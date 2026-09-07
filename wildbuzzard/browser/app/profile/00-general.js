@@ -6,8 +6,6 @@
 
 pref("app.support.baseURL", "about:blank");
 
-// Resume the previous session on startup.
-pref("browser.startup.page", 3);
 pref("browser.tabs.warnOnClose", true);
 
 pref("browser.statusbar.enabled", false);
