@@ -61,7 +61,7 @@ add_task(async function test_toggle_reopens_in_private_tor_context() {
   BrowserTestUtils.removeTab(privateTab);
 });
 
-add_task(async function test_control_client_opens_owned_tor_tab() {
+add_task(async function test_control_client_opens_normal_tor_tab() {
   const clientId = "tor-browser-test-client";
   const result = await BrowserControl.dispatch(
     "tabs",
@@ -150,7 +150,6 @@ add_task(async function test_trusted_onion_storage_and_agent_page_identity() {
       normal,
       "The agent keeps its page after a storage switch"
     );
-    Assert.equal(BrowserControl.pageOwners.get(page), clientId);
     await OnionAuthStore.update(address, { key: null, privateMode: true });
     Assert.equal(TorRouting.contextIdForURI(uri), TorRouting.userContextId);
     const privateTab = await TorRouting._reopenInContext(
@@ -161,7 +160,6 @@ add_task(async function test_trusted_onion_storage_and_agent_page_identity() {
     );
     Assert.ok(PrivateTab.isPrivate(privateTab));
     Assert.equal(BrowserControl.pageForId(page).tab, privateTab);
-    Assert.equal(BrowserControl.pageOwners.get(page), clientId);
   } finally {
     await OnionAuthStore.update(address, null);
     if (page) {

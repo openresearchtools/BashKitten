@@ -32,3 +32,14 @@ Each running profile has its own private socket. The client discovers it when
 one profile is running. With multiple profiles, set
 `WILDBUZZARD_CONTROL_SOCKET` to one of the paths reported by the client; an
 override must be an absolute path in an existing owner-private directory.
+
+Commands can act on any open tab with `--page ID`; no claim or ownership transfer
+is required. Without a page selected for the shell session, page commands use the
+currently selected browser tab. Sessions retain only their current page. They do
+not allocate windows, tab groups or persistent agent styling. A temporary yellow
+dot marks a tab only while an operation is manipulating it.
+
+Run interactive validation with a separate profile and an explicit
+`WILDBUZZARD_CONTROL_SOCKET`. Never use the user's normal profile for test setup
+or leave validation tabs in its saved session. Test manifests and test harnesses
+belong to build/test output, not the installed browser payload.

@@ -232,7 +232,6 @@ add_task(async function test_browser_control_click_is_user_navigation() {
   BrowserControl.start();
   const pageId = BrowserControl.pageIdFor(tab.linkedBrowser);
   const clientId = "torrent-ingress-control-test";
-  BrowserControl.pageOwners.set(pageId, clientId);
   try {
     const snapshot = await BrowserControl.dispatch(
       "snapshot",
@@ -257,7 +256,6 @@ add_task(async function test_browser_control_click_is_user_navigation() {
       "native control click retained explicit user navigation"
     );
   } finally {
-    BrowserControl.pageOwners.delete(pageId);
     BrowserTestUtils.removeTab(tab);
     TorrentIngressTestUtils.reset();
     if (!wasStarted) {

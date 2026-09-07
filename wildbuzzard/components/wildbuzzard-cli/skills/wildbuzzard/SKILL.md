@@ -8,10 +8,15 @@ description: Control Wild Buzzard directly from the shell for web interaction, e
 Use the `wildbuzzard` CLI directly. Do not start an MCP server or look for a
 separate browser-control executable.
 
-Start an owned tab with `wildbuzzard open URL`. The session remembers that page,
-so follow with `wildbuzzard snapshot`, `wildbuzzard click @eN`, `wildbuzzard
-read`, or `wildbuzzard screenshot`. Use `--session NAME` to isolate concurrent
-automation clients. A page owned by another session cannot be controlled.
+Use `wildbuzzard tabs list` to see the user's open tabs. `wildbuzzard snapshot`
+uses the current session page, or the selected browser tab when the session has
+not selected a page yet. Use `--page ID` to work with any existing tab, or
+`wildbuzzard tabs activate ID` to select it. `wildbuzzard open URL` creates a normal
+new tab only when a new tab is needed. Follow with `snapshot`, `click eN`, `read`,
+or `screenshot`. `--session NAME` remembers a current page for each agent without
+reserving tabs or creating groups, windows or control tabs. Do not create groups
+to mark agent ownership. A small yellow dot appears only while a tab is being
+manipulated; it disappears when the command completes or is cancelled.
 
 Use `wildbuzzard help` for the full catalog and `wildbuzzard help COMMAND` for
 flags. The native debugging commands include `console`, `network`, `request`,

@@ -402,6 +402,20 @@ const COMMAND_ALIASES = {
 
 const currentPages = new Map();
 
+function currentPage(session) {
+  const page = currentPages.get(session);
+  if (page !== undefined) {
+    const exists = [...BrowserControl.tabs()].some(
+      entry => BrowserControl.pageIds.get(entry.browser) === page
+    );
+    if (exists) {
+      return page;
+    }
+    currentPages.delete(session);
+  }
+  return BrowserControl.activePageId();
+}
+
 function commandName(value) {
   return value.replaceAll("-", "_");
 }
@@ -614,9 +628,6 @@ function resultPage(result) {
     return direct;
   }
   if (direct && typeof direct === "object") {
-    if (direct.ownership && direct.ownership !== "mine") {
-      return undefined;
-    }
     const value = direct.page ?? direct.pageId;
     if (Number.isInteger(value)) {
       return value;
@@ -906,12 +917,10 @@ async function devtools(argv, cwd, session, input, signal) {
   const pageValue = takeValue(argv, "--page");
   const page =
     pageValue === undefined
-      ? currentPages.get(session)
+      ? currentPage(session)
       : number(pageValue, "devtools --page");
   if (page === undefined) {
-    throw new Error(
-      `no current page for session ${session}; use wildbuzzard open URL or pass --page`
-    );
+    throw new Error("no open tab; use wildbuzzard open URL or pass --page");
   }
   const clientId = `wildbuzzard-cli:${session}`;
   const action = commandName(argv.shift() ?? "open");
@@ -1144,11 +1153,9 @@ async function execute(request, signal) {
     };
   }
   if (PAGE_SCOPED.has(command) && args.page === undefined) {
-    const page = currentPages.get(session);
+    const page = currentPage(session);
     if (page === undefined) {
-      throw new Error(
-        `no current page for session ${session}; use wildbuzzard open URL or pass --page`
-      );
+      throw new Error("no open tab; use wildbuzzard open URL or pass --page");
     }
     args.page = page;
   }

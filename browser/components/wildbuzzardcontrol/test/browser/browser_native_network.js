@@ -15,7 +15,7 @@ add_task(async function test_native_network_captures_page_response() {
   );
   const page = BrowserControl.pageIdFor(tab.linkedBrowser);
   const clientId = "native-network-test";
-  BrowserControl.pageOwners.set(page, clientId);
+
   const url =
     "https://example.com/browser/browser/components/wildbuzzardcontrol/test/browser/file_gecko_render.sjs?mode=json";
   const call = (tool, args = {}) =>
@@ -46,7 +46,6 @@ add_task(async function test_native_network_captures_page_response() {
         : response.responseBody;
     Assert.deepEqual(JSON.parse(body), { rendered: true, source: "original" });
   } finally {
-    BrowserControl.pageOwners.delete(page);
     BrowserTestUtils.removeTab(tab);
     if (!wasStarted) {
       BrowserControl.stop();

@@ -3102,3 +3102,24 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   white-space: nowrap;
   width: 100%;
 }
+
+.tab-automation-indicator {
+  display: none;
+}
+
+.tabbrowser-tab[wildbuzzard-automation-active] .tab-automation-indicator {
+  display: block;
+  flex-shrink: 0;
+  inline-size: 6px;
+  block-size: 6px;
+  margin-inline-end: 6px;
+  border-radius: 50%;
+  background-color: light-dark(#a07800, #f2c94c);
+}
+
+.tabbrowser-tab[pinned] .tab-automation-indicator {
+  position: absolute;
+  inset-inline-start: 4px;
+  inset-block-start: 6px;
+  margin: 0;
+}

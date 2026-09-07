@@ -20,7 +20,7 @@ add_task(async function test_logpoint_survives_reload() {
   );
   const page = BrowserControl.pageIdFor(tab.linkedBrowser);
   const clientId = "logpoint-reload-test";
-  BrowserControl.pageOwners.set(page, clientId);
+
   let logpoint;
   try {
     const set = await BrowserControl.dispatch(
@@ -59,7 +59,7 @@ add_task(async function test_logpoint_survives_reload() {
         new AbortController().signal
       );
     }
-    BrowserControl.pageOwners.delete(page);
+
     BrowserTestUtils.removeTab(tab);
     if (!wasStarted) {
       BrowserControl.stop();

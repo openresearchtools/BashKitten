@@ -21,6 +21,7 @@
           <hbox class="tab-group-line"/>
         </vbox>
         <hbox class="tab-content" align="center">
+          <image class="tab-automation-indicator" data-l10n-id="tabbrowser-tab-automation-active"/>
           <stack class="tab-icon-stack">
             <hbox class="tab-throbber"/>
             <hbox class="tab-icon-pending"/>

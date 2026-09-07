@@ -12,4 +12,7 @@ support-files = ["file_gecko_render.sjs"]
 ["browser_native_tab_groups.js"]
 run-if = ["os == 'linux'"]
 
+["browser_ordinary_agent_tabs.js"]
+run-if = ["os == 'linux'"]
+
 ["browser_window_create.js"]

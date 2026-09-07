@@ -2606,7 +2606,7 @@ class BrowserControlService {
   constructor() {
     this.pageIds = new WeakMap();
     this.pageStates = new Map();
-    this.pageOwners = new Map();
+    this.activeTabOperations = new Map();
     this.rawNodeKeys = new Map();
     this.rawNodeTargets = new Map();
     this.rawNodeIdsByPage = new Map();
@@ -2688,6 +2688,13 @@ class BrowserControlService {
     this.networkListener.on("response-completed", this.#onNetworkResponse);
     this.networkListener.startListening();
     Services.obs.addObserver(this.#onTabReplaced, "wildbuzzard-tab-replaced");
+    for (const topic of [
+      "browser-delayed-startup-finished",
+      "sessionstore-windows-restored",
+    ]) {
+      Services.obs.addObserver(this.removeLegacyControlState, topic);
+    }
+    this.removeLegacyControlState();
     this.started = true;
     return { ready: true };
   }
@@ -2696,6 +2703,16 @@ class BrowserControlService {
     if (!this.started) {
       return;
     }
+    for (const topic of [
+      "browser-delayed-startup-finished",
+      "sessionstore-windows-restored",
+    ]) {
+      Services.obs.removeObserver(this.removeLegacyControlState, topic);
+    }
+    for (const { tab } of this.tabs()) {
+      tab.removeAttribute("wildbuzzard-automation-active");
+    }
+    this.activeTabOperations.clear();
     this.geckoRenderer.stop();
     Services.obs.removeObserver(
       this.#onTabReplaced,
@@ -2733,9 +2750,8 @@ class BrowserControlService {
     this.pageIds.delete(oldBrowser);
     this.pageStates.get(page)?.reset();
     this.clearRawNodesForPage(page);
-    const owner = this.pageOwners.get(page);
-    if (owner) {
-      lazy.SessionStore.setCustomTabValue(newTab, TAB_OWNER_KEY, owner);
+    if (this.activeTabOperations.has(page)) {
+      newTab.setAttribute("wildbuzzard-automation-active", "true");
     }
   };
 
@@ -2953,15 +2969,6 @@ class BrowserControlService {
       this.pageIds.set(browser, pageId);
       this.pageStates.set(pageId, new PageState());
     }
-    if (!this.pageOwners.has(pageId)) {
-      const tab = this.tabForBrowser(browser);
-      const owner = tab
-        ? lazy.SessionStore.getCustomTabValue(tab, TAB_OWNER_KEY)
-        : "";
-      if (owner) {
-        this.pageOwners.set(pageId, owner);
-      }
-    }
     return pageId;
   }
 
@@ -2977,7 +2984,6 @@ class BrowserControlService {
       if (!activePages.has(page)) {
         this.clearRawNodesForPage(page);
         this.pageStates.delete(page);
-        this.pageOwners.delete(page);
       }
     }
     let logpointsChanged = false;
@@ -2992,72 +2998,25 @@ class BrowserControlService {
     }
   }
 
-  assertPageOwned(page, clientId) {
-    this.pageForId(page);
-    if (!clientId || this.pageOwners.get(page) !== clientId) {
-      throw new Error(
-        `page ${page} is not owned by this session; call \`tabs new\` to open a fresh page and use the returned page id.`
-      );
-    }
+  activePageId() {
+    const window = lazy.BrowserWindowTracker.getTopWindow();
+    return window?.gBrowser.selectedBrowser
+      ? this.pageIdFor(window.gBrowser.selectedBrowser)
+      : undefined;
   }
 
-  windowOwnership(window, clientId) {
-    const owners = window.gBrowser.tabs.map(tab =>
-      this.pageOwners.get(this.pageIdFor(tab.linkedBrowser))
-    );
-    if (owners.length && owners.every(owner => owner === clientId)) {
-      return "mine";
+  windowForNewTab(windowId) {
+    if (windowId === undefined || windowId === null) {
+      return lazy.BrowserWindowTracker.getTopWindow();
     }
-    if (owners.every(owner => !owner)) {
-      return "user";
-    }
-    if (owners.some(owner => owner && owner !== clientId)) {
-      return "other-client";
-    }
-    return "mixed";
-  }
-
-  assertWindowOwned(window, clientId) {
-    if (!clientId || this.windowOwnership(window, clientId) !== "mine") {
-      throw new Error(
-        "window is not fully owned by this session; activate an owned tab or create a fresh window instead."
-      );
-    }
-  }
-
-  windowForNewTab(windowId, privateRequested, clientId) {
-    const hasExplicitWindow = windowId !== undefined && windowId !== null;
-    let window = hasExplicitWindow
-      ? this.rawWindowById(windowId)
-      : lazy.BrowserWindowTracker.getTopWindow();
-    if (hasExplicitWindow && !window) {
+    const window = this.rawWindowById(windowId);
+    if (!window) {
       throw new Error(`Unknown window ${windowId}`);
-    }
-    if (
-      hasExplicitWindow &&
-      this.windowOwnership(window, clientId) === "other-client"
-    ) {
-      throw new Error(
-        `window ${windowId} contains tabs owned by another session`
-      );
-    }
-    if (
-      !hasExplicitWindow &&
-      window &&
-      this.windowOwnership(window, clientId) === "other-client"
-    ) {
-      window = [...this.windows()].find(
-        candidate =>
-          lazy.PrivateBrowsingUtils.isWindowPrivate(candidate) ===
-            privateRequested &&
-          this.windowOwnership(candidate, clientId) !== "other-client"
-      );
     }
     return window;
   }
 
-  async closeOwnedWindow(window, clientId) {
-    this.assertWindowOwned(window, clientId);
+  async closeWindow(window) {
     const pages = window.gBrowser.tabs
       .map(tab => this.pageIds.get(tab.linkedBrowser))
       .filter(Boolean);
@@ -3071,7 +3030,6 @@ class BrowserControlService {
     for (const page of pages) {
       this.clearRawNodesForPage(page);
       this.pageStates.delete(page);
-      this.pageOwners.delete(page);
     }
   }
 
@@ -3104,15 +3062,8 @@ class BrowserControlService {
     throw new Error(`page ${pageId} did not become ready for browser control`);
   }
 
-  pageInfo({ window, tab, browser }, clientId) {
+  pageInfo({ window, tab, browser }) {
     const page = this.pageIdFor(browser);
-    const owner = this.pageOwners.get(page);
-    let ownership = "user";
-    if (owner === clientId) {
-      ownership = "mine";
-    } else if (owner) {
-      ownership = "other-client";
-    }
     const tor = lazy.TorRouting.isTorTab(tab);
     return {
       page,
@@ -3128,9 +3079,7 @@ class BrowserControlService {
         window.windowGlobalChild?.innerWindowId ??
         window.docShell.outerWindowID,
       groupId: tab.group?.id ?? null,
-      ownership,
-      ownerClientId: owner ?? null,
-      ownerLabel: owner && owner !== clientId ? owner : null,
+      automationActive: this.activeTabOperations.has(page),
     };
   }
 
@@ -4480,15 +4429,122 @@ class BrowserControlService {
     Services.ppmm.sharedData.flush();
   }
 
-  // eslint-disable-next-line complexity
+  removeLegacyControlState = () => {
+    for (const window of this.windows()) {
+      for (const tab of window.gBrowser.tabs) {
+        if (lazy.SessionStore.getCustomTabValue(tab, TAB_OWNER_KEY)) {
+          lazy.SessionStore.deleteCustomTabValue(tab, TAB_OWNER_KEY);
+        }
+      }
+      for (const group of [...window.gBrowser.tabGroups]) {
+        if (/^control\/wildbuzzard-cli(?:[-:]|$)/.test(group.label)) {
+          group.ungroupTabs();
+        }
+      }
+    }
+  };
+
+  async withTabActivity(pages, callback, signal) {
+    const entries = [...new Set(pages)].map(page => ({
+      ...this.pageForId(page),
+      page,
+    }));
+    for (const { page, tab } of entries) {
+      this.activeTabOperations.set(
+        page,
+        (this.activeTabOperations.get(page) ?? 0) + 1
+      );
+      tab.setAttribute("wildbuzzard-automation-active", "true");
+    }
+    let released = false;
+    const release = () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      for (const { page, tab } of entries) {
+        const remaining = (this.activeTabOperations.get(page) ?? 1) - 1;
+        if (remaining > 0) {
+          this.activeTabOperations.set(page, remaining);
+        } else {
+          this.activeTabOperations.delete(page);
+          tab.removeAttribute("wildbuzzard-automation-active");
+          for (const entry of this.tabs()) {
+            if (this.pageIds.get(entry.browser) === page) {
+              entry.tab.removeAttribute("wildbuzzard-automation-active");
+            }
+          }
+        }
+      }
+    };
+    signal?.addEventListener("abort", release, { once: true });
+    try {
+      throwIfAborted(signal);
+      return await callback();
+    } finally {
+      signal?.removeEventListener("abort", release);
+      release();
+    }
+  }
+
   async dispatch(tool, args, cwd, clientId, signal) {
+    throwIfAborted(signal);
+    const params = args.params ?? {};
+    const rawMutation =
+      tool === "__raw_protocol" &&
+      /^(Input\.|Runtime\.(evaluate|callFunctionOn)|script\.(evaluate|callFunction)|DOM\.(set|focus)|Page\.(navigate|reload|handleJavaScriptDialog|set)|Browser\.(activateTab|closeTab|pinTab|unpinTab|duplicateTab|moveTab|createTabGroup|addTabsToGroup|removeTabsFromGroup|updateTabGroup|closeTabGroup)|Debugger\.(set|remove|enable|resume|pause|step))/.test(
+        args.method
+      );
+    const mutating =
+      rawMutation ||
+      [
+        "navigate",
+        "act",
+        "evaluate",
+        "upload",
+        "download",
+        "enable_debugger",
+        "set_logpoint",
+        "remove_logpoint",
+        "__act_raw",
+        "__navigate_raw",
+      ].includes(tool) ||
+      (tool === "tabs" && ["activate", "close"].includes(args.action)) ||
+      (tool === "tab_groups" &&
+        args.action !== "list" &&
+        args.action !== undefined);
+    const pages = [];
+    if (mutating) {
+      const page = rawMutation ? this.rawProtocolPage(args) : args.page;
+      if (Number.isInteger(page)) {
+        pages.push(page);
+      }
+      pages.push(...(args.pages ?? params.tabIds ?? []));
+      const groupId = args.groupId ?? params.groupId;
+      if (groupId) {
+        const found = this.rawGroupById(groupId);
+        if (found) {
+          pages.push(
+            ...found.group.tabs.map(tab => this.pageIdFor(tab.linkedBrowser))
+          );
+        }
+      }
+    }
+    return this.withTabActivity(
+      pages,
+      () => this.dispatchCommand(tool, args, cwd, clientId, signal),
+      signal
+    );
+  }
+
+  // eslint-disable-next-line complexity
+  async dispatchCommand(tool, args, cwd, clientId, signal) {
     throwIfAborted(signal);
     this.pruneClosedPages();
     if (
       PAGE_SCOPED_TOOLS.has(tool) ||
       (tool === "__raw_protocol" && Number.isInteger(args.page))
     ) {
-      this.assertPageOwned(args.page, clientId);
       await this.ensurePageReady(args.page, signal);
     }
     const dialogAction =
@@ -4690,29 +4746,15 @@ class BrowserControlService {
       const pages = [...this.tabs()].map(entry =>
         this.pageInfo(entry, clientId)
       );
-      const sections = [
-        ["Your tabs:", pages.filter(page => page.ownership === "mine")],
-        ["User's tabs:", pages.filter(page => page.ownership === "user")],
-        [
-          "Other sessions' tabs:",
-          pages.filter(page => page.ownership === "other-client"),
-        ],
-      ]
-        .filter(([, entries]) => !!entries.length)
-        .map(
-          ([heading, entries]) =>
-            `${heading}\n${entries
-              .map(
-                page =>
-                  `[${page.page}] ${page.url}${page.title ? ` (${page.title})` : ""}${page.private ? " [PRIVATE]" : ""}${page.tor ? " [TOR]" : ""}${
-                    page.ownership === "other-client" && page.ownerLabel
-                      ? `, owned by ${page.ownerLabel}`
-                      : ""
-                  }`
-              )
-              .join("\n")}`
-        );
-      return textResult(sections.join("\n\n") || "(no open pages)", { pages });
+      return textResult(
+        pages
+          .map(
+            page =>
+              `[${page.page}] ${page.url}${page.title ? ` (${page.title})` : ""}${page.private ? " [PRIVATE]" : ""}${page.tor ? " [TOR]" : ""}`
+          )
+          .join("\n") || "(no open pages)",
+        { pages }
+      );
     }
     if (action === "active") {
       const window = lazy.BrowserWindowTracker.getTopWindow();
@@ -4733,7 +4775,7 @@ class BrowserControlService {
       });
     }
     if (["claim", "activate"].includes(action)) {
-      return this.ownershipTabsTool(action, args.page, clientId);
+      return this.selectTabTool(action, args.page, clientId);
     }
     if (action === "new") {
       const requestedUrl = args.url ?? "about:blank";
@@ -4743,11 +4785,7 @@ class BrowserControlService {
           : controlNavigationURI(requestedUrl);
       const torRequested = Boolean(args.tor) || lazy.TorRouting.isOnionURI(uri);
       const privateRequested = Boolean(args.private) && !torRequested;
-      let window = this.windowForNewTab(
-        args.windowId,
-        privateRequested,
-        clientId
-      );
+      let window = this.windowForNewTab(args.windowId);
       if (
         !window ||
         lazy.PrivateBrowsingUtils.isWindowPrivate(window) !== privateRequested
@@ -4769,27 +4807,31 @@ class BrowserControlService {
         window.focus();
       }
       const page = this.pageIdFor(tab.linkedBrowser);
-      this.pageOwners.set(page, clientId);
-      lazy.SessionStore.setCustomTabValue(tab, TAB_OWNER_KEY, clientId);
+
       let navigation;
       if (uri.spec !== "about:blank") {
         try {
-          navigation = await this.navigateAndWait(
-            tab.linkedBrowser,
+          navigation = await this.withTabActivity(
+            [page],
             () =>
-              tab.linkedBrowser.loadURI(uri, {
-                triggeringPrincipal:
-                  Services.scriptSecurityManager.getSystemPrincipal(),
-              }),
-            signal,
-            uri.spec
+              this.navigateAndWait(
+                tab.linkedBrowser,
+                () =>
+                  tab.linkedBrowser.loadURI(uri, {
+                    triggeringPrincipal:
+                      Services.scriptSecurityManager.getSystemPrincipal(),
+                  }),
+                signal,
+                uri.spec
+              ),
+            signal
           );
           tab = this.pageForId(page).tab;
         } catch (error) {
           window.gBrowser.removeTab(tab, { animate: false });
           this.clearRawNodesForPage(page);
           this.pageStates.delete(page);
-          this.pageOwners.delete(page);
+
           throw error;
         }
       }
@@ -4799,14 +4841,8 @@ class BrowserControlService {
           window.gBrowser.removeTab(tab, { animate: false });
           this.clearRawNodesForPage(page);
           this.pageStates.delete(page);
-          this.pageOwners.delete(page);
+
           throw new Error(`Unknown tab group ${args.tabGroupId}`);
-        }
-        for (const groupedTab of found.group.tabs) {
-          this.assertPageOwned(
-            this.pageIdFor(groupedTab.linkedBrowser),
-            clientId
-          );
         }
         found.group.addTabs([tab]);
       } else if (tab.group) {
@@ -4822,7 +4858,7 @@ class BrowserControlService {
       if (args.page === undefined || args.page === null) {
         throw new Error("tabs close: page is required.");
       }
-      this.assertPageOwned(args.page, clientId);
+
       const { window, tab } = this.pageForId(args.page);
       window.gBrowser.removeTab(tab, { animate: false });
       if (tab.isConnected && !tab.closing) {
@@ -4830,26 +4866,18 @@ class BrowserControlService {
       }
       this.clearRawNodesForPage(args.page);
       this.pageStates.delete(args.page);
-      this.pageOwners.delete(args.page);
+
       return textResult(`closed page ${args.page}`, { page: args.page });
     }
     throw new Error(`Unknown tabs action: ${action}`);
   }
 
-  async ownershipTabsTool(action, page, clientId) {
+  async selectTabTool(action, page) {
     if (page === undefined || page === null) {
       throw new Error(`tabs ${action}: page is required.`);
     }
     const entry = this.pageForId(page);
-    if (action === "claim") {
-      const owner = this.pageOwners.get(page);
-      if (owner && owner !== clientId) {
-        throw new Error(`page ${page} is owned by another session`);
-      }
-      this.pageOwners.set(page, clientId);
-      lazy.SessionStore.setCustomTabValue(entry.tab, TAB_OWNER_KEY, clientId);
-    } else {
-      this.assertPageOwned(page, clientId);
+    if (action === "activate") {
       for (let attempt = 0; attempt < 20; attempt++) {
         entry.window.focus();
         entry.window.gBrowser.selectedTab = entry.tab;
@@ -4870,7 +4898,7 @@ class BrowserControlService {
         throw new Error(`page ${page} could not be activated`);
       }
     }
-    const info = this.pageInfo(entry, clientId);
+    const info = this.pageInfo(entry);
     return textResult(
       `${action === "claim" ? "claimed" : "activated"} page ${page}`,
       {
@@ -4905,7 +4933,6 @@ class BrowserControlService {
         tabCount: window.gBrowser.tabs.length,
         isActive: window === lazy.BrowserWindowTracker.getTopWindow(),
         isVisible: !window.closed,
-        ownership: this.windowOwnership(window, clientId),
       }));
       return textResult(
         windows.length
@@ -4921,50 +4948,40 @@ class BrowserControlService {
     }
     if (action === "create") {
       const window = await this.openWindow(Boolean(args.private));
-      const startupTab = window.gBrowser.selectedTab;
-      const tab = window.gBrowser.addTrustedTab("about:blank", {
-        inBackground: false,
-        skipAnimation: true,
-      });
-      window.gBrowser.selectedTab = tab;
+      const tab = window.gBrowser.selectedTab;
       const browser = tab.linkedBrowser;
       const page = this.pageIdFor(browser);
-      this.pageOwners.set(page, clientId);
-      lazy.SessionStore.setCustomTabValue(tab, TAB_OWNER_KEY, clientId);
+
       try {
         if (args.url && args.url !== "about:blank") {
           const uri = controlNavigationURI(args.url);
-          await this.navigateAndWait(
-            browser,
+          await this.withTabActivity(
+            [page],
             () =>
-              browser.loadURI(uri, {
-                triggeringPrincipal:
-                  Services.scriptSecurityManager.getSystemPrincipal(),
-              }),
-            signal,
-            uri.spec
+              this.navigateAndWait(
+                browser,
+                () =>
+                  browser.loadURI(uri, {
+                    triggeringPrincipal:
+                      Services.scriptSecurityManager.getSystemPrincipal(),
+                  }),
+                signal,
+                uri.spec
+              ),
+            signal
           );
         }
       } catch (error) {
         window.close();
-        this.pageOwners.delete(page);
+
         this.pageStates.delete(page);
         throw error;
       }
-      if (startupTab !== tab && startupTab.isConnected) {
-        window.gBrowser.removeTab(startupTab, {
-          animate: false,
-          skipPermitUnload: true,
-        });
-      }
       window.focus();
+      const entry = this.pageForId(page);
       const item = {
-        windowId:
-          window.windowGlobalChild?.innerWindowId ??
-          window.docShell.outerWindowID,
-        windowType: args.private ? "private" : "normal",
-        tabCount: window.gBrowser.tabs.length,
-        page: this.pageInfo({ window, tab, browser }, clientId),
+        ...this.rawWindowInfo(entry.window),
+        page: this.pageInfo(entry),
       };
       return textResult(`created window ${item.windowId}`, {
         action,
@@ -4983,7 +5000,7 @@ class BrowserControlService {
       if (!window) {
         throw new Error(`Unknown window ${args.windowId}`);
       }
-      this.assertWindowOwned(window, clientId);
+
       window.focus();
       return textResult(`activated window ${args.windowId}`, {
         action,
@@ -5002,7 +5019,7 @@ class BrowserControlService {
       if (!window) {
         throw new Error(`Unknown window ${args.windowId}`);
       }
-      await this.closeOwnedWindow(window, clientId);
+      await this.closeWindow(window, clientId);
       return textResult(`closed window ${args.windowId}`, {
         action,
         windowId: args.windowId,
@@ -5012,7 +5029,7 @@ class BrowserControlService {
   }
 
   // eslint-disable-next-line complexity
-  async tabGroupsTool(args, clientId) {
+  async tabGroupsTool(args) {
     if (!lazy.tabGroupsEnabled) {
       Services.prefs.setBoolPref("browser.tabs.groups.enabled", true);
     }
@@ -5054,9 +5071,6 @@ class BrowserControlService {
           'tab_groups create: title cannot be set when adding pages to an existing groupId; use action="update" to rename.'
         );
       }
-      for (const pageId of args.pages) {
-        this.assertPageOwned(pageId, clientId);
-      }
       const entries = args.pages.map(pageId => this.pageForId(pageId));
       const window = entries[0].window;
       if (entries.some(entry => entry.window !== window)) {
@@ -5068,9 +5082,6 @@ class BrowserControlService {
         group = existing?.group;
         if (!group) {
           throw new Error(`Unknown tab group ${args.groupId}`);
-        }
-        for (const tab of group.tabs) {
-          this.assertPageOwned(this.pageIdFor(tab.linkedBrowser), clientId);
         }
         group.addTabs(entries.map(entry => entry.tab));
       } else {
@@ -5111,11 +5122,6 @@ class BrowserControlService {
     if ((action === "update" || action === "close") && !found) {
       throw new Error(`Unknown tab group ${args.groupId}`);
     }
-    if (found) {
-      for (const tab of found.group.tabs) {
-        this.assertPageOwned(this.pageIdFor(tab.linkedBrowser), clientId);
-      }
-    }
     if (action === "update") {
       if (
         args.title === undefined &&
@@ -5143,7 +5149,6 @@ class BrowserControlService {
         throw new Error("tab_groups ungroup: pages is required.");
       }
       for (const pageId of args.pages) {
-        this.assertPageOwned(pageId, clientId);
         const { window, tab } = this.pageForId(pageId);
         window.gBrowser.ungroupTab(tab);
       }
@@ -5163,7 +5168,6 @@ class BrowserControlService {
       for (const pageId of pageIds) {
         this.clearRawNodesForPage(pageId);
         this.pageStates.delete(pageId);
-        this.pageOwners.delete(pageId);
       }
       return textResult(`closed tab group ${args.groupId} and all its tabs`, {
         groupId: args.groupId,
@@ -5233,15 +5237,14 @@ class BrowserControlService {
     );
   }
 
-  async bookmarksTool(args, clientId) {
+  async bookmarksTool(args) {
     const action = args.action ?? "list";
     const maxResults = args.maxResults ?? 100;
     let requestedUrl = args.url ? controlNavigationURI(args.url).spec : null;
     let pageInfo;
     if (args.page !== undefined && args.page !== null) {
-      this.assertPageOwned(args.page, clientId);
       const entry = this.pageForId(args.page);
-      pageInfo = this.pageInfo(entry, clientId);
+      pageInfo = this.pageInfo(entry);
       requestedUrl ??= pageInfo.url;
     }
     const serialize = item => ({
@@ -5451,7 +5454,6 @@ class BrowserControlService {
       return this.pageForId(page);
     }
     const selected = window.gBrowser.selectedTab === tab;
-    const owner = this.pageOwners.get(page);
     const torTab = await lazy.TorRouting.createTab(window, {
       uri,
       inBackground: !selected,
@@ -5463,8 +5465,8 @@ class BrowserControlService {
       window.gBrowser.pinTab(torTab);
     }
     this.pageIds.set(torTab.linkedBrowser, page);
-    if (owner) {
-      lazy.SessionStore.setCustomTabValue(torTab, TAB_OWNER_KEY, owner);
+    if (this.activeTabOperations.has(page)) {
+      torTab.setAttribute("wildbuzzard-automation-active", "true");
     }
     if (selected) {
       window.gBrowser.selectedTab = torTab;
@@ -6250,7 +6252,7 @@ class BrowserControlService {
     };
   }
 
-  rawWindowInfo(window, clientId) {
+  rawWindowInfo(window) {
     let windowState = "normal";
     if (window.windowState === window.STATE_MINIMIZED) {
       windowState = "minimized";
@@ -6275,9 +6277,6 @@ class BrowserControlService {
       isActive: window === lazy.BrowserWindowTracker.getTopWindow(),
       isVisible: !window.closed && windowState !== "minimized",
       tabCount: window.gBrowser.tabs.length,
-      ...(clientId === undefined
-        ? {}
-        : { ownership: this.windowOwnership(window, clientId) }),
       ...(activeTab
         ? { activeTabId: this.pageIdFor(activeTab.linkedBrowser) }
         : {}),
@@ -6809,17 +6808,8 @@ class BrowserControlService {
           if (initialPage) {
             this.clearRawNodesForPage(initialPage);
             this.pageStates.delete(initialPage);
-            this.pageOwners.delete(initialPage);
           }
         }
-      } else {
-        const pageId = this.pageIdFor(initialTab.linkedBrowser);
-        this.pageOwners.set(pageId, clientId);
-        lazy.SessionStore.setCustomTabValue(
-          initialTab,
-          TAB_OWNER_KEY,
-          clientId
-        );
       }
       if (params.bounds) {
         const { left, top, width, height, windowState } = params.bounds;
@@ -6844,7 +6834,7 @@ class BrowserControlService {
       if (!window) {
         throw new Error(`Unknown window ${params.windowId}`);
       }
-      await this.closeOwnedWindow(window, clientId);
+      await this.closeWindow(window, clientId);
       return valueResult({});
     }
     if (method === "Browser.activateWindow") {
@@ -6852,7 +6842,7 @@ class BrowserControlService {
       if (!window) {
         throw new Error(`Unknown window ${params.windowId}`);
       }
-      this.assertWindowOwned(window, clientId);
+
       window.focus();
       return valueResult({});
     }
@@ -6861,7 +6851,7 @@ class BrowserControlService {
       if (!window) {
         throw new Error(`Unknown window ${params.windowId}`);
       }
-      this.assertWindowOwned(window, clientId);
+
       if (!params.visible) {
         throw new Error("Hidden windows are no longer supported.");
       }
@@ -6955,21 +6945,12 @@ class BrowserControlService {
       if (!found) {
         throw new Error(`Unknown tab group ${params.groupId}`);
       }
-      const pageIds = found.group.tabs.map(tab =>
-        this.pageIdFor(tab.linkedBrowser)
-      );
-      for (const pageId of pageIds) {
-        this.assertPageOwned(pageId, clientId);
-      }
       const destination =
         params.windowId === undefined || params.windowId === null
           ? found.window
           : this.rawWindowById(params.windowId);
       if (!destination) {
         throw new Error(`Unknown window ${params.windowId}`);
-      }
-      if (destination !== found.window) {
-        this.assertWindowOwned(destination, clientId);
       }
       let group = found.group;
       if (destination === found.window) {
@@ -6994,8 +6975,9 @@ class BrowserControlService {
             );
           }
           this.pageIds.set(adopted.linkedBrowser, pageId);
-          this.pageOwners.set(pageId, clientId);
-          lazy.SessionStore.setCustomTabValue(adopted, TAB_OWNER_KEY, clientId);
+          if (this.activeTabOperations.has(pageId)) {
+            adopted.setAttribute("wildbuzzard-automation-active", "true");
+          }
           adoptedTabs.push(adopted);
         }
         group = destination.gBrowser.addTabGroup(adoptedTabs, { label });
@@ -7075,7 +7057,7 @@ class BrowserControlService {
       if (page === null) {
         throw new Error("Target.attachToTarget requires targetId");
       }
-      this.assertPageOwned(page, clientId);
+
       const context = this.pageForId(page).browser.browsingContext;
       return valueResult({
         sessionId: `gecko-page-${page}-context-${context.id}`,
@@ -7086,7 +7068,7 @@ class BrowserControlService {
         `Raw CDP method ${method} requires a page or Gecko session id`
       );
     }
-    this.assertPageOwned(page, clientId);
+
     if (method !== "Page.handleJavaScriptDialog") {
       const dialog = await this.promptInfo(page);
       if (dialog) {
@@ -7116,9 +7098,6 @@ class BrowserControlService {
       const entry = this.pageForId(page);
       const expectedUrl = entry.browser.currentURI?.spec ?? "about:blank";
       const tab = entry.window.gBrowser.duplicateTab(entry.tab, true);
-      const duplicatePage = this.pageIdFor(tab.linkedBrowser);
-      this.pageOwners.set(duplicatePage, clientId);
-      lazy.SessionStore.setCustomTabValue(tab, TAB_OWNER_KEY, clientId);
       const deadline = Date.now() + 5000;
       while (
         expectedUrl !== "about:blank" &&
@@ -7151,9 +7130,6 @@ class BrowserControlService {
       if (!destination) {
         throw new Error(`Unknown window ${params.windowId}`);
       }
-      if (destination !== entry.window) {
-        this.assertWindowOwned(destination, clientId);
-      }
       let tab = entry.tab;
       if (destination !== entry.window) {
         tab = destination.gBrowser.adoptTab(tab, {
@@ -7164,8 +7140,9 @@ class BrowserControlService {
           throw new Error("Gecko could not move the tab to the target window");
         }
         this.pageIds.set(tab.linkedBrowser, page);
-        this.pageOwners.set(page, clientId);
-        lazy.SessionStore.setCustomTabValue(tab, TAB_OWNER_KEY, clientId);
+        if (this.activeTabOperations.has(page)) {
+          tab.setAttribute("wildbuzzard-automation-active", "true");
+        }
       } else if (Number.isInteger(params.index)) {
         destination.gBrowser.moveTabTo(tab, { tabIndex: params.index });
       }

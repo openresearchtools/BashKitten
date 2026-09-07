@@ -86,7 +86,6 @@ add_task(async function test_native_tab_group_lifecycle() {
       if (entry) {
         BrowserTestUtils.removeTab(entry.tab);
       }
-      BrowserControl.pageOwners.delete(page);
     }
     await BrowserTestUtils.closeWindow(extraWindow);
     if (!wasStarted) {

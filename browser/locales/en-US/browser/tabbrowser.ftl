@@ -514,3 +514,7 @@ split-view-menuitem-close-both-tabs =
     .label = Close Both Tabs
 
 ##
+
+# Shown only while a shell command is manipulating this tab.
+tabbrowser-tab-automation-active =
+    .tooltiptext = An agent is using this tab
