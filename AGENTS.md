@@ -1,3 +1,20 @@
+# Pi / Termux branch instructions (2026-09-19)
+
+The user explicitly changed this branch to a browser frontend for native Pi. These
+rules supersede the historical Rust implementation requirements below wherever
+they conflict. Preserve the existing UI rendering and styling. Run unmodified Pi
+0.85.1 (`d981de1229ef899957bbe968bc8dcda02a21f477`) in RPC mode in Termux.
+Use Pi's own credential store, service login flows, providers, models, tools,
+sessions, queues, compaction and usage. Node.js/npm are permitted and required.
+The localhost web adapter may own UI metadata, local web authentication, RPC
+process supervision and filesystem upload/download/ZIP routes. Add a simple
+expandable repository file browser and responsive sidebars. Do not recreate an
+agent loop, custom provider implementations, llama.cpp supervisor, or model
+credential format. Keep local authentication, CSRF, private file permissions and
+no telemetry. Preserve Pi files and never modify Pi itself. See
+`docs/pi-termux.md` for the current architecture; the rest of this document
+records the old implementation, retained for reference only.
+
 # BashKitten Agent Instructions
 
 ## Governing Pi parity rule

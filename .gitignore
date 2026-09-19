@@ -16,3 +16,5 @@
 # Python development-script bytecode
 __pycache__/
 *.py[cod]
+/node_modules/
+/test-results/

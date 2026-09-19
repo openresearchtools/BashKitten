@@ -1,0 +1,106 @@
+# BashKitten on Pi / Termux
+
+This branch replaces the Rust agent backend with unmodified Pi RPC processes.
+Pi is pinned to npm `@earendil-works/pi-coding-agent@0.85.1`, upstream commit
+`d981de1229ef899957bbe968bc8dcda02a21f477` (tag v0.85.1). The lockfile pins its
+runtime dependencies. Pi owns inference, tools, compaction, session JSONL, and
+credentials. The existing HTML/CSS transcript remains the presentation layer.
+
+Intentional differences from the historical Rust branch: Node runtime; Pi-native
+providers and authentication; Pi-native session tree files with separate UI
+metadata; a private detached RPC worker per session instead of systemd; server
+filesystem browsing, uploads, individual downloads, and streaming ZIP downloads.
+The web server can restart without interrupting detached session workers. A cwd
+change restarts the idle Pi process against its same native session file. Changes
+requested during a turn apply after Pi's agent_settled event. Pi's own system
+prompt and tool cwd are rebuilt on restart. No Pi internals are patched.
+The RPC launch enables Pi's seven built-in read/bash/edit/write/grep/find/ls tools.
+Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
+
+## Transport and UI contract
+
+Browser → web server uses same-origin authenticated HTTP. Live output uses SSE.
+The server proxies each SSE connection to the worker's private Unix socket. A
+subscription starts with one atomic snapshot: native active-branch entries, the
+current in-memory work trace, usage and pending queues. Subsequent events are
+ordered Pi events translated to the original renderer's vocabulary. Reconnect
+rebuilds the view from that snapshot, rather than joining independently fetched
+history and a live stream. Settled native entries replace the transient trace so
+Copy/Fork use real Pi entry IDs. The full native active branch is currently loaded
+on connect; very large histories are a future pagination optimization.
+
+Pi owns its steering/follow-up queues. To edit/promote/remove a browser queue row,
+the worker uses `clear_queue` then requeues only the messages Pi actually returned.
+It retains image payloads and attachment references outside Pi's string-only queue
+notifications. A message already consumed at a turn boundary is never replayed.
+An edit temporarily holds the selected message in the worker; Cancel returns it to
+Pi. A worker crash loses unconsumed in-memory queues, as native RPC does.
+
+For cwd changes Pi is reopened at an idle boundary, retaining its native session
+file and the web worker's socket. The UI metadata records the new working folder;
+the original native session header stays intact. A fork is made using Pi's public
+SessionManager API. For a branch ending before the first assistant response, the
+adapter persists the public native header/entries before passing the file to a new
+RPC process, because Pi otherwise defers saving that branch.
+
+## Files and authentication
+
+All browse/upload/download/ZIP routes require the web account. State changes check
+Origin and a per-login CSRF token. Cookies are HttpOnly/SameSite=Strict; only hashes
+of session and CSRF tokens are persisted. Local web passwords use Argon2id. Login
+cookies survive web restarts. Files/directories in app storage use 0600/0700.
+
+Repository navigation resolves real paths within the selected root. Upload names
+must be single filenames and are created exclusively (`wx`), never overwritten.
+Multipart uploads are capped at 32 MiB per request. ZIP creation streams from the
+backend, includes hidden files and `.git`, preserves safe relative symlinks, and
+omits symlinks escaping the root. Opening repository HTML/SVG returns a sandboxed
+Content-Security-Policy so uploaded scripts cannot act as the authenticated app.
+
+Upload controls are ordinary browser `<input type="file" multiple>` elements. The
+browser owns the file picker and delegates to the operating system as usual. The
+custom expandable tree browses files on the **Termux server**, not the client's
+storage. Open/download links and Content-Disposition delegate handling to the
+browser. Chat image paste uses browser ClipboardEvent files, not Termux:API.
+Clipboard files are read with FileReader and sent as bounded base64 form fields;
+the server validates/decodes those bytes and passes ordinary native images to Pi.
+An unreadable clipboard item times out with the draft preserved instead of
+leaving the send control disabled indefinitely. File-picker uploads stay multipart.
+The working-folder picker is rooted at the current Termux user's home (`~`).
+It offers only readable, writable, searchable directories under that home and
+does not expose system parents, shared storage, or symlinks outside home. The
+header and folder input show `~/project` instead of Android's internal app path.
+This uses Termux's own unrooted app permissions; Android storage permission is
+unnecessary for standard browser uploads and downloads.
+
+Pi RPC has no login command. Provider login uses Pi's public `ModelRuntime.login`
+with its own prompts and notifications alongside the RPC processes. An OAuth
+button synchronously opens a browser tab (avoiding popup blocking). That tab
+presents any native method selection and automatically navigates to Pi's
+authorization URL. Pi owns the loopback listener, OAuth state/PKCE checks, token
+exchange, refresh and native auth.json. The Android browser and Termux share the
+same loopback network: no root, custom Android intent, terminal input, proxy
+callback or changes to Pi are required. Services refreshes on return to the app.
+Pi's optional manual-code fallback is collapsed in Services. Device-code providers
+show the native verification code/link and poll using Pi's implementation.
+Keys/tokens are never included in service status. Cancellation aborts Pi's flow.
+Background model refresh is disabled. RPC launches use `--offline`/`PI_TELEMETRY=0`.
+
+Upstream references at the pinned release:
+[RPC protocol](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/docs/rpc.md),
+[native login API](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/core/model-runtime.ts),
+[browser callback implementation](https://github.com/earendil-works/pi/blob/v0.85.1/packages/ai/src/auth/oauth/openai-codex.ts).
+
+## Native boundaries
+
+- Pi RPC does not stream compaction summary tokens. The existing compaction style
+  shows progress and then the native completed summary, with no invented deltas.
+- Pi has no built-in BashKitten goal loop. Goal commands are native Pi extension
+  commands if installed; the old harness goal UI is removed.
+- Existing custom providers are loaded from Pi's models.json; the old llama.cpp
+  process manager and custom OpenAI credential store are not used.
+- The app does not launch a model request to generate titles.
+- Android lifecycle policy can terminate Termux even though a browser disconnect
+  or web-server restart does not terminate the worker.
+- Imported native sessions should have only one active owner. The app does not
+  attach to a separately running terminal Pi process.

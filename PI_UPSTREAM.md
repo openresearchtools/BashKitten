@@ -1,11 +1,20 @@
-# Pinned Pi behavioral reference
+# Native Pi runtime pin
 
-BashKitten parity work is pinned to:
+This branch runs unmodified Pi rather than porting its behavior:
 
-- Repository: <https://github.com/earendil-works/pi>
-- Version: post-`v0.85.0` (GPT-6 Astra catalog update)
-- Commit: `9841914c71a74d81abe07f751aefd271fd924e63`
+- Repository: https://github.com/earendil-works/pi
+- Release: `v0.85.1`
+- Commit: `d981de1229ef899957bbe968bc8dcda02a21f477`
+- Packages: `@earendil-works/pi-coding-agent@0.85.1`, `@earendil-works/pi-ai@0.85.1`
+- Full transitive dependency resolution and tarball integrity: `package-lock.json`
+- License: MIT (see `reference/PI-LICENSE`)
 
-Updated on 2026-09-05. Catalog/pricing/thinking metadata comes from `packages/ai/scripts/generate-models.ts`, including commit `17de82d7bea18a6589677a9761baabc2060c9efb`. OAuth comes from `packages/ai/src/auth/oauth/openai-codex.ts`, `pkce.ts`, and `device-code.ts` (unchanged since the previous pin). The Web callback presentation, authenticated control endpoints and 15-minute browser-login lifetime are the documented BashKitten differences. Model definitions and costs are shipped locally; no runtime external catalog lookup is added.
+The RPC documentation and public types shipped with that release are the adapter's
+specification. Inference runs through the CLI's RPC mode. Provider setup uses its
+public `ModelRuntime`; history forking uses its public `SessionManager`. No Pi
+files or dependencies are patched. Built-in startup network operations are disabled
+with Pi's supported offline/telemetry flags.
 
-The reference checkout used during development lives outside this repository under the local data-drive build directory. Pi source code is a behavioral specification only and is not a BashKitten runtime dependency.
+The historical Rust implementation remains pinned to
+`9841914c71a74d81abe07f751aefd271fd924e63` for reference and its existing fixtures.
+That pin does not apply to the new native runtime.

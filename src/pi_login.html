@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Pi login · BashKitten</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    html,body { overflow: auto; height: auto; min-height: 100%; }
+    #auth { margin: 8vh auto; }
+    #auth select { width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+    #auth a { color: var(--text); display: inline-block; margin: 10px 0; }
+    #auth strong { display: block; overflow-wrap: anywhere; }
+    #auth button:not(.primary) { background: var(--bg); border: 1px solid var(--line); }
+    #notice { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <main id="auth">
+    <h1>Pi service login</h1>
+    <p id="notice" role="status">Preparing Pi’s login…</p>
+    <div id="steps"></div>
+    <button id="cancel" type="button" hidden>Cancel login</button>
+    <a href="/">Return to BashKitten</a>
+  </main>
+  <script>
+    const provider = new URLSearchParams(location.search).get('provider');
+    const notice = document.querySelector('#notice'), steps = document.querySelector('#steps'), cancel = document.querySelector('#cancel');
+    let csrf, attemptId, signature = '', pending = true, polling = false;
+    async function bootstrap() {
+      const value = await (await fetch('/api/bootstrap')).json();
+      if (!value.authenticated) throw Error('Sign in to BashKitten first, then open Services to connect a provider.');
+      csrf = value.csrf;
+    }
+    async function post(action, body) {
+      for (let tries = 0; tries < 2; tries++) {
+        const response = await fetch('/api/services/' + action, { method: 'POST', headers: { 'content-type': 'application/json', 'x-bashkitten-csrf': csrf }, body: JSON.stringify(body) });
+        const value = await response.json();
+        if (response.status === 403 && value.error === 'Invalid CSRF token' && !tries) { await bootstrap(); continue; }
+        if (!response.ok) throw Error(value.error || 'Pi login failed');
+        return value.login;
+      }
+    }
+    function fail(error) { notice.textContent = error.message; }
+    function render(login) {
+      if (!login || login.id !== attemptId) { pending = false; throw Error('This login is no longer active. Return to Services and try again.'); }
+      pending = login.status === 'pending'; cancel.hidden = !pending;
+      const next = JSON.stringify(login); if (next === signature) return; signature = next;
+      steps.replaceChildren();
+      if (!pending) {
+        notice.textContent = login.status === 'complete' ? 'Connected. You can close this tab and return to BashKitten.' : login.error || 'Login cancelled.';
+        return;
+      }
+      notice.textContent = 'Sign in with ' + provider + '. Pi completes authorization in Termux automatically.';
+      const authorization = login.events.find(event => event.type === 'auth_url' && /^https?:\/\//.test(event.url));
+      if (authorization) { location.replace(authorization.url); return; }
+      for (const event of login.events) {
+        if (event.message || event.instructions) { const line = document.createElement('p'); line.textContent = event.message || event.instructions; steps.append(line); }
+        if (event.userCode) { const code = document.createElement('strong'); code.textContent = event.userCode; steps.append(code); }
+        const links = event.type === 'device_code' ? [{ url: event.verificationUri, label: 'Continue in browser' }] : event.links || [];
+        for (const link of links) {
+          if (!/^https?:\/\//.test(link.url)) continue;
+          const a = document.createElement('a'); a.href = link.url; a.textContent = link.label || 'Continue'; a.target = '_blank'; a.rel = 'noopener'; steps.append(a);
+        }
+      }
+      if (login.prompt) {
+        const prompt = login.prompt, label = document.createElement('label'); label.textContent = prompt.message;
+        const field = document.createElement(prompt.type === 'select' ? 'select' : 'input'); field.id = 'loginInput'; label.htmlFor = field.id; field.autocomplete = 'off';
+        if (prompt.type === 'select') for (const option of prompt.options) field.add(new Option(option.label, option.id));
+        else { field.type = prompt.type === 'secret' ? 'password' : 'text'; field.placeholder = prompt.placeholder || ''; }
+        const button = document.createElement('button'); button.className = 'primary'; button.textContent = 'Continue';
+        button.onclick = async () => {
+          button.disabled = true;
+          try { const input = field.value; field.value = ''; render(await post('answer', { id: login.id, promptId: prompt.id, input })); }
+          catch (error) { fail(error); button.disabled = false; }
+        };
+        field.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); button.click(); } };
+        steps.append(label, field, button);
+      }
+    }
+    cancel.onclick = async () => { try { render(await post('cancel', { id: attemptId })); } catch (error) { fail(error); } };
+    async function refresh() {
+      if (!pending || polling || !attemptId) return;
+      polling = true;
+      try { const response = await fetch('/api/services/login-status'); if (!response.ok) throw Error('Return to BashKitten to sign in again.'); render((await response.json()).login); }
+      catch (error) { fail(error); }
+      finally { polling = false; }
+    }
+    (async () => {
+      try {
+        await bootstrap();
+        const settings = await (await fetch('/api/settings')).json(); document.documentElement.dataset.theme = settings.config.theme;
+        const login = await post('login', { provider, type: 'oauth' }); attemptId = login.id; render(login);
+      } catch (error) { pending = false; fail(error); }
+    })();
+    setInterval(refresh, 500);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  </script>
+</body>
+</html>

@@ -1,102 +1,114 @@
-# BashKitten
+# BashKitten · Pi in Termux
 
-BashKitten is a small, standalone Rust coding-agent harness for Ubuntu and
-Debian. It has seven built-in tools (`bash`, `read`, `edit`, `write`, `grep`,
-`find`, and `ls`), three provider modes, one process per active session, an
-authenticated local Web UI, and a small GTK lifecycle/settings application.
-Node.js and npm are not build or runtime dependencies.
+BashKitten's existing browser UI, backed by the **native Pi coding agent**.
+Open `http://127.0.0.1:3939` in Chrome, Firefox, or another Android browser.
+Pi runs locally in Termux as an unmodified `pi --mode rpc` subprocess for each
+session. The frontend keeps BashKitten's transcript, thinking/tool work traces,
+image viewer, compaction display, themes, and project/chat sidebar.
 
-The compatibility target is Pi post-`v0.85.0` (including GPT-6 Astra) at commit
-`9841914c71a74d81abe07f751aefd271fd924e63`; see [PI_UPSTREAM.md](PI_UPSTREAM.md)
-and [AGENTS.md](AGENTS.md) for the precise scope and intentional differences.
+## Install in Termux
 
-## Build the amd64 Debian package
-
-Podman is the only host build dependency. Rust, Cargo, GTK headers, tests, and
-packaging run inside the build container. Caches and artifacts default to the
-data drive:
+Use a current Termux release from GitHub or F-Droid:
 
 ```sh
-./scripts/build-deb-podman.sh
+pkg update
+pkg install nodejs-lts git ripgrep fd
+# Node >=22.19 is required. Node 24 LTS is supported.
+git clone -b codex/pi-termux-rpc https://github.com/openresearchtools/bashkitten.git
+cd bashkitten
+npm ci --omit=dev --ignore-scripts
+npm start
 ```
 
-The package and SHA-256 file are written to:
+Pi 0.85.1 is installed by npm as a pinned local dependency. You can also use its
+terminal UI in this checkout with `./node_modules/.bin/pi`. No Rust build, GTK,
+systemd, proot, custom inference server, or changes to Pi are required.
 
-```text
-/run/media/user/Data/bashkitten-builds/artifacts/
-```
+Create the local web account on the first visit. Then open **Settings → Services**
+and select one of Pi's supported browser-login or API-key methods. Complete the
+provider's own prompts in the new browser tab. Pi receives the localhost callback
+in Termux automatically and saves the connection; no terminal interaction is
+needed for sign-in. Device-code providers show their verification step in the
+browser. Pi's optional code-paste fallback is available in Services if needed.
+Existing `~/.pi/agent` credentials,
+models, settings, extensions and skills are used by Pi. Credentials stay in Pi's
+native store; BashKitten does not implement OAuth or inference itself.
 
-Override that location with `BASHKITTEN_BUILD_ROOT` when needed.
+Pick a working folder in the chat header and choose a model before sending.
+The working-folder picker starts at Termux's writable home, displayed as `~`.
+It shows writable subfolders, with no inaccessible `/data/data` parents or shared
+storage. No Android storage permission is needed: the browser's standard upload
+picker and download handling move files into and out of Termux.
 
-## Run
+## Use
+
+- The left sidebar groups named chats by working folder. The `⋯` button exposes
+  rename/delete; Copy and Fork remain on transcript messages.
+- The header's **Files** button opens an expandable file tree for the working
+  folder. Each project also has a Files button. Select a directory before uploading;
+  click the panel title to select the root. Uploads never overwrite existing files.
+- File links use the browser's native opening behavior; `↓` requests a download.
+  **Download ZIP** streams a ZIP assembled by the backend, including hidden files
+  and `.git`. Links leaving the selected folder are not followed.
+- Attach files using the composer picker, paste, or drag/drop. Pi receives absolute
+  paths for all files and native image content for PNG/JPEG/GIF/WebP. The app does
+  not depend on Termux's text-only clipboard API for browser image paste.
+- Enter queues a follow-up during a run. Queue rows support steer/edit/remove;
+  Pause invokes Pi's queue clear and abort and restores pending input to the draft.
+- **Compact context** invokes Pi's native compaction. Completed summaries use the
+  existing expandable compaction presentation. Pi RPC does not expose incremental
+  summary tokens, so the indicator remains visible until the summary arrives.
+- Mobile uses drawers for projects and files; wide screens support both sidebars.
+- **Settings → Services → Open an existing Pi session** links a native Pi session
+  into the sidebar. Do not open the same session concurrently in another Pi client.
+
+The old custom llama.cpp/OpenAI backend and goal loop are not used. Pi supplies
+providers, model capabilities, commands and extensions. `/goal` is passed to Pi if
+an installed Pi extension provides it. Custom provider/model configuration uses
+Pi's native `~/.pi/agent/models.json`.
+
+## Processes and storage
+
+BashKitten listens only on IPv4 loopback. A local password, HttpOnly cookie, origin
+check and CSRF token protect filesystem, session and credential endpoints.
+
+UI state defaults to `~/.local/share/bashkitten-pi/`; override it with
+`BASHKITTEN_DATA_DIR`. `PI_CODING_AGENT_DIR` selects an alternate native Pi profile.
+BashKitten stores native session JSONL plus small UI metadata and attachment files.
+Imported sessions keep their original Pi files. Forks preserve native history and
+share immutable attachments so deleting an original chat does not break its forks.
+
+One detached worker owns each Pi RPC process. Closing the browser or restarting
+`npm start` does not stop a running session; reconnect restores history and live
+work. Changing a working folder waits for the turn to settle, then reopens the
+same session with Pi in the new directory. Android can still stop Termux under
+memory/battery pressure; use Termux's wake lock/battery settings for long runs.
+
+Set the port in App settings, or start with `npm start -- --port=3939`.
+Pi is launched with `--offline` and `PI_TELEMETRY=0` to disable startup catalog,
+package/update checks and telemetry. Configured inference and explicit login
+requests still work.
+
+## Development and verification
 
 ```sh
-systemctl --user start bashkitten.target
-xdg-open http://127.0.0.1:3939
+npm ci --ignore-scripts
+npm test
 ```
 
-The first visit creates the one local Web UI account. Provider credentials,
-Web login state, and skills live under `~/.config/bashkitten/`; session folders
-live under `~/.local/share/bashkitten/sessions/`. Those directories and their
-sensitive files are restricted to the current user.
+Tests execute **real Pi RPC processes** against a deterministic local provider,
+including all seven real filesystem/shell tools, image payloads, native session persistence,
+queue edits, forks, compaction, cwd changes and a web-server restart during a turn.
+OAuth tests use Pi's real loopback listener, state/PKCE validation and credential
+store with a test-only token response. Live provider account authorization is a
+separate user sign-in.
+The fixture is test-only and never used by `npm start`.
 
-Connect your OpenAI subscription in **Settings → Subscriptions** using
-browser login or a device code. No Pi/Codex credential import is needed or
-supported. Logout removes the BashKitten subscription credential (not another
-application's login). OAuth secrets stay in Rust and the private credential file.
-The folder control in the chat header changes the session's primary working
-directory after any current turn settles; the sidebar automatically regroups it.
+See [architecture and limits](docs/pi-termux.md) and
+[Cuttlefish test record](tests/live/2026-09-19-pi-termux.md).
+The historical Rust sources and tests are retained for reference; they are not
+part of the Node/Termux runtime. Their former instructions are in
+[the legacy README](docs/legacy-rust-readme.md).
 
-Settings has **App**, **Subscriptions**, **APIs**, and **llama.cpp** tabs. The
-same folder picker is used for a chat's working folder, the App default working
-folder, the llama.cpp models directory, and additional model folders. It supports
-parent navigation, an absolute path, and creating a subfolder.
-
-Configure compatible providers under **APIs**, using either HTTP or HTTPS
-(including local servers such as `http://127.0.0.1:8000/v1`). Provider requests
-connect directly; BashKitten does not use an HTTP proxy. Model downloads, cached
-GGUF discovery, extra model folders, and GPU visibility controls are under
-**llama.cpp**. Opening that tab does not start a Hugging Face search or download.
-
-The composer **+** menu offers Attach files, Goal, and Compact context. Goal
-adds a removable chip: send the ordinary message to make it the session goal.
-`/goal OBJECTIVE` is also supported. Active goals continue normal turns until the
-agent completes them with `bashkitten goal complete` through `bash`; Pause stops
-automatic continuation. `/goal pause`, `/goal resume`, and `/goal clear` manage it.
-`/compact` uses Pi's normal compaction path. The chat streams the summary while
-compacting, restores its partial text after reload, and retains the finished
-summary in an expandable scroll pane. The header shows the compaction count.
-
-Secondary-click a sidebar chat for Rename chat and Delete chat. Secondary-click
-a project folder for Delete project chats; this includes every chat recorded
-under that exact folder. Shift+F10 opens the same menus. Deletion asks
-for confirmation and removes only the selected chat's session directory,
-including history and copied attachments. Its working folder and project files
-are kept. A running worker is stopped before its storage is removed.
-
-The llama.cpp settings list devices reported by the installed server with the
-chosen GPU visibility environment. Native fit controls, fit memory margin,
-minimum context, and maximum new tokens map directly to supported server flags.
-The Hugging Face downloader is embedded Rust code adapted from SimpleHF. Select
-repository files and a destination; files keep their original names and nested
-paths. Downloads support pause, resume, cancellation and an optional saved HF
-token. The default destination is `~/.local/share/bashkitten/models`.
-
-Useful CLI commands:
-
-```sh
-bashkitten models --json
-bashkitten auth status
-bashkitten session start --prompt "Inspect this repository"
-bashkitten session list
-bashkitten send SESSION_ID --steer "Check the parser first"
-```
-
-BashKitten performs no analytics, crash reporting, update checks, remote asset
-loading, or hidden model-catalog calls. Its application network traffic is
-limited to configured model endpoints, OpenAI subscription OAuth/inference,
-explicit Hugging Face actions, and loopback communication. Commands the agent
-deliberately runs through `bash` remain ordinary processes with their normal
-network access.
-
-Licensed under Apache-2.0.
+Apache-2.0. Dependency and historical attribution is in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

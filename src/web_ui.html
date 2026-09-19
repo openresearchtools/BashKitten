@@ -167,7 +167,7 @@
     .session.active { background: var(--surface-2); }
     .session { padding-right: 22px; }
     .session:focus-visible, .folder-heading:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
-    #sessionActions { position:fixed; z-index:20; min-width:150px; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:7px; box-shadow:0 6px 20px var(--shadow); }
+    #sessionActions { position:fixed; z-index:80; min-width:150px; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:7px; box-shadow:0 6px 20px var(--shadow); }
     #sessionActions button { display:block; width:100%; text-align:left; padding:8px 10px; border:0; background:transparent; }
     #sessionActions button.hidden { display:none; }
     #sessionActions button:hover, #sessionActions button:focus-visible { background:var(--surface-2); }
@@ -396,9 +396,10 @@
     .dialog-actions .primary { border: 0; }
     #folderDialog { width: min(620px, calc(100vw - 28px)); }
     .folder-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
-    .folder-toolbar button, .folder-create button { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+    .folder-toolbar button, .folder-create button, #folderLocations button { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+    #folderLocations { margin-bottom: 8px; }
     #folderPath { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
-    #folderList { height: 280px; margin-top: 8px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+    #folderList { height: min(280px, 32dvh); margin-top: 8px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
     .folder-row { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 9px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; color: var(--text); text-align: left; }
     .folder-row:hover { background: var(--surface-2); }
     .folder-empty { padding: 18px; color: var(--muted); text-align: center; }
@@ -419,6 +420,53 @@
       .chat-inner { width: min(100% - 24px, 790px); }
       #composerWrap { padding: 0 10px 10px; }
       #model { width: 145px; }
+    }
+
+    .topbar { min-width:0; }
+    .chat-heading { min-width:0; flex:1; }
+    #usage { flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #sidebarToggle { display:none; }
+    #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
+    #filePanel { min-width:0; overflow:auto; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
+    .file-heading { display:flex; align-items:center; gap:5px; min-height:42px; }
+    .file-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .file-toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+    .file-toolbar button, .file-toolbar a { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:5px; color:var(--text); font-size:12px; text-decoration:none; }
+    #fileDestination, #fileNotice { overflow-wrap:anywhere; padding:5px 2px; }
+    #fileTree details { margin-left:10px; }
+    #fileTree summary { cursor:pointer; padding:7px 1px; overflow-wrap:anywhere; }
+    .file-row { display:flex; gap:7px; padding:7px 2px 7px 15px; border-bottom:1px solid var(--line-soft); align-items:center; }
+    .file-row a:first-child { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .file-row a { color:var(--text); text-decoration:none; }
+    .file-row a:hover { text-decoration:underline; }
+    .session { display:flex; align-items:center; gap:4px; }
+    .session b { flex:1; min-width:0; }
+    .session .icon-button, .folder-heading .icon-button { width:26px; height:26px; flex-shrink:0; }
+    .folder-heading span { flex:1; overflow:hidden; text-overflow:ellipsis; }
+    .service-row { padding:10px 0; border-bottom:1px solid var(--line-soft); }
+    #serviceLogin { border:1px solid var(--line); padding:12px; margin:12px 0; overflow-wrap:anywhere; }
+    #serviceLogin input, #serviceLogin select, #piDialogInput input, #piDialogInput textarea, #piDialogInput select { width:100%; padding:9px; border:1px solid var(--line); background:var(--bg); }
+    @media (max-width:1100px) and (min-width:701px) {
+      #app { grid-template-columns:220px minmax(0,1fr); }
+      #app.files-open { grid-template-columns:220px minmax(0,1fr); }
+      #filePanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; box-shadow:-10px 0 30px var(--shadow); }
+    }
+    @media (max-width:700px) {
+      #app, #app.files-open { grid-template-columns:minmax(0,1fr); }
+      #sidebarToggle { display:inline-grid; flex-shrink:0; }
+      #sidebar { display:none; position:absolute; z-index:40; inset:0 auto 0 0; width:min(86vw,300px); box-shadow:10px 0 30px var(--shadow); }
+      #app.sidebar-open #sidebar { display:flex; }
+      #filePanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); }
+      #drawerBackdrop:not(.hidden) { display:block; position:absolute; inset:0; z-index:35; border:0; background:#0006; }
+      .topbar { flex-wrap:nowrap; gap:4px; padding:5px 8px; }
+      .chat-heading { flex-basis:auto; }
+      #usage { position:absolute; top:43px; left:48px; right:45px; width:auto; font-size:9px; }
+      #folderBtn { max-width:100%; padding:0; }
+      #folderLabel { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      #model { width:145px; }
+      .settings-grid { grid-template-columns:1fr; }
+      #composerWrap { padding-bottom:max(8px,env(safe-area-inset-bottom)); }
+      .chat-inner { width:calc(100% - 24px); }
     }
   </style>
 </head>
@@ -449,11 +497,12 @@
 
     <main id="workspace">
       <header class="topbar">
+        <button id="sidebarToggle" class="icon-button" type="button" aria-label="Projects and chats" aria-expanded="false">☰</button>
         <div class="chat-heading">
           <strong id="title" class="hidden">Settings</strong>
           <button id="folderBtn" type="button" title="Set/change working folder" aria-label="Set/change working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
         </div>
-        <span id="usage"></span>
+        <span id="usage"></span><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
       <div id="chat"><div id="chatInner" class="chat-inner"></div></div>
       <section id="settingsView" class="hidden">
@@ -461,9 +510,7 @@
           <div class="settings-heading"><h2>Settings</h2><button id="settingsDone" type="button">Done</button></div>
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
-            <button id="tabSubscriptions" type="button" role="tab" aria-selected="false" aria-controls="settingsSubscriptions" tabindex="-1" data-settings-tab="subscriptions">Subscriptions</button>
-            <button id="tabApis" type="button" role="tab" aria-selected="false" aria-controls="settingsApis" tabindex="-1" data-settings-tab="apis">APIs</button>
-            <button id="tabLlama" type="button" role="tab" aria-selected="false" aria-controls="settingsLlama" tabindex="-1" data-settings-tab="llama">llama.cpp</button>
+            <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Services</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
@@ -472,160 +519,19 @@
             <label class="wide">Default working folder<span class="folder-field"><input id="defaultCwd"><button id="defaultCwdBrowse" type="button">Browse…</button></span></label>
             <label>Default model<select id="defaultModel"></select></label>
             <label>Default thinking<select id="defaultThinking"></select></label>
-            <label>Network idle timeout<select id="httpIdleTimeout"><option value="30000">30 sec</option><option value="60000">1 min</option><option value="120000">2 min</option><option value="300000">5 min</option><option value="0">Disabled</option></select></label>
+
           </div>
           <p class="meta">Changing the port restarts only the Web UI. Agent sessions keep running.</p>
           </section>
-          <section id="settingsSubscriptions" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabSubscriptions">
-            <h3>OpenAI subscription</h3>
-            <p id="subscriptionStatus" class="meta" role="status">Checking connection…</p>
-            <div class="subscription-actions">
-              <button id="oauthLogin" type="button">Log in with OpenAI</button>
-              <button id="oauthDevice" type="button">Use device code</button>
-              <button id="oauthLogout" class="hidden" type="button">Log out</button>
-            </div>
-            <div id="oauthPending" class="hidden">
-              <p id="oauthMessage" class="meta" role="status"></p>
-              <strong id="oauthUserCode" class="hidden"></strong>
-              <div class="subscription-actions"><button id="oauthCancel" type="button">Cancel login</button></div>
-              <div id="oauthManual" class="hidden">
-                <label for="oauthCode">Complete login in your browser, or paste the authorization code / redirect URL here:</label>
-                <input id="oauthCode" type="text" autocomplete="off" spellcheck="false" placeholder="http://localhost:1455/auth/callback">
-                <div class="subscription-actions"><button id="oauthSubmit" type="button">Complete login</button></div>
-              </div>
-            </div>
-          </section>
-          <section id="settingsApis" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabApis">
-            <h3>OpenAI-compatible API</h3>
-            <div class="subscription-actions"><select id="compatibleProviders" aria-label="Compatible provider"></select><button id="compatibleAdd" type="button">Add provider</button><button id="compatibleRemove" type="button">Remove provider</button></div>
-            <div id="compatibleEditor" class="hidden">
-              <div class="settings-grid">
-                <label>Provider name<input id="compatibleName"></label><label>Provider ID<input id="compatibleId" readonly></label>
-                <label class="wide">Base URL<input id="compatibleUrl" placeholder="http://127.0.0.1:8000/v1"></label>
-                <label>Authentication<select id="compatibleAuth"><option value="none">None</option><option value="bearer">API key / bearer token</option><option value="header">Custom authentication header</option></select></label>
-                <label id="compatibleHeaderLabel">Header name<input id="compatibleHeader" placeholder="x-api-key"></label>
-                <label id="compatibleKeyLabel">Replace credential<input id="compatibleKey" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved credential"></label>
-                <label class="check" id="compatibleClearLabel"><input id="compatibleClear" type="checkbox"> Remove saved credential</label>
-              </div>
-              <div class="subscription-actions"><select id="compatibleModels" aria-label="Model preset"></select><button id="compatibleAddModel" type="button">Add model preset</button><button id="compatibleRemoveModel" type="button">Remove preset</button></div>
-              <div id="compatibleModelEditor" class="hidden">
-                <div class="settings-grid">
-                  <label>Model ID<input id="compatibleModelId" placeholder="ID accepted by this server"></label><label>Display name (optional)<input id="compatibleModelName"></label>
-                  <label>Context window<input id="compatibleContext" type="number" min="1"></label><label>Maximum output tokens<input id="compatibleMax" type="number" min="1"></label>
-                  <label class="check"><input id="compatibleImage" type="checkbox"> Image input</label><label class="check"><input id="compatibleReasoning" type="checkbox"> Reasoning supported</label>
-                  <fieldset class="wide"><legend>Supported thinking levels</legend><div id="compatibleLevels" class="subscription-actions"></div></fieldset>
-                  <label>Default thinking<select id="compatibleThinking"></select></label>
-                  <label>Thinking request format<select id="compatibleFormat"><option value="">Pi automatic detection</option><option>openai</option><option>openrouter</option><option>deepseek</option><option>together</option><option>baseten</option><option>zai</option><option>qwen</option><option>qwen-chat-template</option><option>chat-template</option><option>string-thinking</option><option>ant-ling</option></select></label>
-                  <label>Output-token field<select id="compatibleMaxField"><option value="">Pi automatic detection</option><option>max_completion_tokens</option><option>max_tokens</option></select></label>
-                  <label>Developer role<select id="compatibleDeveloper"></select></label><label>Reasoning effort parameter<select id="compatibleEffort"></select></label>
-                  <label>Stream usage<select id="compatibleUsage"></select></label><label>Finish reason required<select id="compatibleFinish"></select></label>
-                  <label>Store parameter supported<select id="compatibleStore"></select></label><label>Strict tool schemas supported<select id="compatibleStrict"></select></label>
-                  <label class="wide">Request parameters (JSON)<textarea id="compatibleParameters" rows="3" spellcheck="false">{}</textarea></label>
-                </div>
-                <details><summary>Advanced compatibility and thinking</summary>
-                  <label>Additional Pi compatibility controls (JSON)<textarea id="compatibleCompat" rows="4" spellcheck="false">{}</textarea></label>
-                  <label>Thinking level mapping (JSON)<textarea id="compatibleMapping" rows="3" spellcheck="false">{}</textarea></label>
-                  <label>Thinking token budgets (JSON)<textarea id="compatibleBudgets" rows="3" spellcheck="false">{}</textarea></label>
-                  <label>Token prices per million and tiers (JSON)<textarea id="compatibleCost" rows="3" spellcheck="false">{"input":0,"output":0,"cacheRead":0,"cacheWrite":0}</textarea></label>
-                </details>
-              </div>
-              <div class="subscription-actions"><button id="compatibleSave" type="button">Save provider and presets</button></div>
-            </div>
-            <p id="compatibleNotice" class="meta" role="status">Enter model IDs directly and save their context, output and thinking settings before starting a session.</p>
-          </section>
-          <section id="settingsLlama" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabLlama">
-            <h3>llama.cpp</h3>
-            <p id="llamaStatus" class="meta" role="status"></p>
-            <div class="settings-grid">
-              <label class="check wide"><input id="llamaEnabled" type="checkbox"> Enable managed router</label>
-              <label class="wide">Models directory<span class="folder-field"><input id="llamaDirectory"><button id="llamaDirectoryBrowse" type="button">Browse…</button></span></label>
-              <label>Router port<input id="llamaPort" type="number" min="1" max="65535"></label>
-              <label>Context size<input id="llamaContext" type="number" min="0"><small class="meta">0 uses the loaded model's native context and lets llama.cpp fit it.</small></label>
-              <label>Maximum new tokens<input id="llamaMaxNew" type="number" min="0"><small class="meta">0 leaves llama.cpp's default (unlimited).</small></label>
-              <label class="check"><input id="llamaFit" type="checkbox"> Fit model to device memory<small class="meta">Uses native fitting with Auto layers; explicit CPU/count layers disable fitting.</small></label>
-              <label>Fit target margin (MiB)<input id="llamaFitTarget" type="number" min="1"></label>
-              <label>Fit minimum context<input id="llamaFitContext" type="number" min="1"></label>
-              <label>GPU layers<select id="llamaGpu"><option value="auto">Auto / all available layers</option><option value="cpu">CPU only</option><option value="count">Explicit count</option></select></label>
-              <label>Layer count<input id="llamaLayers" type="number" min="0"></label>
-              <label>CPU threads (0 = default)<input id="llamaThreads" type="number" min="0"></label>
-              <label>Batch size<input id="llamaBatch" type="number" min="1"></label>
-              <label>Parallel slots<input id="llamaParallel" type="number" min="1"></label>
-              <label>Replace API key<input id="llamaKey" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved key"></label>
-              <label class="check"><input id="llamaClearKey" type="checkbox"> Remove saved API key</label>
-              <label class="check"><input id="llamaFlash" type="checkbox"> Flash attention</label>
-              <label class="check"><input id="llamaMmap" type="checkbox"> Memory map</label>
-              <label class="check"><input id="llamaMlock" type="checkbox"> Memory lock</label>
-              <label class="check wide"><input id="llamaAutoload" type="checkbox"> Allow router model autoload</label>
-              <fieldset class="wide"><legend>Available devices</legend>
-                <p id="llamaDevicesNotice" class="meta">Refresh to list devices from the installed llama.cpp build.</p>
-                <div id="llamaDevices"></div>
-                <button id="llamaRefreshDevices" type="button">Refresh devices</button>
-              </fieldset>
-              <details class="wide"><summary>Advanced GPU visibility</summary>
-                <p class="meta">Choose device indices visible to llama.cpp, such as 0 or 0,1. CUDA also accepts GPU UUIDs. Unchecked uses the service environment; an enabled empty value hides every device.</p>
-                <label class="check"><input id="llamaCudaOverride" type="checkbox"> Set CUDA_VISIBLE_DEVICES</label>
-                <label>Visible CUDA devices<input id="llamaCudaDevices" placeholder="0,1" spellcheck="false" disabled></label>
-                <label class="check"><input id="llamaVulkanOverride" type="checkbox"> Set GGML_VK_VISIBLE_DEVICES</label>
-                <label>Visible Vulkan devices<input id="llamaVulkanDevices" placeholder="0,1" spellcheck="false" disabled></label>
-              </details>
-              <label class="wide">Extra arguments (one argument per line)<textarea id="llamaExtra" rows="3" spellcheck="false"></textarea></label>
-            </div>
-            <details><summary>Generated launch configuration</summary><pre id="llamaEnvironment" class="tool-output"></pre><pre id="llamaArgs" class="tool-output"></pre><pre id="llamaPresetIni" class="tool-output"></pre></details>
-            <div class="subscription-actions"><button id="llamaSaveSettings" type="button">Save router settings</button><button id="restartLlama" type="button">Save and restart router</button></div>
-            <p id="llamaNotice" class="meta" role="status"></p>
-            <section class="settings-section" aria-labelledby="llamaModelsHeading">
-              <h3 id="llamaModelsHeading">Models</h3>
-              <div class="subscription-actions"><button id="llamaRefresh" type="button">Refresh router models</button><button id="llamaScan" type="button">Refresh local files</button></div>
-              <h4>Router catalog</h4><div id="llamaCatalog"></div>
-              <h4>Local model folders</h4>
-              <p class="meta">Hugging Face caches, llama.cpp caches and typical LM Studio folders are included when present. Add other locations to find their GGUF models.</p>
-              <div id="llamaSources"></div><div id="llamaFolders"></div>
-              <div class="subscription-actions"><button id="llamaAddFolder" type="button">Add model folder…</button><button id="llamaSaveFolders" type="button">Save folders and scan</button></div>
-              <label>Filter local models<input id="llamaLocalFilter" type="search" placeholder="Model name or folder"></label>
-              <p id="llamaLocalSummary" class="meta" role="status"></p>
-              <div id="llamaLocalModels" class="model-list"></div>
-            </section>
-            <div id="llamaOperation" class="hidden"><p id="llamaProgress" class="meta" role="status"></p><progress id="llamaProgressBar" max="1"></progress><button id="llamaCancel" type="button">Cancel operation</button></div>
-            <details id="llamaPresetEditor" class="settings-section"><summary>Model preset</summary>
-              <p id="llamaPresetPath" class="meta"></p>
-              <div class="settings-grid">
-                <label class="wide">Model ID<input id="llamaPresetId" readonly></label>
-                <label>Display name<input id="llamaPresetName"></label>
-                <label>Context window<input id="llamaPresetContext" type="number" min="1"><small class="meta">The router's reported loaded context is used after fitting.</small></label>
-                <label>Maximum output tokens<input id="llamaPresetMax" type="number" min="1"><small class="meta">Registry ceiling; fit can reduce the effective ceiling.</small></label>
-                <label>Maximum new tokens<input id="llamaPresetNew" type="number" min="0" placeholder="Use maximum output tokens"></label>
-                <label>Fit minimum context<input id="llamaPresetFitContext" type="number" min="1" placeholder="Inherit router setting"></label>
-                <label>Fit target margin (MiB)<input id="llamaPresetFitTarget" type="number" min="1" placeholder="Inherit router setting"></label>
-                <label>Fit override<select id="llamaPresetFit"><option value="">Inherit router setting</option><option value="on">On</option><option value="off">Off</option></select></label>
-                <label class="check"><input id="llamaPresetImage" type="checkbox"> Image input</label>
-                <label class="check"><input id="llamaPresetReasoning" type="checkbox"> Reasoning supported</label>
-                <label>Thinking levels (comma separated)<input id="llamaPresetLevels" value="off"></label>
-                <label>Default thinking<select id="llamaPresetThinking"><option>off</option></select></label>
-                <label class="check"><input id="llamaPresetEffort" type="checkbox"> Send reasoning_effort</label>
-                <label class="wide">Request parameters (JSON)<textarea id="llamaPresetParameters" rows="3" spellcheck="false">{}</textarea></label>
-              </div>
-              <label>Advanced model overrides (llama.cpp INI entries)<textarea id="llamaPresetOptions" rows="4" spellcheck="false" placeholder="ngl = 32"></textarea></label>
-              <button id="llamaSavePreset" type="button">Save model preset</button>
-            </details>
-            <details class="settings-section" id="hfDownloadSection"><summary>Download from Hugging Face</summary>
-              <label>Download folder<span class="folder-field"><input id="hfDownloadFolder"><button id="hfDownloadBrowse" type="button">Browse…</button></span></label>
-              <label>Hugging Face access token<input id="hfToken" type="password" autocomplete="new-password" placeholder="Optional token for gated or private repositories"></label>
-              <label class="check"><input id="hfRememberToken" type="checkbox"> Save token on this computer</label>
-              <div class="subscription-actions"><button id="hfSaveSettings" type="button">Save download settings</button><button id="hfForgetToken" type="button">Remove saved token</button></div>
-              <p id="hfTokenStatus" class="meta"></p>
-              <label>Search or repository<input id="llamaHfQuery" placeholder="organization/model-GGUF"></label>
-              <div class="subscription-actions"><button id="llamaHfSearch" type="button">Search</button><button id="llamaHfDetails" type="button">Open repository</button></div>
-              <div id="llamaHfResults"></div>
-              <div id="llamaHfSelection" class="hidden">
-                <p id="llamaHfRepository" class="meta"></p><p id="llamaHfGated" class="meta"></p>
-                <label>File filter<input id="hfFileFilter" type="search" placeholder="GGUF name, quantization or folder"></label>
-                <div class="subscription-actions"><button id="hfSelectVisible" type="button">Select visible files</button><button id="hfClearFiles" type="button">Clear selection</button></div>
-                <div id="hfFileList" style="max-height:330px;overflow:auto"></div><p id="hfFileSummary" class="meta"></p>
-                <label>Concurrent connections<input id="hfConnections" type="number" min="1" max="32" value="8"></label>
-                <button id="llamaHfDownload" type="button">Download selected files</button>
-              </div>
-              <p id="hfNotice" class="meta" role="status"></p><div id="hfJobs"></div>
-            </details>
+          <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
+            <h3>Pi services</h3>
+            <p class="meta">Connect using Pi’s own browser login or API key setup. Credentials are shared with Pi in Termux.</p>
+            <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a service" aria-label="Find a service"><button id="refreshServices" type="button">Refresh</button></div>
+            <div id="serviceLogin" class="hidden settings-section" role="status"></div>
+            <div id="servicesList"></div>
+            <p class="meta">Custom models use Pi’s native ~/.pi/agent/models.json. Existing Pi configuration is loaded automatically.</p>
+            <div class="subscription-actions"><button id="importPiSessions" type="button">Open an existing Pi session</button></div>
+            <div id="piSessions"></div>
           </section>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
           <p id="settingsNotice" class="meta" role="status"></p>
@@ -645,7 +551,7 @@
               <button id="attachBtn" class="icon-button" type="button" title="Add files or actions" aria-label="Add files or actions" aria-haspopup="menu" aria-expanded="false" aria-controls="composerActions">＋</button>
               <div id="composerActions" class="hidden" role="menu" aria-label="Composer actions">
                 <button id="menuAttach" type="button" role="menuitem">Attach files</button>
-                <button id="menuGoal" type="button" role="menuitem">Goal</button>
+
                 <button id="menuCompact" type="button" role="menuitem">Compact context</button>
               </div>
               <select id="model" title="Model"></select>
@@ -668,14 +574,22 @@
         <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""></div></div>
       </section>
     </main>
+    <aside id="filePanel" class="hidden" aria-label="Repository files">
+      <div class="file-heading"><strong id="fileRootLabel">Files</strong><button id="closeFiles" type="button" class="icon-button" aria-label="Close files">×</button></div>
+      <div class="file-toolbar"><button id="uploadRepo" type="button">Upload files</button><button id="refreshFiles" type="button" aria-label="Refresh files">↻</button><a id="downloadRepo">Download ZIP</a><input id="repoUpload" type="file" multiple class="hidden"></div>
+      <div id="fileDestination" class="meta"></div><p id="fileNotice" class="meta" role="status"></p><div id="fileTree"></div>
+    </aside>
+    <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
+  <dialog id="piDialog"><form id="piDialogForm" class="dialog-body"><h2 id="piDialogTitle"></h2><p id="piDialogMessage"></p><div id="piDialogInput"></div><div class="dialog-actions"><button id="piDialogCancel" type="button">Cancel</button><button class="primary">Continue</button></div></form></dialog>
 
   <dialog id="folderDialog">
     <form id="folderForm" class="dialog-body">
       <h2 id="folderTitle">Working folder</h2>
+      <div id="folderLocations" class="subscription-actions" aria-label="Storage locations"></div>
       <div class="folder-toolbar">
         <button id="folderUp" type="button" title="Parent folder">↑</button>
-        <input id="folderPath" required aria-label="Current folder" placeholder="/home/user/project">
+        <input id="folderPath" required aria-label="Current folder" placeholder="~/projects">
         <button id="folderGo" type="button">Go</button>
       </div>
       <div id="folderList" aria-label="Folders"></div>
@@ -1316,7 +1230,7 @@
     function setRunButton(running) {
       const button = $('#sendBtn');
       const editing = Boolean(editingQueueId);
-      const command = !editing && (goalDraft || (!pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact|goal)(?:\s|$)/.test($('#prompt').value.trim())));
+      const command = !editing && (goalDraft || (!pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact)(?:\s|$)/.test($('#prompt').value.trim())));
       button.dataset.mode = editing ? 'edit' : command ? 'command' : (running ? 'pause' : 'play');
       button.textContent = running && !editing && !command ? 'Ⅱ' : '▶';
       button.title = editing ? (queuedItems().find(item => item.id === editingQueueId)?.kind === 'steer' ? 'Send edited steering message' : 'Save queued message') : goalDraft ? 'Send goal' : command ? 'Run command' : (running ? 'Stop current run' : 'Send');
@@ -1325,6 +1239,9 @@
 
     function renderEvent(event) {
       if (event.type === 'session') return;
+      if (event.type === 'snapshot') { renderSnapshot(event.data); return; }
+      if (event.type === 'extension_ui_request') { showPiRequest(event); return; }
+      if (event.type === 'notice') { $('#composerHint').textContent = event.message; return; }
       const followBottom = $('#chat').scrollHeight - $('#chat').scrollTop - $('#chat').clientHeight < 100;
       if (event.type === 'assistant_delta') {
         let body = $('#liveAssistant .message-content');
@@ -1381,6 +1298,7 @@
       } else if (event.type === 'agent_settled') {
         finishRenderedTurn(Date.now());
         queueState.busy = false;
+        clearLive();
         if (current) current.running = false;
         setRunButton(false);
         $('#composerHint').textContent = editingQueueId ? 'Editing queued message · Esc to cancel' : 'Paste, drag, or attach files';
@@ -1406,9 +1324,10 @@
         $('#composerHint').textContent = `Using ${event.model}`;
       } else if (event.type === 'cwd_change') {
         current.cwd = event.cwd;
-        $('#folderLabel').textContent = event.cwd;
-        $('#folderBtn').title = `Change working folder: ${event.cwd}`;
-        $('#composerHint').textContent = `Working folder: ${event.cwd}`;
+        if (!$('#filePanel').classList.contains('hidden')) openFiles(event.cwd);
+        $('#folderLabel').textContent = displayFolder(event.cwd);
+        $('#folderBtn').title = `Change working folder: ${displayFolder(event.cwd)}`;
+        $('#composerHint').textContent = `Working folder: ${displayFolder(event.cwd)}`;
         loadSessions().catch(() => {});
       } else if (event.type === 'cwd_error') {
         $('#composerHint').textContent = event.message;
@@ -1480,24 +1399,22 @@
       $('#defaultThinking').value = value.defaultThinking;
     }
 
+    let folderLocations=[];
+    function displayFolder(value) {
+      if(!value)return '';
+      const location=folderLocations.find(l=>l.path!=='/'&&(value===l.path||value.startsWith(l.path+'/')));
+      return location?location.display+value.slice(location.path.length):value;
+    }
     async function loadSettings() {
       const value = await api('/api/settings');
       config = value.config;
+      folderLocations = value.locations || [];
       applyTheme(config.theme);
       pendingCwd = config.default_cwd;
       $('#webPort').value = config.web_port;
-      const idleTimeout = config.http_idle_timeout_ms ?? 300000;
-      if (![...$('#httpIdleTimeout').options].some(option => Number(option.value) === idleTimeout)) $('#httpIdleTimeout').add(new Option(`${idleTimeout / 1000} sec`, String(idleTimeout)));
-      $('#httpIdleTimeout').value = String(idleTimeout);
       $('#theme').value = config.theme || 'system';
-      $('#defaultCwd').value = config.default_cwd;
-      $('#llamaEnabled').checked = config.llama.enabled;
-      $('#llamaPort').value = config.llama.port;
-      $('#llamaContext').value = config.llama.context_size;
-      renderCompatibleProviders();
-      populateLlamaSettings();
-      if (activeSettingsTab === 'llama') await loadLlamaStatus();
-      if (activeSettingsTab === 'subscriptions') await refreshSubscription();
+      $('#defaultCwd').value = displayFolder(config.default_cwd);
+      if (activeSettingsTab === 'services') await refreshServices();
     }
 
     let displayedGoal = null;
@@ -1702,11 +1619,13 @@
         group.className = 'folder-group';
         const heading = document.createElement('div');
         heading.className = 'folder-heading';
-        heading.title = folder || 'Working folder unavailable';
+        heading.title = displayFolder(folder) || 'Working folder unavailable';
         heading.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg>';
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
+        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent='▤'; browse.title='Browse project files'; browse.setAttribute('aria-label','Browse files in '+folder); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
+
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
         for (const session of groupSessions) {
@@ -1717,6 +1636,8 @@
           const title = document.createElement('b');
           title.textContent = session.title;
           item.append(title);
+          const more = document.createElement('button'); more.type='button'; more.className='icon-button'; more.textContent='⋯'; more.setAttribute('aria-label','Actions for '+session.title); more.onclick=event=>{event.stopPropagation();showSessionActions(session,more);}; item.append(more);
+
           if (session.running) {
             const dot = document.createElement('span');
             dot.className = 'running-dot';
@@ -1725,7 +1646,7 @@
           }
           bindSessionContextMenu(item,session);
           item.onclick = () => openSession(session);
-          item.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();openSession(session);}});
+          item.addEventListener('keydown',event=>{if(event.target===item&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openSession(session);}});
           group.append(item);
         }
         root.append(group);
@@ -1823,8 +1744,8 @@
           current.current_segment = updated.current_segment;
           if (updated.cwd !== current.cwd) {
             current.cwd = updated.cwd;
-            $('#folderLabel').textContent = current.cwd;
-            $('#folderBtn').title = `Change working folder: ${current.cwd}`;
+            $('#folderLabel').textContent = displayFolder(current.cwd);
+            $('#folderBtn').title = `Change working folder: ${displayFolder(current.cwd)}`;
           }
         }
         renderSessionSidebar(sessionCache);
@@ -1889,7 +1810,7 @@
       $('#folderBtn').classList.remove('hidden');
       $('#usage').classList.remove('hidden');
       $('#title').classList.add('hidden');
-      $('#folderLabel').textContent = current?.cwd || pendingCwd || 'Set folder';
+      $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
       $('#folderBtn').disabled = false;
       setRunButton(queueState.busy || Boolean(current?.running));
       if (current) renderUsage();
@@ -1898,6 +1819,8 @@
 
     function showSettingsView() {
       closeImageViewer();
+      setSidebar(false);
+      closeFiles();
       $('#chat').classList.add('hidden');
       $('#composerWrap').classList.add('hidden');
       $('#settingsView').classList.remove('hidden');
@@ -1921,7 +1844,7 @@
             if (source === stream) source = null;
             reject(new Error('Could not connect to the agent session'));
           }
-        }, 5000);
+        }, 15000);
         stream.onmessage = event => {
           if (sessionView !== view) { stream.close(); return; }
           try {
@@ -1937,12 +1860,7 @@
               }
               subscribed = true;
               clearTimeout(timeout);
-              if (value.data?.usage) consume({type: 'usage', data: value.data.usage});
-              applyModelSelection(value.data?.modelSelection);
-              for (const item of value.data?.events || []) consume(item);
-              if (value.data?.busy) consume({type:'agent_start'});
-              queueState.busy=Boolean(value.data?.busy);if(current)current.running=queueState.busy;setRunButton(queueState.busy);
-              if(value.data?.compacting!==undefined || !value.data?.busy)setCompacting(value.data?.compacting);
+              consume({type:'snapshot', data:value.data});
               resolve();
               return;
             }
@@ -1986,9 +1904,9 @@
       editingQueueSnapshot = null;
       renderAttachments();
       $('#title').textContent = session.title;
-      $('#folderLabel').textContent = session.cwd || 'Working folder';
+      $('#folderLabel').textContent = displayFolder(session.cwd) || 'Working folder';
       $('#folderBtn').disabled = false;
-      $('#folderBtn').title = `Change working folder: ${session.cwd}`;
+      $('#folderBtn').title = `Change working folder: ${displayFolder(session.cwd)}`;
       setRunButton(Boolean(session.running));
       if (session.model) {
         $('#model').value = session.model;
@@ -1999,36 +1917,12 @@
       renderedEntries = new Set();
       resetUsage();
       $('#chatInner').innerHTML = '';
-      const pendingEvents = [];
-      let bufferingEvents = Boolean(session.running);
-      if (session.running) {
-        await connectSession(session.id, value => {
-          if (sessionView !== view) return;
-          if (bufferingEvents) pendingEvents.push(value);
-          else renderEvent(value);
-        }, view).catch(() => {});
-      }
+      await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
       if (sessionView !== view) return;
-      const history = await api(`/api/sessions/${session.id}/segments/current`);
+      await connectSession(session.id, renderEvent, view);
       if (sessionView !== view) return;
-      oldestSegment = history.segment;
-      current.current_segment = history.segment;
-      loadingHistory = false;
-      for (const entry of history.entries) {
-        if (entry.type === 'session') { current.model = `${entry.provider}/${entry.modelId}`; current.thinking = entry.thinkingLevel; }
-        else if (entry.type === 'model_change') current.model = `${entry.provider}/${entry.modelId}`;
-        else if (entry.type === 'thinking_level_change') current.thinking = entry.thinkingLevel;
-      }
-      $('#model').value = current.model;
-      setThinking($('#model'));
-      $('#thinking').value = current.thinking;
-      history.entries.forEach(renderEntry);
-      updateHistoryControl();
-      if (renderedTurn) finishRenderedTurn(renderedTurn.lastAt);
-      bufferingEvents = false;
-      pendingEvents.forEach(renderEvent);
-      await refreshQueue().catch(() => { if (sessionView === view) renderQueueState(); });
-      if (sessionView !== view) return;
+      setSidebar(false);
+      if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
       document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
       $('#chat').scrollTop = $('#chat').scrollHeight;
     }
@@ -2055,7 +1949,7 @@
       renderQueueState();
       pendingCwd = config?.default_cwd || '';
       $('#title').textContent = 'New chat';
-      $('#folderLabel').textContent = pendingCwd || 'Set folder';
+      $('#folderLabel').textContent = displayFolder(pendingCwd) || 'Set folder';
       $('#folderBtn').disabled = false;
       $('#folderBtn').title = 'Set working folder';
       setRunButton(false);
@@ -2067,6 +1961,7 @@
       }
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
       showWelcome();
+      setSidebar(false);
       $('#prompt').focus();
     }
 
@@ -2210,9 +2105,12 @@
       catch (error) { if (generation !== folderGeneration) return false; throw error; }
       if (generation !== folderGeneration || !$('#folderDialog').open) return false;
       folderView = value;
+      folderLocations = value.locations || folderLocations;
+      const locations=$('#folderLocations');locations.replaceChildren();
+      for(const location of folderLocations){const button=document.createElement('button');button.type='button';button.textContent=location.label;button.onclick=()=>loadFolder(location.path).catch(error=>alert(error.message));locations.append(button);}
       $('#folderUse').disabled = false;
       $('#createFolder').disabled = false;
-      $('#folderPath').value = value.path;
+      $('#folderPath').value = value.displayPath || displayFolder(value.path);
       $('#folderUp').disabled = !value.parent;
       const list = $('#folderList');
       list.innerHTML = '';
@@ -2248,12 +2146,11 @@
         const reply = await api(`/api/sessions/${current.id}/cwd`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({cwd: path})});
         $('#composerHint').textContent = reply.message;
         await loadSessions();
-      } else $('#folderLabel').textContent = path || 'Set folder';
+      } else $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
       pendingCwd = path;
       $('#prompt').focus();
     });
-    $('#defaultCwdBrowse').onclick = () => openFolderPicker('Default working folder', $('#defaultCwd').value, path => { $('#defaultCwd').value = path; });
-    $('#llamaDirectoryBrowse').onclick = () => openFolderPicker('Models directory', $('#llamaDirectory').value, path => { $('#llamaDirectory').value = path; });
+    $('#defaultCwdBrowse').onclick = () => openFolderPicker('Default working folder', $('#defaultCwd').value, path => { $('#defaultCwd').value = displayFolder(path); });
     $('#folderGo').onclick = () => loadFolder($('#folderPath').value.trim()).catch(error => alert(error.message));
     $('#folderUp').onclick = () => folderView.parent && loadFolder(folderView.parent).catch(error => alert(error.message));
     $('#createFolder').onclick = async () => {
@@ -2272,7 +2169,7 @@
     $('#folderForm').onsubmit = async event => {
       event.preventDefault();
       try {
-        if ($('#folderPath').value.trim() !== folderView.path && !await loadFolder($('#folderPath').value.trim())) return;
+        if ($('#folderPath').value.trim() !== (folderView.displayPath || folderView.path) && !await loadFolder($('#folderPath').value.trim())) return;
       } catch (error) {
         alert(error.message);
         return;
@@ -2287,7 +2184,6 @@
     $('#attachBtn').onclick=()=>{const menu=$('#composerActions'),open=menu.classList.contains('hidden');menu.classList.toggle('hidden',!open);$('#attachBtn').setAttribute('aria-expanded',String(open));$('#menuCompact').disabled=!current;if(open)$('#menuAttach').focus();};
     $('#menuAttach').onclick=()=>{closeComposerActions();$('#files').click();};
     $('#menuCompact').onclick=()=>{closeComposerActions();runSessionCommand('/compact');};
-    $('#menuGoal').onclick=()=>{closeComposerActions();goalDraft=true;renderGoalChip();$('#prompt').focus();};
     $('#removeGoalChip').onclick=()=>{goalDraft=false;renderGoalChip();$('#prompt').focus();};
     document.addEventListener('click',event=>{if(!$('#composerActions').contains(event.target)&&!$('#attachBtn').contains(event.target))closeComposerActions();});
     $('#composerActions').onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeComposerActions();$('#attachBtn').focus();}else if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();const items=[...$('#composerActions').querySelectorAll('button:not(:disabled)')],index=items.indexOf(document.activeElement);items[(index+(event.key==='ArrowDown'?1:items.length-1))%items.length]?.focus();}};
@@ -2301,9 +2197,10 @@
       else if (event.key === '+' || event.key === '=') { event.preventDefault(); setViewerZoom(viewerZoom * 1.25); }
     });
     $('#files').onchange = event => { addAttachments(event.target.files); event.target.value = ''; };
+    const clipboardFiles = new WeakSet();
     $('#prompt').addEventListener('paste', event => {
       const files = [...(event.clipboardData?.files || [])];
-      if (files.length) { event.preventDefault(); addAttachments(files); }
+      if (files.length) { event.preventDefault(); files.forEach(file=>clipboardFiles.add(file)); addAttachments(files); }
     });
     const composeBox = $('.compose-box');
     composeBox.addEventListener('dragenter', event => { event.preventDefault(); composeBox.classList.add('dragging'); });
@@ -2320,54 +2217,14 @@
     $('#thinking').onchange = async () => { try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
-    async function runSessionCommand(text, consumeDraft = false, goalAction = null) {
-      const compact = /^\/compact(?:\s|$)/.test(text);
-      const argument = text.slice(compact ? 8 : 5).trim();
-      const draft = {text:$('#prompt').value, files:[...pendingFiles], retained:[...pendingRetainedAttachments]};
-      let createdId = null;
-      $('#sendBtn').disabled = true;
+    async function runSessionCommand(text, consumeDraft = false) {
+      if (!current) { $('#composerHint').textContent = 'Open a chat first.'; return; }
       try {
-        if (!current) {
-          if (compact || !argument || (!goalAction && ['pause','resume','clear','complete'].includes(argument))) throw new Error('Open a chat first, or set a new goal with an objective.');
-          const form = new FormData();
-          form.append('prompt', argument); form.append('cwd', pendingCwd);
-          form.append('model', $('#model').value); form.append('thinking', $('#thinking').value);
-          const result = await api('/api/sessions', {method:'POST',body:form});
-          createdId = result.id;
-          const sessions = await loadSessions();
-          await openSession(sessions.find(session => session.id === result.id));
-        }
-        const id = current.id;
-        if (!compact && !argument) {
-          await refreshQueue();
-          $('#composerHint').textContent = 'Use /goal <objective>, /goal pause, /goal resume, /goal complete or /goal clear.';
-        } else {
-          await api(`/api/sessions/${id}/resume`, {method:'POST'});
-          if (current?.id !== id) return false;
-          await connectSession(id);
-          if (compact) {
-            await api(`/api/sessions/${id}/compact`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({instructions:argument || null})});
-            if (current?.id === id) $('#composerHint').textContent = 'Compaction requested…';
-          } else {
-            const action = goalAction || (['pause','resume','clear','complete'].includes(argument) ? {action:argument} : {action:'set',objective:argument});
-            const result = await api(`/api/sessions/${id}/goal`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(action)});
-            if (current?.id === id) {renderGoal(result.data); $('#composerHint').textContent = 'Goal updated.';}
-          }
-        }
-        if (consumeDraft && current?.id === id && ($('#prompt').value === text || createdId)) {
-          $('#prompt').value = ''; $('#prompt').dispatchEvent(new Event('input'));
-        }
-        return true;
-      } catch (error) {
-        $('#composerHint').textContent = error.message;
-        return false;
-      } finally {
-        if (!consumeDraft && createdId && current?.id === createdId) {
-          $('#prompt').value=draft.text; pendingFiles=draft.files; pendingRetainedAttachments=draft.retained;
-          renderAttachments(); $('#prompt').dispatchEvent(new Event('input'));
-        }
-        $('#sendBtn').disabled=false; setRunButton(queueState.busy);
-      }
+        await api(`/api/sessions/${current.id}/resume`, {method:'POST'});
+        if (!source) await connectSession(current.id);
+        await api(`/api/sessions/${current.id}/compact`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({instructions:text.slice(8).trim()})});
+        if (consumeDraft) { $('#prompt').value = ''; $('#prompt').dispatchEvent(new Event('input')); }
+      } catch (error) { $('#composerHint').textContent = error.message; }
     }
 
     $('#composer').onsubmit = async event => {
@@ -2376,7 +2233,12 @@
       const text = $('#prompt').value.trim();
       if (editingQueueId) { await saveQueueEdit(); return; }
       if (!text && !pendingFiles.length && !pendingRetainedAttachments.length) return;
-      if (!goalDraft && !pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact|goal)(?:\s|$)/.test(text)) {
+      if (!$('#model').value) {
+        showSettingsView(); selectSettingsTab('services');
+        $('#settingsNotice').textContent = 'Connect a Pi service to choose a model. Your draft is kept.';
+        return;
+      }
+      if (!goalDraft && !pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact)(?:\s|$)/.test(text)) {
         await runSessionCommand(text, true);
         return;
       }
@@ -2403,7 +2265,7 @@
           current = sessions.find(session => session.id === result.id) || {id: result.id, title: text || 'Image session', cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value, running: true};
           renderSessionSidebar(sessions);
           $('#title').textContent = current.title;
-          $('#folderLabel').textContent = current.cwd;
+          $('#folderLabel').textContent = displayFolder(current.cwd);
           $('#folderBtn').disabled = false;
         }
         if (!source || !queueState.busy) {
@@ -2414,7 +2276,14 @@
         messageForm.append('content', text);
         if(sendingGoal)messageForm.append('goal','true');
         messageForm.append('delivery', 'queue');
-        for (const file of files) messageForm.append('file', file);
+        for (const file of files) {
+          if(clipboardFiles.has(file)) {
+            // Android Chromium may stall when FormData streams a clipboard Blob.
+            // Read it in the renderer and send text; Pi still receives image bytes.
+            const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader(),timer=setTimeout(()=>{reader.abort();reject(Error('The browser could not read this clipboard image. Try attaching the file.'));},15000);reader.onload=()=>{clearTimeout(timer);resolve(reader.result.slice(reader.result.indexOf(',')+1));};reader.onerror=()=>{clearTimeout(timer);reject(Error('Could not read pasted image'));};reader.readAsDataURL(file);});
+            messageForm.append('inline_file',JSON.stringify({name:file.name,data:encoded}));
+          } else messageForm.append('file', file);
+        }
         for (const path of retained) messageForm.append('retained_attachment', path);
         const result = await api(`/api/sessions/${current.id}/messages`, {method: 'POST', body: messageForm});
         renderQueueState(result.data);
@@ -2482,8 +2351,7 @@
       }
       $('#settingsSaveRow').classList.toggle('hidden', name !== 'app');
       $('#settingsNotice').textContent = '';
-      if (name === 'subscriptions') refreshSubscription().catch(error => { $('#subscriptionStatus').textContent = error.message; });
-      if (name === 'llama') loadLlamaStatus();
+      if (name === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
     }
     const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
     for (const tab of settingsTabs) {
@@ -2504,7 +2372,6 @@
       try {
       if (activeSettingsTab !== 'app') return;
       config.web_port = Number($('#webPort').value);
-      config.http_idle_timeout_ms = Number($('#httpIdleTimeout').value);
       config.theme = $('#theme').value;
       config.default_cwd = $('#defaultCwd').value;
       config.default_model = $('#defaultModel').value;
@@ -2526,8 +2393,6 @@
           location.assign(saved.restartUrl);
         },1200);return;
       }
-      $('#llamaKey').value = '';
-      delete config.llama.api_key;
       await loadModels();
       applyTheme(config.theme);
       if (!current) {
@@ -2541,366 +2406,167 @@
         $('#settingsNotice').textContent = error.message;
       }
     };
-    let compatibleIndex = -1, compatibleModelIndex = -1;
-    const compatibleFlags = {compatibleDeveloper:'supportsDeveloperRole',compatibleEffort:'supportsReasoningEffort',compatibleUsage:'supportsUsageInStreaming',compatibleFinish:'supportsFinishReason',compatibleStore:'supportsStore',compatibleStrict:'supportsStrictMode'};
-    for(const id of Object.keys(compatibleFlags)) $('#'+id).replaceChildren(new Option('Pi automatic detection',''),new Option('Yes','true'),new Option('No','false'));
-    const thinkingLevels=['off','minimal','low','medium','high','xhigh','max'];
-    for(const level of thinkingLevels){const label=document.createElement('label');label.className='check';const input=document.createElement('input');input.type='checkbox';input.value=level;input.onchange=compatibleThinking;label.append(input,document.createTextNode(level));$('#compatibleLevels').append(label);}
-    function compatibleError(error){$('#compatibleNotice').textContent=error.message;}
-    function jsonObject(id,label){const value=JSON.parse($('#'+id).value||'{}');if(!value||Array.isArray(value)||typeof value!=='object')throw Error(label+' must be a JSON object.');return value;}
-    function compatibleThinking(){
-      const reasoning=$('#compatibleReasoning').checked, selected=$('#compatibleThinking').value;
-      for(const input of $('#compatibleLevels').querySelectorAll('input')){input.disabled=!reasoning&&input.value!=='off';if(input.disabled)input.checked=false;}
-      if(!reasoning)$('#compatibleLevels input[value="off"]').checked=true;
-      const levels=[...$('#compatibleLevels').querySelectorAll('input:checked')].map(input=>input.value);
-      $('#compatibleThinking').replaceChildren(...levels.map(level=>new Option(level,level)));
-      if(levels.includes(selected))$('#compatibleThinking').value=selected;
+    function renderSnapshot(data = {}) {
+      const chat = $('#chat'), follow = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 100;
+      const position = chat.scrollTop;
+      renderedTurn = null; renderedEntries = new Set(); liveToolCalls.clear();
+      $('#chatInner').replaceChildren();
+      (data.entries || []).forEach(renderEntry);
+      if (renderedTurn) finishRenderedTurn(renderedTurn.lastAt);
+      (data.events || []).forEach(renderEvent);
+      if (!(data.entries || []).length && !(data.events || []).length) showWelcome();
+      renderQueueState(data); applyModelSelection(data.modelSelection); renderUsage(data.usage);
+      setCompacting(data.compacting);
+      if (current) current.running = Boolean(data.busy);
+      for (const request of data.dialogs || []) showPiRequest(request);
+      chat.scrollTop = follow ? chat.scrollHeight : position;
     }
-    $('#compatibleReasoning').onchange=compatibleThinking;
-    function compatibleAuth(){const mode=$('#compatibleAuth').value;$('#compatibleHeaderLabel').classList.toggle('hidden',mode!=='header');for(const id of ['compatibleKeyLabel','compatibleClearLabel'])$('#'+id).classList.toggle('hidden',mode==='none');}
-    $('#compatibleAuth').onchange=compatibleAuth;
-    function collectCompatibleModel(){
-      const provider=config.compatible_providers[compatibleIndex];if(!provider||compatibleModelIndex<0)return;
-      const model=provider.models[compatibleModelIndex];if(!model)return;
-      const compat=jsonObject('compatibleCompat','Compatibility');
-      for(const [id,key] of Object.entries(compatibleFlags)){if($('#'+id).value==='')delete compat[key];else compat[key]=$('#'+id).value==='true';}
-      for(const [id,key] of [['compatibleFormat','thinkingFormat'],['compatibleMaxField','maxTokensField']]){if($('#'+id).value)compat[key]=$('#'+id).value;else delete compat[key];}
-      const levels=[...$('#compatibleLevels').querySelectorAll('input:checked')].map(input=>input.value);
-      Object.assign(model,{id:$('#compatibleModelId').value,name:$('#compatibleModelName').value,context_window:Number($('#compatibleContext').value),max_tokens:Number($('#compatibleMax').value),input:$('#compatibleImage').checked?['text','image']:['text'],reasoning:$('#compatibleReasoning').checked,thinking_levels:levels,default_thinking:$('#compatibleThinking').value,compatibility:compat,request_parameters:jsonObject('compatibleParameters','Request parameters'),thinking_level_map:jsonObject('compatibleMapping','Thinking level mapping'),thinking_budgets:jsonObject('compatibleBudgets','Thinking budgets'),cost:jsonObject('compatibleCost','Cost')});
-      delete model.supports_developer_role;delete model.supports_reasoning_effort;
-    }
-    function collectCompatibleProvider(){
-      const provider=config.compatible_providers[compatibleIndex];if(!provider)return;collectCompatibleModel();
-      provider.name=$('#compatibleName').value;provider.base_url=$('#compatibleUrl').value;
-      const mode=$('#compatibleAuth').value,previous=provider.auth?.[mode];
-      provider.auth=mode==='none'?'none':{[mode]:{...(previous||{}),...(mode==='header'?{name:$('#compatibleHeader').value}:{})}};
-      if(mode!=='none'){if($('#compatibleClear').checked)provider.auth[mode].secret='';else if($('#compatibleKey').value)provider.auth[mode].secret=$('#compatibleKey').value;}
-    }
-    function renderCompatibleModels(){
-      const provider=config.compatible_providers[compatibleIndex],list=provider?.models||[];
-      $('#compatibleModels').replaceChildren(...list.map((model,index)=>new Option(model.name||model.id||'New model',index)));
-      $('#compatibleRemoveModel').disabled=!list.length;$('#compatibleModelEditor').classList.toggle('hidden',!list.length);
-      compatibleModelIndex=list.length?Math.min(Math.max(0,compatibleModelIndex),list.length-1):-1;
-      $('#compatibleModels').value=String(compatibleModelIndex);const model=list[compatibleModelIndex];if(!model)return;
-      for(const [id,key] of [['compatibleModelId','id'],['compatibleModelName','name'],['compatibleContext','context_window'],['compatibleMax','max_tokens']])$('#'+id).value=model[key]??'';
-      $('#compatibleImage').checked=model.input.includes('image');$('#compatibleReasoning').checked=Boolean(model.reasoning);
-      for(const input of $('#compatibleLevels').querySelectorAll('input'))input.checked=model.thinking_levels.includes(input.value);
-      compatibleThinking();$('#compatibleThinking').value=model.default_thinking;
-      const compat={...(model.compatibility||{})};
-      for(const [legacy,key] of [['supports_developer_role','supportsDeveloperRole'],['supports_reasoning_effort','supportsReasoningEffort']])if(model[legacy]!=null&&compat[key]==null)compat[key]=model[legacy];
-      for(const [id,key] of Object.entries(compatibleFlags)){$('#'+id).value=compat[key]==null?'':String(compat[key]);delete compat[key];}
-      for(const [id,key] of [['compatibleFormat','thinkingFormat'],['compatibleMaxField','maxTokensField']]){$('#'+id).value=compat[key]||'';delete compat[key];}
-      $('#compatibleCompat').value=JSON.stringify(compat,null,2);
-      for(const [id,key] of [['compatibleParameters','request_parameters'],['compatibleMapping','thinking_level_map'],['compatibleBudgets','thinking_budgets'],['compatibleCost','cost']])$('#'+id).value=JSON.stringify(model[key]||{},null,2);
-    }
-    function renderCompatibleProviders(){
-      const list=config.compatible_providers;compatibleIndex=list.length?Math.min(Math.max(0,compatibleIndex),list.length-1):-1;
-      $('#compatibleProviders').replaceChildren(...list.map((provider,index)=>new Option(provider.name||provider.id,index)));
-      $('#compatibleProviders').value=String(compatibleIndex);$('#compatibleRemove').disabled=!list.length;$('#compatibleEditor').classList.toggle('hidden',!list.length);
-      const provider=list[compatibleIndex];if(!provider)return;
-      $('#compatibleName').value=provider.name;$('#compatibleId').value=provider.id;$('#compatibleUrl').value=provider.base_url;
-      const mode=provider.auth==='none'?'none':provider.auth?.bearer?'bearer':provider.auth?.header?'header':'none';
-      $('#compatibleAuth').value=mode;$('#compatibleHeader').value=provider.auth?.header?.name||'';$('#compatibleKey').value='';$('#compatibleClear').checked=false;
-      compatibleAuth();renderCompatibleModels();
-    }
-    $('#compatibleProviders').onchange=event=>{try{collectCompatibleProvider();compatibleIndex=Number(event.target.value);compatibleModelIndex=0;renderCompatibleProviders();}catch(error){event.target.value=String(compatibleIndex);compatibleError(error);}};
-    $('#compatibleModels').onchange=event=>{try{collectCompatibleModel();compatibleModelIndex=Number(event.target.value);renderCompatibleModels();}catch(error){event.target.value=String(compatibleModelIndex);compatibleError(error);}};
-    $('#compatibleAdd').onclick=()=>{try{collectCompatibleProvider();let id='local',number=1;while(config.compatible_providers.some(p=>p.id===id))id='local-'+(++number);config.compatible_providers.push({id,name:'Local API',base_url:'http://127.0.0.1:8000/v1',auth:'none',models:[]});compatibleIndex=config.compatible_providers.length-1;compatibleModelIndex=-1;renderCompatibleProviders();$('#compatibleName').focus();}catch(error){compatibleError(error);}};
-    $('#compatibleRemove').onclick=()=>{const provider=config.compatible_providers[compatibleIndex];if(!provider||!confirm('Remove '+provider.name+' and its model presets? Existing session history is retained.'))return;config.compatible_providers.splice(compatibleIndex,1);compatibleIndex=-1;compatibleModelIndex=-1;renderCompatibleProviders();$('#compatibleNotice').textContent='Provider removed from this form. Save settings to apply.';};
-    $('#compatibleAddModel').onclick=()=>{try{collectCompatibleModel();const provider=config.compatible_providers[compatibleIndex];provider.models.push({id:'',name:'',context_window:128000,max_tokens:16384,input:['text'],reasoning:false,thinking_levels:['off'],default_thinking:'off',request_parameters:{},compatibility:{},thinking_level_map:{},thinking_budgets:{},cost:{input:0,output:0,cacheRead:0,cacheWrite:0}});compatibleModelIndex=provider.models.length-1;renderCompatibleModels();$('#compatibleModelId').focus();}catch(error){compatibleError(error);}};
-    $('#compatibleRemoveModel').onclick=()=>{const provider=config.compatible_providers[compatibleIndex];if(!provider||compatibleModelIndex<0)return;provider.models.splice(compatibleModelIndex,1);compatibleModelIndex=0;renderCompatibleModels();};
-    $('#compatibleSave').onclick=async()=>{try{collectCompatibleProvider();await api('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(config)});await loadSettings();await loadModels();$('#compatibleNotice').textContent='Provider and model presets saved.';}catch(error){compatibleError(error);}};
 
-    let llamaCatalog = [], llamaLocalModels = [], llamaModelFolders = [], llamaDevices = [], llamaPresetPath = '', llamaHfDetails = null, llamaPoll = null;
-    const llamaPost = (path, body = {}) => api('/api/llama/' + path, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(body)});
-    function llamaError(error) { $('#llamaNotice').textContent = error.message === 'fetch failed' ? 'Could not connect to the server. Use Refresh models to retry.' : error.message; }
-    function populateLlamaSettings() {
-      const c=config.llama;
-      $('#llamaDirectory').value=c.models_dir;
-      $('#llamaMaxNew').value=c.max_new_tokens || 0;
-      $('#llamaFit').checked=c.fit !== false;
-      $('#llamaFitTarget').value=c.fit_target_mib || 1024;
-      $('#llamaFitContext').value=c.fit_context || 4096;
-      renderLlamaDevices(llamaDevices);
-      llamaModelFolders = [...(c.model_search_dirs || [])]; renderLlamaFolders();
-      for (const [name, control, input] of [['CUDA_VISIBLE_DEVICES', 'llamaCudaOverride', 'llamaCudaDevices'], ['GGML_VK_VISIBLE_DEVICES', 'llamaVulkanOverride', 'llamaVulkanDevices']]) {
-        const enabled = Object.hasOwn(c.gpu_environment || {}, name);
-        $('#'+control).checked = enabled; $('#'+input).disabled = !enabled; $('#'+input).value = c.gpu_environment?.[name] || '';
-      }
-      $('#llamaGpu').value=typeof c.gpu_layers==='string'?c.gpu_layers:'count';
-      $('#llamaLayers').value=c.gpu_layers?.count??0;
-      $('#llamaLayers').disabled=$('#llamaGpu').value!=='count';
-      for(const [id,key] of [['llamaThreads','cpu_threads'],['llamaBatch','batch_size'],['llamaParallel','parallel_slots']]) $('#'+id).value=c[key];
-      for(const [id,key] of [['llamaFlash','flash_attention'],['llamaMmap','mmap'],['llamaMlock','mlock'],['llamaAutoload','autoload']]) $('#'+id).checked=c[key];
-      $('#llamaExtra').value=c.extra_arguments.join('\n');
-      $('#llamaKey').value=''; $('#llamaClearKey').checked=false;
+    function setSidebar(open) {
+      $('#app').classList.toggle('sidebar-open', open);
+      $('#sidebarToggle').setAttribute('aria-expanded', String(open));
+      updateBackdrop();
     }
-    function collectLlamaSettings() {
-      const c=config.llama;c.enabled=$('#llamaEnabled').checked;c.models_dir=$('#llamaDirectory').value;
-      c.model_search_dirs = [...llamaModelFolders]; c.gpu_environment = {};
-      if ($('#llamaCudaOverride').checked) c.gpu_environment.CUDA_VISIBLE_DEVICES = $('#llamaCudaDevices').value.trim();
-      if ($('#llamaVulkanOverride').checked) c.gpu_environment.GGML_VK_VISIBLE_DEVICES = $('#llamaVulkanDevices').value.trim();
-      c.port=Number($('#llamaPort').value);c.context_size=Number($('#llamaContext').value);
-      c.max_new_tokens=Number($('#llamaMaxNew').value)||0;
-      c.fit=$('#llamaFit').checked;c.fit_target_mib=Number($('#llamaFitTarget').value)||1024;c.fit_context=Number($('#llamaFitContext').value)||4096;
-      c.gpu_devices=[...document.querySelectorAll('#llamaDevices input[type="checkbox"]:checked')].map(input=>input.value);
-      c.gpu_layers=$('#llamaGpu').value==='count'?{count:Number($('#llamaLayers').value)}:$('#llamaGpu').value;
-      for(const [id,key] of [['llamaThreads','cpu_threads'],['llamaBatch','batch_size'],['llamaParallel','parallel_slots']]) c[key]=Number($('#'+id).value);
-      for(const [id,key] of [['llamaFlash','flash_attention'],['llamaMmap','mmap'],['llamaMlock','mlock'],['llamaAutoload','autoload']]) c[key]=$('#'+id).checked;
-      c.extra_arguments=$('#llamaExtra').value.split('\n').filter(value=>value.trim());
-      if($('#llamaClearKey').checked)c.api_key='';else if($('#llamaKey').value)c.api_key=$('#llamaKey').value;
+    function updateBackdrop() {
+      $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('files-open')));
     }
-    async function loadLlamaStatus() {
-      try {
-        const value=await api('/api/llama/status');
-        $('#llamaStatus').textContent=value.installation?`${value.installation.package} · ${value.installation.backend} · ${value.running?'Running':'Stopped'}`:'llama.cpp is unavailable: install llama-cpp or llama-cpp-cuda.';
-        $('#llamaFlash').disabled=!value.flashAttentionSupported;
-        $('#llamaFit').disabled=!value.fitSupported;
-        $('#llamaFitTarget').disabled=!value.fitSupported;$('#llamaFitContext').disabled=!value.fitSupported;
-        $('#llamaMaxNew').disabled=!value.predictSupported;
-        $('#llamaArgs').textContent=['/usr/bin/llama-server',...value.arguments].map(arg=>/^[a-zA-Z0-9_./:=<>-]+$/.test(arg)?arg:JSON.stringify(arg)).join(' ');
-        $('#llamaPresetIni').textContent=value.presetIni||'';
-        $('#llamaEnvironment').textContent=Object.entries(value.environment || {}).map(([key, value])=>key+'='+JSON.stringify(value)).join('\n') || 'GPU visibility: inherited service environment';
-        llamaDevices=value.devices || []; renderLlamaDevices(llamaDevices, value.deviceError);
-        llamaLocalModels=value.localModels || []; renderLocalModels(); renderLlamaSources(value.localSources || []);
-        llamaCatalog=value.catalog; renderLlamaCatalog();renderLlamaOperation(value.operation);
-      } catch(error) {llamaError(error);}
-    }
-    function renderLlamaDevices(devices=[], error='') {
-      const root=$('#llamaDevices'); if(!root)return; root.replaceChildren();
-      if(!error) {
-        const allowed=new Set(devices.map(device=>device.id));
-        config.llama.gpu_devices=(config.llama.gpu_devices||[]).filter(id=>allowed.has(id));
-      }
-      if(error) $('#llamaDevicesNotice').textContent='Device listing failed: '+error;
-      else if(!devices.length) $('#llamaDevicesNotice').textContent='No accelerator devices were reported. llama.cpp will use its normal device selection.';
-      else $('#llamaDevicesNotice').textContent='Select devices for offloading. The IDs below come directly from llama.cpp.';
-      for(const device of devices) {
-        const label=document.createElement('label');label.className='check wide';
-        const input=document.createElement('input');input.type='checkbox';input.value=device.id;input.checked=(config.llama.gpu_devices||[]).includes(device.id);
-        const memory=[device.totalMemoryMib&&`${device.totalMemoryMib} MiB total`,device.freeMemoryMib&&`${device.freeMemoryMib} MiB free`].filter(Boolean).join(', ');
-        label.append(input,document.createTextNode(` ${device.name} (${device.id}${memory?', '+memory:''})`));root.append(label);
-      }
-    }
-    function renderLlamaCatalog() {
-      const root=$('#llamaCatalog');root.replaceChildren();
-      const visible=[...llamaCatalog];
-      for(const preset of config.llama.models) if(!visible.some(model=>model.id===preset.id)) visible.push({id:preset.id,status:{value:'not in current router'},preset});
-      if(!visible.length)root.textContent='No saved router models. Refresh the router or save a preset from the local files below.';
-      for(const model of visible) {
-        const row=document.createElement('div');row.className='subscription-actions';
-        const label=document.createElement('span');label.textContent=`${model.id} · ${model.status.value}`;row.append(label);
-        const loaded=['loaded','sleeping'].includes(model.status.value);
-        const action=document.createElement('button');action.type='button';action.textContent=loaded?'Unload':'Load';
-        action.disabled=!loaded&&model.status.value!=='unloaded';action.onclick=()=>llamaModelAction(model,loaded?'unload':'load');row.append(action);
-        const edit=document.createElement('button');edit.type='button';edit.textContent=config.llama.models.some(p=>p.id===model.id)?'Edit preset':'Save preset';edit.onclick=()=>editLlamaPreset(model);row.append(edit);
-        if(loaded&&config.llama.models.some(p=>p.id===model.id)) {
-          const choose=document.createElement('button');choose.type='button';choose.textContent='Use model';choose.onclick=async()=>{await loadModels();$('#model').value='llama.cpp/'+model.id;setThinking($('#model'));$('#model').dispatchEvent(new Event('change'));showChatView();};row.append(choose);
+    function closeFiles() { $('#filePanel').classList.add('hidden'); $('#app').classList.remove('files-open'); $('#filesToggle').setAttribute('aria-expanded','false'); updateBackdrop(); }
+    $('#sidebarToggle').onclick=()=>setSidebar(!$('#app').classList.contains('sidebar-open'));
+    $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeFiles();};
+    $('#closeFiles').onclick=closeFiles;
+    window.addEventListener('resize', updateBackdrop);
+    let fileRoot='', fileFolder='', fileGeneration=0;
+    const fileUrl=(suffix,relative='')=>'/api/files'+suffix+'?root='+encodeURIComponent(fileRoot)+'&path='+encodeURIComponent(relative);
+    function selectFileFolder(relative) { fileFolder=relative; $('#fileDestination').textContent='Upload to: '+displayFolder(fileRoot)+(relative?'/'+relative:''); }
+    async function renderFileBranch(target, relative, generation) {
+      const result=await api(fileUrl('',relative));
+      if(generation!==fileGeneration)return;
+      target.replaceChildren();
+      for(const entry of result.entries) {
+        if(entry.directory) {
+          const details=document.createElement('details'), summary=document.createElement('summary'), children=document.createElement('div');
+          summary.textContent=entry.name; details.append(summary,children);
+          let loaded=false;
+          summary.onclick=()=>selectFileFolder(entry.path);
+          details.ontoggle=async()=>{if(details.open&&!loaded){loaded=true;children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation);}catch(error){children.textContent=error.message;loaded=false;}}};
+          target.append(details);
+        } else {
+          const row=document.createElement('div');row.className='file-row';
+          if(entry.blocked) { row.textContent=entry.name+' (outside folder or unavailable)';row.classList.add('meta'); }
+          else {
+            const open=document.createElement('a');open.textContent=entry.name;open.href=fileUrl('/content',entry.path);open.target='_blank';open.rel='noopener';
+            const download=document.createElement('a');download.textContent='↓';download.href=fileUrl('/content',entry.path)+'&download=true';download.download=entry.name;download.setAttribute('aria-label','Download '+entry.name);row.append(open,download);
+          }
+          target.append(row);
         }
-        root.append(row);
       }
+      if(!result.entries.length)target.textContent='Empty folder';
     }
-    function renderLlamaFolders() {
-      const root=$('#llamaFolders');root.replaceChildren();
-      for(const [index,path] of llamaModelFolders.entries()) {
-        const row=document.createElement('div');row.className='model-folder-row';
-        const label=document.createElement('span');label.textContent=path;
-        const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.setAttribute('aria-label','Remove model folder '+path);
-        remove.onclick=()=>{llamaModelFolders.splice(index,1);renderLlamaFolders();$('#llamaNotice').textContent='Folder removed from this form. Save folders to apply.';};
-        row.append(label,remove);root.append(row);
-      }
+    async function openFiles(root) {
+      if(!root)return;
+      fileRoot=root;const generation=++fileGeneration;
+      $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');
+      $('#fileRootLabel').textContent=folderDisplayName(root);$('#fileRootLabel').title=displayFolder(root);
+      $('#downloadRepo').href=fileUrl('/archive');$('#downloadRepo').download=folderDisplayName(root)+'.zip';
+      $('#fileNotice').textContent='';selectFileFolder('');updateBackdrop();
+      $('#fileTree').textContent='Loading…';
+      try{await renderFileBranch($('#fileTree'),'',generation);}catch(error){$('#fileNotice').textContent=error.message;}
     }
-    function renderLlamaSources(sources) {
-      const root=$('#llamaSources');root.replaceChildren();
-      for(const source of sources) {
-        if(source.kind==='custom') continue;
-        const row=document.createElement('p');row.className='meta';
-        row.textContent=source.label+' · '+source.path+(source.error?' · '+source.error:source.exists?'':' · not present');root.append(row);
-      }
-      for(const source of sources.filter(source=>source.kind==='custom'&&source.error)) {
-        const row=document.createElement('p');row.className='meta';row.textContent=source.path+' · '+source.error;root.append(row);
-      }
-    }
-    function renderLocalModels() {
-      const root=$('#llamaLocalModels');root.replaceChildren();
-      const filter=$('#llamaLocalFilter').value.trim().toLowerCase();
-      const visible=llamaLocalModels.filter(model=>(model.name+' '+model.path+' '+model.source).toLowerCase().includes(filter));
-      $('#llamaLocalSummary').textContent=visible.length+' local model'+(visible.length===1?'':'s')+(filter?' matching filter':'')+'. Save a preset to make a model selectable.';
-      for(const model of visible) {
-        const preset=config.llama.models.find(p=>p.id===model.presetId||p.llama_model_path===model.path);
-        const row=document.createElement('div');row.className='local-model-row';
-        const description=document.createElement('div');description.className='local-model-description';
-        const name=document.createElement('strong');name.textContent=model.name;
-        const path=document.createElement('p');path.className='meta';path.textContent=model.path;
-        const info=document.createElement('p');info.className='meta';info.textContent=[model.source,new Intl.NumberFormat().format(model.sizeBytes)+' bytes',model.splitCount>1?model.splitCount+' parts':null,model.missingParts?.length?'Missing parts: '+model.missingParts.join(', '):null,preset?'Preset saved':null].filter(Boolean).join(' · ');
-        description.append(name,path,info);
-        const edit=document.createElement('button');edit.type='button';edit.textContent=preset?'Edit preset':'Save preset';edit.disabled=Boolean(model.missingParts?.length);
-        edit.onclick=()=>{
-          const context=Number(config.llama.context_size)||0;
-          editLlamaPreset({id:preset?.id||model.id,preset:preset||{id:model.id,name:model.name,context_window:context,max_tokens:context?Math.min(16384,context):0,input:['text'],reasoning:false,thinking_levels:['off'],default_thinking:'off',supports_reasoning_effort:false,request_parameters:{},llama_options:'',llama_model_path:model.path}});
-        };
-        row.append(description,edit);root.append(row);
-      }
-    }
-    $('#llamaLocalFilter').oninput=renderLocalModels;
-    $('#llamaAddFolder').onclick=()=>openFolderPicker('Add model folder',llamaModelFolders.at(-1)||$('#llamaDirectory').value,path=>{if(!llamaModelFolders.includes(path))llamaModelFolders.push(path);renderLlamaFolders();$('#llamaNotice').textContent='Folder added. Save folders and scan to list its models.';});
-    $('#llamaScan').onclick=async()=>{await loadLlamaStatus();};
-    $('#llamaSaveFolders').onclick=async()=>{try{config.llama.model_search_dirs=[...llamaModelFolders];await api('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(config)});await loadLlamaStatus();$('#llamaNotice').textContent='Model folders saved and scanned.';}catch(error){llamaError(error);}};
-    function invalidateLlamaDevicesDraft(){config.llama.gpu_devices=[];llamaDevices=[];$('#llamaDevicesNotice').textContent='Visibility settings changed. Refresh devices before selecting them again.';$('#llamaDevices').replaceChildren();}
-    $('#llamaCudaOverride').onchange=()=>{$('#llamaCudaDevices').disabled=!$('#llamaCudaOverride').checked;invalidateLlamaDevicesDraft();};
-    $('#llamaVulkanOverride').onchange=()=>{$('#llamaVulkanDevices').disabled=!$('#llamaVulkanOverride').checked;invalidateLlamaDevicesDraft();};
-    $('#llamaCudaDevices').onchange=invalidateLlamaDevicesDraft;
-    $('#llamaVulkanDevices').onchange=invalidateLlamaDevicesDraft;
-    $('#llamaRefreshDevices').onclick=async()=>{try{const gpu_environment={};if($('#llamaCudaOverride').checked)gpu_environment.CUDA_VISIBLE_DEVICES=$('#llamaCudaDevices').value.trim();if($('#llamaVulkanOverride').checked)gpu_environment.GGML_VK_VISIBLE_DEVICES=$('#llamaVulkanDevices').value.trim();const value=await api('/api/llama/devices',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({gpuEnvironment:gpu_environment})});llamaDevices=value.devices||[];renderLlamaDevices(llamaDevices);}catch(error){$('#llamaDevicesNotice').textContent='Device listing failed: '+error.message;}};
-    $('#llamaSaveSettings').onclick=async()=>{try{collectLlamaSettings();await api('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(config)});$('#llamaKey').value='';delete config.llama.api_key;await loadLlamaStatus();$('#llamaNotice').textContent='Router settings saved. Restart the router to apply launch changes.';}catch(error){llamaError(error);}};
-    async function llamaModelAction(model,action) {
-      let retainOthers=true;
-      if(action==='unload'&&!confirm('Unload model?\n'+model.id))return;
-      if(action==='load'&&llamaCatalog.some(m=>m.id!==model.id&&['loaded','sleeping'].includes(m.status.value))) {
-        const choice=await chooseLlamaRetention();if(choice===null)return;retainOthers=choice;
-      }
-      try {renderLlamaOperation((await llamaPost('operation',{action,model:model.id,retainOthers})).operation);}catch(error){llamaError(error);}
-    }
-    function chooseLlamaRetention() {
-      return new Promise(resolve=>{
-        const dialog=document.createElement('dialog');const text=document.createElement('p');text.textContent='Other models are loaded';dialog.append(text);
-        for(const [label,value] of [['Unload all and load',false],['Keep loaded and load',true],['Cancel',null]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=()=>{dialog.close();dialog.remove();resolve(value);};dialog.append(button);}
-        dialog.oncancel=()=>{dialog.remove();resolve(null);};document.body.append(dialog);dialog.showModal();
-      });
-    }
-    function renderLlamaOperation(op) {
-      clearTimeout(llamaPoll);const active=op&&['running','cancelling'].includes(op.phase);
-      $('#llamaOperation').classList.toggle('hidden',!op);
-      if(!op)return;
-      $('#llamaProgress').textContent=[op.model,op.progress?.message,op.progress?.detail,op.phase,op.phase==='failed'?op.error:''].filter(Boolean).join(' · ');
-      $('#llamaCancel').disabled=!active||op.phase==='cancelling';
-      if(op.progress?.ratio==null)$('#llamaProgressBar').removeAttribute('value');else $('#llamaProgressBar').value=op.progress.ratio;
-      if(active)llamaPoll=setTimeout(async()=>{try{const next=(await api('/api/llama/operation')).operation;renderLlamaOperation(next);if(!['running','cancelling'].includes(next?.phase)){await loadSettings();await loadModels();}}catch(error){llamaError(error);}},750);
-    }
-    function editLlamaPreset(model) {
-      const preset=config.llama.models.find(p=>p.id===model.id)||model.preset;
-      llamaPresetPath=preset.llama_model_path || '';
-      $('#llamaPresetPath').textContent=llamaPresetPath;
-      $('#llamaPresetId').readOnly=true;
-      $('#llamaPresetEditor').scrollIntoView({block:'nearest'});
-      $('#llamaPresetEditor').open=true;$('#llamaPresetId').value=preset.id;$('#llamaPresetName').value=preset.name;
-      $('#llamaPresetContext').value=preset.context_window||'';$('#llamaPresetMax').value=preset.max_tokens||'';
-      $('#llamaPresetNew').value=preset.llama_max_new_tokens??'';
-      $('#llamaPresetFitContext').value=preset.llama_fit_context??'';
-      $('#llamaPresetFitTarget').value=preset.llama_fit_target_mib??'';
-      $('#llamaPresetFit').value=preset.llama_fit==null?'':(preset.llama_fit?'on':'off');
-      $('#llamaPresetImage').checked=preset.input.includes('image');$('#llamaPresetReasoning').checked=Boolean(preset.reasoning);$('#llamaPresetEffort').checked=Boolean(preset.supports_reasoning_effort);
-      $('#llamaPresetLevels').value=preset.thinking_levels.join(', ');presetThinking();$('#llamaPresetThinking').value=preset.default_thinking;
-      $('#llamaPresetParameters').value=JSON.stringify(preset.request_parameters,null,2);
-      $('#llamaPresetOptions').value=preset.llama_options||'';
-    }
-    function presetThinking(){const old=$('#llamaPresetThinking').value;$('#llamaPresetThinking').replaceChildren(...$('#llamaPresetLevels').value.split(',').map(v=>v.trim()).filter(Boolean).map(v=>new Option(v,v)));if([...$('#llamaPresetThinking').options].some(o=>o.value===old))$('#llamaPresetThinking').value=old;}
-    $('#llamaPresetLevels').oninput=presetThinking;
-    $('#llamaGpu').onchange=()=>{$('#llamaLayers').disabled=$('#llamaGpu').value!=='count';};
-    $('#llamaRefresh').onclick=async()=>{try{$('#llamaNotice').textContent='Refreshing models…';llamaCatalog=(await llamaPost('refresh')).catalog;config.llama.catalog=llamaCatalog;renderLlamaCatalog();await loadModels();$('#llamaNotice').textContent='Models refreshed.';}catch(error){llamaError(error);}};
-    $('#llamaCancel').onclick=async()=>{if(!confirm('Stop '+($('#llamaProgress').textContent||'model operation')+'?'))return;try{renderLlamaOperation((await llamaPost('cancel')).operation);}catch(error){llamaError(error);}};
-    $('#llamaSavePreset').onclick=async()=>{
-      try {
-        const id=$('#llamaPresetId').value;
-        const preset={...(config.llama.models.find(p=>p.id===id)||{}),id,name:$('#llamaPresetName').value,context_window:Number($('#llamaPresetContext').value),max_tokens:Number($('#llamaPresetMax').value),llama_max_new_tokens:$('#llamaPresetNew').value?Number($('#llamaPresetNew').value):null,llama_fit_context:$('#llamaPresetFitContext').value?Number($('#llamaPresetFitContext').value):null,llama_fit_target_mib:$('#llamaPresetFitTarget').value?Number($('#llamaPresetFitTarget').value):null,llama_fit:$('#llamaPresetFit').value===''?null:$('#llamaPresetFit').value==='on',input:$('#llamaPresetImage').checked?['text','image']:['text'],reasoning:$('#llamaPresetReasoning').checked,thinking_levels:$('#llamaPresetLevels').value.split(',').map(v=>v.trim()).filter(Boolean),default_thinking:$('#llamaPresetThinking').value,supports_reasoning_effort:$('#llamaPresetEffort').checked,request_parameters:JSON.parse($('#llamaPresetParameters').value),llama_options:$('#llamaPresetOptions').value,llama_model_path:llamaPresetPath};
-        await llamaPost('preset',preset);const index=config.llama.models.findIndex(p=>p.id===id);if(index<0)config.llama.models.push(preset);else config.llama.models[index]=preset;
-        await loadModels();await loadLlamaStatus();$('#llamaNotice').textContent='Model preset saved. Restart the router once to enable the preset file; later edits apply when the unloaded model is refreshed and loaded.';
-      }catch(error){llamaError(error);}
+    $('#filesToggle').onclick=()=>$('#filePanel').classList.contains('hidden')?openFiles(current?.cwd||pendingCwd):closeFiles();
+    $('#refreshFiles').onclick=()=>openFiles(fileRoot);
+    $('#fileRootLabel').onclick=()=>selectFileFolder('');
+    $('#uploadRepo').onclick=()=>$('#repoUpload').click();
+    $('#repoUpload').onchange=async event=>{
+      const files=[...event.target.files];event.target.value='';if(!files.length)return;
+      const form=new FormData();for(const file of files)form.append('file',file);
+      $('#uploadRepo').disabled=true;
+      try{await api(fileUrl('',fileFolder),{method:'POST',body:form});await openFiles(fileRoot);$('#fileNotice').textContent='Files uploaded.';}
+      catch(error){$('#fileNotice').textContent=error.message;}
+      finally{$('#uploadRepo').disabled=false;}
     };
-    let hfRepository = null, hfSelected = new Set(), hfJobsPoll = null;
-    const hfPost=(path, body={})=>api('/api/downloads'+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
-    const hfToken=()=>$('#hfToken').value.trim() || null;
-    const hfBytes=value=>{let bytes=Number(value)||0,index=0;const units=['B','KiB','MiB','GiB','TiB'];while(bytes>=1024&&index<units.length-1){bytes/=1024;index++;}return bytes.toFixed(index?1:0)+' '+units[index];};
-    async function loadDownloadSettings(){try{const value=await api('/api/downloads/settings');$('#hfDownloadFolder').value=value.destination;$('#hfTokenStatus').textContent=value.hasToken?'A token is saved. Leave the field blank to use it.':'Entered tokens stay in memory unless you choose to save them.';$('#hfForgetToken').disabled=!value.hasToken;await refreshDownloads();}catch(error){$('#hfNotice').textContent=error.message;}}
-    $('#hfDownloadSection').ontoggle=()=>{if($('#hfDownloadSection').open)loadDownloadSettings();else clearTimeout(hfJobsPoll);};
-    $('#hfDownloadBrowse').onclick=()=>openFolderPicker('Download folder',$('#hfDownloadFolder').value,path=>{$('#hfDownloadFolder').value=path;});
-    async function saveDownloadSettings(clear=false){const value=await hfPost('/settings',{destination:$('#hfDownloadFolder').value,token:$('#hfRememberToken').checked?hfToken():null,clear_token:clear});if($('#hfRememberToken').checked||clear)$('#hfToken').value='';$('#hfTokenStatus').textContent=value.hasToken?'A token is saved. Leave the field blank to use it.':'No token is saved.';$('#hfForgetToken').disabled=!value.hasToken;}
-    $('#hfSaveSettings').onclick=async()=>{try{await saveDownloadSettings();$('#hfNotice').textContent='Download settings saved.';}catch(error){$('#hfNotice').textContent=error.message;}};
-    $('#hfForgetToken').onclick=async()=>{try{await saveDownloadSettings(true);}catch(error){$('#hfNotice').textContent=error.message;}};
-    function visibleHfFiles(){const filter=$('#hfFileFilter').value.trim().toLowerCase();return (hfRepository?.files||[]).filter(file=>file.path.toLowerCase().includes(filter));}
-    function renderHfFiles(){const root=$('#hfFileList');root.replaceChildren();for(const file of visibleHfFiles()){const label=document.createElement('label');label.className='check';const box=document.createElement('input');box.type='checkbox';box.checked=hfSelected.has(file.path);box.onchange=()=>{if(box.checked)hfSelected.add(file.path);else hfSelected.delete(file.path);renderHfSummary();};label.append(box,document.createTextNode(file.path+' · '+(file.size==null?'size unknown':hfBytes(file.size))));root.append(label);}renderHfSummary();}
-    function renderHfSummary(){const files=(hfRepository?.files||[]).filter(file=>hfSelected.has(file.path));$('#hfFileSummary').textContent=files.length+' selected · '+hfBytes(files.reduce((sum,file)=>sum+(file.size||0),0));$('#llamaHfDownload').disabled=!files.length;}
-    $('#hfFileFilter').oninput=renderHfFiles;
-    $('#hfSelectVisible').onclick=()=>{for(const file of visibleHfFiles())hfSelected.add(file.path);renderHfFiles();};
-    $('#hfClearFiles').onclick=()=>{hfSelected.clear();renderHfFiles();};
-    async function inspectHf(input){try{const id=input.trim().replace(/^https:\/\/huggingface.co\//,'').replace(/\/$/,'');$('#hfNotice').textContent='Loading repository files…';hfRepository=await hfPost('/repository',{id,token:hfToken()});hfSelected.clear();$('#llamaHfSelection').classList.remove('hidden');$('#llamaHfRepository').textContent=hfRepository.id;$('#llamaHfGated').textContent=hfRepository.gated?'This repository requires access. Accept its terms at huggingface.co/'+hfRepository.id+' and use a token with permission.':'';$('#hfFileFilter').value='';renderHfFiles();$('#hfNotice').textContent='Select the files to save with their original names and folders.';}catch(error){$('#hfNotice').textContent=error.message;}}
-    $('#llamaHfDetails').onclick=()=>inspectHf($('#llamaHfQuery').value);
-    $('#llamaHfSearch').onclick=async()=>{try{const value=await hfPost('/search',{query:$('#llamaHfQuery').value.trim(),token:hfToken()});$('#llamaHfResults').replaceChildren(...value.models.map(model=>{const button=document.createElement('button');button.type='button';button.textContent=model.id;button.onclick=()=>inspectHf(model.id);return button;}));}catch(error){$('#hfNotice').textContent=error.message;}};
-    $('#llamaHfDownload').onclick=async()=>{if(!hfRepository||!hfSelected.size)return;try{$('#llamaHfDownload').disabled=true;const enteredToken=hfToken();await saveDownloadSettings();const value=await hfPost('',{repo_id:hfRepository.id,revision:hfRepository.revision,destination:$('#hfDownloadFolder').value,connections:Number($('#hfConnections').value),files:hfRepository.files.filter(file=>hfSelected.has(file.path)),token:enteredToken});renderDownloads(value.jobs);$('#hfNotice').textContent='Download started. Completed files appear in Local model folders.';}catch(error){$('#hfNotice').textContent=error.message;}finally{renderHfSummary();}};
-    async function refreshDownloads(){const value=await api('/api/downloads');renderDownloads(value.jobs);}
-    function renderDownloads(jobs){clearTimeout(hfJobsPoll);const root=$('#hfJobs');root.replaceChildren();let active=false;for(const job of jobs){const row=document.createElement('div');row.className='settings-section';const title=document.createElement('strong');title.textContent=job.manifest.repo_id+' · '+job.status;row.append(title);const folder=document.createElement('p');folder.className='meta';folder.textContent=job.manifest.destination+'/'+job.manifest.repo_id;row.append(folder);const progress=document.createElement('progress');const total=job.files.reduce((n,f)=>n+(f.total||0),0),done=job.files.reduce((n,f)=>n+(f.downloaded||0),0);progress.max=total||1;progress.value=done;row.append(progress);const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent=hfBytes(done)+' / '+hfBytes(total)+' · '+job.files.length+' files';details.append(summary);for(const file of job.files){const line=document.createElement('p');line.className='meta';const speed=file.bytesPerSecond;line.textContent=file.path+' · '+file.status+' · '+hfBytes(file.downloaded)+' / '+hfBytes(file.total)+(job.status==='downloading'&&speed>0?' · '+hfBytes(speed)+'/s · '+Math.ceil((file.total-file.downloaded)/speed)+'s remaining':'')+(file.error?' · '+file.error:'');details.append(line);}row.append(details);if(job.error){const error=document.createElement('p');error.className='meta';error.textContent=job.error;row.append(error);}const actions=document.createElement('div');actions.className='subscription-actions';for(const [action,label] of job.status==='downloading'?[['pause','Pause'],['cancel','Cancel']]:job.status==='paused'?[['resume','Resume'],['cancel','Cancel']]:['failed','cancelled','interrupted'].includes(job.status)?[['resume','Resume download']]:[]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{try{renderDownloads((await hfPost('/control',{id:job.id,action,token:hfToken()})).jobs);}catch(error){$('#hfNotice').textContent=error.message;}};actions.append(button);}row.append(actions);root.append(row);active||=['downloading','paused','cancelling','queued'].includes(job.status);}if(active&&$('#hfDownloadSection').open)hfJobsPoll=setTimeout(()=>refreshDownloads().catch(error=>{$('#hfNotice').textContent=error.message;}),750);}
 
-
-    let oauthActive = false;
-    let subscriptionConnected = null;
-    function renderLogin(login = {}) {
-      oauthActive = ['waiting', 'starting'].includes(login.phase);
-      $('#oauthPending').classList.toggle('hidden', !oauthActive);
-      $('#oauthLogin').disabled = oauthActive;
-      $('#oauthDevice').disabled = oauthActive;
-      $('#oauthMessage').textContent = login.message || '';
-      $('#oauthUserCode').textContent = login.userCode || '';
-      $('#oauthUserCode').classList.toggle('hidden', !login.userCode);
-      const manual = oauthActive && login.url && !login.userCode;
-      $('#oauthManual').classList.toggle('hidden', !manual);
-      if (manual && !login.callbackAvailable) $('#oauthMessage').textContent += ' Port 1455 is in use; paste the redirect URL here after signing in.';
-      if (!oauthActive) $('#oauthCode').value = '';
+    let serviceRows=[], loginRender='', loginPromptId=null, loginPending=false;
+    const servicePost=(action,body={})=>api('/api/services/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    function renderServices() {
+      const root=$('#servicesList');root.replaceChildren();const filter=$('#serviceFilter').value.toLowerCase();
+      for(const service of serviceRows.filter(s=>(s.name+' '+s.id).toLowerCase().includes(filter))) {
+        const row=document.createElement('div');row.className='service-row';
+        const name=document.createElement('strong');name.textContent=service.name;
+        const state=document.createElement('span');state.className='meta';state.textContent=service.connected?' · Connected'+(service.credentialType?' ('+service.credentialType+')':''):' · Not connected';
+        const actions=document.createElement('div');actions.className='subscription-actions';
+        for(const method of service.methods){const button=document.createElement('button');button.type='button';button.textContent=method.name;
+          button.onclick=async()=>{try{
+            if(method.type==='oauth'){
+              window.open('/pi-login?provider='+encodeURIComponent(service.id),'_blank','noopener');
+              $('#settingsNotice').textContent='Complete Pi’s login in the browser tab. This page updates when you return.';
+            }else{await servicePost('login',{provider:service.id,type:method.type});await refreshServices();}
+          }catch(error){$('#settingsNotice').textContent=error.message;}};actions.append(button);}
+        if(service.credentialType){const button=document.createElement('button');button.type='button';button.textContent='Log out';button.onclick=async()=>{try{await servicePost('logout',{provider:service.id});await refreshServices();await loadModels();}catch(error){$('#settingsNotice').textContent=error.message;}};actions.append(button);}
+        if(!service.methods.length){const hint=document.createElement('span');hint.className='meta';hint.textContent='Uses credentials configured in Termux';actions.append(hint);}
+        row.append(name,state,actions);root.append(row);
+      }
     }
-    async function refreshSubscription() {
-      const value = await api('/api/provider/login');
-      const changed = subscriptionConnected !== null && subscriptionConnected !== value.authenticated;
-      subscriptionConnected = value.authenticated;
-      $('#subscriptionStatus').textContent = value.login.phase === 'error' ? value.login.message : (value.authenticated ? 'Connected to OpenAI (ChatGPT Plus/Pro).' : 'Not connected. Log in with your ChatGPT subscription.');
-      $('#oauthLogout').classList.toggle('hidden', !value.authenticated);
-      $('#oauthLogin').textContent = value.authenticated ? 'Log in again' : 'Log in with OpenAI';
-      renderLogin(value.login);
-      if (changed) await loadModels();
-    }
-    async function startSubscription(method) {
-      try {
-        $('#oauthLogin').disabled = $('#oauthDevice').disabled = true;
-        const value = await api('/api/provider/login', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({method})});
-        renderLogin(value.login);
-        if (method === 'browser' && value.browserOpened === false) {
-          $('#oauthMessage').textContent = 'Could not open the default browser. Cancel login, check your desktop browser setting, and try again.';
+    function renderServiceLogin(login) {
+      loginPending=login?.status==='pending';
+      const root=$('#serviceLogin');root.classList.toggle('hidden',!login);if(!login)return;
+      const signature=JSON.stringify(login);if(signature===loginRender)return;loginRender=signature;
+      const previous=root.querySelector('[data-login-input]')?.value, previousPrompt=loginPromptId;
+      root.replaceChildren();
+      const title=document.createElement('strong');title.textContent=login.provider+' · '+login.status;root.append(title);
+      for(const event of login.events||[]) {
+        const line=document.createElement('p');line.className='meta';line.textContent=event.message||event.instructions||'';root.append(line);
+        const links=event.type==='auth_url'?[{url:event.url,label:'Open browser login'}]:event.type==='device_code'?[{url:event.verificationUri,label:'Open verification page'}]:(event.links||[]);
+        if(event.userCode){const code=document.createElement('strong');code.textContent=event.userCode;root.append(code);}
+        for(const link of links){if(!/^https?:\/\//.test(link.url))continue;const a=document.createElement('a');a.textContent=link.label||'Open login';a.href=link.url;a.target='_blank';a.rel='noopener';root.append(a);}
+      }
+      if(login.error){const p=document.createElement('p');p.textContent=login.error;root.append(p);}
+      if(login.prompt){
+        const p=login.prompt;loginPromptId=p.id;let promptRoot=root;
+        if(p.type==='manual_code'){
+          const hint=document.createElement('p');hint.className='meta';hint.textContent='Finish authorization in your browser. Pi receives the callback automatically.';root.append(hint);
+          const fallback=document.createElement('details'),summary=document.createElement('summary');summary.textContent='If automatic login cannot finish';fallback.append(summary);root.append(fallback);promptRoot=fallback;
         }
-      } catch (error) {
-        $('#subscriptionStatus').textContent = error.message;
-        $('#oauthLogin').disabled = $('#oauthDevice').disabled = false;
+        const label=document.createElement('label');label.textContent=p.message;promptRoot.append(label);
+        const field=document.createElement(p.type==='select'?'select':'input');field.dataset.loginInput='true';field.autocomplete='off';
+        if(p.type==='select')for(const option of p.options)field.add(new Option(option.label,option.id));
+        else{field.type=p.type==='secret'?'password':'text';field.placeholder=p.placeholder||'';}
+        if(previousPrompt===p.id&&previous!==undefined)field.value=previous;promptRoot.append(field);
+        const submit=document.createElement('button');submit.type='button';submit.textContent='Continue';submit.onclick=async()=>{try{const input=field.value;field.value='';await servicePost('answer',{id:login.id,promptId:p.id,input});await refreshServices();}catch(error){$('#settingsNotice').textContent=error.message;}};promptRoot.append(submit);
+        field.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();submit.click();}};
       }
+      if(login.status==='pending'){const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel login';cancel.onclick=async()=>{await servicePost('cancel');await refreshServices();};root.append(cancel);}
+      if(login.status==='complete'){loadModels().catch(()=>{});refreshServices().catch(()=>{});}
     }
-    $('#oauthLogin').onclick = () => startSubscription('browser');
-    $('#oauthDevice').onclick = () => startSubscription('device_code');
-    $('#oauthCancel').onclick = async () => {
-      try { await api('/api/provider/login/cancel', {method: 'POST'}); await refreshSubscription(); }
-      catch (error) { $('#oauthMessage').textContent = error.message; }
-    };
-    $('#oauthSubmit').onclick = async () => {
-      try {
-        const input = $('#oauthCode').value.trim();
-        if (!input) return;
-        await api('/api/provider/login/code', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({input})});
-        $('#oauthCode').value = '';
-        $('#oauthMessage').textContent = 'Completing login…';
-      } catch (error) { $('#oauthMessage').textContent = error.message; }
-    };
-    $('#oauthCode').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#oauthSubmit').click(); } };
-    $('#oauthLogout').onclick = async () => {
-      try { await api('/api/provider/logout', {method: 'POST'}); await refreshSubscription(); }
-      catch (error) { $('#subscriptionStatus').textContent = error.message; }
-    };
-    setInterval(() => { if (csrf && oauthActive) refreshSubscription().catch(() => {}); }, 1000);
-    $('#restartLlama').onclick = async () => {
-      try {
-        collectLlamaSettings();
-        await api('/api/settings', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(config)});
-        $('#llamaKey').value=''; delete config.llama.api_key;
-        await api('/api/llama/restart', {method:'POST'});
-        await loadLlamaStatus();
-      } catch(error) {llamaError(error);}
-    };
+    async function refreshServices(){const value=await api('/api/services');serviceRows=value.services;renderServices();renderServiceLogin(value.login);}
+    $('#refreshServices').onclick=()=>refreshServices().catch(error=>$('#settingsNotice').textContent=error.message);
+    $('#serviceFilter').oninput=renderServices;
+    $('#importPiSessions').onclick=async()=>{try{const value=await api('/api/pi-sessions');const root=$('#piSessions');root.replaceChildren();for(const session of value.sessions){const button=document.createElement('button');button.type='button';button.className='folder-row';button.textContent=session.name+' · '+session.cwd;button.onclick=async()=>{try{const result=await api('/api/sessions/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:session.path})});const sessions=await loadSessions();await openSession(sessions.find(s=>s.id===result.id));}catch(error){$('#settingsNotice').textContent=error.message;}};root.append(button);}if(!value.sessions.length)root.textContent='No native Pi sessions found.';}catch(error){$('#settingsNotice').textContent=error.message;}};
+    setInterval(()=>{if(csrf&&loginPending)api('/api/services/login-status').then(value=>renderServiceLogin(value.login)).catch(()=>{});},1000);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&csrf&&activeSettingsTab==='services')refreshServices().then(()=>loadModels()).catch(()=>{});});
+    window.addEventListener('focus',()=>{if(csrf&&activeSettingsTab==='services')refreshServices().catch(()=>{});});
 
-    boot();
+    let piRequests=[], activePiRequest=null;
+    function showPiRequest(request) {
+      if(request.method==='set_editor_text'){ $('#prompt').value=request.text;$('#prompt').dispatchEvent(new Event('input'));return; }
+      if(['notify','setStatus','set_status','set_title','setTitle'].includes(request.method)){ $('#composerHint').textContent=request.message||request.text||request.title||'';return; }
+      if(!['select','confirm','input','editor'].includes(request.method))return;
+      if(activePiRequest?.id===request.id||piRequests.some(r=>r.id===request.id))return;
+      piRequests.push({...request,sessionId:current.id});nextPiRequest();
+    }
+    function nextPiRequest(){
+      if(activePiRequest||!piRequests.length)return;activePiRequest=piRequests.shift();const request=activePiRequest;
+      $('#piDialogTitle').textContent=request.title||'Pi';$('#piDialogMessage').textContent=request.message||'';
+      const root=$('#piDialogInput');root.replaceChildren();
+      if(request.method==='select'){const select=document.createElement('select');select.id='piReply';for(const item of request.options||[])select.add(new Option(item,item));root.append(select);}
+      else if(request.method!=='confirm'){const input=document.createElement(request.method==='editor'?'textarea':'input');input.id='piReply';input.value=request.prefill||'';input.placeholder=request.placeholder||'';root.append(input);}
+      $('#piDialog').showModal();
+    }
+    async function answerPi(cancelled){const r=activePiRequest;if(!r)return;try{const reply={id:r.id,cancelled};if(r.method==='confirm')reply.confirmed=!cancelled;else if(!cancelled)reply.value=$('#piReply')?.value||'';await api(`/api/sessions/${r.sessionId}/reply`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(reply)});}catch(error){$('#composerHint').textContent=error.message;}finally{activePiRequest=null;$('#piDialog').close();nextPiRequest();}}
+    $('#piDialogForm').onsubmit=event=>{event.preventDefault();answerPi(false);};
+    $('#piDialogCancel').onclick=()=>answerPi(true);
+    $('#piDialog').oncancel=event=>{event.preventDefault();answerPi(true);};
+
+    boot().catch(error => { $('#authError').textContent = error.message; $('#composerHint').textContent = error.message; });
     setInterval(() => {
       if (!csrf) return;
       loadSessions().catch(() => {});

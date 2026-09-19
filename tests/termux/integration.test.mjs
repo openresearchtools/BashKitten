@@ -1,0 +1,91 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import http from 'node:http';
+import { spawn } from 'node:child_process';
+import { createMockProvider, configureMockPi } from './mock-provider.mjs';
+const root=path.resolve(import.meta.dirname,'../..');
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+async function until(fn,timeout=20000){const start=Date.now();while(Date.now()-start<timeout){const value=await fn();if(value)return value;await wait(50);}throw Error('Timed out waiting for condition');}
+async function freePort(){const s=http.createServer();await new Promise(r=>s.listen(0,'127.0.0.1',r));const p=s.address().port;await new Promise(r=>s.close(r));return p;}
+test('Real Pi RPC, HTTP auth, native history, files, queues, fork, compaction and web restart', {timeout:120000}, async t=>{
+  const temp=await fs.mkdtemp(path.join(os.homedir(),'.bk-test-')),data=path.join(temp,'data'),agent=path.join(temp,'pi'),cwd=path.join(temp,'project');
+  await fs.mkdir(cwd);await fs.writeFile(path.join(cwd,'fixture.txt'),'TERMUX_NATIVE_FIXTURE');
+  const fixture=await createMockProvider();await configureMockPi(agent,fixture.port);
+  const port=await freePort(),base=`http://127.0.0.1:${port}`;let child,log='',cookie='',csrf='';const ids=[];
+  async function start(){child=spawn(process.execPath,['termux/server.mjs',`--port=${port}`],{cwd:root,env:{...process.env,BASHKITTEN_DATA_DIR:data,PI_CODING_AGENT_DIR:agent},stdio:['ignore','pipe','pipe']});child.stdout.on('data',b=>log+=b);child.stderr.on('data',b=>log+=b);await until(async()=>{try{return(await fetch(base+'/api/bootstrap')).ok;}catch{return false;}});}
+  async function stop(){child.kill('SIGTERM');await new Promise(r=>child.once('exit',r));}
+  async function api(route,body,method){const headers={cookie};if(body!==undefined||method){method||='POST';headers.origin=base;headers['x-bashkitten-csrf']=csrf;if(!(body instanceof FormData))headers['content-type']='application/json';}const res=await fetch(base+route,{method:method||'GET',headers,body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});const value=await res.json();assert.ok(res.ok,route+': '+JSON.stringify(value)+'\n'+log);return value;}
+  async function settled(id){await until(async()=>!(await api(`/api/sessions/${id}/status`)).data.busy);await wait(100);return api(`/api/sessions/${id}/segments/current`);}
+  async function send(id,text,files=[]){const form=new FormData();form.set('content',text);for(const [name,bytes,type]of files)form.append('file',new Blob([bytes],{type}),name);return api(`/api/sessions/${id}/messages`,form);}
+  t.after(async()=>{for(const id of ids){try{await api('/api/sessions/'+id,{},'DELETE');}catch{}}if(child?.exitCode===null)await stop();await fixture.close();await fs.rm(temp,{recursive:true,force:true});});
+  await start();
+  assert.equal((await fetch(base+'/api/sessions')).status,401);
+  assert.equal((await fetch(base+'/api/signup',{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
+  const signup=await fetch(base+'/api/signup',{method:'POST',headers:{origin:base,'content-type':'application/json'},body:JSON.stringify({username:'tester',password:'local-testing-password'})});assert.equal(signup.status,200);cookie=signup.headers.get('set-cookie').split(';')[0];csrf=(await signup.json()).csrf;
+  assert.equal((await fetch(base+'/api/folders',{method:'POST',headers:{cookie,origin:base,'content-type':'application/json'},body:'{}'})).status,403);
+  assert.ok((await fs.readFile(path.join(data,'web-auth.json'),'utf8')).includes('$argon2id$'));
+  assert.ok((await api('/api/models')).models.find(m=>m.provider==='fixture'&&m.available));
+  assert.ok((await api('/api/services')).services.length>3);
+  const login=await api('/api/services/login',{provider:'openai',type:'api_key'});
+  const prompt=await until(async()=>{const state=(await api('/api/services')).login;return state?.prompt?state:null;});
+  await api('/api/services/answer',{id:prompt.id,promptId:prompt.prompt.id,input:'test-key-local-only'});
+  await until(async()=>(await api('/api/services')).login.status==='complete');
+  assert.equal(JSON.parse(await fs.readFile(path.join(agent,'auth.json'),'utf8')).openai.key,'test-key-local-only');
+  assert.ok(!JSON.stringify(await api('/api/services')).includes('test-key-local-only'));
+  await api('/api/services/logout',{provider:'openai'});
+  assert.ok(!JSON.parse(await fs.readFile(path.join(agent,'auth.json'),'utf8')).openai);
+
+  await api('/api/folders',{parent:cwd,name:'nested'});
+  const homeFolders=await api('/api/folders?path=~');assert.equal(homeFolders.displayPath,'~');assert.equal(homeFolders.parent,null);
+  await fs.mkdir(path.join(cwd,'read-only'),{mode:0o500});
+  assert.ok(!(await api('/api/folders?path='+encodeURIComponent(cwd))).folders.some(f=>f.name==='read-only'));
+  await fs.chmod(path.join(cwd,'read-only'),0o700);
+  if(process.platform==='android')assert.equal((await fetch(base+'/api/folders?path=/data/data',{headers:{cookie}})).status,400);
+  assert.ok((await api('/api/folders?path='+encodeURIComponent(cwd))).folders.some(f=>f.name==='nested'));
+  const upload=new FormData();upload.append('file',new Blob(['hello upload']),'uploaded.txt');await api('/api/files?root='+encodeURIComponent(cwd)+'&path=nested',upload);
+  assert.equal(await fs.readFile(path.join(cwd,'nested/uploaded.txt'),'utf8'),'hello upload');
+  await fs.writeFile(path.join(cwd,'script.html'),'<script>fetch("/api/settings")</script>');
+  const content=await fetch(base+'/api/files/content?root='+encodeURIComponent(cwd)+'&path=script.html',{headers:{cookie}});assert.match(content.headers.get('content-security-policy'),/sandbox/);
+  await fs.symlink(temp,path.join(cwd,'escape'));
+  assert.equal((await fetch(base+'/api/files/content?root='+encodeURIComponent(cwd)+'&path=escape/pi/models.json',{headers:{cookie}})).status,403);
+  const zip=await fetch(base+'/api/files/archive?root='+encodeURIComponent(cwd),{headers:{cookie}});assert.match(zip.headers.get('content-disposition'),/attachment/);const archive=Buffer.from(await zip.arrayBuffer());assert.equal(archive.readUInt32LE(),0x04034b50);assert.ok(archive.includes(Buffer.from('nested/uploaded.txt')));assert.ok(!archive.includes(Buffer.from('escape/pi')));
+  const form=new FormData();for(const[k,v]of Object.entries({cwd,model:'fixture/fixture',thinking:'off',prompt:'Native integration'}))form.set(k,v);const created=await api('/api/sessions',form),id=created.id;ids.push(id);
+  const abort=new AbortController(),events=[];const stream=await fetch(base+`/api/sessions/${id}/events`,{headers:{cookie},signal:abort.signal});
+  const consume=(async()=>{let buffer='';try{for await(const chunk of stream.body){buffer+=Buffer.from(chunk).toString();let end;while((end=buffer.indexOf('\n\n'))>=0){const part=buffer.slice(0,end);buffer=buffer.slice(end+2);if(part.startsWith('data: '))events.push(JSON.parse(part.slice(6)));}}}catch{}})();
+  t.after(()=>abort.abort());
+  await send(id,'READ_FIXTURE');let history=await settled(id);
+  assert.ok(history.entries.some(e=>e.message?.role==='toolResult'&&JSON.stringify(e).includes('TERMUX_NATIVE_FIXTURE')),JSON.stringify(history));
+  assert.ok(events.some(e=>e.type==='thinking_delta'));assert.ok(events.some(e=>e.type==='tool_start'));assert.ok(events.some(e=>e.type==='assistant_delta'));
+  assert.ok((await api(`/api/sessions/${id}/status`)).data.usage.tokens.input>0);
+  await send(id,'ALL_TOOLS_FIXTURE');history=await settled(id);
+  const toolResults=history.entries.filter(e=>e.message?.role==='toolResult').map(e=>e.message);
+  for(const name of ['read','write','edit','bash','grep','find','ls'])assert.ok(toolResults.some(m=>m.toolName===name&&!m.isError),name+': '+JSON.stringify(toolResults));
+  assert.equal(await fs.readFile(path.join(cwd,'native-tools.txt'),'utf8'),'after native edit\n');
+  const image=await fs.readFile(path.join(root,'tests/fixtures/images/small.png'));
+  await send(id,'Inspect attachment',[['pixel.png',image,'image/png'],['note.txt','attachment text','text/plain']]);history=await settled(id);
+  assert.ok(fixture.requests.some(r=>JSON.stringify(r.messages).includes('data:image/png;base64,')));
+  const attached=history.entries.find(e=>e.message?.role==='user'&&e.message.content.some?.(b=>b.type==='attachment'));
+  assert.equal(attached.message.content.filter(b=>b.type==='attachment').length,2);
+  const reference=attached.message.content.find(b=>b.type==='attachment');const suffix=reference.path.split('/attachments/')[1].split('/').map(encodeURIComponent).join('/');
+  const downloaded=await fetch(base+`/api/sessions/${id}/attachments/${suffix}?download=true`,{headers:{cookie}});assert.equal(downloaded.status,200);assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()),image);
+  const pasted=new FormData();pasted.set('content','Pasted image');pasted.set('inline_file',JSON.stringify({name:'paste.png',data:image.toString('base64')}));
+  await api(`/api/sessions/${id}/messages`,pasted);history=await settled(id);
+  assert.ok(history.entries.some(e=>e.message?.content?.some?.(b=>b.type==='attachment'&&b.name==='paste.png')));
+  await send(id,'SLOW initial');await send(id,'queued one');await send(id,'queued two');
+  let state=(await api(`/api/sessions/${id}/status`)).data;assert.equal(state.queuedMessages.length,2,JSON.stringify(state));
+  const first=state.queuedMessages[0];await api(`/api/sessions/${id}/queue`,{id:first.id,action:'begin_edit',edit_token:'test-edit'});
+  await wait(1800);
+  assert.ok(!fixture.requests.some(r=>JSON.stringify(r.messages.at(-1)).includes('queued two')), 'later follow-ups must wait behind an edit');
+  await api(`/api/sessions/${id}/queue`,{id:first.id,action:'edit',edit_token:'test-edit',content:'edited one'});
+  history=await settled(id);assert.ok(JSON.stringify(history).includes('edited one'));assert.ok(JSON.stringify(history).includes('queued two'));
+  await api(`/api/sessions/${id}`,{name:'Renamed Pi thread'},'PATCH');assert.equal((await api('/api/sessions')).sessions.find(s=>s.id===id).title,'Renamed Pi thread');
+  const user=history.entries.find(e=>e.message?.role==='user');const fork=await api(`/api/sessions/${id}/fork`,{entryId:user.id});ids.push(fork.id);await api(`/api/sessions/${fork.id}/resume`,{});const forkHistory=await api(`/api/sessions/${fork.id}/segments/current`);assert.ok(forkHistory.entries.some(e=>e.id===user.id));assert.ok(!JSON.stringify(forkHistory).includes('edited one'));
+  await send(id,'SLOW change folder');await api(`/api/sessions/${id}/cwd`,{cwd:path.join(cwd,'nested')});await settled(id);await until(async()=>(await api('/api/sessions')).sessions.find(s=>s.id===id).cwd===path.join(cwd,'nested'));
+  await send(id,'SLOW survives restart');await stop();await start();csrf=(await api('/api/bootstrap')).csrf;history=await settled(id);assert.ok(JSON.stringify(history).includes('survives restart'));
+  await api(`/api/sessions/${id}/compact`,{instructions:'Preserve fixture facts'});history=await settled(id);assert.ok(history.entries.some(e=>e.type==='compaction'),JSON.stringify(history));
+  await send(id,'SLOW cancel');await send(id,'keep draft');const stopped=await api(`/api/sessions/${id}/stop`,{});assert.ok(stopped.data.queuedMessages.some(m=>m.content==='keep draft'));assert.equal((await api(`/api/sessions/${id}/status`)).data.busy,false);
+  abort.abort();await consume;
+});

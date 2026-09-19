@@ -1,5 +1,68 @@
 # Third-party notices
 
+## Native Pi / Termux runtime (2026-09-19)
+
+The Node runtime directly depends on unmodified Pi 0.85.1 (MIT), upstream commit
+`d981de1229ef899957bbe968bc8dcda02a21f477`. The existing Pi MIT notice below applies.
+No third-party web frontend source or visual assets were copied; the HTML/CSS
+renderer is BashKitten's existing UI. Pi's public RPC/SDK APIs are called directly.
+`package-lock.json` records all dependency versions and integrity hashes; npm
+packages retain their respective license files. The historical notices below are
+retained for the legacy Rust sources.
+
+Additional direct runtime dependencies:
+
+- hash-wasm 4.12.0, https://github.com/Daninet/hash-wasm, MIT,
+  Copyright (c) 2020 Dani Biró. Used for portable Argon2id local web passwords.
+- yazl 3.3.1, https://github.com/thejoshwolfe/yazl, MIT,
+  Copyright (c) 2014 Josh Wolfe. Used for server-generated streaming ZIP archives.
+
+Both are distributed under these MIT terms (with the respective copyright
+statement above):
+
+```text
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Embedded C implementations might use other, similarly permissive licenses.
+Check the beginning of the files from the /src directory.
+
+Special thank you to the authors of original C algorithms:
+- Alexander Peslyak <solar@openwall.com>
+- Aleksey Kravchenko <rhash.admin@gmail.com>
+- Colin Percival
+- Stephan Brumme <create@stephan-brumme.com>
+- Steve Reid <steve@edmweb.com>
+- Samuel Neves <sneves@dei.uc.pt>
+- Solar Designer <solar@openwall.com>
+- Project Nayuki
+- ARM Limited
+- Yanbo Li dreamfly281@gmail.com, goldboar@163.comYanbo Li
+- Mark Adler
+- Yann Collet
+
+```
+
+Development-only: Playwright Core 1.63.0, Microsoft Corporation, Apache-2.0,
+https://github.com/microsoft/playwright. Used to test native Android Chromium over
+ADB/CDP. It is omitted from production installation.
+
+
 Portions of BashKitten's behavioral compatibility implementation, including
 model-visible tool wording, compaction prompts, OAuth and model metadata, are derived from Pi:
 
