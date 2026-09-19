@@ -9,4 +9,8 @@ ac_add_options --enable-optimize
 ac_add_options --disable-debug-symbols
 ac_add_options --disable-tests
 ac_add_options --with-branding=mobile/android/branding/wildbuzzard
-ac_add_options --with-ccache=sccache
+if [ -n "$SCCACHE_PATH" ]; then
+  ac_add_options --with-ccache="$SCCACHE_PATH"
+else
+  ac_add_options --with-ccache=sccache
+fi

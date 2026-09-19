@@ -16,11 +16,12 @@ jobs:
     timeout-minutes: 360
     env:
       MOZCONFIG: ${{ github.workspace }}/wildbuzzard/android/mozconfig
-      MOZBUILD_STATE_PATH: ${{ github.workspace }}/../wildbuzzard-mozbuild
+      MOZBUILD_STATE_PATH: ${{ runner.temp }}/wildbuzzard-mozbuild
       PYTHONUNBUFFERED: '1'
       DISABLE_TELEMETRY: '1'
       RUSTUP_TOOLCHAIN: '1.96.0'
       MACH_SHOW_PIP_OUTPUT: '1'
+      SCCACHE_GHA_ENABLED: 'true'
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,6 +54,7 @@ jobs:
             ${{ env.MOZBUILD_STATE_PATH }}
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.android/debug.keystore
           key: android-toolchain-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: android-toolchain-v1-${{ runner.os }}-
       - name: Enable compiler cache
@@ -83,6 +85,7 @@ jobs:
             ${{ env.MOZBUILD_STATE_PATH }}
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.android/debug.keystore
           key: android-toolchain-v1-${{ runner.os }}-${{ github.sha }}
       - name: Preserve build logs and APK artifacts
         if: always()
