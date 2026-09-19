@@ -65,6 +65,7 @@ public final class AgentBrowserTest {
         assertFalse("Resolved dependency licenses are packaged",
             device.wait(Until.hasObject(By.text("Dependency notices unavailable")), 1000));
         assertNotNull("Android dependency list", device.wait(Until.findObject(By.clazz("android.widget.ListView")), 10000));
+        assertFalse("Debug APK must include actual dependency notices", device.hasObject(By.text("Debug License Info")));
         device.pressBack();
         device.waitForIdle();
         click(device, "Back");

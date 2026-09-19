@@ -269,6 +269,28 @@ android {
 // -------------------------------------------------------------------------------------------------
 
 androidComponents {
+    if (!project.hasProperty('android-lint')) {
+        onVariants(selector().withBuildType('debug')) { variant ->
+            // AGP omits its dependency protobuf for debug APKs. Feed the same
+            // OSS license generator the actual resolved runtime coordinates.
+            def resolvedModules = variant.runtimeConfiguration.incoming.artifactView {
+                componentFilter { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            }.artifacts.resolvedArtifacts.map { artifacts ->
+                artifacts.collect { artifact ->
+                    def id = artifact.id.componentIdentifier
+                    [group: id.group, name: id.module, version: id.version]
+                }.unique().sort { a, b -> "${a.group}:${a.name}:${a.version}" <=> "${b.group}:${b.name}:${b.version}" }
+            }
+            tasks.named("${variant.name}OssDependencyTask").configure {
+                inputs.property('wildBuzzardRuntimeModules', resolvedModules)
+                doLast { task ->
+                    def modules = task.inputs.properties['wildBuzzardRuntimeModules']
+                    if (modules.isEmpty()) throw new GradleException('Android dependency notices require resolved runtime modules')
+                    task.dependenciesJson.get().asFile.text = new groovy.json.JsonBuilder(modules).toPrettyString()
+                }
+            }
+        }
+    }
     onVariants(selector().all()) { variant ->
         def buildType = variant.buildType
 

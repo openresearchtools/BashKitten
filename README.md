@@ -1,27 +1,29 @@
-# WildBuzzard for Android
+# Wild Buzzard for Android
 
-A Firefox/Fenix browser for Android with WildBuzzard's neutral light/dark theme,
+A Firefox/Fenix browser for Android with Wild Buzzard's neutral light/dark theme,
 native adblocking, cookie-banner rejection, external-app agent controls, and Tor
 onion browsing. The normal Fenix browser interface remains; Mozilla accounts,
 Sync, telemetry, experiments and promotional services are disabled.
 
 This repository preserves the complete history of
-[WildBuzzard's Android starting branch](https://github.com/openresearchtools/WildBuzzard/tree/refactor/browser-agent-independent)
+[Wild Buzzard's Android starting branch](https://github.com/openresearchtools/WildBuzzard/tree/refactor/browser-agent-independent)
 at `0bd2d7da099a365d2243b320e1e6b38e8ad76cf4`.
 
 - [Android build, architecture, licenses and device tests](wildbuzzard/android/README.md)
 - [External-app agent API and AIDL integration](wildbuzzard/android/API.md)
 - [ARM64 APK build workflow](https://github.com/openresearchtools/wildbuzzard-android/actions/workflows/android-arm64.yml)
-- [Report WildBuzzard Android issues](https://github.com/openresearchtools/wildbuzzard-android/issues)
+- [Report Wild Buzzard Android issues](https://github.com/openresearchtools/wildbuzzard-android/issues)
 
 Agents can create and control their own tabs after user approval, bring the
 browser forward, enable desktop mode or disable adblocking for an individual
 tab, and close tabs without terminating the browser. DuckDuckGo is the default
-search engine. Desktop torrents, bundled agent runtimes and WildBuzzard search
+search engine. Desktop torrents, bundled agent runtimes and Wild Buzzard search
 extensions are excluded from the Android product.
 
-Onion credentials can be imported from TorKitten/Orbot QR codes, `.auth_private`
-files, or manual address/key entry. Enrolled onion identities use Tor's native
+The **Private Tor sites** menu imports the complete address/key pair from a
+TorKitten/Orbot QR code or `.auth_private` file, names the site and adds a normal
+browser bookmark. Opening any `.onion` address automatically uses Tor, with
+keys bound to their exact service identities. Manual entry is also available. Enrolled onion identities use Tor's native
 authentication to permit private-CA HTTPS without installing that CA. Hostname,
 expiry, other-onion and clearnet certificate checks remain in force.
 
@@ -34,7 +36,7 @@ for the Cuttlefish test procedures and current validation records.
 
 This is an independent fork, not a Mozilla product. The inherited source and
 per-file licenses remain intact. Mozilla/Gecko notices are available in
-`about:license`; the app's **Licenses and source** screen includes WildBuzzard,
+`about:license`; the app's **Licenses and source** screen includes Wild Buzzard,
 BrowserOS, Mozilla DevTools MCP, Tor, blocker and Android dependency notices.
 [Android provenance records](wildbuzzard/android/notices/sources.json) pin
 external sources and notice hashes. The

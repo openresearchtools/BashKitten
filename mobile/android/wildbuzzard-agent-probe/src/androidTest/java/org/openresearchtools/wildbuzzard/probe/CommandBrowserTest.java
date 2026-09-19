@@ -66,7 +66,10 @@ public final class CommandBrowserTest {
         while (SystemClock.elapsedRealtime() < deadline);
         assertEquals(ready.output, 0, ready.exit);
         assertTrue(ready.output.contains("tabs.show"));
-        assertTrue("CLI includes license notices", run("--licenses").output.contains("Wild Buzzard"));
+        Result notices = run("--licenses"); assertEquals(notices.output, 0, notices.exit);
+        assertTrue("CLI includes product and dependency notices", notices.output.contains("Wild Buzzard")
+            && notices.output.contains("BrowserOS") && notices.output.contains("Android dependencies from this APK")
+            && !notices.output.contains("Debug License Info"));
         String first = ((JSONObject) call("tabs.create", new JSONObject().put("url", "http://127.0.0.1:8765/"))).getString("id");
         String second = ((JSONObject) call("tabs.create", new JSONObject())).getString("id");
         JSONObject waited = (JSONObject) call("wait", tab(first).put("for", "selector").put("value", "#name").put("timeout", 10000));

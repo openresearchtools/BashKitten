@@ -61,6 +61,7 @@ public final class LicensesActivity extends ProductActivity {
                 int start = Integer.parseInt(range[0]), length = Integer.parseInt(range[1]);
                 TextView text = new TextView(this); text.setPadding(18, 18, 18, 18); text.setTextIsSelectable(true);
                 text.setText(new String(licenses, start, length, StandardCharsets.UTF_8));
+                Linkify.addLinks(text, Linkify.WEB_URLS); text.setMovementMethod(LinkMovementMethod.getInstance());
                 ScrollView scroll = new ScrollView(this); scroll.addView(text);
                 new AlertDialog.Builder(this).setTitle(names[i]).setView(scroll).setPositiveButton("Close", null).show();
             }).show();

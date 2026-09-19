@@ -32,6 +32,15 @@ for source in outputs:
             if 'lib/arm64-v8a/libtor.so' not in libraries: raise SystemExit('Tor not packaged')
             for notice in ('THIRD-PARTY-NOTICES', 'WILDBUZZARD-NOTICES', 'TOR-NOTICES', 'BLOCKER-NOTICES', 'QR-NOTICES'):
                 if 'assets/' + notice + '.txt' not in apk.namelist(): raise SystemExit('Missing legal notices: ' + notice)
+            metadata = apk.read('res/raw/third_party_license_metadata')
+            licenses = apk.read('res/raw/third_party_licenses')
+            if b'Debug License Info' in metadata or len(metadata.splitlines()) < 10 or not licenses:
+                raise SystemExit('Android dependency licenses are missing or contain a debug placeholder')
+            for entry in metadata.splitlines():
+                span, name = entry.split(b' ', 1)
+                offset, length = map(int, span.split(b':'))
+                if not name or offset < 0 or length < 1 or offset + length > len(licenses):
+                    raise SystemExit('Invalid Android dependency license entry')
             with zipfile.ZipFile(io.BytesIO(apk.read('assets/omni.ja'))) as engine:
                 resources = set(engine.namelist())
                 required = {

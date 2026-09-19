@@ -147,9 +147,29 @@ public final class BrowserCommand {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = input.read(buffer)) != -1) System.out.write(buffer, 0, count);
                 }
+                byte[] metadata = apkBytes(apk, "res/raw/third_party_license_metadata");
+                byte[] texts = apkBytes(apk, "res/raw/third_party_licenses");
+                System.out.println("\n\nAndroid dependencies from this APK\n");
+                for (String line : new String(metadata, StandardCharsets.UTF_8).trim().split("\n")) {
+                    int separator = line.indexOf(' ');
+                    String[] range = line.substring(0, separator).split(":");
+                    int offset = Integer.parseInt(range[0]), length = Integer.parseInt(range[1]);
+                    if (offset < 0 || length < 0 || offset > texts.length - length) throw new IOException("Invalid license metadata");
+                    System.out.println(line.substring(separator + 1) + "\n");
+                    System.out.write(texts, offset, length); System.out.println("\n");
+                }
                 return;
             }
         }
         throw new IOException("Run the command from the installed browser APK to read its notices");
+    }
+    private static byte[] apkBytes(ZipFile apk, String name) throws IOException {
+        java.util.zip.ZipEntry entry = apk.getEntry(name);
+        if (entry == null) throw new IOException("This APK is missing dependency license notices");
+        try (InputStream input = apk.getInputStream(entry); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[8192]; int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            return output.toByteArray();
+        }
     }
 }
