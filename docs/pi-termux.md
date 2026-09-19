@@ -1,6 +1,9 @@
 # BashKitten on Pi / Termux
 
-This branch replaces the Rust agent backend with unmodified Pi RPC processes.
+This branch contains a browser frontend and a Node adapter for unmodified Pi RPC
+processes. The old Rust implementation, build files, packages, differential
+fixtures and porting scripts are removed from the current tree; Git history and
+the original main branch retain them.
 Pi is pinned to npm `@earendil-works/pi-coding-agent@0.85.1`, upstream commit
 `d981de1229ef899957bbe968bc8dcda02a21f477` (tag v0.85.1). The lockfile pins its
 runtime dependencies. Pi owns inference, tools, compaction, session JSONL, and

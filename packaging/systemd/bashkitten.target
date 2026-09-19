@@ -1,3 +1,0 @@
-[Unit]
-Description=BashKitten local coding agent
-Wants=bashkitten-web.service

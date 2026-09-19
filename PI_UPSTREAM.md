@@ -15,6 +15,5 @@ public `ModelRuntime`; history forking uses its public `SessionManager`. No Pi
 files or dependencies are patched. Built-in startup network operations are disabled
 with Pi's supported offline/telemetry flags.
 
-The historical Rust implementation remains pinned to
-`9841914c71a74d81abe07f751aefd271fd924e63` for reference and its existing fixtures.
-That pin does not apply to the new native runtime.
+Only this native runtime pin applies to this branch. The old Rust port and its
+differential fixtures are available in Git history, outside the current tree.
