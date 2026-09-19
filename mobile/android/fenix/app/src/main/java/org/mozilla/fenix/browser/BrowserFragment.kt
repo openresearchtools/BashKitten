@@ -31,7 +31,6 @@ import mozilla.components.feature.app.links.AppLinksUseCases
 import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.readerview.ReaderViewFeature
 import mozilla.components.feature.tab.collections.TabCollection
-import mozilla.components.feature.tabs.WindowFeature
 import mozilla.components.lib.accelerometer.sensormanager.LifecycleAwareSensorManagerAccelerometer
 import mozilla.components.lib.shake.detectShakes
 import mozilla.components.support.base.feature.UserInteractionHandler
@@ -82,7 +81,6 @@ import org.mozilla.fenix.ipprotection.store.Surface as IPProtectionSurface
  */
 @Suppress("TooManyFunctions", "LargeClass")
 class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemInsetsPaddedFragment {
-    private val windowFeature = ViewBoundFeatureWrapper<WindowFeature>()
     private val openInAppOnboardingObserver = ViewBoundFeatureWrapper<OpenInAppOnboardingObserver>()
     private val translationsBinding = ViewBoundFeatureWrapper<TranslationsBinding>()
     private val translationsBannerIntegration = ViewBoundFeatureWrapper<TranslationsBannerIntegration>()
@@ -170,15 +168,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
 
         thumbnailsFeature.set(
             feature = BrowserThumbnails(context, binding.engineView, components.core.store),
-            owner = this,
-            view = view,
-        )
-
-        windowFeature.set(
-            feature = WindowFeature(
-                store = components.core.store,
-                tabsUseCases = components.useCases.tabsUseCases,
-            ),
             owner = this,
             view = view,
         )

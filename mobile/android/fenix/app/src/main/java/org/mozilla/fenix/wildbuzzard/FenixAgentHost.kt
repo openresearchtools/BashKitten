@@ -20,6 +20,7 @@ import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.lib.state.ext.flow
+import mozilla.components.feature.tabs.WindowFeature
 import org.mozilla.fenix.FenixApplication
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.geckoview.GeckoView
@@ -28,8 +29,10 @@ import org.openresearchtools.wildbuzzard.BrowserApp
 class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Host {
     private val components get() = application.components
     private var activity = WeakReference<Activity>(null)
+    private val windows = WindowFeature(components.core.store, components.useCases.tabsUseCases)
 
     init {
+        windows.start()
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(value: Activity) { if (value is HomeActivity) activity = WeakReference(value) }
             override fun onActivityDestroyed(value: Activity) { if (activity.get() === value) activity.clear() }

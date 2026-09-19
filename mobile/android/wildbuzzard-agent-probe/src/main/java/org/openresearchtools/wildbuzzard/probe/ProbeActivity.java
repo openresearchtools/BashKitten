@@ -159,6 +159,11 @@ public final class ProbeActivity extends Activity {
             for (int i = 0; i < beforePopup.length(); i++) existing.add(beforePopup.getJSONObject(i).getString("id"));
             JSONObject popup = find(command("snapshot", params(two)), "a", "Open child tab");
             check(popup != null, "child-tab link is exposed to the agent");
+            runOnUiThread(() -> startActivity(new Intent(this, ProbeActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
+            long focusDeadline = SystemClock.elapsedRealtime() + 10000;
+            while (!hasWindowFocus() && SystemClock.elapsedRealtime() < focusDeadline) Thread.sleep(100);
+            check(hasWindowFocus(), "external agent app is foreground while the browser is backgrounded");
             command("act", params(two).put("kind", "click").put("target", popup.getString("reference")));
             String child = null;
             long popupDeadline = SystemClock.elapsedRealtime() + 15000;

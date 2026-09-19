@@ -47,7 +47,7 @@ class WindowFeature(
                         }
                         WindowRequest.Type.OPEN -> {
                             tabsUseCases.addTab(
-                                selectTab = true,
+                                selectTab = store.state.selectedTabId == state.id,
                                 parentId = state.id,
                                 engineSession = windowRequest.prepare(),
                                 contextId = windowRequest.contextId,

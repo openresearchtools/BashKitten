@@ -22,6 +22,9 @@ and their page-created child tabs inherit that context and ownership.
 Fenix persists tab IDs and agent ownership across browser process restarts.
 `tabs.list` includes restored tabs whose engine sessions have not been recreated;
 the next control request recreates that session and reapplies its tab policies.
+Page-created tabs are handled at application scope, including while the agent
+app is in the foreground. A popup from a background tab does not change the
+browser's selected tab.
 
 ```json
 {"method":"tabs.create","params":{"url":"https://example.com","tor":false}}
