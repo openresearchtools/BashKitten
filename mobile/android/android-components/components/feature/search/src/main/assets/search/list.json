@@ -1842,7 +1842,7 @@
     },
     "ltg": {
       "default": {
-        "visibleDefaultEngines": ["google-b-m", "bing", "wikipedia-ltg"],
+        "visibleDefaultEngines": ["ddg", "google-b-m", "bing", "wikipedia-ltg"],
         "vivo-001": ["google-b-vv", "bing-vivo", "wikipedia-ltg"],
         "dt-001": ["google-b-tf", "bing-dt-tele", "wikipedia-ltg"],
         "dt-002": ["google-b-1-dt", "bing", "wikipedia-ltg"],

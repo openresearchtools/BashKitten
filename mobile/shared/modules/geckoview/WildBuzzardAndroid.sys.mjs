@@ -47,7 +47,7 @@ export const WildBuzzardAndroid = {
     let host = "";
     try { host = channel.URI.asciiHost; } catch (_) {}
     // Onion DNS must never escape even from a direct tab's subresources.
-    if (route?.tor || host.endsWith(".onion")) {
+    if ((context && !route) || route?.tor || host.endsWith(".onion")) {
       callback.onProxyFilterResult(proxy.newProxyInfoWithAuth(
         "socks", "127.0.0.1", route?.tor && route.port ? route.port : 1,
         context || "blocked", route?.proxySecret || "blocked", "", context || "blocked",

@@ -39,11 +39,7 @@ fun FirefoxTheme(
 
     val colorScheme: ColorScheme = wildBuzzardScheme(theme)
 
-    val gradients: AcornGradientScheme = when (theme) {
-        Theme.Light -> lightAcornGradientScheme
-        Theme.Dark -> darkAcornGradientScheme
-        Theme.Private -> privateAcornGradientScheme
-    }
+    val gradients = wildBuzzardGradients(theme)
 
     val tabGroupColors: TabGroupColorPalette = when (theme) {
         Theme.Light -> TabGroupColorPalette.lightPalette

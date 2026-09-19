@@ -36,7 +36,22 @@ jobs:
           sudo mkswap /mnt/wildbuzzard.swap
           sudo swapon /mnt/wildbuzzard.swap
           df -h
+      - name: Restore Android toolchains and Gradle downloads
+        id: toolchain-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ env.MOZBUILD_STATE_PATH }}
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-toolchain-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: android-toolchain-v1-${{ runner.os }}-
+      - name: Enable compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
       - name: Bootstrap Mozilla Android toolchain
+        timeout-minutes: 30
         run: |
           set -Eeuo pipefail
           ./mach --no-interactive bootstrap --application-choice mobile_android 2>&1 | tee artifacts/bootstrap.log
@@ -49,6 +64,15 @@ jobs:
           set -Eeuo pipefail
           ./mach gradle :fenix:assembleDebug :wildbuzzard-agent-probe:assembleDebug 2>&1 | tee artifacts/apk-build.log
           python3 wildbuzzard/android/scripts/collect-artifacts.py artifacts
+      - name: Save Android toolchains and Gradle downloads
+        if: always() && !cancelled()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ env.MOZBUILD_STATE_PATH }}
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: android-toolchain-v1-${{ runner.os }}-${{ github.sha }}
       - name: Preserve build logs and APK artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

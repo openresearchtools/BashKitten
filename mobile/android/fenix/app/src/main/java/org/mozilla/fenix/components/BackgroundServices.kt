@@ -213,38 +213,7 @@ class BackgroundServices(
             SCOPE_SESSION,
         ),
         crashReporter,
-    ).also { accountManager ->
-        // Register a telemetry account observer to keep track of FxA auth metrics.
-        accountManager.register(telemetryAccountObserver)
-
-        // Register an "abnormal fxa behaviour" middleware to keep track of events such as
-        // unexpected logouts.
-        accountManager.register(accountAbnormalities)
-
-        accountManager.register(AccountManagerReadyObserver(accountManagerAvailableQueue))
-
-        // Enable push if it's configured.
-        push.feature?.let { autoPushFeature ->
-            FxaPushSupportFeature(context, accountManager, autoPushFeature, crashReporter)
-                .initialize()
-        }
-
-        SendTabFeature(accountManager) { device, tabs ->
-            notificationManager.showReceivedTabs(context, device, tabs)
-        }
-
-        CloseTabsFeature(closeSyncedTabsCommandReceiver, accountManager).observe()
-
-        SyncedTabsIntegration(context, accountManager).launch()
-
-        syncStoreSupport = SyncStoreSupport(syncStore, lazyOf(accountManager)).also {
-            it.initialize()
-        }
-
-        MainScope().launch {
-            accountManager.start()
-        }
-    }
+    )
 
     /**
      * Provides notification functionality, manages notification channels.

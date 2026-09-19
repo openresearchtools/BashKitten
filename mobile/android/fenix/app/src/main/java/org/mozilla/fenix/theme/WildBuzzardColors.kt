@@ -85,3 +85,15 @@ internal fun wildBuzzardColors(theme: Theme) = if (theme == Theme.Light) {
         onInformationContainer = Color(0xFFE5E5E5), surfaceDimVariant = Color(0xFF252525),
         autofillText = Color(0xFFC8C8C8), selectedText = Color(0xFF414141), iconPrivate = Color(0xFFC8C8C8))
 }
+
+internal fun wildBuzzardGradients(theme: Theme): AcornGradientScheme {
+    val dark = theme != Theme.Light
+    val gradient = AcornGradient(
+        type = AcornGradientType.Linear(96f),
+        colorStops = listOf(
+            mozilla.components.compose.base.utils.ColorStop(0f, Color(if (dark) 0xFF252525 else 0xFFE6E6E6)),
+            mozilla.components.compose.base.utils.ColorStop(1f, Color(if (dark) 0xFF414141 else 0xFFC8C8C8)),
+        ),
+    )
+    return AcornGradientScheme(gradient, gradient, gradient, gradient)
+}

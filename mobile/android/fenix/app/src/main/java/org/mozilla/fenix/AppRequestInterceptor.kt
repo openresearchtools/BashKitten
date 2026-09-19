@@ -45,16 +45,14 @@ class AppRequestInterceptor(
     ): RequestInterceptor.InterceptionResponse? {
         val agent = org.openresearchtools.wildbuzzard.BrowserApp.get(context)
         val native = (engineSession as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.wildBuzzardSession()
-        if (native != null && org.openresearchtools.wildbuzzard.BrowserApp.onion(uri)) {
-            val existing = agent.forSession(native)
-            if (existing?.tor != true && !isSubframeRequest) {
-                val state = context.components.core.store.state.tabs.find { it.engineState.engineSession === engineSession }
-                if (state != null) {
-                    val tab = existing ?: agent.track(org.openresearchtools.wildbuzzard.BrowserApp.Tab(
-                        state.id, org.openresearchtools.wildbuzzard.BrowserApp.USER, native,
-                    ))
-                    agent.useTor(tab, uri)
-                }
+        if (native != null && !isSubframeRequest && (uri.startsWith("http://") || uri.startsWith("https://"))) {
+            val state = context.components.core.store.state.tabs.find { it.engineState.engineSession === engineSession }
+            if (state != null) {
+                val tab = agent.forSession(native) ?: agent.track(org.openresearchtools.wildbuzzard.BrowserApp.Tab(
+                    state.id, org.openresearchtools.wildbuzzard.BrowserApp.USER, native,
+                ), state.parentId)
+                if (agent.prepareNavigation(tab, uri)) return RequestInterceptor.InterceptionResponse.Deny
+            } else if (org.openresearchtools.wildbuzzard.BrowserApp.onion(uri)) {
                 return RequestInterceptor.InterceptionResponse.Deny
             }
         }

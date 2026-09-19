@@ -105,3 +105,5 @@ this document describes the implementation and does not assert that an
 unbuilt revision has passed device validation.
 
 Tor listens on a filesystem socket inside the Android app sandbox. A process-owned SOCKS gateway requires a random in-memory credential before forwarding to that socket. The gateway retains its listening socket if Tor stops, so a different app cannot take over the browser's trusted endpoint. Imported keys are never exposed through an unauthenticated shared localhost Tor port.
+
+Each restored or new managed tab blocks network traffic until its saved tab policy has been installed. Tor routing and adblock choice are stored per tab, and page-created child tabs inherit their parent's agent ownership and Tor requirement. The public Binder service and private foreground lifetime service are separate.

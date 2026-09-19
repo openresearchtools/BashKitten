@@ -405,3 +405,5 @@ skip-if = [
 ["test_trust_anchors.js"]
 
 ["test_x509.js"]
+
+["test_wildbuzzard_onion_trust.js"]

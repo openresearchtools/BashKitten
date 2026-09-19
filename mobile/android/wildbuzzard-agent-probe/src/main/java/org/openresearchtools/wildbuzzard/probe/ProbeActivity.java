@@ -56,6 +56,30 @@ public final class ProbeActivity extends Activity {
     }
     JSONObject params(String tab) throws Exception { return new JSONObject().put("tabId", tab); }
     void check(boolean condition, String name) { if (!condition) throw new AssertionError(name); log("PASS: " + name); }
+    JSONObject find(Object value, String tag, String name) throws Exception {
+        if (value instanceof JSONObject) {
+            JSONObject item = (JSONObject) value;
+            if (tag.equals(item.optString("tag")) && item.optString("name").contains(name) && item.has("reference")) return item;
+            java.util.Iterator<String> keys = item.keys();
+            while (keys.hasNext()) { JSONObject found = find(item.get(keys.next()), tag, name); if (found != null) return found; }
+        } else if (value instanceof JSONArray) {
+            JSONArray items = (JSONArray) value;
+            for (int i = 0; i < items.length(); i++) { JSONObject found = find(items.get(i), tag, name); if (found != null) return found; }
+        }
+        return null;
+    }
+    Object evaluate(String tab, String code) throws Exception { return command("evaluate", params(tab).put("code", code)); }
+    void waitPage(String tab) throws Exception {
+        long deadline = android.os.SystemClock.elapsedRealtime() + 15000;
+        do {
+            try {
+                JSONObject result = (JSONObject) command("wait", params(tab).put("for", "selector").put("value", "#name").put("timeout", 1000));
+                if (result.optBoolean("matched")) return;
+            } catch (IllegalStateException ignored) {}
+            Thread.sleep(150);
+        } while (android.os.SystemClock.elapsedRealtime() < deadline);
+        throw new AssertionError("Page did not load");
+    }
     void tests() {
         try {
             JSONObject a = (JSONObject) command("tabs.create", new JSONObject());
@@ -68,12 +92,28 @@ public final class ProbeActivity extends Activity {
             JSONArray tabs = (JSONArray) command("tabs.list", new JSONObject());
             check(tabs.toString().contains(two) && !tabs.toString().contains(one), "closing one tab leaves the other alive");
             command("navigate", params(two).put("url", "http://127.0.0.1:8765/"));
-            Thread.sleep(2500);
-            command("wait", params(two).put("for", "selector").put("value", "#name").put("timeout", 10000));
+            browser.showTab(two).send();
+            waitPage(two);
             Object snapshot = command("snapshot", params(two));
             check(snapshot.toString().contains("Agent test page"), "native Gecko page snapshot");
-            Object value = command("evaluate", params(two).put("code", "document.querySelector('#name').value = 'WildBuzzard'; document.querySelector('#submit').click(); document.querySelector('#result').textContent"));
-            check(value.toString().contains("WildBuzzard"), "page input, click and JavaScript run inside Gecko");
+            String input = find(snapshot, "input", "Name").getString("reference");
+            String button = find(snapshot, "button", "Submit").getString("reference");
+            command("act", params(two).put("kind", "fill").put("target", input).put("value", "WildBuzzard").put("clear", true));
+            command("act", params(two).put("kind", "click").put("target", button));
+            check(evaluate(two, "return document.querySelector('#result').textContent;").toString().contains("Hello WildBuzzard"), "native element input and click");
+            command("snapshot", params(two));
+            JSONObject stale = call(new JSONObject().put("method", "act").put("params", params(two).put("kind", "click").put("target", button)).toString());
+            check(stale.has("error"), "stale element reference rejected");
+            check(evaluate(two, "return document.querySelector('#ad-test').dataset.result;").toString().contains("blocked"), "native adblock blocks bundled-list image fixture");
+            command("tabs.setAdblocking", params(two).put("enabled", false));
+            waitPage(two);
+            check(evaluate(two, "return document.querySelector('#ad-test').dataset.result;").toString().contains("loaded"), "per-tab exception permits image fixture after reload");
+            command("tabs.setDesktopMode", params(two).put("enabled", true));
+            waitPage(two);
+            check(!evaluate(two, "return navigator.userAgent;").toString().contains("Mobile"), "agent enables real desktop user agent");
+            command("tabs.setDesktopMode", params(two).put("enabled", false));
+            command("tabs.setAdblocking", params(two).put("enabled", true));
+            waitPage(two);
             JSONObject restricted = call(new JSONObject().put("method", "navigate").put("params", params(two).put("url", "file:///data/system/packages.xml")).toString());
             check(restricted.has("error"), "agent cannot navigate to local files");
             command("tabs.close", params(two));

@@ -245,7 +245,7 @@ class Settings(
      * Indicates whether or not the "Synced Tabs" section should be shown on the home screen.
      */
     val showSyncedTabs: Boolean
-        get() = FxNimbus.features.homescreen.value().sectionsEnabled[HomeScreenSection.SYNCED_TABS] == true
+        get() = false
 
     /**
      * Indicates whether or not the "Collections" section should be shown on the home screen.

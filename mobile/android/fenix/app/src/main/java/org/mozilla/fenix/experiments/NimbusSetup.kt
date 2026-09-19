@@ -44,62 +44,6 @@ fun createNimbus(
     geckoPrefHandler: GeckoPrefHandler,
 ): NimbusApi {
     return mozilla.components.service.nimbus.NimbusDisabled(context)
-
-    // These values can be used in the JEXL expressions when targeting experiments.
-    val customTargetingAttributes = CustomAttributeProvider.getCustomTargetingAttributes(context)
-
-    val isAppFirstRun = settings.isFirstNimbusRun
-    if (isAppFirstRun) {
-        settings.isFirstNimbusRun = false
-    }
-
-    val recordedNimbusContext = RecordedNimbusContext.create(
-        context = context,
-        isFirstRun = isAppFirstRun,
-    )
-
-    val serverSettings: NimbusServerSettings? = remoteSettingsService?.let { service ->
-        NimbusServerSettings(
-            rsService = service,
-            collectionName = if (settings.nimbusUsePreview) {
-                "nimbus-preview"
-            } else {
-                "nimbus-mobile-experiments"
-            },
-        )
-    }
-
-    // The name "fenix" here corresponds to the app_name defined for the family of apps
-    // that encompasses all of the channels for the Fenix app.  This is defined upstream in
-    // the telemetry system. For more context on where the app_name come from see:
-    // https://probeinfo.telemetry.mozilla.org/v2/glean/app-listings
-    // and
-    // https://github.com/mozilla/probe-scraper/blob/master/repositories.yaml
-    val appInfo = NimbusAppInfo(
-        appName = "fenix",
-        // Note: Using BuildConfig.BUILD_TYPE is important here so that it matches the value
-        // passed into Glean. `Config.channel.toString()` turned out to be non-deterministic
-        // and would mostly produce the value `Beta` and rarely would produce `beta`.
-        channel = BuildConfig.BUILD_TYPE.let { if (it == "debug") "developer" else it },
-        customTargetingAttributes = customTargetingAttributes,
-    )
-
-    return NimbusBuilder(context).apply {
-        url = urlString
-        errorReporter = context::reportError
-        initialExperiments = R.raw.initial_experiments
-        timeoutLoadingExperiment = TIME_OUT_LOADING_EXPERIMENT_FROM_DISK_MS
-        sharedPreferences = settings.preferences
-        isFirstRun = isAppFirstRun
-        featureManifest = FxNimbus
-        onFetchCallback = {
-            settings.nimbusExperimentsFetched = true
-        }
-        recordedContext = recordedNimbusContext
-        this.geckoPrefHandler = geckoPrefHandler
-    }.build(appInfo, serverSettings).also { nimbusApi ->
-        nimbusApi.recordIsReady(FxNimbus.features.nimbusIsReady.value().eventCount)
-    }
 }
 
 private fun Context.reportError(message: String, e: Throwable) {

@@ -7,3 +7,5 @@
 <button id="submit" onclick="document.querySelector('#result').textContent = 'Hello ' + document.querySelector('#name').value">Submit</button>
 <p id="result"></p>
 <iframe title="Frame test" src="frame.html"></iframe>
+<img id="ad-test" src="/ads/banners/marker.svg" onload="this.dataset.result='loaded'" onerror="this.dataset.result='blocked'" alt="Blocking fixture">
+<a id="popup" target="_blank" href="/frame.html">Open child tab</a>

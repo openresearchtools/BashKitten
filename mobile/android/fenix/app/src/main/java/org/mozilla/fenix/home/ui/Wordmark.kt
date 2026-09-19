@@ -70,15 +70,13 @@ internal fun WordmarkLogo(
 
 @Composable
 internal fun WordmarkText(color: Color?) {
-    Image(
-        modifier = Modifier
-            .semantics {
-                testTagsAsResourceId = true
-                testTag = HOMEPAGE_WORDMARK_TEXT
-            }
-            .height(dimensionResource(R.dimen.wordmark_text_height)),
-        painter = painterResource(getAttr(R.attr.fenixWordmarkText)),
-        colorFilter = color?.let { ColorFilter.tint(it) },
-        contentDescription = stringResource(R.string.app_name),
+    androidx.compose.material3.Text(
+        text = stringResource(R.string.app_name),
+        style = org.mozilla.fenix.theme.FirefoxTheme.typography.headline5,
+        color = color ?: androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.semantics {
+            testTagsAsResourceId = true
+            testTag = HOMEPAGE_WORDMARK_TEXT
+        },
     )
 }

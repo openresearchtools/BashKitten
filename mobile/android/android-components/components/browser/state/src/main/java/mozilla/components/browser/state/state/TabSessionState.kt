@@ -78,7 +78,7 @@ data class TabSessionState(
         engineState = engineState,
         extensionState = extensionState,
         mediaSessionState = mediaSessionState,
-        contextId = contextId,
+        contextId = contextId ?: "wildbuzzard-${UUID.randomUUID()}",
         cookieBanner = cookieBanner,
     )
 }
@@ -135,7 +135,7 @@ fun createTab(
         parentId = parentId ?: parent?.id,
         extensionState = extensions,
         readerState = readerState,
-        contextId = contextId,
+        contextId = contextId ?: "wildbuzzard-${UUID.randomUUID()}",
         lastAccess = lastAccess,
         lastVisibleAt = lastVisibleAt,
         createdAt = createdAt,

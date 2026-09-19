@@ -41,7 +41,6 @@ enum class Page {
                 PrivateTabs,
                 NormalTabs,
                 TabGroups.takeIf { shouldShowTabGroupsPage },
-                SyncedTabs,
             )
 
         /**
@@ -55,7 +54,7 @@ enum class Page {
                 position == 0 -> PrivateTabs
                 position == 1 -> NormalTabs
                 shouldShowTabGroupsPage && position == 2 -> TabGroups
-                else -> SyncedTabs
+                else -> NormalTabs
             }
         }
 
@@ -70,7 +69,7 @@ enum class Page {
                 PrivateTabs -> 0
                 NormalTabs -> 1
                 TabGroups -> if (shouldShowTabGroupsPage) 2 else 1
-                SyncedTabs -> visiblePages(shouldShowTabGroupsPage).lastIndex
+                SyncedTabs -> 1
             }
         }
     }

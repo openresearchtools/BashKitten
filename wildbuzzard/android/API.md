@@ -25,7 +25,7 @@ by another app. The browser menu revokes all grants and closes agent-owned tabs.
 {"method":"snapshot","params":{"tabId":"..."}}
 {"method":"act","params":{"tabId":"...","kind":"click","target":"reference-from-snapshot"}}
 {"method":"read","params":{"tabId":"...","format":"text"}}
-{"method":"evaluate","params":{"tabId":"...","code":"document.title"}}
+{"method":"evaluate","params":{"tabId":"...","code":"return document.title;"}}
 {"method":"navigate","params":{"tabId":"...","url":"https://example.com/next"}}
 {"method":"tabs.close","params":{"tabId":"..."}}
 ```
@@ -45,3 +45,5 @@ or application-kill method. Desktop-only tool parity must not be assumed: use
 capability discovery. Requests are limited to 200,000 characters and responses
 to 200,000 characters; narrow large snapshots/read queries. Evaluations and
 waits are bounded to 30 seconds.
+
+`evaluate.code` is an asynchronous function body; use `return` to return a value. `act` supports snapshot references for click, focus, fill, check/uncheck and select; `fill` accepts `value` and optional `clear`.

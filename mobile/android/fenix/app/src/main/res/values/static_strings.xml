@@ -5,7 +5,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Name of the application -->
     <string name="app_name" translatable="false">WildBuzzard</string>
-    <string name="firefox" translatable="false">Firefox</string>
+    <string name="firefox" translatable="false">WildBuzzard</string>
 
     <!-- Preference for developers -->
     <string name="preference_leakcanary" translatable="false">LeakCanary</string>
@@ -208,7 +208,7 @@
     <string name="profiler_active_notification" translatable="false">Profiler active</string>
     <string name="profiler_notification_text" translatable="false">Profiling is active. Tap to stop profiler</string>
     <string name="profiler_settings_title">Profiler Settings</string>
-    <string name="profiler_filter_firefox">Firefox</string>
+    <string name="profiler_filter_firefox">WildBuzzard</string>
     <string name="profiler_running">Profiler is currently running</string>
     <string name="profiler_filter_firefox_explain">Recommended preset for profiling Firefox</string>
     <string name="profiler_filter_graphics">Graphics</string>
@@ -380,5 +380,5 @@
     <!-- Label for the secret settings preference to enable Import Passwords -->
     <string name="preferences_debug_settings_import_passwords">Enable Import Passwords</string>
     <!--  Firefox brand name  -->
-    <string name="app_name_firefox" tools:ignore="BrandUsage">Firefox</string>
+    <string name="app_name_firefox" tools:ignore="BrandUsage">WildBuzzard</string>
 </resources>
