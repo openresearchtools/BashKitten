@@ -435,3 +435,6 @@ pref("browser.ipProtection.enabled", false);
 pref("browser.ipProtection.guardian.endpoint", "");
 pref("browser.safebrowsing.provider.mozilla.updateURL", "");
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "");
+
+// Share the desktop product's audited no-vendor-service policy, including locks.
+#include ../../../wildbuzzard/browser/app/profile/99-wildbuzzard.js

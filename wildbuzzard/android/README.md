@@ -16,6 +16,10 @@ prevent users from visiting Mozilla websites. Bundled security data and Gecko's
 sandbox, same-origin checks, certificate validation and content isolation remain.
 DuckDuckGo is the default search engine. Desktop torrents, agent runtimes and
 WildBuzzard search extensions are not Android runtime dependencies.
+Android includes the desktop `99-wildbuzzard.js` policy directly. This also
+disables vendor Safe Browsing lookups, remote certificate/blocklist updates and
+Mozilla model downloads. The native blocker remains enabled; keeping Gecko and
+its bundled security data current requires publishing updated WildBuzzard builds.
 
 ## Android app control
 

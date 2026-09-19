@@ -64,13 +64,22 @@ try:
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self,*a,**kw): super().__init__(*a,directory=str(web),**kw)
         def log_message(self,*a): pass
-    server = http.server.ThreadingHTTPServer(('127.0.0.1',9443),Handler)
-    server.socket = certificate_context(args.expired).wrap_socket(server.socket,server_side=True)
+    class TLSServer(http.server.ThreadingHTTPServer):
+        def get_request(self):
+            connection, address = super().get_request()
+            connection.settimeout(15)
+            try:
+                return self.context.wrap_socket(connection, server_side=True), address
+            except Exception:
+                connection.close()
+                raise
+    server = TLSServer(('127.0.0.1',9443),Handler)
+    server.context = certificate_context(args.expired)
     print('Private onion fixture: https://'+host,flush=True)
     print('Unenrolled onion fixture: https://'+public_host,flush=True)
     print('Import fixture.auth_private from '+str(root)+'; no CA installation is needed for the onion test.',flush=True)
     def renew(expired):
-        server.socket.context = certificate_context(expired)
+        server.context = certificate_context(expired)
         (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'key':key,'expired':expired}))
         print('TLS leaf renewed under the persistent CA; expired='+str(expired),flush=True)
     signal.signal(signal.SIGHUP,lambda *_: renew(False))
