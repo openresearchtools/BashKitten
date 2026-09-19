@@ -74,6 +74,7 @@ def main():
                 "android.permission.POST_NOTIFICATIONS")
     command("reverse", "tcp:8765", "tcp:8765")
     command("reverse", "tcp:9443", "tcp:9443")
+    command("shell", "rm", "-rf", "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/screenshots")
     suites = [] if args.onion_only else ["AgentBrowserTest", "CommandBrowserTest"]
     credential_name = None
     if args.onion_fixture:

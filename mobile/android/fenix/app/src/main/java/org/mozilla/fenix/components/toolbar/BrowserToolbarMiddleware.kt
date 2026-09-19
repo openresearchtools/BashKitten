@@ -296,17 +296,19 @@ class BrowserToolbarMiddleware(
             }
 
             is TabCounterClicked -> {
-                thumbnailsFeature()?.requestScreenshot()
-
-                navController.nav(
-                    R.id.browserFragment,
-                    BrowserFragmentDirections.actionGlobalTabManagementFragment(
-                        page = when (browsingModeManager.mode) {
-                            Normal -> Page.NormalTabs
-                            Private -> Page.PrivateTabs
-                        },
-                    ),
-                )
+                val openTray = {
+                    navController.nav(
+                        R.id.browserFragment,
+                        BrowserFragmentDirections.actionGlobalTabManagementFragment(
+                            page = when (browsingModeManager.mode) {
+                                Normal -> Page.NormalTabs
+                                Private -> Page.PrivateTabs
+                            },
+                        ),
+                    )
+                }
+                val thumbnails = thumbnailsFeature()
+                if (thumbnails == null) openTray() else thumbnails.requestScreenshot { openTray() }
 
                 next(action)
             }

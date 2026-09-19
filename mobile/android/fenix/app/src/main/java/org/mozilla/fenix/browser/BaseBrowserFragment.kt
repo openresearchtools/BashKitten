@@ -1696,16 +1696,19 @@ abstract class BaseBrowserFragment :
     }
 
     private fun onTabCounterClicked(browsingMode: BrowsingMode) {
-        thumbnailsFeature.get()?.requestScreenshot()
-        findNavController().nav(
-            R.id.browserFragment,
-            BrowserFragmentDirections.actionGlobalTabManagementFragment(
-                page = when (browsingMode) {
-                    BrowsingMode.Normal -> Page.NormalTabs
-                    BrowsingMode.Private -> Page.PrivateTabs
-                },
-            ),
-        )
+        val openTray = {
+            if (isAdded) findNavController().nav(
+                R.id.browserFragment,
+                BrowserFragmentDirections.actionGlobalTabManagementFragment(
+                    page = when (browsingMode) {
+                        BrowsingMode.Normal -> Page.NormalTabs
+                        BrowsingMode.Private -> Page.PrivateTabs
+                    },
+                ),
+            )
+        }
+        val thumbnails = thumbnailsFeature.get()
+        if (thumbnails == null) openTray() else thumbnails.requestScreenshot { openTray() }
     }
 
     @VisibleForTesting

@@ -5,6 +5,9 @@
 package mozilla.components.browser.thumbnails
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.VisibleForTesting
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +38,7 @@ class BrowserThumbnails(
     private val engineView: EngineView,
     private val store: BrowserStore,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Main,
+    private val capture: ((Bitmap?) -> Unit) -> Unit = engineView::captureThumbnail,
 ) : LifecycleAwareFeature {
 
     private var scope: CoroutineScope? = null
@@ -58,21 +62,34 @@ class BrowserThumbnails(
      * Requests a screenshot to be taken that can be observed from [BrowserStore] if successful. The request can fail
      * if the device is low on memory or if there is no tab attached to the [EngineView].
      */
-    fun requestScreenshot() {
+    fun requestScreenshot(onComplete: (() -> Unit)? = null) {
+        val handler = Handler(Looper.getMainLooper())
+        var completed = false
+        val complete = Runnable {
+            if (!completed) {
+                completed = true
+                onComplete?.invoke()
+            }
+        }
+        if (onComplete != null) handler.postDelayed(complete, 500)
         if (!isLowOnMemory()) {
             // Create a local reference to prevent capturing "this" in the lambda
             // which would leak the context if the view is destroyed before the
             // callback is invoked. This is a workaround for:
             // https://bugzilla.mozilla.org/show_bug.cgi?id=1678364
             val store = this.store
-            val tab = store.state.selectedTab ?: return
-            engineView.captureThumbnail {
-                val bitmap = it ?: return@captureThumbnail
+            val tab = store.state.selectedTab
+            if (tab == null) { complete.run(); return }
+            capture { bitmap ->
                 val current = store.state.selectedTab
-                if (current?.id != tab.id || current.content.url != tab.content.url) return@captureThumbnail
-
-                store.dispatch(ContentAction.UpdateThumbnailAction(tab.id, bitmap))
+                if (!completed && bitmap != null && current?.id == tab.id && current.content.url == tab.content.url) {
+                    store.dispatch(ContentAction.UpdateThumbnailAction(tab.id, bitmap))
+                }
+                handler.removeCallbacks(complete)
+                complete.run()
             }
+        } else {
+            complete.run()
         }
     }
 

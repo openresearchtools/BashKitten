@@ -167,7 +167,11 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         initIPProtectionOnboarding(context, view)
 
         thumbnailsFeature.set(
-            feature = BrowserThumbnails(context, binding.engineView, components.core.store),
+            feature = BrowserThumbnails(context, binding.engineView, components.core.store, capture = { callback ->
+                org.mozilla.fenix.wildbuzzard.captureDisplayedPage(
+                    binding.engineView.asView(), binding.engineView::captureThumbnail, callback,
+                )
+            }),
             owner = this,
             view = view,
         )

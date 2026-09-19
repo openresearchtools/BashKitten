@@ -162,6 +162,8 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         }
         val view = activity.get()?.window?.decorView?.let(::find)
         if (view == null) { result.accept(null); return }
-        view.capturePixels().accept({ result.accept(it) }, { result.accept(null) })
+        captureDisplayedPage(view, { callback ->
+            view.capturePixels().accept({ callback(it) }, { callback(null) })
+        }, { result.accept(it) })
     }
 }

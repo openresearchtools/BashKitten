@@ -87,12 +87,38 @@ public final class CommandBrowserTest {
         JSONObject launch = (JSONObject) call("tabs.show", tab(first));
         context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.openresearchtools.wildbuzzard.CommandAccessActivity")
             .putExtra("launch", launch.getString("launch")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        assertNotNull(device.wait(Until.findObject(By.desc("More options")), 15000));
+        JSONObject screenshot = (JSONObject) call("screenshot", tab(first));
+        assertFixturePixels(android.util.Base64.decode(screenshot.getString("base64"), android.util.Base64.DEFAULT));
+        UiObject2 counter = device.findObject(By.descStartsWith("Non-private Tabs Open:"));
+        assertNotNull(counter); counter.click();
+        assertTrue(device.wait(Until.hasObject(By.desc("Page preview")), 15000));
+        SystemClock.sleep(1000);
+        String thumbnail = device.executeShellCommand("run-as org.openresearchtools.wildbuzzard cat no_backup/mozac_browser_thumbnails/thumbnails/" + first + ".0 | base64");
+        assertFixturePixels(android.util.Base64.decode(thumbnail, android.util.Base64.DEFAULT));
+        device.pressBack();
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 15000); assertNotNull(menu); menu.click();
         scrollToAndClick(device, "Settings");
         scrollToAndClick(device, "Revoke agent access");
         assertTrue("Revocation disables the saved shell key", run("tabs.list").exit != 0);
         android.util.Log.i("WildBuzzardProbe", "PASS: browser-owned shell entry, real page access, tab isolation, closure, and revocation");
         device.pressBack();
+    }
+    void assertFixturePixels(byte[] encoded) {
+        android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(encoded, 0, encoded.length);
+        assertNotNull("Page image decodes", bitmap);
+        int light = 0, dark = 0, total = 0;
+        for (int y = 4; y < bitmap.getHeight(); y += 8) {
+            for (int x = 4; x < bitmap.getWidth(); x += 8) {
+                int color = bitmap.getPixel(x, y);
+                if (android.graphics.Color.red(color) > 220 && android.graphics.Color.green(color) > 220 && android.graphics.Color.blue(color) > 220) light++;
+                if (android.graphics.Color.red(color) < 80 && android.graphics.Color.green(color) < 80 && android.graphics.Color.blue(color) < 80) dark++;
+                total++;
+            }
+        }
+        bitmap.recycle();
+        assertTrue("White fixture page is actually captured, not a black placeholder", light > total / 2);
+        assertTrue("Captured page includes its dark text and controls", dark > total / 100);
     }
     void click(UiDevice device, String text) {
         java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
