@@ -47,8 +47,8 @@ public final class AgentBrowserTest {
         assertNotNull("Fenix menu", menu); menu.click();
         device.waitForIdle();
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-menu.png")));
-        assertNotNull("Desktop site is in the normal menu", device.wait(Until.findObject(By.desc("Desktop site")), 10000));
-        assertNotNull("Per-tab adblocking is in the normal menu", device.wait(Until.findObject(By.desc("Adblocking for this tab")), 10000));
+        assertNotNull("Desktop site is in the normal menu", device.wait(Until.findObject(By.descStartsWith("Desktop site ")), 10000));
+        assertNotNull("Per-tab adblocking is in the normal menu", device.wait(Until.findObject(By.descStartsWith("Adblocking for this tab ")), 10000));
         assertFalse("No separate product tab-options screen", device.hasObject(By.desc("Wild Buzzard tab controls")));
         new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Settings"));
         click(device, "Settings");

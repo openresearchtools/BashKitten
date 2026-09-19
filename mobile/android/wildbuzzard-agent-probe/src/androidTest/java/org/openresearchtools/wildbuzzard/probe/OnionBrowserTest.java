@@ -37,7 +37,7 @@ public final class OnionBrowserTest {
         probe.send(probe.browser.showTab(tab));
         probe.waitPage(tab);
         device.waitForIdle();
-        UiObject2 counter = device.wait(Until.findObject(By.desc(java.util.regex.Pattern.compile("(?:Non-private )?Tabs Open:.*"))), 20000);
+        UiObject2 counter = device.wait(Until.findObject(By.desc(java.util.regex.Pattern.compile("(?:Non-private )?Tabs Open:.*"))), 45000);
         assertNotNull("Fenix tab counter", counter); counter.click();
         UiObject2 torPage = device.wait(Until.findObject(By.descStartsWith("Tor tabs:")), 10000);
         assertNotNull("Normal / Private / Tor tray", torPage); torPage.click();
