@@ -89,6 +89,7 @@ def main():
             credential.write_text(fixture["onion"].removesuffix(".onion") + ":descriptor:x25519:" + fixture["key"] + "\n")
             credential.chmod(0o600)
             command("push", str(credential), "/sdcard/Download/" + credential_name)
+    failed_suites = []
     try:
         for suite in suites:
             extra = ["-e", "credentialFile", credential_name] if suite == "OnionBrowserTest" else []
@@ -102,7 +103,7 @@ def main():
             report_path.write_text(json.dumps(report, indent=2) + "\n")
             print(suite + (": PASS" if report["tests"][suite] else ": FAIL"), flush=True)
             if not report["tests"][suite]:
-                raise RuntimeError("Device suite failed; inspect " + str(args.output / (suite + ".log")))
+                failed_suites.append(suite)
     finally:
         if credential_name:
             command("shell", "rm", "-f", "/sdcard/Download/" + credential_name)
@@ -112,6 +113,8 @@ def main():
                         str(args.output / "screenshots")], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         report["finished"] = datetime.now(timezone.utc).isoformat()
         report_path.write_text(json.dumps(report, indent=2) + "\n")
+    if failed_suites:
+        raise RuntimeError("Device suites failed: " + ", ".join(failed_suites) + "; inspect " + str(args.output))
 
 
 if __name__ == "__main__":

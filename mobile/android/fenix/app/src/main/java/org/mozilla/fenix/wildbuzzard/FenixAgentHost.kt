@@ -155,8 +155,13 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     override fun screenshot(id: String, result: Consumer<Bitmap?>) {
         val tab = components.core.store.state.tabs.find { it.id == id }
         val engine = tab?.engineState?.engineSession as? GeckoEngineSession
+        if (engine == null || components.core.store.state.selectedTabId != id) {
+            result.accept(null)
+            return
+        }
+        val session = engine.wildBuzzardSession()
         fun find(view: View): GeckoView? {
-            if (view is GeckoView && view.session === engine?.wildBuzzardSession()) return view
+            if (view is GeckoView && view.session === session) return view
             if (view is ViewGroup) for (i in 0 until view.childCount) find(view.getChildAt(i))?.let { return it }
             return null
         }
@@ -164,6 +169,16 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         if (view == null) { result.accept(null); return }
         captureDisplayedPage(view, { callback ->
             view.capturePixels().accept({ callback(it) }, { callback(null) })
-        }, { result.accept(it) })
+        }, { bitmap ->
+            val current = components.core.store.state
+            if (current.selectedTabId != id || view.session !== session ||
+                current.tabs.find { it.id == id }?.engineState?.engineSession !== engine
+            ) {
+                bitmap?.recycle()
+                result.accept(null)
+            } else {
+                result.accept(bitmap)
+            }
+        })
     }
 }
