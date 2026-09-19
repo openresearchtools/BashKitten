@@ -163,6 +163,8 @@ process and rerun the test to verify a renewed leaf under the persistent CA.
 Send `SIGUSR1` and repush its fixture JSON to test certificate expiry. These
 signals preserve the running Tor service and onion identity. `--expired` is
 also available when starting the fixture.
+Send `SIGUSR2` to test a self-signed leaf, or start with `--self-signed-leaf`.
+`SIGHUP` returns to a valid leaf signed by the original persistent private CA.
 The suite also checks unenrolled onions, hostname mismatches, clearnet private-CA
 rejection, and blocked localhost access from a Tor tab. These are test procedures,
 not claims that device validation has already passed.

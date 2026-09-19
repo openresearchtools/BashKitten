@@ -17,7 +17,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--directory', required=True, type=Path)
 parser.add_argument('--tor', required=True)
 parser.add_argument('--expired', action='store_true', help='Serve an expired leaf for the validity rejection test')
+parser.add_argument('--self-signed-leaf', action='store_true', help='Serve a self-signed leaf instead of a private-CA leaf')
 args = parser.parse_args()
+if args.expired and args.self_signed_leaf:
+    parser.error('Choose --expired or --self-signed-leaf')
 os.umask(0o077)
 root = args.directory.resolve()
 root.mkdir(parents=True, exist_ok=True)
@@ -53,7 +56,7 @@ try:
     (root/'qr.txt').write_text('http://'+host+'?key='+key+'\n')
     if not (root/'ca.pem').exists():
         openssl('req','-x509','-newkey','rsa:2048','-nodes','-days','30','-subj','/CN=WildBuzzard Test Private CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign','-keyout',root/'ca.key','-out',root/'ca.pem')
-    def certificate_context(expired):
+    def certificate_context(expired, self_signed=False):
         openssl('req','-new','-newkey','rsa:2048','-nodes','-subj','/CN='+host,'-keyout',root/'server.key','-out',root/'server.csr')
         (root/'extensions').write_text('subjectAltName=DNS:'+host+',DNS:'+public_host+',IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
         if expired:
@@ -77,9 +80,11 @@ commonName=supplied
             now = datetime.datetime.now(datetime.timezone.utc)
             date = lambda days: (now-datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%SZ')
             openssl('ca','-batch','-notext','-config',root/'ca.cnf','-in',root/'server.csr','-out',root/'server.pem','-startdate',date(2),'-enddate',date(1),'-extfile',root/'extensions')
+        elif self_signed:
+            openssl('x509','-req','-in',root/'server.csr','-signkey',root/'server.key','-days','7','-extfile',root/'extensions','-out',root/'server.pem')
         else:
             openssl('x509','-req','-in',root/'server.csr','-CA',root/'ca.pem','-CAkey',root/'ca.key','-CAcreateserial','-days','7','-extfile',root/'extensions','-out',root/'server.pem')
-        (root/'chain.pem').write_bytes((root/'server.pem').read_bytes()+(root/'ca.pem').read_bytes())
+        (root/'chain.pem').write_bytes((root/'server.pem').read_bytes()+(b'' if self_signed else (root/'ca.pem').read_bytes()))
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(root/'chain.pem',root/'server.key')
         return context
@@ -97,21 +102,22 @@ commonName=supplied
                 connection.close()
                 raise
     server = TLSServer(('127.0.0.1',9443),Handler)
-    server.context = certificate_context(args.expired)
+    server.context = certificate_context(args.expired, args.self_signed_leaf)
     print('Private onion fixture: https://'+host,flush=True)
     print('Unenrolled onion fixture: https://'+public_host,flush=True)
     print('Import fixture.auth_private from '+str(root)+'; no CA installation is needed for the onion test.',flush=True)
-    def renew(expired):
+    def renew(expired, self_signed=False):
         try:
-            server.context = certificate_context(expired)
+            server.context = certificate_context(expired, self_signed)
         except Exception as error:
             print('Certificate renewal failed; previous TLS context retained: '+str(error),flush=True)
             return
         (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'key':key,'expired':expired}))
-        print('TLS leaf renewed under the persistent CA; expired='+str(expired),flush=True)
+        print('TLS leaf renewed; self-signed='+str(self_signed)+', expired='+str(expired),flush=True)
     signal.signal(signal.SIGHUP,lambda *_: renew(False))
     signal.signal(signal.SIGUSR1,lambda *_: renew(True))
-    print('Send SIGHUP to renew the leaf; SIGUSR1 installs an expired leaf. Tor keeps running.',flush=True)
+    signal.signal(signal.SIGUSR2,lambda *_: renew(False, True))
+    print('SIGHUP renews under the persistent CA; SIGUSR1 expires the leaf; SIGUSR2 installs a self-signed leaf. Tor keeps running.',flush=True)
     signal.signal(signal.SIGTERM,lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     server.serve_forever()
 except KeyboardInterrupt:
