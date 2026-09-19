@@ -5,6 +5,7 @@
 package org.mozilla.fenix.settings.about
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -187,7 +188,7 @@ class AboutFragment(
             ""
         }
 
-        val content = getString(R.string.about_content, appName)
+        val content = getString(R.string.wildbuzzard_about_content)
         val buildDate = BuildConfig.BUILD_DATE
 
         binding.aboutText.text = aboutText
@@ -196,21 +197,19 @@ class AboutFragment(
     }
 
     private fun populateAboutList(): List<AboutPageItem> {
-        val context = requireContext()
-
         return listOf(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     WHATS_NEW,
-                    SupportUtils.WHATS_NEW_URL,
+                    "https://github.com/openresearchtools/wildbuzzard-android/commits/main/",
                 ),
                 // Note: Fenix only has release notes for 'Release' versions, NOT 'Beta' & 'Nightly'.
-                getString(R.string.about_whats_new, getString(R.string.firefox)),
+                getString(R.string.about_whats_new, appName),
             ),
             AboutPageItem(
                 AboutItem.ExternalLink(
                     SUPPORT,
-                    SupportUtils.getSumoURLForTopic(context, SupportUtils.SumoTopic.HELP),
+                    "https://github.com/openresearchtools/wildbuzzard-android/issues",
                 ),
                 getString(R.string.about_support),
             ),
@@ -221,14 +220,14 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     PRIVACY_NOTICE,
-                    SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.PRIVACY_NOTICE),
+                    "https://github.com/openresearchtools/wildbuzzard-android/blob/main/wildbuzzard/android/README.md",
                 ),
                 getString(R.string.about_privacy_notice),
             ),
             AboutPageItem(
                 AboutItem.ExternalLink(
                     RIGHTS,
-                    SupportUtils.getSumoURLForTopic(context, SupportUtils.SumoTopic.YOUR_RIGHTS),
+                    "about:rights",
                 ),
                 getString(R.string.about_know_your_rights),
             ),
@@ -239,6 +238,10 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.Libraries,
                 getString(R.string.about_other_open_source_libraries),
+            ),
+            AboutPageItem(
+                AboutItem.ProductLicenses,
+                getString(R.string.wildbuzzard_licenses_and_source),
             ),
         )
     }
@@ -271,6 +274,9 @@ class AboutFragment(
             }
             is AboutItem.Libraries -> {
                 openLibrariesPage()
+            }
+            is AboutItem.ProductLicenses -> {
+                startActivity(Intent(requireContext(), org.openresearchtools.wildbuzzard.LicensesActivity::class.java))
             }
             is AboutItem.Crashes -> {
                 val navController = findNavController()
