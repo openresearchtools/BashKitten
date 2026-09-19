@@ -565,6 +565,8 @@ class TabManagementFragment : Fragment() {
         return storeProvider.get { restoredState ->
             TabsTrayStore(
                 initialState = restoredState?.copy(
+                    selectedPage = restoredState.selectedPage.takeIf { it in Page.visiblePages(false) }
+                        ?: Page.NormalTabs,
                     config = restoredState.config.copy(displayTabsInGrid = settings.gridTabView),
                 ) ?: createInitialState(args, settings),
                 middlewares = listOf(
@@ -591,12 +593,13 @@ class TabManagementFragment : Fragment() {
     ): TabsTrayState {
         val appState = requireComponents.appStore.state
         val coreState = requireComponents.core.store.state
+        val requestedPage = args.page.takeIf { it in Page.visiblePages(false) } ?: Page.NormalTabs
 
         return TabsTrayState(
-            selectedPage = if (args.page == Page.NormalTabs &&
+            selectedPage = if (requestedPage == Page.NormalTabs &&
                 coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
                     it.contextId?.startsWith("wildbuzzard-tor-") == true }
-            ) Page.TorTabs else args.page,
+            ) Page.TorTabs else requestedPage,
             mode = if (args.enterMultiselect) TabsTrayState.Mode.Select(emptySet()) else TabsTrayState.Mode.Normal,
             inactiveTabs = TabsTrayState.InactiveTabsState(
                 isExpanded = appState.inactiveTabsExpanded,

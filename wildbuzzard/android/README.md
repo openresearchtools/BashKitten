@@ -36,7 +36,7 @@ See [API.md](API.md). The AIDL contract lives in
 `mobile/android/wildbuzzard-sdk/src/main/aidl`. External apps bind to the
 explicit Wild Buzzard service, obtain a user authorization PendingIntent, then
 control their own tabs. Grants are tied to package names and signing
-certificates. They can be revoked from **Wild Buzzard tab controls**.
+certificates. They can be revoked from **Settings → Revoke agent access**.
 
 Tab closure removes a tab from Fenix. It never requests application shutdown,
 force-stops a process, or stops Tor. Android can still reclaim or terminate an
