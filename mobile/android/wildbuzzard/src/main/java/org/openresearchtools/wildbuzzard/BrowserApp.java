@@ -211,7 +211,10 @@ public final class BrowserApp extends ContextWrapper {
             }, fail);
             return;
         }
-        configure(tab, tor.identities(), value -> { tab.session.reload(); done.accept(value); }, fail);
+        configure(tab, tor.identities(), value -> {
+            tab.session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE);
+            done.accept(value);
+        }, fail);
     }
     void page(Tab tab, String method, JSONObject params, Consumer<JSONObject> done, Consumer<String> fail) {
         try {
