@@ -55,11 +55,28 @@ jobs:
             ${{ env.MOZBUILD_STATE_PATH }}
             ~/.gradle/caches
             ~/.gradle/wrapper
-            ~/.android/debug.keystore
           key: android-toolchain-v2-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mobile/android/android-components/.config.yml', 'mobile/android/*/build.gradle', 'mobile/android/fenix/app/build.gradle', 'python/mozboot/mozboot/android.py', 'python/mozboot/mozboot/mozconfig.py') }}
           restore-keys: |
             android-toolchain-v2-${{ runner.os }}-
             android-toolchain-v1-${{ runner.os }}-
+      - name: Restore consistent debug signing identity
+        id: debug-signing
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.android/debug.keystore
+          key: wildbuzzard-android-debug-signing-v1
+      - name: Prepare debug signing identity
+        if: steps.debug-signing.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.android
+          rm -f ~/.android/debug.keystore
+          keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 10000
+      - name: Save debug signing identity
+        if: steps.debug-signing.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.android/debug.keystore
+          key: wildbuzzard-android-debug-signing-v1
       - name: Enable compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
@@ -88,7 +105,6 @@ jobs:
             ${{ env.MOZBUILD_STATE_PATH }}
             ~/.gradle/caches
             ~/.gradle/wrapper
-            ~/.android/debug.keystore
           key: android-toolchain-v2-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mobile/android/android-components/.config.yml', 'mobile/android/*/build.gradle', 'mobile/android/fenix/app/build.gradle', 'python/mozboot/mozboot/android.py', 'python/mozboot/mozboot/mozconfig.py') }}
       - name: Preserve build logs and APK artifacts
         if: always()

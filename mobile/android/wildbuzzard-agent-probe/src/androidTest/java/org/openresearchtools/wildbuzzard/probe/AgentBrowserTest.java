@@ -47,7 +47,7 @@ public final class AgentBrowserTest {
         assertNotNull("Fenix menu", menu); menu.click();
         device.waitForIdle();
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-menu.png")));
-        if (!device.wait(Until.hasObject(By.text("WildBuzzard tab controls")), 2000)) {
+        if (!device.wait(Until.hasObject(By.desc("WildBuzzard tab controls")), 2000)) {
             new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("WildBuzzard tab controls");
         }
         click(device, "WildBuzzard tab controls");
@@ -108,7 +108,9 @@ public final class AgentBrowserTest {
         context.startActivity(new Intent(context, ProbeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
     private void click(UiDevice device, String text) {
-        UiObject2 item = device.wait(Until.findObject(By.text(java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE))), 15000);
+        java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
+        UiObject2 item = device.findObject(By.desc(label));
+        if (item == null) item = device.wait(Until.findObject(By.text(label)), 15000);
         assertNotNull(text, item); item.click();
     }
 }

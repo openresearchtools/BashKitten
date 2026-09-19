@@ -14,6 +14,7 @@
         <activity android:name="org.openresearchtools.wildbuzzard.ActivateTabActivity" android:exported="false" />
         <activity android:name="org.openresearchtools.wildbuzzard.LicensesActivity" android:exported="false" />
         <activity android:name="org.openresearchtools.wildbuzzard.GrantActivity" android:exported="false" />
+        <activity android:name="org.openresearchtools.wildbuzzard.CommandAccessActivity" android:exported="true" />
         <activity android:name="org.openresearchtools.wildbuzzard.OnionActivity" android:exported="false" />
         <service android:name="org.openresearchtools.wildbuzzard.BrowserControlService" android:exported="true">
             <intent-filter><action android:name="org.openresearchtools.wildbuzzard.BIND_AGENT" /></intent-filter>

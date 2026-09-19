@@ -35,9 +35,11 @@ public final class OnionBrowserTest {
         click(device, "Allow");
         String tab = ((JSONObject) probe.command("tabs.create", new JSONObject().put("url", "http://127.0.0.1:8765/"))).getString("id");
         probe.send(probe.browser.showTab(tab));
+        probe.waitPage(tab);
+        device.waitForIdle();
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 20000);
         assertNotNull("Fenix menu", menu); menu.click();
-        if (!device.wait(Until.hasObject(By.text("WildBuzzard tab controls")), 2000)) {
+        if (!device.wait(Until.hasObject(By.desc("WildBuzzard tab controls")), 2000)) {
             new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("WildBuzzard tab controls");
         }
         click(device, "WildBuzzard tab controls");
@@ -102,7 +104,9 @@ public final class OnionBrowserTest {
         fail(label + ": expected navigation error");
     }
     private void click(UiDevice device, String text) {
-        UiObject2 item = device.wait(Until.findObject(By.text(java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE))), 15000);
+        java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
+        UiObject2 item = device.findObject(By.desc(label));
+        if (item == null) item = device.wait(Until.findObject(By.text(label)), 15000);
         assertNotNull(text, item); item.click();
     }
 }

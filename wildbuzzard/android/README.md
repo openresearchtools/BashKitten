@@ -1,6 +1,10 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # WildBuzzard for Android
 
+**Install `wildbuzzard-arm64-debug.apk` only.** It includes the browser, agent
+control and Tor. The two probe APKs in developer artifacts are optional test
+tools; users and agents do not need a companion app.
+
 Android product fork of `openresearchtools/WildBuzzard`, preserving the complete
 ancestry of `refactor/browser-agent-independent` at
 `0bd2d7da099a365d2243b320e1e6b38e8ad76cf4`.
@@ -22,6 +26,11 @@ Mozilla model downloads. The native blocker remains enabled; keeping Gecko and
 its bundled security data current requires publishing updated WildBuzzard builds.
 
 ## Android app control
+
+Terminal programs can also call the command entry point included in the browser
+APK. [API.md](API.md#termux-and-shell-programs) documents the Termux shell function,
+one-time consent, JSON input/output and commands. Android app binding and shell
+commands both use the browser's own dispatcher and tab ownership checks.
 
 See [API.md](API.md). The AIDL contract lives in
 `mobile/android/wildbuzzard-sdk/src/main/aidl`. External apps bind to the

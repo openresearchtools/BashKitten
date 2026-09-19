@@ -24,7 +24,11 @@ def main():
     adb = ["adb", "-s", args.serial]
 
     def command(*values, timeout=120):
-        return subprocess.check_output([*adb, *values], text=True, stderr=subprocess.STDOUT, timeout=timeout).strip()
+        result = subprocess.run([*adb, *values], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+        if result.returncode:
+            (args.output / "failed-command.log").write_text(result.stdout)
+            raise RuntimeError(result.stdout.strip())
+        return result.stdout.strip()
 
     manifest = json.loads((args.artifacts / "build-manifest.json").read_text())
     for name, expected in manifest["apks"].items():
@@ -65,7 +69,7 @@ def main():
         (args.output / (role + "-install.log")).write_text(result + "\n")
     command("reverse", "tcp:8765", "tcp:8765")
     command("reverse", "tcp:9443", "tcp:9443")
-    suites = [] if args.onion_only else ["AgentBrowserTest"]
+    suites = [] if args.onion_only else ["AgentBrowserTest", "CommandBrowserTest"]
     if args.onion_fixture:
         suites.append("OnionBrowserTest")
         destination = "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files"

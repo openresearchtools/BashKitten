@@ -15,6 +15,7 @@ android {
         targetSdk project.ext.targetSdkVersion
         ndk { abiFilters 'arm64-v8a' }
         manifestPlaceholders = project.ext.manifestPlaceholders
+        consumerProguardFiles 'consumer-rules.pro'
     }
     buildFeatures { aidl true; buildConfig true }
     sourceSets.main.aidl.srcDirs += '../wildbuzzard-sdk/src/main/aidl'

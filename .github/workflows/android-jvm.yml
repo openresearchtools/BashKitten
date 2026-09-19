@@ -47,7 +47,6 @@ jobs:
             ${{ env.MOZBUILD_STATE_PATH }}
             ~/.gradle/caches
             ~/.gradle/wrapper
-            ~/.android/debug.keystore
           key: android-toolchain-v2-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mobile/android/android-components/.config.yml', 'mobile/android/*/build.gradle', 'mobile/android/fenix/app/build.gradle', 'python/mozboot/mozboot/android.py', 'python/mozboot/mozboot/mozconfig.py') }}
           restore-keys: |
             android-toolchain-v2-${{ runner.os }}-
@@ -71,7 +70,6 @@ jobs:
             ${{ env.MOZBUILD_STATE_PATH }}
             ~/.gradle/caches
             ~/.gradle/wrapper
-            ~/.android/debug.keystore
           key: android-toolchain-v2-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mobile/android/android-components/.config.yml', 'mobile/android/*/build.gradle', 'mobile/android/fenix/app/build.gradle', 'python/mozboot/mozboot/android.py', 'python/mozboot/mozboot/mozconfig.py') }}
       - name: Preserve compilation logs
         if: always()

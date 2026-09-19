@@ -30,6 +30,8 @@ public final class BrowserApp extends ContextWrapper {
     public static BrowserApp get(Context context) { return ((Provider) context.getApplicationContext()).wildBuzzard(); }
     public final Handler main = new Handler(Looper.getMainLooper());
     final AppGrants grants;
+    final AgentController controller;
+    final CommandGateway commands;
     final TorManager tor;
     final SharedPreferences policies;
     public final Host host;
@@ -54,6 +56,8 @@ public final class BrowserApp extends ContextWrapper {
         grants = new AppGrants(this); tor = new TorManager(this);
         policies = getSharedPreferences("tab-policies", 0);
         policies.getAll();
+        controller = new AgentController(this);
+        commands = new CommandGateway(this);
     }
     void keepAlive() {
         startForegroundService(new Intent(this, BrowserKeepAliveService.class));

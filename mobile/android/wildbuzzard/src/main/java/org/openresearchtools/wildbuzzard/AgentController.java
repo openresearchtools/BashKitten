@@ -1,0 +1,137 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+package org.openresearchtools.wildbuzzard;
+
+import android.content.*;
+import android.graphics.Bitmap;
+import android.net.Uri;
+import androidx.core.content.FileProvider;
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import org.json.*;
+
+/** One dispatcher and ownership boundary for Android apps and shell programs. */
+final class AgentController extends ContextWrapper {
+    final BrowserApp app;
+    final Map<String, AtomicInteger> pending = new ConcurrentHashMap<>();
+    static final class Access {
+        final String owner;
+        final int uid;
+        final Runnable check;
+        Access(String owner, int uid, Runnable check) { this.owner = owner; this.uid = uid; this.check = check; }
+    }
+    AgentController(BrowserApp app) { super(app); this.app = app; }
+    Access forUid(int uid) {
+        String owner = app.grants.require(uid);
+        return new Access(owner, uid, () -> {
+            if (!owner.equals(app.grants.require(uid))) throw new SecurityException("Caller changed");
+        });
+    }
+    void execute(Access access, String json, Consumer<String> callback) {
+        access.check.run();
+        if (callback == null || json == null || json.length() > 200000) throw new IllegalArgumentException("Invalid request");
+        AtomicInteger count = pending.computeIfAbsent(access.owner, ignored -> new AtomicInteger());
+        if (count.incrementAndGet() > 8) { count.decrementAndGet(); throw new IllegalStateException("Too many requests"); }
+        app.main.post(() -> {
+            boolean[] completed = {false};
+            Runnable[] timeout = {null};
+            Consumer<JSONObject> send = result -> {
+                if (completed[0]) return;
+                completed[0] = true; count.decrementAndGet();
+                app.main.removeCallbacks(timeout[0]);
+                String response;
+                try { access.check.run(); response = result.toString(); }
+                catch (SecurityException error) { response = "{\"error\":\"Access revoked\"}"; }
+                if (response.length() > 200000) response = "{\"error\":\"Result too large; narrow the query\"}";
+                callback.accept(response);
+            };
+            Consumer<String> fail = message -> {
+                try { send.accept(new JSONObject().put("error", message)); } catch (JSONException ignored) {}
+            };
+            timeout[0] = () -> fail.accept("Request timed out");
+            app.main.postDelayed(timeout[0], 210000);
+            try { access.check.run(); run(new JSONObject(json), access, send, fail); }
+            catch (Exception error) { fail.accept(error.getMessage() == null ? "Request failed" : error.getMessage()); }
+        });
+    }
+    private void run(JSONObject request, Access access, Consumer<JSONObject> send, Consumer<String> fail) throws Exception {
+        String owner = access.owner;
+        int uid = access.uid;
+        app.refresh();
+        String method = request.getString("method");
+        JSONObject params = request.optJSONObject("params"); if (params == null) params = new JSONObject();
+        if (method.equals("capabilities")) {
+            JSONArray methods = new JSONArray(Arrays.asList("tabs.list", "tabs.create", "tabs.close", "navigate", "back", "forward", "reload", "stop", "snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "screenshot", "tabs.setDesktopMode", "tabs.setAdblocking"));
+            if (uid < 0) methods.put("tabs.show");
+            send.accept(new JSONObject().put("result", new JSONObject().put("protocol", 1).put("engine", "gecko")
+                .put("methods", methods)
+                .put("foreground", uid < 0 ? "tabs.show" : "Call showTab(tabId), then send its PendingIntent")
+                .put("source", "https://github.com/openresearchtools/wildbuzzard-android")));
+            return;
+        }
+        if (method.equals("tabs.list")) {
+            JSONArray list = new JSONArray();
+            for (BrowserApp.Tab tab : app.tabs.values()) if (tab.owner.equals(owner)) list.put(tab.json());
+            send.accept(new JSONObject().put("result", list)); return;
+        }
+        if (method.equals("tabs.create")) {
+            String url = params.optString("url", "about:blank");
+            if (!url.equals("about:blank")) url = BrowserApp.webUrl(url);
+            app.create(owner, params.optBoolean("tor"), url, tab -> {
+                try { send.accept(new JSONObject().put("result", tab.json())); } catch (Exception error) { fail.accept("Could not return tab"); }
+            }, fail); return;
+        }
+        BrowserApp.Tab tab = app.owned(params.getString("tabId"), owner);
+        if (!method.equals("tabs.close") && (tab.session == null || !tab.session.isOpen() || !tab.ready)) {
+            app.ensure(tab, () -> {
+                try { access.check.run(); run(request, access, send, fail); }
+                catch (Exception error) { fail.accept("Restored tab is unavailable"); }
+            }, fail);
+            return;
+        }
+        params.remove("tabId");
+        switch (method) {
+            case "tabs.close": app.close(tab); break;
+            case "navigate": {
+                String url = BrowserApp.webUrl(params.getString("url"));
+                if (BrowserApp.onion(url) && !tab.tor) throw new IllegalArgumentException("Create a Tor tab for onion navigation");
+                tab.session.loadUri(url); break;
+            }
+            case "back": tab.session.goBack(); break;
+            case "forward": tab.session.goForward(); break;
+            case "reload": tab.session.reload(); break;
+            case "stop": tab.session.stop(); break;
+            case "tabs.setDesktopMode": app.host.desktop(tab.id, params.getBoolean("enabled")); break;
+            case "tabs.setAdblocking": app.setAdblock(tab, params.getBoolean("enabled"), send, fail); return;
+            case "screenshot": {
+                app.host.screenshot(tab.id, bitmap -> {
+                    if (bitmap == null) { fail.accept("Show this tab before capturing a screenshot"); return; }
+                    try {
+                        if (uid < 0) {
+                            ByteArrayOutputStream out = new ByteArrayOutputStream();
+                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+                            send.accept(new JSONObject().put("result", new JSONObject()
+                                .put("base64", android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP))
+                                .put("mimeType", "image/png")));
+                            return;
+                        }
+                        File directory = new File(getCacheDir(), "agent"); directory.mkdirs();
+                        File file = new File(directory, UUID.randomUUID() + ".png");
+                        try (FileOutputStream out = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
+                        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", file);
+                        String[] packages = getPackageManager().getPackagesForUid(uid);
+                        if (packages != null) for (String name : packages) grantUriPermission(name, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        send.accept(new JSONObject().put("result", new JSONObject().put("uri", uri.toString()).put("mimeType", "image/png")));
+                        app.main.postDelayed(() -> { revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); file.delete(); }, 300000);
+                    } catch (Exception error) { fail.accept("Screenshot failed"); }
+                }); return;
+            }
+            default:
+                if (!Arrays.asList("snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport").contains(method)) throw new IllegalArgumentException("Unsupported method");
+                app.page(tab, method, params, send, fail); return;
+        }
+        send.accept(new JSONObject().put("result", true));
+    }
+}

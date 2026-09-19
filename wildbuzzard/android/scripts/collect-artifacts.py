@@ -13,6 +13,7 @@ import zipfile
 root = Path(__file__).resolve().parents[3]
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
+(out/'INSTALL.txt').write_text('Install wildbuzzard-arm64-debug.apk. This is the complete browser, including agent control and Tor.\n\nThe agent-probe and agent-probe-test APKs are optional developer test tools. They are not required by users or agents.\nThese are debug-signed test builds, not production releases.\n')
 obj = root.parent/'obj-wildbuzzard-android'
 outputs = list((obj/'gradle/build/mobile/android/fenix').rglob('*.apk')) + list((obj/'gradle/build/mobile/android/wildbuzzard-agent-probe').rglob('*.apk'))
 if not outputs:

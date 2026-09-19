@@ -152,8 +152,10 @@ public final class ProbeActivity extends Activity {
             check(true, "desktop mode does not change another tab");
             command("tabs.close", params(isolated));
             command("tabs.setDesktopMode", params(two).put("enabled", false));
+            waitValue(two, "return navigator.userAgent.includes('Mobile');", "true");
             command("tabs.setAdblocking", params(two).put("enabled", true));
             waitPage(two);
+            waitValue(two, "return document.querySelector('#ad-test').dataset.result;", "blocked");
             JSONArray beforePopup = (JSONArray) command("tabs.list", new JSONObject());
             java.util.Set<String> existing = new java.util.HashSet<>();
             for (int i = 0; i < beforePopup.length(); i++) existing.add(beforePopup.getJSONObject(i).getString("id"));

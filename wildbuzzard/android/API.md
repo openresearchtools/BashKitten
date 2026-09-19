@@ -1,6 +1,64 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Android agent API v1
 
+Install only the **browser APK**. The agent probe is an optional developer test
+app, not an agent runtime or a required companion. Both interfaces below execute
+inside the browser and share its tab dispatcher.
+
+## Termux and shell programs
+
+The installed browser APK includes `org.openresearchtools.wildbuzzard.BrowserCommand`.
+Run it with Android's `app_process`; no second APK, root, ADB, or copied client
+binary is required. In Termux, add this function to your shell configuration:
+
+```sh
+wildbuzzard() {
+    local browser_apk
+    browser_apk="$(pm path org.openresearchtools.wildbuzzard | sed -n 's/^package://p' | head -n 1)"
+    [ -n "$browser_apk" ] || { echo 'Install WildBuzzard first' >&2; return 1; }
+    env -u LD_PRELOAD -u LD_LIBRARY_PATH CLASSPATH="$browser_apk" \
+        /system/bin/app_process / org.openresearchtools.wildbuzzard.BrowserCommand "$@"
+}
+
+wildbuzzard --authorize
+wildbuzzard tabs.create '{"url":"https://example.com"}'
+wildbuzzard tabs.list
+wildbuzzard tabs.show '{"tabId":"ID_FROM_CREATE"}'
+wildbuzzard snapshot '{"tabId":"ID_FROM_CREATE"}'
+wildbuzzard tabs.setDesktopMode '{"tabId":"ID_FROM_CREATE","enabled":true}'
+wildbuzzard tabs.close '{"tabId":"ID_FROM_CREATE"}'
+```
+
+Authorization opens the browser's consent dialog. Match its short key identifier
+to the terminal before approving. The private command key stays in
+`$HOME/.config/wildbuzzard/command-key` with mode 0600; `--state-dir` selects an
+alternative app-private directory. Programs sharing that key share their agent
+tabs and authority. This is a command-key grant, separate from Android package
+and signing-certificate grants. Never put the key in shared storage or a repository.
+**Revoke agent access** invalidates both kinds of grant and closes their tabs.
+
+Commands return JSON to stdout, diagnostics to stderr, and a nonzero exit code
+on errors. A complete request may be passed with `--json` or on stdin. The CLI
+opens the browser when needed using Termux's `am` command; Android's foreground
+launch restrictions still apply. `tabs.show` brings a particular tab forward.
+Native Android callers handling their own foreground launch can use `--no-launch`
+and send the returned single-use `launch` ticket as an extra to
+`org.openresearchtools.wildbuzzard.CommandAccessActivity` within 30 seconds.
+
+The browser owns an IPv4 loopback listener on port 48271 while command access is
+enabled. A challenge proves possession of the enrolled 256-bit key before the
+client sends a page command. Requests and responses use AES-GCM with distinct
+direction/transcript binding. The key is never sent over the socket; the browser
+stores it in its Android Keystore-encrypted, backup-excluded vault. Authentication
+does not rely on trusting every app that can connect to localhost. Protocol
+framing and cryptography are defined in `CommandProtocol.java`.
+
+Shell screenshots return PNG `base64` and `mimeType`, subject to the same response
+size limit; reduce the viewport if necessary. Use `wildbuzzard --help` for syntax
+and `wildbuzzard --licenses` for the notices packaged in that exact browser APK.
+
+## Android apps
+
 Bind an explicit intent with action
 `org.openresearchtools.wildbuzzard.BIND_AGENT` and package
 `org.openresearchtools.wildbuzzard`. Include that package in your manifest's
