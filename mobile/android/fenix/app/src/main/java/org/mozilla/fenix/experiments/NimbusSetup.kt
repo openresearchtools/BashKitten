@@ -44,6 +44,7 @@ fun createNimbus(
     remoteSettingsService: RemoteSettingsService?,
     geckoPrefHandler: GeckoPrefHandler,
 ): NimbusApi {
+    org.mozilla.experiments.nimbus.NullVariables.instance.setContext(context)
     return mozilla.components.service.nimbus.NimbusDisabled(context)
 }
 

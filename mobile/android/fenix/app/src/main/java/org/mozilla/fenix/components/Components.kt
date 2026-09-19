@@ -94,7 +94,6 @@ import org.mozilla.fenix.home.sports.client.mockWorldCupBaseHost
 import org.mozilla.fenix.home.sports.hasWorldCupEnded
 import org.mozilla.fenix.ipprotection.IPProtectionManager
 import org.mozilla.fenix.ipprotection.store.DefaultIPProtectionPromptRepository
-import org.mozilla.fenix.messaging.state.MessagingMiddleware
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.onboarding.FenixOnboarding
 import org.mozilla.fenix.perf.AppLinkIntentLaunchTypeProvider
@@ -342,10 +341,6 @@ class Components(private val context: Context) {
                     context.pocketStoriesSelectedCategoriesDataStore,
                     SettingsBackedPocketSettings(settings),
                     performance.visualCompletenessQueue,
-                ),
-                MessagingMiddleware(
-                    controller = nimbus.messaging,
-                    settings = settings,
                 ),
                 MetricsMiddleware(
                     metrics = analytics.metrics,

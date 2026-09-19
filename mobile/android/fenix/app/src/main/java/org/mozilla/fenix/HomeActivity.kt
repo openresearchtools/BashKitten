@@ -525,10 +525,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         }
 
         if (!shouldShowOnboarding) {
-            lifecycleScope.launch(IO) {
-                showFullscreenMessageIfNeeded(applicationContext)
-            }
-
             // Unless the activity is recreated, navigate to home first (without rendering it)
             // to add it to the back stack.
             if (savedInstanceState == null) {
@@ -1578,37 +1574,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     private fun shouldNavigateToBrowserOnColdStart(savedInstanceState: Bundle?): Boolean {
         return isActivityColdStarted(intent, savedInstanceState) &&
             !processIntent(intent)
-    }
-
-    private suspend fun showFullscreenMessageIfNeeded(context: Context) {
-        val messaging = context.components.nimbus.messaging
-        val nextMessage = messaging.getNextMessage(FenixMessageSurfaceId.SURVEY) ?: return
-        val researchSurfaceDialogFragment = ResearchSurfaceDialogFragment.newInstance(
-            keyMessageText = nextMessage.text,
-            keyAcceptButtonText = nextMessage.buttonLabel,
-            keyDismissButtonText = null,
-        )
-
-        researchSurfaceDialogFragment.onAccept = {
-            processIntent(messaging.getIntentForMessage(nextMessage))
-            components.appStore.dispatch(AppAction.MessagingAction.MessageClicked(nextMessage))
-        }
-
-        researchSurfaceDialogFragment.onDismiss = {
-            components.appStore.dispatch(AppAction.MessagingAction.MessageDismissed(nextMessage))
-        }
-
-        lifecycleScope.launch(Main) {
-            researchSurfaceDialogFragment.showNow(
-                supportFragmentManager,
-                ResearchSurfaceDialogFragment.FRAGMENT_TAG,
-            )
-        }
-
-        // Update message as displayed.
-        val currentBootUniqueIdentifier = BootUtils.getBootIdentifier(context)
-
-        messaging.onMessageDisplayed(nextMessage, currentBootUniqueIdentifier)
     }
 
     /**
