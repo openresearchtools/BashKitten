@@ -13,6 +13,7 @@ import java.io.File;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import static org.junit.Assert.*;
+import static org.openresearchtools.wildbuzzard.probe.UiNavigation.click;
 import static org.openresearchtools.wildbuzzard.probe.UiNavigation.scrollToAndClick;
 
 @RunWith(AndroidJUnit4.class)
@@ -113,10 +114,5 @@ public final class AgentBrowserTest {
     private void launch(Context context) {
         context.startActivity(new Intent(context, ProbeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
-    private void click(UiDevice device, String text) {
-        java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
-        UiObject2 item = device.findObject(By.desc(label));
-        if (item == null) item = device.wait(Until.findObject(By.text(label)), 15000);
-        assertNotNull(text, item); item.click();
-    }
+
 }

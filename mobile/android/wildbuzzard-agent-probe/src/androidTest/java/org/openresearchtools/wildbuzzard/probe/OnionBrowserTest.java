@@ -14,6 +14,7 @@ import java.io.File;
 import java.nio.file.Files;
 import java.util.List;
 import static org.junit.Assert.*;
+import static org.openresearchtools.wildbuzzard.probe.UiNavigation.click;
 import static org.junit.Assume.assumeTrue;
 
 /** Optional live Tor tests; fixture credentials are generated outside the repository. */
@@ -160,10 +161,5 @@ public final class OnionBrowserTest {
         } while (SystemClock.elapsedRealtime() < deadline);
         fail(label + ": expected navigation error");
     }
-    private void click(UiDevice device, String text) {
-        java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
-        UiObject2 item = device.findObject(By.desc(label));
-        if (item == null) item = device.wait(Until.findObject(By.text(label)), 15000);
-        assertNotNull(text, item); item.click();
-    }
+
 }

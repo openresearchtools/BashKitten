@@ -17,6 +17,7 @@ import org.json.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
+import static org.openresearchtools.wildbuzzard.probe.UiNavigation.click;
 import static org.openresearchtools.wildbuzzard.probe.UiNavigation.scrollToAndClick;
 
 /** Runs the browser APK's actual shell entry point under the independent probe UID. */
@@ -120,10 +121,5 @@ public final class CommandBrowserTest {
         assertTrue("White fixture page is actually captured, not a black placeholder", light > total / 2);
         assertTrue("Captured page includes its dark text and controls", dark > total / 100);
     }
-    void click(UiDevice device, String text) {
-        java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
-        UiObject2 item = device.findObject(By.desc(label));
-        if (item == null) item = device.wait(Until.findObject(By.text(label)), 15000);
-        assertNotNull(text, item); item.click();
-    }
+
 }
