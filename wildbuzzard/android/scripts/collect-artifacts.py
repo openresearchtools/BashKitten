@@ -109,4 +109,6 @@ subprocess.run([sys.executable, str(root/'wildbuzzard/android/scripts/notices.py
 manifest = {'source': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
             'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'signing_certificates':signers,
             'apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
+if os.environ.get('WILDBUZZARD_ENGINE_PROVENANCE'):
+    manifest['native_engine_artifact'] = json.loads(Path(os.environ['WILDBUZZARD_ENGINE_PROVENANCE']).read_text())
 (out/'build-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

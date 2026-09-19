@@ -69,6 +69,9 @@ def main():
         else:
             result = command("install", "-r", str(args.artifacts / name), timeout=300)
         (args.output / (role + "-install.log")).write_text(result + "\n")
+    if int(device["sdk"]) >= 33:
+        command("shell", "pm", "grant", "org.openresearchtools.wildbuzzard",
+                "android.permission.POST_NOTIFICATIONS")
     command("reverse", "tcp:8765", "tcp:8765")
     command("reverse", "tcp:9443", "tcp:9443")
     suites = [] if args.onion_only else ["AgentBrowserTest", "CommandBrowserTest"]

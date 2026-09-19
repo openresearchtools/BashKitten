@@ -224,3 +224,14 @@ It first checks both scanner cancellation controls, then imports the complete
 generated `.auth_private` through Android's document picker. The recorded-build
 runner stages that test credential with a unique filename and removes it after
 the suite. Use only generated test credentials with the device test runner.
+
+### Android UI builds with a verified native engine
+
+The manually dispatched **Android UI APK with verified engine** workflow accepts
+a successful full ARM64 build run ID from this repository. It checks the recorded
+APK hash and rejects source changes outside an explicit Android UI/control
+allowlist before using Mozilla's artifact-build support with those native Gecko
+binaries. It builds the current Java/Kotlin UI and engine resources, retains the
+full-build workflow, verifies APK signing, and records the native engine source
+and input APK hash in `build-manifest.json`. Native or engine-interface changes
+require a new full ARM64 build.
