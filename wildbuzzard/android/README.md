@@ -169,7 +169,9 @@ onion, and an unenrolled public onion. Keep its directory outside the checkout:
 python3 wildbuzzard/android/tests/onion-fixture.py --tor /path/to/tor --directory /private/test-fixture
 adb reverse tcp:9443 tcp:9443
 adb push /private/test-fixture/probe-fixture.json /sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/probe-fixture.json
-adb shell am instrument -w -e class org.openresearchtools.wildbuzzard.probe.OnionBrowserTest org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner
+adb push /private/test-fixture/fixture.auth_private /sdcard/Download/fixture.auth_private
+adb shell am instrument -w -e credentialFile fixture.auth_private -e class org.openresearchtools.wildbuzzard.probe.OnionBrowserTest org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner
+adb shell rm /sdcard/Download/fixture.auth_private
 ```
 
 Never commit the generated credential file. Send `SIGHUP` to the fixture's Python
@@ -182,3 +184,7 @@ Send `SIGUSR2` to test a self-signed leaf, or start with `--self-signed-leaf`.
 The suite also checks unenrolled onions, hostname mismatches, clearnet private-CA
 rejection, and blocked localhost access from a Tor tab. These are test procedures,
 not claims that device validation has already passed.
+It first checks both scanner cancellation controls, then imports the complete
+generated `.auth_private` through Android's document picker. The recorded-build
+runner stages that test credential with a unique filename and removes it after
+the suite. Use only generated test credentials with the device test runner.

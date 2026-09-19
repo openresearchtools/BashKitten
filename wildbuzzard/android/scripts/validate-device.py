@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
+import uuid
 from datetime import datetime, timezone
 
 
@@ -70,15 +72,25 @@ def main():
     command("reverse", "tcp:8765", "tcp:8765")
     command("reverse", "tcp:9443", "tcp:9443")
     suites = [] if args.onion_only else ["AgentBrowserTest", "CommandBrowserTest"]
+    credential_name = None
     if args.onion_fixture:
         suites.append("OnionBrowserTest")
         destination = "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files"
         command("shell", "mkdir", "-p", destination)
         command("push", str(args.onion_fixture), destination + "/probe-fixture.json")
+        fixture = json.loads(args.onion_fixture.read_text())
+        credential_name = "wildbuzzard-test-" + uuid.uuid4().hex + ".auth_private"
+        with tempfile.TemporaryDirectory(prefix="wildbuzzard-enrollment-") as temporary:
+            credential = Path(temporary) / credential_name
+            credential.write_text(fixture["onion"].removesuffix(".onion") + ":descriptor:x25519:" + fixture["key"] + "\n")
+            credential.chmod(0o600)
+            command("push", str(credential), "/sdcard/Download/" + credential_name)
     try:
         for suite in suites:
+            extra = ["-e", "credentialFile", credential_name] if suite == "OnionBrowserTest" else []
             result = command("shell", "am", "instrument", "-w", "-e", "class",
                              "org.openresearchtools.wildbuzzard.probe." + suite,
+                             *extra,
                              "org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner",
                              timeout=1200)
             (args.output / (suite + ".log")).write_text(result + "\n")
@@ -88,6 +100,8 @@ def main():
             if not report["tests"][suite]:
                 raise RuntimeError("Device suite failed; inspect " + str(args.output / (suite + ".log")))
     finally:
+        if credential_name:
+            command("shell", "rm", "-f", "/sdcard/Download/" + credential_name)
         log = command("logcat", "-d", "-v", "threadtime", "WildBuzzardProbe:I", "AndroidRuntime:E", "*:S")
         (args.output / "device-logcat.log").write_text(log + "\n")
         subprocess.run([*adb, "pull", "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/screenshots",

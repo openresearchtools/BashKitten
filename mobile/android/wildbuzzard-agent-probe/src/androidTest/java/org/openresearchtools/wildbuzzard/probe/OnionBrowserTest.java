@@ -55,13 +55,18 @@ public final class OnionBrowserTest {
         device.pressBack();
         assertTrue("Android Back closes scanner", device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
         assertEquals("Scanner cancellation keeps browser alive", browserPid, device.executeShellCommand("pidof org.openresearchtools.wildbuzzard").trim());
-        click(device, "Enter manually");
-        List<UiObject2> inputs = device.findObjects(By.clazz("android.widget.EditText"));
-        assertEquals("Address and private key fields", 2, inputs.size());
-        inputs.get(0).setText(fixture.getString("onion"));
-        inputs.get(1).setText(fixture.getString("key"));
-        click(device, "Import key");
+        String credentialFile = InstrumentationRegistry.getArguments().getString("credentialFile");
+        assertNotNull("Runner stages a complete auth_private enrollment file", credentialFile);
+        click(device, "Choose .auth_private file");
+        UiObject2 roots = device.wait(Until.findObject(By.desc("Show roots")), 10000);
+        assertNotNull("Android document picker", roots); roots.click();
+        click(device, "Downloads");
+        if (!device.wait(Until.hasObject(By.text(credentialFile)), 3000))
+            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView(credentialFile);
+        click(device, credentialFile);
         assertTrue("Tor installs the encrypted credential", device.wait(Until.hasObject(By.text("Onion key imported")), 195000));
+        assertTrue("File import supplies the onion address without typing",
+            device.wait(Until.hasObject(By.text(java.util.regex.Pattern.compile("Open " + java.util.regex.Pattern.quote(fixture.getString("onion")), java.util.regex.Pattern.CASE_INSENSITIVE))), 10000));
         String privateTab = create(probe, "https://" + fixture.getString("onion"), true);
         if (fixture.optBoolean("expired")) {
             assertCertError(probe, privateTab, "Expired enrolled onion certificate");

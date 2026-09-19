@@ -1,5 +1,6 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
     <queries><package android:name="org.openresearchtools.wildbuzzard" /></queries>
     <application android:label="Wild Buzzard Agent Probe" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:allowBackup="false">
         <activity android:name=".ProbeActivity" android:exported="true">
