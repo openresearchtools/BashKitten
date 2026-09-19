@@ -50,7 +50,10 @@ final class TorManager {
             try {
                 if (start) {
                     try {
-                        String socket = new java.io.File(app.getNoBackupFilesDir(), "tor-socks").getAbsolutePath();
+                        java.io.File directory = new java.io.File(app.getNoBackupFilesDir(), "tor");
+                        Files.createDirectories(directory.toPath());
+                        android.system.Os.chmod(directory.getAbsolutePath(), 0700);
+                        String socket = new java.io.File(directory, "socks").getAbsolutePath();
                         if (gateway == null) gateway = new TorGateway(socket);
                         Files.write(TorService.getTorrc(app).toPath(),
                             ("SocksPort unix:" + socket + " IsolateSOCKSAuth\nHTTPTunnelPort 0\nDisableNetwork 1\nSafeSocks 1\nTestSocks 0\nClientOnly 1\n").getBytes(StandardCharsets.UTF_8));
@@ -71,7 +74,7 @@ final class TorManager {
                     List<String> enrolled = new ArrayList<>();
                     for (Iterator<String> it = stored.keys(); it.hasNext();) {
                         String host = it.next();
-                        current.getTorControlConnection().onionClientAuthAdd(host.substring(0, 56), stored.getString(host));
+                        current.getTorControlConnection().onionClientAuthAdd(host.substring(0, 56), new OnionKey(host, stored.getString(host)).controlKey());
                         enrolled.add(host);
                     }
                     current.getTorControlConnection().setConf("DisableNetwork", "0");
@@ -111,7 +114,7 @@ final class TorManager {
                 stored.put(key.host, key.key); keys.write(stored);
                 app.main.post(() -> ready(port -> io.execute(() -> {
                     try {
-                        service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.key);
+                        service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.controlKey());
                         installed.add(key.host);
                         app.main.post(() -> { app.refreshTor(port, identities()); complete.accept("Onion key imported"); });
                     } catch (Exception error) {

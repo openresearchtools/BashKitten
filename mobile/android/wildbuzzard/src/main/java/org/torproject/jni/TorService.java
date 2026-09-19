@@ -286,11 +286,12 @@ public class TorService extends Service implements TorControlCommands {
                 var controlSocketFd = prepareFileDescriptor(getControlSocket(TorService.this).getAbsolutePath());
                 var is = new FileInputStream(controlSocketFd);
                 var os = new FileOutputStream(controlSocketFd);
-                torControlConnection = new TorControlConnection(is, os);
-                torControlConnection.launchThread(true);
-                torControlConnection.authenticate(new byte[0]);
-                torControlConnection.addRawEventListener(startedEventListener);
-                torControlConnection.setEvents(Collections.singletonList(EVENT_STATUS_CLIENT));
+                var readyConnection = new TorControlConnection(is, os);
+                readyConnection.launchThread(true);
+                readyConnection.authenticate(new byte[0]);
+                readyConnection.addRawEventListener(startedEventListener);
+                readyConnection.setEvents(Collections.singletonList(EVENT_STATUS_CLIENT));
+                torControlConnection = readyConnection;
 
                 socksPort = getPortFromGetInfo("net/listeners/socks");
                 httpTunnelPort = getPortFromGetInfo("net/listeners/httptunnel");

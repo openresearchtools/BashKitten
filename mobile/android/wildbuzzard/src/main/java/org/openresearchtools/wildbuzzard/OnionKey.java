@@ -18,6 +18,18 @@ final class OnionKey {
         host = normalized;
         key = secret;
     }
+    String controlKey() {
+        byte[] bytes = new byte[32];
+        int buffer = 0, bits = 0, offset = 0;
+        for (int i = 0; i < key.length(); i++) {
+            char value = key.charAt(i);
+            buffer = (buffer << 5) | (value >= 'A' && value <= 'Z' ? value - 'A' : value - '2' + 26);
+            bits += 5;
+            if (bits >= 8) { bits -= 8; bytes[offset++] = (byte) (buffer >>> bits); }
+        }
+        try { return java.util.Base64.getEncoder().withoutPadding().encodeToString(bytes); }
+        finally { java.util.Arrays.fill(bytes, (byte) 0); }
+    }
     static OnionKey parse(String text) {
         String value = text.trim();
         if (value.length() > 2048) throw new IllegalArgumentException("Credential too large");
