@@ -56,7 +56,7 @@ public final class ProbeActivity extends Activity {
     JSONObject call(String json) throws Exception {
         CompletableFuture<String> result = new CompletableFuture<>();
         browser.execute(json, new IAgentCallback.Stub() { @Override public void onResult(String value) { result.complete(value); } });
-        return new JSONObject(result.get(105, TimeUnit.SECONDS));
+        return new JSONObject(result.get(220, TimeUnit.SECONDS));
     }
     Object command(String method, JSONObject params) throws Exception {
         JSONObject result = call(new JSONObject().put("method", method).put("params", params).toString());

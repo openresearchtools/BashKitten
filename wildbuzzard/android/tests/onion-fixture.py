@@ -38,6 +38,7 @@ key = base64.b32encode(private).decode().rstrip('=')
 (root/'torrc').write_text(f'DataDirectory {root}/data\nSocksPort 0\nHiddenServiceDir {service}\nHiddenServicePort 443 127.0.0.1:9443\nHiddenServiceDir {public_service}\nHiddenServicePort 443 127.0.0.1:9443\nLog notice stdout\n')
 log = (root/'tor.log').open('a')
 tor = subprocess.Popen([args.tor, '-f', str(root/'torrc')], stdout=log, stderr=subprocess.STDOUT)
+server = None
 try:
     deadline = time.monotonic()+20
     while not (service/'hostname').exists() or not (public_service/'hostname').exists():
@@ -50,29 +51,38 @@ try:
     (root/'fixture.auth_private').write_text(host.removesuffix('.onion')+':descriptor:x25519:'+key+'\n')
     (root/'qr.txt').write_text('http://'+host+'?key='+key+'\n')
     if not (root/'ca.pem').exists():
-        openssl('req','-x509','-newkey','rsa:2048','-nodes','-days','30','-subj','/CN=WildBuzzard Test Private CA','-keyout',root/'ca.key','-out',root/'ca.pem')
-    openssl('req','-new','-newkey','rsa:2048','-nodes','-subj','/CN='+host,'-keyout',root/'server.key','-out',root/'server.csr')
-    (root/'extensions').write_text('subjectAltName=DNS:'+host+',DNS:'+public_host+',IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
-    openssl('x509','-req','-in',root/'server.csr','-CA',root/'ca.pem','-CAkey',root/'ca.key','-CAcreateserial','-days', '-1' if args.expired else '7','-extfile',root/'extensions','-out',root/'server.pem')
-    (root/'chain.pem').write_bytes((root/'server.pem').read_bytes()+(root/'ca.pem').read_bytes())
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(root/'chain.pem',root/'server.key')
+        openssl('req','-x509','-newkey','rsa:2048','-nodes','-days','30','-subj','/CN=WildBuzzard Test Private CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign','-keyout',root/'ca.key','-out',root/'ca.pem')
+    def certificate_context(expired):
+        openssl('req','-new','-newkey','rsa:2048','-nodes','-subj','/CN='+host,'-keyout',root/'server.key','-out',root/'server.csr')
+        (root/'extensions').write_text('subjectAltName=DNS:'+host+',DNS:'+public_host+',IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
+        openssl('x509','-req','-in',root/'server.csr','-CA',root/'ca.pem','-CAkey',root/'ca.key','-CAcreateserial','-days', '-1' if expired else '7','-extfile',root/'extensions','-out',root/'server.pem')
+        (root/'chain.pem').write_bytes((root/'server.pem').read_bytes()+(root/'ca.pem').read_bytes())
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(root/'chain.pem',root/'server.key')
+        return context
     web = Path(__file__).parent/'web'
     class Handler(http.server.SimpleHTTPRequestHandler):
         def __init__(self,*a,**kw): super().__init__(*a,directory=str(web),**kw)
         def log_message(self,*a): pass
     server = http.server.ThreadingHTTPServer(('127.0.0.1',9443),Handler)
-    server.socket = context.wrap_socket(server.socket,server_side=True)
+    server.socket = certificate_context(args.expired).wrap_socket(server.socket,server_side=True)
     print('Private onion fixture: https://'+host,flush=True)
     print('Unenrolled onion fixture: https://'+public_host,flush=True)
     print('Import fixture.auth_private from '+str(root)+'; no CA installation is needed for the onion test.',flush=True)
-    print('Restart this fixture to renew its leaf certificate under the same persistent CA.',flush=True)
+    def renew(expired):
+        server.socket.context = certificate_context(expired)
+        (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'key':key,'expired':expired}))
+        print('TLS leaf renewed under the persistent CA; expired='+str(expired),flush=True)
+    signal.signal(signal.SIGHUP,lambda *_: renew(False))
+    signal.signal(signal.SIGUSR1,lambda *_: renew(True))
+    print('Send SIGHUP to renew the leaf; SIGUSR1 installs an expired leaf. Tor keeps running.',flush=True)
     signal.signal(signal.SIGTERM,lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
     server.serve_forever()
 except KeyboardInterrupt:
     pass
 finally:
+    if server is not None: server.server_close()
     tor.terminate()
     try: tor.wait(timeout=10)
-    except subprocess.TimeoutExpired: tor.kill()
+    except subprocess.TimeoutExpired: tor.kill(); tor.wait()
     log.close()

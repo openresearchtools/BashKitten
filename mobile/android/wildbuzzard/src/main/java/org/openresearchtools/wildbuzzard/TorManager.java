@@ -18,7 +18,13 @@ final class TorManager {
     private volatile TorService service;
     private TorGateway gateway;
     private final Set<String> installed = ConcurrentHashMap.newKeySet();
-    private boolean starting;
+    private boolean starting, connecting;
+    private static final class Waiting {
+        final Consumer<Integer> success;
+        final Consumer<String> failure;
+        Waiting(Consumer<Integer> success, Consumer<String> failure) { this.success = success; this.failure = failure; }
+    }
+    private final List<Waiting> waiting = new ArrayList<>();
     private volatile boolean restored;
     TorManager(BrowserApp app) { this.app = app; keys = new SecretStore(app, "onion-keys"); }
     private final ServiceConnection connection = new ServiceConnection() {
@@ -42,9 +48,12 @@ final class TorManager {
                 if (!app.bindService(new Intent(app, TorService.class), connection, Context.BIND_AUTO_CREATE)) throw new IllegalStateException();
             } catch (Exception error) { starting = false; failure.accept("Could not start Tor"); return; }
         }
+        waiting.add(new Waiting(success, failure));
+        if (connecting) return;
+        connecting = true;
         io.execute(() -> {
             try {
-                long deadline = SystemClock.elapsedRealtime() + 90000;
+                long deadline = SystemClock.elapsedRealtime() + 180000;
                 TorService current;
                 while ((current = service) == null || current.getTorControlConnection() == null) {
                     if (SystemClock.elapsedRealtime() > deadline) throw new IllegalStateException();
@@ -70,11 +79,20 @@ final class TorManager {
                 }
                 int port = gateway.port();
                 if (port < 1) throw new IllegalStateException();
-                app.main.post(() -> { app.refreshTor(port, new ArrayList<>(installed)); success.accept(port); });
+                app.main.post(() -> finishConnecting(port, null));
             } catch (Exception error) {
-                app.main.post(() -> { app.refreshTor(0, new ArrayList<>()); failure.accept("Tor is unavailable; no direct connection was made. Retry when connected."); });
+                app.main.post(() -> finishConnecting(0, "Tor is unavailable; no direct connection was made. Retry when connected."));
             }
         });
+    }
+    private void finishConnecting(int port, String error) {
+        connecting = false;
+        List<Waiting> completed = new ArrayList<>(waiting); waiting.clear();
+        app.refreshTor(port, port == 0 ? Collections.emptyList() : identities());
+        for (Waiting request : completed) {
+            if (error == null) request.success.accept(port);
+            else request.failure.accept(error);
+        }
     }
     String proxySecret() { return gateway == null ? "" : gateway.secret; }
     List<String> identities() { return new ArrayList<>(installed); }

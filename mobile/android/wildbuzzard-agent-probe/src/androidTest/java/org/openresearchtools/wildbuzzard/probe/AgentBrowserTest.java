@@ -40,6 +40,16 @@ public final class AgentBrowserTest {
         device.executeShellCommand("cmd uimode night yes");
         device.waitForIdle(); SystemClock.sleep(1000);
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark.png")));
+        UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 10000);
+        assertNotNull("Fenix menu", menu); menu.click();
+        device.waitForIdle();
+        assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-menu.png")));
+        if (!device.wait(Until.hasObject(By.text("WildBuzzard tab controls")), 2000)) {
+            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("WildBuzzard tab controls");
+        }
+        click(device, "WildBuzzard tab controls");
+        assertTrue(device.wait(Until.hasObject(By.text("Adblocking for this tab")), 10000));
+        assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-tab-controls.png")));
     }
     private void launch(Context context) {
         context.startActivity(new Intent(context, ProbeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));

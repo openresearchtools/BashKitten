@@ -48,7 +48,7 @@ public final class OnionBrowserTest {
         inputs.get(0).setText(fixture.getString("onion"));
         inputs.get(1).setText(fixture.getString("key"));
         click(device, "Import key");
-        assertTrue("Tor installs the encrypted credential", device.wait(Until.hasObject(By.text("Onion key imported")), 100000));
+        assertTrue("Tor installs the encrypted credential", device.wait(Until.hasObject(By.text("Onion key imported")), 195000));
         String privateTab = create(probe, "https://" + fixture.getString("onion"), true);
         if (fixture.optBoolean("expired")) {
             assertCertError(probe, privateTab, "Expired enrolled onion certificate");

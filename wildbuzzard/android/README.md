@@ -129,9 +129,11 @@ adb push /private/test-fixture/probe-fixture.json /sdcard/Android/data/org.openr
 adb shell am instrument -w -e class org.openresearchtools.wildbuzzard.probe.OnionBrowserTest org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-Never commit the generated credential file. Restart the fixture with the same
-directory and rerun the test to verify a renewed leaf under the persistent CA.
-Restart with `--expired` and repush the fixture JSON to test certificate expiry.
+Never commit the generated credential file. Send `SIGHUP` to the fixture's Python
+process and rerun the test to verify a renewed leaf under the persistent CA.
+Send `SIGUSR1` and repush its fixture JSON to test certificate expiry. These
+signals preserve the running Tor service and onion identity. `--expired` is
+also available when starting the fixture.
 The suite also checks unenrolled onions, hostname mismatches, clearnet private-CA
 rejection, and blocked localhost access from a Tor tab. These are test procedures,
 not claims that device validation has already passed.

@@ -55,7 +55,7 @@ public final class BrowserControlService extends Service {
                 Consumer<String> fail = message -> {
                     try { send.accept(new JSONObject().put("error", message)); } catch (JSONException ignored) {}
                 };
-                app.main.postDelayed(() -> fail.accept("Request timed out"), 100000);
+                app.main.postDelayed(() -> fail.accept("Request timed out"), 210000);
                 try {
                     app.grants.require(uid);
                     run(new JSONObject(json), owner, uid, send, fail);

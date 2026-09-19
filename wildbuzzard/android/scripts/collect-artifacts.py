@@ -6,15 +6,18 @@ import json
 import shutil
 import subprocess
 import sys
+import struct
 import zipfile
 
 root = Path(__file__).resolve().parents[3]
 out = Path(sys.argv[1]).resolve()
+out.mkdir(parents=True, exist_ok=True)
 obj = root.parent/'obj-wildbuzzard-android'
 outputs = list((obj/'gradle/build/mobile/android/fenix').rglob('*.apk')) + list((obj/'gradle/build/mobile/android/wildbuzzard-agent-probe').rglob('*.apk'))
 if not outputs:
     outputs = list(obj.rglob('*.apk'))
 browser = []
+native = {}
 for source in outputs:
     with zipfile.ZipFile(source) as apk:
         libraries = [name for name in apk.namelist() if name.startswith('lib/')]
@@ -23,11 +26,26 @@ for source in outputs:
                 raise SystemExit('APK contains non-ARM64 native libraries: ' + str(source))
             if 'lib/arm64-v8a/libtor.so' not in libraries: raise SystemExit('Tor not packaged')
             if 'assets/THIRD-PARTY-NOTICES.txt' not in apk.namelist(): raise SystemExit('Missing legal notices')
+            details = {}
+            for name in libraries:
+                if not name.endswith('.so'): continue
+                with apk.open(name) as library:
+                    header = library.read(64)
+                    if header[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', header, 18)[0] != 183:
+                        raise SystemExit('Native library is not AArch64 ELF: ' + name)
+                    offset = struct.unpack_from('<Q', header, 32)[0]
+                    size, count = struct.unpack_from('<HH', header, 54)
+                    library.seek(offset)
+                    segments = library.read(size * count)
+                    alignment = min(struct.unpack_from('<Q', segments, i * size + 48)[0]
+                                    for i in range(count) if struct.unpack_from('<I', segments, i * size)[0] == 1)
+                    details[name] = {'machine': 'AArch64', 'load_segment_alignment': alignment}
+            native[source.name] = details
             browser.append(source)
     shutil.copy2(source, out/source.name)
 if not browser: raise SystemExit('No real Gecko ARM64 APK produced')
 shutil.copytree(root/'wildbuzzard/android/notices', out/'notices', dirs_exist_ok=True)
 subprocess.run([sys.executable, str(root/'wildbuzzard/android/scripts/notices.py'), str(out)], check=True)
 manifest = {'source': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
-            'architecture':'arm64-v8a','apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
+            'architecture':'arm64-v8a','native_libraries':native,'apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
 (out/'build-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
