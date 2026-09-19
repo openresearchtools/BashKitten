@@ -70,6 +70,8 @@ final class TorManager {
                     Thread.sleep(100);
                 }
                 if (!restored) {
+                    // SETCONF replaces Tor's in-memory client-auth map; install credentials afterwards.
+                    current.getTorControlConnection().setConf("DisableNetwork", "0");
                     JSONObject stored = keys.read();
                     List<String> enrolled = new ArrayList<>();
                     for (Iterator<String> it = stored.keys(); it.hasNext();) {
@@ -77,7 +79,6 @@ final class TorManager {
                         current.getTorControlConnection().onionClientAuthAdd(host.substring(0, 56), new OnionKey(host, stored.getString(host)).controlKey());
                         enrolled.add(host);
                     }
-                    current.getTorControlConnection().setConf("DisableNetwork", "0");
                     installed.clear(); installed.addAll(enrolled);
                     restored = true;
                 }

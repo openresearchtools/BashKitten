@@ -72,6 +72,17 @@ public final class OnionBrowserTest {
             device.wait(Until.hasObject(By.desc("Open " + fixture.getString("onion"))), 10000));
         click(device, "Quick access " + fixture.getString("onion"));
         assertTrue("Import created a quick-access shortcut", device.wait(Until.hasObject(By.text("Already in quick access")), 10000));
+        device.pressHome();
+        device.executeShellCommand("am force-stop org.openresearchtools.wildbuzzard");
+        context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.mozilla.fenix.HomeActivity")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        context.startActivity(new Intent(context, ProbeActivity.class)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        deadline = SystemClock.elapsedRealtime() + 30000;
+        while ((!ProbeActivity.connected || ProbeActivity.active == probe) && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(100);
+        assertTrue("Agent reconnects after browser restart", ProbeActivity.connected);
+        assertNotSame("Fresh independent probe connection", probe, ProbeActivity.active);
+        probe = ProbeActivity.active;
         String privateTab = create(probe, "http://127.0.0.1:8765/", false);
         probe.waitPage(privateTab);
         probe.command("navigate", probe.params(privateTab).put("url", "https://" + fixture.getString("onion")));
@@ -79,6 +90,7 @@ public final class OnionBrowserTest {
             assertCertError(probe, privateTab, "Expired enrolled onion certificate");
         } else {
             assertFixtureLoaded(probe, privateTab);
+            android.util.Log.i("WildBuzzardProbe", "PASS: saved onion key works after browser restart without re-import");
             String otherPrivate = create(probe, "https://" + fixture.getString("otherPrivateOnion"), false);
             assertNavigationError(probe, otherPrivate, false, "Key is not tried on another private onion service");
             assertCertError(probe, create(probe, "https://wrong." + fixture.getString("onion"), true), "Enrolled onion hostname mismatch");

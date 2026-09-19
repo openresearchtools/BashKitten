@@ -34,6 +34,9 @@ allowed_prefixes = (
 )
 allowed_files = {
     'mobile/android/fenix/app/build.gradle',
+    'mobile/android/fenix/app/src/main/assets/shared_error_style.css',
+    'mobile/android/fenix/app/src/main/assets/low_and_medium_risk_error_style.css',
+    'mobile/android/fenix/app/src/main/assets/high_risk_error_style.css',
     'wildbuzzard/android/API.md',
     'wildbuzzard/android/README.md',
     'wildbuzzard/android/VALIDATION.md',

@@ -3,13 +3,13 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 :root {
-  --background-color: #f9f9fb;
-  --text-color: #15141a;
-  --primary-button-color: #312a65;
+  --background-color: #f5f5f5;
+  --text-color: #252525;
+  --primary-button-color: #4a4a4a;
   --primary-button-text-color: #ffffff;
-  --secondary-button-color: #e0e0e6;
-  --secondary-button-text-color: #20123a;
-  --header-color: #312a65;
+  --secondary-button-color: #e6e6e6;
+  --secondary-button-text-color: #252525;
+  --header-color: #4a4a4a;
 }
 
 #badCertTechnicalInfo {
@@ -24,12 +24,12 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background-color: #15141a;
-    --text-color: #fbfbfe;
-    --primary-button-color: #7542e5;
-    --primary-button-text-color: #ffffff;
-    --secondary-button-color: #e0e0e6;
-    --secondary-button-text-color: #312a65;
-    --header-color: #fbfbfe;
+    --background-color: #1e1e1e;
+    --text-color: #e5e5e5;
+    --primary-button-color: #e5e5e5;
+    --primary-button-text-color: #252525;
+    --secondary-button-color: #414141;
+    --secondary-button-text-color: #e5e5e5;
+    --header-color: #e5e5e5;
   }
 }
