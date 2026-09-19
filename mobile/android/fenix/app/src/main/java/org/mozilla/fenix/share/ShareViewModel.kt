@@ -48,7 +48,7 @@ import org.mozilla.fenix.share.listadapters.SyncShareOption
  * @param queryIntentActivitiesCompat A lambda that handles querying for activities that can resolve a given intent.
  */
 class ShareViewModel(
-    private val fxaAccountManager: FxaAccountManager,
+    private val fxaAccountManager: FxaAccountManager?,
     private val recentAppsStorage: RecentAppsStorage,
     private val connectivityManager: ConnectivityManager?,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -93,7 +93,7 @@ class ShareViewModel(
      *
      */
     internal fun initDataLoad() {
-        if (!isNetworkCallbackRegistered) {
+        if (fxaAccountManager != null && !isNetworkCallbackRegistered) {
             val networkRequest = NetworkRequest.Builder().build()
             connectivityManager?.registerNetworkCallback(networkRequest, networkCallback)
             isNetworkCallbackRegistered = true
@@ -141,7 +141,7 @@ class ShareViewModel(
     private fun refreshDevices(network: Network?) {
         viewModelScope.launch {
             // Trigger FxA refresh
-            fxaAccountManager.authenticatedAccount()
+            fxaAccountManager?.authenticatedAccount()
                 ?.deviceConstellation()
                 ?.refreshDevices()
 
@@ -203,6 +203,7 @@ class ShareViewModel(
     @VisibleForTesting
     internal suspend fun buildDeviceList(network: Network? = null): List<SyncShareOption> =
         withContext(ioDispatcher) {
+            if (fxaAccountManager == null) return@withContext emptyList()
             val account = fxaAccountManager.authenticatedAccount()
             when {
                 // No network

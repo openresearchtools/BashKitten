@@ -618,7 +618,7 @@ abstract class BaseBrowserFragment :
                 snackbarDelegate = FenixSnackbarDelegate(binding.dynamicSnackbarContainer),
                 navController = findNavController(),
                 tabsUseCases = context.components.useCases.tabsUseCases,
-                sendTabUseCases = SendTabUseCases(requireComponents.backgroundServices.accountManager),
+                sendTabUseCases = null,
                 customTabSessionId = customTabSessionId,
                 viewHasFocus = { view.hasWindowFocus() },
             ),

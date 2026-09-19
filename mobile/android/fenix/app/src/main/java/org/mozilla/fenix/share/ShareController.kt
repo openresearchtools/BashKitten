@@ -104,7 +104,7 @@ class DefaultShareController(
     private val shareSubject: String?,
     private val shareData: List<ShareData>,
     private val isPrivate: Boolean,
-    private val sendTabUseCases: SendTabUseCases,
+    private val sendTabUseCases: SendTabUseCases?,
     private val saveToPdfUseCase: SessionUseCases.SaveToPdfUseCase,
     private val printUseCase: SessionUseCases.PrintContentUseCase,
     private val sentFromFirefoxManager: SentFromFirefoxManager,
@@ -118,6 +118,7 @@ class DefaultShareController(
 ) : ShareController {
 
     override fun handleReauth() {
+        if (sendTabUseCases == null) return
         val directions = ShareFragmentDirections.actionGlobalAccountProblemFragment(
             entrypoint = fxaEntrypoint as FenixFxAEntryPoint,
         )
@@ -189,24 +190,28 @@ class DefaultShareController(
     }
 
     override fun handleAddNewDevice() {
+        if (sendTabUseCases == null) return
         val directions = ShareFragmentDirections.actionShareFragmentToAddNewDeviceFragment()
         navController.navigate(directions)
     }
 
     override fun handleShareToDevice(device: Device) {
+        val send = sendTabUseCases ?: return
         SyncAccount.sendTab.record(NoExtras())
         shareToDevicesWithRetry(listOf(device.id)) {
-            sendTabUseCases.sendToDeviceAsync(device.id, shareData.toTabData())
+            send.sendToDeviceAsync(device.id, shareData.toTabData())
         }
     }
 
     override fun handleShareToAllDevices(devices: List<Device>) {
+        val send = sendTabUseCases ?: return
         shareToDevicesWithRetry(
             devices.map { it.id },
-        ) { sendTabUseCases.sendToAllAsync(shareData.toTabData()) }
+        ) { send.sendToAllAsync(shareData.toTabData()) }
     }
 
     override fun handleSignIn() {
+        if (sendTabUseCases == null) return
         SyncAccount.signInToSendTab.record(NoExtras())
         val directions = ShareFragmentDirections.actionGlobalTurnOnSync(
             entrypoint = fxaEntrypoint as FenixFxAEntryPoint,

@@ -47,7 +47,7 @@ class ShareFragment : AppCompatDialogFragment() {
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
                 val app = requireActivity().application
                 return ShareViewModel(
-                    fxaAccountManager = requireComponents.backgroundServices.accountManager,
+                    fxaAccountManager = null,
                     recentAppsStorage = RecentAppsStorage(app),
                     connectivityManager = app.getSystemService<ConnectivityManager>(),
                     packageManager = app.packageManager,
@@ -97,8 +97,6 @@ class ShareFragment : AppCompatDialogFragment() {
         )
         val shareData = args.data.toList()
 
-        val accountManager = requireComponents.backgroundServices.accountManager
-
         // Determine if tabs being shared are from private browsing mode.
         // When sessionId is provided, check that specific tab's private state.
         // When sessionId is null it must be from tabs tray, and since selection mode
@@ -115,7 +113,7 @@ class ShareFragment : AppCompatDialogFragment() {
                 shareData = shareData,
                 isPrivate = isPrivate,
                 navController = findNavController(),
-                sendTabUseCases = SendTabUseCases(accountManager),
+                sendTabUseCases = null,
                 saveToPdfUseCase = requireComponents.useCases.sessionUseCases.saveToPdf,
                 printUseCase = requireComponents.useCases.sessionUseCases.printContent,
                 sentFromFirefoxManager = requireComponents.core.sentFromFirefoxManager,
@@ -136,6 +134,7 @@ class ShareFragment : AppCompatDialogFragment() {
         binding.shareWrapper.setOnClickListener { shareInteractor.onShareClosed() }
         shareToAccountDevicesView =
             ShareToAccountDevicesView(binding.devicesShareLayout, shareInteractor)
+        binding.devicesShareLayout.visibility = View.GONE
 
         if (args.showPage) {
             // Show the previous fragment underneath the share background scrim

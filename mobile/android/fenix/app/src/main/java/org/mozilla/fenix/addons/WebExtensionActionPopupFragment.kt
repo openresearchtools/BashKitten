@@ -99,7 +99,7 @@ class WebExtensionActionPopupFragment : AddonPopupBaseFragment(), EngineSession.
                 snackbarDelegate = FenixSnackbarDelegate(provideDynamicSnackbarContainer()),
                 navController = findNavController(),
                 tabsUseCases = requireComponents.useCases.tabsUseCases,
-                sendTabUseCases = SendTabUseCases(requireComponents.backgroundServices.accountManager),
+                sendTabUseCases = null,
                 customTabSessionId = null,
             ),
             owner = this,

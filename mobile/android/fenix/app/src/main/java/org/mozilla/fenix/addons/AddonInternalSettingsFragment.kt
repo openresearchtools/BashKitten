@@ -67,7 +67,7 @@ class AddonInternalSettingsFragment : AddonPopupBaseFragment(), SystemInsetsPadd
                 snackbarDelegate = FenixSnackbarDelegate(provideDynamicSnackbarContainer()),
                 navController = findNavController(),
                 tabsUseCases = requireComponents.useCases.tabsUseCases,
-                sendTabUseCases = SendTabUseCases(requireComponents.backgroundServices.accountManager),
+                sendTabUseCases = null,
                 customTabSessionId = session?.id,
             ),
             owner = this,

@@ -1085,10 +1085,9 @@ class Settings(
         }
     }
 
-    var whatsappLinkSharingEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_link_sharing),
-        default = { FxNimbus.features.sentFromFirefox.value().enabled },
-    )
+    var whatsappLinkSharingEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: sharing does not add Mozilla promotion. */ }
 
     var linkSharingSettingsSnackbarShown by booleanPreference(
         key = appContext.getPreferenceKey(R.string.pref_key_link_sharing_settings_snackbar),

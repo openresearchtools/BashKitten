@@ -845,30 +845,6 @@ class HomeFragment : Fragment() {
         subscribeToTabCollections()
         updateLastHomeActivity()
 
-        requireComponents.backgroundServices.accountManagerAvailableQueue.runIfReadyOrQueue {
-            // By the time this code runs, we may not be attached to a context or have a view lifecycle owner.
-            if ((this@HomeFragment).view?.context == null) {
-                return@runIfReadyOrQueue
-            }
-
-            requireComponents.backgroundServices.accountManager.register(
-                object : AccountObserver {
-                    override fun onAuthenticated(account: OAuthAccount, authType: AuthType) {
-                        if (authType != AuthType.Existing) {
-                            showComposeSnackbar(
-                                SnackbarState(
-                                    message = requireContext().getString(
-                                        R.string.onboarding_firefox_account_sync_is_on,
-                                    ),
-                                ),
-                            )
-                        }
-                    }
-                },
-                owner = this@HomeFragment.viewLifecycleOwner,
-            )
-        }
-
         // We only want this observer live just before we navigate away to the collection creation screen
         requireComponents.core.tabCollectionStorage.unregister(collectionStorageObserver)
 
@@ -1191,7 +1167,7 @@ class HomeFragment : Fragment() {
                 ),
                 navController = findNavController(),
                 tabsUseCases = requireComponents.useCases.tabsUseCases,
-                sendTabUseCases = SendTabUseCases(requireComponents.backgroundServices.accountManager),
+                sendTabUseCases = null,
                 customTabSessionId = null,
                 viewHasFocus = { view.hasWindowFocus() },
             ),
