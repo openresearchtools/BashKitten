@@ -108,6 +108,9 @@
 @BINPATH@/actors/*
 
 ; [Browser Chrome Files]
+; WildBuzzard bundled blocker lists, scriptlets and blocked-page resources.
+@BINPATH@/chrome/browser@JAREXT@
+@BINPATH@/chrome/browser.manifest
 @BINPATH@/chrome/pdfjs.manifest
 @BINPATH@/chrome/pdfjs/*
 @BINPATH@/defaults/pref/PdfJsDefaultPrefs.js

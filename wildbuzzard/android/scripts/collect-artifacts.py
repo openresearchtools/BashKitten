@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 from pathlib import Path
 import hashlib
+import io
 import json
 import shutil
 import subprocess
@@ -29,6 +30,21 @@ for source in outputs:
                 raise SystemExit('APK contains non-ARM64 native libraries: ' + str(source))
             if 'lib/arm64-v8a/libtor.so' not in libraries: raise SystemExit('Tor not packaged')
             if 'assets/THIRD-PARTY-NOTICES.txt' not in apk.namelist(): raise SystemExit('Missing legal notices')
+            with zipfile.ZipFile(io.BytesIO(apk.read('assets/omni.ja'))) as engine:
+                resources = set(engine.namelist())
+                required = {
+                    'modules/GeckoViewWildBuzzard.sys.mjs',
+                    'modules/WildBuzzardAndroid.sys.mjs',
+                    'chrome/remote/content/wildbuzzard/BrowserControlChild.sys.mjs',
+                    'defaults/settings/main/cookie-banner-rules-list.json',
+                    'chrome/browser/wildbuzzard/blocker/assets/list_catalog.json',
+                    'chrome/browser/wildbuzzard/blocker/assets/filters/easylist.txt',
+                    'chrome/browser/wildbuzzard/blocker/assets/filters/easylist-cookie.txt',
+                    'chrome/browser/wildbuzzard/blocker/assets/resources/resources.json',
+                    'chrome/browser/wildbuzzard/blocker/assets/resources/ubo-scriptlets.json',
+                }
+                missing = required - resources
+                if missing: raise SystemExit('Missing offline engine resources: ' + ', '.join(sorted(missing)))
             details = {}
             for name in libraries:
                 if not name.endswith('.so'): continue
