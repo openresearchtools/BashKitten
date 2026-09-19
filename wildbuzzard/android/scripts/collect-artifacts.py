@@ -97,8 +97,10 @@ for source in outputs:
         verification = subprocess.check_output([
             str(signing_tools[-1]), 'verify', '--print-certs', str(out/destination),
         ], text=True)
-        certificates = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)', verification)
-        if certificates != [expected_signer]:
+        certificates = {value.lower() for value in re.findall(
+            r'^(?:Signer #\d+|V[1-4](?:\.\d+)? Signer):? certificate SHA-256 digest: ([0-9a-fA-F]{64})$',
+            verification, re.MULTILINE)}
+        if certificates != {expected_signer}:
             raise SystemExit('APK did not use the configured signing identity: ' + destination)
         signers[destination] = expected_signer
 if not browser: raise SystemExit('No real Gecko ARM64 APK produced')
