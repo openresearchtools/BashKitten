@@ -17,6 +17,7 @@ import org.json.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
+import static org.openresearchtools.wildbuzzard.probe.UiNavigation.scrollToAndClick;
 
 /** Runs the browser APK's actual shell entry point under the independent probe UID. */
 @RunWith(AndroidJUnit4.class)
@@ -87,10 +88,8 @@ public final class CommandBrowserTest {
         context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.openresearchtools.wildbuzzard.CommandAccessActivity")
             .putExtra("launch", launch.getString("launch")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 15000); assertNotNull(menu); menu.click();
-        new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Settings"));
-        click(device, "Settings");
-        new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Revoke agent access");
-        click(device, "Revoke agent access");
+        scrollToAndClick(device, "Settings");
+        scrollToAndClick(device, "Revoke agent access");
         assertTrue("Revocation disables the saved shell key", run("tabs.list").exit != 0);
         android.util.Log.i("WildBuzzardProbe", "PASS: browser-owned shell entry, real page access, tab isolation, closure, and revocation");
         device.pressBack();

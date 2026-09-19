@@ -13,6 +13,7 @@ import java.io.File;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import static org.junit.Assert.*;
+import static org.openresearchtools.wildbuzzard.probe.UiNavigation.scrollToAndClick;
 
 @RunWith(AndroidJUnit4.class)
 public final class AgentBrowserTest {
@@ -111,18 +112,6 @@ public final class AgentBrowserTest {
     }
     private void launch(Context context) {
         context.startActivity(new Intent(context, ProbeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
-    }
-    private void scrollToAndClick(UiDevice device, String label) {
-        for (int attempt = 0; attempt < 10; attempt++) {
-            UiObject2 item = device.findObject(By.desc(label));
-            if (item == null) item = device.findObject(By.text(label));
-            if (item != null) { item.click(); return; }
-            UiObject2 scroll = device.wait(Until.findObject(By.scrollable(true)), 10000);
-            assertNotNull("Scrollable content before " + label, scroll);
-            // Scrolling to the beginning first dismisses Fenix's bottom-sheet menu.
-            scroll.scroll(Direction.DOWN, 0.7f);
-        }
-        fail("Menu or preference not found: " + label);
     }
     private void click(UiDevice device, String text) {
         java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
