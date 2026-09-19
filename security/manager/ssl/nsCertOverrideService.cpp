@@ -804,7 +804,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAuthenticatedOnion(
     return NS_ERROR_INVALID_ARG;
   }
   if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
-  nsAutoCString key(NS_ConvertUTF16toUTF8(sessionContext));
+  nsAutoCString key{NS_ConvertUTF16toUTF8(sessionContext)};
   key.Append('|');
   key.Append(identity);
   bool removed = false;
@@ -832,7 +832,7 @@ NS_IMETHODIMP nsCertOverrideService::IsAuthenticatedOnion(
   const nsDependentCSubstring identity = Substring(host, host.Length() - 62);
   if (!IsV3OnionIdentity(identity) ||
       (host.Length() > 62 && host[host.Length() - 63] != '.')) return NS_OK;
-  nsAutoCString key(NS_ConvertUTF16toUTF8(sessionContext));
+  nsAutoCString key{NS_ConvertUTF16toUTF8(sessionContext)};
   key.Append('|');
   key.Append(identity);
   MutexAutoLock lock(mMutex);

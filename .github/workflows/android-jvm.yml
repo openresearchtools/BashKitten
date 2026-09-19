@@ -9,7 +9,7 @@ permissions:
   contents: read
 concurrency:
   group: android-jvm-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   compile:
     runs-on: ubuntu-24.04
