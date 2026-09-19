@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 360
     env:
       MOZCONFIG: ${{ github.workspace }}/wildbuzzard/android/mozconfig
-      MOZBUILD_STATE_PATH: ${{ runner.temp }}/wildbuzzard-mozbuild
+      MOZBUILD_STATE_PATH: ${{ github.workspace }}-mozbuild
       PYTHONUNBUFFERED: '1'
       DISABLE_TELEMETRY: '1'
       RUSTUP_TOOLCHAIN: '1.96.0'
