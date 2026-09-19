@@ -71,6 +71,8 @@ public final class OnionBrowserTest {
             try {
                 if (probe.evaluate(id, "return document.querySelector('h1')?.textContent;").toString().contains("Agent test page")) {
                     assertEquals("https:", probe.evaluate(id, "return location.protocol;"));
+                    assertEquals("Enrolled onion remains a secure web context", true,
+                        probe.evaluate(id, "return window.isSecureContext;"));
                     android.util.Log.i("WildBuzzardProbe", "PASS: enrolled onion private-CA HTTPS without CA installation");
                     return;
                 }
