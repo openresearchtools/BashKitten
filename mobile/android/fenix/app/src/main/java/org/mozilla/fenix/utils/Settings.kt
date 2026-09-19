@@ -206,7 +206,7 @@ class Settings(
     @Suppress("DEPRECATION")
     var showPocketRecommendationsFeature: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates what simple toolbar shortcut key is currently selected.
@@ -612,11 +612,11 @@ class Settings(
 
     var isTelemetryEnabled: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     var isMarketingTelemetryEnabled: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     var hasMadeMarketingTelemetrySelection by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_marketing_telemetry_selection_made),
@@ -671,7 +671,7 @@ class Settings(
      */
     var isTermsOfUsePromptEnabled: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Returns true if the nimbus flag for showing the terms of use drag handle is true.
@@ -736,11 +736,11 @@ class Settings(
      */
     var isDailyUsagePingEnabled: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     var isExperimentationEnabled: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * This lets us know if the user has disabled experimentation manually so that we know
@@ -758,7 +758,7 @@ class Settings(
      */
     var isRolloutsEnabled: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Timestamp in milliseconds when the "Set as default browser" system prompt was requested.
@@ -1175,7 +1175,7 @@ class Settings(
 
     var shouldEnableGlobalPrivacyControl by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_privacy_enable_global_privacy_control),
-        false,
+        true,
     )
 
     var shouldUseCookieBannerPrivateMode by booleanPreference(
@@ -1184,7 +1184,7 @@ class Settings(
     )
 
     val shouldUseCookieBannerPrivateModeDefaultValue: Boolean
-        get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_VALUE_PBM] == 1
+        get() = true
 
     val shouldUseCookieBanner: Boolean
         get() = true
@@ -1196,10 +1196,10 @@ class Settings(
         get() = false
 
     val shouldEnableCookieBannerGlobalRules: Boolean
-        get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_GLOBAL_RULES] == 1
+        get() = true
 
     val shouldEnableCookieBannerGlobalRulesSubFrame: Boolean
-        get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_GLOBAL_RULES_SUB_FRAMES] == 1
+        get() = true
 
     /**
      * Declared as a function for performance purposes. This could be declared as a variable using
@@ -2174,7 +2174,7 @@ class Settings(
      */
     var showContileFeature: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Blocklist used to filter items from the home screen that have previously been removed.
@@ -2593,7 +2593,7 @@ class Settings(
     @Suppress("DEPRECATION")
     var enableFxSuggest: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates if boosting AMP/wiki suggestions is enabled.
@@ -2616,7 +2616,7 @@ class Settings(
     @Suppress("DEPRECATION")
     var showSponsoredSuggestions: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates if the user has chosen to show search suggestions for web content in the
@@ -2626,7 +2626,7 @@ class Settings(
     @Suppress("DEPRECATION")
     var showNonSponsoredSuggestions: Boolean
         get() = false
-        set(value) { /* Product policy: this Mozilla service is disabled. */ }
+        set(@Suppress("UNUSED_PARAMETER") value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates that the user does not want warned of a translations

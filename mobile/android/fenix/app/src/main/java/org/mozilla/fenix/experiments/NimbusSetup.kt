@@ -36,6 +36,7 @@ private val logger = Logger("service/Nimbus")
 /**
  * Create the Nimbus singleton object for the Fenix app.
  */
+@Suppress("UNUSED_PARAMETER")
 fun createNimbus(
     context: Context,
     settings: Settings,
