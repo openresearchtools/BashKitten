@@ -25,6 +25,7 @@ public final class BrowserApp extends ContextWrapper {
         void show(String id);
         void desktop(String id, boolean enabled);
         void screenshot(String id, Consumer<Bitmap> result);
+        void bookmark(String url, String title, Consumer<String> done, Consumer<String> fail);
         Intent launchIntent();
     }
     public static BrowserApp get(Context context) { return ((Provider) context.getApplicationContext()).wildBuzzard(); }
@@ -111,6 +112,10 @@ public final class BrowserApp extends ContextWrapper {
         for (Tab tab : host.list()) track(tab, tab.parentId);
     }
     void ensure(Tab tab, Runnable done, Consumer<String> fail) {
+        if (tab.preparing) {
+            awaitPreparation(tab, SystemClock.elapsedRealtime() + 185000, done, fail);
+            return;
+        }
         host.ensure(tab, () -> {
             if (tab.ready) { done.run(); return; }
             String restoreUrl = tab.url;
@@ -124,6 +129,15 @@ public final class BrowserApp extends ContextWrapper {
             if (tab.tor) tor.ready(configured, fail);
             else configured.accept(0);
         }, fail);
+    }
+    private void awaitPreparation(Tab tab, long deadline, Runnable done, Consumer<String> fail) {
+        if (!tabs.containsKey(tab.id)) { fail.accept("Tab was closed"); return; }
+        if (!tab.preparing) {
+            if (tab.ready) done.run(); else fail.accept("Tab connection is unavailable; retry navigation");
+            return;
+        }
+        if (SystemClock.elapsedRealtime() >= deadline) { fail.accept("Tab connection timed out"); return; }
+        main.postDelayed(() -> awaitPreparation(tab, deadline, done, fail), 100);
     }
     Tab owned(String id, String owner) {
         refresh(); Tab tab = tabs.get(id);

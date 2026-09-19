@@ -39,21 +39,22 @@ public final class OnionBrowserTest {
         device.waitForIdle();
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 20000);
         assertNotNull("Fenix menu", menu); menu.click();
-        if (!device.wait(Until.hasObject(By.desc("Wild Buzzard tab controls")), 2000)) {
-            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Wild Buzzard tab controls");
+        if (!device.wait(Until.hasObject(By.desc("Private Tor sites")), 2000)) {
+            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Private Tor sites");
         }
-        click(device, "Wild Buzzard tab controls");
-        click(device, "Onion keys");
-        assertTrue(device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
+        click(device, "Private Tor sites");
+        assertTrue(device.wait(Until.hasObject(By.text("Private Tor sites")), 10000));
+        click(device, "Back");
+        click(device, "Private Tor sites");
         String browserPid = device.executeShellCommand("pidof org.openresearchtools.wildbuzzard").trim();
         device.executeShellCommand("pm grant org.openresearchtools.wildbuzzard android.permission.CAMERA");
         click(device, "Scan QR code");
         click(device, "Close scanner");
-        assertTrue("Scanner closes back to enrollment", device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
+        assertTrue("Scanner closes back to enrollment", device.wait(Until.hasObject(By.text("Private Tor sites")), 10000));
         click(device, "Scan QR code");
         assertTrue(device.wait(Until.hasObject(By.text("Close scanner")), 10000));
         device.pressBack();
-        assertTrue("Android Back closes scanner", device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
+        assertTrue("Android Back closes scanner", device.wait(Until.hasObject(By.text("Private Tor sites")), 10000));
         assertEquals("Scanner cancellation keeps browser alive", browserPid, device.executeShellCommand("pidof org.openresearchtools.wildbuzzard").trim());
         String credentialFile = InstrumentationRegistry.getArguments().getString("credentialFile");
         assertNotNull("Runner stages a complete auth_private enrollment file", credentialFile);
@@ -64,14 +65,23 @@ public final class OnionBrowserTest {
         if (!device.wait(Until.hasObject(By.text(credentialFile)), 3000))
             new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView(credentialFile);
         click(device, credentialFile);
+        assertTrue(device.wait(Until.hasObject(By.text("Add private Tor site")), 10000));
+        device.findObject(By.clazz("android.widget.EditText")).setText("Private Tor fixture");
+        click(device, "Save site");
         assertTrue("Tor installs the encrypted credential", device.wait(Until.hasObject(By.text("Onion key imported")), 195000));
         assertTrue("File import supplies the onion address without typing",
-            device.wait(Until.hasObject(By.text(java.util.regex.Pattern.compile("Open " + java.util.regex.Pattern.quote(fixture.getString("onion")), java.util.regex.Pattern.CASE_INSENSITIVE))), 10000));
-        String privateTab = create(probe, "https://" + fixture.getString("onion"), true);
+            device.wait(Until.hasObject(By.desc("Open " + fixture.getString("onion"))), 10000));
+        click(device, "Bookmark " + fixture.getString("onion"));
+        assertTrue("Import created a normal bookmark", device.wait(Until.hasObject(By.text("Already in bookmarks")), 10000));
+        String privateTab = create(probe, "http://127.0.0.1:8765/", false);
+        probe.waitPage(privateTab);
+        probe.command("navigate", probe.params(privateTab).put("url", "https://" + fixture.getString("onion")));
         if (fixture.optBoolean("expired")) {
             assertCertError(probe, privateTab, "Expired enrolled onion certificate");
         } else {
             assertFixtureLoaded(probe, privateTab);
+            String otherPrivate = create(probe, "https://" + fixture.getString("otherPrivateOnion"), false);
+            assertNavigationError(probe, otherPrivate, false, "Key is not tried on another private onion service");
             assertCertError(probe, create(probe, "https://wrong." + fixture.getString("onion"), true), "Enrolled onion hostname mismatch");
             assertCertError(probe, create(probe, "https://" + fixture.getString("publicOnion"), true), "Unenrolled onion unknown CA");
             assertCertError(probe, create(probe, "https://127.0.0.1:9443/", false), "Clearnet unknown CA");
@@ -110,6 +120,7 @@ public final class OnionBrowserTest {
                 JSONObject tab = tabs.getJSONObject(i);
                 if (tab.getString("id").equals(id) && !tab.optString("error").isEmpty()) {
                     if (certificate) assertEquals(label, "ERROR_SECURITY_BAD_CERT", tab.getString("error"));
+                    else assertNotEquals(label + " must fail before TLS", "ERROR_SECURITY_BAD_CERT", tab.getString("error"));
                     probe.command("tabs.close", probe.params(id));
                     android.util.Log.i("WildBuzzardProbe", "PASS: " + label);
                     return;

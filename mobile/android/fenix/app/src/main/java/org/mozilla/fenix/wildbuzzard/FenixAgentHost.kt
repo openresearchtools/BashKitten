@@ -124,8 +124,21 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     override fun desktop(id: String, enabled: Boolean) {
         components.useCases.sessionUseCases.requestDesktopSite(enabled, id)
     }
+    override fun bookmark(url: String, title: String, done: Consumer<String>, fail: Consumer<String>) {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val storage = components.core.bookmarksStorage
+                if (storage.getBookmarksWithUrl(url).getOrThrow().isNotEmpty()) {
+                    done.accept("Already in bookmarks")
+                } else {
+                    storage.addItem(mozilla.appservices.places.BookmarkRoot.Mobile.id, url, title, null).getOrThrow()
+                    done.accept("Saved to bookmarks")
+                }
+            } catch (error: Exception) { fail.accept("Could not save bookmark") }
+        }
+    }
     override fun launchIntent() = Intent(application, HomeActivity::class.java)
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         .putExtra(HomeActivity.OPEN_TO_BROWSER, true)
 
     override fun screenshot(id: String, result: Consumer<Bitmap?>) {

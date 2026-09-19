@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 public final class LicensesActivity extends ProductActivity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        setTitle("Licenses and source");
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(20, 55, 20, 20);
         Button mozilla = new Button(this); mozilla.setText("Mozilla and Gecko license notices");
         mozilla.setOnClickListener(v -> {
@@ -21,13 +22,27 @@ public final class LicensesActivity extends ProductActivity {
         }); root.addView(mozilla);
         Button dependencies = new Button(this); dependencies.setText("Android library licenses");
         dependencies.setOnClickListener(v -> dependencyLicenses()); root.addView(dependencies);
-        ScrollView scroll = new ScrollView(this); TextView text = new TextView(this); text.setTextSize(13); text.setTextIsSelectable(true);
-        try (InputStream input = getAssets().open("THIRD-PARTY-NOTICES.txt"); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+        noticeButton(root, "Wild Buzzard, BrowserOS and agent tools", "WILDBUZZARD-NOTICES.txt");
+        noticeButton(root, "C Tor and its dependencies", "TOR-NOTICES.txt");
+        noticeButton(root, "Adblocking, scriptlets and filter lists", "BLOCKER-NOTICES.txt");
+        noticeButton(root, "QR scanner", "QR-NOTICES.txt");
+        noticeButton(root, "All notices and source links", "THIRD-PARTY-NOTICES.txt");
+        showContent(root, true);
+    }
+    private void noticeButton(LinearLayout root, String title, String asset) {
+        Button button = new Button(this); button.setText(title); button.setAllCaps(false);
+        button.setOnClickListener(view -> notice(title, asset)); root.addView(button);
+    }
+    private void notice(String title, String asset) {
+        TextView text = new TextView(this); text.setTextSize(14); text.setTextIsSelectable(true);
+        int padding = Math.round(20 * getResources().getDisplayMetrics().density); text.setPadding(padding, padding, padding, padding);
+        try (InputStream input = getAssets().open(asset); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192]; int n; while ((n = input.read(buffer)) != -1) output.write(buffer, 0, n);
             text.setText(new String(output.toByteArray(), StandardCharsets.UTF_8));
         } catch (Exception error) { text.setText("Notices unavailable: this build is incomplete."); }
         Linkify.addLinks(text, Linkify.WEB_URLS); text.setMovementMethod(LinkMovementMethod.getInstance());
-        scroll.addView(text); root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1)); showContent(root, false);
+        ScrollView scroll = new ScrollView(this); scroll.addView(text);
+        new AlertDialog.Builder(this).setTitle(title).setView(scroll).setPositiveButton("Close", null).show();
     }
     private byte[] resource(int id) throws IOException {
         try (InputStream input = getResources().openRawResource(id); ByteArrayOutputStream out = new ByteArrayOutputStream()) {

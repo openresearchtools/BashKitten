@@ -10,19 +10,20 @@ import java.util.ArrayList;
 public final class TabOptionsActivity extends ProductActivity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
+        setTitle("Wild Buzzard · this tab");
         BrowserApp app = BrowserApp.get(this);
         BrowserApp.Tab tab = app.host.selected();
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24, 60, 24, 24);
-        TextView title = new TextView(this); title.setText("Wild Buzzard · this tab"); title.setTextSize(22); root.addView(title);
         if (tab != null) {
             Switch desktop = new Switch(this); desktop.setText("Desktop site"); desktop.setChecked(tab.desktop);
             desktop.setOnCheckedChangeListener((b, enabled) -> app.host.desktop(tab.id, enabled)); root.addView(desktop);
             Switch blocker = new Switch(this); blocker.setText("Adblocking for this tab"); blocker.setChecked(tab.adblock);
             blocker.setOnCheckedChangeListener((b, enabled) -> app.setAdblock(tab, enabled, ignored -> {}, app::message)); root.addView(blocker);
-            Button tor = new Button(this); tor.setText(tab.tor ? "Tor is on for this tab" : "Use Tor for this tab"); tor.setEnabled(!tab.tor);
-            tor.setOnClickListener(v -> { app.useTor(tab, tab.url); tor.setEnabled(false); }); root.addView(tor);
+            if (tab.tor) {
+                TextView route = new TextView(this); route.setText("Connected through Tor"); root.addView(route);
+            }
         }
-        add(root, "Onion keys", () -> startActivity(new Intent(this, OnionActivity.class)));
+        add(root, "Private Tor sites", () -> startActivity(new Intent(this, OnionActivity.class)));
         add(root, "Revoke agent access", () -> {
             app.grants.revokeAll();
             app.commands.revokeAll();

@@ -54,6 +54,17 @@ that storage context.
 
 ## Onion browsing
 
+Open **Private Tor sites** directly from the browser menu to scan a credential QR
+or choose a complete `.auth_private` file. Give the site an optional name and
+save it; **Add to bookmarks** is checked by default. Saved sites have Open,
+Bookmark and Remove actions. These screens have a toolbar Back button, and the
+scanner has a visible Close button as well as Android Back support.
+
+Typing, following a link, opening a bookmark, or using the agent `navigate`
+command with an `.onion` address automatically prepares its tab for Tor. There
+is no manual Tor switch to enable first. Bookmarks store only the HTTPS address
+and title; the site-specific key remains in the encrypted credential store.
+
 Tor is C Tor 0.4.9.12 from Guardian Project's checksum-pinned ARM64 binary. Its
 Java service is built from the matching source revision. It uses a private
 control socket and browser-owned lifetime. SOCKS requests resolve DNS through
@@ -68,13 +79,14 @@ revoke the route or enrolled onion trust of its remaining sibling tabs.
 Keys can be entered manually, imported from `.auth_private`, or scanned from
 TorKitten's `http://<v3-address>.onion?key=<x25519-key>` QR. Keys are stored using
 Android Keystore AES-GCM in app-private, backup-excluded storage and are sent
-to Tor's in-memory client-auth registry. QR enrollment URLs are parsed locally;
+to Tor's in-memory client-auth registry under the exact 56-character onion
+service ID. A key is never tried on a different onion service. The same binding
+is restored after browser restart. QR enrollment URLs are parsed locally;
 they are never navigated or sent to a search engine.
 The QR and `.auth_private` options are first in the enrollment screen. Both
 extract the complete address/key pair; manual fields are an optional fallback.
-Imported identities appear as **Open …** buttons, so the address need not be
-retyped. The scanner has a visible **Close scanner** button and supports Android
-Back, returning to enrollment without ending the browser.
+Imported sites can be opened from this screen or from normal browser bookmarks,
+without retyping the address or key.
 
 For an enrolled v3 onion identity reached through that tab's Tor route, Gecko
 accepts an unknown issuer or self-signed TLS certificate without a leaf-cert
@@ -104,7 +116,9 @@ revision and SHA-256 checksums. Build logs are retained even on failure.
 
 Firefox's `about:license` remains available. **Licenses and source** includes
 Wild Buzzard, BrowserOS and Mozilla DevTools MCP provenance, Tor and linked
-library notices, blocker notices and source links. Android dependency notices
+library notices, blocker notices and source links in separate labeled buttons.
+The complete offline bundle is also available from **All notices and source links**.
+Android dependency notices
 use the same build-time OSS license generator as Fenix. Existing file licenses
 and source history remain controlling. CLI notice output:
 
@@ -181,7 +195,9 @@ signals preserve the running Tor service and onion identity. `--expired` is
 also available when starting the fixture.
 Send `SIGUSR2` to test a self-signed leaf, or start with `--self-signed-leaf`.
 `SIGHUP` returns to a valid leaf signed by the original persistent private CA.
-The suite also checks unenrolled onions, hostname mismatches, clearnet private-CA
+The suite also checks a second private onion that could accept the same key but
+has not been enrolled: it must fail before TLS because that key is not tried.
+It checks unenrolled public onions, hostname mismatches, clearnet private-CA
 rejection, and blocked localhost access from a Tor tab. These are test procedures,
 not claims that device validation has already passed.
 It first checks both scanner cancellation controls, then imports the complete

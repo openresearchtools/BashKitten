@@ -2,7 +2,18 @@
 <resources>
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:colorAccent">#c8c8c8</item>
+        <item name="android:windowBackground">@color/wildbuzzard_surface</item>
+        <item name="android:colorBackground">@color/wildbuzzard_surface</item>
+        <item name="android:colorForeground">@color/wildbuzzard_text</item>
+        <item name="android:textColorPrimary">@color/wildbuzzard_text</item>
+        <item name="android:textColorSecondary">@color/wildbuzzard_secondary</item>
+        <item name="android:colorAccent">@color/wildbuzzard_secondary</item>
+        <item name="android:colorControlNormal">@color/wildbuzzard_secondary</item>
+        <item name="android:colorControlActivated">@color/wildbuzzard_secondary</item>
+        <item name="android:colorButtonNormal">@color/wildbuzzard_button</item>
+        <item name="colorAccent">@color/wildbuzzard_secondary</item>
+        <item name="colorControlNormal">@color/wildbuzzard_secondary</item>
+        <item name="colorControlActivated">@color/wildbuzzard_secondary</item>
+        <item name="colorButtonNormal">@color/wildbuzzard_button</item>
     </style>
 </resources>

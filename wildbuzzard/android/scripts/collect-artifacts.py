@@ -30,7 +30,8 @@ for source in outputs:
             if any(not name.startswith('lib/arm64-v8a/') for name in libraries):
                 raise SystemExit('APK contains non-ARM64 native libraries: ' + str(source))
             if 'lib/arm64-v8a/libtor.so' not in libraries: raise SystemExit('Tor not packaged')
-            if 'assets/THIRD-PARTY-NOTICES.txt' not in apk.namelist(): raise SystemExit('Missing legal notices')
+            for notice in ('THIRD-PARTY-NOTICES', 'WILDBUZZARD-NOTICES', 'TOR-NOTICES', 'BLOCKER-NOTICES', 'QR-NOTICES'):
+                if 'assets/' + notice + '.txt' not in apk.namelist(): raise SystemExit('Missing legal notices: ' + notice)
             with zipfile.ZipFile(io.BytesIO(apk.read('assets/omni.ja'))) as engine:
                 resources = set(engine.namelist())
                 required = {

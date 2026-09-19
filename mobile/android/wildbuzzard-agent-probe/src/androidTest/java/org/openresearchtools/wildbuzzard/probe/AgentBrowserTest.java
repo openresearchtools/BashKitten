@@ -54,16 +54,21 @@ public final class AgentBrowserTest {
         assertTrue(device.wait(Until.hasObject(By.text("Adblocking for this tab")), 10000));
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-tab-controls.png")));
         click(device, "Licenses and source");
+        assertTrue(device.wait(Until.hasObject(By.text("Wild Buzzard, BrowserOS and agent tools")), 10000));
+        assertTrue(device.wait(Until.hasObject(By.text("C Tor and its dependencies")), 10000));
+        assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-licenses.png")));
+        click(device, "All notices and source links");
         assertTrue("Offline source and copyright bundle is displayed",
             device.wait(Until.hasObject(By.textStartsWith("Wild Buzzard for Android")), 10000));
-        assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-licenses.png")));
+        click(device, "Close");
         click(device, "Android library licenses");
         assertFalse("Resolved dependency licenses are packaged",
             device.wait(Until.hasObject(By.text("Dependency notices unavailable")), 1000));
         assertNotNull("Android dependency list", device.wait(Until.findObject(By.clazz("android.widget.ListView")), 10000));
         device.pressBack();
-        device.pressBack();
-        device.pressBack();
+        device.waitForIdle();
+        click(device, "Back");
+        click(device, "Back");
     }
     private void verifyProcessRecovery(Context context, UiDevice device) throws Exception {
         ProbeActivity probe = ProbeActivity.active;

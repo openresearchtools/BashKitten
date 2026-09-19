@@ -313,6 +313,19 @@ fun MainMenu(
             )
         }
 
+        MenuGroup {
+            val context = LocalContext.current
+            MenuItem(
+                label = "Private Tor sites",
+                beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_settings_24),
+                onClick = {
+                    context.startActivity(android.content.Intent(
+                        context, org.openresearchtools.wildbuzzard.OnionActivity::class.java,
+                    ))
+                },
+            )
+        }
+
         LibraryMenuGroup(
             isDownloadHighlighted = isDownloadHighlighted,
             onBookmarksMenuClick = onBookmarksMenuClick,

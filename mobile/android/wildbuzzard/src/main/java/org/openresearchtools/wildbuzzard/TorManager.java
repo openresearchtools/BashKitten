@@ -106,13 +106,13 @@ final class TorManager {
     }
     String proxySecret() { return gateway == null ? "" : gateway.secret; }
     List<String> identities() { return new ArrayList<>(installed); }
-    void save(OnionKey key, Consumer<String> complete) {
+    void save(OnionKey key, Runnable saved, Consumer<String> complete) {
         io.execute(() -> {
             try {
                 JSONObject stored = keys.read();
                 if (!stored.has(key.host) && stored.length() >= 64) throw new IllegalStateException("Key limit reached");
                 stored.put(key.host, key.key); keys.write(stored);
-                app.main.post(() -> ready(port -> io.execute(() -> {
+                app.main.post(() -> { saved.run(); ready(port -> io.execute(() -> {
                     try {
                         service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.controlKey());
                         installed.add(key.host);
@@ -120,7 +120,7 @@ final class TorManager {
                     } catch (Exception error) {
                         app.main.post(() -> complete.accept("Key saved; Tor is unavailable. Retry when connected."));
                     }
-                }), ignored -> complete.accept("Key saved; Tor is unavailable. Retry when connected.")));
+                }), ignored -> complete.accept("Key saved; Tor is unavailable. Retry when connected.")); });
             } catch (Exception error) { app.main.post(() -> complete.accept("Could not save onion key")); }
         });
     }

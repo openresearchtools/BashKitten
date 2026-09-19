@@ -28,6 +28,8 @@ service = root/'service'
 (service/'authorized_clients').mkdir(parents=True, exist_ok=True)
 public_service = root/'public-service'
 public_service.mkdir(parents=True, exist_ok=True)
+other_private_service = root/'other-private-service'
+(other_private_service/'authorized_clients').mkdir(parents=True, exist_ok=True)
 
 def openssl(*values):
     return subprocess.check_output(['openssl', *map(str, values)], stderr=subprocess.DEVNULL)
@@ -39,26 +41,31 @@ public = openssl('pkey', '-in', client, '-pubout', '-outform', 'DER')[-32:]
 private = openssl('pkey', '-in', client, '-outform', 'DER')[-32:]
 key = base64.b32encode(private).decode().rstrip('=')
 (service/'authorized_clients/test.auth').write_text('descriptor:x25519:'+base64.b32encode(public).decode().rstrip('=')+'\n')
-(root/'torrc').write_text(f'DataDirectory {root}/data\nSocksPort 0\nHiddenServiceDir {service}\nHiddenServicePort 443 127.0.0.1:9443\nHiddenServiceDir {public_service}\nHiddenServicePort 443 127.0.0.1:9443\nLog notice stdout\n')
+# The same key could decrypt this service, but it must never be tried without a separate enrollment.
+(other_private_service/'authorized_clients/test.auth').write_text((service/'authorized_clients/test.auth').read_text())
+(root/'torrc').write_text(f'DataDirectory {root}/data\nSocksPort 0\nHiddenServiceDir {service}\nHiddenServicePort 443 127.0.0.1:9443\nHiddenServiceDir {public_service}\nHiddenServicePort 443 127.0.0.1:9443\nHiddenServiceDir {other_private_service}\nHiddenServicePort 443 127.0.0.1:9443\nLog notice stdout\n')
 log = (root/'tor.log').open('a')
 tor = subprocess.Popen([args.tor, '-f', str(root/'torrc')], stdout=log, stderr=subprocess.STDOUT)
 server = None
 try:
     deadline = time.monotonic()+20
-    while not (service/'hostname').exists() or not (public_service/'hostname').exists():
+    while not all((folder/'hostname').exists() for folder in (service, public_service, other_private_service)):
         if tor.poll() is not None or time.monotonic() > deadline:
             raise RuntimeError('Tor did not initialize; inspect tor.log')
         time.sleep(0.1)
     host = (service/'hostname').read_text().strip()
     public_host = (public_service/'hostname').read_text().strip()
-    (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'key':key,'expired':args.expired}))
+    other_private_host = (other_private_service/'hostname').read_text().strip()
+    def write_probe(expired):
+        (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'otherPrivateOnion':other_private_host,'key':key,'expired':expired}))
+    write_probe(args.expired)
     (root/'fixture.auth_private').write_text(host.removesuffix('.onion')+':descriptor:x25519:'+key+'\n')
     (root/'qr.txt').write_text('http://'+host+'?key='+key+'\n')
     if not (root/'ca.pem').exists():
         openssl('req','-x509','-newkey','rsa:2048','-nodes','-days','30','-subj','/CN=WildBuzzard Test Private CA','-addext','basicConstraints=critical,CA:TRUE','-addext','keyUsage=critical,keyCertSign,cRLSign','-keyout',root/'ca.key','-out',root/'ca.pem')
     def certificate_context(expired, self_signed=False):
         openssl('req','-new','-newkey','rsa:2048','-nodes','-subj','/CN='+host,'-keyout',root/'server.key','-out',root/'server.csr')
-        (root/'extensions').write_text('subjectAltName=DNS:'+host+',DNS:'+public_host+',IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
+        (root/'extensions').write_text('subjectAltName=DNS:'+host+',DNS:'+public_host+',DNS:'+other_private_host+',IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
         if expired:
             (root/'cert-index').touch(exist_ok=True)
             (root/'cert-records').mkdir(exist_ok=True)
@@ -112,7 +119,7 @@ commonName=supplied
         except Exception as error:
             print('Certificate renewal failed; previous TLS context retained: '+str(error),flush=True)
             return
-        (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'key':key,'expired':expired}))
+        write_probe(expired)
         print('TLS leaf renewed; self-signed='+str(self_signed)+', expired='+str(expired),flush=True)
     signal.signal(signal.SIGHUP,lambda *_: renew(False))
     signal.signal(signal.SIGUSR1,lambda *_: renew(True))

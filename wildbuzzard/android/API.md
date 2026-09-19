@@ -103,6 +103,12 @@ Call `capabilities` to discover supported methods. Navigation also supports
 returns a `content://` URI with read permission granted to the caller's package;
 it expires after five minutes.
 
+Both `tabs.create` and `navigate` automatically route `.onion` addresses through
+Tor, including when the caller leaves `tor` false or omits it. Navigation in an
+existing direct-network tab creates an isolated Tor session in that same tab.
+Imported authentication keys are selected by exact onion service ID, never by
+trying keys saved for other sites.
+
 Element references are opaque, tied to a tab/document, and refreshed by each
 snapshot. Optional `frameId` values must identify a frame inside the requested
 tab. Content tools only operate on HTTP/HTTPS documents. Raw Gecko references,

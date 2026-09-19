@@ -96,7 +96,6 @@ final class AgentController extends ContextWrapper {
             case "tabs.close": app.close(tab); break;
             case "navigate": {
                 String url = BrowserApp.webUrl(params.getString("url"));
-                if (BrowserApp.onion(url) && !tab.tor) throw new IllegalArgumentException("Create a Tor tab for onion navigation");
                 tab.session.loadUri(url); break;
             }
             case "back": tab.session.goBack(); break;
