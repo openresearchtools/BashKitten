@@ -95,7 +95,7 @@ public final class CommandBrowserTest {
         assertNotNull(counter); counter.click();
         assertTrue(device.wait(Until.hasObject(By.desc("Page preview")), 15000));
         SystemClock.sleep(1000);
-        String thumbnail = device.executeShellCommand("run-as org.openresearchtools.wildbuzzard cat no_backup/mozac_browser_thumbnails/thumbnails/" + first + ".0 | base64");
+        String thumbnail = device.executeShellCommand("run-as org.openresearchtools.wildbuzzard base64 no_backup/mozac_browser_thumbnails/thumbnails/" + first + ".0");
         assertFixturePixels(android.util.Base64.decode(thumbnail, android.util.Base64.DEFAULT));
         device.pressBack();
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 15000); assertNotNull(menu); menu.click();
