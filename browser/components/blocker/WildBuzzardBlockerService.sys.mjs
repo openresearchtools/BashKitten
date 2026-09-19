@@ -2017,8 +2017,11 @@ export const WildBuzzardBlockerService = {
       }
     }
 
-    // 2) Network fetch (upstream + custom URLs)
-    const fetchedLists = await this._fetchAndPersistLists(descriptors);
+    // Android's first page must not wait for network list downloads. Its
+    // bundled lists seed the engine; the normal updater keeps them current.
+    const fetchedLists = Services.appinfo.OS === "Android"
+      ? []
+      : await this._fetchAndPersistLists(descriptors);
     if (this._initGeneration !== generation) {
       return;
     }
