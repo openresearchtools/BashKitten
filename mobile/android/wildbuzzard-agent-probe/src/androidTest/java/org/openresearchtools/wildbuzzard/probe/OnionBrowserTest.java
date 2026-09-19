@@ -40,7 +40,7 @@ public final class OnionBrowserTest {
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 20000);
         assertNotNull("Fenix menu", menu); menu.click();
         if (!device.wait(Until.hasObject(By.desc("Private Tor sites")), 2000)) {
-            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Private Tor sites");
+            new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Private Tor sites"));
         }
         click(device, "Private Tor sites");
         assertTrue(device.wait(Until.hasObject(By.text("Private Tor sites")), 10000));
