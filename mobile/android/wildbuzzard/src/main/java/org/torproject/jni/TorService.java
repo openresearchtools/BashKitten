@@ -392,7 +392,7 @@ public class TorService extends Service implements TorControlCommands {
 
     private int getPortFromGetInfo(String key) {
         var value = getInfo(key);
-        if (value.trim().isEmpty()) return 0; // port is disabled
+        if (value.trim().isEmpty() || value.contains("unix:")) return 0; // port is disabled
         return Integer.parseInt(value.substring(value.lastIndexOf(':') + 1, value.length() - 1));
     }
 

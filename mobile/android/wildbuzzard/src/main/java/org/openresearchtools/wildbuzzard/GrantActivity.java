@@ -16,7 +16,7 @@ public final class GrantActivity extends Activity {
                     .setMessage(name + " can create and control its own tabs, read their pages, and act using the logins in those tabs. You can revoke access from WildBuzzard's menu.")
                     .setNegativeButton("Cancel", (d, w) -> finish())
                     .setPositiveButton("Allow", (d, w) -> { app.grants.approve(request);
-                    startForegroundService(new android.content.Intent(this, BrowserControlService.class)); finish(); })
+                    app.keepAlive(); finish(); })
                     .setOnCancelListener(d -> finish()).show();
         } catch (Exception error) { finish(); }
     }

@@ -22,13 +22,16 @@ public final class BrowserControlService extends Service {
         super.onCreate(); app = BrowserApp.get(this);
     }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        if (intent == null || !app.serviceToken.equals(intent.getStringExtra("token"))) {
+            stopSelf(startId); return START_NOT_STICKY;
+        }
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("browser", "Browser automation", NotificationManager.IMPORTANCE_LOW));
         PendingIntent open = PendingIntent.getActivity(this, 0, app.host.launchIntent(), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         startForeground(1, new Notification.Builder(this, "browser").setContentTitle("WildBuzzard is available")
             .setContentText("Browser tabs and Tor connections stay active").setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(open).setOngoing(true).build());
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
     private final IAgentBrowser.Stub binder = new IAgentBrowser.Stub() {
         @Override public PendingIntent requestAccess() { return app.grants.request(Binder.getCallingUid()); }

@@ -16,6 +16,7 @@ final class TorManager {
     private final SecretStore keys;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private volatile TorService service;
+    private TorGateway gateway;
     private final Set<String> installed = new HashSet<>();
     private boolean starting;
     private volatile boolean restored;
@@ -32,8 +33,11 @@ final class TorManager {
     void ready(Consumer<Integer> success, Consumer<String> failure) {
         if (!starting) {
             try {
+                app.keepAlive();
+                String socket = new java.io.File(app.getNoBackupFilesDir(), "tor-socks").getAbsolutePath();
+                if (gateway == null) gateway = new TorGateway(socket);
                 Files.write(TorService.getTorrc(app).toPath(),
-                    ("SocksPort auto IsolateSOCKSAuth\nHTTPTunnelPort 0\nDisableNetwork 1\nSafeSocks 1\nTestSocks 0\nClientOnly 1\n").getBytes(StandardCharsets.UTF_8));
+                    ("SocksPort unix:" + socket + " IsolateSOCKSAuth\nHTTPTunnelPort 0\nDisableNetwork 1\nSafeSocks 1\nTestSocks 0\nClientOnly 1\n").getBytes(StandardCharsets.UTF_8));
                 starting = true;
                 if (!app.bindService(new Intent(app, TorService.class), connection, Context.BIND_AUTO_CREATE)) throw new IllegalStateException();
             } catch (Exception error) { starting = false; failure.accept("Could not start Tor"); return; }
@@ -64,7 +68,7 @@ final class TorManager {
                     if (SystemClock.elapsedRealtime() > deadline) throw new IllegalStateException();
                     Thread.sleep(250);
                 }
-                int port = current.getSocksPort();
+                int port = gateway.port();
                 if (port < 1) throw new IllegalStateException();
                 app.main.post(() -> { app.refreshTor(port, new ArrayList<>(installed)); success.accept(port); });
             } catch (Exception error) {
@@ -72,12 +76,14 @@ final class TorManager {
             }
         });
     }
+    String proxySecret() { return gateway == null ? "" : gateway.secret; }
     List<String> identities() { return new ArrayList<>(installed); }
     void save(OnionKey key, Consumer<String> complete) {
         ready(port -> io.execute(() -> {
             try {
-                service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.key);
                 JSONObject stored = keys.read();
+                if (!stored.has(key.host) && stored.length() >= 64) throw new IllegalStateException("Key limit reached");
+                service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.key);
                 stored.put(key.host, key.key); keys.write(stored);
                 app.main.post(() -> { installed.add(key.host); app.refreshTor(port, identities()); complete.accept("Onion key imported"); });
             } catch (Exception error) { app.main.post(() -> complete.accept("Could not import onion key")); }

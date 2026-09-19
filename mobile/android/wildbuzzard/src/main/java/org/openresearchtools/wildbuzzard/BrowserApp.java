@@ -29,6 +29,7 @@ public final class BrowserApp extends ContextWrapper {
     final AppGrants grants;
     final TorManager tor;
     public final Host host;
+    final String serviceToken = UUID.randomUUID().toString();
     final LinkedHashMap<String, Tab> tabs = new LinkedHashMap<>();
     public static final String USER = "local-user";
     public static final class Tab {
@@ -46,6 +47,9 @@ public final class BrowserApp extends ContextWrapper {
     public BrowserApp(Context context, Host host) {
         super(context.getApplicationContext()); this.host = host;
         grants = new AppGrants(this); tor = new TorManager(this);
+    }
+    void keepAlive() {
+        startForegroundService(new Intent(this, BrowserControlService.class).putExtra("token", serviceToken));
     }
     public static String webUrl(String value) {
         URI uri = URI.create(value);
@@ -99,7 +103,7 @@ public final class BrowserApp extends ContextWrapper {
     void configure(Tab tab, List<String> identities, Consumer<JSONObject> done, Consumer<String> fail) {
         try {
             JSONObject params = new JSONObject().put("tor", tab.tor).put("port", tab.port)
-                .put("identities", new JSONArray(identities)).put("adblock", tab.adblock);
+                .put("proxySecret", tor.proxySecret()).put("identities", new JSONArray(identities)).put("adblock", tab.adblock);
             page(tab, "configure", params, done, fail);
         } catch (Exception error) { fail.accept("Could not configure tab"); }
     }

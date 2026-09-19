@@ -103,3 +103,5 @@ lifecycle/page suite. Verify `adb shell getprop ro.product.cpu.abi` reports
 `arm64-v8a`. Test records and actual build results are recorded separately;
 this document describes the implementation and does not assert that an
 unbuilt revision has passed device validation.
+
+Tor listens on a filesystem socket inside the Android app sandbox. A process-owned SOCKS gateway requires a random in-memory credential before forwarding to that socket. The gateway retains its listening socket if Tor stops, so a different app cannot take over the browser's trusted endpoint. Imported keys are never exposed through an unauthenticated shared localhost Tor port.
