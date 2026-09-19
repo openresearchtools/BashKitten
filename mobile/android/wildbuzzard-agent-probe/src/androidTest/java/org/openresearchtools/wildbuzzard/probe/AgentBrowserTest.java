@@ -69,7 +69,8 @@ public final class AgentBrowserTest {
         device.pressBack();
         device.waitForIdle();
         click(device, "Back");
-        click(device, "Back");
+        click(device, "Navigate up");
+        assertNotNull("Settings returns to the browser", device.wait(Until.findObject(By.desc("More options")), 10000));
     }
     private void verifyProcessRecovery(Context context, UiDevice device) throws Exception {
         ProbeActivity probe = ProbeActivity.active;
