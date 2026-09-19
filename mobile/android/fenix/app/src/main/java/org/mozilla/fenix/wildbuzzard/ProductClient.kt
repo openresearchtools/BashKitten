@@ -12,7 +12,7 @@ class ProductClient(private val delegate: Client) : Client() {
     override fun fetch(request: Request): Response {
         val host = URI(request.url).host?.lowercase().orEmpty()
         val disabled = listOf("mozilla.com", "mozilla.org", "mozilla.net", "mozilla.cloud", "mozilla.social", "firefox.com", "firefoxusercontent.com", "mozaws.net", "mozgcp.net", "firefox.settings.services.mozilla.com", "adjust.com", "sentry.io")
-        if (disabled.any { host == it || host.endsWith(".$it") }) throw IOException("Mozilla product services are disabled in WildBuzzard")
+        if (disabled.any { host == it || host.endsWith(".$it") }) throw IOException("Mozilla product services are disabled in Wild Buzzard")
         return delegate.fetch(request)
     }
 }

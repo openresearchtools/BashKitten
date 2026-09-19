@@ -16,7 +16,7 @@ public final class BrowserCommand {
     public static void main(String[] arguments) {
         try { System.exit(run(arguments)); }
         catch (Exception error) {
-            System.err.println("WildBuzzard: " + (error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
+            System.err.println("Wild Buzzard: " + (error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()));
             System.exit(1);
         }
     }
@@ -32,7 +32,7 @@ public final class BrowserCommand {
         }
         if (directory == null) throw new IllegalArgumentException("Set --state-dir to an app-private directory");
         if (args.contains("--help")) {
-            System.out.println("WildBuzzard Android commands (included in the browser APK)\n"
+            System.out.println("Wild Buzzard Android commands (included in the browser APK)\n"
                 + "  --authorize                  Approve this terminal's command key\n"
                 + "  METHOD [PARAMS_JSON]          Run a browser tool\n"
                 + "  --json REQUEST_JSON          Run a complete JSON request\n"
@@ -48,7 +48,7 @@ public final class BrowserCommand {
             return 0;
         }
         if (args.equals(Collections.singletonList("--licenses"))) { licenses(); return 0; }
-        if (args.equals(Collections.singletonList("--version"))) { System.out.println("WildBuzzard Android command protocol 1"); return 0; }
+        if (args.equals(Collections.singletonList("--version"))) { System.out.println("Wild Buzzard Android command protocol 1"); return 0; }
         boolean authorize = args.equals(Collections.singletonList("--authorize"));
         Path file = directory.resolve("command-key");
         if (authorize && !Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
@@ -65,7 +65,7 @@ public final class BrowserCommand {
         if (Files.size(file) != 64) throw new IOException("Invalid command key file");
         byte[] key = CommandProtocol.key(new String(Files.readAllBytes(file), StandardCharsets.US_ASCII));
         if (authorize) {
-            System.err.println("Approve command key " + CommandProtocol.id(key).substring(0, 12) + " in WildBuzzard.");
+            System.err.println("Approve command key " + CommandProtocol.id(key).substring(0, 12) + " in Wild Buzzard.");
             launch("key", CommandProtocol.hex(key));
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(3);
             do {
@@ -135,7 +135,7 @@ public final class BrowserCommand {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); byte[] buffer = new byte[1024]; int count;
         while ((count = process.getInputStream().read(buffer)) != -1) if (bytes.size() < 16384) bytes.write(buffer, 0, count);
         if (process.waitFor() != 0 || bytes.toString("UTF-8").contains("Error:"))
-            throw new IOException("Android could not open WildBuzzard. Run from a visible terminal with Termux's am command, or open the browser yourself.");
+            throw new IOException("Android could not open Wild Buzzard. Run from a visible terminal with Termux's am command, or open the browser yourself.");
     }
     private static void licenses() throws Exception {
         for (String path : System.getProperty("java.class.path", "").split(File.pathSeparator)) {

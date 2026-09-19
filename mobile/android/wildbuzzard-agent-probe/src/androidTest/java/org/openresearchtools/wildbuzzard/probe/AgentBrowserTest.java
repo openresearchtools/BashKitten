@@ -47,15 +47,15 @@ public final class AgentBrowserTest {
         assertNotNull("Fenix menu", menu); menu.click();
         device.waitForIdle();
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-menu.png")));
-        if (!device.wait(Until.hasObject(By.desc("WildBuzzard tab controls")), 2000)) {
-            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("WildBuzzard tab controls");
+        if (!device.wait(Until.hasObject(By.desc("Wild Buzzard tab controls")), 2000)) {
+            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Wild Buzzard tab controls");
         }
-        click(device, "WildBuzzard tab controls");
+        click(device, "Wild Buzzard tab controls");
         assertTrue(device.wait(Until.hasObject(By.text("Adblocking for this tab")), 10000));
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-tab-controls.png")));
         click(device, "Licenses and source");
         assertTrue("Offline source and copyright bundle is displayed",
-            device.wait(Until.hasObject(By.textStartsWith("WildBuzzard for Android")), 10000));
+            device.wait(Until.hasObject(By.textStartsWith("Wild Buzzard for Android")), 10000));
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-licenses.png")));
         click(device, "Android library licenses");
         assertFalse("Resolved dependency licenses are packaged",

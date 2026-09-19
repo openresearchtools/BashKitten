@@ -13,7 +13,7 @@ public final class BrowserKeepAliveService extends Service {
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("browser", "Browser automation", NotificationManager.IMPORTANCE_LOW));
         PendingIntent open = PendingIntent.getActivity(this, 0, app.host.launchIntent(), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        startForeground(1, new Notification.Builder(this, "browser").setContentTitle("WildBuzzard is available")
+        startForeground(1, new Notification.Builder(this, "browser").setContentTitle("Wild Buzzard is available")
             .setContentText("Browser tabs and Tor connections stay active").setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(open).setOngoing(true).build());
         return START_NOT_STICKY;

@@ -16,6 +16,7 @@
         <activity android:name="org.openresearchtools.wildbuzzard.GrantActivity" android:exported="false" />
         <activity android:name="org.openresearchtools.wildbuzzard.CommandAccessActivity" android:exported="true" />
         <activity android:name="org.openresearchtools.wildbuzzard.OnionActivity" android:exported="false" />
+        <activity android:name="org.openresearchtools.wildbuzzard.OnionCaptureActivity" android:exported="false" android:theme="@style/AppTheme" />
         <service android:name="org.openresearchtools.wildbuzzard.BrowserControlService" android:exported="true">
             <intent-filter><action android:name="org.openresearchtools.wildbuzzard.BIND_AGENT" /></intent-filter>
         </service>

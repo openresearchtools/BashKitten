@@ -322,7 +322,7 @@ fun MainMenu(
         )
 
         MenuGroup {
-            // Mozilla accounts and Sync are not product features in WildBuzzard.
+            // Mozilla accounts and Sync are not product features in Wild Buzzard.
 
             if (accessPoint == MenuAccessPoint.Home) {
                 MenuItem(
@@ -390,7 +390,7 @@ private fun ToolsAndActionsMenuGroup(
     MenuGroup {
         val wildBuzzardContext = androidx.compose.ui.platform.LocalContext.current
         MenuItem(
-            label = "WildBuzzard tab controls",
+            label = "Wild Buzzard tab controls",
             beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_settings_24),
             onClick = {
                 wildBuzzardContext.startActivity(android.content.Intent(

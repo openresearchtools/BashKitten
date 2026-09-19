@@ -12,9 +12,9 @@
 ##
 ## Reference: https://www.mozilla.org/styleguide/communications/translation/
 
--brand-short-name = WildBuzzard
--brand-full-name = WildBuzzard
+-brand-short-name = Wild Buzzard
+-brand-full-name = Wild Buzzard
 # This brand name can be used in messages where the product name needs to
 # remain unchanged across different versions (Nightly, Beta, etc.).
--brand-product-name = WildBuzzard
+-brand-product-name = Wild Buzzard
 -vendor-short-name = Open Research Tools

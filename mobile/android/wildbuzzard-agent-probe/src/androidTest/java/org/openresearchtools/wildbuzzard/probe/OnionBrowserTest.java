@@ -39,12 +39,23 @@ public final class OnionBrowserTest {
         device.waitForIdle();
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 20000);
         assertNotNull("Fenix menu", menu); menu.click();
-        if (!device.wait(Until.hasObject(By.desc("WildBuzzard tab controls")), 2000)) {
-            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("WildBuzzard tab controls");
+        if (!device.wait(Until.hasObject(By.desc("Wild Buzzard tab controls")), 2000)) {
+            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Wild Buzzard tab controls");
         }
-        click(device, "WildBuzzard tab controls");
+        click(device, "Wild Buzzard tab controls");
         click(device, "Onion keys");
         assertTrue(device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
+        String browserPid = device.executeShellCommand("pidof org.openresearchtools.wildbuzzard").trim();
+        device.executeShellCommand("pm grant org.openresearchtools.wildbuzzard android.permission.CAMERA");
+        click(device, "Scan QR code");
+        click(device, "Close scanner");
+        assertTrue("Scanner closes back to enrollment", device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
+        click(device, "Scan QR code");
+        assertTrue(device.wait(Until.hasObject(By.text("Close scanner")), 10000));
+        device.pressBack();
+        assertTrue("Android Back closes scanner", device.wait(Until.hasObject(By.text("Private onion sites")), 10000));
+        assertEquals("Scanner cancellation keeps browser alive", browserPid, device.executeShellCommand("pidof org.openresearchtools.wildbuzzard").trim());
+        click(device, "Enter manually");
         List<UiObject2> inputs = device.findObjects(By.clazz("android.widget.EditText"));
         assertEquals("Address and private key fields", 2, inputs.size());
         inputs.get(0).setText(fixture.getString("onion"));

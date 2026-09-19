@@ -15,7 +15,7 @@ binary is required. In Termux, add this function to your shell configuration:
 wildbuzzard() {
     local browser_apk
     browser_apk="$(pm path org.openresearchtools.wildbuzzard | sed -n 's/^package://p' | head -n 1)"
-    [ -n "$browser_apk" ] || { echo 'Install WildBuzzard first' >&2; return 1; }
+    [ -n "$browser_apk" ] || { echo 'Install Wild Buzzard first' >&2; return 1; }
     env -u LD_PRELOAD -u LD_LIBRARY_PATH CLASSPATH="$browser_apk" \
         /system/bin/app_process / org.openresearchtools.wildbuzzard.BrowserCommand "$@"
 }

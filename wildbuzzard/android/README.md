@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
-# WildBuzzard for Android
+# Wild Buzzard for Android
 
 **Install `wildbuzzard-arm64-debug.apk` only.** It includes the browser, agent
 control and Tor. The two probe APKs in developer artifacts are optional test
@@ -10,7 +10,7 @@ ancestry of `refactor/browser-agent-independent` at
 `0bd2d7da099a365d2243b320e1e6b38e8ad76cf4`.
 
 The app uses the **Fenix interface and tab store**, Firefox's full Gecko engine,
-and WildBuzzard's existing neutral light/dark palette and branding. Browser
+and Wild Buzzard's existing neutral light/dark palette and branding. Browser
 navigation, bookmarks, history, downloads, local passwords, permissions,
 reader view, private browsing and desktop-site controls remain Fenix features.
 Mozilla accounts, Sync, telemetry, marketing, experiments, remote rollouts,
@@ -19,11 +19,11 @@ browser service HTTP client rejects Mozilla product endpoints; it does not
 prevent users from visiting Mozilla websites. Bundled security data and Gecko's
 sandbox, same-origin checks, certificate validation and content isolation remain.
 DuckDuckGo is the default search engine. Desktop torrents, agent runtimes and
-WildBuzzard search extensions are not Android runtime dependencies.
+Wild Buzzard search extensions are not Android runtime dependencies.
 Android includes the desktop `99-wildbuzzard.js` policy directly. This also
 disables vendor Safe Browsing lookups, remote certificate/blocklist updates and
 Mozilla model downloads. The native blocker remains enabled; keeping Gecko and
-its bundled security data current requires publishing updated WildBuzzard builds.
+its bundled security data current requires publishing updated Wild Buzzard builds.
 
 ## Android app control
 
@@ -34,9 +34,9 @@ commands both use the browser's own dispatcher and tab ownership checks.
 
 See [API.md](API.md). The AIDL contract lives in
 `mobile/android/wildbuzzard-sdk/src/main/aidl`. External apps bind to the
-explicit WildBuzzard service, obtain a user authorization PendingIntent, then
+explicit Wild Buzzard service, obtain a user authorization PendingIntent, then
 control their own tabs. Grants are tied to package names and signing
-certificates. They can be revoked from **WildBuzzard tab controls**.
+certificates. They can be revoked from **Wild Buzzard tab controls**.
 
 Tab closure removes a tab from Fenix. It never requests application shutdown,
 force-stops a process, or stops Tor. Android can still reclaim or terminate an
@@ -70,6 +70,11 @@ TorKitten's `http://<v3-address>.onion?key=<x25519-key>` QR. Keys are stored usi
 Android Keystore AES-GCM in app-private, backup-excluded storage and are sent
 to Tor's in-memory client-auth registry. QR enrollment URLs are parsed locally;
 they are never navigated or sent to a search engine.
+The QR and `.auth_private` options are first in the enrollment screen. Both
+extract the complete address/key pair; manual fields are an optional fallback.
+Imported identities appear as **Open …** buttons, so the address need not be
+retyped. The scanner has a visible **Close scanner** button and supports Android
+Back, returning to enrollment without ending the browser.
 
 For an enrolled v3 onion identity reached through that tab's Tor route, Gecko
 accepts an unknown issuer or self-signed TLS certificate without a leaf-cert
@@ -77,7 +82,7 @@ exception or private-CA installation. Certificate hostname and validity checks
 remain, including for renewals. This policy is ephemeral and keyed to the exact
 GeckoView session origin attribute and onion identity. Clearnet HTTPS, other
 onion identities and other tab contexts retain normal certificate validation.
-TorKitten itself is unchanged. WildBuzzard does not claim Tor Browser's complete
+TorKitten itself is unchanged. Wild Buzzard does not claim Tor Browser's complete
 fingerprinting/anonymity protections.
 
 ## Build and licenses
@@ -98,7 +103,7 @@ use Android debug signing and are test builds. Their manifest records source
 revision and SHA-256 checksums. Build logs are retained even on failure.
 
 Firefox's `about:license` remains available. **Licenses and source** includes
-WildBuzzard, BrowserOS and Mozilla DevTools MCP provenance, Tor and linked
+Wild Buzzard, BrowserOS and Mozilla DevTools MCP provenance, Tor and linked
 library notices, blocker notices and source links. Android dependency notices
 use the same build-time OSS license generator as Fenix. Existing file licenses
 and source history remain controlling. CLI notice output:
@@ -109,7 +114,7 @@ python3 wildbuzzard/android/scripts/notices.py --licenses
 
 ## Device validation
 
-The separate **WildBuzzard Agent Probe** app uses the public Binder contract
+The separate **Wild Buzzard Agent Probe** app uses the public Binder contract
 under a different Android UID. Run it on a real ARM64 Android device or an
 ARM64 Cuttlefish instance, with a local test server:
 
@@ -120,7 +125,7 @@ adb install -r <browser.apk>
 adb install -r <probe.apk>
 ```
 
-Use the probe's access button, approve its package in WildBuzzard, then run its
+Use the probe's access button, approve its package in Wild Buzzard, then run its
 lifecycle/page suite. Verify `adb shell getprop ro.product.cpu.abi` reports
 `arm64-v8a`. Test records and actual build results are recorded separately;
 this document describes the implementation and does not assert that an

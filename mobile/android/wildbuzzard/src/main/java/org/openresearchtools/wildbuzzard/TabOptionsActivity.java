@@ -13,7 +13,7 @@ public final class TabOptionsActivity extends ProductActivity {
         BrowserApp app = BrowserApp.get(this);
         BrowserApp.Tab tab = app.host.selected();
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24, 60, 24, 24);
-        TextView title = new TextView(this); title.setText("WildBuzzard · this tab"); title.setTextSize(22); root.addView(title);
+        TextView title = new TextView(this); title.setText("Wild Buzzard · this tab"); title.setTextSize(22); root.addView(title);
         if (tab != null) {
             Switch desktop = new Switch(this); desktop.setText("Desktop site"); desktop.setChecked(tab.desktop);
             desktop.setOnCheckedChangeListener((b, enabled) -> app.host.desktop(tab.id, enabled)); root.addView(desktop);
