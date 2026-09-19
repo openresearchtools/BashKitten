@@ -128,7 +128,7 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         .putExtra(HomeActivity.OPEN_TO_BROWSER, true)
 
-    override fun screenshot(id: String, result: Consumer<Bitmap>) {
+    override fun screenshot(id: String, result: Consumer<Bitmap?>) {
         val tab = components.core.store.state.tabs.find { it.id == id }
         val engine = tab?.engineState?.engineSession as? GeckoEngineSession
         fun find(view: View): GeckoView? {

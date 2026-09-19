@@ -62,7 +62,7 @@ jobs:
       - name: Compile Android product and independent agent tests
         run: |
           set -Eeuo pipefail
-          ./mach gradle :fenix:compileDebugKotlin :fenix:compileDebugJavaWithJavac :wildbuzzard-agent-probe:compileDebugJavaWithJavac :wildbuzzard-agent-probe:compileDebugAndroidTestJavaWithJavac 2>&1 | tee artifacts/jvm-build.log
+          ./mach gradle --continue :fenix:compileDebugKotlin :fenix:compileDebugJavaWithJavac :wildbuzzard-agent-probe:compileDebugJavaWithJavac :wildbuzzard-agent-probe:compileDebugAndroidTestJavaWithJavac 2>&1 | tee artifacts/jvm-build.log
       - name: Save Android toolchains and Gradle downloads
         if: always() && !cancelled() && steps.toolchain-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
