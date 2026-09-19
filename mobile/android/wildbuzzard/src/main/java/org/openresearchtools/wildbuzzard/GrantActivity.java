@@ -2,10 +2,10 @@
 package org.openresearchtools.wildbuzzard;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
 import android.os.Bundle;
 
-public final class GrantActivity extends Activity {
+public final class GrantActivity extends ProductActivity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         try {

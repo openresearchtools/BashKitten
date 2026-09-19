@@ -32,7 +32,7 @@
     <color name="fx_mobile_information">#4a4a4a</color>
     <color name="fx_mobile_on_information">@color/novaWhite</color>
     <color name="fx_mobile_information_container">#e6e6e6</color>
-    <color name="fx_mobile_on_information_container">#e6e6e6</color>
+    <color name="fx_mobile_on_information_container">#252525</color>
     <color name="fx_mobile_success">@color/novaGreen50</color>
     <color name="fx_mobile_on_success">@color/novaWhite</color>
     <color name="fx_mobile_warning">@color/novaYellow50</color>
@@ -49,7 +49,7 @@
     <color name="fx_mobile_surface_container_low">#ffffff</color>
     <color name="fx_mobile_surface_container_lowest">#ffffff</color>
     <color name="fx_mobile_autofill_text">#4a4a4a</color>
-    <color name="fx_mobile_selected_text">@color/novaGray35</color>
+    <color name="fx_mobile_selected_text">#c8c8c8</color>
     <color name="fx_mobile_icon_private">#4a4a4a</color>
     <color name="fx_mobile_scrim">@color/novaBlackA50</color>
 
@@ -59,13 +59,13 @@
 
     <!-- Layers -->
     <!-- Card background, Menu background, Dialog, Banner -->
-    <color name="fx_mobile_layer_color_2">@color/photonWhite</color>
+    <color name="fx_mobile_layer_color_2">#ffffff</color>
     <!-- Search -->
-    <color name="fx_mobile_layer_color_3">@color/photonLightGrey20</color>
+    <color name="fx_mobile_layer_color_3">#e6e6e6</color>
     <!-- Tooltip -->
     <color name="fx_mobile_layer_color_gradient_start">#e6e6e6</color>
     <!-- Tooltip -->
-    <color name="fx_mobile_layer_color_gradient_end">#e6e6e6</color>
+    <color name="fx_mobile_layer_color_gradient_end">#c8c8c8</color>
     <!-- Warning background -->
     <color name="fx_mobile_layer_color_warning">@color/photonYellow20</color>
     <!-- Error background -->
@@ -97,64 +97,64 @@
     <!-- Private theme color variables -->
 
     <!-- Material3 color variables -->
-    <color name="fx_mobile_private_primary">#4a4a4a</color>
-    <color name="fx_mobile_private_on_primary">@color/novaGray80</color>
-    <color name="fx_mobile_private_primary_container">#e6e6e6</color>
-    <color name="fx_mobile_private_on_primary_container">#e6e6e6</color>
+    <color name="fx_mobile_private_primary">#c8c8c8</color>
+    <color name="fx_mobile_private_on_primary">#252525</color>
+    <color name="fx_mobile_private_primary_container">#414141</color>
+    <color name="fx_mobile_private_on_primary_container">#e5e5e5</color>
     <color name="fx_mobile_private_primary_inverse">#4a4a4a</color>
-    <color name="fx_mobile_private_secondary">@color/novaGray20</color>
-    <color name="fx_mobile_private_on_secondary">@color/novaGray80</color>
-    <color name="fx_mobile_private_secondary_container">#e6e6e6</color>
-    <color name="fx_mobile_private_on_secondary_container">#e6e6e6</color>
-    <color name="fx_mobile_private_tertiary">#4a4a4a</color>
-    <color name="fx_mobile_private_on_tertiary">@color/novaGray80</color>
-    <color name="fx_mobile_private_tertiary_container">#e6e6e6</color>
-    <color name="fx_mobile_private_on_tertiary_container">#e6e6e6</color>
-    <color name="fx_mobile_private_background">#e6e6e6</color>
-    <color name="fx_mobile_private_on_background">#e6e6e6</color>
-    <color name="fx_mobile_private_surface">#e6e6e6</color>
-    <color name="fx_mobile_private_on_surface">#e6e6e6</color>
-    <color name="fx_mobile_private_surface_variant">#e6e6e6</color>
-    <color name="fx_mobile_private_on_surface_variant">#e6e6e6</color>
-    <color name="fx_mobile_private_surface_inverse">@color/novaGray30</color>
-    <color name="fx_mobile_private_on_surface_inverse">@color/novaGray80</color>
+    <color name="fx_mobile_private_secondary">#c8c8c8</color>
+    <color name="fx_mobile_private_on_secondary">#252525</color>
+    <color name="fx_mobile_private_secondary_container">#414141</color>
+    <color name="fx_mobile_private_on_secondary_container">#e5e5e5</color>
+    <color name="fx_mobile_private_tertiary">#d8d8d8</color>
+    <color name="fx_mobile_private_on_tertiary">#252525</color>
+    <color name="fx_mobile_private_tertiary_container">#303030</color>
+    <color name="fx_mobile_private_on_tertiary_container">#e5e5e5</color>
+    <color name="fx_mobile_private_background">#1e1e1e</color>
+    <color name="fx_mobile_private_on_background">#e5e5e5</color>
+    <color name="fx_mobile_private_surface">#303030</color>
+    <color name="fx_mobile_private_on_surface">#e5e5e5</color>
+    <color name="fx_mobile_private_surface_variant">#414141</color>
+    <color name="fx_mobile_private_on_surface_variant">#c8c8c8</color>
+    <color name="fx_mobile_private_surface_inverse">#e6e6e6</color>
+    <color name="fx_mobile_private_on_surface_inverse">#252525</color>
     <color name="fx_mobile_private_error">@color/novaRed30</color>
-    <color name="fx_mobile_private_on_error">@color/novaGray80</color>
+    <color name="fx_mobile_private_on_error">#252525</color>
     <color name="fx_mobile_private_error_container">@color/novaRed70</color>
-    <color name="fx_mobile_private_on_error_container">@color/novaVioletDesaturated0</color>
-    <color name="fx_mobile_private_information">#4a4a4a</color>
-    <color name="fx_mobile_private_on_information">@color/novaGray80</color>
-    <color name="fx_mobile_private_information_container">#e6e6e6</color>
-    <color name="fx_mobile_private_on_information_container">#e6e6e6</color>
+    <color name="fx_mobile_private_on_error_container">#e5e5e5</color>
+    <color name="fx_mobile_private_information">#c8c8c8</color>
+    <color name="fx_mobile_private_on_information">#252525</color>
+    <color name="fx_mobile_private_information_container">#303030</color>
+    <color name="fx_mobile_private_on_information_container">#e5e5e5</color>
     <color name="fx_mobile_private_success">@color/novaGreen30</color>
-    <color name="fx_mobile_private_on_success">@color/novaGray80</color>
+    <color name="fx_mobile_private_on_success">#252525</color>
     <color name="fx_mobile_private_warning">@color/novaYellow30</color>
-    <color name="fx_mobile_private_on_warning">@color/novaGray80</color>
+    <color name="fx_mobile_private_on_warning">#252525</color>
     <color name="fx_mobile_private_warning_container">@color/novaYellow70</color>
-    <color name="fx_mobile_private_on_warning_container">@color/novaVioletDesaturated0</color>
-    <color name="fx_mobile_private_outline">@color/novaGray45</color>
-    <color name="fx_mobile_private_outline_variant">#4a4a4a</color>
-    <color name="fx_mobile_private_surface_bright">#e6e6e6</color>
-    <color name="fx_mobile_private_surface_dim">#FF0D0321</color>
-    <color name="fx_mobile_private_surface_container">#e6e6e6</color>
-    <color name="fx_mobile_private_surface_container_high">#FF20163A</color>
-    <color name="fx_mobile_private_surface_container_highest">#e6e6e6</color>
-    <color name="fx_mobile_private_surface_container_low">#FF11042B</color>
-    <color name="fx_mobile_private_surface_container_lowest">#FF0D0321</color>
-    <color name="fx_mobile_private_autofill_text">#4a4a4a</color>
-    <color name="fx_mobile_private_selected_text">@color/novaGray45A81</color>
-    <color name="fx_mobile_private_icon_private">#4a4a4a</color>
+    <color name="fx_mobile_private_on_warning_container">#e5e5e5</color>
+    <color name="fx_mobile_private_outline">#808080</color>
+    <color name="fx_mobile_private_outline_variant">#414141</color>
+    <color name="fx_mobile_private_surface_bright">#414141</color>
+    <color name="fx_mobile_private_surface_dim">#1e1e1e</color>
+    <color name="fx_mobile_private_surface_container">#303030</color>
+    <color name="fx_mobile_private_surface_container_high">#414141</color>
+    <color name="fx_mobile_private_surface_container_highest">#4a4a4a</color>
+    <color name="fx_mobile_private_surface_container_low">#252525</color>
+    <color name="fx_mobile_private_surface_container_lowest">#1e1e1e</color>
+    <color name="fx_mobile_private_autofill_text">#c8c8c8</color>
+    <color name="fx_mobile_private_selected_text">#414141</color>
+    <color name="fx_mobile_private_icon_private">#c8c8c8</color>
     <color name="fx_mobile_private_scrim">@color/novaBlackA50</color>
 
     <!-- Layers -->
     <!-- Card background, Menu background, Dialog, Banner -->
-    <color name="fx_mobile_private_layer_color_2">#e6e6e6</color>
+    <color name="fx_mobile_private_layer_color_2">#303030</color>
     <!-- Search -->
-    <color name="fx_mobile_private_layer_color_3">@color/photonInk90</color>
+    <color name="fx_mobile_private_layer_color_3">#252525</color>
 
     <!-- Action -->
     <!-- Primary button in a disabled state -->
-    <color name="fx_mobile_private_action_color_primary_disabled">@color/photonInk20A20</color>
+    <color name="fx_mobile_private_action_color_primary_disabled">#66414141</color>
 
     <!-- Text -->
     <!-- Text Inverted/On Color -->
@@ -167,50 +167,50 @@
     <color name="fx_mobile_private_icon_color_oncolor">@color/photonLightGrey05</color>
 
     <!-- Light theme color palette -->
-    <color name="primary_text_light_theme">@color/photonInk80</color>
+    <color name="primary_text_light_theme">#252525</color>
     <color name="dark_grey_90_gradient_start">@color/photonDarkGrey90</color>
     <color name="dark_grey_90_gradient_end">#0015141A</color>
 
     <!-- Private theme color palette -->
-    <color name="accent_private_theme">#4a4a4a</color>
-    <color name="accent_high_contrast_private_theme">#AA71FF</color>
+    <color name="accent_private_theme">#c8c8c8</color>
+    <color name="accent_high_contrast_private_theme">#e5e5e5</color>
     <color name="neutral_private_theme">@color/photonGrey20</color>
     <color name="neutral_faded_private_theme">#1FFBFBFE</color>
-    <color name="prompt_login_edit_text_cursor_color_private_theme">#4a4a4a</color>
+    <color name="prompt_login_edit_text_cursor_color_private_theme">#c8c8c8</color>
 
     <!-- Normal theme colors for light mode -->
-    <color name="accent_normal_theme">@color/photonInk20</color>
-    <color name="accent_high_contrast_normal_theme">@color/photonInk20</color>
+    <color name="accent_normal_theme">#4a4a4a</color>
+    <color name="accent_high_contrast_normal_theme">#252525</color>
     <color name="neutral_normal_theme">@color/photonGrey30</color>
     <color name="neutral_faded_normal_theme">@color/photonGrey20</color>
-    <color name="fill_link_from_clipboard_normal_theme">@color/photonInk20</color>
+    <color name="fill_link_from_clipboard_normal_theme">#4a4a4a</color>
     <color name="add_on_private_browsing_exterior_circle_background_normal_theme">#e6e6e6</color>
-    <color name="prompt_login_edit_text_cursor_color_normal_theme">@color/photonInk20</color>
+    <color name="prompt_login_edit_text_cursor_color_normal_theme">#4a4a4a</color>
     <color name="search_suggestion_indicator_icon_color_normal_theme">@color/photonGreen70</color>
     <color name="search_suggestion_indicator_icon_bookmark_color_normal_theme">#4a4a4a</color>
 
     <!-- Tracking protection dashboard colors used in normal browsing mode -->
-    <color name="protections_dashboard_chip_background">#66FFFFFF</color>
-    <color name="protections_dashboard_chip_text">#FF312A64</color>
+    <color name="protections_dashboard_chip_background">#ffffff</color>
+    <color name="protections_dashboard_chip_text">#252525</color>
     <color name="protections_dashboard_progress_bar">#4a4a4a</color>
     <color name="protections_dashboard_gradient_start">#e6e6e6</color>
-    <color name="protections_dashboard_gradient_end">@color/novaOrange10</color>
+    <color name="protections_dashboard_gradient_end">#c8c8c8</color>
 
     <!-- Tracking protection dashboard colors used in private browsing mode -->
-    <color name="protections_dashboard_chip_background_private">#FF3D3264</color>
-    <color name="protections_dashboard_chip_text_private">#FFD9D0F5</color>
-    <color name="protections_dashboard_progress_bar_private">#4a4a4a</color>
-    <color name="protections_dashboard_gradient_start_private">#e6e6e6</color>
-    <color name="protections_dashboard_gradient_end_private">@color/novaOrange70</color>
+    <color name="protections_dashboard_chip_background_private">#414141</color>
+    <color name="protections_dashboard_chip_text_private">#e5e5e5</color>
+    <color name="protections_dashboard_progress_bar_private">#c8c8c8</color>
+    <color name="protections_dashboard_gradient_start_private">#252525</color>
+    <color name="protections_dashboard_gradient_end_private">#414141</color>
 
     <!-- Colors for Edge to Edge background  -->
-    <color name="homepage_edge_to_edge_gradient_start">#FFF7EAE8</color>
-    <color name="homepage_edge_to_edge_gradient_end">#FFF8F3F4</color>
-    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_active">#FCF4F2</color>
-    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_inactive">#EFDCD6</color>
+    <color name="homepage_edge_to_edge_gradient_start">#f5f5f5</color>
+    <color name="homepage_edge_to_edge_gradient_end">#e6e6e6</color>
+    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_active">#ffffff</color>
+    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_inactive">#e6e6e6</color>
     <color name="homepage_tab_edge_to_edge_toolbar_background">#00000000</color>
     <color name="homepage_tab_edge_to_edge_toolbar_outline">#00000000</color>
-    <color name="homepage_tab_edge_to_edge_private_toolbar_outline">#564A75</color>
+    <color name="homepage_tab_edge_to_edge_private_toolbar_outline">#414141</color>
 
     <!-- Bookmark buttons -->
     <color name="bookmark_favicon_background">#DFDFE3</color>
@@ -227,7 +227,7 @@
     <color name="preference_scroll_highlight">@color/fx_mobile_surface_container_highest</color>
 
     <!-- Prompt colors -->
-    <color name="mozac_feat_prompt_cancel_save_dialog_text_color" tools:ignore="UnusedResources">@color/photonViolet70A80</color>
+    <color name="mozac_feat_prompt_cancel_save_dialog_text_color" tools:ignore="UnusedResources">#4a4a4a</color>
 
     <!-- Reader View colors -->
     <color name="mozac_feature_readerview_text_color" tools:ignore="UnusedResources">@color/fx_mobile_on_surface</color>

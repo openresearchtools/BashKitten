@@ -2,7 +2,7 @@
 package org.openresearchtools.wildbuzzard;
 
 import android.app.Activity;
-import android.app.AlertDialog;
+import androidx.appcompat.app.AlertDialog;
 import android.os.Bundle;
 import android.text.method.LinkMovementMethod;
 import android.text.util.Linkify;
@@ -10,7 +10,7 @@ import android.widget.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
-public final class LicensesActivity extends Activity {
+public final class LicensesActivity extends ProductActivity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(20, 55, 20, 20);
@@ -27,7 +27,7 @@ public final class LicensesActivity extends Activity {
             text.setText(new String(output.toByteArray(), StandardCharsets.UTF_8));
         } catch (Exception error) { text.setText("Notices unavailable: this build is incomplete."); }
         Linkify.addLinks(text, Linkify.WEB_URLS); text.setMovementMethod(LinkMovementMethod.getInstance());
-        scroll.addView(text); root.addView(scroll); setContentView(root);
+        scroll.addView(text); root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1)); showContent(root, false);
     }
     private byte[] resource(int id) throws IOException {
         try (InputStream input = getResources().openRawResource(id); ByteArrayOutputStream out = new ByteArrayOutputStream()) {

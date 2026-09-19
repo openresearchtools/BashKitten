@@ -7,12 +7,13 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.WindowManager;
 import android.widget.*;
+import androidx.appcompat.app.AlertDialog;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 
-public final class OnionActivity extends Activity {
+public final class OnionActivity extends ProductActivity {
     EditText address, secret;
     TextView status;
     BrowserApp app;
@@ -32,7 +33,7 @@ public final class OnionActivity extends Activity {
         add(root, "Remove an imported key", () -> app.tor.list(hosts -> new AlertDialog.Builder(this).setTitle("Remove key")
             .setItems(hosts.toArray(new String[0]), (d, i) -> app.tor.remove(hosts.get(i), this::message)).show()));
         status = new TextView(this); root.addView(status);
-        setContentView(root);
+        showContent(root, true);
     }
     private void add(LinearLayout root, String text, Runnable action) { Button b = new Button(this); b.setText(text); b.setOnClickListener(v -> action.run()); root.addView(b); }
     private void save(OnionKey key) { secret.setText(""); status.setText("Importing key…"); app.tor.save(key, this::message); }

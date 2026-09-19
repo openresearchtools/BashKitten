@@ -7,7 +7,7 @@ import android.os.Bundle;
 import android.widget.*;
 import java.util.ArrayList;
 
-public final class TabOptionsActivity extends Activity {
+public final class TabOptionsActivity extends ProductActivity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         BrowserApp app = BrowserApp.get(this);
@@ -29,7 +29,7 @@ public final class TabOptionsActivity extends Activity {
             app.message("Agent access revoked");
         });
         add(root, "Licenses and source", () -> startActivity(new Intent(this, LicensesActivity.class)));
-        setContentView(root);
+        showContent(root, true);
     }
     private void add(LinearLayout root, String label, Runnable action) { Button b = new Button(this); b.setText(label); b.setOnClickListener(v -> action.run()); root.addView(b); }
 }

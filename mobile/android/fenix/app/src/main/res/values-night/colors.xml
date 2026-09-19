@@ -30,9 +30,9 @@
     <color name="fx_mobile_error_container">@color/novaRed70</color>
     <color name="fx_mobile_on_error_container">@color/novaVioletDesaturated0</color>
     <color name="fx_mobile_information">#c8c8c8</color>
-    <color name="fx_mobile_on_information">@color/novaGray80</color>
+    <color name="fx_mobile_on_information">#252525</color>
     <color name="fx_mobile_information_container">#303030</color>
-    <color name="fx_mobile_on_information_container">#303030</color>
+    <color name="fx_mobile_on_information_container">#e5e5e5</color>
     <color name="fx_mobile_success">@color/novaGreen30</color>
     <color name="fx_mobile_on_success">@color/novaGray80</color>
     <color name="fx_mobile_warning">@color/novaYellow30</color>
@@ -49,7 +49,7 @@
     <color name="fx_mobile_surface_container_low">#252525</color>
     <color name="fx_mobile_surface_container_lowest">#1e1e1e</color>
     <color name="fx_mobile_autofill_text">#c8c8c8</color>
-    <color name="fx_mobile_selected_text">@color/novaGray45A80</color>
+    <color name="fx_mobile_selected_text">#414141</color>
     <color name="fx_mobile_icon_private">#c8c8c8</color>
     <color name="fx_mobile_scrim">@color/novaBlackA50</color>
 
@@ -59,11 +59,11 @@
 
     <!-- Layers -->
     <!-- Card background, Menu background, Dialog, Banner -->
-    <color name="fx_mobile_layer_color_2">@color/photonDarkGrey30</color>
+    <color name="fx_mobile_layer_color_2">#303030</color>
     <!-- Search -->
-    <color name="fx_mobile_layer_color_3">@color/photonDarkGrey80</color>
+    <color name="fx_mobile_layer_color_3">#252525</color>
     <!-- Tooltip -->
-    <color name="fx_mobile_layer_color_gradient_start">#303030</color>
+    <color name="fx_mobile_layer_color_gradient_start">#252525</color>
     <!-- Tooltip -->
     <color name="fx_mobile_layer_color_gradient_end">#303030</color>
     <!-- Warning background -->
@@ -73,7 +73,7 @@
 
     <!-- Action -->
     <!-- Primary button in a disabled state -->
-    <color name="fx_mobile_action_color_primary_disabled">#c8c8c8</color>
+    <color name="fx_mobile_action_color_primary_disabled">#66414141</color>
 
     <!-- Text -->
     <!-- Text Inverted/On Color -->
@@ -108,17 +108,17 @@
     <color name="search_suggestion_indicator_icon_bookmark_color_normal_theme">#c8c8c8</color>
 
     <!-- Protections Dashboard colors -->
-    <color name="protections_dashboard_chip_background">#FF3D3264</color>
-    <color name="protections_dashboard_chip_text">#FFD9D0F5</color>
+    <color name="protections_dashboard_chip_background">#414141</color>
+    <color name="protections_dashboard_chip_text">#e5e5e5</color>
     <color name="protections_dashboard_progress_bar">#c8c8c8</color>
-    <color name="protections_dashboard_gradient_start">#303030</color>
-    <color name="protections_dashboard_gradient_end">@color/novaOrange70</color>
+    <color name="protections_dashboard_gradient_start">#252525</color>
+    <color name="protections_dashboard_gradient_end">#414141</color>
 
     <!-- Colors for Edge to Edge background  -->
-    <color name="homepage_edge_to_edge_gradient_start">#FF0A1A3B</color>
-    <color name="homepage_edge_to_edge_gradient_end">#FF293564</color>
-    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_active">#213B6F</color>
-    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_inactive">#0E1A40</color>
+    <color name="homepage_edge_to_edge_gradient_start">#252525</color>
+    <color name="homepage_edge_to_edge_gradient_end">#303030</color>
+    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_active">#414141</color>
+    <color name="homepage_tab_edge_to_edge_tab_strip_item_background_inactive">#252525</color>
     <color name="homepage_tab_edge_to_edge_toolbar_background">#00000000</color>
     <color name="homepage_tab_edge_to_edge_toolbar_outline">#00000000</color>
 
