@@ -368,17 +368,13 @@ class Settings(
     )
 
     val canShowCfr: Boolean
-        get() = (System.currentTimeMillis() - lastCfrShownTimeInMillis) > THREE_DAYS_MS
+        get() = false
 
-    val cfrPopupsEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_cfr_popups_enabled),
-        default = { FxNimbus.features.enablePopups.value().cfrPopupsEnabled },
-    )
+    val cfrPopupsEnabled: Boolean
+        get() = false
 
-    val inAppMessagesEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_in_app_messages_enabled),
-        default = { FxNimbus.features.enablePopups.value().inAppMessagesEnabled },
-    )
+    val inAppMessagesEnabled: Boolean
+        get() = false
 
     var forceEnableZoom by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_accessibility_force_enable_zoom),
@@ -1720,7 +1716,7 @@ class Settings(
      * and if the auto-close setting is already set to [closeTabsAfterOneMonth].
      */
     fun shouldShowInactiveTabsAutoCloseDialog(numbersOfTabs: Int): Boolean {
-        return !hasInactiveTabsAutoCloseDialogBeenDismissed &&
+        return canShowCfr && !hasInactiveTabsAutoCloseDialogBeenDismissed &&
             numbersOfTabs >= INACTIVE_TAB_MINIMUM_TO_SHOW_AUTO_CLOSE_DIALOG &&
             !closeTabsAfterOneMonth
     }
