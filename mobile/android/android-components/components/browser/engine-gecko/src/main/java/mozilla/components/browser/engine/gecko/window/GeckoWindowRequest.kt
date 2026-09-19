@@ -15,9 +15,14 @@ class GeckoWindowRequest(
     override val url: String = "",
     private val engineSession: GeckoEngineSession,
     override val type: WindowRequest.Type = WindowRequest.Type.OPEN,
+    private val onStart: () -> Unit = {},
 ) : WindowRequest {
+
+    override val contextId: String? get() = engineSession.wildBuzzardSession().settings.contextId
 
     override fun prepare(): EngineSession {
         return this.engineSession
     }
+
+    override fun start() = onStart()
 }

@@ -117,6 +117,8 @@ public final class ProbeActivity extends Activity {
             command("navigate", params(two).put("url", "http://127.0.0.1:8765/"));
             send(browser.showTab(two));
             waitPage(two);
+            waitValue(two, "return document.documentElement.dataset.consent;", "rejected");
+            check(true, "cookie banner policy actively rejects consent");
             Object snapshot = command("snapshot", params(two));
             check(snapshot.toString().contains("Agent test page"), "native Gecko page snapshot");
             check(evaluate(two, "return navigator.globalPrivacyControl;").equals(true), "Global Privacy Control is enabled");
@@ -149,6 +151,28 @@ public final class ProbeActivity extends Activity {
             command("tabs.setDesktopMode", params(two).put("enabled", false));
             command("tabs.setAdblocking", params(two).put("enabled", true));
             waitPage(two);
+            JSONArray beforePopup = (JSONArray) command("tabs.list", new JSONObject());
+            java.util.Set<String> existing = new java.util.HashSet<>();
+            for (int i = 0; i < beforePopup.length(); i++) existing.add(beforePopup.getJSONObject(i).getString("id"));
+            JSONObject popup = find(command("snapshot", params(two)), "a", "Open child tab");
+            check(popup != null, "child-tab link is exposed to the agent");
+            command("act", params(two).put("kind", "click").put("target", popup.getString("reference")));
+            String child = null;
+            long popupDeadline = SystemClock.elapsedRealtime() + 15000;
+            while (child == null && SystemClock.elapsedRealtime() < popupDeadline) {
+                JSONArray opened = (JSONArray) command("tabs.list", new JSONObject());
+                for (int i = 0; i < opened.length(); i++) {
+                    String id = opened.getJSONObject(i).getString("id");
+                    if (!existing.contains(id)) child = id;
+                }
+                if (child == null) Thread.sleep(100);
+            }
+            check(child != null, "page-created child tab inherits agent ownership");
+            waitValue(child, "return !!document.querySelector('#frame-button');", "true");
+            check(true, "child tab loads through its configured route");
+            command("tabs.close", params(child));
+            waitPage(two);
+            check(true, "closing child tab preserves the parent");
             JSONObject restricted = call(new JSONObject().put("method", "navigate").put("params", params(two).put("url", "file:///data/system/packages.xml")).toString());
             check(restricted.has("error"), "agent cannot navigate to local files");
             command("tabs.close", params(two));

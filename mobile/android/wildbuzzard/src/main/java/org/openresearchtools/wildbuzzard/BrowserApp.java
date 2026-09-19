@@ -156,7 +156,8 @@ public final class BrowserApp extends ContextWrapper {
     void show(Tab tab) { host.show(tab.id); }
     void close(Tab tab) {
         tabs.remove(tab.id);
-        policies.edit().remove(tab.id + ".owner").remove(tab.id + ".tor").remove(tab.id + ".adblock").apply();
+        // Fenix can restore a closed tab with its original ID and session context.
+        save(tab);
         host.close(tab.id);
     }
     void message(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }

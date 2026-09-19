@@ -9,3 +9,11 @@
 <iframe title="Frame test" src="frame.html"></iframe>
 <img id="ad-test" src="/ads/banners/marker.svg" onload="this.dataset.result='loaded'" onerror="this.dataset.result='blocked'" alt="Blocking fixture">
 <a id="popup" target="_blank" href="/frame.html">Open child tab</a>
+
+<div id="onetrust-consent-sdk">
+  <p>Cookie consent fixture</p>
+  <div id="onetrust-button-group">
+    <button id="onetrust-reject-all-handler" onclick="document.documentElement.dataset.consent='rejected'; document.querySelector('#onetrust-consent-sdk').remove()">Reject all</button>
+    <button id="onetrust-accept-btn-handler" onclick="document.documentElement.dataset.consent='accepted'; document.querySelector('#onetrust-consent-sdk').remove()">Accept all</button>
+  </div>
+</div>

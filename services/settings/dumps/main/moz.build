@@ -38,6 +38,12 @@ if not CONFIG["MOZ_BUILD_APP"].startswith("mobile/"):
         "websites-with-shared-credential-backends.json",
     ]
 
+# WildBuzzard uses cookie rejection without a remote-settings connection.
+if CONFIG["MOZ_BUILD_APP"] == "mobile/android":
+    FINAL_TARGET_FILES.defaults.settings.main += [
+        "cookie-banner-rules-list.json",
+    ]
+
 # These collections are referenced in toolkit/ or other core code.
 FINAL_TARGET_FILES.defaults.settings.main += [
     "password-recipes.json",

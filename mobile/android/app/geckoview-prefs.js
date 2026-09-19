@@ -394,6 +394,7 @@ pref("wildbuzzard.blocker.enabled", true);
 pref("cookiebanners.service.mode", 1);
 pref("cookiebanners.service.mode.privateBrowsing", 1);
 pref("cookiebanners.service.detectOnly", false);
+pref("wildbuzzard.cookiebanners.rejectHidden", true);
 pref("privacy.globalprivacycontrol.enabled", true);
 pref("privacy.donottrackheader.enabled", true);
 pref("network.cookie.cookieBehavior", 5);

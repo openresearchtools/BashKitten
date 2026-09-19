@@ -249,7 +249,13 @@ export class CookieBannerParent extends JSWindowActorParent {
       return {
         hide: rule.hide ?? rule.presence,
         presence: rule.presence,
-        skipPresenceVisibilityCheck: rule.skipPresenceVisibilityCheck,
+        // Native cosmetic filtering can hide a supported banner before its
+        // rejection runs. This policy never permits hidden opt-in actions.
+        skipPresenceVisibilityCheck:
+          rule.skipPresenceVisibilityCheck ||
+          (mode == Ci.nsICookieBannerService.MODE_REJECT &&
+            Boolean(rule.optOut) &&
+            Services.prefs.getBoolPref("wildbuzzard.cookiebanners.rejectHidden", false)),
         target,
       };
     });

@@ -1087,10 +1087,13 @@ class GeckoEngineSession(
                     openGeckoSession = false,
                     contextId = "wildbuzzard-${java.util.UUID.randomUUID()}",
                 )
+            val result = GeckoResult<GeckoSession>()
             notifyObservers {
-                onWindowRequest(GeckoWindowRequest(uri, newEngineSession))
+                onWindowRequest(GeckoWindowRequest(uri, newEngineSession) {
+                    result.complete(newEngineSession.geckoSession)
+                })
             }
-            return GeckoResult.fromValue(newEngineSession.geckoSession)
+            return result
         }
 
         override fun onLoadError(

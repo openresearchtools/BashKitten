@@ -45,13 +45,16 @@ class WindowFeature(
                                 tabsUseCases.removeTab(it.id)
                             }
                         }
-                        WindowRequest.Type.OPEN -> consumeWindowRequest(state.id) {
+                        WindowRequest.Type.OPEN -> {
                             tabsUseCases.addTab(
                                 selectTab = true,
                                 parentId = state.id,
                                 engineSession = windowRequest.prepare(),
+                                contextId = windowRequest.contextId,
                                 private = state.content.private,
                             )
+                            // Register ownership and context before Gecko starts the child load.
+                            store.dispatch(ContentAction.ConsumeWindowRequestAction(state.id)).join()
                             windowRequest.start()
                         }
                         else -> {

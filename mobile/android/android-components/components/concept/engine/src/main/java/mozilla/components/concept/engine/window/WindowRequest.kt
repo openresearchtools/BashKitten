@@ -29,6 +29,9 @@ interface WindowRequest {
      */
     val url: String
 
+    /** Session context of the prepared engine, retained when the tab is restored. */
+    val contextId: String? get() = null
+
     /**
      * Prepares an [EngineSession] for the window request. This is used to
      * attach state (e.g. a native session or view) to the engine session.
