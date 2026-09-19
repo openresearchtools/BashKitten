@@ -16,7 +16,7 @@ final class TorManager {
     private final SecretStore keys;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private volatile TorService service;
-    private TorGateway gateway;
+    private volatile TorGateway gateway;
     private final Set<String> installed = ConcurrentHashMap.newKeySet();
     private boolean starting, connecting;
     private static final class Waiting {
@@ -37,22 +37,29 @@ final class TorManager {
         }
     };
     void ready(Consumer<Integer> success, Consumer<String> failure) {
-        if (!starting) {
-            try {
-                app.keepAlive();
-                String socket = new java.io.File(app.getNoBackupFilesDir(), "tor-socks").getAbsolutePath();
-                if (gateway == null) gateway = new TorGateway(socket);
-                Files.write(TorService.getTorrc(app).toPath(),
-                    ("SocksPort unix:" + socket + " IsolateSOCKSAuth\nHTTPTunnelPort 0\nDisableNetwork 1\nSafeSocks 1\nTestSocks 0\nClientOnly 1\n").getBytes(StandardCharsets.UTF_8));
-                starting = true;
-                if (!app.bindService(new Intent(app, TorService.class), connection, Context.BIND_AUTO_CREATE)) throw new IllegalStateException();
-            } catch (Exception error) { starting = false; failure.accept("Could not start Tor"); return; }
-        }
         waiting.add(new Waiting(success, failure));
         if (connecting) return;
         connecting = true;
+        boolean start = !starting;
+        if (start) {
+            try { app.keepAlive(); }
+            catch (Exception error) { finishConnecting(0, "Could not start Tor"); return; }
+            starting = true;
+        }
         io.execute(() -> {
             try {
+                if (start) {
+                    try {
+                        String socket = new java.io.File(app.getNoBackupFilesDir(), "tor-socks").getAbsolutePath();
+                        if (gateway == null) gateway = new TorGateway(socket);
+                        Files.write(TorService.getTorrc(app).toPath(),
+                            ("SocksPort unix:" + socket + " IsolateSOCKSAuth\nHTTPTunnelPort 0\nDisableNetwork 1\nSafeSocks 1\nTestSocks 0\nClientOnly 1\n").getBytes(StandardCharsets.UTF_8));
+                        if (!app.bindService(new Intent(app, TorService.class), connection, Context.BIND_AUTO_CREATE)) throw new IllegalStateException();
+                    } catch (Exception error) {
+                        app.main.post(() -> { starting = false; finishConnecting(0, "Could not start Tor"); });
+                        return;
+                    }
+                }
                 long deadline = SystemClock.elapsedRealtime() + 180000;
                 TorService current;
                 while ((current = service) == null || current.getTorControlConnection() == null) {

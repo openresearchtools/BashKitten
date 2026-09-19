@@ -16,6 +16,7 @@ import java.util.UUID;
 
 final class AppGrants {
     private final Context context;
+    private final android.content.SharedPreferences preferences;
     private final Map<String, Request> pending = new HashMap<>();
     static final class Request {
         final int uid;
@@ -23,7 +24,11 @@ final class AppGrants {
         final long expires;
         Request(int uid, String identity) { this.uid = uid; this.identity = identity; expires = android.os.SystemClock.elapsedRealtime() + 300000; }
     }
-    AppGrants(Context context) { this.context = context; }
+    AppGrants(Context context) {
+        this.context = context;
+        preferences = context.getSharedPreferences("agent-grants", 0);
+        preferences.getAll();
+    }
     String identity(int uid) {
         try {
             String[] packages = context.getPackageManager().getPackagesForUid(uid);
@@ -45,7 +50,7 @@ final class AppGrants {
     }
     String require(int uid) {
         String identity = identity(uid);
-        if (!context.getSharedPreferences("agent-grants", 0).getBoolean(identity, false)) {
+        if (!preferences.getBoolean(identity, false)) {
             throw new SecurityException("User authorization required");
         }
         return identity;
@@ -66,7 +71,7 @@ final class AppGrants {
     }
     void approve(Request request) {
         if (!request.identity.equals(identity(request.uid))) throw new SecurityException("Caller changed");
-        context.getSharedPreferences("agent-grants", 0).edit().putBoolean(request.identity, true).apply();
+        preferences.edit().putBoolean(request.identity, true).apply();
     }
-    void revokeAll() { context.getSharedPreferences("agent-grants", 0).edit().clear().apply(); }
+    void revokeAll() { preferences.edit().clear().apply(); }
 }

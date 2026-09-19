@@ -53,6 +53,7 @@ public final class BrowserApp extends ContextWrapper {
         super(context.getApplicationContext()); this.host = host;
         grants = new AppGrants(this); tor = new TorManager(this);
         policies = getSharedPreferences("tab-policies", 0);
+        policies.getAll();
     }
     void keepAlive() {
         startForegroundService(new Intent(this, BrowserKeepAliveService.class));

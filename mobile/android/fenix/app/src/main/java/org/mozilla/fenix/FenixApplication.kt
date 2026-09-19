@@ -332,6 +332,8 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
         val megazordDeferred = setupMegazordNetwork()
 
         setDayNightTheme()
+        // Prepare local policy stores before activity/service startup enables strict disk checks.
+        wildBuzzardServices
         components.strictMode.enableStrictMode(true)
 
         initializeWebExtensionSupport()
