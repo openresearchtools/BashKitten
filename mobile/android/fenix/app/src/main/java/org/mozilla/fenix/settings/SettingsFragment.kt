@@ -347,7 +347,8 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
 
         setupPreferences(settings)
         listOf("pref_key_sign_in", "pref_key_account_category", "pref_key_sync_debug", "pref_key_data_choices",
-            "pref_key_nimbus_experiments", "pref_key_remote_improvements", "pref_key_rollouts", "pref_key_email_masks").forEach { name ->
+            "pref_key_nimbus_experiments", "pref_key_remote_improvements", "pref_key_rollouts", "pref_key_email_masks",
+            "pref_key_rate").forEach { name ->
             val resource = resources.getIdentifier(name, "string", requireContext().packageName)
             if (resource != 0) findPreference<Preference>(getString(resource))?.isVisible = false
         }

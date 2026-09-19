@@ -50,10 +50,8 @@ public final class AgentBrowserTest {
         assertNotNull("Desktop site is in the normal menu", device.wait(Until.findObject(By.descStartsWith("Desktop site ")), 10000));
         assertNotNull("Per-tab adblocking is in the normal menu", device.wait(Until.findObject(By.descStartsWith("Adblocking for this tab ")), 10000));
         assertFalse("No separate product tab-options screen", device.hasObject(By.desc("Wild Buzzard tab controls")));
-        new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Settings"));
-        click(device, "Settings");
-        new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Licenses and source");
-        click(device, "Licenses and source");
+        scrollToAndClick(device, "Settings");
+        scrollToAndClick(device, "Licenses and source");
         assertTrue(device.wait(Until.hasObject(By.text("Wild Buzzard, BrowserOS and agent tools")), 10000));
         assertTrue(device.wait(Until.hasObject(By.text("C Tor and its dependencies")), 10000));
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-licenses.png")));
@@ -113,6 +111,18 @@ public final class AgentBrowserTest {
     }
     private void launch(Context context) {
         context.startActivity(new Intent(context, ProbeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+    }
+    private void scrollToAndClick(UiDevice device, String label) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            UiObject2 item = device.findObject(By.desc(label));
+            if (item == null) item = device.findObject(By.text(label));
+            if (item != null) { item.click(); return; }
+            UiObject2 scroll = device.wait(Until.findObject(By.scrollable(true)), 10000);
+            assertNotNull("Scrollable content before " + label, scroll);
+            // Scrolling to the beginning first dismisses Fenix's bottom-sheet menu.
+            scroll.scroll(Direction.DOWN, 0.7f);
+        }
+        fail("Menu or preference not found: " + label);
     }
     private void click(UiDevice device, String text) {
         java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);

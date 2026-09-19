@@ -248,7 +248,7 @@
         app:iconSpaceReserved="false"
         android:layout="@layout/preference_category_no_icon_style">
         <androidx.preference.Preference
-            android:key="@string/pref_key_rate"
+            android:key="@string/pref_key_rate" app:isPreferenceVisible="false"
             app:iconSpaceReserved="false"
             android:title="@string/preferences_rate" />
 
