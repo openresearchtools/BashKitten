@@ -53,6 +53,17 @@ public final class AgentBrowserTest {
         click(device, "WildBuzzard tab controls");
         assertTrue(device.wait(Until.hasObject(By.text("Adblocking for this tab")), 10000));
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-tab-controls.png")));
+        click(device, "Licenses and source");
+        assertTrue("Offline source and copyright bundle is displayed",
+            device.wait(Until.hasObject(By.textStartsWith("WildBuzzard for Android")), 10000));
+        assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-licenses.png")));
+        click(device, "Android library licenses");
+        assertFalse("Resolved dependency licenses are packaged",
+            device.wait(Until.hasObject(By.text("Dependency notices unavailable")), 1000));
+        assertNotNull("Android dependency list", device.wait(Until.findObject(By.clazz("android.widget.ListView")), 10000));
+        device.pressBack();
+        device.pressBack();
+        device.pressBack();
     }
     private void verifyProcessRecovery(Context context, UiDevice device) throws Exception {
         ProbeActivity probe = ProbeActivity.active;
