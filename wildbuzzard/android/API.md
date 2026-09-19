@@ -19,6 +19,9 @@ by another app. The browser menu revokes all grants and closes agent-owned tabs.
 Ordinary tabs owned by the same approved app share website cookies and storage;
 each app has a separate storage context. Tor tabs start in isolated contexts,
 and their page-created child tabs inherit that context and ownership.
+Fenix persists tab IDs and agent ownership across browser process restarts.
+`tabs.list` includes restored tabs whose engine sessions have not been recreated;
+the next control request recreates that session and reapplies its tab policies.
 
 ```json
 {"method":"tabs.create","params":{"url":"https://example.com","tor":false}}

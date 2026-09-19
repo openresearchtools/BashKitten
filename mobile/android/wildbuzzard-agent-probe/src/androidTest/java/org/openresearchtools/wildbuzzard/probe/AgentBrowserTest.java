@@ -10,6 +10,8 @@ import androidx.test.uiautomator.*;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import java.io.File;
+import org.json.JSONArray;
+import org.json.JSONObject;
 import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
@@ -33,6 +35,7 @@ public final class AgentBrowserTest {
         launch(context);
         click(device, "Show last tab");
         assertTrue("Fenix foreground browser", device.wait(Until.hasObject(By.pkg("org.openresearchtools.wildbuzzard").depth(0)), 15000));
+        verifyProcessRecovery(context, device);
         File captures = new File(context.getExternalFilesDir(null), "screenshots"); captures.mkdirs();
         device.executeShellCommand("cmd uimode night no");
         device.waitForIdle(); SystemClock.sleep(1000);
@@ -50,6 +53,45 @@ public final class AgentBrowserTest {
         click(device, "WildBuzzard tab controls");
         assertTrue(device.wait(Until.hasObject(By.text("Adblocking for this tab")), 10000));
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-tab-controls.png")));
+    }
+    private void verifyProcessRecovery(Context context, UiDevice device) throws Exception {
+        ProbeActivity probe = ProbeActivity.active;
+        String selected = ProbeActivity.lastTab;
+        String dormant = ((JSONObject) probe.command("tabs.create", new JSONObject()
+            .put("url", "http://127.0.0.1:8765/"))).getString("id");
+        probe.waitPage(dormant);
+        probe.command("tabs.setDesktopMode", probe.params(dormant).put("enabled", true));
+        probe.command("tabs.setAdblocking", probe.params(dormant).put("enabled", false));
+        probe.waitValue(dormant, "return document.querySelector('#ad-test').dataset.result;", "loaded");
+        device.pressHome();
+        SystemClock.sleep(3000);
+        device.executeShellCommand("am force-stop org.openresearchtools.wildbuzzard");
+        context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.mozilla.fenix.HomeActivity")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        context.startActivity(new Intent(context, ProbeActivity.class)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        long deadline = SystemClock.elapsedRealtime() + 20000;
+        while ((!ProbeActivity.connected || ProbeActivity.active == probe) && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(100);
+        assertTrue("Agent reconnects after browser process restart", ProbeActivity.connected);
+        probe = ProbeActivity.active;
+        JSONObject restored = null;
+        while (restored == null && SystemClock.elapsedRealtime() < deadline) {
+            JSONArray tabs = (JSONArray) probe.command("tabs.list", new JSONObject());
+            for (int i = 0; i < tabs.length(); i++) {
+                if (dormant.equals(tabs.getJSONObject(i).getString("id"))) restored = tabs.getJSONObject(i);
+            }
+            if (restored == null) SystemClock.sleep(100);
+        }
+        assertNotNull("Dormant agent tab survives process restart", restored);
+        assertTrue("Desktop mode persists", restored.getBoolean("desktop"));
+        assertFalse("Per-tab adblocking choice persists", restored.getBoolean("adblock"));
+        probe.waitValue(dormant, "return navigator.userAgent.includes('Mobile');", "false");
+        probe.waitValue(dormant, "return document.querySelector('#ad-test').dataset.result;", "loaded");
+        probe.command("tabs.close", probe.params(dormant));
+        ProbeActivity.lastTab = selected;
+        click(device, "Show last tab");
+        assertTrue("Restored Fenix tab opens from another app", device.wait(Until.hasObject(By.pkg("org.openresearchtools.wildbuzzard").depth(0)), 15000));
+        probe.waitPage(selected);
     }
     private void launch(Context context) {
         context.startActivity(new Intent(context, ProbeActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));

@@ -25,6 +25,7 @@ public final class TabOptionsActivity extends ProductActivity {
         add(root, "Onion keys", () -> startActivity(new Intent(this, OnionActivity.class)));
         add(root, "Revoke agent access", () -> {
             app.grants.revokeAll();
+            app.refresh();
             for (BrowserApp.Tab owned : new ArrayList<>(app.tabs.values())) if (!owned.owner.equals(BrowserApp.USER)) app.close(owned);
             app.message("Agent access revoked");
         });

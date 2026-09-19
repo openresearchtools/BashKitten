@@ -88,6 +88,13 @@ public final class BrowserControlService extends Service {
             }, fail); return;
         }
         BrowserApp.Tab tab = app.owned(params.getString("tabId"), owner);
+        if (!method.equals("tabs.close") && (tab.session == null || !tab.session.isOpen() || !tab.ready)) {
+            app.ensure(tab, () -> {
+                try { app.grants.require(uid); run(request, owner, uid, send, fail); }
+                catch (Exception error) { fail.accept("Restored tab is unavailable"); }
+            }, fail);
+            return;
+        }
         params.remove("tabId");
         switch (method) {
             case "tabs.close": app.close(tab); break;

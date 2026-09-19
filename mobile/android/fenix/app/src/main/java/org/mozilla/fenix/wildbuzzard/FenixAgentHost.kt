@@ -12,11 +12,14 @@ import java.lang.ref.WeakReference
 import java.util.function.Consumer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import mozilla.components.browser.engine.gecko.GeckoEngineSession
 import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.TabSessionState
+import mozilla.components.lib.state.ext.flow
 import org.mozilla.fenix.FenixApplication
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.geckoview.GeckoView
@@ -38,9 +41,12 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         })
     }
 
-    private fun nativeTab(state: TabSessionState): BrowserApp.Tab? {
-        val engine = state.engineState.engineSession as? GeckoEngineSession ?: return null
-        return BrowserApp.Tab(state.id, BrowserApp.USER, engine.wildBuzzardSession()).also { refresh(it) }
+    private fun nativeTab(state: TabSessionState): BrowserApp.Tab {
+        val engine = state.engineState.engineSession as? GeckoEngineSession
+        return BrowserApp.Tab(state.id, BrowserApp.USER, engine?.wildBuzzardSession()).also {
+            it.parentId = state.parentId
+            refresh(it)
+        }
     }
 
     override fun create(owner: String, contextId: String): BrowserApp.Tab {
@@ -53,14 +59,16 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     }
 
     override fun selected(): BrowserApp.Tab? = components.core.store.state.selectedTab?.let(::nativeTab)?.let {
-        BrowserApp.get(application).track(it)
+        BrowserApp.get(application).track(it, it.parentId)
     }
+
+    override fun list(): List<BrowserApp.Tab> = components.core.store.state.tabs.map(::nativeTab)
 
     override fun refresh(tab: BrowserApp.Tab): Boolean {
         val state = components.core.store.state.tabs.find { it.id == tab.id } ?: return false
         val current = state.engineState.engineSession as? GeckoEngineSession
-        if (current != null && tab.session !== current.wildBuzzardSession()) {
-            tab.session = current.wildBuzzardSession()
+        if (tab.session !== current?.wildBuzzardSession()) {
+            tab.session = current?.wildBuzzardSession()
             tab.ready = false
             tab.preparing = false
         }
@@ -69,6 +77,24 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         tab.loading = state.content.loading
         tab.desktop = state.content.desktopMode
         return true
+    }
+
+    override fun ensure(tab: BrowserApp.Tab, done: Runnable, fail: Consumer<String>) {
+        val store = components.core.store
+        if (store.state.tabs.none { it.id == tab.id }) { fail.accept("Tab was closed"); return }
+        store.dispatch(EngineAction.CreateEngineSessionAction(tab.id))
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                withTimeout(15000) {
+                    store.flow().first { state ->
+                        state.tabs.find { it.id == tab.id }?.engineState?.engineSession != null
+                    }
+                }
+                if (!refresh(tab)) { fail.accept("Tab was closed"); return@launch }
+                if (tab.session?.isOpen != true) { fail.accept("Tab session is unavailable"); return@launch }
+                done.run()
+            } catch (error: Exception) { fail.accept("Could not restore tab session") }
+        }
     }
 
     override fun close(id: String) { components.useCases.tabsUseCases.removeTab(id) }

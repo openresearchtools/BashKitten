@@ -17,7 +17,9 @@ public final class BrowserApp extends ContextWrapper {
     public interface Host {
         Tab create(String owner, String contextId);
         Tab selected();
+        List<Tab> list();
         boolean refresh(Tab tab);
+        void ensure(Tab tab, Runnable done, Consumer<String> fail);
         void close(String id);
         void isolate(Tab tab, String contextId, Runnable done, Consumer<String> fail);
         void show(String id);
@@ -37,6 +39,7 @@ public final class BrowserApp extends ContextWrapper {
         public final String id, owner;
         public GeckoSession session;
         public String url = "about:blank", title = "New tab", error = "";
+        public String parentId;
         public boolean loading, desktop, tor, ready, preparing, adblock = true;
         String pendingUrl;
         int port;
@@ -69,9 +72,11 @@ public final class BrowserApp extends ContextWrapper {
         Tab current = tabs.get(tab.id);
         if (current != null) { host.refresh(current); return current; }
         Tab parent = tabs.get(parentId);
-        String owner = policies.getString(tab.id + ".owner", parent == null ? tab.owner : parent.owner);
+        String parentOwner = parent == null ? policies.getString(parentId + ".owner", tab.owner) : parent.owner;
+        String owner = policies.getString(tab.id + ".owner", parentOwner);
         Tab value = new Tab(tab.id, owner, tab.session);
-        value.tor = policies.getBoolean(tab.id + ".tor", parent != null && parent.tor);
+        value.parentId = parentId;
+        value.tor = policies.getBoolean(tab.id + ".tor", parent != null ? parent.tor : policies.getBoolean(parentId + ".tor", false));
         if (parent != null && parent.tor) value.port = parent.port;
         value.adblock = policies.getBoolean(tab.id + ".adblock", true);
         host.refresh(value); tabs.put(value.id, value); return value;
@@ -96,7 +101,25 @@ public final class BrowserApp extends ContextWrapper {
         for (Tab tab : tabs.values()) if (tab.session == session) return tab;
         return null;
     }
-    void refresh() { tabs.values().removeIf(tab -> !host.refresh(tab)); }
+    void refresh() {
+        tabs.values().removeIf(tab -> !host.refresh(tab));
+        for (Tab tab : host.list()) track(tab, tab.parentId);
+    }
+    void ensure(Tab tab, Runnable done, Consumer<String> fail) {
+        host.ensure(tab, () -> {
+            if (tab.ready) { done.run(); return; }
+            String restoreUrl = tab.url;
+            Consumer<Integer> configured = port -> {
+                tab.port = port;
+                configure(tab, tor.identities(), ignored -> {
+                    if (!restoreUrl.equals("about:blank")) tab.session.loadUri(restoreUrl);
+                    done.run();
+                }, fail);
+            };
+            if (tab.tor) tor.ready(configured, fail);
+            else configured.accept(0);
+        }, fail);
+    }
     Tab owned(String id, String owner) {
         refresh(); Tab tab = tabs.get(id);
         if (tab == null || !tab.owner.equals(owner)) throw new SecurityException("Tab is not owned by this app");
@@ -131,6 +154,11 @@ public final class BrowserApp extends ContextWrapper {
     public void useTor(Tab tab, String url) {
         tab.tor = true; tab.ready = false; tab.pendingUrl = url;
         tab.preparing = true;
+        save(tab);
+        if (tab.session == null || !tab.session.isOpen()) {
+            host.ensure(tab, () -> useTor(tab, url), error -> { tab.preparing = false; message(error); });
+            return;
+        }
         // Block the route before waiting for Tor bootstrap.
         tab.port = 0;
         tab.session.stop();
@@ -156,6 +184,14 @@ public final class BrowserApp extends ContextWrapper {
     }
     void setAdblock(Tab tab, boolean enabled, Consumer<JSONObject> done, Consumer<String> fail) {
         tab.adblock = enabled;
+        save(tab);
+        if (tab.session == null || !tab.session.isOpen()) {
+            ensure(tab, () -> {
+                try { done.accept(new JSONObject().put("result", true)); }
+                catch (JSONException error) { fail.accept("Could not return tab policy"); }
+            }, fail);
+            return;
+        }
         configure(tab, tor.identities(), value -> { tab.session.reload(); done.accept(value); }, fail);
     }
     void page(Tab tab, String method, JSONObject params, Consumer<JSONObject> done, Consumer<String> fail) {
@@ -167,10 +203,15 @@ public final class BrowserApp extends ContextWrapper {
         } catch (Exception error) { fail.accept("Page operation unavailable"); }
     }
     void refreshTor(int port, List<String> hosts) {
-        for (Tab tab : tabs.values()) if (tab.tor) { tab.port = port; configure(tab, hosts, ignored -> {}, this::message); }
+        for (Tab tab : tabs.values()) if (tab.tor) {
+            tab.port = port;
+            if (tab.session != null && tab.session.isOpen()) configure(tab, hosts, ignored -> {}, this::message);
+        }
     }
     void refreshTorTrust(List<String> hosts) {
-        for (Tab tab : tabs.values()) if (tab.tor) { tab.session.stop(); configure(tab, hosts, ignored -> {}, this::message); }
+        for (Tab tab : tabs.values()) if (tab.tor && tab.session != null && tab.session.isOpen()) {
+            tab.session.stop(); configure(tab, hosts, ignored -> {}, this::message);
+        }
     }
     void show(Tab tab) { host.show(tab.id); }
     void close(Tab tab) {
