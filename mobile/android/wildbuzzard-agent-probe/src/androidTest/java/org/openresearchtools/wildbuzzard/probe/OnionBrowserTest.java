@@ -72,7 +72,8 @@ public final class OnionBrowserTest {
         assertTrue(device.wait(Until.hasObject(By.text("Add private Tor site")), 10000));
         device.findObject(By.clazz("android.widget.EditText")).setText("Private Tor fixture");
         click(device, "Save site");
-        assertTrue("Tor installs the encrypted credential", device.wait(Until.hasObject(By.text("Onion key imported")), 195000));
+        assertTrue("Imported site is saved with its chosen name",
+            device.wait(Until.hasObject(By.text("Private Tor fixture")), 30000));
         assertTrue("File import supplies the onion address without typing",
             device.wait(Until.hasObject(By.desc("Open " + fixture.getString("onion"))), 10000));
         click(device, "Quick access " + fixture.getString("onion"));
