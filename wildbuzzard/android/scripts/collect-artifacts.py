@@ -4,6 +4,8 @@ from pathlib import Path
 import hashlib
 import io
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +23,17 @@ if not outputs:
 browser = []
 native = {}
 roles = {}
+signers = {}
+signing_key = os.environ.get('WILDBUZZARD_DEBUG_KEYSTORE')
+expected_signer = None
+if signing_key:
+    expected_signer = hashlib.sha256(subprocess.check_output([
+        'keytool', '-exportcert', '-keystore', signing_key, '-storepass', 'android',
+        '-alias', 'androiddebugkey',
+    ])).hexdigest()
+    state = Path(os.environ.get('MOZBUILD_STATE_PATH', Path.home()/'.mozbuild'))
+    signing_tools = sorted(state.glob('android-sdk-*/build-tools/*/apksigner'))
+    if not signing_tools: raise SystemExit('APK signing verification tool not found')
 for source in outputs:
     with zipfile.ZipFile(source) as apk:
         libraries = [name for name in apk.namelist() if name.startswith('lib/')]
@@ -80,11 +93,20 @@ for source in outputs:
             continue
     shutil.copy2(source, out/destination)
     roles[role] = destination
+    if expected_signer:
+        verification = subprocess.check_output([
+            str(signing_tools[-1]), 'verify', '--print-certs', str(out/destination),
+        ], text=True)
+        certificates = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)', verification)
+        if certificates != [expected_signer]:
+            raise SystemExit('APK did not use the configured signing identity: ' + destination)
+        signers[destination] = expected_signer
 if not browser: raise SystemExit('No real Gecko ARM64 APK produced')
 if not {'browser', 'agent_probe', 'instrumentation'} <= roles.keys():
     raise SystemExit('Browser, independent agent probe and instrumentation APKs are all required')
 shutil.copytree(root/'wildbuzzard/android/notices', out/'notices', dirs_exist_ok=True)
 subprocess.run([sys.executable, str(root/'wildbuzzard/android/scripts/notices.py'), str(out)], check=True)
 manifest = {'source': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
-            'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
+            'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'signing_certificates':signers,
+            'apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
 (out/'build-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')

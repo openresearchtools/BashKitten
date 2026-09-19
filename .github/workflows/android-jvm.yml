@@ -23,6 +23,7 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.96.0'
       MACH_SHOW_PIP_OUTPUT: '1'
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g'
+      WILDBUZZARD_DEBUG_KEYSTORE: ${{ runner.temp }}/wildbuzzard-jvm-check.p12
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -53,6 +54,8 @@ jobs:
             android-toolchain-v1-${{ runner.os }}-
       - name: Install compatible Rust toolchain
         run: rustup toolchain install 1.96.0 --profile minimal --target aarch64-linux-android
+      - name: Exercise explicit debug signing configuration
+        run: keytool -genkeypair -keystore "$WILDBUZZARD_DEBUG_KEYSTORE" -storetype PKCS12 -storepass android -alias androiddebugkey -keypass android -dname 'CN=Wild Buzzard JVM Test,O=openresearchtools,C=US' -keyalg RSA -keysize 2048 -validity 2
       - name: Bootstrap and generate Gecko bindings
         run: |
           set -Eeuo pipefail

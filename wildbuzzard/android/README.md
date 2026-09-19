@@ -126,6 +126,13 @@ The **Android ARM64 APK** GitHub Actions workflow cross-compiles native Gecko
 for `aarch64-linux-android` and builds installable APK artifacts. Debug artifacts
 use Android debug signing and are test builds. Their manifest records source
 revision and SHA-256 checksums. Build logs are retained even on failure.
+Repository builds use the explicit `WILDBUZZARD_CI_DEBUG_KEYSTORE` Actions secret
+so updates retain their signing identity. Artifact collection verifies every APK
+against that certificate and records its fingerprint. Pull requests without
+access to the secret use an ephemeral test identity. Local builds can set
+`WILDBUZZARD_DEBUG_KEYSTORE` to a debug keystore with the standard `android`
+password and `androiddebugkey` alias. These identities are for development;
+production APKs require the publisher's production signing configuration.
 
 Firefox's `about:license` remains available. **Licenses and source** includes
 Wild Buzzard, BrowserOS and Mozilla DevTools MCP provenance, Tor and linked

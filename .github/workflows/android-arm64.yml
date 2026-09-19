@@ -23,6 +23,7 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.96.0'
       MACH_SHOW_PIP_OUTPUT: '1'
       SCCACHE_GHA_ENABLED: 'true'
+      WILDBUZZARD_DEBUG_KEYSTORE: ${{ runner.temp }}/wildbuzzard-ci-debug.p12
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -59,24 +60,25 @@ jobs:
           restore-keys: |
             android-toolchain-v2-${{ runner.os }}-
             android-toolchain-v1-${{ runner.os }}-
-      - name: Restore consistent debug signing identity
-        id: debug-signing
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.android/debug.keystore
-          key: wildbuzzard-android-debug-signing-v1
-      - name: Prepare debug signing identity
-        if: steps.debug-signing.outputs.cache-hit != 'true'
+      - name: Prepare explicit debug signing identity
+        env:
+          CI_DEBUG_KEYSTORE_B64: ${{ secrets.WILDBUZZARD_CI_DEBUG_KEYSTORE }}
         run: |
-          mkdir -p ~/.android
-          rm -f ~/.android/debug.keystore
-          keytool -genkeypair -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 10000
-      - name: Save debug signing identity
-        if: steps.debug-signing.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.android/debug.keystore
-          key: wildbuzzard-android-debug-signing-v1
+          set -Eeuo pipefail
+          if [ -n "$CI_DEBUG_KEYSTORE_B64" ]; then
+            python3 - <<'PY'
+          import base64, os
+          from pathlib import Path
+          destination = Path(os.environ['WILDBUZZARD_DEBUG_KEYSTORE'])
+          destination.write_bytes(base64.b64decode(os.environ['CI_DEBUG_KEYSTORE_B64'], validate=True))
+          destination.chmod(0o600)
+          PY
+          elif [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            keytool -genkeypair -keystore "$WILDBUZZARD_DEBUG_KEYSTORE" -storetype PKCS12 -storepass android -alias androiddebugkey -keypass android -dname 'CN=Wild Buzzard Pull Request Debug,O=openresearchtools,C=US' -keyalg RSA -keysize 3072 -validity 10000
+          else
+            echo 'WILDBUZZARD_CI_DEBUG_KEYSTORE must be configured for stable installable builds' >&2
+            exit 1
+          fi
       - name: Enable compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
