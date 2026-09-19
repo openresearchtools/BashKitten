@@ -17,6 +17,7 @@ jobs:
     env:
       MOZCONFIG: ${{ github.workspace }}/wildbuzzard/android/mozconfig
       MOZBUILD_STATE_PATH: ${{ github.workspace }}-mozbuild
+      ANDROID_NDK_HOME: ${{ github.workspace }}-mozbuild/android-ndk-r29
       PYTHONUNBUFFERED: '1'
       DISABLE_TELEMETRY: '1'
       RUSTUP_TOOLCHAIN: '1.96.0'
