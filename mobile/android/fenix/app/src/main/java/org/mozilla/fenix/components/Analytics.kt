@@ -5,30 +5,10 @@
 package org.mozilla.fenix.components
 
 import android.app.Application
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.os.Build
 import mozilla.components.lib.crash.CrashReporter
-import mozilla.components.lib.crash.runtimetagproviders.BuildRuntimeTagProvider
-import mozilla.components.lib.crash.runtimetagproviders.EnvironmentRuntimeProvider
-import mozilla.components.lib.crash.runtimetagproviders.ExperimentDataRuntimeTagProvider
-import mozilla.components.lib.crash.runtimetagproviders.VersionInfoProvider
-import mozilla.components.lib.crash.sentry.SentryService
-import mozilla.components.lib.crash.sentry.eventprocessors.CrashMetadataEventProcessor
-import mozilla.components.lib.crash.service.CrashReporterService
-import mozilla.components.lib.crash.service.GleanCrashReporterService
-import mozilla.components.lib.crash.service.socorro.MozillaSocorroService
-import mozilla.components.lib.crash.store.CrashReportOption
-import mozilla.components.support.ktx.android.content.isMainProcess
 import mozilla.components.support.utils.Browsers
 import mozilla.components.support.utils.RunWhenReadyQueue
-import mozilla.components.support.utils.ext.packageManagerCompatHelper
-import org.mozilla.fenix.BuildConfig
-import org.mozilla.fenix.Config
-import org.mozilla.fenix.HomeActivity
-import org.mozilla.fenix.R
-import org.mozilla.fenix.ReleaseChannel
 import org.mozilla.fenix.components.metrics.AdjustMetricsService
 import org.mozilla.fenix.components.metrics.DefaultMetricsStorage
 import org.mozilla.fenix.components.metrics.FirstSessionMetricsService
@@ -39,15 +19,8 @@ import org.mozilla.fenix.components.metrics.InstallReferrerMetricsService
 import org.mozilla.fenix.components.metrics.MetricController
 import org.mozilla.fenix.components.metrics.MetricsStorage
 import org.mozilla.fenix.crashes.CrashFactCollector
-import org.mozilla.fenix.crashes.NimbusExperimentDataProvider
-import org.mozilla.fenix.crashes.ReleaseRuntimeTagProvider
-import org.mozilla.fenix.crashes.crashReportOption
 import org.mozilla.fenix.perf.lazyMonitored
 import org.mozilla.fenix.utils.Settings
-import org.mozilla.geckoview.BuildConfig.MOZ_APP_BUILDID
-import org.mozilla.geckoview.BuildConfig.MOZ_APP_VENDOR
-import org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION
-import org.mozilla.geckoview.BuildConfig.MOZ_UPDATE_CHANNEL
 
 /**
  * Component group for all functionality related to analytics e.g. crash reporting and telemetry.
@@ -104,24 +77,3 @@ class Analytics(
         )
     }
 }
-
-private fun isSentryEnabled() = !BuildConfig.SENTRY_TOKEN.isNullOrEmpty()
-
-private fun getSentryProjectUrl(): String? {
-    val baseUrl = "https://sentry.io/organizations/mozilla/issues"
-    return when (Config.channel) {
-        ReleaseChannel.Nightly -> "$baseUrl/?project=6295546"
-        ReleaseChannel.Release -> "$baseUrl/?project=6375561"
-        ReleaseChannel.Beta -> "$baseUrl/?project=6295551"
-        else -> null
-    }
-}
-
-private val Context.versionInfoProvider: VersionInfoProvider
-    get() {
-        val packageInfo = applicationContext.packageManagerCompatHelper.getPackageInfoCompat(
-            applicationContext.packageName,
-            0,
-        )
-        return VersionInfoProvider.fromPackageInfo(packageInfo)
-    }

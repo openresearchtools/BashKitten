@@ -71,10 +71,6 @@ internal fun MoreSettingsSubmenu(
             isPrivate = isPrivate,
             onMoveToNonPrivateTabMenuClick = onMoveToNonPrivateTabMenuClick,
         )
-        WebCompatReporterMenuItem(
-            isWebCompatEnabled = isWebCompatEnabled,
-            onWebCompatReporterClick = onWebCompatReporterClick,
-        )
         ShortcutsSection(
             showShortcuts = showShortcuts,
             isPinned = isPinned,
