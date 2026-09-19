@@ -26,6 +26,7 @@ public final class BrowserApp extends ContextWrapper {
         void desktop(String id, boolean enabled);
         void screenshot(String id, Consumer<Bitmap> result);
         void bookmark(String url, String title, Consumer<String> done, Consumer<String> fail);
+        void quickAccess(String url, String title, Consumer<String> done, Consumer<String> fail);
         Intent launchIntent();
     }
     public static BrowserApp get(Context context) { return ((Provider) context.getApplicationContext()).wildBuzzard(); }
@@ -201,7 +202,7 @@ public final class BrowserApp extends ContextWrapper {
             page(tab, "configure", params, value -> { tab.ready = !tab.tor || tab.port != 0; done.accept(value); }, fail);
         } catch (Exception error) { fail.accept("Could not configure tab"); }
     }
-    void setAdblock(Tab tab, boolean enabled, Consumer<JSONObject> done, Consumer<String> fail) {
+    public void setAdblock(Tab tab, boolean enabled, Consumer<JSONObject> done, Consumer<String> fail) {
         tab.adblock = enabled;
         save(tab);
         if (tab.session == null || !tab.session.isOpen()) {
@@ -236,6 +237,29 @@ public final class BrowserApp extends ContextWrapper {
         }
     }
     void show(Tab tab) { host.show(tab.id); }
+
+    public void openTorTab(String address, Consumer<String> fail) {
+        String url;
+        try {
+            String value = address.trim();
+            url = value.isEmpty() ? "about:blank" : webUrl(value.contains("://") ? value : "https://" + value);
+        } catch (Exception error) { fail.accept("Enter a website address"); return; }
+        create(USER, true, url, this::show, fail);
+    }
+
+    public void savedTorSites(Consumer<Map<String, String>> result) {
+        tor.list(hosts -> {
+            Map<String, String> sites = new TreeMap<>();
+            for (String host : hosts) sites.put(host, policies.getString("onion." + host + ".title", host));
+            result.accept(sites);
+        });
+    }
+
+    public void revokeAgentAccess() {
+        grants.revokeAll(); commands.revokeAll(); refresh();
+        for (Tab tab : new ArrayList<>(tabs.values())) if (!tab.owner.equals(USER)) close(tab);
+        message("Agent access revoked");
+    }
     void close(Tab tab) {
         tabs.remove(tab.id);
         // Fenix can restore a closed tab with its original ID and session context.

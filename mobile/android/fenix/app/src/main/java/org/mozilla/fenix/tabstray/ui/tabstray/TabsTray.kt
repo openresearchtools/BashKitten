@@ -56,6 +56,7 @@ import org.mozilla.fenix.tabstray.ui.tabpage.NormalTabsPage
 import org.mozilla.fenix.tabstray.ui.tabpage.PrivateTabsPage
 import org.mozilla.fenix.tabstray.ui.tabpage.SyncedTabsPage
 import org.mozilla.fenix.tabstray.ui.tabpage.TabGroupsPage
+import org.mozilla.fenix.tabstray.ui.tabpage.TorTabsPage
 import org.mozilla.fenix.tabstray.ui.theme.TabManagerThemeProvider
 import org.mozilla.fenix.theme.FirefoxTheme
 import mozilla.components.browser.storage.sync.Tab as SyncTab
@@ -199,6 +200,7 @@ fun TabsTray(
                 selectedPage = tabsTrayState.selectedPage,
                 normalTabCount = tabsTrayState.normalTabsState.tabCount,
                 privateTabCount = tabsTrayState.privateBrowsing.tabs.size,
+                torTabCount = tabsTrayState.torTabsState.tabCount,
                 shouldShowTabGroupsPage = shouldShowTabGroupsPage,
                 tabGroupCount = tabsTrayState.tabGroupState.groups.size,
                 syncedTabCount = syncedTabCount,
@@ -297,6 +299,15 @@ fun TabsTray(
                         )
                     }
 
+                    Page.TorTabs -> {
+                        TorTabsPage(
+                            state = tabsTrayState,
+                            onTabClose = onTabClose,
+                            onItemClick = onItemClick,
+                            onItemLongClick = onItemLongClick,
+                            tabInteractionHandler = tabInteractionHandler,
+                        )
+                    }
                     Page.PrivateTabs -> {
                         PrivateTabsPage(
                             privateTabs = tabsTrayState.privateBrowsing.tabs,

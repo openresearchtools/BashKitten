@@ -481,14 +481,9 @@ class Settings(
         persistDefaultIfNotExists = true,
     )
 
-    var currentWallpaperName by stringPreference(
-        appContext.getPreferenceKey(R.string.pref_key_current_wallpaper),
-        default = if (enableHomepageEdgeToEdgeBackgroundFeature) {
-            Wallpaper.EdgeToEdge.name
-        } else {
-            Wallpaper.Default.name
-        },
-    )
+    var currentWallpaperName: String
+        get() = Wallpaper.Default.name
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * A cache of the text color to use on text overlaying the current wallpaper.
@@ -2068,11 +2063,18 @@ class Settings(
         default = { FxNimbus.features.searchOptimizationOption.value().showSportsCard },
     )
 
-    var isTabStripEnabled by booleanPreference(
+    var showTabStripOnWideWindows by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_tab_strip_show),
-        default = FxNimbus.features.tabStrip.value().enabled &&
-                (isTabStripEligible(appContext) || FxNimbus.features.tabStrip.value().allowOnAllDevices),
+        default = true,
     )
+
+    // Updated from the activity's current window, including split-screen and fold changes.
+    var browserWindowWidthDp: Int = appContext.resources.configuration.screenWidthDp
+
+    var isTabStripEnabled: Boolean
+        get() = showTabStripOnWideWindows && browserWindowWidthDp >= 600
+        set(value) { showTabStripOnWideWindows = value }
+
 
     var isDynamicToolbarEnabled by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_dynamic_toolbar),
@@ -2113,14 +2115,7 @@ class Settings(
     /**
      * Returns true if the the device has the prerequisites to enable the tab strip.
      */
-    private fun isTabStripEligible(context: Context): Boolean {
-        // Tab Strip is currently disabled on foldable devices, while we work on improving the
-        // Homescreen / Toolbar / Browser screen to better support the feature. There is also
-        // an emulator bug that causes the doesDeviceHaveHinge check to return true on emulators,
-        // causing it to be disabled on emulator tablets for API 34 and below.
-        // https://issuetracker.google.com/issues/296162661
-        return context.isLargeScreenSize() && !context.doesDeviceHaveHinge()
-    }
+
 
     /**
      * Show the Addresses autofill feature.
@@ -3134,26 +3129,23 @@ class Settings(
     /**
      * Whether the Tab Groups feature is enabled.
      */
-    var tabGroupsEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_tab_groups),
-        default = { DefaultTabManagementFeatureHelper.tabGroupsEnabled },
-    )
+    var tabGroupsEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Whether drag and drop is enabled for the Tab Groups feature.
      */
-    var tabGroupsDragAndDropEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_tab_groups_drag_and_drop),
-        default = { DefaultTabManagementFeatureHelper.tabGroupsDragAndDropEnabled },
-    )
+    var tabGroupsDragAndDropEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Whether onboarding is enabled for the Tab Groups feature.
      */
-    var tabGroupsOnboardingEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_tab_groups_onboarding),
-        default = { DefaultTabManagementFeatureHelper.tabGroupsOnboardingEnabled },
-    )
+    var tabGroupsOnboardingEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Whether the Native Share Sheet feature is enabled.
@@ -3189,10 +3181,9 @@ class Settings(
     /**
      * Whether Longfox is enabled.
      */
-    var longfoxEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_longfox),
-        default = { FxNimbus.features.longfox.value().enabled },
-    )
+    var longfoxEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Number of times the app has been foregrounded (cold start or returned from background).

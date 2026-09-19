@@ -18,7 +18,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,7 +29,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.trace
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.onSubscription
 import mozilla.components.browser.state.state.TabSessionState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.compose.base.theme.information
@@ -115,30 +116,21 @@ fun ThumbnailImage(
     } else {
         trace(TabsTrayTraceTag.TRACE_THUMBNAIL_IMAGE_CREATION) {
             var state by remember(request) { mutableStateOf(ThumbnailImageState(null, false)) }
-            val scope = rememberCoroutineScope()
             val storage = components.core.thumbnailStorage
 
-            DisposableEffect(request) {
-                if (!state.hasLoaded) {
-                    scope.launch {
-                        val thumbnailBitmap = storage.loadThumbnail(request).await()
-                        thumbnailBitmap?.prepareToDraw()
-                        state = ThumbnailImageState(
-                            bitmap = thumbnailBitmap,
-                            hasLoaded = true,
-                        )
+            LaunchedEffect(request, storage) {
+                storage.thumbnailUpdates.onSubscription { emit(request.id) }
+                    .filter { it == request.id }
+                    .collectLatest {
+                        val bitmap = storage.loadThumbnail(request).await()
+                        bitmap?.prepareToDraw()
+                        state = ThumbnailImageState(bitmap, true)
                     }
-                }
-
+            }
+            DisposableEffect(request) {
                 onDispose {
-                    // Recycle the bitmap to liberate the RAM. Without this, a list of [ThumbnailImage]
-                    // will bloat the memory. This is a trade-off, however, as the bitmap
-                    // will be re-fetched if this Composable is disposed and re-loaded.
                     state.bitmap?.recycle()
-                    state = ThumbnailImageState(
-                        bitmap = null,
-                        hasLoaded = false,
-                    )
+                    state = ThumbnailImageState(null, false)
                 }
             }
 
@@ -148,7 +140,7 @@ fun ThumbnailImage(
                 state.bitmap?.let { bitmap ->
                     Image(
                         bitmap = bitmap.asImageBitmap(),
-                        contentDescription = null,
+                        contentDescription = "Page preview",
                         modifier = modifier,
                         contentScale = contentScale,
                         alignment = alignment,
@@ -198,7 +190,7 @@ private fun FallbackContent(
             )
         } else if (tabUrl == ABOUT_HOME_URL) {
             Image(
-                painter = painterResource(id = R.drawable.ic_firefox),
+                painter = painterResource(id = R.drawable.wildbuzzard_logo),
                 contentDescription = null,
                 modifier = Modifier
                     .size(FallbackIconSize)

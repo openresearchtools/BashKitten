@@ -49,7 +49,7 @@ public final class OnionActivity extends ProductActivity {
         EditText name = new EditText(this); name.setHint("Site name"); name.setSingleLine();
         name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});
         name.setText(siteName(key.host)); form.addView(name);
-        CheckBox bookmark = new CheckBox(this); bookmark.setText("Add to bookmarks"); bookmark.setChecked(true); form.addView(bookmark);
+        CheckBox bookmark = new CheckBox(this); bookmark.setText("Add to quick access"); bookmark.setChecked(true); form.addView(bookmark);
         new AlertDialog.Builder(this).setTitle("Add private Tor site").setView(form)
             .setNegativeButton("Cancel", null).setPositiveButton("Save site", (dialog, which) -> {
                 String title = name.getText().toString().trim();
@@ -58,7 +58,7 @@ public final class OnionActivity extends ProductActivity {
     }
     private String siteName(String host) { return app.policies.getString("onion." + host + ".title", host); }
     private void bookmark(String host) {
-        app.host.bookmark("https://" + host + "/", siteName(host), this::message, this::message);
+        app.host.quickAccess("https://" + host + "/", siteName(host), this::message, this::message);
     }
     private void save(OnionKey key, String title, boolean bookmark) {
         address.setText(key.host); secret.setText(""); manual.setVisibility(android.view.View.GONE);
@@ -82,9 +82,9 @@ public final class OnionActivity extends ProductActivity {
                 LinearLayout actions = new LinearLayout(this); imported.addView(actions);
                 siteAction(actions, "Open", "Open " + host, () ->
                     app.create(BrowserApp.USER, false, "https://" + host + "/", tab -> { app.show(tab); finish(); }, this::message));
-                siteAction(actions, "Bookmark", "Bookmark " + host, () -> bookmark(host));
+                siteAction(actions, "Quick access", "Quick access " + host, () -> bookmark(host));
                 siteAction(actions, "Remove", "Remove " + host, () -> new AlertDialog.Builder(this)
-                    .setTitle("Remove private site?").setMessage("Remove the saved key for " + siteName(host) + "? Any bookmark will remain.")
+                    .setTitle("Remove private site?").setMessage("Remove the saved key for " + siteName(host) + "? Quick-access entries and bookmarks will remain.")
                     .setNegativeButton("Cancel", null).setPositiveButton("Remove", (dialog, which) ->
                         app.tor.remove(host, value -> { message(value); refreshImported(); })).show());
             }

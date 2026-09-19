@@ -387,9 +387,14 @@ class TabManagementFragment : Fragment() {
                                             tabsTrayStore.dispatch(TabsTrayAction.CloseAllPrivateTabs)
                                         }
 
-                                        tabManagerController.onCloseAllTabsClicked(
-                                            private = tabsTrayStore.state.selectedPage == Page.PrivateTabs,
-                                        )
+                                        if (tabsTrayStore.state.selectedPage == Page.NormalTabs) {
+                                            val ids = tabsTrayStore.state.normalTabsState.items.map { it.id } +
+                                                tabsTrayStore.state.inactiveTabs.tabs.map { it.id }
+                                            requireComponents.useCases.tabsUseCases.removeTabs(ids)
+                                            showUndoSnackbarForTab(false)
+                                        } else {
+                                            tabManagerController.onCloseAllTabsClicked(private = true)
+                                        }
                                     },
                                     onDeleteSelectedTabsClick =
                                         tabManagerInteractor::onDeleteSelectedTabsClicked,
@@ -588,7 +593,10 @@ class TabManagementFragment : Fragment() {
         val coreState = requireComponents.core.store.state
 
         return TabsTrayState(
-            selectedPage = args.page,
+            selectedPage = if (args.page == Page.NormalTabs &&
+                coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
+                    it.contextId?.startsWith("wildbuzzard-tor-") == true }
+            ) Page.TorTabs else args.page,
             mode = if (args.enterMultiselect) TabsTrayState.Mode.Select(emptySet()) else TabsTrayState.Mode.Normal,
             inactiveTabs = TabsTrayState.InactiveTabsState(
                 isExpanded = appState.inactiveTabsExpanded,
@@ -776,7 +784,7 @@ class TabManagementFragment : Fragment() {
                 true -> getString(R.string.snackbar_private_tab_closed)
                 false -> getString(R.string.snackbar_tab_closed)
             }
-        val page = if (isPrivate) Page.PrivateTabs else Page.NormalTabs
+        val page = if (isPrivate) Page.PrivateTabs else tabsTrayStore.state.selectedPage
         val undoUseCases = requireComponents.useCases.tabsUseCases.undo
 
         lifecycleScope.launch {
@@ -987,8 +995,12 @@ class TabManagementFragment : Fragment() {
      * the selected page is normal and the tab is normal.  Returns false otherwise.
      */
     private fun tabMatchesPage(selectedPage: Page, tabState: TabsTrayItem.Tab?): Boolean {
-        return (selectedPage == Page.NormalTabs && tabState?.private == false) ||
-            (selectedPage == Page.PrivateTabs && tabState?.private == true)
+        return when (selectedPage) {
+            Page.NormalTabs -> tabsTrayStore.state.normalTabsState.items.any { it.id == tabState?.id }
+            Page.TorTabs -> tabsTrayStore.state.torTabsState.items.any { it.id == tabState?.id }
+            Page.PrivateTabs -> tabState?.private == true
+            else -> false
+        }
     }
 
     /**

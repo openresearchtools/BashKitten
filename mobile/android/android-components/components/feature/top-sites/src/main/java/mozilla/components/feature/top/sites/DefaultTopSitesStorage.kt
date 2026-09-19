@@ -85,6 +85,13 @@ class DefaultTopSitesStorage private constructor(
         notifyObservers { onStorageUpdated() }
     }
 
+    /** Remove bundled shortcuts without deleting browsing history or user-created pins. */
+    suspend fun removeDefaultTopSites() {
+        val defaults = pinnedSitesStorage.getPinnedSites().filterIsInstance<TopSite.Default>()
+        defaults.forEach { pinnedSitesStorage.removePinnedSite(it) }
+        if (defaults.isNotEmpty()) notifyObservers { onStorageUpdated() }
+    }
+
     override suspend fun addTopSites(topSites: List<Pair<String, String>>, isDefault: Boolean) {
         pinnedSitesStorage.addAllPinnedSites(topSites = topSites, isDefault = isDefault)
         notifyObservers { onStorageUpdated() }

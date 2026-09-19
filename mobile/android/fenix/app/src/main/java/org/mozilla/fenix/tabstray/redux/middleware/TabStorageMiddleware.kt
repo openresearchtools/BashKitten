@@ -486,6 +486,8 @@ class TabStorageMiddleware(
         val normalItems: MutableList<TabsTrayItem> = mutableListOf()
         val inactiveTabs: MutableList<TabsTrayItem.Tab> = mutableListOf()
         val privateTabs: MutableList<TabsTrayItem> = mutableListOf()
+        val torTabs: MutableList<TabsTrayItem> = mutableListOf()
+        var selectedTorTabIndex = 0
         val transformedTabGroups = constructTabGroupMaps(tabGroups = tabGroups)
         val groupsIncludedInNormalTabs = hashSetOf<TabItemId>()
         var normalTabCount = 0
@@ -501,6 +503,11 @@ class TabStorageMiddleware(
             val assignedGroup = transformedTabGroups[assignedGroupId]
 
             when {
+                // Private onion tabs keep private storage and the private-tab lock.
+                !displayTab.private && tab.contextId?.startsWith("wildbuzzard-tor-") == true -> {
+                    torTabs.add(displayTab)
+                    if (displayTab.isFocused) selectedTorTabIndex = torTabs.lastIndex
+                }
                 assignedGroup != null -> {
                     if (!assignedGroup.closed) {
                         normalTabCount++
@@ -542,6 +549,8 @@ class TabStorageMiddleware(
             normalTabCount = normalTabCount,
             selectedNormalItemIndex = selectedNormalTabIndex,
             inactiveTabs = inactiveTabs,
+            torTabs = torTabs,
+            selectedTorItemIndex = selectedTorTabIndex,
             privateTabs = privateTabs,
             selectedPrivateItemIndex = selectedPrivateTabIndex,
             tabGroups = transformedTabGroups.values.toList().sortedByDescending { it.lastModified },

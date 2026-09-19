@@ -87,9 +87,10 @@ public final class CommandBrowserTest {
         context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.openresearchtools.wildbuzzard.CommandAccessActivity")
             .putExtra("launch", launch.getString("launch")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 15000); assertNotNull(menu); menu.click();
-        if (!device.wait(Until.hasObject(By.desc("Wild Buzzard tab controls")), 2000))
-            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Wild Buzzard tab controls");
-        click(device, "Wild Buzzard tab controls"); click(device, "Revoke agent access");
+        new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Settings"));
+        click(device, "Settings");
+        new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Revoke agent access");
+        click(device, "Revoke agent access");
         assertTrue("Revocation disables the saved shell key", run("tabs.list").exit != 0);
         android.util.Log.i("WildBuzzardProbe", "PASS: browser-owned shell entry, real page access, tab isolation, closure, and revocation");
         device.pressBack();

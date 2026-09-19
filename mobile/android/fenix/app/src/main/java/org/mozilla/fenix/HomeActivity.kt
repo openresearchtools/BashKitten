@@ -414,10 +414,14 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         }
     }
 
+    private var tabStripShownForWindow = false
+
     @Suppress("CognitiveComplexMethod", "CyclomaticComplexMethod")
     final override fun onCreate(savedInstanceState: Bundle?) {
         // DO NOT MOVE ANYTHING ABOVE THIS getProfilerTime CALL.
         val startTimeProfiler = components.core.engine.profiler?.getProfilerTime()
+        components.settings.browserWindowWidthDp = resources.configuration.screenWidthDp
+        tabStripShownForWindow = components.settings.isTabStripEnabled
 
         // Setup nimbus-cli tooling. This is a NOOP when launching normally.
         components.nimbus.sdk.initializeTooling(applicationContext, intent)
@@ -913,7 +917,15 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     }
 
     final override fun onConfigurationChanged(newConfig: Configuration) {
+        components.settings.browserWindowWidthDp = newConfig.screenWidthDp
+        val showTabStrip = components.settings.isTabStripEnabled
         super.onConfigurationChanged(newConfig)
+        if (showTabStrip != tabStripShownForWindow) {
+            tabStripShownForWindow = showTabStrip
+            // Rebind both toolbar placement and Gecko viewport insets; sessions remain in the application store.
+            recreate()
+            return
+        }
 
         // Diagnostic breadcrumb for "Display already aquired" crash:
         // https://github.com/mozilla-mobile/android-components/issues/7960

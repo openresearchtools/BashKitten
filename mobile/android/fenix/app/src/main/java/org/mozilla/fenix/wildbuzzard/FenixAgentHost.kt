@@ -137,6 +137,17 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
             } catch (error: Exception) { fail.accept("Could not save bookmark") }
         }
     }
+    override fun quickAccess(url: String, title: String, done: Consumer<String>, fail: Consumer<String>) {
+        CoroutineScope(Dispatchers.Main).launch {
+            try {
+                val storage = components.core.topSitesStorage
+                val existing = storage.getTopSites(Int.MAX_VALUE, null, null).find { it.url == url }
+                if (existing == null) storage.addTopSite(title, url, isDefault = false)
+                else storage.updateTopSite(existing, title, url)
+                done.accept(if (existing == null) "Saved to quick access" else "Already in quick access")
+            } catch (error: Exception) { fail.accept("Could not save quick access") }
+        }
+    }
     override fun launchIntent() = Intent(application, HomeActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         .putExtra(HomeActivity.OPEN_TO_BROWSER, true)

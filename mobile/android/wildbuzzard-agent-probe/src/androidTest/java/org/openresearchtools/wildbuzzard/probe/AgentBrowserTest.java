@@ -47,12 +47,12 @@ public final class AgentBrowserTest {
         assertNotNull("Fenix menu", menu); menu.click();
         device.waitForIdle();
         assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-menu.png")));
-        if (!device.wait(Until.hasObject(By.desc("Wild Buzzard tab controls")), 2000)) {
-            new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Wild Buzzard tab controls");
-        }
-        click(device, "Wild Buzzard tab controls");
-        assertTrue(device.wait(Until.hasObject(By.text("Adblocking for this tab")), 10000));
-        assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-dark-tab-controls.png")));
+        assertNotNull("Desktop site is in the normal menu", device.wait(Until.findObject(By.desc("Desktop site")), 10000));
+        assertNotNull("Per-tab adblocking is in the normal menu", device.wait(Until.findObject(By.desc("Adblocking for this tab")), 10000));
+        assertFalse("No separate product tab-options screen", device.hasObject(By.desc("Wild Buzzard tab controls")));
+        new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Settings"));
+        click(device, "Settings");
+        new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView("Licenses and source");
         click(device, "Licenses and source");
         assertTrue(device.wait(Until.hasObject(By.text("Wild Buzzard, BrowserOS and agent tools")), 10000));
         assertTrue(device.wait(Until.hasObject(By.text("C Tor and its dependencies")), 10000));

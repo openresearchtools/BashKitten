@@ -37,11 +37,10 @@ public final class OnionBrowserTest {
         probe.send(probe.browser.showTab(tab));
         probe.waitPage(tab);
         device.waitForIdle();
-        UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 20000);
-        assertNotNull("Fenix menu", menu); menu.click();
-        if (!device.wait(Until.hasObject(By.desc("Private Tor sites")), 2000)) {
-            new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().description("Private Tor sites"));
-        }
+        UiObject2 counter = device.wait(Until.findObject(By.descMatches("(?:Non-private )?Tabs Open:.*")), 20000);
+        assertNotNull("Fenix tab counter", counter); counter.click();
+        UiObject2 torPage = device.wait(Until.findObject(By.descStartsWith("Tor tabs:")), 10000);
+        assertNotNull("Normal / Private / Tor tray", torPage); torPage.click();
         click(device, "Private Tor sites");
         assertTrue(device.wait(Until.hasObject(By.text("Private Tor sites")), 10000));
         click(device, "Back");
@@ -71,8 +70,8 @@ public final class OnionBrowserTest {
         assertTrue("Tor installs the encrypted credential", device.wait(Until.hasObject(By.text("Onion key imported")), 195000));
         assertTrue("File import supplies the onion address without typing",
             device.wait(Until.hasObject(By.desc("Open " + fixture.getString("onion"))), 10000));
-        click(device, "Bookmark " + fixture.getString("onion"));
-        assertTrue("Import created a normal bookmark", device.wait(Until.hasObject(By.text("Already in bookmarks")), 10000));
+        click(device, "Quick access " + fixture.getString("onion"));
+        assertTrue("Import created a quick-access shortcut", device.wait(Until.hasObject(By.text("Already in quick access")), 10000));
         String privateTab = create(probe, "http://127.0.0.1:8765/", false);
         probe.waitPage(privateTab);
         probe.command("navigate", probe.params(privateTab).put("url", "https://" + fixture.getString("onion")));

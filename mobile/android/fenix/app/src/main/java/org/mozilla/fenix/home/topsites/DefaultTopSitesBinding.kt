@@ -8,8 +8,6 @@ import android.content.res.Resources
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -53,23 +51,8 @@ class DefaultTopSitesBinding(
 ) : AbstractBinding<BrowserState>(browserStore, mainDispatcher = mainDispatcher) {
 
     override suspend fun onState(flow: Flow<BrowserState>) {
-        if (settings.defaultTopSitesAdded) return
-
-        flow
-            .mapNotNull { it.search.region }
-            .distinctUntilChanged()
-            .collect { regionState ->
-                if (isReleased && regionState == RegionState.Default) {
-                    return@collect
-                }
-
-                val defaultTopSites = getTopSites(region = regionState.current)
-
-                if (defaultTopSites.isNotEmpty()) {
-                    topSitesStorage.addTopSites(topSites = defaultTopSites, isDefault = true)
-                    settings.defaultTopSitesAdded = true
-                }
-            }
+        topSitesStorage.removeDefaultTopSites()
+        settings.defaultTopSitesAdded = true
     }
 
     internal suspend fun getTopSites(region: String): List<Pair<String, String>> = withContext(ioDispatcher) {

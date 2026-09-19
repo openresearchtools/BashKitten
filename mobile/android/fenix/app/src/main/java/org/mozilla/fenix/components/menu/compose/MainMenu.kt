@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -273,18 +275,6 @@ fun MainMenu(
             }
         }
 
-        MenuGroup {
-            val context = LocalContext.current
-            MenuItem(
-                label = "Private Tor sites",
-                beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_lock_24),
-                onClick = {
-                    context.startActivity(android.content.Intent(
-                        context, org.openresearchtools.wildbuzzard.OnionActivity::class.java,
-                    ))
-                },
-            )
-        }
 
         if (accessPoint == MenuAccessPoint.Home) {
             MenuGroup {
@@ -337,13 +327,7 @@ fun MainMenu(
         MenuGroup {
             // Mozilla accounts and Sync are not product features in Wild Buzzard.
 
-            if (accessPoint == MenuAccessPoint.Home) {
-                MenuItem(
-                    label = stringResource(id = R.string.browser_menu_change_wallpaper),
-                    beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_wallpaper_24),
-                    onClick = onWallpaperButtonClick,
-                )
-            }
+
 
             MenuItem(
                 label = stringResource(id = R.string.browser_menu_settings),
@@ -401,16 +385,27 @@ private fun ToolsAndActionsMenuGroup(
     extensionSubmenu: @Composable () -> Unit,
 ) {
     MenuGroup {
-        val wildBuzzardContext = androidx.compose.ui.platform.LocalContext.current
-        MenuItem(
-            label = "Wild Buzzard tab controls",
-            beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_settings_24),
-            onClick = {
-                wildBuzzardContext.startActivity(android.content.Intent(
-                    wildBuzzardContext, org.openresearchtools.wildbuzzard.TabOptionsActivity::class.java,
-                ))
-            },
-        )
+        val context = LocalContext.current
+        val browser = (context.applicationContext as? org.openresearchtools.wildbuzzard.BrowserApp.Provider)?.wildBuzzard()
+        val tab = browser?.host?.selected()
+        var adblock by androidx.compose.runtime.remember(tab?.id) {
+            androidx.compose.runtime.mutableStateOf(tab?.adblock ?: true)
+        }
+        if (tab != null) {
+            MenuItem(
+                label = "Adblocking for this tab",
+                beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_shield_24),
+                stateDescription = if (adblock) "On" else "Off",
+                state = if (adblock) MenuItemState.ACTIVE else MenuItemState.ENABLED,
+                onClick = {
+                    browser?.setAdblock(tab, !adblock, { adblock = tab.adblock }, {
+                        android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+                    })
+                },
+            ) {
+                androidx.compose.material3.Checkbox(checked = adblock, onCheckedChange = null)
+            }
+        }
         val labelId = R.string.browser_menu_desktop_site
         val badgeText: String
         val menuItemState: MenuItemState
@@ -462,10 +457,7 @@ private fun ToolsAndActionsMenuGroup(
                 return@MenuItem
             }
 
-            Badge(
-                badgeText = badgeText,
-                state = menuItemState,
-            )
+            androidx.compose.material3.Checkbox(checked = isDesktopMode, onCheckedChange = null)
         }
 
         ExtensionsMenuItem(

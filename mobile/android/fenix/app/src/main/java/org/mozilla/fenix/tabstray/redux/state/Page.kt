@@ -24,6 +24,9 @@ enum class Page {
      */
     TabGroups,
 
+    /** Tabs with a browser-owned Tor route. */
+    TorTabs,
+
     /**
      * The page that displays Synced Tabs.
      */
@@ -36,12 +39,9 @@ enum class Page {
          *
          * @param shouldShowTabGroupsPage Whether the tab groups page should be included.
          */
+        @Suppress("UNUSED_PARAMETER")
         fun visiblePages(shouldShowTabGroupsPage: Boolean): List<Page> =
-            listOfNotNull(
-                PrivateTabs,
-                NormalTabs,
-                TabGroups.takeIf { shouldShowTabGroupsPage },
-            )
+            listOf(NormalTabs, PrivateTabs, TorTabs)
 
         /**
          * Returns the [Page] that corresponds to the [position].
@@ -50,12 +50,7 @@ enum class Page {
          * @param shouldShowTabGroupsPage Whether the tab groups page should be included.
          */
         fun positionToPage(position: Int, shouldShowTabGroupsPage: Boolean = false): Page {
-            return when {
-                position == 0 -> PrivateTabs
-                position == 1 -> NormalTabs
-                shouldShowTabGroupsPage && position == 2 -> TabGroups
-                else -> NormalTabs
-            }
+            return visiblePages(shouldShowTabGroupsPage).getOrElse(position) { NormalTabs }
         }
 
         /**
@@ -65,12 +60,7 @@ enum class Page {
          * @param shouldShowTabGroupsPage Whether the tab groups page should be included.
          */
         fun pageToPosition(page: Page, shouldShowTabGroupsPage: Boolean = false): Int {
-            return when (page) {
-                PrivateTabs -> 0
-                NormalTabs -> 1
-                TabGroups -> if (shouldShowTabGroupsPage) 2 else 1
-                SyncedTabs -> 1
-            }
+            return visiblePages(shouldShowTabGroupsPage).indexOf(page).coerceAtLeast(0)
         }
     }
 }

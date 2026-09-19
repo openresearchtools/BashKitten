@@ -14,6 +14,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import mozilla.components.browser.thumbnails.R
 import mozilla.components.browser.thumbnails.utils.ThumbnailDiskCache
 import mozilla.components.concept.base.images.ImageLoadRequest
@@ -47,6 +49,10 @@ class ThumbnailStorage(
     private val maximumSize =
         context.resources.getDimensionPixelSize(R.dimen.mozac_browser_thumbnails_maximum_size)
     private val scope = CoroutineScope(jobDispatcher)
+    private val savedThumbnails = MutableSharedFlow<String>(extraBufferCapacity = 64)
+
+    /** IDs whose thumbnail has finished saving; visible tab cards can refresh a missing or old image. */
+    val thumbnailUpdates = savedThumbnails.asSharedFlow()
 
     init {
         privateDiskCache.clear(context)
@@ -129,5 +135,6 @@ class ThumbnailStorage(
             } else {
                 sharedDiskCache.putThumbnailBitmap(context, request, bitmap)
             }
+            savedThumbnails.emit(request.id)
         }
 }

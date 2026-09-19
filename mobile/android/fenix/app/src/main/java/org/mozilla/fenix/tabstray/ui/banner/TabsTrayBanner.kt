@@ -124,6 +124,7 @@ fun TabsTrayBanner(
     onTabAutoCloseBannerShown: () -> Unit,
     onExitSelectModeClick: () -> Unit,
     onAddToTabGroup: () -> Unit,
+    torTabCount: Int = 0,
 ) {
     val isInMultiSelectMode by remember(selectionMode) {
         derivedStateOf {
@@ -167,6 +168,7 @@ fun TabsTrayBanner(
                 selectedPage = selectedPage,
                 normalTabCount = normalTabCount,
                 privateTabCount = privateTabCount,
+                torTabCount = torTabCount,
                 shouldShowTabGroupsPage = shouldShowTabGroupsPage,
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
@@ -237,6 +239,7 @@ private fun TabPageBanner(
     selectedPage: Page,
     normalTabCount: Int,
     privateTabCount: Int,
+    torTabCount: Int,
     shouldShowTabGroupsPage: Boolean,
     tabGroupCount: Int,
     syncedTabCount: Int,
@@ -276,6 +279,7 @@ private fun TabPageBanner(
                 selectedPage = selectedPage,
                 normalTabCount = normalTabCount,
                 privateTabCount = privateTabCount,
+                torTabCount = torTabCount,
                 shouldShowTabGroupsPage = shouldShowTabGroupsPage,
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
@@ -292,6 +296,7 @@ private fun TabPageBannerTabs(
     selectedPage: Page,
     normalTabCount: Int,
     privateTabCount: Int,
+    torTabCount: Int,
     shouldShowTabGroupsPage: Boolean,
     tabGroupCount: Int,
     syncedTabCount: Int,
@@ -306,24 +311,7 @@ private fun TabPageBannerTabs(
         id = R.string.tabs_header_normal_tabs_counter_title,
         normalTabCount.toString(),
     )
-    val tabGroupsDescription = pluralStringResource(
-        id = R.plurals.tabs_header_tab_group_counter_title,
-        count = tabGroupCount,
-        tabGroupCount,
-    )
-    val syncedTabDescription = stringResource(
-        id = R.string.tabs_header_synced_tabs_counter_title,
-        syncedTabCount.toString(),
-    )
 
-    BannerTab(
-        selected = selectedPage == Page.PrivateTabs,
-        testTag = TabsTrayTestTag.PRIVATE_TABS_PAGE_BUTTON,
-        contentDescription = privateTabDescription,
-        onClick = { onTabPageIndicatorClicked(Page.PrivateTabs) },
-    ) {
-        Icon(painterResource(iconsR.drawable.mozac_ic_private_mode_24), null)
-    }
 
     BannerTab(
         selected = selectedPage == Page.NormalTabs,
@@ -337,16 +325,24 @@ private fun TabPageBannerTabs(
         )
     }
 
-    if (shouldShowTabGroupsPage) {
-        BannerTab(
-            selected = selectedPage == Page.TabGroups,
-            testTag = TabsTrayTestTag.TAB_GROUPS_PAGE_BUTTON,
-            contentDescription = tabGroupsDescription,
-            onClick = { onTabPageIndicatorClicked(Page.TabGroups) },
-        ) {
-            Icon(painterResource(iconsR.drawable.mozac_ic_tab_group_24), null)
-        }
+    BannerTab(
+        selected = selectedPage == Page.PrivateTabs,
+        testTag = TabsTrayTestTag.PRIVATE_TABS_PAGE_BUTTON,
+        contentDescription = privateTabDescription,
+        onClick = { onTabPageIndicatorClicked(Page.PrivateTabs) },
+    ) {
+        Icon(painterResource(iconsR.drawable.mozac_ic_private_mode_24), null)
     }
+
+    BannerTab(
+        selected = selectedPage == Page.TorTabs,
+        testTag = "tor_tabs_page_button",
+        contentDescription = "Tor tabs: $torTabCount",
+        onClick = { onTabPageIndicatorClicked(Page.TorTabs) },
+    ) {
+        Text("Tor", style = FirefoxTheme.typography.body2)
+    }
+
 
 
 }
@@ -401,6 +397,7 @@ private fun MultiSelectBanner(
     onCloseSelectedTabsClick: () -> Unit,
     onMakeSelectedTabsInactive: () -> Unit,
     onAddToTabGroup: () -> Unit,
+    torTabCount: Int = 0,
 ) {
     val buttonsEnabled by remember(selectedTabCount) {
         derivedStateOf {
@@ -505,6 +502,7 @@ private fun generateMultiSelectBannerMenuItems(
     onSaveToCollectionsClick: () -> Unit,
     onMakeSelectedTabsInactive: () -> Unit,
     onAddToTabGroup: () -> Unit,
+    torTabCount: Int = 0,
 ): List<MenuItem> {
     val menuItems = mutableListOf(
         MenuItem.IconItem(

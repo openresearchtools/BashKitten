@@ -52,17 +52,30 @@ sharing another app's browsing session. Popups retain their opener's storage
 context. Adblock exceptions use the individual Gecko browser ID, independent of
 that storage context.
 
+The tab tray has Normal, Private and Tor pages. Non-private Tor sessions stay out
+of Normal; onion pages opened privately retain private storage and the private
+lock. The normal menu contains checkbox controls for Desktop site and per-tab
+adblocking. Licenses and agent-access revocation live in Settings. Seeded top
+sites, Firefox icon customization, wallpapers, the Longfox game and tab-group
+promotions are disabled. User-created shortcuts and history are preserved.
+
+The toolbar follows the activity's current window width. At 600 dp or wider it
+shows the tab bar by default; narrowing the window hides it. Folding, unfolding,
+rotation and split-screen changes rebind the toolbar and viewport while keeping
+browser sessions in the application store. The customization switch controls
+the wide-window tab bar, without forcing it onto a narrow phone window.
+
 ## Onion browsing
 
-Open **Private Tor sites** directly from the browser menu to scan a credential QR
+Open the tab tray, select **Tor**, then **Private Tor sites** to scan a credential QR
 or choose a complete `.auth_private` file. Give the site an optional name and
-save it; **Add to bookmarks** is checked by default. Saved sites have Open,
-Bookmark and Remove actions. These screens have a toolbar Back button, and the
+save it; **Add to quick access** is checked by default. Saved sites have Open,
+Quick access and Remove actions. These screens have a toolbar Back button, and the
 scanner has a visible Close button as well as Android Back support.
 
 Typing, following a link, opening a bookmark, or using the agent `navigate`
 command with an `.onion` address automatically prepares its tab for Tor. There
-is no manual Tor switch to enable first. Bookmarks store only the HTTPS address
+is no manual Tor switch to enable first. Quick-access entries and bookmarks store only the HTTPS address
 and title; the site-specific key remains in the encrypted credential store.
 
 Tor is C Tor 0.4.9.12 from Guardian Project's checksum-pinned ARM64 binary. Its
@@ -85,7 +98,7 @@ is restored after browser restart. QR enrollment URLs are parsed locally;
 they are never navigated or sent to a search engine.
 The QR and `.auth_private` options are first in the enrollment screen. Both
 extract the complete address/key pair; manual fields are an optional fallback.
-Imported sites can be opened from this screen or from normal browser bookmarks,
+Imported sites can be opened from this screen or from home-page quick access or the Tor tray,
 without retyping the address or key.
 
 For an enrolled v3 onion identity reached through that tab's Tor route, Gecko

@@ -39,32 +39,13 @@ internal fun WordmarkLogo(
     onLogoClicked: () -> Unit,
     isSportsWidgetEnabled: Boolean,
 ) {
-    val wordmarkResourceId = if (isSportsWidgetEnabled) R.attr.fenixWordmarkSportLogo else R.attr.fenixWordmarkLogo
-    val sportsLogoContentDescription = stringResource(R.string.sports_widget_country_selector_title)
     Image(
-        modifier = Modifier
-            .height(40.dp)
-            .semantics {
-                testTagsAsResourceId = true
-                testTag = HOMEPAGE_WORDMARK_LOGO
-                resourceId = wordmarkResourceId
-                if (isSportsWidgetEnabled) {
-                    contentDescription = sportsLogoContentDescription
-                }
-            }
-            .thenConditional(
-                Modifier.clickable(
-                    onClick = onLogoClicked,
-                    role = Role.Button,
-                ),
-            ) { isSportsWidgetEnabled }
-            .padding(end = 10.dp),
-        painter = painterResource(
-            getAttr(
-                wordmarkResourceId,
-            ),
-        ),
+        painter = painterResource(R.drawable.wildbuzzard_logo),
         contentDescription = null,
+        modifier = Modifier.height(40.dp).padding(end = 10.dp).semantics {
+            testTagsAsResourceId = true
+            testTag = HOMEPAGE_WORDMARK_LOGO
+        },
     )
 }
 

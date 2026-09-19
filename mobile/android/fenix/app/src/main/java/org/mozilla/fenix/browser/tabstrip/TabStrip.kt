@@ -44,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -195,6 +197,8 @@ private fun TabStripContent(
 ) {
     Row(
         modifier = Modifier
+            .testTag("wildbuzzard_tab_strip")
+            .semantics { testTagsAsResourceId = true }
             .fillMaxWidth()
             .height(dimensionResource(R.dimen.tab_strip_height))
             .background(brush = colors.backgroundBrush)
@@ -481,7 +485,7 @@ private fun TabStripIcon(
             )
         } else if (url == ABOUT_HOME_URL) {
             Favicon(
-                imageResource = R.drawable.ic_firefox,
+                imageResource = R.drawable.wildbuzzard_logo,
                 size = tabStripIconSize,
             )
         } else {

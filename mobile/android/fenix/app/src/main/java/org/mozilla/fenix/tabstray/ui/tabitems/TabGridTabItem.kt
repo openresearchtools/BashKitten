@@ -241,7 +241,7 @@ private fun TabIcon(
         )
     } else if (tab.url == ABOUT_HOME_URL) {
         Image(
-            painter = painterResource(id = R.drawable.ic_firefox),
+            painter = painterResource(id = R.drawable.wildbuzzard_logo),
             contentDescription = null,
             modifier = Modifier.size(TabHeaderFaviconSize),
         )

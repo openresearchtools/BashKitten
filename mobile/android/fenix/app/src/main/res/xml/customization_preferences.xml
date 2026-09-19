@@ -5,15 +5,6 @@
 <androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:key="@string/pref_key_customization_preference_screen" >
-    <androidx.preference.PreferenceCategory
-        android:layout="@layout/preference_cat_style"
-        android:title="@string/preferences_app_icon"
-        android:key="@string/pref_key_customization_category_app_icon"
-        app:allowDividerBelow="false"
-        app:iconSpaceReserved="false">
-        <org.mozilla.fenix.iconpicker.ui.AppIconPreference
-            android:key="@string/pref_key_app_icon" />
-    </androidx.preference.PreferenceCategory>
 
     <androidx.preference.PreferenceCategory
         android:layout="@layout/preference_cat_style"

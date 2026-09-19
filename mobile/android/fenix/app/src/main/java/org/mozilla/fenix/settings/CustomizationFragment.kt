@@ -275,12 +275,14 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
         val tabStripSwitch = requirePreference<SwitchPreferenceCompat>(R.string.pref_key_tab_strip_show)
         val context = requireContext()
 
-        tabStripSwitch.isChecked = Settings(requireContext()).isTabStripEnabled
+        tabStripSwitch.title = "Show tab bar on wide windows"
+        tabStripSwitch.summary = "Appears automatically on tablets and unfolded phones; hides in narrow windows"
+        tabStripSwitch.isChecked = context.components.settings.showTabStripOnWideWindows
 
         tabStripSwitch.setOnPreferenceChangeListener { _, newValue ->
             val enabled = newValue as Boolean
             context.components.settings.isTabStripEnabled = enabled
-            updateToolbarCategoryBasedOnTabStrip(enabled)
+            updateToolbarCategoryBasedOnTabStrip(context.components.settings.isTabStripEnabled)
             setupToolbarLayout()
             true
         }

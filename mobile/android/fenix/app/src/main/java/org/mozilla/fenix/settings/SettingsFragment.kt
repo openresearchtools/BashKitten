@@ -200,6 +200,29 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
+        val category = androidx.preference.PreferenceCategory(requireContext()).apply {
+            title = "Wild Buzzard"
+            key = "wildbuzzard_settings"
+        }
+        preferenceScreen.addPreference(category)
+        with(category) {
+            category.addPreference(androidx.preference.Preference(requireContext()).apply {
+                title = "Revoke agent access"
+                summary = "Disconnect all authorized apps and shell programs and close their tabs"
+                setOnPreferenceClickListener {
+                    org.openresearchtools.wildbuzzard.BrowserApp.get(requireContext()).revokeAgentAccess()
+                    true
+                }
+            })
+            category.addPreference(androidx.preference.Preference(requireContext()).apply {
+                title = "Licenses and source"
+                setOnPreferenceClickListener {
+                    startActivity(android.content.Intent(requireContext(),
+                        org.openresearchtools.wildbuzzard.LicensesActivity::class.java))
+                    true
+                }
+            })
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {

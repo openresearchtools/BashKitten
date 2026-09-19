@@ -241,6 +241,11 @@ internal object TabsTrayReducer {
                     selectedItemIndex = action.tabStorageUpdate.selectedNormalItemIndex,
                     tabCount = action.tabStorageUpdate.normalTabCount,
                 ),
+                torTabsState = state.torTabsState.copy(
+                    items = action.tabStorageUpdate.torTabs,
+                    selectedItemIndex = action.tabStorageUpdate.selectedTorItemIndex,
+                    tabCount = action.tabStorageUpdate.torTabs.size,
+                ),
                 inactiveTabs = state.inactiveTabs.copy(tabs = action.tabStorageUpdate.inactiveTabs),
                 privateBrowsing = state.privateBrowsing.copy(
                     tabs = action.tabStorageUpdate.privateTabs,

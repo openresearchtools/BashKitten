@@ -45,7 +45,7 @@ class BrowserThumbnails(
     override fun start() {
         scope = store.flowScoped(dispatcher = dispatcher) { flow ->
             flow.map { it.selectedTab }
-                .ifAnyChanged { arrayOf(it?.content?.loading, it?.content?.firstContentfulPaint) }
+                .ifAnyChanged { arrayOf(it?.id, it?.content?.loading, it?.content?.firstContentfulPaint) }
                 .collect { state ->
                     if (state?.content?.loading == false && state.content.firstContentfulPaint) {
                         requestScreenshot()
@@ -65,11 +65,13 @@ class BrowserThumbnails(
             // callback is invoked. This is a workaround for:
             // https://bugzilla.mozilla.org/show_bug.cgi?id=1678364
             val store = this.store
+            val tab = store.state.selectedTab ?: return
             engineView.captureThumbnail {
                 val bitmap = it ?: return@captureThumbnail
-                val tabId = store.state.selectedTabId ?: return@captureThumbnail
+                val current = store.state.selectedTab
+                if (current?.id != tab.id || current.content.url != tab.content.url) return@captureThumbnail
 
-                store.dispatch(ContentAction.UpdateThumbnailAction(tabId, bitmap))
+                store.dispatch(ContentAction.UpdateThumbnailAction(tab.id, bitmap))
             }
         }
     }

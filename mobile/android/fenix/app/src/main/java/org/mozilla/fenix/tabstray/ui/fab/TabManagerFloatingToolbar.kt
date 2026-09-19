@@ -265,7 +265,7 @@ internal fun FloatingToolbarFAB(
             onClick = onOpenNewPrivateTabClicked
         }
 
-        Page.TabGroups -> return
+        Page.TabGroups, Page.TorTabs -> return
 
         Page.SyncedTabs -> {
             icon = iconsR.drawable.mozac_ic_sync_24

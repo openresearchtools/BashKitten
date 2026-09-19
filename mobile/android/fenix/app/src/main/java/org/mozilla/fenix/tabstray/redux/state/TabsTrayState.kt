@@ -31,6 +31,7 @@ data class TabsTrayState(
     val mode: Mode = Mode.Normal,
     val selectedTabId: String? = null,
     val normalTabsState: NormalTabsState = NormalTabsState(),
+    val torTabsState: NormalTabsState = NormalTabsState(),
     val inactiveTabs: InactiveTabsState = InactiveTabsState(),
     val privateBrowsing: PrivateBrowsingState = PrivateBrowsingState(),
     val tabGroupState: TabGroupState = TabGroupState(),
@@ -216,6 +217,7 @@ data class TabsTrayState(
         get() = when {
             selectedPage == Page.NormalTabs && normalTabsState.items.isNotEmpty() -> true
             selectedPage == Page.PrivateTabs && privateBrowsing.tabs.isNotEmpty() -> true
+            selectedPage == Page.TorTabs && torTabsState.items.isNotEmpty() -> true
             else -> false
         }
 
@@ -246,6 +248,6 @@ data class TabsTrayState(
             val privateTabsLocked = privateBrowsing.isLocked && selectedPage == Page.PrivateTabs
             val tabGroupsPageSelected = config.tabGroupsEnabled && selectedPage == Page.TabGroups
 
-            return mode is Mode.Normal && !privateTabsLocked && !tabGroupsPageSelected
+            return mode is Mode.Normal && !privateTabsLocked && !tabGroupsPageSelected && selectedPage != Page.TorTabs
         }
 }
