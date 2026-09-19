@@ -2897,10 +2897,9 @@ class Settings(
     /**
      * Indicates whether or not we should use the new crash reporter flow.
      */
-    var useNewCrashReporterFlow by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_use_new_crash_reporter),
-        default = Config.channel.isNightlyOrDebug || Config.channel.isBeta,
-    )
+    var useNewCrashReporterFlow: Boolean
+        get() = false
+        set(_) = Unit
 
     /**
      * Do not show crash pull dialog before this date.

@@ -640,7 +640,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
         return components
             .analytics
             .crashReporter
-            .install(this, ::handleCaughtException)
+            .install(this)
     }
 
     private fun handleCaughtException() {

@@ -154,7 +154,7 @@ class CrashReporter internal constructor(
         get() = runtimeTagProviders.fold(emptyMap()) { acc, provider -> acc + provider() }
 
     init {
-        require(services.isNotEmpty() || telemetryServices.isNotEmpty()) {
+        require(!enabled || services.isNotEmpty() || telemetryServices.isNotEmpty()) {
             "No crash reporter services defined"
         }
     }
