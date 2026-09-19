@@ -33,6 +33,11 @@ user-authorized automation visible while it is active.
 Desktop mode calls Fenix's existing per-tab desktop-site implementation.
 Native adblocking can be toggled for one tab, with a reload; it does not create
 a site-wide exception for other tabs. Both controls are available to agents.
+Ordinary user tabs share website cookies and storage. Each approved agent app
+gets its own shared website storage, so its login tabs can work together without
+sharing another app's browsing session. Popups retain their opener's storage
+context. Adblock exceptions use the individual Gecko browser ID, independent of
+that storage context.
 
 ## Onion browsing
 
@@ -42,6 +47,10 @@ control socket and browser-owned lifetime. SOCKS requests resolve DNS through
 Tor and use a separate circuit-isolation credential per Gecko session context.
 There is no direct proxy fallback. WebRTC and WebTransport are disabled to
 avoid transports outside this routing layer.
+Switching an existing tab to Tor creates a fresh isolated Gecko session in that
+same tab, dropping its previous direct-network page history and website storage.
+Its subsequent popups inherit that Tor context. Closing one such popup does not
+revoke the route or enrolled onion trust of its remaining sibling tabs.
 
 Keys can be entered manually, imported from `.auth_private`, or scanned from
 TorKitten's `http://<v3-address>.onion?key=<x25519-key>` QR. Keys are stored using

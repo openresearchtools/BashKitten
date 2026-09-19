@@ -7,11 +7,14 @@ const commands = new Set(["snapshot", "act", "read", "evaluate", "wait", "consol
 export class GeckoViewWildBuzzard extends GeckoViewModule {
   onInit() {
     this.references = new Map();
+    this.context = this.settings.sessionContextId;
+    this.browserId = this.browser.browsingContext.browserId;
+    WildBuzzardAndroid.register(this.context, this.browserId);
     this.registerListener(["WildBuzzard:Request"]);
     this.ready = WildBuzzardAndroid.init();
   }
   onDestroy() {
-    WildBuzzardAndroid.close(this.settings.sessionContextId);
+    WildBuzzardAndroid.close(this.context, this.browserId);
   }
   async onEvent(event, data, callback) {
     try {
@@ -28,7 +31,7 @@ export class GeckoViewWildBuzzard extends GeckoViewModule {
   }
   async request({ method, params = {} }) {
     if (method === "configure") {
-      WildBuzzardAndroid.configure(this.settings.sessionContextId, params);
+      WildBuzzardAndroid.configure(this.context, this.browserId, params);
       return { ready: true };
     }
     if (!commands.has(method)) throw new Error("Unsupported page method");

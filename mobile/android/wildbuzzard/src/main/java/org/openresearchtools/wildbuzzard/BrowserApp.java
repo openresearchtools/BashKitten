@@ -19,6 +19,7 @@ public final class BrowserApp extends ContextWrapper {
         Tab selected();
         boolean refresh(Tab tab);
         void close(String id);
+        void isolate(Tab tab, String contextId, Runnable done, Consumer<String> fail);
         void show(String id);
         void desktop(String id, boolean enabled);
         void screenshot(String id, Consumer<Bitmap> result);
@@ -71,6 +72,7 @@ public final class BrowserApp extends ContextWrapper {
         String owner = policies.getString(tab.id + ".owner", parent == null ? tab.owner : parent.owner);
         Tab value = new Tab(tab.id, owner, tab.session);
         value.tor = policies.getBoolean(tab.id + ".tor", parent != null && parent.tor);
+        if (parent != null && parent.tor) value.port = parent.port;
         value.adblock = policies.getBoolean(tab.id + ".adblock", true);
         host.refresh(value); tabs.put(value.id, value); return value;
     }
@@ -84,8 +86,8 @@ public final class BrowserApp extends ContextWrapper {
         if (tab.preparing) return true;
         if (onion(url)) tab.tor = true;
         tab.preparing = true;
-        if (tab.tor) useTor(tab, url);
-        else configure(tab, Collections.emptyList(), ignored -> {
+        if (tab.tor && tab.port == 0) useTor(tab, url);
+        else configure(tab, tab.tor ? tor.identities() : Collections.emptyList(), ignored -> {
             tab.preparing = false; tab.session.loadUri(tab.pendingUrl);
         }, error -> { tab.preparing = false; message(error); });
         return true;
@@ -103,7 +105,17 @@ public final class BrowserApp extends ContextWrapper {
     void create(String owner, boolean useTor, String url, Consumer<Tab> done, Consumer<String> fail) {
         refresh();
         if (tabs.size() >= 64 || tabs.values().stream().filter(t -> t.owner.equals(owner)).count() >= 16) { fail.accept("Tab limit reached"); return; }
-        Tab tab = host.create(owner, "wildbuzzard-" + UUID.randomUUID());
+        boolean needsTor = useTor || onion(url);
+        String context;
+        if (needsTor) context = "wildbuzzard-tor-" + UUID.randomUUID();
+        else if (owner.equals(USER)) context = "wildbuzzard-user";
+        else {
+            try {
+                byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(owner.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                context = "wildbuzzard-agent-" + Base64.getUrlEncoder().withoutPadding().encodeToString(digest);
+            } catch (Exception error) { fail.accept("Could not identify agent storage"); return; }
+        }
+        Tab tab = host.create(owner, context);
         tabs.put(tab.id, tab); tab.tor = useTor || onion(url);
         Consumer<Integer> configured = port -> {
             if (!tabs.containsKey(tab.id)) return;
@@ -118,11 +130,18 @@ public final class BrowserApp extends ContextWrapper {
     }
     public void useTor(Tab tab, String url) {
         tab.tor = true; tab.ready = false; tab.pendingUrl = url;
+        tab.preparing = true;
         // Block the route before waiting for Tor bootstrap.
         tab.port = 0;
         tab.session.stop();
         tab.session.loadUri("about:blank");
         Consumer<String> failed = error -> { tab.preparing = false; message(error); };
+        String context = tab.session.getSettings().getContextId();
+        if (context == null || !context.startsWith("wildbuzzard-tor-")) {
+            host.isolate(tab, "wildbuzzard-tor-" + UUID.randomUUID(), () -> connectTor(tab, failed), failed);
+        } else connectTor(tab, failed);
+    }
+    private void connectTor(Tab tab, Consumer<String> failed) {
         configure(tab, Collections.emptyList(), ignored -> tor.ready(port -> {
             tab.port = port; configure(tab, tor.identities(), result -> { tab.preparing = false; tab.session.loadUri(tab.pendingUrl); }, error -> { tab.preparing = false; message(error); });
         }, failed), failed);

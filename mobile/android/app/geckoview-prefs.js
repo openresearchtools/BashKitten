@@ -431,3 +431,7 @@ pref("browser.region.update.enabled", false);
 pref("network.captive-portal-service.enabled", false);
 pref("network.connectivity-service.enabled", false);
 pref("extensions.telemetry.EnvironmentAddonBuilder", false);
+pref("browser.ipProtection.enabled", false);
+pref("browser.ipProtection.guardian.endpoint", "");
+pref("browser.safebrowsing.provider.mozilla.updateURL", "");
+pref("browser.safebrowsing.provider.mozilla.gethashURL", "");

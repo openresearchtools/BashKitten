@@ -1686,14 +1686,14 @@ class ResponseFilteringListener {
  * counts for each tab so the protections UI can read them.
  */
 export const WildBuzzardBlockerService = {
-  _disabledSessionContexts: new Set(),
-  setSessionBlocking(context, enabled) {
-    if (!context) throw new Error("Missing tab context");
-    if (enabled) this._disabledSessionContexts.delete(context);
-    else this._disabledSessionContexts.add(context);
+  _disabledAndroidBrowsers: new Set(),
+  setAndroidTabBlocking(browserId, enabled) {
+    if (!browserId) throw new Error("Missing tab browser ID");
+    if (enabled) this._disabledAndroidBrowsers.delete(browserId);
+    else this._disabledAndroidBrowsers.add(browserId);
   },
-  isSessionBlockingEnabled(context) {
-    return !context || !this._disabledSessionContexts.has(context);
+  isAndroidTabBlockingEnabled(browserId) {
+    return !browserId || !this._disabledAndroidBrowsers.has(browserId);
   },
   QueryInterface: ChromeUtils.generateQI([
     "nsIObserver",
@@ -2416,7 +2416,7 @@ export const WildBuzzardBlockerService = {
     loadInfo,
     { isTopLevelDocument = false, targetHostname = "" } = {}
   ) {
-    if (!this.isSessionBlockingEnabled(loadInfo?.originAttributes?.geckoViewSessionContextId)) return true;
+    if (!this.isAndroidTabBlockingEnabled(this._getTopBrowserId(loadInfo))) return true;
     const candidateHosts = [
       targetHostname,
       this._getPrincipalHost(loadInfo?.triggeringPrincipal),
@@ -2652,7 +2652,9 @@ export const WildBuzzardBlockerService = {
 
   _getTopBrowserId(loadInfo) {
     try {
-      return Number(loadInfo?.browsingContext?.top?.browserId || 0);
+      return Number(loadInfo?.browsingContext?.top?.browserId ||
+        loadInfo?.targetBrowsingContext?.top?.browserId ||
+        loadInfo?.workerAssociatedBrowsingContext?.top?.browserId || 0);
     } catch (_) {
       // BrowsingContext can disappear during navigation teardown.
       return 0;
@@ -3348,7 +3350,7 @@ export const WildBuzzardBlockerService = {
    * @returns {object|null} Parsed cosmetic resource payload from the native engine.
    */
   getCosmeticResources(url, browsingContext = null) {
-    if (!this.isSessionBlockingEnabled(browsingContext?.originAttributes?.geckoViewSessionContextId)) return null;
+    if (!this.isAndroidTabBlockingEnabled(browsingContext?.top?.browserId)) return null;
     if (!this.isEnabled()) {
       return null;
     }

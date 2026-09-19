@@ -132,8 +132,11 @@ public final class ProbeActivity extends Activity {
             check(stale.has("error"), "stale element reference rejected");
             waitValue(two, "return document.querySelector('#ad-test').dataset.result;", "blocked");
             check(true, "native adblock blocks bundled-list image fixture");
+            evaluate(two, "document.cookie = 'agent_session=shared; Path=/; SameSite=Lax'; localStorage.setItem('agent_session', 'shared'); return true;");
             String isolated = ((JSONObject) command("tabs.create", new JSONObject().put("url", "http://127.0.0.1:8765/"))).getString("id");
             waitPage(isolated);
+            waitValue(isolated, "return document.cookie.includes('agent_session=shared') && localStorage.getItem('agent_session') === 'shared';", "true");
+            check(true, "same-agent tabs share normal website login storage");
             waitValue(isolated, "return document.querySelector('#ad-test').dataset.result;", "blocked");
             command("tabs.setAdblocking", params(two).put("enabled", false));
             waitPage(two);
@@ -170,6 +173,8 @@ public final class ProbeActivity extends Activity {
             check(child != null, "page-created child tab inherits agent ownership");
             waitValue(child, "return !!document.querySelector('#frame-button');", "true");
             check(true, "child tab loads through its configured route");
+            waitValue(child, "return !!window.opener && window.opener.document.querySelector('h1').textContent;", "Agent test page");
+            check(true, "same-origin popup can communicate with its opener");
             command("tabs.close", params(child));
             waitPage(two);
             check(true, "closing child tab preserves the parent");

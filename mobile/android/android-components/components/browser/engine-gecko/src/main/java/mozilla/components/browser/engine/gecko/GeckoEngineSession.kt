@@ -1085,7 +1085,7 @@ class GeckoEngineSession(
                     privateMode = privateMode,
                     defaultSettings = defaultSettings,
                     openGeckoSession = false,
-                    contextId = "wildbuzzard-${java.util.UUID.randomUUID()}",
+                    contextId = geckoSession.settings.contextId,
                 )
             val result = GeckoResult<GeckoSession>()
             notifyObservers {

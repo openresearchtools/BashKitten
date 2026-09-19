@@ -10,7 +10,11 @@ import android.view.View
 import android.view.ViewGroup
 import java.lang.ref.WeakReference
 import java.util.function.Consumer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import mozilla.components.browser.engine.gecko.GeckoEngineSession
+import mozilla.components.browser.state.action.EngineAction
 import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.TabSessionState
 import org.mozilla.fenix.FenixApplication
@@ -68,6 +72,25 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     }
 
     override fun close(id: String) { components.useCases.tabsUseCases.removeTab(id) }
+    override fun isolate(tab: BrowserApp.Tab, contextId: String, done: Runnable, fail: Consumer<String>) {
+        val store = components.core.store
+        val state = store.state.tabs.find { it.id == tab.id }
+        if (state == null) { fail.accept("Tab was closed"); return }
+        val old = state.engineState.engineSession
+        val engine = components.core.engine.createSession(state.content.private, contextId) as GeckoEngineSession
+        engine.toggleDesktopMode(state.content.desktopMode, reload = false)
+        store.dispatch(EngineAction.UnlinkEngineSessionAction(tab.id))
+        val linked = store.dispatch(EngineAction.LinkEngineSessionAction(
+            tab.id, engine, skipLoading = true, contextId = contextId,
+        ))
+        CoroutineScope(Dispatchers.Main).launch {
+            linked.join()
+            old?.close()
+            tab.session = engine.wildBuzzardSession()
+            tab.ready = false
+            done.run()
+        }
+    }
     override fun show(id: String) {
         components.useCases.tabsUseCases.selectTab(id)
         application.startActivity(launchIntent())

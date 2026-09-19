@@ -1544,6 +1544,7 @@ sealed class EngineAction : BrowserAction() {
      * @property engineSession The [EngineSession] that should be linked to the tab.
      * @property timestamp Timestamp (milliseconds) of when the linking has happened (By default
      * set to [SystemClock.elapsedRealtime].
+     * @property contextId Optional replacement storage context; clears the previous session history.
      */
     data class LinkEngineSessionAction(
         override val tabId: String,
@@ -1551,6 +1552,7 @@ sealed class EngineAction : BrowserAction() {
         val timestamp: Long = Clock.elapsedRealtime(),
         val skipLoading: Boolean = false,
         val includeParent: Boolean = false,
+        val contextId: String? = null,
     ) : EngineAction(), ActionWithTab
 
     /**

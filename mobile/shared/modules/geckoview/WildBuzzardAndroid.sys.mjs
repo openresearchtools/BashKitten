@@ -5,6 +5,7 @@ import { WildBuzzardBlockerService } from "resource:///modules/WildBuzzardBlocke
 const proxy = Cc["@mozilla.org/network/protocol-proxy-service;1"].getService(Ci.nsIProtocolProxyService);
 const certificates = Cc["@mozilla.org/security/certoverride;1"].getService(Ci.nsICertOverrideService);
 const routes = new Map();
+const contexts = new Map();
 let ready;
 
 export const WildBuzzardAndroid = {
@@ -18,7 +19,11 @@ export const WildBuzzardAndroid = {
     }
     return ready;
   },
-  configure(context, { tor = false, port = 0, identities = [], adblock = true, proxySecret = "" }) {
+  register(context, browserId) {
+    if (!contexts.has(context)) contexts.set(context, new Set());
+    contexts.get(context).add(browserId);
+  },
+  configure(context, browserId, { tor = false, port = 0, identities = [], adblock = true, proxySecret = "" }) {
     if (!context) throw new Error("Missing isolated session context");
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Invalid Tor port");
     if (tor && port && !/^[A-Za-z0-9_-]{43}$/.test(proxySecret)) throw new Error("Missing Tor proxy authentication");
@@ -26,7 +31,7 @@ export const WildBuzzardAndroid = {
       throw new Error("Invalid authenticated onion identity");
     }
     // Revoke before changing routes. Never convert a Tor context into a direct context.
-    WildBuzzardBlockerService.setSessionBlocking(context, adblock);
+    WildBuzzardBlockerService.setAndroidTabBlocking(browserId, adblock);
     const previous = routes.get(context);
     if (previous?.tor && !tor) throw new Error("Tor route is immutable for this tab");
     const nextIdentities = tor && port ? identities : [];
@@ -38,8 +43,12 @@ export const WildBuzzardAndroid = {
       if (!previous?.identities.includes(host)) certificates.setAuthenticatedOnion(context, host, true);
     }
   },
-  close(context) {
-    WildBuzzardBlockerService.setSessionBlocking(context, true);
+  close(context, browserId) {
+    WildBuzzardBlockerService.setAndroidTabBlocking(browserId, true);
+    const members = contexts.get(context);
+    members?.delete(browserId);
+    if (members?.size) return;
+    contexts.delete(context);
     const previous = routes.get(context);
     for (const host of previous?.identities ?? []) certificates.setAuthenticatedOnion(context, host, false);
     // Keep a dead route for residual workers/requests until process termination.

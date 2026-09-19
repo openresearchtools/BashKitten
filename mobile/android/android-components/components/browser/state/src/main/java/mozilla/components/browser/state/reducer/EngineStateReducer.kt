@@ -20,10 +20,14 @@ internal object EngineStateReducer {
      */
     fun reduce(state: BrowserState, action: EngineAction): BrowserState {
         return when (action) {
-            is EngineAction.LinkEngineSessionAction -> state.copyWithEngineState(action.tabId) { engineState ->
-                engineState.copy(
-                    engineSession = action.engineSession,
-                    timestamp = action.timestamp,
+            is EngineAction.LinkEngineSessionAction -> state.updateTabOrCustomTabState(action.tabId) { current ->
+                current.createCopy(
+                    contextId = action.contextId ?: current.contextId,
+                    engineState = current.engineState.copy(
+                        engineSession = action.engineSession,
+                        timestamp = action.timestamp,
+                        engineSessionState = if (action.contextId != null) null else current.engineState.engineSessionState,
+                    ),
                 )
             }
             is EngineAction.UnlinkEngineSessionAction -> state.copyWithEngineState(action.tabId) { engineState ->

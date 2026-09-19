@@ -77,7 +77,7 @@ export class WildBuzzardBlockerParent extends JSWindowActorParent {
   }
 
   _getHiddenClassIdSelectors({ classes, ids, exceptions } = {}) {
-    if (!WildBuzzardBlockerService.isSessionBlockingEnabled(this.browsingContext?.originAttributes?.geckoViewSessionContextId)) return [];
+    if (!WildBuzzardBlockerService.isAndroidTabBlockingEnabled(this.browsingContext?.top?.browserId)) return [];
     return WildBuzzardBlockerService.getHiddenClassIdSelectors(
       classes || [],
       ids || [],
