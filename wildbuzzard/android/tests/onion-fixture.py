@@ -3,6 +3,7 @@
 """Private onion + private-CA HTTPS fixture. Store generated credentials outside git."""
 import argparse
 import base64
+import datetime
 import http.server
 import json
 import os
@@ -55,7 +56,29 @@ try:
     def certificate_context(expired):
         openssl('req','-new','-newkey','rsa:2048','-nodes','-subj','/CN='+host,'-keyout',root/'server.key','-out',root/'server.csr')
         (root/'extensions').write_text('subjectAltName=DNS:'+host+',DNS:'+public_host+',IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n')
-        openssl('x509','-req','-in',root/'server.csr','-CA',root/'ca.pem','-CAkey',root/'ca.key','-CAcreateserial','-days', '-1' if expired else '7','-extfile',root/'extensions','-out',root/'server.pem')
+        if expired:
+            (root/'cert-index').touch(exist_ok=True)
+            (root/'cert-records').mkdir(exist_ok=True)
+            if not (root/'cert-serial').exists(): (root/'cert-serial').write_text('1000\n')
+            (root/'ca.cnf').write_text(f'''[ca]
+default_ca=fixture
+[fixture]
+database={root}/cert-index
+serial={root}/cert-serial
+new_certs_dir={root}/cert-records
+certificate={root}/ca.pem
+private_key={root}/ca.key
+default_md=sha256
+unique_subject=no
+policy=subject
+[subject]
+commonName=supplied
+''')
+            now = datetime.datetime.now(datetime.timezone.utc)
+            date = lambda days: (now-datetime.timedelta(days=days)).strftime('%Y%m%d%H%M%SZ')
+            openssl('ca','-batch','-notext','-config',root/'ca.cnf','-in',root/'server.csr','-out',root/'server.pem','-startdate',date(2),'-enddate',date(1),'-extfile',root/'extensions')
+        else:
+            openssl('x509','-req','-in',root/'server.csr','-CA',root/'ca.pem','-CAkey',root/'ca.key','-CAcreateserial','-days','7','-extfile',root/'extensions','-out',root/'server.pem')
         (root/'chain.pem').write_bytes((root/'server.pem').read_bytes()+(root/'ca.pem').read_bytes())
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain(root/'chain.pem',root/'server.key')
@@ -79,7 +102,11 @@ try:
     print('Unenrolled onion fixture: https://'+public_host,flush=True)
     print('Import fixture.auth_private from '+str(root)+'; no CA installation is needed for the onion test.',flush=True)
     def renew(expired):
-        server.context = certificate_context(expired)
+        try:
+            server.context = certificate_context(expired)
+        except Exception as error:
+            print('Certificate renewal failed; previous TLS context retained: '+str(error),flush=True)
+            return
         (root/'probe-fixture.json').write_text(json.dumps({'onion':host,'publicOnion':public_host,'key':key,'expired':expired}))
         print('TLS leaf renewed under the persistent CA; expired='+str(expired),flush=True)
     signal.signal(signal.SIGHUP,lambda *_: renew(False))
