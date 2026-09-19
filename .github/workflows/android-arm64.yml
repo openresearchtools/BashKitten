@@ -55,8 +55,10 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
             ~/.android/debug.keystore
-          key: android-toolchain-v1-${{ runner.os }}-${{ github.sha }}
-          restore-keys: android-toolchain-v1-${{ runner.os }}-
+          key: android-toolchain-v2-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mobile/android/android-components/.config.yml', 'mobile/android/*/build.gradle', 'mobile/android/fenix/app/build.gradle', 'python/mozboot/mozboot/android.py', 'python/mozboot/mozboot/mozconfig.py') }}
+          restore-keys: |
+            android-toolchain-v2-${{ runner.os }}-
+            android-toolchain-v1-${{ runner.os }}-
       - name: Enable compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:
@@ -78,7 +80,7 @@ jobs:
           ./mach gradle :fenix:assembleDebug :wildbuzzard-agent-probe:assembleDebug :wildbuzzard-agent-probe:assembleDebugAndroidTest 2>&1 | tee artifacts/apk-build.log
           python3 wildbuzzard/android/scripts/collect-artifacts.py artifacts
       - name: Save Android toolchains and Gradle downloads
-        if: always() && !cancelled()
+        if: always() && !cancelled() && steps.toolchain-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -86,7 +88,7 @@ jobs:
             ~/.gradle/caches
             ~/.gradle/wrapper
             ~/.android/debug.keystore
-          key: android-toolchain-v1-${{ runner.os }}-${{ github.sha }}
+          key: android-toolchain-v2-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'mobile/android/android-components/.config.yml', 'mobile/android/*/build.gradle', 'mobile/android/fenix/app/build.gradle', 'python/mozboot/mozboot/android.py', 'python/mozboot/mozboot/mozconfig.py') }}
       - name: Preserve build logs and APK artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
