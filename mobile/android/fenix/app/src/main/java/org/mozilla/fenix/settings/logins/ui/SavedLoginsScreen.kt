@@ -43,7 +43,6 @@ import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.PreviewParameter
 import androidx.compose.ui.unit.dp
@@ -52,8 +51,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.map
-import mozilla.components.compose.base.LinkText
-import mozilla.components.compose.base.LinkTextState
 import mozilla.components.compose.base.annotation.FlexibleWindowPreview
 import mozilla.components.compose.base.button.IconButton
 import mozilla.components.compose.base.menu.DropdownMenu
@@ -223,23 +220,11 @@ private fun EmptyList(
         ) {
             Text(
                 text = String.format(
-                    stringResource(R.string.preferences_passwords_saved_logins_description_empty_text_2),
+                    stringResource(R.string.wildbuzzard_saved_passwords_description),
                     stringResource(R.string.app_name),
                 ),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = FirefoxTheme.typography.body2,
-            )
-
-            LinkText(
-                text = stringResource(R.string.preferences_passwords_saved_logins_description_empty_learn_more_link_2),
-                linkTextStates = listOf(
-                    LinkTextState(
-                        text = stringResource(R.string.preferences_passwords_saved_logins_description_empty_learn_more_link_2),
-                        url = "",
-                        onClick = { dispatcher(LearnMoreAboutSync) },
-                    ),
-                ),
-                linkTextDecoration = TextDecoration.Underline,
             )
 
             AddPasswordItem(

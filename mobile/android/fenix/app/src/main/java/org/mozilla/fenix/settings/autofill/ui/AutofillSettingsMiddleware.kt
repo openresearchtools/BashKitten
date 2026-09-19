@@ -31,7 +31,7 @@ import org.mozilla.fenix.settings.logins.ui.LoginsAction
  */
 internal class AutofillSettingsMiddleware(
     private val autofillSettingsStorage: AutofillCreditCardsAddressesStorage,
-    private val accountManager: FxaAccountManager,
+    private val accountManager: FxaAccountManager?,
     private val updateSaveFillStatus: (String, Boolean) -> Unit,
     private val updateSyncStatusAcrossDevices: (String, Boolean) -> Unit,
     private val goToScreen: (String) -> Unit,
@@ -51,7 +51,7 @@ internal class AutofillSettingsMiddleware(
 
         when (action) {
             is InitializeAddressesAndCreditCards -> {
-                store.registerObserverForAccountChanges(accountManager)
+                accountManager?.let { store.registerObserverForAccountChanges(it) }
                 store.loadAddressesAndCreditCards()
             }
             is AddAddressClicked -> {
@@ -91,7 +91,7 @@ internal class AutofillSettingsMiddleware(
                 goToScreen(AutofillScreenDestination.MANAGE_CREDIT_CARDS)
             }
             is ViewDisposed -> {
-                accountManager.unregister(observer)
+                if (::observer.isInitialized) accountManager?.unregister(observer)
             }
             is UpdateAddresses,
             is UpdateCreditCards,

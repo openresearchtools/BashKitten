@@ -30,15 +30,11 @@ import kotlinx.coroutines.launch
 import mozilla.components.lib.state.ext.consumeFrom
 import mozilla.components.lib.state.helpers.StoreProvider.Companion.fragmentStore
 import mozilla.components.lib.state.helpers.StoreProvider.Companion.storeProvider
-import mozilla.components.service.fxa.SyncEngine
-import mozilla.components.service.fxa.manager.SyncEnginesStorage
 import mozilla.components.service.sync.autofill.AutofillCreditCardsAddressesStorage
 import mozilla.components.ui.widgets.withCenterAlignedButtons
 import org.mozilla.fenix.Config
-import org.mozilla.fenix.NavGraphDirections
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.LogMiddleware
-import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.hideToolbar
@@ -47,7 +43,6 @@ import org.mozilla.fenix.ext.runIfFragmentIsAttached
 import org.mozilla.fenix.ext.secure
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.settings.SharedPreferenceUpdater
-import org.mozilla.fenix.settings.SyncPreferenceView
 import org.mozilla.fenix.settings.autofill.ui.AccountAuthState
 import org.mozilla.fenix.settings.autofill.ui.AutofillSettingsMiddleware
 import org.mozilla.fenix.settings.autofill.ui.AutofillSettingsScreen
@@ -76,7 +71,6 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
      */
     private val creditCardPreferences: List<Int> = listOf(
         R.string.pref_key_credit_cards_save_and_autofill_cards,
-        R.string.pref_key_credit_cards_sync_cards_across_devices,
         R.string.pref_key_credit_cards_manage_cards,
     )
 
@@ -155,18 +149,13 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             val buildStore = { _: NavHostController ->
 
-                val syncEnginesStatus = SyncEnginesStorage(requireContext()).getStatus()
                 val autofillStore by fragmentStore(
                     AutofillSettingsState.default.copy(
                         saveFillAddresses = requireComponents.settings.shouldAutofillAddressDetails,
                         saveFillCards = requireComponents.settings.shouldAutofillCreditCardDetails,
-                        syncAddresses = syncEnginesStatus.getOrElse(SyncEngine.Addresses) { false },
-                        syncCreditCards = syncEnginesStatus.getOrElse(SyncEngine.CreditCards) { false },
-                        accountAuthState = if (requireComponents.settings.signedInFxaAccount) {
-                            AccountAuthState.Authenticated
-                        } else {
-                            AccountAuthState.LoggedOut
-                        },
+                        syncAddresses = false,
+                        syncCreditCards = false,
+                        accountAuthState = AccountAuthState.LoggedOut,
                     ),
                 ) {
                     AutofillSettingsStore(
@@ -187,8 +176,8 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
                 FirefoxTheme {
                     AutofillSettingsScreen(
                         buildStore = buildStore,
-                        accountManager = requireComponents.backgroundServices.accountManager,
-                        isAddressSyncEnabled = requireComponents.settings.isAddressSyncEnabled,
+                        accountManager = null,
+                        isAddressSyncEnabled = false,
                     )
                 }
             }
@@ -197,13 +186,11 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
     private fun createAutofillSettingsMiddleware() =
         AutofillSettingsMiddleware(
             autofillSettingsStorage = requireContext().components.core.autofillStorage,
-            accountManager = requireComponents.backgroundServices.accountManager,
+            accountManager = null,
             updateSaveFillStatus = { destination, newValue ->
                 updateSaveFillStatus(destination, newValue)
             },
-            updateSyncStatusAcrossDevices = { destination, newValue ->
-                updateSyncStatusAcrossDevices(destination, newValue)
-            },
+            updateSyncStatusAcrossDevices = { _, _ -> },
             goToScreen = { nextFragment ->
                 goToFragment(nextFragment)
             },
@@ -249,55 +236,7 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
             showToolbar(getString(R.string.preferences_credit_cards_2))
         }
 
-        SyncPreferenceView(
-            syncPreference = requirePreference(R.string.pref_key_credit_cards_sync_cards_across_devices),
-            lifecycleOwner = viewLifecycleOwner,
-            coroutineScope = viewLifecycleOwner.lifecycleScope,
-            accountManager = requireComponents.backgroundServices.accountManager,
-            syncEngine = SyncEngine.CreditCards,
-            loggedOffTitle = requireContext()
-                .getString(R.string.preferences_credit_cards_sync_cards_across_devices),
-            loggedInTitle = requireContext()
-                .getString(R.string.preferences_credit_cards_sync_cards),
-            onSyncSignInClicked = {
-                findNavController().navigate(
-                    NavGraphDirections.actionGlobalTurnOnSync(entrypoint = FenixFxAEntryPoint.AutofillSetting),
-                )
-            },
-            onReconnectClicked = {
-                findNavController().navigate(
-                    AutofillSettingFragmentDirections.actionGlobalAccountProblemFragment(
-                        entrypoint = FenixFxAEntryPoint.AutofillSetting,
-                    ),
-                )
-            },
-        )
-
-        if (requireComponents.settings.isAddressSyncEnabled) {
-            SyncPreferenceView(
-                syncPreference = requirePreference(R.string.pref_key_addresses_sync_cards_across_devices),
-                lifecycleOwner = viewLifecycleOwner,
-                coroutineScope = viewLifecycleOwner.lifecycleScope,
-                accountManager = requireComponents.backgroundServices.accountManager,
-                syncEngine = SyncEngine.Addresses,
-                loggedOffTitle = requireContext()
-                    .getString(R.string.preferences_addresses_sync_addresses_across_devices),
-                loggedInTitle = requireContext()
-                    .getString(R.string.preferences_addresses_sync_addresses),
-                onSyncSignInClicked = {
-                    findNavController().navigate(
-                        NavGraphDirections.actionGlobalTurnOnSync(entrypoint = FenixFxAEntryPoint.AutofillSetting),
-                    )
-                },
-                onReconnectClicked = {
-                    findNavController().navigate(
-                        AutofillSettingFragmentDirections.actionGlobalAccountProblemFragment(
-                            entrypoint = FenixFxAEntryPoint.AutofillSetting,
-                        ),
-                    )
-                },
-            )
-        }
+        requirePreference<Preference>(R.string.pref_key_credit_cards_sync_cards_across_devices).isVisible = false
 
         togglePrefsEnabled(creditCardPreferences, true)
     }
@@ -313,10 +252,9 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
         val manageAddressesPreference =
             requirePreference<Preference>(R.string.pref_key_addresses_manage_addresses)
 
-        // show address sync preference if address sync is enabled
         val addressSyncPreference =
             requirePreference<Preference>(R.string.pref_key_addresses_sync_cards_across_devices)
-        addressSyncPreference.isVisible = requireComponents.settings.isAddressSyncEnabled
+        addressSyncPreference.isVisible = false
 
         if (hasAddresses) {
             manageAddressesPreference.icon = null
@@ -469,9 +407,7 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
                 MANAGE_CREDIT_CARDS -> {
                     navigateToCreditCardManagementFragment()
                 }
-                SYNC_SIGN_IN -> {
-                    syncSignIn()
-                }
+                SYNC_SIGN_IN -> Unit
             }
         }
     }
@@ -502,23 +438,6 @@ class AutofillSettingFragment : BiometricPromptPreferenceFragment(), SystemInset
             AutofillSettingFragmentDirections
                 .actionAutofillSettingFragmentToCreditCardsManagementFragment()
         findNavController().navigate(directions)
-    }
-
-    private fun syncSignIn() {
-        findNavController().navigate(
-            NavGraphDirections.actionGlobalTurnOnSync(entrypoint = FenixFxAEntryPoint.AutofillSetting),
-        )
-    }
-
-    private fun updateSyncStatusAcrossDevices(destination: String, newValue: Boolean) {
-        val engine = when (destination) {
-            AutofillScreenDestination.ADDRESS -> SyncEngine.Addresses
-            AutofillScreenDestination.CREDIT_CARD -> SyncEngine.CreditCards
-            else -> return
-        }
-        viewLifecycleOwner.lifecycleScope.launch {
-            requireComponents.backgroundServices.accountManager.setEngineEnabled(engine, newValue)
-        }
     }
 
     private fun updateSaveFillStatus(destination: String, newValue: Boolean) {

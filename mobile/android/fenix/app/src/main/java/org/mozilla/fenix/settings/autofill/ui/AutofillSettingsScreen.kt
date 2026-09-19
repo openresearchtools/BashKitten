@@ -88,7 +88,7 @@ internal fun AutofillSettingsScreen(
         ) {
             Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
-            AutofillSettingsAddressSection(store, isAddressSyncEnabled)
+            AutofillSettingsAddressSection(store, accountManager != null && isAddressSyncEnabled)
 
             Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
 
@@ -96,7 +96,7 @@ internal fun AutofillSettingsScreen(
 
             Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static300))
 
-            AutofillSettingsCreditCardSection(store)
+            AutofillSettingsCreditCardSection(store, accountManager != null)
         }
     }
 }
@@ -190,7 +190,7 @@ private fun AutofillSettingsAddressSection(
 }
 
 @Composable
-private fun AutofillSettingsCreditCardSection(store: AutofillSettingsStore) {
+private fun AutofillSettingsCreditCardSection(store: AutofillSettingsStore, isSyncEnabled: Boolean) {
     val state by store.stateFlow.collectAsState()
 
     SettingsSectionHeader(
@@ -215,19 +215,21 @@ private fun AutofillSettingsCreditCardSection(store: AutofillSettingsStore) {
 
     Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
 
-    if (state.accountAuthState == AccountAuthState.Authenticated) {
-        SwitchListItem(
-            label = stringResource(id = R.string.preferences_credit_cards_sync_cards),
-            checked = state.syncCreditCards,
-            showSwitchAfter = true,
-        ) {
-            store.dispatch(UpdateCreditCardsSyncStatus(!state.syncCreditCards))
+    if (isSyncEnabled) {
+        if (state.accountAuthState == AccountAuthState.Authenticated) {
+            SwitchListItem(
+                label = stringResource(id = R.string.preferences_credit_cards_sync_cards),
+                checked = state.syncCreditCards,
+                showSwitchAfter = true,
+            ) {
+                store.dispatch(UpdateCreditCardsSyncStatus(!state.syncCreditCards))
+            }
+        } else {
+            TextListItem(
+                label = stringResource(id = R.string.preferences_credit_cards_sync_cards_across_devices),
+                onClick = { store.dispatch(SyncCardsAcrossDevicesClicked) },
+            )
         }
-    } else {
-        TextListItem(
-            label = stringResource(id = R.string.preferences_credit_cards_sync_cards_across_devices),
-            onClick = { store.dispatch(SyncCardsAcrossDevicesClicked) },
-        )
     }
 
     Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static100))
