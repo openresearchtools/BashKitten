@@ -23,7 +23,7 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.96.0'
       MACH_SHOW_PIP_OUTPUT: '1'
       SCCACHE_GHA_ENABLED: 'true'
-      WILDBUZZARD_DEBUG_KEYSTORE: ${{ runner.temp }}/wildbuzzard-ci-debug.p12
+      WILDBUZZARD_DEBUG_KEYSTORE: ${{ github.workspace }}-ci-debug.p12
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
