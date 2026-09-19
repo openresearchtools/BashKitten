@@ -14,7 +14,7 @@ Use a current Termux release from GitHub or F-Droid:
 pkg update
 pkg install nodejs-lts git ripgrep fd
 # Node >=22.19 is required. Node 24 LTS is supported.
-git clone --single-branch -b codex/pi-termux-rpc https://github.com/openresearchtools/bashkitten.git
+git clone --single-branch -b main https://github.com/openresearchtools/bashkitten.git
 cd bashkitten
 npm ci --omit=dev --ignore-scripts
 npm start
@@ -109,10 +109,8 @@ See [architecture and limits](docs/pi-termux.md) and
 This branch contains the browser UI (`src/*.html`), the Node/Termux adapter
 (`termux/`), and native Pi integration tests (`tests/termux/`). There is no Rust
 backend, Cargo project, GTK controller, Debian packaging, or copied agent engine.
-The original Rust implementation remains in the repository's Git history and
-on its separate [main branch](https://github.com/openresearchtools/bashkitten/tree/main).
-GitHub's repository-wide language bar follows that default branch, rather than
-this Pi branch ([GitHub documentation](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-repository-languages)).
+The original Rust implementation remains in Git history and is preserved with
+its complete main-branch history in [bashkitten-rust](https://github.com/openresearchtools/bashkitten-rust).
 
 Apache-2.0. Dependency attribution is in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
