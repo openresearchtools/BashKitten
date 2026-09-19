@@ -110,7 +110,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
         private fun updateAccountUi(profile: Profile? = null) {
             val context = context ?: return
             lifecycleScope.launch {
-                accountUiView.updateAccountUIState(
+                if (::accountUiView.isInitialized) accountUiView.updateAccountUIState(
                     context = context,
                     profile = profile
                         ?: context.components.backgroundServices.accountManager.accountProfile(),
@@ -134,12 +134,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
 
         components = requireContext().components
 
-        accountUiView = AccountUiView(
-            fragment = this,
-            scope = lifecycleScope,
-            accountManager = requireComponents.backgroundServices.accountManager,
-            httpClient = requireComponents.core.client,
-        )
+        // WildBuzzard does not initialize Mozilla account UI.
 
         addonFilePicker = AddonFilePicker(requireContext(), requireComponents.addonManager)
         addonFilePicker.registerForResults(this)
@@ -150,7 +145,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
         // For example, if user is signed-in, and we don't perform this call in onCreate, we'll briefly
         // display a "Sign In" preference, which will then get replaced by the correct account information
         // once this call is ran in onResume shortly after.
-        accountUiView.updateAccountUIState(
+        if (::accountUiView.isInitialized) accountUiView.updateAccountUIState(
             requireContext(),
             requireComponents.backgroundServices.accountManager.accountProfile(),
         )
@@ -281,23 +276,19 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
     override fun onStart() {
         super.onStart()
         // Observe account changes to keep the UI up-to-date.
-        requireComponents.backgroundServices.accountManager.register(
-            accountObserver,
-            owner = this,
-            autoPause = true,
-        )
+        // Account synchronization is disabled.
     }
 
     override fun onStop() {
         super.onStop()
         // If the screen isn't visible we don't need to show updates.
         // Also prevent the observer registered to the FXA singleton causing memory leaks.
-        requireComponents.backgroundServices.accountManager.unregister(accountObserver)
+        // No account observer to unregister.
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
-        accountUiView.cancel()
+        if (::accountUiView.isInitialized) accountUiView.cancel()
     }
 
     private fun update(
@@ -332,9 +323,14 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
         openLinksInAppsSettingsPreference.summary = settings.getOpenLinksInAppsString()
 
         setupPreferences(settings)
+        listOf("pref_key_sign_in", "pref_key_account_category", "pref_key_sync_debug", "pref_key_data_choices",
+            "pref_key_nimbus_experiments", "pref_key_remote_improvements", "pref_key_rollouts", "pref_key_email_masks").forEach { name ->
+            val resource = resources.getIdentifier(name, "string", requireContext().packageName)
+            if (resource != 0) findPreference<Preference>(getString(resource))?.isVisible = false
+        }
 
         if (shouldUpdateAccountUIState) {
-            accountUiView.updateAccountUIState(
+            if (::accountUiView.isInitialized) accountUiView.updateAccountUIState(
                 requireContext(),
                 requireComponents.backgroundServices.accountManager.accountProfile(),
             )

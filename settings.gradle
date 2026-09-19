@@ -45,6 +45,9 @@ if (gradle.ext.mozconfig.substs.MOZ_APPSERVICES_IN_TREE) {
 System.setProperty('android.home', gradle.mozconfig.substs.ANDROID_SDK_ROOT)
 
 include ':annotations', ':messaging_example', ':port_messaging_example'
+include ':wildbuzzard', ':wildbuzzard-agent-probe'
+project(':wildbuzzard').projectDir = new File("${topsrcdir}/mobile/android/wildbuzzard")
+project(':wildbuzzard-agent-probe').projectDir = new File("${topsrcdir}/mobile/android/wildbuzzard-agent-probe")
 include ':geckoview'
 include ':android-components'
 

@@ -34,7 +34,7 @@ apply plugin: 'com.google.devtools.ksp'
 
 // The OSS-licenses plugin is only needed for shipping builds, so skip it during
 // `mach lint` (which always passes `-Pandroid-lint`) to avoid unnecessary overhead.
-if (gradle.mozconfig.substs.MOZILLA_OFFICIAL && !project.hasProperty('android-lint')) {
+if (!project.hasProperty('android-lint')) {
     apply plugin: 'com.google.android.gms.oss-licenses-plugin'
 }
 
@@ -57,8 +57,8 @@ android {
             arg("room.schemaLocation", "$projectDir/schemas".toString())
         }
 
-        applicationId "org.mozilla"
-        minSdk config.minSdkVersion
+        applicationId "org.openresearchtools.wildbuzzard"
+        minSdk 28
         targetSdk config.targetSdkVersion
         versionCode 1
         versionName Config.generateDebugVersionName()
@@ -118,12 +118,12 @@ android {
         debug {
             shrinkResources = false
             minifyEnabled = false
-            applicationIdSuffix ".fenix.debug"
+            applicationIdSuffix ""
             resValue "bool", "IS_DEBUG", "true"
             pseudoLocalesEnabled = true
         }
         nightly releaseTemplate >> {
-            applicationIdSuffix ".fenix"
+            applicationIdSuffix ""
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
             def deepLinkSchemeValue = "fenix-nightly"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
@@ -133,7 +133,7 @@ android {
         }
         beta releaseTemplate >> {
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
-            applicationIdSuffix ".firefox_beta"
+            applicationIdSuffix ""
             def deepLinkSchemeValue = "fenix-beta"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
@@ -150,7 +150,7 @@ android {
         }
         release releaseTemplate >> {
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
-            applicationIdSuffix ".firefox"
+            applicationIdSuffix ""
             def deepLinkSchemeValue = "fenix"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
@@ -169,7 +169,7 @@ android {
             initWith buildTypes.nightly
             shrinkResources = false
             minifyEnabled = false
-            applicationIdSuffix ".fenix"
+            applicationIdSuffix ""
             signingConfig = signingConfigs.debug
             debuggable false
             buildConfigField "boolean", "IS_BENCHMARK_BUILD", "true"
@@ -239,7 +239,7 @@ android {
             if (project.hasProperty("benchmarkTest")) {
                 include "arm64-v8a"
             } else {
-                include "armeabi-v7a", "arm64-v8a", "x86_64"
+                include "arm64-v8a"
                 if (gradle.mozconfig.substs.MOZILLA_OFFICIAL || System.getenv("MOZ_BUILD_CONFIG_LINT") == "1") {
                     universalApk true
                 }
@@ -335,7 +335,7 @@ androidComponents {
 
 android.defaultConfig.with {
     buildConfigField 'boolean', 'CRASH_REPORTING', 'true'
-    buildConfigField 'boolean', 'TELEMETRY', 'true'
+    buildConfigField 'boolean', 'TELEMETRY', 'false'
 
     // Reading the sentry token from a local file (if it exists). In a release task on taskcluster it will be available.
     buildConfigField 'String', 'SENTRY_TOKEN', 'null'
@@ -454,6 +454,7 @@ nimbus {
 }
 
 dependencies {
+    implementation project(':wildbuzzard')
     implementation project('longfox')
     implementation project(':components:browser-engine-gecko')
     implementation project(':components:compose-awesomebar')

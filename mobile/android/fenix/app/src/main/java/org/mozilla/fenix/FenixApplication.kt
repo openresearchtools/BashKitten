@@ -151,7 +151,12 @@ private const val BYTES_TO_MEGABYTES_CONVERSION = 1024.0 * 1024.0
  * Installs [CrashReporter], initializes [Glean] in fenix builds and setup [Megazord] in the main process.
  */
 @Suppress("Registered", "TooManyFunctions", "LargeClass")
-open class FenixApplication : Application(), Provider, ThemeProvider {
+open class FenixApplication : Application(), Provider, ThemeProvider, org.openresearchtools.wildbuzzard.BrowserApp.Provider {
+    private val wildBuzzardServices by lazy {
+        org.openresearchtools.wildbuzzard.BrowserApp(this, org.mozilla.fenix.wildbuzzard.FenixAgentHost(this))
+    }
+    override fun wildBuzzard() = wildBuzzardServices
+
     init {
         // [TIMER] Record startup timestamp as early as reasonable with some degree of consistency.
         //
@@ -310,7 +315,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider {
         // Kick off initialization of Glean backend off-thread. Glean will continue to queue
         // metric samples until the backend is ready. If we don't have data-upload consent then
         // this will be a no-op and initialization may be attempted after onboarding.
-        maybeInitializeGlean()
+        // WildBuzzard disables the upstream product service: maybeInitializeGlean()
 
         // Initialize the [BrowserStore] so that [setStartupMetrics] can reference this.
         // Note: This is a historical artifact and should be revisited.
@@ -342,11 +347,11 @@ open class FenixApplication : Application(), Provider, ThemeProvider {
 
         GlobalSyncedTabsCommandsProvider.initialize(lazy { components.backgroundServices.syncedTabsCommands })
 
-        initializeRemoteSettingsSupport()
+        // WildBuzzard disables the upstream product service: initializeRemoteSettingsSupport()
 
         restoreBrowserState()
         restoreDownloads()
-        restoreMessaging()
+        // WildBuzzard disables the upstream product service: restoreMessaging()
 
         // [IMPORTANT] Don't progress further until application-services is actually ready to go.
         // This makes it easier to reason about behaviour and avoids issues in the Rust code.
@@ -362,24 +367,9 @@ open class FenixApplication : Application(), Provider, ThemeProvider {
     private fun setupPostMegazord() {
         setupLeakCanary()
 
-        if (components.fenixOnboarding.userHasBeenOnboarded()) {
-            startMetricsIfEnabled(
-                logger = logger,
-                analytics = components.analytics,
-                isTelemetryEnabled = components.settings.isTelemetryEnabled,
-                isMarketingTelemetryEnabled = components.settings.isMarketingTelemetryEnabled &&
-                    components.settings.hasMadeMarketingTelemetrySelection,
-                isDailyUsagePingEnabled = components.settings.isDailyUsagePingEnabled,
-            )
-        } else {
-            CoroutineScope(IO).launch {
-                components.distributionIdManager.startAdjustIfSkippingConsentScreen()
-            }
-        }
+        // WildBuzzard disables the upstream product service: setupPush()
 
-        setupPush()
-
-        maybeSetupIPProtection()
+        // WildBuzzard disables the upstream product service: maybeSetupIPProtection()
 
         GlobalFxSuggestDependencyProvider.initialize(components.fxSuggest.storage)
 
@@ -401,11 +391,9 @@ open class FenixApplication : Application(), Provider, ThemeProvider {
             VisibilityLifecycleObserver(),
         )
 
-        components.analytics.metricsStorage.tryRegisterAsUsageRecorder(this)
+        // No telemetry upload or usage recorder in WildBuzzard.
 
-        CoroutineScope(IO).launch {
-            components.useCases.wallpaperUseCases.fetchCurrentWallpaperUseCase.invoke()
-        }
+
     }
 
     @OptIn(DelicateCoroutinesApi::class) // GlobalScope usage
@@ -433,20 +421,20 @@ open class FenixApplication : Application(), Provider, ThemeProvider {
         // We init these items in the visual completeness queue to avoid them initing in the critical
         // startup path, before the UI finishes drawing (i.e. visual completeness).
         queueInitStorageAndServices(queue)
-        queueMetrics(queue)
+        // WildBuzzard disables the upstream product service: queueMetrics(queue)
         queueEngineWarmup(queue)
         queueIncrementNumberOfAppLaunches(queue)
         queueRestoreLocale(queue)
         queueStorageMaintenance(queue)
-        queueIntegrityClientWarmUp(queue)
-        queueNimbusFetchInForeground(queue)
-        queueDownloadWallpapers(queue)
+        // WildBuzzard disables the upstream product service: queueIntegrityClientWarmUp(queue)
+        // WildBuzzard disables the upstream product service: queueNimbusFetchInForeground(queue)
+        // WildBuzzard disables the upstream product service: queueDownloadWallpapers(queue)
 
         if (components.settings.enableFxSuggest) {
             queueSuggestIngest(queue)
         }
 
-        queueCollectProcessExitInfo(queue)
+        // WildBuzzard disables the upstream product service: queueCollectProcessExitInfo(queue)
     }
 
     private inline fun runOnVisualCompleteness(
@@ -511,19 +499,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider {
                 }
                 components.core.fileUploadsDirCleaner.cleanUploadsDirectory()
             }
-            // Account manager initialization needs to happen on the main thread.
-            GlobalScope.launch(Dispatchers.Main) {
-                logElapsedTime(logger, "Kicking-off account manager") {
-                    components.backgroundServices.accountManager
-                }
 
-                // Start Relay feature to monitor account state throughout the app lifecycle.
-                // Note: This feature monitors FxA account changes and runs regardless of user
-                // settings; UI components check settings before actually using Relay functionality.
-                logElapsedTime(logger, "Starting Relay feature integration") {
-                    components.relayFeatureIntegration.start()
-                }
-            }
         }
 
     private fun queueMetrics(queue: RunWhenReadyQueue) = runOnVisualCompleteness(queue) {

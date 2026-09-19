@@ -322,12 +322,7 @@ fun MainMenu(
         )
 
         MenuGroup {
-            MozillaAccountMenuItem(
-                account = account,
-                accountState = accountState,
-                isPrivate = isPrivate,
-                onClick = onMozillaAccountButtonClick,
-            )
+            // Mozilla accounts and Sync are not product features in WildBuzzard.
 
             if (accessPoint == MenuAccessPoint.Home) {
                 MenuItem(
@@ -393,6 +388,16 @@ private fun ToolsAndActionsMenuGroup(
     extensionSubmenu: @Composable () -> Unit,
 ) {
     MenuGroup {
+        val wildBuzzardContext = androidx.compose.ui.platform.LocalContext.current
+        MenuItem(
+            label = "WildBuzzard tab controls",
+            beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_settings_24),
+            onClick = {
+                wildBuzzardContext.startActivity(android.content.Intent(
+                    wildBuzzardContext, org.openresearchtools.wildbuzzard.TabOptionsActivity::class.java,
+                ))
+            },
+        )
         val labelId = R.string.browser_menu_desktop_site
         val badgeText: String
         val menuItemState: MenuItemState

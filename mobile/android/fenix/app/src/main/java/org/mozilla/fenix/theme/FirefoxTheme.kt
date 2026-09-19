@@ -35,17 +35,9 @@ fun FirefoxTheme(
     theme: Theme = getThemeProvider().provideTheme(),
     content: @Composable () -> Unit,
 ) {
-    val colors: AcornColors = when (theme) {
-        Theme.Light -> lightColorPalette
-        Theme.Dark -> darkColorPalette
-        Theme.Private -> privateColorPalette
-    }
+    val colors: AcornColors = wildBuzzardColors(theme)
 
-    val colorScheme: ColorScheme = when (theme) {
-        Theme.Light -> acornLightColorScheme()
-        Theme.Dark -> acornDarkColorScheme()
-        Theme.Private -> acornPrivateColorScheme()
-    }
+    val colorScheme: ColorScheme = wildBuzzardScheme(theme)
 
     val gradients: AcornGradientScheme = when (theme) {
         Theme.Light -> lightAcornGradientScheme

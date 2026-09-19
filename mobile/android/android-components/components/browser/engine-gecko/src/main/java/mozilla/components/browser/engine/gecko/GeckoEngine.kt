@@ -312,12 +312,13 @@ class GeckoEngine(
      */
     override fun createSession(private: Boolean, contextId: String?): EngineSession {
         ThreadUtils.assertOnUiThread()
-        val speculativeSession = speculativeConnectionFactory.get(private, contextId)
+        val isolatedContextId = contextId ?: "wildbuzzard-${java.util.UUID.randomUUID()}"
+        val speculativeSession = speculativeConnectionFactory.get(private, isolatedContextId)
         return speculativeSession ?: GeckoEngineSession(
             runtime = runtime,
             privateMode = private,
             defaultSettings = defaultSettings,
-            contextId = contextId,
+            contextId = isolatedContextId,
         )
     }
 

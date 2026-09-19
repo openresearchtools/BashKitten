@@ -1,0 +1,82 @@
+[
+  {
+    "name": "tor-android",
+    "repository": "https://github.com/guardianproject/tor-android",
+    "commit": "cb04167d313cc3b5e1c1246111591aa57c2147cb",
+    "licensePath": "LICENSE",
+    "notice": "tor-android-LICENSE",
+    "sha256": "ead918e4ca90496c08cae119d90ddd832753139c89d61d0718e8b48bc97d7802"
+  },
+  {
+    "name": "jtorctl",
+    "repository": "https://github.com/guardianproject/jtorctl",
+    "commit": "039dfb5a75cd857d112d068f873ebd2967882987",
+    "licensePath": "LICENSE",
+    "notice": "jtorctl-LICENSE",
+    "sha256": "e79f2786595048b2a7549797538ccd3be788122188a53021ae6837371b7951c0"
+  },
+  {
+    "name": "tor",
+    "repository": "https://github.com/guardianproject/tor",
+    "commit": "7aa3dffc8283f974e7e66ab1942620fd3767e821",
+    "licensePath": "LICENSE",
+    "notice": "tor-LICENSE",
+    "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766"
+  },
+  {
+    "name": "libevent",
+    "repository": "https://github.com/libevent/libevent",
+    "commit": "79ddfb460847999b807cba76d04e73891f29c6ee",
+    "licensePath": "LICENSE",
+    "notice": "libevent-LICENSE",
+    "sha256": "ff02effc9b331edcdac387d198691bfa3e575e7d244ad10cb826aa51ef085670"
+  },
+  {
+    "name": "openssl",
+    "repository": "https://github.com/openssl/openssl",
+    "commit": "f4dc4d58b48d346a8270183f89acf826d459b0ca",
+    "licensePath": "LICENSE.txt",
+    "notice": "openssl-LICENSE",
+    "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+  },
+  {
+    "name": "zlib",
+    "repository": "https://github.com/madler/zlib",
+    "commit": "da607da739fa6047df13e66a2af6b8bec7c2a498",
+    "licensePath": "LICENSE",
+    "notice": "zlib-LICENSE",
+    "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+  },
+  {
+    "name": "zstd",
+    "repository": "https://github.com/facebook/zstd",
+    "commit": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "licensePath": "LICENSE",
+    "notice": "zstd-LICENSE",
+    "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+  },
+  {
+    "name": "ublock",
+    "repository": "https://github.com/gorhill/uBlock",
+    "commit": "4a738e226f17ba8b854bc411871607704e46aad8",
+    "licensePath": "LICENSE.txt",
+    "notice": "ublock-LICENSE",
+    "sha256": "e73d33841f942fa73aa5a63d4a6399cc39a29564db1dbca0915485842fcb236d"
+  },
+  {
+    "name": "brave-resources",
+    "repository": "https://github.com/brave/adblock-resources",
+    "commit": "65cc707a78e25f3e203b6755f7289f01116db3e8",
+    "licensePath": "LICENSE",
+    "notice": "brave-resources-LICENSE",
+    "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+  },
+  {
+    "name": "zxing-android",
+    "repository": "https://github.com/journeyapps/zxing-android-embedded",
+    "commit": "24d02945fec5f2c5a65b24ea7848cb5ca18f9f81",
+    "licensePath": "COPYING",
+    "notice": "zxing-android-LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  }
+]

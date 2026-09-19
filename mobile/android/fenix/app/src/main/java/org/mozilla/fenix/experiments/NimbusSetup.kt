@@ -43,6 +43,8 @@ fun createNimbus(
     remoteSettingsService: RemoteSettingsService?,
     geckoPrefHandler: GeckoPrefHandler,
 ): NimbusApi {
+    return mozilla.components.service.nimbus.NimbusDisabled(context)
+
     // These values can be used in the JEXL expressions when targeting experiments.
     val customTargetingAttributes = CustomAttributeProvider.getCustomTargetingAttributes(context)
 

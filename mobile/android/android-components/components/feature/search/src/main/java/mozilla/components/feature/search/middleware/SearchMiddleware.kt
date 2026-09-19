@@ -215,7 +215,7 @@ class SearchMiddleware(
 
         val action = SearchAction.SetSearchEnginesAction(
             regionSearchEngines = filteredRegionSearchEngines,
-            regionDefaultSearchEngineId = regionBundle.await().defaultSearchEngineId,
+            regionDefaultSearchEngineId = filteredRegionSearchEngines.firstOrNull { it.name.equals("DuckDuckGo", ignoreCase = true) }?.id ?: regionBundle.await().defaultSearchEngineId,
             userSelectedSearchEngineId = userChoice.await()?.searchEngineId,
             userSelectedSearchEngineName = userChoice.await()?.searchEngineName,
             userSelectedPrivateSearchEngineId = userPrivateChoice.await()?.searchEngineId,

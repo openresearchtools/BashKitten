@@ -7,16 +7,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <androidx.preference.Preference
-        android:key="@string/pref_key_sign_in"
+        android:key="@string/pref_key_sign_in" app:isPreferenceVisible="false"
         android:layout="@layout/sign_in_preference"
         android:summary="@string/preferences_sign_in_description"
         android:title="@string/preferences_sign_in"
         app:allowDividerBelow="false" />
 
     <androidx.preference.PreferenceCategory
-        android:key="@string/pref_key_account_category"
+        android:key="@string/pref_key_account_category" app:isPreferenceVisible="false"
         android:title="@string/preferences_category_account"
-        app:isPreferenceVisible="false"
+
         android:layout="@layout/preference_category_no_icon_style">
 
         <org.mozilla.fenix.settings.account.AccountPreference
@@ -30,9 +30,9 @@
 
     <androidx.preference.Preference
         app:iconSpaceReserved="false"
-        android:key="@string/pref_key_sync_debug"
+        android:key="@string/pref_key_sync_debug" app:isPreferenceVisible="false"
         android:title="@string/preferences_sync_debug"
-        app:isPreferenceVisible="false" />
+         />
 
     <androidx.preference.PreferenceCategory
         android:title="@string/preferences_category_general"
@@ -63,10 +63,10 @@
             android:title="@string/preferences_passwords_logins_and_passwords_2" />
 
         <androidx.preference.Preference
-            android:key="@string/pref_key_email_masks"
+            android:key="@string/pref_key_email_masks" app:isPreferenceVisible="false"
             android:title="@string/preferences_email_masks"
             app:iconSpaceReserved="false"
-            app:isPreferenceVisible="false" />
+             />
 
         <androidx.preference.Preference
             app:iconSpaceReserved="false"
@@ -172,7 +172,7 @@
             android:title="@string/preferences_notifications" />
 
         <androidx.preference.Preference
-            android:key="@string/pref_key_data_choices"
+            android:key="@string/pref_key_data_choices" app:isPreferenceVisible="false"
             app:iconSpaceReserved="false"
             android:title="@string/preferences_data_collection" />
 
@@ -226,7 +226,7 @@
             app:isPreferenceVisible="@bool/IS_DEBUG" />
 
         <androidx.preference.Preference
-            android:key="@string/pref_key_remote_improvements"
+            android:key="@string/pref_key_remote_improvements" app:isPreferenceVisible="false"
             android:title="@string/preferences_remote_improvements"
             app:iconSpaceReserved="false" />
 
@@ -264,10 +264,10 @@
             app:isPreferenceVisible="false" />
 
         <androidx.preference.Preference
-            android:key="@string/pref_key_nimbus_experiments"
+            android:key="@string/pref_key_nimbus_experiments" app:isPreferenceVisible="false"
             app:iconSpaceReserved="false"
             android:title="@string/preferences_nimbus_experiments"
-            app:isPreferenceVisible="false" />
+             />
         <androidx.preference.Preference
             android:key="@string/pref_key_start_profiler"
             app:iconSpaceReserved="false"

@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+package org.openresearchtools.wildbuzzard;
+
+import android.content.*;
+import android.os.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.function.Consumer;
+import org.json.JSONObject;
+import org.torproject.jni.TorService;
+
+final class TorManager {
+    private final BrowserApp app;
+    private final SecretStore keys;
+    private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private volatile TorService service;
+    private final Set<String> installed = new HashSet<>();
+    private boolean starting;
+    private volatile boolean restored;
+    TorManager(BrowserApp app) { this.app = app; keys = new SecretStore(app, "onion-keys"); }
+    private final ServiceConnection connection = new ServiceConnection() {
+        @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            service = ((TorService.LocalBinder) binder).getService();
+        }
+        @Override public void onServiceDisconnected(ComponentName name) {
+            service = null; restored = false;
+            app.main.post(() -> { installed.clear(); app.refreshTor(0, new ArrayList<>()); });
+        }
+    };
+    void ready(Consumer<Integer> success, Consumer<String> failure) {
+        if (!starting) {
+            try {
+                Files.write(TorService.getTorrc(app).toPath(),
+                    ("SocksPort auto IsolateSOCKSAuth\nHTTPTunnelPort 0\nDisableNetwork 1\nSafeSocks 1\nTestSocks 0\nClientOnly 1\n").getBytes(StandardCharsets.UTF_8));
+                starting = true;
+                if (!app.bindService(new Intent(app, TorService.class), connection, Context.BIND_AUTO_CREATE)) throw new IllegalStateException();
+            } catch (Exception error) { starting = false; failure.accept("Could not start Tor"); return; }
+        }
+        io.execute(() -> {
+            try {
+                long deadline = SystemClock.elapsedRealtime() + 90000;
+                TorService current;
+                while ((current = service) == null || current.getTorControlConnection() == null) {
+                    if (SystemClock.elapsedRealtime() > deadline) throw new IllegalStateException();
+                    Thread.sleep(100);
+                }
+                if (!restored) {
+                    JSONObject stored = keys.read();
+                    List<String> enrolled = new ArrayList<>();
+                    for (Iterator<String> it = stored.keys(); it.hasNext();) {
+                        String host = it.next();
+                        current.getTorControlConnection().onionClientAuthAdd(host.substring(0, 56), stored.getString(host));
+                        enrolled.add(host);
+                    }
+                    current.getTorControlConnection().setConf("DisableNetwork", "0");
+                    restored = true;
+                    app.main.post(() -> { installed.clear(); installed.addAll(enrolled); });
+                }
+                while (true) {
+                    String status = current.getTorControlConnection().getInfo("status/bootstrap-phase");
+                    if (status.contains("PROGRESS=100")) break;
+                    if (SystemClock.elapsedRealtime() > deadline) throw new IllegalStateException();
+                    Thread.sleep(250);
+                }
+                int port = current.getSocksPort();
+                if (port < 1) throw new IllegalStateException();
+                app.main.post(() -> { app.refreshTor(port, new ArrayList<>(installed)); success.accept(port); });
+            } catch (Exception error) {
+                app.main.post(() -> { app.refreshTor(0, new ArrayList<>()); failure.accept("Tor is unavailable; no direct connection was made. Retry when connected."); });
+            }
+        });
+    }
+    List<String> identities() { return new ArrayList<>(installed); }
+    void save(OnionKey key, Consumer<String> complete) {
+        ready(port -> io.execute(() -> {
+            try {
+                service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.key);
+                JSONObject stored = keys.read();
+                stored.put(key.host, key.key); keys.write(stored);
+                app.main.post(() -> { installed.add(key.host); app.refreshTor(port, identities()); complete.accept("Onion key imported"); });
+            } catch (Exception error) { app.main.post(() -> complete.accept("Could not import onion key")); }
+        }), complete);
+    }
+    void list(Consumer<List<String>> result) {
+        io.execute(() -> {
+            List<String> hosts = new ArrayList<>();
+            try { keys.read().keys().forEachRemaining(hosts::add); } catch (Exception ignored) {}
+            app.main.post(() -> result.accept(hosts));
+        });
+    }
+    void remove(String host, Consumer<String> complete) {
+        installed.remove(host);
+        app.refreshTorTrust(identities());
+        io.execute(() -> {
+            try {
+                JSONObject stored = keys.read(); stored.remove(host); keys.write(stored);
+                if (service != null && service.getTorControlConnection() != null) service.getTorControlConnection().onionClientAuthRemove(host.substring(0, 56));
+                app.main.post(() -> complete.accept("Onion key removed"));
+            } catch (Exception error) { app.main.post(() -> complete.accept("Key removal failed; retry")); }
+        });
+    }
+}

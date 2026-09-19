@@ -119,6 +119,9 @@ class GeckoEngineSession(
     private val logger = Logger("GeckoEngineSession")
 
     internal lateinit var geckoSession: GeckoSession
+
+    /** Browser-owned Android control integration; does not install a remote debugger. */
+    fun wildBuzzardSession(): GeckoSession = geckoSession
     internal var currentUrl: String? = null
     internal var currentTitle: String? = null
     internal var lastLoadRequestUri: String? = null

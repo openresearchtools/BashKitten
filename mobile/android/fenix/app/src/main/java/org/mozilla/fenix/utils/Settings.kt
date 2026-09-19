@@ -204,11 +204,9 @@ class Settings(
      * Indicates if the stories homescreen section should be shown.
      */
     @Suppress("DEPRECATION")
-    var showPocketRecommendationsFeature by lazyFeatureFlagBooleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_pocket_homescreen_recommendations),
-        featureFlag = ContentRecommendationsFeatureHelper.isContentRecommendationsFeatureEnabled(appContext),
-        defaultValue = { homescreenSections[HomeScreenSection.POCKET] == true },
-    )
+    var showPocketRecommendationsFeature: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates what simple toolbar shortcut key is currently selected.
@@ -232,11 +230,8 @@ class Settings(
      * Indicates if the Pocket recommendations homescreen section should also show sponsored stories.
      */
     @Suppress("DEPRECATION")
-    val showPocketSponsoredStories by lazyFeatureFlagBooleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_pocket_sponsored_stories),
-        defaultValue = { homescreenSections[HomeScreenSection.POCKET_SPONSORED_STORIES] == true },
-        featureFlag = ContentRecommendationsFeatureHelper.isPocketSponsoredStoriesFeatureEnabled(appContext),
-    )
+    val showPocketSponsoredStories: Boolean
+        get() = false
 
     /**
      * Indicates whether or not the "Recently Visited" section should be shown on the home screen.
@@ -615,15 +610,13 @@ class Settings(
         default = false,
     )
 
-    var isTelemetryEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_telemetry),
-        default = true,
-    )
+    var isTelemetryEnabled: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
-    var isMarketingTelemetryEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_marketing_telemetry),
-        default = false,
-    )
+    var isMarketingTelemetryEnabled: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     var hasMadeMarketingTelemetrySelection by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_marketing_telemetry_selection_made),
@@ -676,10 +669,9 @@ class Settings(
     /**
      * Returns true if the terms of use feature flag is enabled
      */
-    var isTermsOfUsePromptEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_terms_prompt_enabled),
-        default = { FxNimbus.features.termsOfUsePrompt.value().enabled },
-    )
+    var isTermsOfUsePromptEnabled: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Returns true if the nimbus flag for showing the terms of use drag handle is true.
@@ -742,16 +734,13 @@ class Settings(
      * sure that users who upgrade and had telemetry disabled don't start sending the
      * daily usage ping telemetry.
      */
-    var isDailyUsagePingEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_daily_usage_ping),
-        default = isTelemetryEnabled,
-        persistDefaultIfNotExists = true,
-    )
+    var isDailyUsagePingEnabled: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
-    var isExperimentationEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_experimentation_v2),
-        default = isTelemetryEnabled,
-    )
+    var isExperimentationEnabled: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * This lets us know if the user has disabled experimentation manually so that we know
@@ -767,10 +756,9 @@ class Settings(
      * Rollouts are completely decoupled from telemetry and experiments, so users
      * can receive feature updates regardless of their telemetry or experiment settings.
      */
-    var isRolloutsEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_rollouts),
-        default = { appContext.components.nimbus.sdk.rolloutParticipation },
-    )
+    var isRolloutsEnabled: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Timestamp in milliseconds when the "Set as default browser" system prompt was requested.
@@ -1199,13 +1187,13 @@ class Settings(
         get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_VALUE_PBM] == 1
 
     val shouldUseCookieBanner: Boolean
-        get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_VALUE] == 1
+        get() = true
 
     val shouldShowCookieBannerUI: Boolean
         get() = cookieBannersSection[CookieBannersSection.FEATURE_UI] == 1
 
     val shouldEnableCookieBannerDetectOnly: Boolean
-        get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_DETECT_ONLY] == 1
+        get() = false
 
     val shouldEnableCookieBannerGlobalRules: Boolean
         get() = cookieBannersSection[CookieBannersSection.FEATURE_SETTING_GLOBAL_RULES] == 1
@@ -2184,10 +2172,9 @@ class Settings(
     /**
      * Indicates if the Contile functionality should be visible.
      */
-    var showContileFeature by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_contile),
-        default = true,
-    )
+    var showContileFeature: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Blocklist used to filter items from the home screen that have previously been removed.
@@ -2604,11 +2591,9 @@ class Settings(
      * Indicates if Firefox Suggest is enabled.
      */
     @Suppress("DEPRECATION")
-    var enableFxSuggest by lazyFeatureFlagBooleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_fxsuggest),
-        defaultValue = { FxNimbus.features.fxSuggest.value().enabled },
-        featureFlag = FeatureFlags.FX_SUGGEST,
-    )
+    var enableFxSuggest: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates if boosting AMP/wiki suggestions is enabled.
@@ -2629,11 +2614,9 @@ class Settings(
      * The default value is computed lazily, and based on whether Firefox Suggest is enabled.
      */
     @Suppress("DEPRECATION")
-    var showSponsoredSuggestions by lazyFeatureFlagBooleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_show_sponsored_suggestions),
-        defaultValue = { enableFxSuggest },
-        featureFlag = FeatureFlags.FX_SUGGEST,
-    )
+    var showSponsoredSuggestions: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates if the user has chosen to show search suggestions for web content in the
@@ -2641,11 +2624,9 @@ class Settings(
      * is enabled.
      */
     @Suppress("DEPRECATION")
-    var showNonSponsoredSuggestions by lazyFeatureFlagBooleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_show_nonsponsored_suggestions),
-        defaultValue = { enableFxSuggest },
-        featureFlag = FeatureFlags.FX_SUGGEST,
-    )
+    var showNonSponsoredSuggestions: Boolean
+        get() = false
+        set(value) { /* Product policy: this Mozilla service is disabled. */ }
 
     /**
      * Indicates that the user does not want warned of a translations

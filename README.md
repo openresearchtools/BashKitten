@@ -1,3 +1,15 @@
+# WildBuzzard for Android
+
+Android-focused fork of WildBuzzard's `refactor/browser-agent-independent` branch,
+with its full source history. The app retains Fenix's browser interface and adds
+app-to-app agent control, native adblocking and authenticated onion browsing.
+
+See [Android implementation and build guide](wildbuzzard/android/README.md) and
+[agent API](wildbuzzard/android/API.md). GitHub Actions builds native ARM64 APKs.
+The inherited desktop documentation follows for source provenance and reference.
+
+---
+
 ![Firefox Browser](./docs/readme/readme-banner.svg)
 
 [Firefox](https://firefox.com/) is a fast, reliable and private web browser from the non-profit [Mozilla organization](https://mozilla.org/).

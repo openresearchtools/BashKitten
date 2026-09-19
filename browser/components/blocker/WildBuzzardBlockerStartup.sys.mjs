@@ -52,8 +52,10 @@ export const WildBuzzardBlockerStartup = {
       allFrames: true,
     });
 
-    lazy.WildBuzzardBlockerPanel.init();
-    lazy.WildBuzzardBlockerExtensionDetector.init();
+    if (Services.appinfo.OS !== "Android") {
+      lazy.WildBuzzardBlockerPanel.init();
+      lazy.WildBuzzardBlockerExtensionDetector.init();
+    }
     lazy.WildBuzzardBlockerService.init().catch(error =>
       console.error("WildBuzzard blocker startup failed", error)
     );

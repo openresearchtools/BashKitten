@@ -18,6 +18,7 @@
 #include "nsIObserver.h"
 #include "nsString.h"
 #include "nsTHashtable.h"
+#include "nsTHashSet.h"
 #include "nsWeakReference.h"
 #include "secoidt.h"
 
@@ -116,6 +117,7 @@ class nsCertOverrideService final : public nsICertOverrideService,
   ~nsCertOverrideService();
 
   mozilla::Mutex mMutex;
+  nsTHashSet<nsCStringHashKey> mAuthenticatedOnions MOZ_GUARDED_BY(mMutex);
   bool mDisableAllSecurityCheck MOZ_GUARDED_BY(mMutex);
   mozilla::HashMap<uint32_t, bool> mUserContextIdsWithSecurityChecksOverride
       MOZ_GUARDED_BY(mMutex);

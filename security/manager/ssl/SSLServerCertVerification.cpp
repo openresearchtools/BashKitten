@@ -665,6 +665,39 @@ PRErrorCode AuthCertificateParseResults(
     /* out */
     nsITransportSecurityInfo::OverridableErrorCategory&
         aOverridableErrorCategory) {
+
+#ifdef ANDROID
+  // Tor authenticates the onion identity. Only the owned, isolated Tor route
+  // can enroll that identity; this replaces issuer trust, not TLS key proof,
+  // certificate hostname/validity checks, or clearnet certificate validation.
+  if (aCertVerificationError == SEC_ERROR_UNKNOWN_ISSUER ||
+      aCertVerificationError == MOZILLA_PKIX_ERROR_SELF_SIGNED_CERT) {
+    nsCOMPtr<nsICertOverrideService> service =
+        do_GetService(NS_CERTOVERRIDE_CONTRACTID);
+    bool enrolled = false;
+    if (service && NS_SUCCEEDED(service->IsAuthenticatedOnion(
+            aOriginAttributes.mGeckoViewSessionContextId, aHostName, &enrolled)) &&
+        enrolled) {
+      UniqueCERTCertificate cert(aCert->GetCert());
+      Input der;
+      Input hostname;
+      if (cert && der.Init(cert->derCert.data, cert->derCert.len) == Success &&
+          hostname.Init(reinterpret_cast<const uint8_t*>(aHostName.BeginReading()),
+                        aHostName.Length()) == Success &&
+          CheckCertHostname(der, hostname) == Success) {
+        BackCert leaf(der, EndEntityOrCA::MustBeEndEntity, nullptr);
+        Time notBefore(Time::uninitialized), notAfter(Time::uninitialized);
+        if (leaf.Init() == Success &&
+            ParseValidity(leaf.GetValidity(), &notBefore, &notAfter) == Success &&
+            CheckValidity(aTime, notBefore, notAfter) == Success) {
+          aOverridableErrorCategory =
+              nsITransportSecurityInfo::OverridableErrorCategory::ERROR_UNSET;
+          return 0;
+        }
+      }
+    }
+  }
+#endif
   uint32_t probeValue = MapCertErrorToProbeValue(aCertVerificationError);
   glean::ssl::cert_verification_errors.AccumulateSingleSample(probeValue);
 

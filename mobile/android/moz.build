@@ -77,6 +77,8 @@ GenerateWebCompatAddonFiles(
 
 CONFIGURE_SUBST_FILES += ["installer/Makefile"]
 
+DIRS += ["/browser/components/blocker"]
+
 DIRS += [
     "../locales",
     "locales",

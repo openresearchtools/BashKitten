@@ -297,10 +297,10 @@ class Core(
      * [Client] implementation to be used for code depending on `concept-fetch``
      */
     val client: Client by lazyMonitored {
-        GeckoViewFetchClient(
+        org.mozilla.fenix.wildbuzzard.ProductClient(GeckoViewFetchClient(
             context,
             geckoRuntime,
-        )
+        ))
     }
 
     val fileUploadsDirCleaner: FileUploadsDirCleaner by lazyMonitored {
@@ -387,10 +387,10 @@ class Core(
                 RegionMiddleware(context, locationService),
                 SearchMiddleware(
                     context = context,
-                    additionalBundledSearchEngineIds = listOf("reddit", "youtube"),
+                    additionalBundledSearchEngineIds = emptyList(),
                     migration = SearchMigration(context),
                     searchExtraParams = searchExtraParams,
-                    searchEngineSelectorConfig = getSearchEngineSelectorConfig(),
+                    searchEngineSelectorConfig = null,
                 ),
                 RecordingDevicesMiddleware(context, context.components.notificationsDelegate),
                 PromptMiddleware(),

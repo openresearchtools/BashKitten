@@ -1686,6 +1686,15 @@ class ResponseFilteringListener {
  * counts for each tab so the protections UI can read them.
  */
 export const WildBuzzardBlockerService = {
+  _disabledSessionContexts: new Set(),
+  setSessionBlocking(context, enabled) {
+    if (!context) throw new Error("Missing tab context");
+    if (enabled) this._disabledSessionContexts.delete(context);
+    else this._disabledSessionContexts.add(context);
+  },
+  isSessionBlockingEnabled(context) {
+    return !context || !this._disabledSessionContexts.has(context);
+  },
   QueryInterface: ChromeUtils.generateQI([
     "nsIObserver",
     "nsIWildBuzzardBlockerContentPolicyBridge",
@@ -2407,6 +2416,7 @@ export const WildBuzzardBlockerService = {
     loadInfo,
     { isTopLevelDocument = false, targetHostname = "" } = {}
   ) {
+    if (!this.isSessionBlockingEnabled(loadInfo?.originAttributes?.geckoViewSessionContextId)) return true;
     const candidateHosts = [
       targetHostname,
       this._getPrincipalHost(loadInfo?.triggeringPrincipal),
@@ -3338,6 +3348,7 @@ export const WildBuzzardBlockerService = {
    * @returns {object|null} Parsed cosmetic resource payload from the native engine.
    */
   getCosmeticResources(url, browsingContext = null) {
+    if (!this.isSessionBlockingEnabled(browsingContext?.originAttributes?.geckoViewSessionContextId)) return null;
     if (!this.isEnabled()) {
       return null;
     }

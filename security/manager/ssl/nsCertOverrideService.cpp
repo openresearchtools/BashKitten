@@ -787,3 +787,42 @@ void nsCertOverrideService::RemoveShutdownBlocker() {
     MOZ_RELEASE_ASSERT(NS_SUCCEEDED(rv));
   }
 }
+
+static bool IsV3OnionIdentity(const nsACString& host) {
+  if (host.Length() != 62 || !StringEndsWith(host, ".onion"_ns)) return false;
+  for (size_t i = 0; i < 56; ++i) {
+    const char c = host[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= '2' && c <= '7'))) return false;
+  }
+  return true;
+}
+
+NS_IMETHODIMP nsCertOverrideService::SetAuthenticatedOnion(
+    const nsAString& sessionContext, const nsACString& identity, bool enabled) {
+  if (sessionContext.IsEmpty() || sessionContext.Length() > 256 ||
+      sessionContext.FindChar('|') != kNotFound || !IsV3OnionIdentity(identity)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+  nsAutoCString key(NS_ConvertUTF16toUTF8(sessionContext));
+  key.Append('|');
+  key.Append(identity);
+  MutexAutoLock lock(mMutex);
+  if (enabled) mAuthenticatedOnions.Insert(key);
+  else mAuthenticatedOnions.Remove(key);
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsCertOverrideService::IsAuthenticatedOnion(
+    const nsAString& sessionContext, const nsACString& host, bool* result) {
+  *result = false;
+  if (sessionContext.IsEmpty() || host.Length() < 62) return NS_OK;
+  const nsDependentCSubstring identity = Substring(host, host.Length() - 62);
+  if (!IsV3OnionIdentity(identity) ||
+      (host.Length() > 62 && host[host.Length() - 63] != '.')) return NS_OK;
+  nsAutoCString key(NS_ConvertUTF16toUTF8(sessionContext));
+  key.Append('|');
+  key.Append(identity);
+  MutexAutoLock lock(mMutex);
+  *result = mAuthenticatedOnions.Contains(key);
+  return NS_OK;
+}
