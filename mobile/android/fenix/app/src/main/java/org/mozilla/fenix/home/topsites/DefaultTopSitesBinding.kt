@@ -26,8 +26,8 @@ import org.mozilla.fenix.R
 import org.mozilla.fenix.utils.Settings
 
 /**
- * A binding for observing [RegionState] and adding default top sites that are included in the
- * application.
+ * A binding that removes bundled top sites while preserving user-created shortcuts.
+ * The resource decoder is retained for compatibility with upstream shortcut data.
  *
  * @param browserStore The [BrowserStore] to observe state changes.
  * @param topSitesStorage An instance of the [DefaultTopSitesStorage] used add to default top sites.

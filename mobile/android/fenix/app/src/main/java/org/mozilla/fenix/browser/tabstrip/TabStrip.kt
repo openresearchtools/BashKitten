@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
@@ -66,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.text.BidiFormatter
 import kotlinx.coroutines.flow.map
 import mozilla.components.browser.state.action.TabListAction
+import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.modifier.thenConditional
@@ -128,6 +130,17 @@ fun TabStrip(
     onSelectedTabClick: (url: String) -> Unit,
     onTabCounterClick: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val addTabForCurrentRoute: () -> Unit = {
+        val tab = browserStore.state.selectedTab
+        if (tab?.content?.private == false && tab.contextId?.startsWith("wildbuzzard-tor-") == true) {
+            org.openresearchtools.wildbuzzard.BrowserApp.get(context).openTorTab("") {
+                android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            }
+        } else {
+            onAddTabClick()
+        }
+    }
     val isPossiblyPrivateMode by remember { appStore.stateFlow.map { it.mode.isPrivate } }
         .collectAsState(initial = false)
     val state by remember {
@@ -135,7 +148,7 @@ fun TabStrip(
             it.toTabStripState(
                 isSelectDisabled = isSelectDisabled,
                 isPossiblyPrivateMode = isPossiblyPrivateMode,
-                addTab = onAddTabClick,
+                addTab = addTabForCurrentRoute,
                 closeTab = { isPrivate, numberOfTabs ->
                     it.selectedTabId?.let { selectedTabId ->
                         closeTab(
@@ -157,7 +170,7 @@ fun TabStrip(
         showActionButtons = showActionButtons,
         colors = tabStripColors,
         onAddTabClick = {
-            onAddTabClick()
+            addTabForCurrentRoute()
             TabStripMetrics.newTabTapped.record()
         },
         onCloseTabClick = { tabId, isPrivate ->

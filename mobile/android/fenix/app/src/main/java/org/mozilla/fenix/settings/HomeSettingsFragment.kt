@@ -63,6 +63,11 @@ class HomeSettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragm
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.home_preferences, rootKey)
         setupPreferences()
+        listOf(R.string.pref_key_wallpapers, R.string.pref_key_enable_contile,
+            R.string.pref_key_pocket_homescreen_recommendations, R.string.pref_key_pocket_sponsored_stories,
+            R.string.pref_key_show_homepage_sports_widget).forEach {
+            findPreference<Preference>(getString(it))?.isVisible = false
+        }
     }
 
     override fun onResume() {

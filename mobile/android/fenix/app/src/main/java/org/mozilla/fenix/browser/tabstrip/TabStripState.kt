@@ -81,7 +81,10 @@ internal fun BrowserState.toTabStripState(
         selectedTab?.content?.private == true
     }
 
-    val tabs = getNormalOrPrivateTabs(private = isPrivateMode)
+    val torMode = !isPrivateMode && selectedTab?.contextId?.startsWith("wildbuzzard-tor-") == true
+    val tabs = getNormalOrPrivateTabs(private = isPrivateMode).filter {
+        isPrivateMode || (it.contextId?.startsWith("wildbuzzard-tor-") == true) == torMode
+    }
 
     return TabStripState(
         tabs = tabs

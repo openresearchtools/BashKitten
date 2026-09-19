@@ -64,7 +64,7 @@ class HomeDeepLinkIntentProcessor(
             "urls_bookmarks" -> GlobalDirections.Bookmarks
             "urls_history" -> GlobalDirections.History
             "settings" -> GlobalDirections.Settings
-            "turn_on_sync" -> GlobalDirections.Sync
+            "turn_on_sync" -> GlobalDirections.Settings
             "settings_search_engine" -> GlobalDirections.SearchEngine
             "settings_accessibility" -> GlobalDirections.Accessibility
             "settings_delete_browsing_data" -> GlobalDirections.DeleteData
@@ -75,10 +75,10 @@ class HomeDeepLinkIntentProcessor(
             // https://github.com/mozilla-mobile/fenix/issues/11856
             // The current version of UI has these features in more complex screens.
             "settings_privacy" -> GlobalDirections.Settings
-            "settings_wallpapers" -> GlobalDirections.WallpaperSettings
+            "settings_wallpapers" -> GlobalDirections.Settings
             "home_collections" -> GlobalDirections.Home
             "settings_private_browsing" -> GlobalDirections.SettingsPrivateBrowsing
-            "settings_app_icon" -> GlobalDirections.SettingsAppIcon
+            "settings_app_icon" -> GlobalDirections.Settings
             "settings_ai_controls" -> GlobalDirections.SettingsAIControls
 
             else -> return

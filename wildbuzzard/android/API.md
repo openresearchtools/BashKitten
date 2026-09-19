@@ -73,7 +73,7 @@ Bind an explicit intent with action
 
 An approval allows the app to read and act in its own tabs, including pages
 using stored logins. It does not expose raw key/password storage or tabs owned
-by another app. The browser menu revokes all grants and closes agent-owned tabs.
+by another app. The Revoke agent access item in Settings revokes all grants and closes agent-owned tabs.
 Ordinary tabs owned by the same approved app share website cookies and storage;
 each app has a separate storage context. Tor tabs start in isolated contexts,
 and their page-created child tabs inherit that context and ownership.

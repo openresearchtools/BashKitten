@@ -398,7 +398,7 @@ private fun ToolsAndActionsMenuGroup(
                 stateDescription = if (adblock) "On" else "Off",
                 state = if (adblock) MenuItemState.ACTIVE else MenuItemState.ENABLED,
                 onClick = {
-                    browser?.setAdblock(tab, !adblock, { adblock = tab.adblock }, {
+                    browser.setAdblock(tab, !adblock, { adblock = tab.adblock }, {
                         android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
                     })
                 },

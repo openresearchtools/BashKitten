@@ -37,7 +37,7 @@ public final class OnionBrowserTest {
         probe.send(probe.browser.showTab(tab));
         probe.waitPage(tab);
         device.waitForIdle();
-        UiObject2 counter = device.wait(Until.findObject(By.descMatches("(?:Non-private )?Tabs Open:.*")), 20000);
+        UiObject2 counter = device.wait(Until.findObject(By.desc(java.util.regex.Pattern.compile("(?:Non-private )?Tabs Open:.*"))), 20000);
         assertNotNull("Fenix tab counter", counter); counter.click();
         UiObject2 torPage = device.wait(Until.findObject(By.descStartsWith("Tor tabs:")), 10000);
         assertNotNull("Normal / Private / Tor tray", torPage); torPage.click();
@@ -86,6 +86,21 @@ public final class OnionBrowserTest {
             assertCertError(probe, create(probe, "https://127.0.0.1:9443/", false), "Clearnet unknown CA");
             String loopback = create(probe, "http://127.0.0.1:8765/", true);
             assertNavigationError(probe, loopback, false, "Tor tab must not bypass its proxy for localhost");
+            probe.command("evaluate", probe.params(privateTab).put("code", "document.title = 'Private onion preview'; return true;"));
+            probe.send(probe.browser.showTab(privateTab));
+            UiObject2 shownCounter = device.wait(Until.findObject(By.desc(java.util.regex.Pattern.compile("(?:Non-private )?Tabs Open:.*"))), 20000);
+            assertNotNull("Tor tab keeps normal browser navigation", shownCounter);
+            SystemClock.sleep(1500); shownCounter.click();
+            assertTrue("Tor session is shown in the Tor page", device.wait(Until.hasObject(By.text("Private onion preview")), 15000));
+            assertTrue("Rendered Tor tab has a page thumbnail", device.wait(Until.hasObject(By.desc("Page preview")), 15000));
+            UiObject2 normalPage = device.findObject(By.descStartsWith("Normal Tabs Open:"));
+            assertNotNull(normalPage); normalPage.click();
+            assertFalse("Tor session is absent from Normal", device.wait(Until.hasObject(By.text("Private onion preview")), 1500));
+            device.findObject(By.descStartsWith("Tor tabs:")).click();
+            assertTrue(device.wait(Until.hasObject(By.text("Private Tor fixture")), 10000));
+            File captures = new File(context.getExternalFilesDir(null), "screenshots"); captures.mkdirs();
+            assertTrue(device.takeScreenshot(new File(captures, "wildbuzzard-tor-tabs.png")));
+            android.util.Log.i("WildBuzzardProbe", "PASS: Tor tray separation, saved quick access and rendered thumbnail");
         }
         android.util.Log.i("WildBuzzardProbe", "PASS: live onion TLS policy checks completed");
     }

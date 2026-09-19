@@ -15,7 +15,7 @@ public final class CommandAccessActivity extends ProductActivity {
             String key = getIntent().getStringExtra("key");
             String fingerprint = CommandProtocol.id(CommandProtocol.key(key)).substring(0, 12);
             new AlertDialog.Builder(this).setTitle("Allow command-line browser control?")
-                .setMessage("Key " + fingerprint + "\n\nOnly approve if this matches the command you started. Programs with this key can create and control their own tabs, read pages, and act using saved logins and imported onion credentials. They cannot control other apps' tabs. Revoke access from Wild Buzzard's menu.")
+                .setMessage("Key " + fingerprint + "\n\nOnly approve if this matches the command you started. Programs with this key can create and control their own tabs, read pages, and act using saved logins and imported onion credentials. They cannot control other apps' tabs. Approve once; commands then run automatically until you revoke access in Settings.")
                 .setNegativeButton("Cancel", (dialog, which) -> finish())
                 .setPositiveButton("Allow", (dialog, which) -> {
                     app.keepAlive();
