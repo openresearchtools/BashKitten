@@ -51,6 +51,7 @@ class AppRequestInterceptor(
                 val tab = agent.forSession(native) ?: agent.track(org.openresearchtools.wildbuzzard.BrowserApp.Tab(
                     state.id, org.openresearchtools.wildbuzzard.BrowserApp.USER, native,
                 ), state.parentId)
+                tab.error = ""
                 if (agent.prepareNavigation(tab, uri)) return RequestInterceptor.InterceptionResponse.Deny
             } else if (org.openresearchtools.wildbuzzard.BrowserApp.onion(uri)) {
                 return RequestInterceptor.InterceptionResponse.Deny
@@ -85,6 +86,10 @@ class AppRequestInterceptor(
         uri: String?,
     ): RequestInterceptor.ErrorResponse {
         val improvedErrorType = improveErrorType(errorType)
+        val native = (session as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.wildBuzzardSession()
+        if (native != null) {
+            org.openresearchtools.wildbuzzard.BrowserApp.get(context).forSession(native)?.error = improvedErrorType.name
+        }
         val riskLevel = getRiskLevel(improvedErrorType)
 
         ErrorPage.visitedError.record(ErrorPage.VisitedErrorExtra(improvedErrorType.name))

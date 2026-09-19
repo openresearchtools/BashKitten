@@ -66,7 +66,7 @@ Use the root source tree and Mozilla's build wrapper:
 export MOZCONFIG="$PWD/wildbuzzard/android/mozconfig"
 ./mach --no-interactive bootstrap --application-choice mobile_android
 ./mach build
-./mach gradle :fenix:assembleDebug :wildbuzzard-agent-probe:assembleDebug
+./mach gradle :fenix:assembleDebug :wildbuzzard-agent-probe:assembleDebug :wildbuzzard-agent-probe:assembleDebugAndroidTest
 python3 wildbuzzard/android/scripts/collect-artifacts.py artifacts
 ```
 
@@ -107,3 +107,31 @@ unbuilt revision has passed device validation.
 Tor listens on a filesystem socket inside the Android app sandbox. A process-owned SOCKS gateway requires a random in-memory credential before forwarding to that socket. The gateway retains its listening socket if Tor stops, so a different app cannot take over the browser's trusted endpoint. Imported keys are never exposed through an unauthenticated shared localhost Tor port.
 
 Each restored or new managed tab blocks network traffic until its saved tab policy has been installed. Tor routing and adblock choice are stored per tab, and page-created child tabs inherit their parent's agent ownership and Tor requirement. The public Binder service and private foreground lifetime service are separate.
+
+### Cuttlefish instrumentation and live Tor fixture
+
+Install the probe instrumentation APK as well as the browser and probe APKs,
+then run the separate-app lifecycle suite. The test handles the browser's
+consent UI and records light/dark screenshots in the probe's external files.
+
+```sh
+adb install -r <probe-androidTest.apk>
+adb shell am instrument -w -e class org.openresearchtools.wildbuzzard.probe.AgentBrowserTest org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+The optional live Tor test uses a locally generated private CA, a client-auth
+onion, and an unenrolled public onion. Keep its directory outside the checkout:
+
+```sh
+python3 wildbuzzard/android/tests/onion-fixture.py --tor /path/to/tor --directory /private/test-fixture
+adb reverse tcp:9443 tcp:9443
+adb push /private/test-fixture/probe-fixture.json /sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/probe-fixture.json
+adb shell am instrument -w -e class org.openresearchtools.wildbuzzard.probe.OnionBrowserTest org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Never commit the generated credential file. Restart the fixture with the same
+directory and rerun the test to verify a renewed leaf under the persistent CA.
+Restart with `--expired` and repush the fixture JSON to test certificate expiry.
+The suite also checks unenrolled onions, hostname mismatches, clearnet private-CA
+rejection, and blocked localhost access from a Tor tab. These are test procedures,
+not claims that device validation has already passed.

@@ -17,9 +17,10 @@ public final class ProbeActivity extends Activity {
     static volatile String lastTab;
     public static volatile String testResult;
     public static volatile boolean connected;
+    static volatile ProbeActivity active;
     final ExecutorService worker = Executors.newSingleThreadExecutor();
     @Override public void onCreate(Bundle saved) {
-        super.onCreate(saved);
+        super.onCreate(saved); connected = false; active = this;
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(20, 65, 20, 20);
         add(root, "Request browser access", () -> { try { send(browser.requestAccess()); } catch (Exception e) { log("Grant request: " + e); } });
         add(root, "Run lifecycle and page tests", () -> { testResult = "RUNNING"; worker.execute(this::tests); });
@@ -149,5 +150,5 @@ public final class ProbeActivity extends Activity {
             log("PASS: lifecycle/page suite completed");
         } catch (Throwable error) { testResult = "FAIL: " + error; log(testResult); }
     }
-    @Override protected void onDestroy() { unbindService(connection); worker.shutdownNow(); super.onDestroy(); }
+    @Override protected void onDestroy() { if (active == this) { active = null; connected = false; } unbindService(connection); worker.shutdownNow(); super.onDestroy(); }
 }
