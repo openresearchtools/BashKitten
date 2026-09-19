@@ -47,3 +47,5 @@ to 200,000 characters; narrow large snapshots/read queries. Evaluations and
 waits are bounded to 30 seconds.
 
 `evaluate.code` is an asynchronous function body; use `return` to return a value. `act` supports snapshot references for click, focus, fill, check/uncheck and select; `fill` accepts `value` and optional `clear`.
+
+For Android 14 and later, the visible caller must opt in to sending its launch privileges with the PendingIntent. On API 36+, pass `ActivityOptions.makeBasic().setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE).toBundle()` to `PendingIntent.send`. On API 34–35, use `MODE_BACKGROUND_ACTIVITY_START_ALLOWED` while the caller is visible. The probe app demonstrates the version guards. This follows [Android's activity launch rules](https://developer.android.com/guide/components/activities/secure-bal); neither API call grants an unrestricted background-launch permission.

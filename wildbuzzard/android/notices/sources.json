@@ -78,5 +78,29 @@
     "licensePath": "COPYING",
     "notice": "zxing-android-LICENSE",
     "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  {
+    "name": "tor-equix",
+    "repository": "https://github.com/guardianproject/tor",
+    "commit": "7aa3dffc8283f974e7e66ab1942620fd3767e821",
+    "licensePath": "src/ext/equix/LICENSE",
+    "notice": "tor-equix-LICENSE",
+    "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+  },
+  {
+    "name": "tor-hashx",
+    "repository": "https://github.com/guardianproject/tor",
+    "commit": "7aa3dffc8283f974e7e66ab1942620fd3767e821",
+    "licensePath": "src/ext/equix/hashx/LICENSE",
+    "notice": "tor-hashx-LICENSE",
+    "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
+  },
+  {
+    "name": "tor-mulodi",
+    "repository": "https://github.com/guardianproject/tor",
+    "commit": "7aa3dffc8283f974e7e66ab1942620fd3767e821",
+    "licensePath": "src/ext/mulodi/LICENSE.TXT",
+    "notice": "tor-mulodi-LICENSE",
+    "sha256": "415ec2b15961f8b34859a50af386663f552bb62b9fffd69e8eb676c792ea022e"
   }
 ]

@@ -14,14 +14,16 @@ public final class ProbeActivity extends Activity {
     IAgentBrowser browser;
     TextView output;
     EditText request;
-    String lastTab;
+    static volatile String lastTab;
+    public static volatile String testResult;
+    public static volatile boolean connected;
     final ExecutorService worker = Executors.newSingleThreadExecutor();
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(20, 65, 20, 20);
-        add(root, "Request browser access", () -> { try { browser.requestAccess().send(); } catch (Exception e) { log("Grant request: " + e); } });
+        add(root, "Request browser access", () -> { try { send(browser.requestAccess()); } catch (Exception e) { log("Grant request: " + e); } });
         add(root, "Run lifecycle and page tests", () -> worker.execute(this::tests));
-        add(root, "Show last tab", () -> { try { browser.showTab(lastTab).send(); } catch (Exception e) { log("Show: " + e); } });
+        add(root, "Show last tab", () -> { try { send(browser.showTab(lastTab)); } catch (Exception e) { log("Show: " + e); } });
         request = new EditText(this); request.setText("{\"method\":\"capabilities\"}"); root.addView(request);
         add(root, "Send JSON request", () -> { String text = request.getText().toString(); worker.execute(() -> { try { log(call(text).toString(2)); } catch (Exception e) { log(e.toString()); } }); });
         ScrollView scroll = new ScrollView(this); output = new TextView(this); output.setTextIsSelectable(true); scroll.addView(output); root.addView(scroll); setContentView(root);
@@ -30,7 +32,7 @@ public final class ProbeActivity extends Activity {
     }
     final ServiceConnection connection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
-            browser = IAgentBrowser.Stub.asInterface(binder); log("Connected from an independent Android UID");
+            browser = IAgentBrowser.Stub.asInterface(binder); connected = true; log("Connected from an independent Android UID");
             worker.execute(() -> {
                 try { call("{\"method\":\"tabs.list\"}"); log("Already authorized"); }
                 catch (SecurityException e) { log("PASS: unapproved caller denied"); }
@@ -39,6 +41,12 @@ public final class ProbeActivity extends Activity {
         }
         @Override public void onServiceDisconnected(ComponentName name) { browser = null; log("Service disconnected"); }
     };
+    void send(android.app.PendingIntent intent) throws Exception {
+        android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+        if (Build.VERSION.SDK_INT >= 36) options.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE);
+        else if (Build.VERSION.SDK_INT >= 34) options.setPendingIntentBackgroundActivityStartMode(android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+        intent.send(this, 0, null, null, null, null, options.toBundle());
+    }
     void add(LinearLayout root, String title, Runnable action) { Button b = new Button(this); b.setText(title); b.setOnClickListener(v -> action.run()); root.addView(b); }
     void log(String message) {
         android.util.Log.i("WildBuzzardProbe", message);
@@ -81,6 +89,7 @@ public final class ProbeActivity extends Activity {
         throw new AssertionError("Page did not load");
     }
     void tests() {
+        testResult = "RUNNING";
         try {
             JSONObject a = (JSONObject) command("tabs.create", new JSONObject());
             JSONObject b = (JSONObject) command("tabs.create", new JSONObject());
@@ -92,7 +101,7 @@ public final class ProbeActivity extends Activity {
             JSONArray tabs = (JSONArray) command("tabs.list", new JSONObject());
             check(tabs.toString().contains(two) && !tabs.toString().contains(one), "closing one tab leaves the other alive");
             command("navigate", params(two).put("url", "http://127.0.0.1:8765/"));
-            browser.showTab(two).send();
+            send(browser.showTab(two));
             waitPage(two);
             Object snapshot = command("snapshot", params(two));
             check(snapshot.toString().contains("Agent test page"), "native Gecko page snapshot");
@@ -120,8 +129,9 @@ public final class ProbeActivity extends Activity {
             command("capabilities", new JSONObject());
             check(true, "browser service survives closing the last owned tab");
             lastTab = ((JSONObject) command("tabs.create", new JSONObject().put("url", "http://127.0.0.1:8765/"))).getString("id");
+            testResult = "PASS";
             log("PASS: lifecycle/page suite completed");
-        } catch (Throwable error) { log("FAIL: " + error); }
+        } catch (Throwable error) { testResult = "FAIL: " + error; log(testResult); }
     }
     @Override protected void onDestroy() { unbindService(connection); worker.shutdownNow(); super.onDestroy(); }
 }

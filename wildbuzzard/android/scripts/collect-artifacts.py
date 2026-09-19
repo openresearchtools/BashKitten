@@ -16,7 +16,6 @@ if not outputs:
     outputs = list(obj.rglob('*.apk'))
 browser = []
 for source in outputs:
-    if 'androidTest' in source.name: continue
     with zipfile.ZipFile(source) as apk:
         libraries = [name for name in apk.namelist() if name.startswith('lib/')]
         if any(name.endswith('/libxul.so') for name in libraries):

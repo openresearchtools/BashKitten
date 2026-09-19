@@ -23,7 +23,7 @@
                 android:value="User-authorized browser automation and active onion browsing" />
         </service>
         <service android:name="org.torproject.jni.TorService" android:exported="false" />
-        <provider android:name="androidx.core.content.FileProvider"
+        <provider android:name="org.openresearchtools.wildbuzzard.AgentFileProvider"
             android:authorities="${applicationId}.files" android:exported="false"
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files" />
