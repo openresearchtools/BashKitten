@@ -106,16 +106,13 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         val engine = components.core.engine.createSession(state.content.private, contextId) as GeckoEngineSession
         engine.toggleDesktopMode(state.content.desktopMode, reload = false)
         store.dispatch(EngineAction.UnlinkEngineSessionAction(tab.id))
-        val linked = store.dispatch(EngineAction.LinkEngineSessionAction(
+        store.dispatch(EngineAction.LinkEngineSessionAction(
             tab.id, engine, skipLoading = true, contextId = contextId,
         ))
-        CoroutineScope(Dispatchers.Main).launch {
-            linked.join()
-            old?.close()
-            tab.session = engine.wildBuzzardSession()
-            tab.ready = false
-            done.run()
-        }
+        old?.close()
+        tab.session = engine.wildBuzzardSession()
+        tab.ready = false
+        done.run()
     }
     override fun show(id: String) {
         components.useCases.tabsUseCases.selectTab(id)

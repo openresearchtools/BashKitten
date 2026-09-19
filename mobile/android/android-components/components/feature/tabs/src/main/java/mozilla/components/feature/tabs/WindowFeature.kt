@@ -54,7 +54,7 @@ class WindowFeature(
                                 private = state.content.private,
                             )
                             // Register ownership and context before Gecko starts the child load.
-                            store.dispatch(ContentAction.ConsumeWindowRequestAction(state.id)).join()
+                            store.dispatch(ContentAction.ConsumeWindowRequestAction(state.id))
                             windowRequest.start()
                         }
                         else -> {
