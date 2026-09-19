@@ -33,6 +33,10 @@ public final class OnionBrowserTest {
         ProbeActivity probe = ProbeActivity.active;
         click(device, "Request browser access");
         click(device, "Allow");
+        context.startActivity(new Intent(context, ProbeActivity.class)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP));
+        assertTrue("Visible caller may launch its browser tab",
+            device.wait(Until.hasObject(By.text("Show last tab")), 15000));
         String tab = ((JSONObject) probe.command("tabs.create", new JSONObject().put("url", "http://127.0.0.1:8765/"))).getString("id");
         probe.send(probe.browser.showTab(tab));
         probe.waitPage(tab);
