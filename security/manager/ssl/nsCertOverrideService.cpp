@@ -803,12 +803,25 @@ NS_IMETHODIMP nsCertOverrideService::SetAuthenticatedOnion(
       sessionContext.FindChar('|') != kNotFound || !IsV3OnionIdentity(identity)) {
     return NS_ERROR_INVALID_ARG;
   }
+  if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
   nsAutoCString key(NS_ConvertUTF16toUTF8(sessionContext));
   key.Append('|');
   key.Append(identity);
-  MutexAutoLock lock(mMutex);
-  if (enabled) mAuthenticatedOnions.Insert(key);
-  else mAuthenticatedOnions.Remove(key);
+  bool removed = false;
+  {
+    MutexAutoLock lock(mMutex);
+    if (enabled) mAuthenticatedOnions.Insert(key);
+    else {
+      removed = mAuthenticatedOnions.Contains(key);
+      mAuthenticatedOnions.Remove(key);
+    }
+  }
+  if (removed) {
+    nsCOMPtr<nsINSSComponent> nss(do_GetService(PSM_COMPONENT_CONTRACTID));
+    if (nss) nss->ClearSSLExternalAndInternalSessionCache();
+    nsCOMPtr<nsIObserverService> observers = mozilla::services::GetObserverService();
+    if (observers) observers->NotifyObservers(nullptr, "net:cancel-all-connections", nullptr);
+  }
   return NS_OK;
 }
 

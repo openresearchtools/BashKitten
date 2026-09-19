@@ -29,9 +29,14 @@ export const WildBuzzardAndroid = {
     WildBuzzardBlockerService.setSessionBlocking(context, adblock);
     const previous = routes.get(context);
     if (previous?.tor && !tor) throw new Error("Tor route is immutable for this tab");
-    for (const host of previous?.identities ?? []) certificates.setAuthenticatedOnion(context, host, false);
-    routes.set(context, { tor, port, proxySecret, identities: tor && port ? identities : [] });
-    for (const host of routes.get(context).identities) certificates.setAuthenticatedOnion(context, host, true);
+    const nextIdentities = tor && port ? identities : [];
+    for (const host of previous?.identities ?? []) {
+      if (!nextIdentities.includes(host)) certificates.setAuthenticatedOnion(context, host, false);
+    }
+    routes.set(context, { tor, port, proxySecret, identities: nextIdentities });
+    for (const host of nextIdentities) {
+      if (!previous?.identities.includes(host)) certificates.setAuthenticatedOnion(context, host, true);
+    }
   },
   close(context) {
     WildBuzzardBlockerService.setSessionBlocking(context, true);

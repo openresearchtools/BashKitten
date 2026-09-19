@@ -17,7 +17,7 @@ final class TorManager {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private volatile TorService service;
     private TorGateway gateway;
-    private final Set<String> installed = new HashSet<>();
+    private final Set<String> installed = ConcurrentHashMap.newKeySet();
     private boolean starting;
     private volatile boolean restored;
     TorManager(BrowserApp app) { this.app = app; keys = new SecretStore(app, "onion-keys"); }
@@ -59,8 +59,8 @@ final class TorManager {
                         enrolled.add(host);
                     }
                     current.getTorControlConnection().setConf("DisableNetwork", "0");
+                    installed.clear(); installed.addAll(enrolled);
                     restored = true;
-                    app.main.post(() -> { installed.clear(); installed.addAll(enrolled); });
                 }
                 while (true) {
                     String status = current.getTorControlConnection().getInfo("status/bootstrap-phase");
@@ -79,15 +79,22 @@ final class TorManager {
     String proxySecret() { return gateway == null ? "" : gateway.secret; }
     List<String> identities() { return new ArrayList<>(installed); }
     void save(OnionKey key, Consumer<String> complete) {
-        ready(port -> io.execute(() -> {
+        io.execute(() -> {
             try {
                 JSONObject stored = keys.read();
                 if (!stored.has(key.host) && stored.length() >= 64) throw new IllegalStateException("Key limit reached");
-                service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.key);
                 stored.put(key.host, key.key); keys.write(stored);
-                app.main.post(() -> { installed.add(key.host); app.refreshTor(port, identities()); complete.accept("Onion key imported"); });
-            } catch (Exception error) { app.main.post(() -> complete.accept("Could not import onion key")); }
-        }), complete);
+                app.main.post(() -> ready(port -> io.execute(() -> {
+                    try {
+                        service.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.key);
+                        installed.add(key.host);
+                        app.main.post(() -> { app.refreshTor(port, identities()); complete.accept("Onion key imported"); });
+                    } catch (Exception error) {
+                        app.main.post(() -> complete.accept("Key saved; Tor is unavailable. Retry when connected."));
+                    }
+                }), ignored -> complete.accept("Key saved; Tor is unavailable. Retry when connected.")));
+            } catch (Exception error) { app.main.post(() -> complete.accept("Could not save onion key")); }
+        });
     }
     void list(Consumer<List<String>> result) {
         io.execute(() -> {
@@ -103,7 +110,8 @@ final class TorManager {
             try {
                 JSONObject stored = keys.read(); stored.remove(host); keys.write(stored);
                 if (service != null && service.getTorControlConnection() != null) service.getTorControlConnection().onionClientAuthRemove(host.substring(0, 56));
-                app.main.post(() -> complete.accept("Onion key removed"));
+                installed.remove(host);
+                app.main.post(() -> { app.refreshTorTrust(identities()); complete.accept("Onion key removed"); });
             } catch (Exception error) { app.main.post(() -> complete.accept("Key removal failed; retry")); }
         });
     }

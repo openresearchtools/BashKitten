@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 
 public final class OnionActivity extends Activity {
     EditText address, secret;
+    TextView status;
     BrowserApp app;
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved); app = BrowserApp.get(this);
@@ -30,11 +31,12 @@ public final class OnionActivity extends Activity {
         add(root, "Choose .auth_private file", () -> startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), 20));
         add(root, "Remove an imported key", () -> app.tor.list(hosts -> new AlertDialog.Builder(this).setTitle("Remove key")
             .setItems(hosts.toArray(new String[0]), (d, i) -> app.tor.remove(hosts.get(i), this::message)).show()));
+        status = new TextView(this); root.addView(status);
         setContentView(root);
     }
     private void add(LinearLayout root, String text, Runnable action) { Button b = new Button(this); b.setText(text); b.setOnClickListener(v -> action.run()); root.addView(b); }
-    private void save(OnionKey key) { secret.setText(""); app.tor.save(key, this::message); }
-    private void message(String value) { Toast.makeText(this, value, Toast.LENGTH_LONG).show(); }
+    private void save(OnionKey key) { secret.setText(""); status.setText("Importing key…"); app.tor.save(key, this::message); }
+    private void message(String value) { status.setText(value); Toast.makeText(this, value, Toast.LENGTH_LONG).show(); }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         try {

@@ -22,7 +22,7 @@ public final class ProbeActivity extends Activity {
         super.onCreate(saved);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(20, 65, 20, 20);
         add(root, "Request browser access", () -> { try { send(browser.requestAccess()); } catch (Exception e) { log("Grant request: " + e); } });
-        add(root, "Run lifecycle and page tests", () -> worker.execute(this::tests));
+        add(root, "Run lifecycle and page tests", () -> { testResult = "RUNNING"; worker.execute(this::tests); });
         add(root, "Show last tab", () -> { try { send(browser.showTab(lastTab)); } catch (Exception e) { log("Show: " + e); } });
         request = new EditText(this); request.setText("{\"method\":\"capabilities\"}"); root.addView(request);
         add(root, "Send JSON request", () -> { String text = request.getText().toString(); worker.execute(() -> { try { log(call(text).toString(2)); } catch (Exception e) { log(e.toString()); } }); });
@@ -39,7 +39,7 @@ public final class ProbeActivity extends Activity {
                 catch (Exception e) { log("Initial check: " + e); }
             });
         }
-        @Override public void onServiceDisconnected(ComponentName name) { browser = null; log("Service disconnected"); }
+        @Override public void onServiceDisconnected(ComponentName name) { connected = false; browser = null; log("Service disconnected"); }
     };
     void send(android.app.PendingIntent intent) throws Exception {
         android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
@@ -76,7 +76,11 @@ public final class ProbeActivity extends Activity {
         }
         return null;
     }
-    Object evaluate(String tab, String code) throws Exception { return command("evaluate", params(tab).put("code", code)); }
+    Object evaluate(String tab, String code) throws Exception {
+        JSONObject result = (JSONObject) command("evaluate", params(tab).put("code", code));
+        if (!result.optBoolean("hasValue")) throw new IllegalStateException(result.optString("description"));
+        return result.get("value");
+    }
     void waitPage(String tab) throws Exception {
         long deadline = android.os.SystemClock.elapsedRealtime() + 15000;
         do {
@@ -87,6 +91,15 @@ public final class ProbeActivity extends Activity {
             Thread.sleep(150);
         } while (android.os.SystemClock.elapsedRealtime() < deadline);
         throw new AssertionError("Page did not load");
+    }
+    void waitValue(String tab, String code, String expected) throws Exception {
+        long deadline = SystemClock.elapsedRealtime() + 15000;
+        do {
+            try { if (evaluate(tab, code).toString().equals(expected)) return; }
+            catch (IllegalStateException ignored) {}
+            Thread.sleep(150);
+        } while (SystemClock.elapsedRealtime() < deadline);
+        throw new AssertionError("Page value did not become " + expected);
     }
     void tests() {
         testResult = "RUNNING";
@@ -113,13 +126,16 @@ public final class ProbeActivity extends Activity {
             command("snapshot", params(two));
             JSONObject stale = call(new JSONObject().put("method", "act").put("params", params(two).put("kind", "click").put("target", button)).toString());
             check(stale.has("error"), "stale element reference rejected");
-            check(evaluate(two, "return document.querySelector('#ad-test').dataset.result;").toString().contains("blocked"), "native adblock blocks bundled-list image fixture");
+            waitValue(two, "return document.querySelector('#ad-test').dataset.result;", "blocked");
+            check(true, "native adblock blocks bundled-list image fixture");
             command("tabs.setAdblocking", params(two).put("enabled", false));
             waitPage(two);
-            check(evaluate(two, "return document.querySelector('#ad-test').dataset.result;").toString().contains("loaded"), "per-tab exception permits image fixture after reload");
+            waitValue(two, "return document.querySelector('#ad-test').dataset.result;", "loaded");
+            check(true, "per-tab exception permits image fixture after reload");
             command("tabs.setDesktopMode", params(two).put("enabled", true));
             waitPage(two);
-            check(!evaluate(two, "return navigator.userAgent;").toString().contains("Mobile"), "agent enables real desktop user agent");
+            waitValue(two, "return navigator.userAgent.includes('Mobile');", "false");
+            check(true, "agent enables real desktop user agent");
             command("tabs.setDesktopMode", params(two).put("enabled", false));
             command("tabs.setAdblocking", params(two).put("enabled", true));
             waitPage(two);

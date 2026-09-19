@@ -34,7 +34,7 @@ public final class BrowserApp extends ContextWrapper {
     public static final String USER = "local-user";
     public static final class Tab {
         public final String id, owner;
-        public final GeckoSession session;
+        public GeckoSession session;
         public String url = "about:blank", title = "New tab", error = "";
         public boolean loading, desktop, tor, ready, preparing, adblock = true;
         String pendingUrl;
@@ -121,6 +121,7 @@ public final class BrowserApp extends ContextWrapper {
         // Block the route before waiting for Tor bootstrap.
         tab.port = 0;
         tab.session.stop();
+        tab.session.loadUri("about:blank");
         Consumer<String> failed = error -> { tab.preparing = false; message(error); };
         configure(tab, Collections.emptyList(), ignored -> tor.ready(port -> {
             tab.port = port; configure(tab, tor.identities(), result -> { tab.preparing = false; tab.session.loadUri(tab.pendingUrl); }, error -> { tab.preparing = false; message(error); });

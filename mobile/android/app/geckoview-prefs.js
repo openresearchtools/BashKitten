@@ -413,6 +413,8 @@ pref("network.dns.disablePrefetch", true);
 pref("network.predictor.enabled", false);
 pref("network.http.speculative-parallel-limit", 0);
 pref("network.proxy.failover_direct", false);
+pref("network.proxy.allow_hijacking_localhost", true);
+pref("network.proxy.no_proxies_on", "");
 pref("network.dns.blockDotOnion", true);
 pref("network.trr.mode", 5);
 pref("media.peerconnection.enabled", false);

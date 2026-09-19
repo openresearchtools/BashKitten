@@ -54,6 +54,12 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
 
     override fun refresh(tab: BrowserApp.Tab): Boolean {
         val state = components.core.store.state.tabs.find { it.id == tab.id } ?: return false
+        val current = state.engineState.engineSession as? GeckoEngineSession
+        if (current != null && tab.session !== current.wildBuzzardSession()) {
+            tab.session = current.wildBuzzardSession()
+            tab.ready = false
+            tab.preparing = false
+        }
         tab.url = state.content.url
         tab.title = state.content.title
         tab.loading = state.content.loading

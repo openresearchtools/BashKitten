@@ -25,6 +25,7 @@ public final class AgentBrowserTest {
         assertTrue("Browser-owned consent dialog", device.wait(Until.hasObject(By.text("Allow browser control?")), 15000));
         click(device, "Allow");
         launch(context);
+        ProbeActivity.testResult = null;
         click(device, "Run lifecycle and page tests");
         deadline = SystemClock.elapsedRealtime() + 180000;
         while ((ProbeActivity.testResult == null || ProbeActivity.testResult.equals("RUNNING")) && SystemClock.elapsedRealtime() < deadline) SystemClock.sleep(200);

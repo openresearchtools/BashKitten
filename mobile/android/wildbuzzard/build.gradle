@@ -39,6 +39,9 @@ dependencies {
 tasks.register('stageNotices', Exec) {
     commandLine 'python3', "${rootProject.projectDir}/wildbuzzard/android/scripts/notices.py", "$buildDir/generated/notices"
     inputs.files(fileTree("${rootProject.projectDir}/wildbuzzard/android/notices"))
+    inputs.file("${rootProject.projectDir}/wildbuzzard/android/scripts/notices.py")
+    // The bundle records this checkout's commit and source notices.
+    outputs.upToDateWhen { false }
     outputs.dir "$buildDir/generated/notices"
 }
 tasks.named('preBuild').configure { dependsOn 'stageNotices' }
