@@ -5,6 +5,9 @@ This branch reuses BashKitten's browser UI with unmodified Pi 0.85.1
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
 `docs/pi-termux.md` describes the architecture and native boundaries.
 
+BashKitten's own code is GPL-3.0-only. Preserve third-party license notices and
+the individual license metadata of dependencies.
+
 ## Runtime ownership
 
 - Pi owns the agent loop, tools, providers, models, thinking, queues, compaction,

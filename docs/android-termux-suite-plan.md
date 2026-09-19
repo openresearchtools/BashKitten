@@ -82,11 +82,11 @@ Termux app identifies its main license as GPLv3-only with exceptions, and X11
 also carries GPLv3. See [Termux licensing](https://github.com/termux/termux-app/blob/master/LICENSE.md)
 and [X11 licensing](https://github.com/termux/termux-x11/blob/master/LICENSE).
 
-Keep Termux modifications in their licensed projects. BashKitten can retain its
-existing Apache-2.0 source licensing while independently implementing the public
-IPC client. Do not copy GPL implementation libraries into the APK under an
-Apache-only notice. Any borrowed implementation needs a recorded license review
-and its required notices; this plan requires no third-party frontend code.
+Keep Termux modifications in their licensed projects. BashKitten's own frontend,
+Node adapter and planned Android host use **GPL-3.0-only**, matching Termux's
+project license. Third-party components retain their own licenses and notices.
+Any borrowed implementation must be compatible with GPL-3.0-only and retain its
+required attribution; this plan requires no third-party frontend code.
 
 ## 3. Signing, Android identity and build configuration
 

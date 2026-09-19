@@ -1,6 +1,6 @@
 # Third-party notices
 
-BashKitten's frontend and Node adapter are Apache-2.0. The renderer is the existing
+BashKitten's frontend and Node adapter are GPL-3.0-only. The renderer is the existing
 BashKitten UI; no third-party web frontend source or visual assets were copied.
 Pi is invoked through its public RPC and SDK APIs without modification.
 `package-lock.json` pins all runtime dependencies and tarball integrity hashes.

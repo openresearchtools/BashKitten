@@ -112,5 +112,6 @@ backend, Cargo project, GTK controller, Debian packaging, or copied agent engine
 The original Rust implementation remains in Git history and is preserved with
 its complete main-branch history in [bashkitten-rust](https://github.com/openresearchtools/bashkitten-rust).
 
-Apache-2.0. Dependency attribution is in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+BashKitten is licensed under the GNU General Public License, version 3 only
+(`GPL-3.0-only`). See [LICENSE](LICENSE). Third-party dependencies retain their
+own licenses and attribution in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
