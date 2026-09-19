@@ -15,8 +15,6 @@ EXTRA_JS_MODULES += [
     "GeckoViewClipboardPermission.sys.mjs",
     "GeckoViewConsole.sys.mjs",
     "GeckoViewContent.sys.mjs",
-    "GeckoViewWildBuzzard.sys.mjs",
-    "WildBuzzardAndroid.sys.mjs",
     "GeckoViewContentBlocking.sys.mjs",
     "GeckoViewIdentityCredential.sys.mjs",
     "GeckoViewIPProtection.sys.mjs",
@@ -39,10 +37,12 @@ EXTRA_JS_MODULES += [
     "GeckoViewTranslations.sys.mjs",
     "GeckoViewUtils.sys.mjs",
     "GeckoViewWebExtension.sys.mjs",
+    "GeckoViewWildBuzzard.sys.mjs",
     "LoadURIDelegate.sys.mjs",
     "MediaUtils.sys.mjs",
     "Messaging.sys.mjs",
     "NimbusGeckoViewQATelemetry.sys.mjs",
+    "WildBuzzardAndroid.sys.mjs",
 ]
 
 XPCSHELL_TESTS_MANIFESTS += ["test/xpcshell/xpcshell.toml"]
