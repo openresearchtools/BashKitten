@@ -117,6 +117,22 @@ lifecycle/page suite. Verify `adb shell getprop ro.product.cpu.abi` reports
 this document describes the implementation and does not assert that an
 unbuilt revision has passed device validation.
 
+The recorded-build runner verifies APK checksums and native ARM64 device
+architecture, installs all three APKs, runs the external-app instrumentation,
+and saves test results, logcat and screenshots outside the checkout:
+
+```sh
+python3 wildbuzzard/android/scripts/validate-device.py /path/to/downloaded-artifacts \
+  --serial 0.0.0.0:6520 --output /path/to/device-results \
+  --onion-fixture /private/test-fixture/probe-fixture.json
+```
+
+Omit `--onion-fixture` for the browser/agent suite alone. After renewing or
+expiring the live fixture certificate, add `--onion-only` and choose a new
+output directory. This verifies the installed APK hashes and leaves the running
+browser in place instead of reinstalling it. Reports record the device page
+size; testing a 4 KB Cuttlefish instance does not establish 16 KB device support.
+
 Tor listens on a filesystem socket inside the Android app sandbox. A process-owned SOCKS gateway requires a random in-memory credential before forwarding to that socket. The gateway retains its listening socket if Tor stops, so a different app cannot take over the browser's trusted endpoint. Imported keys are never exposed through an unauthenticated shared localhost Tor port.
 
 Each restored or new managed tab blocks network traffic until its saved tab policy has been installed. Tor routing and adblock choice are stored per tab, and page-created child tabs inherit their parent's agent ownership and Tor requirement. The public Binder service and private foreground lifetime service are separate.
