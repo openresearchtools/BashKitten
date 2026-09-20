@@ -5,6 +5,7 @@ import { PiRpc, translateEvent, activeBranch, usageView, displayMessage, queueIt
 import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody } from '../common.mjs';
 import path from 'node:path';
 import { syncContext } from './context.mjs';
+import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
 import { notifyTurn, deliverNotifications } from '../platform/termux/notifications.mjs';
 
@@ -29,7 +30,7 @@ const clients = new Set(), dialogs = new Map();
 let operations = Promise.resolve(), eventWork = Promise.resolve();
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
 function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e); }
-function status() { return { busy, compacting, usage, contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking }, pendingCwd,
+function status() { return { runtimeVersion: rpc?.runtime.version, busy, compacting, usage, contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking }, pendingCwd,
   steeringMessages: queue.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: queue.filter(q => q.kind !== 'steer').map(queueItem) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
 function emit(event, remember = true) {
@@ -110,7 +111,7 @@ async function launch() {
 async function applyPending() {
   if (stopping || busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
   const version = await syncContext();
-  if (pendingCwd || version !== meta.contextVersion) {
+  if (pendingCwd || version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root) {
     const target = pendingCwd || meta.cwd; pendingCwd = null; changing = true;
     await rpc.close();
     const previous = meta.cwd; meta.cwd = target;
@@ -127,6 +128,7 @@ async function applyPending() {
   }
 }
 async function send(item) {
+  allowRuntimeWork();
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
   await rpc.command('prompt', { message: item.wire, images: item.images || [], streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
@@ -199,6 +201,8 @@ const server = http.createServer(async (req, res) => {
     }
     const result = await serial(async () => {
       if (stopping) throw Error('Pi instance is stopping');
+      if (req.url === '/barrier') { const state = await rpc.command('get_state'); return { idle: !state.isStreaming && !state.isCompacting && !dialogs.size && !queue.some(q => !q.held && !q.editToken) }; }
+      if (!['/context', '/barrier'].includes(req.url)) allowRuntimeWork();
       if (req.url === '/context') { pendingContext = (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
       if (req.url === '/message') {
         await applyPending();

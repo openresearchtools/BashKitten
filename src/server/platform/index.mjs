@@ -6,6 +6,9 @@ import { dataDir, readJson } from '../common.mjs';
 export const platform = process.platform === 'android' ? 'termux' : 'linux';
 export const telemetryOff = Object.freeze({ PI_TELEMETRY: '0', PI_OFFLINE: '1', GH_TELEMETRY: '0', DO_NOT_TRACK: '1', GH_NO_UPDATE_NOTIFIER: '1', GH_NO_EXTENSION_UPDATE_NOTIFIER: '1' });
 Object.assign(process.env, telemetryOff);
+// Native hosts can launch an absolute Node path outside an interactive shell.
+const nodeBin = path.dirname(process.execPath);
+if (!(process.env.PATH || '').split(path.delimiter).includes(nodeBin)) process.env.PATH = nodeBin + path.delimiter + (process.env.PATH || '');
 
 export async function projectLocations() {
   const home = await fs.realpath(os.homedir());

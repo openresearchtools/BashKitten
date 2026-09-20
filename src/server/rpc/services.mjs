@@ -1,11 +1,13 @@
-import { ModelRuntime } from '@earendil-works/pi-coding-agent';
-import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { loadPi, allowRuntimeWork } from './runtime.mjs';
+import { dataDir, writeJson } from '../common.mjs';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 /** The same ModelRuntime and auth.json used by Pi's CLI, with no catalog network refresh. */
 export class Services {
   attempt = null;
-  async runtime() { return ModelRuntime.create({ allowModelNetwork: false }); }
+  async runtime() { const { pi: { ModelRuntime } } = await loadPi(); return ModelRuntime.create({ allowModelNetwork: false }); }
   async list() {
     const runtime = await this.runtime();
     const credentials = await runtime.listCredentials();
@@ -20,6 +22,7 @@ export class Services {
     }));
   }
   async models() {
+    const { ai: { getSupportedThinkingLevels } } = await loadPi();
     const runtime = await this.runtime();
     const available = new Set(runtime.getAvailableSnapshot().map(m => `${m.provider}/${m.id}`));
     return runtime.getAvailableSnapshot().map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
@@ -33,13 +36,18 @@ export class Services {
     return { id, provider, status, events, prompt, error };
   }
   async start(provider, type) {
+    allowRuntimeWork();
     if (this.attempt?.status === 'pending') throw Error('Finish or cancel the current login first');
     const runtime = await this.runtime();
     if (this.attempt?.status === 'pending') throw Error('Finish or cancel the current login first');
     if (!runtime.getProvider(provider)) throw Error('Unknown Pi provider');
     if (!['api_key', 'oauth'].includes(type)) throw Error('Unknown login method');
     const attempt = { id: randomUUID(), provider, status: 'pending', events: [], prompt: null, controller: new AbortController() };
+    allowRuntimeWork();
     this.attempt = attempt;
+    const lease = path.join(dataDir, 'run/login.json');
+    await writeJson(lease, { pid: process.pid, id: attempt.id });
+    try { allowRuntimeWork(); } catch (error) { this.attempt = null; await fs.rm(lease, { force: true }); throw error; }
     const timer = setTimeout(() => attempt.controller.abort(), 15 * 60 * 1000);
     attempt.finished = runtime.login(provider, type, {
       signal: attempt.controller.signal,
@@ -58,7 +66,7 @@ export class Services {
       attempt.status = attempt.controller.signal.aborted ? 'cancelled' : 'failed';
       // Do not expose provider response bodies, which may contain credentials.
       attempt.error = attempt.status === 'failed' ? 'Pi could not complete login. Check the selected method and try again.' : undefined;
-    }).finally(() => { clearTimeout(timer); attempt.prompt = null; attempt.answer = null; });
+    }).finally(async () => { clearTimeout(timer); attempt.prompt = null; attempt.answer = null; await fs.rm(lease, { force: true }); });
     return this.state();
   }
   answer(id, promptId, input) {
@@ -69,5 +77,5 @@ export class Services {
     if (id && this.attempt?.id !== id) throw Error('This login is no longer active');
     if (this.attempt?.status === 'pending') { this.attempt.controller.abort(); await this.attempt.finished; }
   }
-  async logout(provider) { if (this.attempt?.provider === provider) await this.cancel(); await (await this.runtime()).logout(provider); }
+  async logout(provider) { allowRuntimeWork(); if (this.attempt?.provider === provider) await this.cancel(); await (await this.runtime()).logout(provider); }
 }

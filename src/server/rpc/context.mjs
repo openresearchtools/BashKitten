@@ -1,14 +1,16 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { getAgentDir, SettingsManager } from '@earendil-works/pi-coding-agent';
+import { loadPi } from './runtime.mjs';
 import { digest, privateDir, randomToken } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 
 const begin = '<!-- bashkitten:environment -->', end = '<!-- /bashkitten:environment -->';
 async function read(file) { try { return await fs.readFile(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
 
-export async function syncContext({ agentDir = getAgentDir(), target = platform, home = os.homedir(), prefix = process.env.PREFIX || '/data/data/com.termux/files/usr' } = {}) {
+export async function syncContext({ agentDir, target = platform, home = os.homedir(), prefix = process.env.PREFIX || '/data/data/com.termux/files/usr' } = {}) {
+  const { pi: { getAgentDir, SettingsManager } } = await loadPi();
+  agentDir ||= getAgentDir();
   if (!['linux', 'termux'].includes(target)) throw Error('Unknown environment');
   await privateDir(agentDir);
   const template = await fs.readFile(new URL(`../platform/${target}/pi-context/AGENTS.md`, import.meta.url), 'utf8');

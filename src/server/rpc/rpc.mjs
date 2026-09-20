@@ -1,10 +1,8 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export const piCli = path.join(path.dirname(fileURLToPath(import.meta.resolve('@earendil-works/pi-coding-agent'))), 'cli.js');
+import { selectedRuntime } from './runtime.mjs';
 
 export function displayMessage(meta, message) {
   if (message.role !== 'user') return message;
@@ -35,7 +33,8 @@ export class PiRpc extends EventEmitter {
   pending = new Map();
   constructor(meta) {
     super();
-    const args = [piCli, '--offline', '--mode', 'rpc', '--tools', 'read,bash,edit,write,grep,find,ls', '--session', meta.piFile];
+    this.runtime = selectedRuntime();
+    const args = [this.runtime.cli, '--offline', '--mode', 'rpc', '--tools', 'read,bash,edit,write,grep,find,ls', '--session', meta.piFile];
     if (meta.model) args.push('--model', meta.model);
     if (meta.thinking) args.push('--thinking', meta.thinking);
     this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });

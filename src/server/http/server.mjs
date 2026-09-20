@@ -8,7 +8,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { SessionManager } from '@earendil-works/pi-coding-agent';
+import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem } from '../rpc/rpc.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
@@ -36,6 +36,7 @@ if (portOverride) config.web_port = Number(portOverride);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function running(id) { try { return await workerRequest(id, '/status'); } catch { return null; } }
 async function ensureWorker(id, explicit = false) {
+  allowRuntimeWork();
   const lifecycle = path.join(sessionDir(id), 'lifecycle.json');
   if ((await readJson(lifecycle, {})).stopped) {
     if (!explicit) throw Error('Pi instance is stopped. Press Start Pi to resume.');
@@ -61,6 +62,7 @@ async function ensureWorker(id, explicit = false) {
   try { return await starting; } finally { starts.delete(id); }
 }
 async function savedView(meta) {
+  const { pi: { SessionManager } } = await loadPi();
   const entries = await fs.access(meta.piFile).then(() => SessionManager.open(meta.piFile, undefined, meta.cwd).getBranch()).catch(() => []);
   const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
   return { busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
@@ -128,7 +130,7 @@ async function handler(req, res) {
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-stop', 'pi-kill'].includes(value.command)) throw Error('Unknown control action');
+      if (!['status', 'start', 'stop', 'restart', 'pi-stop', 'pi-kill', 'package-job'].includes(value.command)) throw Error('Unknown control action');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
     }
     if (route === '/api/settings') {
@@ -176,10 +178,12 @@ async function handler(req, res) {
       return json(res, await listFiles(root, relative));
     }
     if (route === '/api/pi-sessions') {
+      const { pi: { SessionManager } } = await loadPi();
       requireMethod(req, ['GET']);
       return json(res, { sessions: (await SessionManager.listAll()).map(s => ({ path: s.path, id: s.id, cwd: s.cwd, name: s.name || s.firstMessage || 'Pi session' })) });
     }
     if (route === '/api/sessions/import') {
+      const { pi: { SessionManager } } = await loadPi();
       requireMethod(req, ['POST']); const input = await jsonBody(req);
       const found = (await SessionManager.listAll()).find(s => s.path === input.path);
       if (!found) throw Error('Choose a session from Pi’s session list');
@@ -247,6 +251,7 @@ async function handler(req, res) {
     }
     const input = await jsonBody(req);
     if (action === 'fork') {
+      const { pi: { SessionManager } } = await loadPi();
       const view = await workerRequest(id, '/view');
       if (!view.entries.some(e => e.id === input.entryId && e.type === 'message')) throw Error('Message not found in this branch');
       meta = await readMeta(id);

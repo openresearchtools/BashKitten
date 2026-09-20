@@ -9,6 +9,9 @@ import { spawn } from 'node:child_process';
 import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, workerRequest, socketPath, allMeta } from './common.mjs';
 import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
+import { Jobs } from './updates/jobs.mjs';
+import { installPi, rollbackPi, updateStatus } from './updates/runtime.mjs';
+import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -56,6 +59,8 @@ async function serve() {
   await fs.rm(controlSocket, { force: true });
   let state = await readJson(stateFile, { web: true }), serial = Promise.resolve(), starting = false, lastError = null;
   let retryAt = 0, failures = 0;
+  const jobs = new Jobs({ 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages });
+  await jobs.init();
   async function web() {
     const info = await readJson(serverFile, null);
     return info && await owned(info.pid, info.script) && info.script === serverScript ? info : null;
@@ -91,7 +96,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 1, platform, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+    return { version: 1, platform, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
   }
   async function stopPi(id, force) {
     const meta = (await allMeta()).find(item => item.id === id);
@@ -108,6 +113,11 @@ async function serve() {
   }
   async function action(command, value) {
     if (command === 'status') return status();
+    if (command === 'package-job') {
+      const current = await jobs.status();
+      await jobs.start(value.retry ? current?.kind : value.kind, value.retry ? current?.input : value.input || {}, Boolean(value.retry));
+      return status();
+    }
     if (['start', 'stop', 'restart'].includes(command)) {
       state.web = command !== 'stop'; await writeJson(stateFile, state);
       if (command !== 'start') await stopWeb();
@@ -127,6 +137,7 @@ async function serve() {
       if (!roots.includes(root)) await writeJson(file, [...roots, root]);
       return { path: root };
     } else if (command === 'shutdown') {
+      if (jobs.busy) throw Error('Wait for package maintenance to finish before stopping the manager');
       jsonShutdown(); return { ok: true };
     } else throw Error('Unknown control command');
     return status();
@@ -141,7 +152,7 @@ async function serve() {
       json(res, await operation);
     } catch (error) { json(res, { error: error.message }, 400); }
   });
-  function jsonShutdown() { setTimeout(async () => { clearInterval(monitor); await fs.rm(lock, { force: true }); server.close(() => process.exit(0)); }, 50); }
+  function jsonShutdown() { if (jobs.busy) return; setTimeout(async () => { clearInterval(monitor); await fs.rm(lock, { force: true }); server.close(() => process.exit(0)); }, 50); }
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
   const monitor = setInterval(() => {

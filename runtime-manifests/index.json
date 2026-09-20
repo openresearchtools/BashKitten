@@ -1,0 +1,12 @@
+[
+  {
+    "version": "0.85.1",
+    "node": ">=22.19.0",
+    "platforms": [
+      "linux",
+      "android"
+    ],
+    "lock": "../package-lock.json",
+    "sha256": "f05f0e28cba7a1b6281f73cebf9bc8ef4f0730b334a78f0dad6773443eba68f7"
+  }
+]

@@ -522,6 +522,14 @@
 
           </div>
           <p class="meta">Changing the port restarts only the Web UI. Agent sessions keep running.</p>
+          <div class="settings-section" id="packageUpdates">
+            <h3>Pi runtime</h3>
+            <p id="packageSummary" class="meta"></p>
+            <div class="subscription-actions"><button type="button" data-package-job="check-packages">Check updates</button><button type="button" data-package-job="update-pi">Update Pi</button><button type="button" data-package-job="rollback-pi" id="rollbackPi">Roll back Pi</button></div>
+            <div class="subscription-actions hidden" id="termuxPackageActions"><button type="button" data-package-job="update-packages">Update packages</button><button type="button" data-package-job="refresh-lists">Refresh lists</button><button type="button" data-package-job="recover-packages">Repair interrupted update</button></div>
+            <p id="packagePhase" role="status" class="meta"></p><button type="button" id="retryPackageJob" class="hidden">Retry</button>
+            <details><summary>Package output</summary><pre id="packageOutput" style="max-height:16rem;overflow:auto;white-space:pre-wrap"></pre></details>
+          </div>
           <div id="termuxNotifications" class="hidden settings-section">
             <h3>Turn notifications</h3>
             <label><input id="notifyEnabled" type="checkbox"> Notify when Pi finishes a turn</label>
@@ -1441,6 +1449,7 @@
       const value = await api('/api/settings');
       config = value.config;
       serverPlatform = value.platform;
+      $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
       $('#termuxNotifications').classList.toggle('hidden', serverPlatform !== 'termux');
       $('#notifyEnabled').checked = Boolean(config.notifications?.enabled);
       $('#notifyHidden').checked = config.notifications?.onlyWhenHidden !== false;
@@ -1453,6 +1462,31 @@
       $('#defaultCwd').value = displayFolder(config.default_cwd);
       if (activeSettingsTab === 'services') await refreshServices();
     }
+
+    let packagePollBusy = false;
+    async function refreshPackages() {
+      if (packagePollBusy || $('#settingsView').classList.contains('hidden')) return;
+      packagePollBusy = true;
+      try {
+        const status = await api('/api/control'), packages = status.packages;
+        const pi = packages.sources.pi, apt = packages.sources.apt, job = packages.job;
+        $('#packageSummary').textContent = ['Installed Pi ' + packages.runtime.version, pi?.error ? 'npm: ' + pi.error : pi ? 'Latest upstream ' + pi.latest + ' · Compatible ' + pi.compatible + (pi.reason ? ' · ' + pi.reason : '') : 'Updates have not been checked', apt?.error ? 'APT: ' + apt.error : apt ? apt.available + ' APT updates' : ''].filter(Boolean).join(' · ');
+        const active = job && ['running', 'waiting'].includes(job.status);
+        document.querySelectorAll('[data-package-job]').forEach(button => { button.disabled = Boolean(active); });
+        $('#rollbackPi').classList.toggle('hidden', !packages.runtime.previous);
+        $('#packagePhase').textContent = job ? job.phase + ' · ' + job.status + (job.error ? ' · ' + job.error : '') : '';
+        $('#packageOutput').textContent = job?.log || '';
+        $('#retryPackageJob').classList.toggle('hidden', !job || !['failed','interrupted'].includes(job.status));
+      } catch (error) { $('#packagePhase').textContent = error.message; }
+      finally { packagePollBusy = false; }
+    }
+    async function packageJob(kind, retry = false) {
+      try { await api('/api/control', {method:'POST',body:JSON.stringify({command:'package-job',kind,retry})}); await refreshPackages(); }
+      catch (error) { $('#packagePhase').textContent = error.message; }
+    }
+    document.querySelectorAll('[data-package-job]').forEach(button => { button.onclick = () => packageJob(button.dataset.packageJob); });
+    $('#retryPackageJob').onclick = () => packageJob(null, true);
+    setInterval(refreshPackages, 3000);
 
     let displayedGoal = null;
     function renderGoal(goal){displayedGoal=goal;const row=$('#goalStatus');row.classList.toggle('hidden',!goal);row.textContent=goal?'Goal '+goal.status+': '+goal.objective+(goal.summary?' · '+goal.summary:''):'';}
@@ -1863,6 +1897,7 @@
       $('#chat').classList.add('hidden');
       $('#composerWrap').classList.add('hidden');
       $('#settingsView').classList.remove('hidden');
+      refreshPackages();
       $('#settingsBtn').classList.add('active');
       $('#title').textContent = 'Settings';
       $('#title').classList.remove('hidden');
