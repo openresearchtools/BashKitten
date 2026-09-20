@@ -39,6 +39,15 @@ internal fun captureDisplayedPage(
     val session = gecko?.session
     val handler = Handler(Looper.getMainLooper())
     val deadline = SystemClock.uptimeMillis() + 2000
+    fun uniform(bitmap: Bitmap): Boolean {
+        val color = bitmap.getPixel(0, 0)
+        for (y in 0 until bitmap.height step maxOf(1, bitmap.height / 32)) {
+            for (x in 0 until bitmap.width step maxOf(1, bitmap.width / 32)) {
+                if (bitmap.getPixel(x, y) != color) return false
+            }
+        }
+        return true
+    }
     fun capture() {
         if (!view.hasWindowFocus() || gecko?.session !== session) { result(null); return }
         if (gecko != null && !gecko.hasPaintedSurface()) {
@@ -58,7 +67,14 @@ internal fun captureDisplayedPage(
                     bitmap.recycle()
                     result(null)
                 } else if (status == PixelCopy.SUCCESS) {
-                    result(bitmap)
+                    // Android can expose the clear buffer before presenting Gecko's first frame.
+                    // A genuinely solid page is still returned when the bounded wait ends.
+                    if (uniform(bitmap) && SystemClock.uptimeMillis() < deadline) {
+                        bitmap.recycle()
+                        handler.postDelayed({ capture() }, 50)
+                    } else {
+                        result(bitmap)
+                    }
                 } else {
                     bitmap.recycle()
                     fallback(result)
