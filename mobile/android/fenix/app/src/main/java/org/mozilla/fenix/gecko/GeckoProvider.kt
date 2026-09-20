@@ -118,8 +118,8 @@ object GeckoProvider {
                     safeBrowsingRealTimeSimulationNegativeCacheTTLSec = 300,
                 ),
             )
-            .consoleOutput(context.components.settings.enableGeckoLogs)
-            .debugLogging(Config.channel.isDebug || context.components.settings.enableGeckoLogs)
+            .consoleOutput(false)
+            .debugLogging(false)
             .aboutConfigEnabled(Config.channel.isBeta || Config.channel.isNightlyOrDebug)
             .extensionsProcessEnabled(true)
             .extensionsWebAPIEnabled(true)

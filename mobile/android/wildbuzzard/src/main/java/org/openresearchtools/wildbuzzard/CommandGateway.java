@@ -37,7 +37,7 @@ final class CommandGateway {
                 }
                 if (generation.get() == version) keys = Collections.unmodifiableMap(loaded);
                 if (!keys.isEmpty()) listen();
-            } catch (Exception error) { android.util.Log.e("WildBuzzard", "Command access could not be restored"); }
+            } catch (Exception error) { app.main.post(() -> app.message("Command access could not be restored")); }
         });
     }
     void authorize(String text, Runnable done, Consumer<String> fail) {

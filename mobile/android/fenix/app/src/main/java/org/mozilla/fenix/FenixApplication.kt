@@ -13,7 +13,7 @@ import android.os.Build
 import android.os.Build.VERSION.SDK_INT
 import android.os.StrictMode
 import android.os.SystemClock
-import android.util.Log.INFO
+import android.util.Log.ASSERT
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.runtime.Composable
@@ -72,7 +72,6 @@ import mozilla.components.support.base.ext.isNotificationChannelEnabled
 import mozilla.components.support.base.facts.register
 import mozilla.components.support.base.log.Log
 import mozilla.components.support.base.log.logger.Logger
-import mozilla.components.support.base.log.sink.AndroidLogSink
 import mozilla.components.support.ktx.android.arch.lifecycle.addObservers
 import mozilla.components.support.ktx.android.content.isMainProcess
 import mozilla.components.support.ktx.android.content.runOnlyInMainProcess
@@ -206,10 +205,6 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
         // manually because Glean has not started initializing yet. Note that by this point the
         // content providers from Fenix and its libraries have run their initializers already.
         val start = SystemClock.elapsedRealtimeNanos()
-
-        // Capture A-C logs to Android logcat. Note that gecko maybe directly post to logcat
-        // regardless of what we do here.
-        Log.addSink(FenixLogSink(logsDebug = Config.channel.isDebug, AndroidLogSink()))
 
         // Register a deferred initializer for crash reporting that will be called lazily when
         // CrashReporter.requireInstance is first accessed. This allows all processes to register
@@ -380,7 +375,6 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
         registerActivityLifecycleCallbacks(MarkersActivityLifecycleCallbacks(components.core.engine))
 
         components.appStartReasonProvider.registerInAppOnCreate(this)
-        components.startupActivityLog.registerInAppOnCreate(this)
         components.appLinkIntentLaunchTypeProvider.registerInAppOnCreate(this)
 
         initVisualCompletenessQueueAndQueueTasks()
@@ -1206,7 +1200,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
     }
 
     override val workManagerConfiguration
-        get() = Builder().setMinimumLoggingLevel(INFO).build()
+        get() = Builder().setMinimumLoggingLevel(ASSERT).build()
 
     @OptIn(DelicateCoroutinesApi::class)
     open fun downloadWallpapers() {

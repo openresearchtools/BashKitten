@@ -261,3 +261,19 @@ binaries. It builds the current Java/Kotlin UI and engine resources, retains the
 full-build workflow, verifies APK signing, and records the native engine source
 and input APK hash in `build-manifest.json`. Native or engine-interface changes
 require a new full ARM64 build.
+
+## Local data and diagnostics
+
+Mozilla telemetry, Sync and crash uploads are disabled. Wild Buzzard does not
+register Firefox's Android diagnostic log sink or startup activity recorder.
+Gecko debug logging and page-console forwarding to Android logs are disabled,
+including in the APK build flavor used by CI. Embedded Tor runs with `--quiet`
+and sends its configured log destination to `/dev/null`; connection readiness
+is read over its private control socket. Tor errors remain visible in the UI.
+
+This does not mean the browser stores no data: tabs, cookies, saved passwords,
+onion credentials and downloads support the requested browser features. Agent
+tool results and requested screenshots/downloads are returned to the caller;
+the Pi extension saves them in that caller's private Pi session. The page-console
+tool remains available on request. Android and native dependencies can emit
+system or fatal-error diagnostics; these are not a browser telemetry service.

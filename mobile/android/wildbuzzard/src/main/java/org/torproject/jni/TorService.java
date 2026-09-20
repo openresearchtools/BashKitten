@@ -9,7 +9,6 @@ import android.os.Binder;
 import android.os.FileObserver;
 import android.os.IBinder;
 import android.os.Process;
-import android.util.Log;
 
 import net.freehaven.tor.control.RawEventListener;
 import net.freehaven.tor.control.TorControlCommands;
@@ -141,7 +140,6 @@ public class TorService extends Service implements TorControlCommands {
      * <li>writing {@code ControlPort.txt} // TODO
      * <li>reading {@code torrc} and {@code torrc-defaults}
      * <li>{@code DataDirectory} and {@code CacheDirectory}
-     * <li>the debug log file
      * </ul>
      */
     private static File getAppTorServiceDir(Context context) {
@@ -297,7 +295,6 @@ public class TorService extends Service implements TorControlCommands {
                 httpTunnelPort = getPortFromGetInfo("net/listeners/httptunnel");
 
             } catch (IOException | ArrayIndexOutOfBoundsException | InterruptedException e) {
-                Log.e(TAG, e.toString());
                 broadcastError(TorService.this, e);
                 broadcastStatus(TorService.this, STATUS_STOPPING);
                 stopSelf();
@@ -316,6 +313,7 @@ public class TorService extends Service implements TorControlCommands {
                 setDefaultProxyPorts();
 
                 var lines = new ArrayList<>(Arrays.asList("tor", "--verify-config", // must always be here
+                        "--quiet",
                         "--RunAsDaemon", "0",
                         "-f", getTorrc(context).getAbsolutePath(),
                         "--defaults-torrc", getDefaultsTorrc(context).getAbsolutePath(),
@@ -325,9 +323,8 @@ public class TorService extends Service implements TorControlCommands {
                         "--DataDirectory", getAppTorServiceDataDir(context).getAbsolutePath(),
                         "--ControlSocket", getControlSocket(context).getAbsolutePath(),
                         "--CookieAuthentication", "0",
-                        // can be moved to ControlPort messages
-                        "--LogMessageDomains", "1",
-                        "--TruncateLogFile", "1"
+                        // Bootstrap status is read through the private control socket.
+                        "--Log", "err file /dev/null"
                 ));
                 var verifyLines = lines.toArray(new String[0]);
                 if (!mainConfigurationSetCommandLine(verifyLines)) {
@@ -358,7 +355,6 @@ public class TorService extends Service implements TorControlCommands {
                 }
 
             } catch (IllegalStateException | IllegalArgumentException | InterruptedException e) {
-                Log.e(TAG, e.toString());
                 broadcastError(context, e);
             } finally {
                 broadcastStatus(context, STATUS_STOPPING);
@@ -387,7 +383,7 @@ public class TorService extends Service implements TorControlCommands {
             pw.flush();
             pw.close();
         } catch (IOException e) {
-            Log.e(TAG, e.toString());
+            throw new IllegalStateException("Could not configure Tor", e);
         }
     }
 
@@ -405,20 +401,10 @@ public class TorService extends Service implements TorControlCommands {
      * {@link #controlPortThread} to start so it is running before Tor could
      * potentially create the {@code ControlSocket}.  Then finally Tor is
      * started in its own {@code Thread}.
-     * <p>
-     * Tor daemon does not output early debug messages to logcat, only after it
-     * tries to connect to the ports.  So it is important that Tor does not run
-     * into port conflicts when first starting.
-     *
-     * @see <a href="https://trac.torproject.org/projects/tor/ticket/32036">#32036  output debug logs to logcat as early as possible on Android</a>
      * @see <a href="https://github.com/torproject/tor/blob/40be20d542a83359ea480bbaa28380b4137c88b2/src/app/config/config.c#L4730">options that must be on the command line</a>
      */
     private void startTorServiceThread() {
-        if (runLock.isLocked()) {
-            Log.i(TAG, "Waiting for lock");
-        }
         runLock.lock();
-        Log.i(TAG, "Acquired lock");
         torThread.start();
     }
 
@@ -429,7 +415,6 @@ public class TorService extends Service implements TorControlCommands {
             torControlConnection.removeRawEventListener(startedEventListener);
         }
         if (runLock.isLocked()) {
-            Log.i(TAG, "Releasing lock");
             runLock.unlock();
         }
         shutdownTor();
@@ -454,9 +439,8 @@ public class TorService extends Service implements TorControlCommands {
         try {
             return torControlConnection.getInfo(key);
         } catch (IOException | NullPointerException e) {
-            Log.e(TAG, e.toString());
+            return null;
         }
-        return null;
     }
 
     /**
@@ -470,8 +454,8 @@ public class TorService extends Service implements TorControlCommands {
             if (torControlConnection != null) {
                 torControlConnection.shutdownTor(SIGNAL_SHUTDOWN);
             }
-        } catch (IOException e) {
-            Log.e(TAG, e.toString());
+        } catch (IOException ignored) {
+            // Shutdown is best effort; do not write connection diagnostics.
         }
     }
 

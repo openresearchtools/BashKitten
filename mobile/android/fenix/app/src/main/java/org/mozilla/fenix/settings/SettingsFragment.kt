@@ -745,28 +745,11 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
 
     @VisibleForTesting
     internal fun setupGeckoLogsPreference(settings: Settings) {
-        val preferenceEnabledGeckoLogs =
-            findPreference<Preference>(getPreferenceKey(R.string.pref_key_enable_gecko_logs))
-
-        val show = settings.showSecretDebugMenuThisSession
-        preferenceEnabledGeckoLogs?.isVisible = show
-
-        preferenceEnabledGeckoLogs?.onPreferenceChangeListener =
-            Preference.OnPreferenceChangeListener { _, newValue ->
-                settings.enableGeckoLogs = newValue as Boolean
-                Toast.makeText(
-                    context,
-                    getString(R.string.quit_application),
-                    Toast.LENGTH_LONG,
-                ).show()
-                Handler(Looper.getMainLooper()).postDelayed(
-                    {
-                        exitProcess(0)
-                    },
-                    FXA_SYNC_OVERRIDE_EXIT_DELAY,
-                )
-                true
-            }
+        settings.enableGeckoLogs = false
+        findPreference<Preference>(getPreferenceKey(R.string.pref_key_enable_gecko_logs))?.apply {
+            isVisible = false
+            onPreferenceChangeListener = null
+        }
     }
 
     @VisibleForTesting
