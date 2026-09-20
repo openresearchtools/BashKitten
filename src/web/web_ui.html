@@ -2152,10 +2152,10 @@
       $('#thinking').value = selection.thinking;
     }
 
-    async function applyCurrentModel() {
+    async function applyCurrentModel(includeThinking = true) {
       if (!current) return;
       const id = current.id, view = sessionView;
-      const model = $('#model').value, thinking = $('#thinking').value;
+      const model = $('#model').value, thinking = includeThinking ? $('#thinking').value : '';
       if (!source) {
         await api(`/api/sessions/${id}/resume`, {method:'POST'});
         if (view !== sessionView) return;
@@ -2375,7 +2375,7 @@
       else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('#composer').requestSubmit(); }
     });
 
-    $('#model').onchange = async () => { setThinking($('#model')); try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
+    $('#model').onchange = async () => { setThinking($('#model')); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
     $('#thinking').onchange = async () => { try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
