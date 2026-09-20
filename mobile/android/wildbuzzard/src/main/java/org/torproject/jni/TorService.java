@@ -259,7 +259,6 @@ public class TorService extends Service implements TorControlCommands {
                 readyConnection.addRawEventListener(startedEventListener);
                 readyConnection.setEvents(Collections.singletonList(EVENT_STATUS_CLIENT));
                 if (controlStopped) throw new IOException("Tor stopped during startup");
-                socket.setSoTimeout(0);
                 torControlConnection = readyConnection;
 
                 socksPort = getPortFromGetInfo("net/listeners/socks");
@@ -281,7 +280,6 @@ public class TorService extends Service implements TorControlCommands {
             try {
                 socket.connect(new LocalSocketAddress(getControlSocket(this).getAbsolutePath(),
                         LocalSocketAddress.Namespace.FILESYSTEM));
-                socket.setSoTimeout(5000);
                 return socket;
             } catch (IOException error) {
                 socket.close();
