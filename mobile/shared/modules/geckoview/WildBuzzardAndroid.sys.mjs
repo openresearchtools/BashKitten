@@ -15,6 +15,9 @@ export const WildBuzzardAndroid = {
         Services.prefs.getDefaultBranch("").setBoolPref(name, false);
         Services.prefs.lockPref(name);
       }
+      // Isolated agent chats must not inherit another chat's site-wide click cooldown.
+      Services.prefs.getDefaultBranch("").setIntPref("cookiebanners.bannerClicking.maxTriesPerSiteAndSession", 0);
+      Services.prefs.lockPref("cookiebanners.bannerClicking.maxTriesPerSiteAndSession");
       proxy.registerChannelFilter(this, 0);
       WildBuzzardBlockerStartup.init();
       ready = WildBuzzardBlockerService.whenEngineReady().then(() => {
