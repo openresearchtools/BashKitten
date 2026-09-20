@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 # Wild Buzzard for Android
 
-**Install `wildbuzzard-arm64-debug.apk` only.** It includes the browser, agent
+**Install `wildbuzzard-arm64.apk` only** for publisher-signed builds. It includes the browser, agent
 control and Tor. The two probe APKs in developer artifacts are optional test
 tools; users and agents do not need a companion app.
 
@@ -29,14 +29,15 @@ its bundled security data current requires publishing updated Wild Buzzard build
 
 Terminal programs can also call the command entry point included in the browser
 APK. [API.md](API.md#termux-and-shell-programs) documents the Termux shell function,
-one-time consent, JSON input/output and commands. Android app binding and shell
+automatic publisher trust, one-time vendor-app consent, JSON input/output and commands. Android app binding and shell
 commands both use the browser's own dispatcher and tab ownership checks.
 
 See [API.md](API.md). The AIDL contract lives in
 `mobile/android/wildbuzzard-sdk/src/main/aidl`. External apps bind to the
 explicit Wild Buzzard service, obtain a user authorization PendingIntent, then
-control their own tabs. Grants are tied to package names and signing
-certificates. They can be revoked from **Settings → Revoke agent access**.
+control their own tabs. Publisher-signed apps are allowed automatically. Other app grants are tied to
+package names and current signing certificates. **Settings → Agent access** can
+allow another vendor’s Termux or any installed app and revoke it individually. They can be revoked from **Settings → Revoke agent access**.
 
 Tab closure removes a tab from Fenix. It never requests application shutdown,
 force-stops a process, or stops Tor. Android can still reclaim or terminate an
@@ -110,6 +111,11 @@ onion identities and other tab contexts retain normal certificate validation.
 TorKitten itself is unchanged. Wild Buzzard does not claim Tor Browser's complete
 fingerprinting/anonymity protections.
 
+The [Pi extension](pi/README.md) exposes browser tools, returns screenshot images
+and private file paths, and saves browser downloads under each native Pi chat’s
+session storage. Plain terminal programs can use `--output` or the short-lived,
+per-file localhost bearer transfer returned by `downloads.get`.
+
 ## Build and licenses
 
 Use the root source tree and Mozilla's build wrapper:
@@ -126,8 +132,13 @@ The **Android ARM64 APK** GitHub Actions workflow cross-compiles native Gecko
 for `aarch64-linux-android` and builds installable APK artifacts. Debug artifacts
 use Android debug signing and are test builds. Their manifest records source
 revision and SHA-256 checksums. Build logs are retained even on failure.
-Repository builds use the explicit `WILDBUZZARD_CI_DEBUG_KEYSTORE` Actions secret
-so updates retain their signing identity. Artifact collection verifies every APK
+Repository publisher builds use `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`, the
+same secret names as the Termux suite. Their current certificate must match the
+suite catalog. `WILDBUZZARD_SIGNING_LINEAGE_BASE64` preserves an in-place upgrade
+from the earlier browser development signer. Publisher browser APKs disable
+Android debuggability; `WILDBUZZARD_CI_DEBUG_KEYSTORE` signs only the independent
+vendor test probes and non-publisher development builds. Artifact collection verifies every APK
 against that certificate and records its fingerprint. Pull requests without
 access to the secret use an ephemeral test identity. Local builds can set
 `WILDBUZZARD_DEBUG_KEYSTORE` to a debug keystore with the standard `android`

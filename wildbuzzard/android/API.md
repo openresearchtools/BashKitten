@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
-# Android agent API v1
+# Android agent API v2
 
 Install only the **browser APK**. The agent probe is an optional developer test
 app, not an agent runtime or a required companion. Both interfaces below execute
@@ -29,13 +29,27 @@ wildbuzzard tabs.setDesktopMode '{"tabId":"ID_FROM_CREATE","enabled":true}'
 wildbuzzard tabs.close '{"tabId":"ID_FROM_CREATE"}'
 ```
 
-Authorization opens the browser's consent dialog. Match its short key identifier
-to the terminal before approving. The private command key stays in
-`$HOME/.config/wildbuzzard/command-key` with mode 0600; `--state-dir` selects an
-alternative app-private directory. Programs sharing that key share their agent
-tabs and authority. This is a command-key grant, separate from Android package
-and signing-certificate grants. Never put the key in shared storage or a repository.
-**Revoke agent access** invalidates both kinds of grant and closes their tabs.
+The browser checks Android's actual caller UID and current APK signing
+certificate. Apps signed with the same publisher certificate are allowed by
+default, including this publisher's `com.termux`. The package name alone never
+confers trust. A Termux build from another vendor, or another Android app, can
+run `--authorize` once and approve the named app. **Settings → Agent access** also
+lets the user allow or revoke installed apps and disable automatic publisher
+trust. Individual commands do not prompt again. Revoke-all disables existing
+grants and automatic publisher trust until it is enabled again.
+
+The default command interface needs no manually managed key. It uses an Android
+Unix-domain socket; both sides verify kernel-supplied peer UIDs, and the browser
+checks package signatures before dispatch. The caller verifies that the socket
+belongs to the installed browser. A supplied package name cannot impersonate an
+app. Add `--session CHAT_ID` to partition a terminal app's tabs, downloads and
+website storage between chats. Session IDs namespace an app's authority; they
+are not an additional security boundary against programs already in that app.
+
+The older encrypted command-key interface remains available with `--legacy-key`
+or `--state-dir DIRECTORY`. Its private key stays in
+`$HOME/.config/wildbuzzard/command-key` with mode 0600. Its grant remains separate
+from Android app identity. Never put it in shared storage or a repository.
 
 Commands return JSON to stdout, diagnostics to stderr, and a nonzero exit code
 on errors. A complete request may be passed with `--json` or on stdin. The CLI
@@ -45,17 +59,39 @@ Native Android callers handling their own foreground launch can use `--no-launch
 and send the returned single-use `launch` ticket as an extra to
 `org.openresearchtools.wildbuzzard.CommandAccessActivity` within 30 seconds.
 
-The browser owns an IPv4 loopback listener on port 48271 while command access is
-enabled. A challenge proves possession of the enrolled 256-bit key before the
+The legacy command-key interface uses an IPv4 loopback listener on port 48271
+while legacy command access is enabled. A challenge proves possession of the enrolled 256-bit key before the
 client sends a page command. Requests and responses use AES-GCM with distinct
 direction/transcript binding. The key is never sent over the socket; the browser
 stores it in its Android Keystore-encrypted, backup-excluded vault. Authentication
 does not rely on trusting every app that can connect to localhost. Protocol
 framing and cryptography are defined in `CommandProtocol.java`.
 
-Shell screenshots return PNG `base64` and `mimeType`, subject to the same response
-size limit; reduce the viewport if necessary. Use `wildbuzzard --help` for syntax
-and `wildbuzzard --licenses` for the notices packaged in that exact browser APK.
+Save a screenshot directly into Termux's private files, without shared storage:
+
+```sh
+wildbuzzard --session CHAT_ID tabs.show '{"tabId":"TAB_ID"}'
+wildbuzzard --session CHAT_ID --output "$HOME/screenshot.png" screenshot '{"tabId":"TAB_ID"}'
+wildbuzzard --session CHAT_ID downloads.list
+wildbuzzard --session CHAT_ID --output "$HOME/download.pdf" downloads.get '{"downloadId":"DOWNLOAD_ID"}'
+```
+
+The output JSON contains the absolute `path`. Files are created with mode 0600;
+existing paths are never overwritten. `screenshot` with `{"transfer":true}` or
+`downloads.get` without `--output` returns a five-minute `transfer` object with
+`url`, `token`, `size`, and a ready-to-use `wget` command. Only the requested file
+is exposed, only on `127.0.0.1`, with an Authorization bearer header. Origin-bearing
+web requests, missing/wrong tokens, expired transfers and revoked app grants
+are rejected. There is no unauthenticated directory listing. Only downloads from
+tabs belonging to the calling app/session can be listed or exported, including
+after those tabs close. `downloads.accept {tabId,downloadId}` accepts a pending
+browser download; visible agent tabs automatically use the browser's downloader.
+
+Legacy screenshots without `transfer` still return PNG `base64` and `mimeType`,
+subject to the JSON response limit. Transfers avoid that limit. Use
+`wildbuzzard --help` for syntax and `wildbuzzard --licenses` for this APK's notices.
+The optional [Pi extension](pi/README.md) saves screenshots/downloads in each
+native Pi session directory and returns native image content plus the file path.
 
 ## Android apps
 
@@ -65,7 +101,8 @@ Bind an explicit intent with action
 `queries` section. Compile the two AIDL files from `wildbuzzard-sdk`.
 
 1. Call `requestAccess()` and launch the returned immutable PendingIntent while
-   your app is visible. The user approves your package and signing identity.
+   your app is visible. Publisher-signed apps are already authorized; other apps
+   receive a one-time package/signing-identity prompt.
 2. Call `execute(requestJson, callback)`. The callback receives JSON containing
    `result` or `error`. Up to eight requests per caller may be outstanding.
 3. To bring a tab to the foreground, call `showTab(tabId)` and launch the returned
@@ -97,7 +134,16 @@ browser's selected tab.
 {"method":"tabs.close","params":{"tabId":"..."}}
 ```
 
-Call `capabilities` to discover supported methods. Navigation also supports
+Call `capabilities` to discover supported methods and authorization mode.
+`diagnostics {tabId}` reads the actual Gecko remote-debugging preferences,
+Marionette/remote-agent state preferences, `navigator.webdriver`, and Gecko's
+accessibility-service state. Remote protocol preferences are locked off. Android
+page snapshots use DOM trees without starting the Gecko accessibility service;
+an external Android accessibility tool can independently activate accessibility,
+and diagnostics reports that actual state. There is no Android accessibility
+service used as an agent-control bridge. Publisher APKs have Android debuggability
+disabled; the independent test-probe APKs keep their separate development signer.
+ Navigation also supports
 `back`, `forward`, `reload` and `stop`. Page tools include `wait`, `console`,
 `clearConsole` and `viewport`. `screenshot` requires the tab to be shown and
 returns a `content://` URI with read permission granted to the caller's package;
