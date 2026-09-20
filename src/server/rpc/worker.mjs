@@ -6,6 +6,7 @@ import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, priva
 import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
+import { notifyTurn, deliverNotifications } from '../platform/termux/notifications.mjs';
 
 process.umask(0o077);
 const id = process.argv[2];
@@ -87,6 +88,7 @@ async function launch() {
         events = [];
         emit({ type: 'snapshot', data: snapshot() }, false);
         emit({ type: 'agent_settled' }, false);
+        notifyTurn(meta, entries).catch(() => {});
         await serial(applyPending);
       }).catch(error => emit({ type: 'notice', message: error.message }));
       return;
@@ -254,6 +256,7 @@ await fs.rm(socketPath(id), { force: true });
 try { await launch(); await new Promise(resolve => server.listen(socketPath(id), resolve)); await fs.chmod(socketPath(id), 0o600); }
 catch { await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
 process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });
+setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();
 // Release idle Pi processes on memory-constrained phones. Active turns, queues,
 // extension dialogs and subscribed browsers always retain their worker.
 setInterval(async () => {

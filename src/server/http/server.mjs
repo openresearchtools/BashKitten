@@ -18,6 +18,7 @@ import { folderLocations, pickerDirectory, listFolders } from '../files/folders.
 import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
+import { visibleSession } from '../platform/termux/notifications.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -118,6 +119,12 @@ async function handler(req, res) {
     if (!record) throw Object.assign(Error('Sign in to BashKitten'), { status: 401 });
     if (mutation) auth.checkCsrf(req, record);
     if (route === '/api/logout') { requireMethod(req, ['POST']); await auth.logout(record, res); return json(res, { ok: true }); }
+    if (route === '/api/visibility') {
+      requireMethod(req, ['POST']);
+      const value = await jsonBody(req);
+      if (platform === 'termux') await visibleSession(value.client, value.id, Boolean(value.visible));
+      return json(res, { ok: true });
+    }
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
@@ -130,6 +137,7 @@ async function handler(req, res) {
       const input = await jsonBody(req);
       const next = { web_port: Number(input.web_port), theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : 'system',
         default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || 'off') };
+      if (platform === 'termux') next.notifications = { enabled: Boolean(input.notifications?.enabled), onlyWhenHidden: input.notifications?.onlyWhenHidden !== false, preview: input.notifications?.preview !== false };
       if (!Number.isInteger(next.web_port) || next.web_port < 1024 || next.web_port > 65535) throw Error('Port must be between 1024 and 65535');
       let restartUrl;
       if (next.web_port !== config.web_port) {

@@ -24,6 +24,14 @@ export async function writeJson(file, value) {
   await fs.writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
   await fs.rename(temp, file);
 }
+export async function createJson(file, value) {
+  await privateDir(path.dirname(file));
+  const temp = `${file}.${randomToken().slice(0, 12)}.tmp`;
+  await fs.writeFile(temp, JSON.stringify(value) + '\n', { mode: 0o600 });
+  try { await fs.link(temp, file); return true; }
+  catch (error) { if (error.code === 'EEXIST') return false; throw error; }
+  finally { await fs.rm(temp, { force: true }); }
+}
 export const readMeta = id => readJson(path.join(sessionDir(id), 'ui.json'));
 export const writeMeta = meta => writeJson(path.join(sessionDir(meta.id), 'ui.json'), meta);
 export function json(res, value, status = 200) {

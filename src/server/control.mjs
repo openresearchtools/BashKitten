@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, workerRequest, socketPath, allMeta } from './common.mjs';
 import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
+import { deliverNotifications } from './platform/termux/notifications.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
 const stateFile = path.join(dataDir, 'control.json');
@@ -146,6 +147,7 @@ async function serve() {
   const monitor = setInterval(() => {
     if (state.web && Date.now() > retryAt) { const operation = serial.then(startWeb); serial = operation.catch(() => {}); }
   }, 2000);
+  setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();
   process.on('SIGTERM', jsonShutdown);
   if (state.web) await startWeb().catch(() => {});
 }

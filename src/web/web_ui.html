@@ -522,6 +522,13 @@
 
           </div>
           <p class="meta">Changing the port restarts only the Web UI. Agent sessions keep running.</p>
+          <div id="termuxNotifications" class="hidden settings-section">
+            <h3>Turn notifications</h3>
+            <label><input id="notifyEnabled" type="checkbox"> Notify when Pi finishes a turn</label>
+            <label><input id="notifyHidden" type="checkbox" checked> Only when this chat is not visible</label>
+            <label><input id="notifyPreview" type="checkbox" checked> Show a short message preview</label>
+            <p class="meta">Uses Termux:API. Android notification settings control lock-screen visibility.</p>
+          </div>
           </section>
           <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
             <h3>Pi services</h3>
@@ -661,6 +668,15 @@
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
     const nativeHost = window.bashkittenHost || null;
     const nativeLinux = nativeHost?.platform === 'linux';
+    const visibilityClient = crypto.randomUUID();
+    let serverPlatform = '';
+    function sendVisibility() {
+      if (serverPlatform === 'termux' && csrf) api('/api/visibility', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({client:visibilityClient, id:current?.id, visible:!document.hidden && document.hasFocus()})}).catch(()=>{});
+    }
+    setInterval(sendVisibility, 15000);
+    document.addEventListener('visibilitychange', sendVisibility);
+    window.addEventListener('focus', sendVisibility);
+    window.addEventListener('blur', sendVisibility);
     if (nativeLinux) {
       $('#filesToggle').textContent = '↗';
       $('#filesToggle').title = 'Open project folder';
@@ -1424,6 +1440,11 @@
     async function loadSettings() {
       const value = await api('/api/settings');
       config = value.config;
+      serverPlatform = value.platform;
+      $('#termuxNotifications').classList.toggle('hidden', serverPlatform !== 'termux');
+      $('#notifyEnabled').checked = Boolean(config.notifications?.enabled);
+      $('#notifyHidden').checked = config.notifications?.onlyWhenHidden !== false;
+      $('#notifyPreview').checked = config.notifications?.preview !== false;
       folderLocations = value.locations || [];
       applyTheme(config.theme);
       pendingCwd = config.default_cwd;
@@ -1909,6 +1930,7 @@
       if (sessionView !== view) return;
       closeImageViewer();
       current = {...session};
+      sendVisibility();
       oldestSegment = 0;
       setCompacting(false);
       loadingHistory = false;
@@ -1956,6 +1978,7 @@
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
+      sendVisibility();
       updateInstanceControl(false);
       oldestSegment = 0;
       showChatView();
@@ -2111,7 +2134,8 @@
       await loadSettings();
       await loadModels();
       const sessions = await loadSessions();
-      if (sessions.length) await openSession(sessions[0]);
+      const requested = /^#session=([a-f0-9-]{36})$/.exec(location.hash)?.[1];
+      if (sessions.length) await openSession(sessions.find(s=>s.id===requested) || sessions[0]);
       else beginNewSession();
     }
 
@@ -2422,6 +2446,7 @@
       config.default_cwd = $('#defaultCwd').value;
       config.default_model = $('#defaultModel').value;
       config.default_thinking = $('#defaultThinking').value;
+      config.notifications = {enabled:$('#notifyEnabled').checked, onlyWhenHidden:$('#notifyHidden').checked, preview:$('#notifyPreview').checked};
       const saved=await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(config)});
       if(saved.restartUrl){
         source?.close();source=null;
