@@ -2,17 +2,19 @@
 
 Status: proposed implementation, researched 19–20 September 2026. The `main`
 branch supplies the web UI and native Pi adapter, promoted from `codex/pi-termux-rpc`. This
-document adds a plan for the Android host, signed Termux distribution, package
-installation, lifecycle controls and desktop integration. It does not describe
-those additions as already implemented or tested.
+document adds a plan for a portable shared server, the Android host, signed
+Termux distribution, APT/npm package maintenance, lifecycle controls and desktop
+integration. It does not describe those additions as already implemented or tested.
 
 ## 1. Product and process ownership
 
 Build a Kotlin Android BashKitten app with a system WebView for the existing chat
-UI and a native store/control screen. Termux owns every backend, Pi and desktop
-process. The store remains available before Termux is installed and whenever the
-web server is stopped. Ordinary Android browsers continue to use the same
-authenticated `http://127.0.0.1:3939` application.
+UI and a native store/control screen. On Android, Termux owns every backend, Pi
+and desktop process. The store remains available before Termux is installed and
+whenever the web server is stopped. Ordinary Android browsers continue to use
+the same authenticated `http://127.0.0.1:3939` application. On Linux, the same
+Node server and web UI run directly under the user's account without Termux or
+an APK. The diagram below describes the Android deployment of that shared code.
 
 ```mermaid
 flowchart TD
@@ -32,7 +34,9 @@ The current transcript renderer, tool/thinking streaming, output styling,
 compaction presentation, themes, session naming and project sidebar remain the
 UI. Preserve native Pi history and credentials. Narrow screens use collapsible
 project and file drawers; wide screens can show projects, chat and files together.
-Keep the expandable repository browser in the top bar.
+Keep the expandable repository browser in the top bar for Android and ordinary
+browser clients. The optional Linux desktop host uses the system file manager
+instead of this file panel, as specified in section 10.
 
 WildBuzzard is not a dependency, installation requirement or implementation
 target for this work. A future app signed with the suite certificate can request
@@ -42,11 +46,70 @@ the same Termux command permission independently.
 
 | Repository | Responsibility | Published artifacts |
 | --- | --- | --- |
-| `openresearchtools/bashkitten` | Existing web UI and Pi adapter; new `android/`, lifecycle manager and Termux packaging | BashKitten APK, `bashkitten_VERSION_aarch64.deb`, source and release metadata |
+| `openresearchtools/bashkitten` | Shared `src/web/` and `src/server/`, hosts in `src/android/` and `src/linux/`, platform adapters and packaging | BashKitten APK, Termux `aarch64` server `.deb`, Linux `arm64`/`amd64` server and desktop `.deb` packages, source and release metadata |
 | Proposed `openresearchtools/termux-suite` | Tracked upstream Termux sources, patch series, build/signing workflows and suite catalog | Termux/add-on APKs, both X11 variants, matched X11 companion `.deb`, complete source archive and signed catalog |
-| Existing `openresearchtools/apt` | Existing signed native Termux package index and keyring | Current keyring and signed indexes referencing application release assets |
+| Existing `openresearchtools/apt` | Final signed APT distribution for Linux `arm64`/`amd64` and native Termux `aarch64` packages | Platform-specific keyring packages and the existing shared signed index referencing application release assets |
 
-Proposed suite layout:
+### Shared BashKitten source layout
+
+Keep application source under one `src/` tree, with the shared server independent
+of Android packaging. Proposed BashKitten layout:
+
+```text
+src/
+  web/                       # One existing chat/settings/login UI for all hosts
+  server/
+    http/                    # HTTP(S) routes, auth, event streams and UI serving
+    rpc/                     # Native Pi processes, detached workers and sessions
+                             # Also Pi ModelRuntime services, login and runtime selection
+    files/                   # Folder browsing, uploads, downloads and backend ZIPs
+    updates/                 # Pi npm checks, runtime staging and shared job/status types
+    platform/
+      linux/                 # Linux paths, Pi context template and platform capabilities
+      termux/                # Termux paths/context, bootstrap/APT, supervisor, API and X11
+  android/                   # Native APK: Gradle, Kotlin/Compose, WebView and store
+  linux/                     # Small Python/PyGObject GTK 4 + WebKitGTK desktop host
+packaging/termux/             # .deb recipes and installation assets, not copied source
+packaging/linux/              # Desktop launcher, icons and host dependency declarations
+tests/server/                # Shared server/RPC/files tests
+tests/platform/              # Platform integration tests
+```
+
+The current `termux/server.mjs`, `rpc.mjs`, `worker.mjs`, `services.mjs`,
+`files.mjs`, `folders.mjs`, `web-auth.mjs` and common helpers are mostly shared
+server code. Move them to the appropriate `src/server/` areas, splitting out only
+the actual platform dependencies. Move the two existing UI HTML files into
+`src/web/` and update launch scripts, asset paths, tests and packaging together.
+Do not create Android and Linux copies of the UI, HTTP(S) API or Pi controls.
+Pi remains an unmodified dependency; `rpc/` contains BashKitten's integration.
+
+Pass a small platform adapter into the shared server for home/data/runtime paths,
+allowed working-folder roots, process startup and optional capabilities. On
+Termux, the picker remains confined to writable Termux home directories. On
+Linux, it defaults to the user's home, with explicitly configured writable
+project roots where needed. The tree/picker component and confinement checks
+are shared. Browser upload pickers remain separate and use the browser's normal
+file input on both platforms.
+
+Termux bootstrap, `pkg`/APT operations, Android notifications and X11 commands
+belong in the Termux adapter; APK installation, Android permissions and WebView
+callbacks belong in `src/android/`. Shared code uses capability interfaces and
+does not require Android classes, a Termux prefix or Termux commands on Linux.
+Expose supported controls through those capabilities. Linux also runs the web
+application in an ordinary browser; the optional `src/linux/` wrapper adds native
+window/file integration without becoming a prerequisite. Do not assume every
+Linux distribution uses APT. Keep Pi's short environment context templates in
+the platform adapters and their common installation/reload logic in `server/rpc/`.
+
+HTTP(S) transport and any TLS configuration belong in `src/server/http/` on both
+platforms. The current listener is loopback HTTP; this layout does not claim
+HTTPS is already implemented. Preserve localhost binding, authentication and
+Origin/CSRF checks when adding transport options. Source reorganization must
+preserve existing session/data locations, credentials and UI behavior.
+
+### Termux suite source layout
+
+Proposed layout in the separate suite repository:
 
 ```text
 sources/termux-app/
@@ -71,6 +134,45 @@ submodules, including X11 dependencies, so a source download contains their
 contents. Keep upstream trees pristine and apply the documented patch series to
 a build staging directory. Updating upstream is a source-import commit followed
 by explicit patch refreshes; CI fails when a patch no longer applies.
+
+### Upstream build fidelity and license preservation
+
+Build each Termux app from its own pinned official release tag/commit using its
+upstream Gradle wrapper, build scripts, modules, bootstrap variant/checksums,
+dependency versions and documented build environment. Use that release's workflow
+as the reference rather than reconstructing an unrelated Android project. Keep
+our workflow as a thin source/patch/build/sign/publish layer. Retain upstream
+package IDs, runtime paths, resources and bootstrap/package-management behavior.
+Sources: [Termux build configuration](https://github.com/termux/termux-app/blob/master/app/build.gradle)
+and [upstream GitHub build workflow](https://github.com/termux/termux-app/blob/master/.github/workflows/debug_build.yml);
+implementation must use their equivalents at the locked release commit.
+
+Record every deviation: the small trusted-control/setup patch in section 4,
+our signing configuration and necessary production/version/build compatibility
+settings. Where an upstream workflow builds a debug artifact, explicitly record
+the production signing/non-debuggable adjustment instead of silently inheriting
+its test key or changing unrelated behavior. Keep API/add-on behavior unchanged
+unless a separately documented compatibility fix is necessary. Preserve upstream
+build tools per project; make the already-required 16 KB changes isolated and
+reviewable if the selected upstream release does not yet satisfy them.
+
+Preserve all upstream LICENSE/COPYING/NOTICE files, source copyright headers,
+license exceptions, third-party notices and existing in-app license displays.
+Add a separate suite modification notice identifying the upstream project and
+revision, our changes/dates, build revision and source location. Do not replace
+upstream attribution with our name or apply the Termux app's license to every
+bundled component. Retain existing notice text and add our disclosure to the
+source, release metadata and store/About source-license view.
+
+This covers APK libraries, bootstrap archives and any `.deb`/runtime dependency
+we redistribute. Record a component manifest with versions, hashes, licenses,
+upstream source locations and build/patch inputs. Retain each package's license
+payload in the platform-appropriate documentation path. Include required
+corresponding source and build material for the exact redistributed versions in
+release source artifacts; an app-only tag archive or a notice alone is not a
+substitute. Ordinary dependencies installed from upstream Termux repositories
+continue to use upstream's packages and metadata; this is not a plan to rebuild
+or relabel the entire Termux package repository.
 
 Every released APK must identify its upstream commit, suite revision, build
 inputs and matching source artifact. Publish source, patches, build scripts and
@@ -139,8 +241,40 @@ Signing procedure:
 4. Pin build tools and Actions revisions. Build and test before the signing job;
    verify every output certificate with `apksigner`. Do not inherit upstream's
    public debug/test signing key. Release APKs are not debuggable.
-5. Maintain monotonically increasing version codes per package, coordinated
-   across the two X11 variants. Document signing-key recovery before shipping.
+5. Preserve upstream displayed versions and maintain increasing internal version
+   codes as described below, coordinated across the two X11 variants. Document
+   signing-key recovery before shipping.
+
+### Termux APK versions and suite revisions
+
+Keep each app's **`versionName` equal to its selected official upstream release**.
+Termux, API, X11 and the other add-ons retain their own release sequences; do not
+assign BashKitten's version to them. Obtain the effective version from the
+upstream release workflow/tag and generated APK metadata, including supported
+version overrides, rather than assuming a static Gradle default is authoritative.
+For X11 nightlies, retain upstream's version/date/commit identity and pin the
+matching companion package.
+
+Track our changes separately as `suiteRevision`, for example a store label
+`Termux <upstream version> · suite revision 2`. Put the upstream identity and suite
+revision in release asset names, notices and the signed catalog. These identify
+our modified, suite-signed distribution while preserving familiar upstream
+versioning. BashKitten itself retains its own version sequence.
+
+Keep a checked-in per-package release ledger for **`versionCode`**. On the first
+suite build, use the upstream code where valid. For a new suite release, allocate
+`max(upstreamVersionCode, previousSuiteVersionCode + 1)` and record the mapping.
+This permits another patched build of the same upstream version and still lets
+a later upstream release upgrade it. Validate Android's integer limits and the
+actual output manifest; an identical reproducibility rerun reuses its recorded
+release code instead of allocating another. Both X11 variants share the package
+ledger. Store update decisions use the signed catalog and installed version code,
+not `versionName` alone. The internal code may therefore differ from upstream
+even when the displayed version matches. See [Android versioning](https://developer.android.com/studio/publish/versioning).
+
+Test both a same-upstream-version patch upgrade and an upgrade to the next
+upstream release, signed with the suite key. A matching upstream version number
+does not make APKs signed with different certificates interchangeable.
 
 Document how others build and install the entire suite with their own signing
 key, including the backup/reinstall transition for a different certificate.
@@ -308,6 +442,73 @@ to Pi's tools. Use the native upstream [Git package](https://github.com/termux/t
 and [GitHub CLI package](https://github.com/termux/termux-packages/blob/master/packages/gh/build.sh).
 Installation does not embed a GitHub account or token.
 
+### Short native Pi environment context
+
+Ship a concise base `AGENTS.md` template at
+`src/server/platform/termux/pi-context/AGENTS.md`, capped at roughly 200 words.
+During bootstrap and after template updates, synchronize it into Pi's global
+context file, normally `~/.pi/agent/AGENTS.md`. Resolve the effective agent
+directory through the selected Pi runtime, including `PI_CODING_AGENT_DIR`, and
+render paths from the real environment. This is separate from BashKitten's own
+repository `AGENTS.md`; do not copy development instructions into the user's Pi.
+
+Use an identifiable, versioned managed block; atomically replace only that block
+and preserve personal instructions outside it. Keep a backup before the first
+change, make repeat setup idempotent and never rewrite project context files.
+Preserve previously effective global instructions when Pi's alternate filenames
+are present: creating `AGENTS.md` must not hide an existing `CLAUDE.md`, and an
+existing `AGENTS.override.md` needs the managed block in the effective file too.
+Do not change Pi's precedence rules or replace its native system prompt.
+
+Draft Termux block, with placeholders expanded by the installer:
+
+```markdown
+## Termux environment
+
+- You run inside unrooted Android Termux, using Bionic and native aarch64
+  packages. Debian arm64/glibc binaries are not interchangeable. Do not assume
+  sudo, systemd, /usr or a conventional Linux filesystem.
+- Home: {{HOME}}. Package prefix: {{PREFIX}}. Work in the selected project or
+  writable home directories; other Android apps' private data is inaccessible.
+- Find packages with `pkg search NAME`; install with `pkg install NAME`.
+  `pkg update` refreshes repository metadata; `pkg upgrade` refreshes and upgrades
+  installed packages. Use Termux repositories and respect package-manager locks.
+- Global skills: {{PI_AGENT_DIR}}/skills/ and ~/.agents/skills/. Trusted projects
+  can provide .pi/skills/ or .agents/skills/. Read the relevant SKILL.md when its
+  task applies, then any needed references; do not preload every skill body.
+- Package help: https://wiki.termux.com/wiki/Package_Management
+  Available package recipes: https://github.com/termux/termux-packages
+```
+
+Keep package inventories, desktop/GPU recipes and full skills out of this block.
+Pi's own skill discovery provides names/descriptions and loads full skill content
+on demand; respect native project trust and user skill settings. Documented
+sources: [Pi context files](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/docs/usage.md#context-files)
+and [Pi skills](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/docs/skills.md).
+
+Synchronize before launching Pi, and track the context version loaded by each
+worker. An update during a turn takes effect at the next safe idle boundary:
+checkpoint the session/queues and gracefully restart only that Pi subprocess
+against the same native session to reload context. Do not interrupt a turn or
+replay queued messages. No Pi source change or invented RPC `reload` command is
+required. Show pending/applied status if an update is waiting on active work.
+
+Provide a smaller Linux template under
+`src/server/platform/linux/pi-context/AGENTS.md`, using the same managed-block
+mechanism and excluding Termux-specific guidance:
+
+```markdown
+## Linux environment
+
+Home: {{HOME}}. Work in the selected project as the current user. Check
+/etc/os-release and available tools before choosing distribution-specific
+package commands; do not assume root or sudo access. Global skills are in
+{{PI_AGENT_DIR}}/skills/ and ~/.agents/skills/; trusted projects may add
+.pi/skills/ or .agents/skills/. Read relevant SKILL.md files on demand.
+```
+
+### Telemetry defaults
+
 Apply telemetry-off defaults before the first Pi or GitHub CLI launch. Persist
 them in an owned Termux environment/profile file, preserving existing user files,
 and explicitly apply them to the supervisor, background services, login helper,
@@ -337,13 +538,19 @@ behavior during startup, idle operation and first use. Explicit model/provider
 requests, Git/GitHub actions, package downloads and the requested store update
 checks still work; disabling telemetry does not disable those functions.
 
-Publish `bashkitten_VERSION_aarch64.deb` from the BashKitten release. Add
-`openresearchtools/bashkitten` with glob `bashkitten_*_aarch64.deb` to the existing
-APT `packages.json`. Dispatch the existing `package-released` workflow after
-publishing; retain the repository's scheduled refresh as recovery. This uses
-the existing index architecture instead of adding another APT service.
+Publish `bashkitten_VERSION_aarch64.deb` from the BashKitten release, alongside
+the Linux artifacts described in section 10 when releasing those targets. Add
+`openresearchtools/bashkitten` with glob `bashkitten*.deb` to the existing APT
+`packages.json`, covering the server and Linux desktop packages. Validate each
+asset's actual package name, architecture and version before publication.
+Dispatch the existing `package-released` workflow after publishing; retain the
+repository's scheduled refresh as recovery. **Our existing APT repository is the
+final installation/update channel for these `.deb` packages.** GitHub Releases
+hold immutable binary/source assets used by its existing signed index; Actions
+artifacts are for pre-release testing. APKs remain in GitHub Releases and the
+signed app catalog, installed through Android's package installer.
 
-The package is `aarch64`, despite much of its content being JavaScript: it uses
+The Termux package is `aarch64`, despite much of its content being JavaScript: it uses
 Termux/Bionic dependencies and paths. Do not publish it as a Debian `arm64` build
 or a generic cross-platform `all` package. Build/select native npm dependencies
 for Android/Bionic and validate them in real Termux; a Debian/Ubuntu `arm64` build
@@ -351,10 +558,12 @@ is not a Termux `aarch64` build. Ship the pinned production dependency graph,
 without a network-dependent `npm install` in package-maintainer scripts. Pi remains the ordinary upstream
 package, currently pinned to 0.85.1 in this branch.
 
-Install `bashkitten-web`, `bashkittenctl` and a launcher for the same bundled Pi
-version. Expose `pi` for terminal use where it is unoccupied; detect any existing
-global Pi installation rather than overwriting it. Both the UI and launcher use
-the bundled version, avoiding an uncontrolled global npm upgrade.
+Install `bashkitten-web`, `bashkittenctl` and a launcher for the same managed Pi
+runtime, initially supplied by the package. Expose `pi` for terminal use where
+it is unoccupied; detect any existing global Pi installation rather than
+overwriting it. Both the UI and BashKitten's launcher resolve the same selected,
+exactly pinned runtime. An unrelated global npm installation is not the version
+reported as BashKitten's Pi.
 
 Retain data at the current `~/.local/share/bashkitten-pi` location and credentials
 in Pi's native location. Stage immutable runtime versions in package-managed
@@ -372,10 +581,50 @@ package conflicts/provides, and a manifest mapping APK commit to companion
 version. Do not mix an arbitrary `termux-x11-nightly` update with a separately
 pinned APK. Source: [X11 build and companion packaging](https://github.com/termux/termux-x11/blob/master/lorie-app/build.gradle).
 
-Package updates are a supervisor-owned operation with a durable job ID, status
-and bounded output log. The **Update packages** action refreshes configured APT
-repositories, resolves upgrades, then downloads and applies the package-manager
-transaction. Termux's `pkg update` refreshes metadata only; `pkg upgrade` runs
+### Pi npm update checks and runtime selection
+
+Package maintenance checks **both APT packages and Pi's npm release**. Read the
+installed Pi version from the runtime actually selected by `src/server/rpc/`,
+including the version used by existing workers. Query the configured npm registry
+for `@earendil-works/pi-coding-agent` release metadata and its dependencies; for
+example, `npm view @earendil-works/pi-coding-agent@latest version engines dependencies dist.integrity --json`.
+Use semantic version comparison and show installed, latest upstream and latest
+compatible versions separately when they differ. Do not equate a package lock's
+allowed version with the latest upstream release. See npm's documented
+[registry metadata command](https://docs.npmjs.com/cli/v11/commands/npm-view/)
+and [installed/wanted/latest distinction](https://docs.npmjs.com/cli/v11/commands/npm-outdated/).
+
+The common update check refreshes APK catalog, APT and npm status independently,
+with per-source timestamps and errors. A failed or offline npm check must not
+display Pi as up to date or prevent APT/APK checks. Read-only checks never change
+the installed runtime. Keep Pi's own startup catalog traffic and telemetry off;
+these are explicit BashKitten package checks, also available on Linux without APT.
+
+An **Update Pi** action, also included in **Update packages** when a compatible
+release is available, stages an exact dependency graph in a new managed runtime
+directory outside dpkg-owned payloads. Publish tested runtime manifests with
+exact versions, lockfile/integrity data and adapter/Node/platform compatibility.
+A newer upstream release without a compatible manifest remains visibly available
+with an explanation; it must not be silently installed into a running adapter.
+Check Android/Bionic dependencies for Termux and host-native dependencies for Linux.
+
+Use one runtime resolver for Pi RPC, ModelRuntime login, `pi-ai` and the launcher,
+so an update cannot leave those components on incompatible versions. Validate
+the staged runtime, then atomically select it at an idle boundary, including any
+active provider login. Preserve old workers and their dependencies until exit;
+retain the previous runtime for rollback. APT updates must reconcile their bundled
+runtime with the selected manifest instead of silently overwriting or downgrading
+it. Report which version is active and which is waiting for activation. Never
+run a blind `npm update -g` or modify dpkg-owned `node_modules` in place.
+
+### Package update jobs and progress
+
+On Termux, package updates are a supervisor-owned operation with a durable job
+ID, status and bounded output log. The **Update packages** action refreshes APT
+and Pi npm metadata, resolves compatible updates, applies the APT transaction,
+then reconciles/stages any remaining Pi runtime update using the rules above.
+Show the two stages separately and retain each result if only one succeeds.
+Termux's `pkg update` refreshes metadata only; `pkg upgrade` runs
 `apt update` followed by `apt full-upgrade`. Use those native semantics, retaining
 APT signature checks, dependency resolution and dpkg ownership.
 [Termux package-manager implementation](https://github.com/termux/termux-tools/blob/master/scripts/pkg.in).
@@ -390,8 +639,10 @@ Preserve normal package-manager messages in an expandable plain-text log.
 Only one package transaction runs at a time, using the real APT/dpkg locks as
 well as the supervisor's job lock. The job continues if the screen closes and
 can be observed through native Termux control even if the HTTP server restarts.
-Graphics-profile package changes use this same queue and progress protocol;
-bootstrap, Update packages and profile switching cannot run competing operations.
+Graphics-profile changes and Pi runtime installation use this same queue and
+progress protocol; bootstrap, Update packages, Update Pi and profile switching
+cannot run competing operations. npm work does not pretend to hold a dpkg lock,
+but shares the supervisor lock so Node/APT upgrades cannot race runtime staging.
 Respect the runtime idle-boundary and paired-X11 rules above, showing any waiting
 reason. Preserve modified configuration by default and surface decisions that
 need user input in the UI. Cancellation must not force-kill dpkg while it is
@@ -414,13 +665,22 @@ exists in the catalog. BashKitten has its own update row.
 Place a compact **Termux packages** block near the top of this screen, directly
 alongside the app-update area and above the service controls. This is the package
 environment the user referred to as the VM; the UI calls it Termux packages.
-Its primary button is **Update packages**, with a secondary **Refresh lists**
-action for a metadata-only check. Display the last successful check/update and
-the available update count when known.
+Its primary button is **Update packages**, with a secondary **Check updates**
+action that refreshes both APT and Pi npm metadata without installing anything.
+Keep an APT-only **Refresh lists** action in the expanded details. Display the
+last successful check/update and the available update count when known.
+
+Include a **Pi (npm)** row in this same block, showing the actual installed
+version, available release, compatibility/activation status and **Update Pi**
+when applicable. Node.js remains an APT-managed dependency on Termux; distinguish
+its updates from the Pi npm package. APT being up to date must not hide a newer
+Pi release. The shared web settings can show Pi status/update controls on Linux;
+the native APK store and Termux package controls remain platform capabilities.
 
 Clicking Update packages expands that block in place: phase label, progress bar
 or spinner, current package and a short scrolling list of actual downloads,
-unpacking and configuration activity. Include expandable full output, final
+unpacking and configuration activity, followed by Pi download/validation/activation
+progress when applicable. Include expandable full output, final
 success/error summary and Retry when appropriate. Reopening it reconnects to the
 same job. Keep the row compact when idle; do not require a terminal window or put
 package-manager output in the chat transcript.
@@ -434,7 +694,7 @@ Below the app rows, show:
 | Desktop: Stopped/Starting/Running/Error | Start/stop the managed X11 and XFCE session; show persisted startup and graphics choices |
 | X11 viewer | Open or close the Android viewer separately from terminating the desktop session |
 | App updates | Check, download, apply eligible APK updates, or show Android's pending confirmation |
-| Termux packages (top block) | Refresh repository lists or update installed packages; show live native package-manager progress and output |
+| Termux packages (top block) | Check APT and Pi npm releases; update packages together or Pi separately; show live package-manager and Pi runtime progress |
 
 Keep routine controls in a few rows with compact play/stop icons and accessible
 labels. Put logs, resolved commands and diagnostics in expandable details.
@@ -448,10 +708,12 @@ choice; do not promise a fixed speedup on all phones.
 
 ## 8. Supervisor, recovery and Pi lifecycle
 
-Run `bashkitten-suite-manager` as a long-lived task owned by Termux's existing
-service. It manages the HTTP child, desktop process groups and state, while the
-existing detached per-session workers continue to own Pi RPC. It has a private
-local control socket and a CLI that returns versioned JSON status/results.
+On Android, run `bashkitten-suite-manager` as a long-lived task owned by Termux's
+existing service. Its Termux adapter manages the shared HTTP(S) server child,
+desktop process groups and state, while detached workers in `src/server/rpc/`
+continue to own Pi RPC on both platforms. It has a private local control socket
+and a CLI that returns versioned JSON status/results. Linux launches the same
+server/worker code using its platform adapter, without the Android command bridge.
 
 While BashKitten is visible, its native controller uses the protected Termux
 command component to run `bashkittenctl status/start/...`. This route works when
@@ -617,6 +879,8 @@ local authenticated/private transport and expose its state separately.
 
 ## 10. Browser behavior, files and provider login
 
+### Android WebView and ordinary browsers
+
 The WebView loads the same server-delivered UI and preserves its cookie store
 across launches and APK updates. Flush cookies when appropriate; do not clear
 them during routine lifecycle events. Chrome has a separate cookie jar, so it
@@ -629,11 +893,13 @@ paste and Pi's native image content blocks. No custom storage browser replaces
 the system upload picker, and no broad Android storage permission is required.
 [WebView file-chooser API](https://developer.android.com/reference/android/webkit/WebChromeClient#onShowFileChooser(android.webkit.WebView,%20android.webkit.ValueCallback%3Candroid.net.Uri%5B%5D%3E,%20android.webkit.WebChromeClient.FileChooserParams)).
 
-Keep the repository tree server-side inside writable/readable/searchable Termux
-home directories. Display `~` and `~/project`, with no navigation above home.
-Termux serves files from its own permissions; the Android picker is only choosing
-files to upload. Do not add a Termux shared-storage mount or ask users to grant
-access to `/data/data`.
+Keep repository browsing and folder selection in the shared server/UI, with
+roots supplied by the platform adapter. On Termux, show only writable/readable/
+searchable home directories: `~` and `~/project`, with no navigation above home.
+On Linux, show the user's home and any explicitly configured accessible project
+roots, enforcing the same path/symlink confinement. Termux serves files from its
+own permissions; the Android picker is only choosing files to upload. Do not add
+a Termux shared-storage mount or ask users to grant access to `/data/data`.
 
 In Chrome, downloads/open continue to follow normal browser behavior. In WebView,
 handle download callbacks by streaming the authenticated response to Android
@@ -648,8 +914,10 @@ Provider login remains owned by unmodified Pi. Its RPC protocol has no login
 command, so retain the current public `ModelRuntime.login` adapter and native
 credential store. Obtain Pi's authorization URL in the authenticated UI, then
 open that URL in the user's external Android browser. Pi receives its own
-loopback callback inside Termux. Do not open an authenticated localhost helper
-in a different browser and assume it shares WebView cookies. Preserve Pi's
+loopback callback inside Termux. On Linux, the same shared login adapter uses
+the normal browser and Pi's local callback, with no Android dependency. Do not
+open an authenticated localhost helper in a different browser and assume it
+shares WebView cookies. Preserve Pi's
 device-code and API-key methods and refresh Services on return; no terminal
 login is required. Sources are pinned in [the existing runtime document](pi-termux.md).
 
@@ -659,10 +927,148 @@ receive a native command/install interface. Keep the existing account, HttpOnly
 cookies, Origin/CSRF protection and localhost-only bind. Android describes the
 relevant risks in [WebView native bridges](https://developer.android.com/privacy-and-security/risks/insecure-webview-native-bridges).
 
+### Lightweight Linux desktop host
+
+Use a small **Python/PyGObject, GTK 4 and WebKitGTK 6.0** application in
+`src/linux/`. It loads the same localhost URL and existing `src/web/` assets.
+The host handles its window, server attachment and desktop integration; all
+chat, authentication and Pi logic remains in the shared Node server. Use the
+distribution's maintained WebKitGTK runtime, without Electron or a bundled
+Chromium engine. Keep GTK/WebKit dependencies out of browser-only server installs.
+Sources: [PyGObject](https://pygobject.gnome.org/) and
+[WebKitGTK 6.0 API](https://webkitgtk.org/reference/webkitgtk/stable/).
+
+On launch, attach to the existing BashKitten server for this user/profile, or
+start the shared server with the Linux adapter and wait for readiness. Use a
+single-instance lock and verified local control connection so reopening does not
+start duplicate servers or attach to an unrelated process occupying the port.
+Closing the window leaves the server and active Pi turns running, matching the
+Android lifecycle. Explicit server/Pi stop controls remain available; an explicit
+stop is respected until the user starts the service again. Reopening recovers an
+unexpectedly dead server. A small native Start/Retry surface remains usable while
+the server is down. The shell is a local host; remote browser clients keep the
+ordinary web behavior.
+
+Give the host a persistent WebKit network session with private data/cache paths
+under the user's XDG directories and explicitly configure persistent cookie
+storage. Retain BashKitten's expiring persistent login cookie across window
+restarts and host updates; clear it on logout as usual. Keep a stable server
+origin and preserve server-side sessions. Do not share or copy the user's
+external browser cookies. See WebKit's [network sessions](https://webkitgtk.org/reference/webkitgtk/stable/class.NetworkSession.html)
+and [persistent cookie storage](https://webkitgtk.org/reference/webkitgtk/stable/method.CookieManager.set_persistent_storage.html).
+
+Use a small host-capability adapter in the shared UI instead of forking its
+renderer or scattering operating-system checks. Select the desktop presentation
+only for the native Linux host; it must not globally change another browser
+connected to the same server. Presentation flags do not grant native privileges.
+
+| Behavior | Android app / ordinary browser | Native Linux host |
+| --- | --- | --- |
+| Projects and chats sidebar | Existing UI | Same UI |
+| Repository file panel, including top-bar expandable tree | Existing browse/upload/download/ZIP controls | Hidden; replace with compact **Open project folder** action |
+| Select a working directory | Shared server folder picker with platform roots | Native folder chooser; pass selection to the same backend validation |
+| Attach/upload files and images | Browser/system file picker, paste and drag/drop | Same HTML file inputs and Pi attachment handling through WebKit's native chooser; preserve paste and drag/drop |
+| Click a local file/artifact link | Browser or Android download/open behavior | Open the existing local file in its associated application |
+| Click an external URL or provider login | External browser where the host provides it | Default system browser; internal chat navigation stays inside BashKitten |
+| Repository download / ZIP | Backend ZIP and normal browser download | Hidden; project files are already available through the file manager |
+
+For working-directory selection, return a native absolute path and explicitly
+register a user-selected project root if it lies outside the default home root.
+Continue checking permissions and symlink confinement on the backend. If the
+native chooser is unavailable, the existing shared picker remains a fallback.
+Hiding the file panel must not remove chat attachment controls or the project/
+thread sidebar. WebKit exposes the HTML upload request through
+[FileChooserRequest](https://webkitgtk.org/reference/webkitgtk/stable/class.FileChooserRequest.html).
+
+Implement **Open project folder**, **Open file** and external-link actions as a
+narrow native bridge available only to the trusted BashKitten main frame and
+invoked by a user action. Resolve session/attachment IDs and relative file paths
+against validated project or attachment roots. The host opens that actual file,
+including uploaded attachments saved by the server, rather than downloading a
+second copy. For an inline image or attachment that exists only as bytes/base64,
+have the backend materialize a file once in its attachment cache and open that
+path; do not send a WebView-only blob URL to an external application.
+Keep arbitrary repository HTML and remote pages outside the bridge.
+Use [Gtk.FileLauncher](https://docs.gtk.org/gtk4/class.FileLauncher.html) and the
+system URI launcher for default applications/file managers, passing paths as
+data. File launches are document-open requests, never shell commands.
+
+Route clicked external links and new-window requests to the default browser;
+keep provider callbacks with Pi's existing localhost login flow. Do not navigate
+the embedded app into provider or arbitrary external pages. The external browser
+handles remote downloads with its own login state. There is no custom Linux
+download manager: existing local artifacts open directly, and any export that
+must generate a new file is written by the backend to an explicit local
+destination before opening/revealing it. Android and ordinary-browser download
+endpoints retain their existing behavior.
+
+Distribute a desktop entry/icon and declare Python, PyGObject, GTK and WebKitGTK
+runtime dependencies in Linux packaging. Keep this host small and test against
+the chosen supported distribution versions on both Wayland and X11. The system
+web engine still has a runtime memory cost; measure the host plus Node/Pi and
+WebKit processes instead of promising a footprint from shell size alone.
+
+### Linux arm64/amd64 builds and final APT delivery
+
+Build and publish **both Linux `arm64` and `amd64`** from the same release source
+and dependency locks. These are Debian/Ubuntu Linux targets, separate from the
+Termux/Bionic `aarch64` target even when the CPU is from the same architecture
+family. Use an architecture matrix with native ARM64 and AMD64 builders where
+available; compile/select each native dependency for its target and supported
+distribution baseline. Do not reuse Termux binaries in a Linux package or relabel
+one architecture's `.deb` as another.
+
+Keep `bashkitten` as the server/Pi runtime package and `bashkitten-desktop` as the
+small Linux host package, depending on the matching `bashkitten` version. This
+allows server-only installs without GTK/WebKit dependencies. Build the desktop
+package for each Linux architecture too: its host dependency constraints are
+Linux-specific even though its own wrapper is Python. Do not mark either package
+as a cross-platform `Architecture: all` artifact in the shared APT index.
+
+| Target | Server package | Desktop host package |
+| --- | --- | --- |
+| Linux `arm64` | `bashkitten_VERSION_arm64.deb` | `bashkitten-desktop_VERSION_arm64.deb` |
+| Linux `amd64` | `bashkitten_VERSION_amd64.deb` | `bashkitten-desktop_VERSION_amd64.deb` |
+| Termux `aarch64` | `bashkitten_VERSION_aarch64.deb` | Android APK; no GTK host package |
+
+Use normal Linux package paths and dependencies for the first two rows, preserving
+per-user Pi credentials/sessions and BashKitten data on install/upgrade/removal.
+Keep the Termux prefix and dependency names confined to the third row. Record
+and test minimum Node, Python, GTK/WebKit and native library versions for each
+supported Linux distribution; avoid tying release binaries to newer libraries
+available only on the developer machine.
+
+The current development machine is a native ARM test target: `uname -m` reports
+`aarch64` and `dpkg --print-architecture` reports `arm64`. Use it for real Linux
+ARM64 host/Pi/browser testing, plus a disposable matching environment for package
+install/upgrade/removal tests. AMD64 gets its own native CI/runtime tests, including
+desktop integration; an ARM64 pass is not an AMD64 validation. Both architectures
+must pass the same shared-server suite and relevant host checks before a Linux
+release is published.
+
+Publish tested `.deb` files and matching source/license artifacts to the
+BashKitten GitHub Release, then update the **existing `openresearchtools/apt`
+catalog at `https://apt.openresearchtools.com`** through section 6's workflow.
+The current publisher already accepts `arm64`, `amd64` and `aarch64` in one signed
+flat index; preserve that design and let package architecture/dependencies select
+the correct target. Linux users use the existing Debian archive keyring package;
+Termux users use the existing Termux keyring. After repository setup, Linux users
+install the full app with `apt install bashkitten-desktop` and receive subsequent
+package upgrades through APT. Use the APT signing identity for repository metadata;
+the Droid Android signing key remains for APKs.
+
+First test candidate packages from build artifacts or a prerelease. The current
+APT publisher excludes drafts/prereleases, so only promote tested immutable
+assets to a normal release and trigger indexing when ready. Verify candidates
+and an actual repository install/upgrade for both Linux architectures after
+indexing. Keep the companion X11 `.deb` on the same existing Termux APT path;
+APKs continue through the signed app catalog rather than APT.
+
 ## 11. Termux-only turn notifications
 
-Add a notification adapter to the detached worker, triggered at a settled Pi
-turn with a final assistant message. It must work while the HTTP server or UI is
+Add a platform notification hook to the shared detached worker, triggered at a
+settled Pi turn with a final assistant message. The Termux implementation lives
+under `src/server/platform/termux/`. It must work while the HTTP server or UI is
 closed. Persist a small deduplicated outbox keyed by session and turn ID so
 reconnection does not produce duplicate notifications.
 
@@ -685,17 +1091,27 @@ normal user-controlled OS setting. Desktop web deployments disable this adapter.
 
 | Phase | Deliverable | Required evidence before moving on |
 | --- | --- | --- |
-| 1. Source and signed IPC | Suite sources/locks, tiny Termux patch, test APKs and a minimal BashKitten native controller | Matching certificate can initialize and run a command without manual Termux configuration; a differently signed test app is denied |
-| 2. Installation and packaging | Native store, certificate checks, keyring bootstrap, native `.deb`, APT indexing, Git/GitHub CLI and telemetry-off defaults | Fresh setup reaches the localhost UI; `git` and `gh` work; Pi/GitHub CLI opt-outs apply to terminal and background launches; interrupted setup resumes |
+| 0. Shared source and platform boundaries | One `src/web/`, shared `src/server/` with Pi controls in `rpc/`, thin Linux/Termux adapters and native APK source under `src/android/` | Same UI/RPC fixtures run on Linux and Termux; Linux starts without Android components; folder roots adapt correctly; source moves preserve sessions, credentials and rendering |
+| 1. Source and signed IPC | Suite sources/locks, upstream-based build recipes, tiny Termux patch, notices, test APKs and a minimal BashKitten native controller | Matching certificate can initialize and run a command without manual Termux configuration; a differently signed test app is denied; upstream versions and all build deviations are recorded |
+| 2. Installation and packaging | Native store, certificate checks, keyring bootstrap, native `.deb`, APT indexing, Git/GitHub CLI, short Pi environment context and telemetry-off defaults | Fresh setup reaches the localhost UI; `git` and `gh` work; correct global context loads without losing personal instructions; template refresh waits for idle and preserves sessions/queues; telemetry opt-outs apply to terminal and background launches; interrupted setup resumes |
 | 3. Runtime lifecycle | Supervisor, backend controls, Pi stop/kill and recovery | Closing APK/browser preserves a real turn; backend restart preserves workers; no duplicate server or prompt replay; deliberate stops stay stopped |
 | 4. Browser integration | Persistent WebView, picker/paste/download/open/OAuth behavior | Same chat and files work in APK and Chrome; uploads use the real Android picker; provider callback returns to native Pi |
 | 5. Desktop | Both X11 builds, matching companion, XFCE/LibreOffice, profiles/custom commands and dependency switching | Start/stop and variant migration work; selecting a ready profile never reinstalls; conflicting-package swaps show real progress and recover from failure; reopen/repeated selection creates no duplicate job; each GPU claim has rendered evidence |
-| 6. Notifications and updates | Worker notifications, signed catalog, APK/APT update orchestration and top package-progress block | One notification per turn; correct session opens; APK update paths work; package refresh/upgrade streams real progress, survives UI closure/backend restart and exposes errors/recovery |
-| 7. Release | Production signed artifacts, matching source, usable local signing-key backup and recovery instructions | Local signing succeeds without GitHub; complete install-to-update scenario, telemetry checks and source/signature checks pass before release catalog publication |
+| 6. Notifications and updates | Worker notifications, signed catalog, APK/APT/Pi npm update orchestration and top package-progress block | One notification per turn; correct session opens; APK update paths work; Pi updates are detected even with no APT changes; staged update/rollback preserves active workers; progress survives UI closure/backend restart and exposes per-source errors/recovery |
+| 6L. Linux host and packages | GTK/WebKitGTK wrapper, persistent profile, server attachment, native file/link actions and `arm64`/`amd64` server/desktop `.deb` builds | ARM64 tested on this machine and AMD64 on its native test host; login survives restart; uploads/paste work; local paths open externally; file panel is hidden only in the host; provider login works; closing preserves Pi turns; both architectures pass package install/upgrade/removal checks |
+| 7. Release | Production signed artifacts, exact source/license/notice artifacts, upstream version mapping, Linux/Termux APT publication, usable local signing-key backup and recovery instructions | Local signing succeeds without GitHub; same-upstream patch and next-upstream APK upgrades pass; Linux `arm64`/`amd64` and Termux `aarch64` install/upgrade from the final APT index; complete product, telemetry, source/license and signature checks pass before catalog promotion |
 
 Use Cuttlefish with Termux and Chrome/system WebView for installation, service,
-Pi RPC, picker, file, notification and update tests. Preserve existing native Pi
-fixture tests and add focused Android integration tests for the new boundaries.
+Pi RPC, picker, file, notification and update tests. Run the shared server and
+native Pi fixture tests on ordinary Linux as well, including working-folder
+selection, browser uploads/downloads, repository ZIPs and Pi update discovery.
+Check environment templates with the pinned Pi resource loader: the Termux block
+is present only on Termux, the Linux block only on Linux, personal/global/project
+instructions remain effective, and a relevant skill body can be read on demand
+without injecting all skill contents. Test the Linux host separately from the
+ordinary browser, including files with spaces/Unicode, external/new-window links,
+persistent cookies, image attachments and desktop integration on Wayland and X11.
+Add focused Android integration tests for the new boundaries.
 Use a disposable emulator snapshot for signing-migration tests rather than
 destroying the existing development profile.
 
@@ -712,6 +1128,8 @@ OAuth from a real provider account login in every test report.
 
 Keep APK catalog checks and explicit package maintenance separate from telemetry.
 The user's requested app-update checks and package-update controls are enabled
-in the Android product. Pi stays pinned and offline at startup; the telemetry-off
-settings above apply throughout the shipped Termux environment. The final release
+in the Android product, including npm discovery for the Pi runtime. Pi starts
+from the selected exact version with offline startup; successful explicit updates
+replace that pin only after validation. The telemetry-off settings above apply
+throughout the shipped environment on both platforms. The final release
 gate is the whole product flow, not merely a successful APK compilation.
