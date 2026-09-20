@@ -17,20 +17,16 @@ export async function sourceResult(source, operation) {
   const saved = await readJson(stateFile, {}); saved[source] = value; await writeJson(stateFile, saved);
   return value;
 }
-export async function runtimeManifests() {
-  return readJson(path.join(bundledRoot, 'runtime-manifests/index.json'), []);
-}
 export async function checkPi() {
   return sourceResult('pi', async () => {
     const runtime = selectedRuntime();
-    const { stdout } = await exec('npm', ['view', '@earendil-works/pi-coding-agent@latest', 'version', 'engines', 'dependencies', 'dist.integrity', '--json'], { timeout: 45000, maxBuffer: 1024 * 1024 });
+    const { stdout } = await exec('npm', ['view', '@earendil-works/pi-coding-agent@latest', 'version', 'engines', 'dist.integrity', '--json'], { timeout: 45000, maxBuffer: 1024 * 1024 });
     const latest = JSON.parse(stdout);
     if (!semver.valid(latest.version)) throw Error('npm returned an invalid Pi version');
-    const compatible = (await runtimeManifests()).filter(m => m.platforms.includes(process.platform) && semver.satisfies(process.version, m.node)).sort((a, b) => semver.rcompare(a.version, b.version))[0];
-    return { installed: runtime.version, latest: latest.version, compatible: compatible?.version || runtime.version,
-      updateAvailable: Boolean(compatible && semver.gt(compatible.version, runtime.version)),
-      upstreamAvailable: semver.gt(latest.version, runtime.version),
-      reason: !compatible || semver.gt(latest.version, compatible.version) ? 'A newer upstream release needs a tested BashKitten runtime manifest.' : null };
+    const compatible = !latest.engines?.node || semver.satisfies(process.version, latest.engines.node);
+    return { installed: runtime.version, latest: latest.version, compatible: compatible ? latest.version : runtime.version,
+      updateAvailable: compatible && semver.gt(latest.version, runtime.version), upstreamAvailable: semver.gt(latest.version, runtime.version),
+      reason: compatible ? null : `Pi ${latest.version} needs Node ${latest.engines.node}. Update system packages first.` };
   });
 }
 export async function updateStatus() {
@@ -76,57 +72,40 @@ export async function activateRuntime(job, next) {
   });
 }
 export async function installPi(job) {
-  const current = selectedRuntime();
-  const manifests = (await runtimeManifests()).filter(m => m.platforms.includes(process.platform) && semver.satisfies(process.version, m.node));
-  const manifest = manifests.sort((a, b) => semver.rcompare(a.version, b.version))[0];
-  if (!manifest || !semver.gt(manifest.version, current.version)) { await job.log('The selected Pi runtime is already the latest compatible release.\n'); return; }
-  const lockPath = path.join(bundledRoot, 'runtime-manifests', manifest.lock);
-  const lockBytes = await fs.readFile(lockPath);
-  if (digest(lockBytes) !== manifest.sha256) throw Error('The runtime lock does not match its tested manifest');
+  await job.phase('Checking Pi on npm');
+  const available = await checkPi();
+  if (available.error) throw Error(available.error);
+  if (available.reason && available.upstreamAvailable) throw Error(available.reason);
+  if (!available.updateAvailable) { await job.log(`Pi ${available.installed} is up to date on npm.\n`); return; }
   const parent = process.platform === 'android' ? path.join(process.env.PREFIX, 'var/lib/bashkitten/runtimes') : path.join(dataDir, 'runtimes');
   await privateDir(parent);
-  const root = path.join(parent, manifest.version + '-' + manifest.sha256.slice(0, 12));
-  await job.step('stage-pi', 'Downloading Pi and its pinned dependencies', async () => {
-    await privateDir(root);
-    const lock = JSON.parse(lockBytes); await writeJson(path.join(root, 'package.json'), { ...lock.packages[''], private: true, type: 'module' });
-    await fs.writeFile(path.join(root, 'package-lock.json'), lockBytes);
-    // npm verifies every locked tarball's integrity; no dependency lifecycle scripts run.
-    await job.exec('npm', ['ci', '--prefix', root, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']);
-    await selectPlatformPackages(root);
-    const check = `import {ModelRuntime,SessionManager} from ${JSON.stringify('file://' + path.join(root, 'node_modules/@earendil-works/pi-coding-agent/dist/index.js'))}; const r=await ModelRuntime.create({allowModelNetwork:false}); if(!r.getProviders().length||!SessionManager)process.exit(1);`;
+  const temporary = await fs.mkdtemp(path.join(parent, '.install-'));
+  let root;
+  try {
+    await job.phase(`Downloading Pi ${available.latest} and npm dependencies`);
+    await writeJson(path.join(temporary, 'package.json'), { name: 'bashkitten-pi-runtime', private: true, type: 'module',
+      dependencies: { '@earendil-works/pi-coding-agent': available.latest, '@earendil-works/pi-ai': available.latest } });
+    // npm records exact resolved versions and integrity in the new lock. The
+    // running installation stays untouched until the native API check passes.
+    await job.exec('npm', ['install', '--prefix', temporary, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--loglevel=http']);
+    await selectPlatformPackages(temporary);
+    await job.phase(`Checking Pi ${available.latest}`);
+    const check = `import {ModelRuntime,SessionManager} from ${JSON.stringify('file://' + path.join(temporary, 'node_modules/@earendil-works/pi-coding-agent/dist/index.js'))}; const r=await ModelRuntime.create({allowModelNetwork:false}); if(!r.getProviders().length||!SessionManager)process.exit(1);`;
     await job.exec(process.execPath, ['--input-type=module', '-e', check], { timeout: 60000 });
-    await writeJson(path.join(root, 'managed.json'), { owner: 'bashkitten', version: manifest.version, lockSha256: manifest.sha256 });
-  });
-  await job.step('activate-pi', 'Activating Pi', () => activateRuntime(job, { root, version: manifest.version }));
+    const hash = digest(await fs.readFile(path.join(temporary, 'package-lock.json')));
+    root = path.join(parent, available.latest + '-' + hash.slice(0, 12));
+    await writeJson(path.join(temporary, 'managed.json'), { owner: 'bashkitten', version: available.latest, lockSha256: hash });
+    try { await fs.rename(temporary, root); }
+    catch (error) { if (!['EEXIST', 'ENOTEMPTY'].includes(error.code)) throw error; }
+    await job.phase(`Activating Pi ${available.latest}`);
+    await activateRuntime(job, { root, version: available.latest });
+    await checkPi();
+    await job.log(`Pi ${available.latest} installed.\n`);
+  } finally { await fs.rm(temporary, { recursive: true, force: true }); }
 }
 export async function rollbackPi(job) {
   const previous = selectedRuntime().previous;
   if (!previous) throw Error('No previous managed runtime is available');
   await fs.access(path.join(previous.root, 'node_modules/@earendil-works/pi-coding-agent/package.json'));
   await activateRuntime(job, previous);
-}
-
-export async function pruneRuntimes(parent, keep, commands) {
-  for (const entry of await fs.readdir(parent, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; })) {
-    if (!entry.isDirectory() || !/^[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]{12}$/.test(entry.name)) continue;
-    const root = path.join(parent, entry.name), marker = await readJson(path.join(root, 'managed.json'), null);
-    if (marker?.owner !== 'bashkitten' || entry.name !== marker.version + '-' + marker.lockSha256?.slice(0, 12)) continue;
-    if (Date.now() - (await fs.stat(path.join(root, 'managed.json'))).mtimeMs < 7 * 86400000) continue;
-    if (keep.has(root) || commands.some(command => command.some(argument => argument.startsWith(root + '/')))) continue;
-    await fs.rm(root, { recursive: true });
-  }
-}
-export async function collectRuntimes() {
-  // Only called before starting services, with no surviving web/worker process.
-  // Terminal Pi processes still keep their exact runtime through /proc ownership.
-  const current = selectedRuntime(), bundled = await readJson(path.join(bundledRoot, 'runtime-default.json'), null);
-  const keep = new Set([current.root, current.previous?.root, bundled?.root].filter(Boolean));
-  const commands = [];
-  for (const pid of (await fs.readdir('/proc')).filter(value => /^[0-9]+$/.test(value))) {
-    try { commands.push((await fs.readFile('/proc/' + pid + '/cmdline', 'utf8')).split('\0')); }
-    catch (error) { if (!['ENOENT', 'ESRCH', 'EACCES', 'EPERM'].includes(error.code)) throw error; }
-  }
-  if (commands.some(args => /^(apt|apt-get|dpkg|npm|pkg)$/.test(path.basename(args[0] || '')))) return;
-  const parent = process.platform === 'android' ? path.join(process.env.PREFIX, 'var/lib/bashkitten/runtimes') : path.join(dataDir, 'runtimes');
-  await pruneRuntimes(parent, keep, commands);
 }

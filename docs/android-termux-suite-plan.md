@@ -342,13 +342,9 @@ the user may briefly see a setup progress window, but never has to enter termina
 commands. This also gives first initialization a proper Android activity
 lifecycle. A command service alone cannot assume `$PREFIX` already exists.
 
-Termux:API has one small compatibility patch: the exact BashKitten session URI
-in a notification action becomes a direct Android activity PendingIntent.
-Android 17 device testing confirmed that the upstream shell trampoline cannot
-open the app in the background, even through TermuxAm. Other API actions remain
-unchanged; no additional permission or Pi change is required. X11 needs signing/build adjustments
-and its existing variant selection; no GPU or session-management fork is planned.
-Keep any additional upstream compatibility fixes separately justified and tested.
+Termux:API and the other add-ons retain upstream application behavior. Turn
+notifications use the normal Termux:API text notification interface, without a
+custom notification-link patch. Build/signing adjustments are recorded separately.
 
 ## 5. Installation and actual update behavior
 
@@ -575,7 +571,7 @@ Retain data at the current `~/.local/share/bashkitten-pi` location and credentia
 in Pi's native location. Stage immutable runtime versions in package-managed
 payloads and retain active runtime copies under `$PREFIX/var/lib/bashkitten`.
 Switch the active launcher only after verification; old workers keep their
-runtime until exit, then garbage collection can remove unused versions. Account
+runtime until exit, and are retained after exit. Account
 for dpkg removing old package files: merely naming package directories with
 versions does not preserve them across upgrades. Runtime/Node upgrades requiring
 process replacement wait for an idle boundary, with backups before migrations.
@@ -606,22 +602,16 @@ display Pi as up to date or prevent APT/APK checks. Read-only checks never chang
 the installed runtime. Keep Pi's own startup catalog traffic and telemetry off;
 these are explicit BashKitten package checks, also available on Linux without APT.
 
-An **Update Pi** action, also included in **Update packages** when a compatible
-release is available, stages an exact dependency graph in a new managed runtime
-directory outside dpkg-owned payloads. Publish tested runtime manifests with
-exact versions, lockfile/integrity data and adapter/Node/platform compatibility.
-A newer upstream release without a compatible manifest remains visibly available
-with an explanation; it must not be silently installed into a running adapter.
-Check Android/Bionic dependencies for Termux and host-native dependencies for Linux.
+**Update packages** checks APT, installed global npm packages, and Pi's current
+npm release. Show package names with installed/available versions. Node/npm files
+owned by APT are updated through APT, not overwritten by a global npm install.
 
-Use one runtime resolver for Pi RPC, ModelRuntime login, `pi-ai` and the launcher,
-so an update cannot leave those components on incompatible versions. Validate
-the staged runtime, then atomically select it at an idle boundary, including any
-active provider login. Preserve old workers and their dependencies until exit;
-retain the previous runtime for rollback. APT updates must reconcile their bundled
-runtime with the selected manifest instead of silently overwriting or downgrading
-it. Report which version is active and which is waiting for activation. Never
-run a blind `npm update -g` or modify dpkg-owned `node_modules` in place.
+Pi updates use npm directly; no separately published compatibility manifest is
+required. Check the upstream Node requirement, install the exact discovered Pi
+version and matching pi-ai into a separate runtime, retain npm's dependency lock,
+and validate the native API before selecting it. Active turns and provider logins
+finish before activation. A failed installation leaves the current Pi selected.
+The launcher, RPC and service login use the same selected native runtime.
 
 ### Package update jobs and progress
 
@@ -655,64 +645,37 @@ need user input in the UI. Cancellation must not force-kill dpkg while it is
 unpacking/configuring; finish that transaction safely. Record interrupted jobs
 accurately and expose package-manager recovery through the same UI.
 
-## 7. Native store and service controls
+## 7. Native menu, app store and update window
 
-A compact hamburger near the app title opens the store/control screen. Use
-native Compose for this screen, matching the app's theme. It must work without
-the localhost server. It includes required, desktop and optional sections.
+The compact hamburger beside BashKitten opens a menu. **Apps** is one menu item
+and opens a separate, professionally laid-out store screen. It does not toggle a
+single long page containing store, packages, services and chat controls.
 
-Each application row has an icon, name, installed/available version and one
-primary state: Install, Installing, Installed (disabled), Update, or Retry.
-Provide release notes and source links as secondary actions. Termux and
-Termux:API are required. X11 has the variant selector. Boot, Widget, Styling,
-Float and Tasker can be optional signed builds; none installs just because it
-exists in the catalog. BashKitten has its own update row.
+The store has real application icons, titles, short descriptions, installed and
+available versions, and Install / Installing / Installed / Update / Retry states.
+Use required, desktop and optional sections, pull to refresh and a refresh button.
+Release notes and source/license links belong in each app's details. X11 has the
+standalone/shared-UID selector. The current selected installed graphics profile
+gets one tick, as specified in section 9.
 
-Place a compact **Termux packages** block near the top of this screen, directly
-alongside the app-update area and above the service controls. This is the package
-environment the user referred to as the VM; the UI calls it Termux packages.
-Its primary button is **Update packages**, with a secondary **Check updates**
-action that refreshes both APT and Pi npm metadata without installing anything.
-Keep an APT-only **Refresh lists** action in the expanded details. Display the
-last successful check/update and the available update count when known.
+A compact **Package updates** card near the store's top opens a separate update
+screen. The menu also links directly to it. Show APT and npm package lists,
+including the Pi runtime, and Check updates / Update all actions. Updating shows
+a progress window with the current phase, actual package names, downloads,
+unpacking/configuration and npm installation output. Reopening follows the same
+job. Unknown/disconnected status must never label an installed Pi as missing.
 
-Include a **Pi (npm)** row in this same block, showing the actual installed
-version, available release, compatibility/activation status and **Update Pi**
-when applicable. Node.js remains an APT-managed dependency on Termux; distinguish
-its updates from the Pi npm package. APT being up to date must not hide a newer
-Pi release. The shared web settings can show Pi status/update controls on Linux;
-the native APK store and Termux package controls remain platform capabilities.
+The menu provides compact server start/stop status and links to Desktop and Pi
+session controls. Desktop controls retain remembered commands, graphics choices
+and play/stop; Pi controls retain per-session stop/kill and stop all.
 
-Clicking Update packages expands that block in place: phase label, progress bar
-or spinner, current package and a short scrolling list of actual downloads,
-unpacking and configuration activity, followed by Pi download/validation/activation
-progress when applicable. Include expandable full output, final
-success/error summary and Retry when appropriate. Reopening it reconnects to the
-same job. Keep the row compact when idle; do not require a terminal window or put
-package-manager output in the chat transcript.
+Back from every native screen returns to the existing loaded chat. Keep the
+WebView attached and preserve its document, selected session, unsent draft and
+cookies. Opening or closing these screens does not stop services or reload chat.
 
-Below the app rows, show:
-
-| Control | Behavior |
-| --- | --- |
-| Backend: Running/Stopped/Starting/Error | Play starts it; stop shuts down the HTTP server; restart replaces the HTTP server without terminating existing Pi workers |
-| Pi instances: count and per-session state | Open session, stop current turn, stop instance, or force-kill an unresponsive instance; also Stop all |
-| Desktop: Stopped/Starting/Running/Error | Start/stop the managed X11 and XFCE session; show persisted startup and graphics choices |
-| X11 viewer | Open or close the Android viewer separately from terminating the desktop session |
-| App updates | Check, download, apply eligible APK updates, or show Android's pending confirmation |
-| Termux packages (top block) | Check APT and Pi npm releases; update packages together or Pi separately; show live package-manager and Pi runtime progress |
-
-Keep routine controls in a few rows with compact play/stop icons and accessible
-labels. Put logs, resolved commands and diagnostics in expandable details.
-
-Both X11 APK variants use `com.termux.x11`. They cannot be installed together.
-Switching shared-UID membership requires manually removing X11 in Android settings
-before installing the other variant. BashKitten never uninstalls applications:
-do not request uninstall permission or provide an uninstall action. Migration
-tests remove X11 manually on the disposable emulator, outside BashKitten.
-Explain the transition and preserve/export settings where supported. Shared UID is offered
-for upstream's foreground-scheduling benefit, with standalone as the compatibility
-choice; do not promise a fixed speedup on all phones.
+BashKitten never uninstalls applications. Changing X11 shared-UID membership
+requires manual removal through Android settings. Emulator migration tests do
+that outside BashKitten on the disposable test device.
 
 ## 8. Supervisor, recovery and Pi lifecycle
 
@@ -1080,15 +1043,14 @@ under `src/server/platform/termux/`. It must work while the HTTP server or UI is
 closed. Persist a small deduplicated outbox keyed by session and turn ID so
 reconnection does not produce duplicate notifications.
 
-The notification action is `bashkitten://session/UUID`; the suite API patch
-opens this exact URI directly in `com.bashkitten.MainActivity`.
+Notifications use unmodified Termux:API. There is no custom notification action
+or API patch; completion title and preview are delivered through its normal CLI.
 
 When enabled on Termux, deliver through the installed `termux-notification` CLI
 and Termux:API. Use the chat name as title and a configurable, Unicode-safe text
 preview, initially capped around 240 characters. This is a product limit; Android
 does not provide one universal visible-character limit across notification
-layouts. Include a notification action opening the corresponding BashKitten
-session. Pass text as data, never interpolate model output into a shell command.
+layouts. Pass text as data, never interpolate model output into a shell command.
 
 Settings: off/on, optionally only when the relevant chat is not visible, and
 preview enabled/hidden on the lock screen. Foreground suppression uses an expiring
@@ -1108,7 +1070,7 @@ normal user-controlled OS setting. Desktop web deployments disable this adapter.
 | 3. Runtime lifecycle | Supervisor, backend controls, Pi stop/kill and recovery | Closing APK/browser preserves a real turn; backend restart preserves workers; no duplicate server or prompt replay; deliberate stops stay stopped |
 | 4. Browser integration | Persistent WebView, picker/paste/download/open/OAuth behavior | Same chat and files work in APK and Chrome; uploads use the real Android picker; provider callback returns to native Pi |
 | 5. Desktop | Both X11 builds, matching companion, XFCE/LibreOffice, profiles/custom commands and dependency switching | Start/stop and variant migration work; selecting a ready profile never reinstalls; conflicting-package swaps show real progress and recover from failure; reopen/repeated selection creates no duplicate job; each GPU claim has rendered evidence |
-| 6. Notifications and updates | Worker notifications, signed catalog, APK/APT/Pi npm update orchestration and top package-progress block | One notification per turn; correct session opens; APK update paths work; Pi updates are detected even with no APT changes; staged update/rollback preserves active workers; progress survives UI closure/backend restart and exposes per-source errors/recovery |
+| 6. Notifications and updates | Worker notifications, signed catalog, APK/APT/Pi npm update orchestration and top package-progress block | One notification per turn; correct session opens; APK update paths work; Pi and installed npm updates are detected even with no APT changes; staged Pi updates preserve active workers; progress survives UI closure/backend restart and exposes per-source errors/recovery |
 | 6L. Linux host and packages | GTK/WebKitGTK wrapper, persistent profile, server attachment, native file/link actions and `arm64`/`amd64` server/desktop `.deb` builds | ARM64 tested on this machine and AMD64 on its native test host; login survives restart; uploads/paste work; local paths open externally; file panel is hidden only in the host; provider login works; closing preserves Pi turns; both architectures pass package install/upgrade/removal checks |
 | 7. Release | Production signed artifacts, exact source/license/notice artifacts, upstream version mapping, Linux/Termux APT publication, usable local signing-key backup and recovery instructions | Local signing succeeds without GitHub; same-upstream patch and next-upstream APK upgrades pass; Linux `arm64`/`amd64` and Termux `aarch64` install/upgrade from the final APT index; complete product, telemetry, source/license and signature checks pass before catalog promotion |
 

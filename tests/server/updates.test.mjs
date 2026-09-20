@@ -90,3 +90,27 @@ test('Cancellation finishes the current transaction and resumes at the next step
   await jobs.start('update', {}, true); while (jobs.busy) await new Promise(r => setTimeout(r, 10));
   assert.equal(transactions, 1); assert.equal(next, 1); assert.equal((await jobs.status()).status, 'complete');
 });
+
+test('Update checks report registry Pi releases and global npm updates without a custom release manifest', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-npm-check-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const bin = path.join(directory, 'bin'); await fs.mkdir(bin);
+  await fs.writeFile(path.join(bin, 'npm'), `#!/bin/sh
+case "$1" in
+ view) printf '%s' '{"version":"9.0.0","engines":{"node":">=22"}}';;
+ outdated) printf '%s' '{"example-cli":{"current":"1.0.0","latest":"1.1.0"}}'; exit 1;;
+ *) exit 2;;
+esac
+`, { mode: 0o700 });
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const script = `
+    import assert from 'node:assert/strict';
+    import {checkPi,updateStatus} from './src/server/updates/runtime.mjs';
+    import {checkNpm} from './src/server/updates/npm.mjs';
+    const pi=await checkPi(); assert.equal(pi.updateAvailable,true); assert.equal(pi.latest,'9.0.0'); assert.equal(pi.reason,null);
+    const npm=await checkNpm(); assert.equal(npm.available,1); assert.deepEqual(npm.packages,[{name:'example-cli',current:'1.0.0',latest:'1.1.0'}]);
+    const status=await updateStatus(); assert.equal(status.sources.pi.latest,'9.0.0'); assert.equal(status.sources.npm.available,1);
+  `;
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], { cwd: path.resolve(import.meta.dirname, '../..'), env: { ...process.env, PATH: bin + ':' + process.env.PATH, BASHKITTEN_DATA_DIR: directory }, timeout: 15000 });
+});

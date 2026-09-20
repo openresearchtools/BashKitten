@@ -22,8 +22,7 @@ test('Termux notifications deduplicate, retain failed delivery and respect previ
   assert.equal(calls[0].command, 'termux-notification');
   assert.equal(calls[0].args[calls[0].args.indexOf('--title') + 1], meta.title);
   assert.equal([...calls[0].args[calls[0].args.indexOf('--content') + 1]].length, 240);
-  assert.equal(calls[0].args.at(-1), 'bashkitten://session/' + meta.id);
-  assert.ok(!calls[0].args.at(-1).includes(meta.title));
+  assert.ok(!calls[0].args.includes('--action'), 'Unmodified Termux API needs no custom notification action');
   const client = randomUUID(); await visibleSession(client, meta.id, true);
   entries[0].id = 'visible'; await notifyTurn(meta, entries, options); assert.equal(calls.length, 1);
   await visibleSession(client, meta.id, false);

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sourceResult, checkPi, installPi, atIdle } from '../../updates/runtime.mjs';
+import { checkNpm, updateNpm } from '../../updates/npm.mjs';
 import { platform } from '../index.mjs';
 
 const exec = promisify(execFile);
@@ -17,12 +18,14 @@ export async function refreshApt(job) {
   return sourceResult('apt', async () => {
     await job.phase('Refreshing APT repositories'); await apt(job, ['update']);
     const output = await apt(job, ['-s', 'upgrade']);
-    return { available: (output.match(/^Inst /gm) || []).length, summary: output.slice(-16000) };
+    const packages = [...output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)].map(([, name, current, latest]) => ({ name, current: current || 'Not installed', latest }));
+    return { available: packages.length, packages, summary: output.slice(-16000) };
   });
 }
 export async function checkPackages(job) {
   const results = [];
   if (platform === 'termux') results.push(await refreshApt(job));
+  await job.phase('Checking installed npm packages'); results.push(await checkNpm());
   await job.phase('Checking Pi on npm'); results.push(await checkPi());
   const errors = results.filter(result => result.error);
   if (errors.length) throw Error(errors.map(result => result.error).join('; '));
@@ -32,8 +35,6 @@ export async function updatePackages(job) {
   await job.step('refresh-apt', 'Refreshing APT repositories', async () => {
     const result = await refreshApt(job); if (result.error) throw Error(result.error);
   });
-  await job.phase('Checking Pi on npm');
-  const piCheck = await checkPi();
   await job.step('apt-upgrade', 'Updating Termux packages', () => atIdle(job, async () => {
     const simulation = await apt(job, ['-s', 'full-upgrade']);
     if (/^Remv (bashkitten|nodejs-lts|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(simulation)) throw Error('APT would remove a required suite package; inspect the transaction before proceeding');
@@ -41,8 +42,10 @@ export async function updatePackages(job) {
     await apt(job, ['--download-only', '-y', 'full-upgrade']);
     await apt(job, ['-y', 'full-upgrade']);
   }, { desktop: true }));
-  if (piCheck.error) throw Error('APT completed. Pi update check failed: ' + piCheck.error);
-  await installPi(job);
+  const errors = [];
+  for (const operation of [updateNpm, installPi]) { try { await operation(job); } catch (error) { errors.push(error.message); } }
+  if (errors.length) throw Error('APT completed. npm: ' + errors.join('; '));
+  await refreshApt(job);
 }
 export async function recoverPackages(job) {
   requireTermux();

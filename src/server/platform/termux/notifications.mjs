@@ -59,8 +59,7 @@ export async function deliverNotifications(options = {}) {
       if (current?.state !== 'pending') continue;
       const content = settings.preview !== false ? current.text : 'Turn finished';
       const result = await (options.execute || execute)('termux-notification', ['--id', 'bashkitten-' + name.slice(0, 24), '--alert-once', '--group', 'BashKitten',
-        '--title', current.title || 'BashKitten', '--content', content, '--action',
-        `bashkitten://session/${current.id}`], { timeout: 10000, maxBuffer: 65536 });
+        '--title', current.title || 'BashKitten', '--content', content], { timeout: 10000, maxBuffer: 65536 });
       if (result?.stdout?.trim()) throw Object.assign(Error('Termux:API returned an error'), { code: 'API_ERROR' });
       await writeJson(file, { ...current, state: 'sent', sentAt: Date.now(), error: undefined });
     } catch (error) { await writeJson(file, { ...value, error: error.code || 'Termux:API could not post the notification' }); }

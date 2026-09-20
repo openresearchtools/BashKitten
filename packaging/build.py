@@ -17,8 +17,6 @@ termux = args.target == 'termux'
 arch = 'aarch64' if termux else {'aarch64': 'arm64', 'x86_64': 'amd64'}[platform.machine()]
 prefix = '/data/data/com.termux/files/usr' if termux else '/usr'
 package = json.loads((ROOT / 'package.json').read_text())
-for manifest in json.loads((ROOT / 'runtime-manifests/index.json').read_text()):
-    assert hashlib.sha256((ROOT / 'runtime-manifests' / manifest['lock']).read_bytes()).hexdigest() == manifest['sha256'], 'Runtime manifest integrity must match its exact lock: ' + manifest['version']
 version = package['version']
 lock_hash = hashlib.sha256((ROOT / 'package-lock.json').read_bytes()).hexdigest()
 pi_version = package['dependencies']['@earendil-works/pi-coding-agent']
@@ -28,7 +26,7 @@ if stage.exists():
 stage.mkdir(parents=True)
 app = stage / prefix.lstrip('/') / 'lib/bashkitten'
 app.mkdir(parents=True)
-for folder in ['src/server', 'src/web', 'runtime-manifests', 'reference']:
+for folder in ['src/server', 'src/web', 'reference']:
     if (ROOT / folder).exists():
         shutil.copytree(ROOT / folder, app / folder, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
 for name in ['package.json', 'package-lock.json', 'LICENSE', 'PI_UPSTREAM.md']:

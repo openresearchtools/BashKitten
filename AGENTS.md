@@ -32,8 +32,10 @@ except for the documented Termux integration/build patches.
   callback. Present all required steps in the browser, without terminal sign-in.
 - Never modify Pi, port its agent logic, introduce a custom provider credential
   format, or restore the old llama.cpp supervisor or goal loop.
-- Keep the exact Pi release and npm dependencies pinned. Inspect the pinned
-  upstream APIs before changing how the adapter interacts with Pi.
+- Ship an exact Pi release and dependency lock. User-requested npm updates
+  resolve an exact new runtime from the registry, validate its native API and
+  retain its lock before activation. Do not require a custom release manifest.
+  Inspect upstream APIs before changing how the adapter interacts with Pi.
 
 ## UI and filesystem
 

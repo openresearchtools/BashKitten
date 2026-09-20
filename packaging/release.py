@@ -11,7 +11,7 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
-SERVER_INPUTS = ['src/server', 'src/web', 'src/linux', 'packaging/build.py', 'package.json', 'package-lock.json', 'runtime-manifests', 'reference', 'LICENSE', 'PI_UPSTREAM.md']
+SERVER_INPUTS = ['src/server', 'src/web', 'src/linux', 'packaging/build.py', 'package.json', 'package-lock.json', 'reference', 'LICENSE', 'PI_UPSTREAM.md']
 
 def sha(file):
     with file.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()

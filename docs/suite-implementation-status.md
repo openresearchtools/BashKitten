@@ -131,12 +131,11 @@ contents stay unmodified. The selected Termux payload's native ELF passes
 aarch64 and 4 KB/16 KB static alignment checks and all 17 native Termux tests.
 The Termux package shrank from about 122 MB to 23 MB.
 
-The complete installed 474-package Termux environment initially had 28 failing
-ELF files in eight older upstream packages. Official recipes were rebuilt with
-explicit 16 KB linker alignment in **35493655858** and installed successfully.
-The repeated audit now passes **all 3,306 ELF files**, with zero failures. Exact
-source/patch/build inputs accompany these eight small package overrides in the
-`package-alignment-20260920` release. Runtime checks still use a 4 KB device.
+The installed environment audit found 28 unaligned ELF files in eight upstream
+packages. An experimental rebuild passed static alignment checks, but this package
+fork was removed from the product scope. Its release is marked withdrawn/prerelease
+and is not indexed in APT. Ordinary packages continue from upstream Termux. Full
+16 KB desktop compatibility is therefore not established by the current 4 KB test.
 
 A system-call trace of Pi service discovery, RPC startup and idle operation
 showed no IP network connections; offline/telemetry settings were effective.
@@ -145,7 +144,8 @@ The separate requested store/package checks remain enabled.
 The daily signed catalog renewal workflow is implemented. It renews only explicitly
 selected release manifests pinned by SHA-256; no production channel is selected
 yet. APK replacement pause/recovery, X11 companion pairing, named custom graphics
-profiles/dependencies, and conservative unused-runtime cleanup are implemented.
+profiles/dependencies, are implemented. The custom Pi release-manifest gate and automatic runtime cleanup
+have been removed; package updates use npm registry releases.
 Cleanup preserves active, rollback, bundled, terminal-used, unowned and symlinked
 runtimes; its regression passes, with a seven-day grace period.
 
