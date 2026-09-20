@@ -50,7 +50,15 @@ object TermuxBridge {
         context.startForegroundService(intent)
     }
     fun bootstrapStatus(context: Context, callback: (Result<JSONObject>) -> Unit) {
-        val script = "dir=\"\$HOME/.local/share/bashkitten-pi/bootstrap\"; state=\$(cat \"\$dir/status.json\" 2>/dev/null || printf '{}'); log=\$(tail -c 24000 \"\$dir/output.log\" 2>/dev/null | base64 | tr -d '\\n'); printf '{\"bootstrap\":%s,\"logBase64\":\"%s\"}\\n' \"\$state\" \"\$log\""
+        val script = """
+            dir="${'$'}HOME/.local/share/bashkitten-pi/bootstrap"
+            state=${'$'}(cat "${'$'}dir/status.json" 2>/dev/null || printf '{}')
+            if [ -f "${'$'}dir/lock" ] && flock -n "${'$'}dir/lock" true; then
+                case "${'$'}state" in *'"status":"running"'*) state='{"status":"interrupted","phase":"Setup interrupted. Resume to continue."}';; esac
+            fi
+            log=${'$'}(tail -c 24000 "${'$'}dir/output.log" 2>/dev/null | base64 | tr -d '\n')
+            printf '{"bootstrap":%s,"logBase64":"%s"}\n' "${'$'}state" "${'$'}log"
+        """.trimIndent()
         execute(context, "$prefix/bin/bash", arrayOf("-c", script), null, callback = callback)
     }
 

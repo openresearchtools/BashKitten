@@ -196,9 +196,10 @@ class MainActivity : ComponentActivity() {
             }.onFailure { error ->
                 if (managerAttempts > 0) managerAttempts--
                 if (managerAttempts == 0 && !setupActive) { screen = "apps"; connectExpanded = true; notice = error.message.orEmpty() }
-                if (setupActive) TermuxBridge.bootstrapStatus(this) { result -> result.onSuccess {
+                TermuxBridge.bootstrapStatus(this) { result -> result.onSuccess {
                     bootstrap = it
-                    if (it.optJSONObject("bootstrap")?.optString("status") == "failed") setupActive = false
+                    setupActive = it.optJSONObject("bootstrap")?.optString("status") == "running"
+                    if (setupActive) { notice = ""; packagesExpanded = true; followWork() }
                 } }
             }
         }
