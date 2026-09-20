@@ -659,6 +659,22 @@
     let nextSessionOffset = null;
     let loadingSessions = null;
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
+    const nativeHost = window.bashkittenHost || null;
+    const nativeLinux = nativeHost?.platform === 'linux';
+    if (nativeLinux) {
+      $('#filesToggle').textContent = '↗';
+      $('#filesToggle').title = 'Open project folder';
+      $('#filesToggle').setAttribute('aria-label', 'Open project folder');
+      document.addEventListener('click', event => {
+        const link = event.target.closest('a');
+        if (!link) return;
+        const url = new URL(link.href, location.href);
+        if ((url.origin === location.origin && /^\/api\/(files\/content|sessions\/[^/]+\/attachments\/)/.test(url.pathname)) || /^data:image\//.test(link.href)) {
+          event.preventDefault();
+          nativeHost.call('open-file', {url:link.href}).catch(error => { $('#composerHint').textContent = error.message; });
+        }
+      }, true);
+    }
 
     async function api(url, options = {}) {
       options.headers = options.headers || {};
@@ -781,9 +797,9 @@
           save.className = 'image-download';
           save.href = download;
           save.download = block.name || 'image';
-          save.title = `Download ${block.name || 'image'}`;
+          save.title = `${nativeLinux ? 'Open' : 'Download'} ${block.name || 'image'}`;
           save.setAttribute('aria-label', save.title);
-          save.textContent = '↓';
+          save.textContent = nativeLinux ? '↗' : '↓';
           wrapper.append(image, save);
           holder.append(wrapper);
         } else {
@@ -800,7 +816,7 @@
           name.textContent = block.name || 'attachment';
           const icon = document.createElement('span');
           icon.className = 'sent-file-download';
-          icon.textContent = '↓';
+          icon.textContent = nativeLinux ? '↗' : '↓';
           save.append(kind, name, icon);
           holder.append(save);
         }
@@ -1462,7 +1478,7 @@
         text.textContent = item.content || (item.attachments?.length ? `${item.attachments.length} attachment(s)` : '(empty message)');
         text.title = item.content || '';
         row.append(kind, text);
-        if (item.kind !== 'steer') {
+        if (item.kind !== 'steer' || item.recovered) {
           const steer = document.createElement('button');
           steer.type = 'button';
           steer.className = 'queue-steer';
@@ -2156,6 +2172,10 @@
     }
 
     async function openFolderPicker(title, path, onSelect) {
+      if (nativeLinux) {
+        try { const selected = await nativeHost.call('choose-folder', {title, path}); if (selected) await onSelect(selected.path); return; }
+        catch (error) { $('#composerHint').textContent = error.message; }
+      }
       folderSelection = onSelect;
       folderView = {path: '', parent: null};
       $('#newFolderName').value = '';
@@ -2489,6 +2509,10 @@
       if(!result.entries.length)target.textContent='Empty folder';
     }
     async function openFiles(root) {
+      if (nativeLinux) {
+        try { await nativeHost.call('open-file', {folder:root}); } catch (error) { $('#composerHint').textContent = error.message; }
+        return;
+      }
       if(!root)return;
       fileRoot=root;const generation=++fileGeneration;
       $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');

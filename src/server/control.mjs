@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, workerRequest, socketPath, allMeta } from './common.mjs';
 import { platform } from './platform/index.mjs';
+import { nativeFile } from './platform/linux/files.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
 const stateFile = path.join(dataDir, 'control.json');
@@ -113,6 +114,9 @@ async function serve() {
     } else if (command === 'pi-stop' || command === 'pi-kill') {
       const ids = value?.id ? [value.id] : (await allMeta()).map(meta => meta.id);
       for (const id of ids) await stopPi(id, command === 'pi-kill');
+    } else if (command === 'native-file') {
+      if (platform !== 'linux') throw Error('Native file opening is only available on Linux');
+      return nativeFile(value);
     } else if (command === 'project-root') {
       if (platform !== 'linux') throw Error('Additional roots are only supported on Linux');
       const root = await fs.realpath(value.path);
