@@ -41,10 +41,10 @@ if (!project.hasProperty('android-lint')) {
 apply from: 'benchmark.gradle'
 
 def isAppBundle = gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") }
+def publisherKeystore = System.getenv('WILDBUZZARD_PUBLISHER_KEYSTORE')
+def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
 
 android {
-    def publisherKeystore = System.getenv('WILDBUZZARD_PUBLISHER_KEYSTORE')
-    def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
     def ciDebugKeystore = System.getenv('WILDBUZZARD_DEBUG_KEYSTORE')
     if (ciDebugKeystore) {
         signingConfigs.debug {
@@ -220,6 +220,9 @@ android {
 
 
     sourceSets {
+        if (publisherSigning) {
+            debug.java.setSrcDirs(['src/release/java'])
+        }
         androidTest {
             resources.srcDirs += ['src/androidTest/resources']
             assets.srcDirs += files("$projectDir/schemas".toString())
@@ -656,7 +659,9 @@ dependencies {
     ksp libs.androidx.room.compiler
 
     debugImplementation libs.androidx.compose.ui.tooling
-    debugImplementation libs.leakcanary
+    if (!publisherSigning) {
+        debugImplementation libs.leakcanary
+    }
 
     // Exclude Mockito to prevent classpath conflicts with MockK in tests.
     testImplementation (project(':components:support-test')) {
