@@ -44,7 +44,8 @@ class LoginFlowTest {
             }
             fun js(script: String, helper: Boolean = false): String {
                 val done = CountDownLatch(1); var result = ""
-                instrumentation.runOnMainSync { view(helper)!!.evaluateJavascript(script) { result = it; done.countDown() } }
+                val web = view(helper)!!
+                instrumentation.runOnMainSync { web.evaluateJavascript(script) { result = it; done.countDown() } }
                 assertTrue(done.await(10, TimeUnit.SECONDS)); return result
             }
             fun until(script: String, helper: Boolean = false) {
@@ -58,7 +59,8 @@ class LoginFlowTest {
                 until("document.querySelector('$selector')?.getBoundingClientRect().height > 0", helper)
                 val xy = JSONArray(js("(()=>{const r=document.querySelector('$selector').getBoundingClientRect();return [(r.x+r.width/2)*devicePixelRatio,(r.y+r.height/2)*devicePixelRatio]})()", helper))
                 val location = IntArray(2)
-                instrumentation.runOnMainSync { view(helper)!!.getLocationOnScreen(location) }
+                val web = view(helper)!!
+                instrumentation.runOnMainSync { web.getLocationOnScreen(location) }
                 device.click(location[0]+xy.getDouble(0).toInt(), location[1]+xy.getDouble(1).toInt())
             }
             until("document.querySelector('#app')?.classList.contains('hidden') === false")
