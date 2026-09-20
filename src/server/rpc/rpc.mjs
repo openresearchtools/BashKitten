@@ -6,6 +6,16 @@ import { randomUUID } from 'node:crypto';
 
 export const piCli = path.join(path.dirname(fileURLToPath(import.meta.resolve('@earendil-works/pi-coding-agent'))), 'cli.js');
 
+export function displayMessage(meta, message) {
+  if (message.role !== 'user') return message;
+  const text = typeof message.content === 'string' ? message.content : (message.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+  const upload = (meta.messages || []).find(m => m.wire === text);
+  return upload ? { ...message, content: [...upload.attachments, { type: 'text', text: upload.text }] } : message;
+}
+export function queueItem(item) {
+  return { id: item.id, content: item.text, attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken), recovered: Boolean(item.recovered) };
+}
+
 /** Strict LF framing: a JSON string may contain U+2028/U+2029. */
 export class JsonLines {
   buffer = '';

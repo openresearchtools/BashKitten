@@ -6,7 +6,7 @@ import { openSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { dataDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, workerRequest, socketPath, allMeta } from './common.mjs';
+import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, workerRequest, socketPath, allMeta } from './common.mjs';
 import { platform } from './platform/index.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -86,7 +86,7 @@ async function serve() {
   async function status() {
     const info = await web();
     const sessions = await Promise.all((await allMeta()).map(async meta => {
-      const current = await workerRequest(meta.id, '/status').catch(() => null);
+      const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
     return { version: 1, platform, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
@@ -94,9 +94,10 @@ async function serve() {
   async function stopPi(id, force) {
     const meta = (await allMeta()).find(item => item.id === id);
     if (!meta) throw Error('Session not found');
+    await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
     // Ask the owner to checkpoint drafts and shut down its native Pi child.
     try { await socketRequest(socketPath(id), '/shutdown', {}, force ? 1000 : 10000); return; }
-    catch (error) { if (!force && await fs.stat(socketPath(id)).catch(() => null)) throw error; }
+    catch (error) { if (!force && !['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
     if (force) {
       const pid = Number(await fs.readFile(socketPath(id) + '.lock', 'utf8').catch(() => '0'));
       const workerScript = fileURLToPath(new URL('./rpc/worker.mjs', import.meta.url));

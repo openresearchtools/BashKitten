@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
-import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, existingDirectory, safeName, withinRoot } from '../common.mjs';
+import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
+import { displayMessage, queueItem } from '../rpc/rpc.mjs';
+import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
@@ -32,7 +34,12 @@ const portOverride = process.argv.find(arg => arg.startsWith('--port='))?.slice(
 if (portOverride) config.web_port = Number(portOverride);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function running(id) { try { return await workerRequest(id, '/status'); } catch { return null; } }
-async function ensureWorker(id) {
+async function ensureWorker(id, explicit = false) {
+  const lifecycle = path.join(sessionDir(id), 'lifecycle.json');
+  if ((await readJson(lifecycle, {})).stopped) {
+    if (!explicit) throw Error('Pi instance is stopped. Press Start Pi to resume.');
+    await writeJson(lifecycle, { stopped: false });
+  }
   if (starts.has(id)) return starts.get(id);
   const starting = (async () => {
     if (await running(id)) return;
@@ -52,12 +59,12 @@ async function ensureWorker(id) {
   starts.set(id, starting);
   try { return await starting; } finally { starts.delete(id); }
 }
-async function allMeta() {
-  const result = [];
-  for (const item of await fs.readdir(sessionsDir)) {
-    try { result.push(await readMeta(item)); } catch {}
-  }
-  return result;
+async function savedView(meta) {
+  const entries = await fs.access(meta.piFile).then(() => SessionManager.open(meta.piFile, undefined, meta.cwd).getBranch()).catch(() => []);
+  const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
+  return { busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
+    entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e), events: [],
+    steeringMessages: drafts.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(queueItem) };
 }
 async function sessionList() {
   return Promise.all((await allMeta()).map(async meta => {
@@ -111,6 +118,12 @@ async function handler(req, res) {
     if (!record) throw Object.assign(Error('Sign in to BashKitten'), { status: 401 });
     if (mutation) auth.checkCsrf(req, record);
     if (route === '/api/logout') { requireMethod(req, ['POST']); await auth.logout(record, res); return json(res, { ok: true }); }
+    if (route === '/api/control') {
+      requireMethod(req, ['GET', 'POST']);
+      const value = mutation ? await jsonBody(req) : { command: 'status' };
+      if (!['status', 'start', 'stop', 'restart', 'pi-stop', 'pi-kill'].includes(value.command)) throw Error('Unknown control action');
+      await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
+    }
     if (route === '/api/settings') {
       requireMethod(req, ['GET', 'POST']);
       if (!mutation) return json(res, { config, locations: await folderLocations(), platform });
@@ -200,8 +213,8 @@ async function handler(req, res) {
       if (!file) throw Object.assign(Error('Attachment not found'), { status: 404 });
       return await sendFile(req, res, file.path, url.searchParams.get('download') === 'true');
     }
-    if (action === 'status') { requireMethod(req, ['GET']); return json(res, await running(id) || { data: { busy: false, steeringMessages: [], queuedMessages: [] } }); }
-    if (action.startsWith('segments/')) { requireMethod(req, ['GET']); const view = await workerRequest(id, '/view'); return json(res, { segment: 1, entries: view.entries }); }
+    if (action === 'status') { requireMethod(req, ['GET']); return json(res, await running(id) || { data: await savedView(meta) }); }
+    if (action.startsWith('segments/')) { requireMethod(req, ['GET']); const view = await workerRequest(id, '/view').catch(() => savedView(meta)); return json(res, { segment: 1, entries: view.entries }); }
     requireMethod(req, ['POST', 'DELETE', 'PATCH']);
     if (!action && req.method === 'PATCH') {
       const input = await jsonBody(req), title = String(input.name || '').trim();
@@ -209,7 +222,11 @@ async function handler(req, res) {
       await ensureWorker(id); await workerRequest(id, '/rename', { title }); return json(res, { title });
     }
     if (!action || action === 'delete') { if (req.method !== 'DELETE' && action !== 'delete') throw Error('Use DELETE'); await deleteSession(id); return json(res, { deleted: [id] }); }
-    if (action === 'resume') { await ensureWorker(id); return json(res, { ok: true }); }
+    if (action === 'resume') {
+      const value = await jsonBody(req);
+      if ((await readJson(path.join(sessionDir(id), 'lifecycle.json'), {})).stopped && !value.start) return json(res, { stopped: true, snapshot: await savedView(meta) });
+      await ensureWorker(id, Boolean(value.start)); return json(res, { ok: true });
+    }
     await ensureWorker(id);
     if (action === 'messages') {
       const form = await formBody(req), text = String(form.get('content') || '');

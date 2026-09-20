@@ -4,7 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createMockProvider, configureMockPi } from './mock-provider.mjs';
 const root=path.resolve(import.meta.dirname,'../..');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -14,13 +15,13 @@ test('Real Pi RPC, HTTP auth, native history, files, queues, fork, compaction an
   const temp=await fs.mkdtemp(path.join(os.homedir(),'.bk-test-')),data=path.join(temp,'data'),agent=path.join(temp,'pi'),cwd=path.join(temp,'project');
   await fs.mkdir(cwd);await fs.writeFile(path.join(cwd,'fixture.txt'),'TERMUX_NATIVE_FIXTURE');
   const fixture=await createMockProvider();await configureMockPi(agent,fixture.port);
-  const port=await freePort(),base=`http://127.0.0.1:${port}`;let child,log='',cookie='',csrf='';const ids=[];
+  const port=await freePort(),base=`http://127.0.0.1:${port}`;let child,log='',cookie='',csrf='',manager=false;const ids=[];
   async function start(){child=spawn(process.execPath,['src/server/http/server.mjs',`--port=${port}`],{cwd:root,env:{...process.env,BASHKITTEN_DATA_DIR:data,PI_CODING_AGENT_DIR:agent},stdio:['ignore','pipe','pipe']});child.stdout.on('data',b=>log+=b);child.stderr.on('data',b=>log+=b);await until(async()=>{try{return(await fetch(base+'/api/bootstrap')).ok;}catch{return false;}});}
   async function stop(){child.kill('SIGTERM');await new Promise(r=>child.once('exit',r));}
   async function api(route,body,method){const headers={cookie};if(body!==undefined||method){method||='POST';headers.origin=base;headers['x-bashkitten-csrf']=csrf;if(!(body instanceof FormData))headers['content-type']='application/json';}const res=await fetch(base+route,{method:method||'GET',headers,body:body===undefined?undefined:body instanceof FormData?body:JSON.stringify(body)});const value=await res.json();assert.ok(res.ok,route+': '+JSON.stringify(value)+'\n'+log);return value;}
   async function settled(id){await until(async()=>!(await api(`/api/sessions/${id}/status`)).data.busy);await wait(100);return api(`/api/sessions/${id}/segments/current`);}
   async function send(id,text,files=[]){const form=new FormData();form.set('content',text);for(const [name,bytes,type]of files)form.append('file',new Blob([bytes],{type}),name);return api(`/api/sessions/${id}/messages`,form);}
-  t.after(async()=>{for(const id of ids){try{await api('/api/sessions/'+id,{},'DELETE');}catch{}}if(child?.exitCode===null)await stop();await fixture.close();await fs.rm(temp,{recursive:true,force:true});});
+  t.after(async()=>{for(const id of ids){try{await api('/api/sessions/'+id,{},'DELETE');}catch{}}if(manager)await promisify(execFile)(process.execPath,['src/server/control.mjs','shutdown'],{cwd:root,env:{...process.env,BASHKITTEN_DATA_DIR:data,PI_CODING_AGENT_DIR:agent}}).catch(()=>{});if(child?.exitCode===null)await stop();await fixture.close();await fs.rm(temp,{recursive:true,force:true});});
   await start();
   assert.equal((await fetch(base+'/api/sessions')).status,401);
   assert.equal((await fetch(base+'/api/signup',{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:'{}'})).status,403);
@@ -87,5 +88,18 @@ test('Real Pi RPC, HTTP auth, native history, files, queues, fork, compaction an
   await send(id,'SLOW survives restart');await stop();await start();csrf=(await api('/api/bootstrap')).csrf;history=await settled(id);assert.ok(JSON.stringify(history).includes('survives restart'));
   await api(`/api/sessions/${id}/compact`,{instructions:'Preserve fixture facts'});history=await settled(id);assert.ok(history.entries.some(e=>e.type==='compaction'),JSON.stringify(history));
   await send(id,'SLOW cancel');await send(id,'keep draft');const stopped=await api(`/api/sessions/${id}/stop`,{});assert.ok(stopped.data.queuedMessages.some(m=>m.content==='keep draft'));assert.equal((await api(`/api/sessions/${id}/status`)).data.busy,false);
+  await send(id,'SLOW instance stop'); await send(id,'durable draft');
+  manager=true; await api('/api/control',{command:'pi-stop',id});
+  const reconnect=await api(`/api/sessions/${id}/resume`,{});
+  assert.equal(reconnect.stopped,true);
+  assert.ok(reconnect.snapshot.queuedMessages.some(m=>m.content==='durable draft'&&m.recovered));
+  assert.ok((await api(`/api/sessions/${id}/segments/current`)).entries.length);
+  await api(`/api/sessions/${id}/resume`,{start:true});
+  await wait(300);
+  assert.ok(!fixture.requests.some(r=>JSON.stringify(r.messages.at(-1)).includes('durable draft')),'recovered drafts must not replay automatically');
+  const draft=(await api(`/api/sessions/${id}/status`)).data.queuedMessages.find(m=>m.content==='durable draft');
+  await api(`/api/sessions/${id}/queue`,{id:draft.id,action:'send'});
+  history=await settled(id);
+  assert.equal(history.entries.filter(e=>e.message?.role==='user'&&JSON.stringify(e.message.content).includes('durable draft')).length,1);
   abort.abort();await consume;
 });

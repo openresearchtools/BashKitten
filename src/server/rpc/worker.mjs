@@ -1,8 +1,8 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PiRpc, translateEvent, activeBranch, usageView } from './rpc.mjs';
-import { readMeta, writeMeta, socketPath, privateDir, json, jsonBody, existingDirectory } from '../common.mjs';
+import { PiRpc, translateEvent, activeBranch, usageView, displayMessage, queueItem } from './rpc.mjs';
+import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody } from '../common.mjs';
 import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
@@ -13,17 +13,21 @@ let meta = await readMeta(id);
 let rpc, busy = false, compacting = false, stopping = false, changing = false;
 let lastAccess = Date.now();
 let entries = [], events = [], usage = null, queue = [], pendingCwd = null, pendingModel = null, pendingContext = false;
+const draftsFile = path.join(sessionDir(id), 'drafts.json');
+// A crashed process cannot prove whether Pi consumed its last submitted prompt.
+// Recover every remaining item as a held draft; only an explicit user send releases it.
+queue = (await readJson(draftsFile, [])).map(item => ({ ...item, held: true, recovered: true, editToken: undefined }));
+let draftWrites = Promise.resolve();
+function checkpoint() {
+  const saved = structuredClone(queue);
+  const work = draftWrites.then(() => writeJson(draftsFile, saved));
+  draftWrites = work.catch(error => emit({ type: 'notice', message: 'Could not save drafts: ' + error.message }, false));
+  return work;
+}
 const clients = new Set(), dialogs = new Map();
 let operations = Promise.resolve(), eventWork = Promise.resolve();
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
-function displayMessage(message) {
-  if (message.role !== 'user') return message;
-  const text = typeof message.content === 'string' ? message.content : (message.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-  const upload = (meta.messages || []).find(m => m.wire === text);
-  return upload ? { ...message, content: [...upload.attachments, { type: 'text', text: upload.text }] } : message;
-}
-function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(e.message) } : e); }
-function queueItem(item) { return { id: item.id, content: item.text, attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken) }; }
+function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e); }
 function status() { return { busy, compacting, usage, contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking }, pendingCwd,
   steeringMessages: queue.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: queue.filter(q => q.kind !== 'steer').map(queueItem) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
@@ -32,7 +36,7 @@ function emit(event, remember = true) {
   const line = `data: ${JSON.stringify(event)}\n\n`;
   for (const res of clients) if (!res.write(line) && res.writableLength > 8 * 1024 * 1024) res.destroy();
 }
-function queueChanged() { emit({ type: 'queue_state', data: status() }, false); }
+function queueChanged() { checkpoint().catch(() => {}); emit({ type: 'queue_state', data: status() }, false); }
 async function refresh() {
   const [state, history, stats] = await Promise.all([rpc.command('get_state'), rpc.command('get_entries'), rpc.command('get_session_stats')]);
   entries = activeBranch(history.entries, history.leafId);
@@ -88,7 +92,7 @@ async function launch() {
       return;
     }
     const translated = translateEvent(event);
-    if (translated?.type === 'message') translated.message = displayMessage(translated.message);
+    if (translated?.type === 'message') translated.message = displayMessage(meta, translated.message);
     if (translated) emit(translated);
   });
   rpc.on('exit', () => {
@@ -102,7 +106,7 @@ async function launch() {
   if (meta.title) await rpc.command('set_session_name', { name: meta.title });
 }
 async function applyPending() {
-  if (busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
+  if (stopping || busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
   const version = await syncContext();
   if (pendingCwd || version !== meta.contextVersion) {
     const target = pendingCwd || meta.cwd; pendingCwd = null; changing = true;
@@ -122,6 +126,7 @@ async function applyPending() {
 }
 async function send(item) {
   // Pi's prompt command is the authority for idle versus streaming delivery.
+  item.delivery = 'submitted'; await checkpoint();
   await rpc.command('prompt', { message: item.wire, images: item.images || [], streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
 }
 async function rebuildQueue(mutate) {
@@ -145,7 +150,7 @@ async function rebuildQueue(mutate) {
   // follow-up could overtake the message while the user is editing its text.
   const blocked = new Set();
   for (const item of retained) {
-    delete item.held;
+    item.held = Boolean(item.recovered);
     if (item.editToken) blocked.add(item.kind);
     else if (blocked.has(item.kind)) item.held = true;
   }
@@ -173,17 +178,25 @@ const server = http.createServer(async (req, res) => {
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
       const pending = status();
-      await rpc.command('clear_queue'); queue = [];
+      await rpc.command('clear_queue'); queue = []; await checkpoint();
       await rpc.command('abort'); busy = compacting = false;
       await refresh(); events = []; emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
       return json(res, { data: pending });
     }
     if (req.url === '/shutdown') {
-      stopping = true; await rpc.close(); json(res, { ok: true });
+      stopping = true;
+      await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
+      await serial(async () => {
+        await rebuildQueue(items => { for (const item of items) { item.recovered = true; item.held = true; delete item.editToken; } });
+        await rpc.command('abort'); await checkpoint(); await rpc.close();
+      });
+      json(res, { ok: true });
       for (const client of clients) client.end();
+      await fs.rm(socketPath(id) + '.lock', { force: true });
       server.close(() => process.exit(0)); return;
     }
     const result = await serial(async () => {
+      if (stopping) throw Error('Pi instance is stopping');
       if (req.url === '/context') { pendingContext = (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
       if (req.url === '/message') {
         await applyPending();
@@ -192,7 +205,7 @@ const server = http.createServer(async (req, res) => {
         await writeMeta(meta);
         const item = { ...value, id: randomUUID(), kind: value.kind || 'queue' };
         queue.push(item);
-        try { await send(item); } catch (error) { queue = queue.filter(q => q.id !== item.id); throw error; }
+        try { await send(item); } catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
         return { data: status() };
       }
       if (req.url === '/queue') {
@@ -203,11 +216,12 @@ const server = http.createServer(async (req, res) => {
           else {
             if (item.editToken && item.editToken !== value.edit_token) throw Error('Edit is no longer owned by this tab');
             if (value.action === 'remove') items.splice(index, 1);
-            else if (value.action === 'promote') item.kind = 'steer';
+            else if (value.action === 'send') { delete item.recovered; delete item.held; }
+            else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; }
             else if (value.action === 'cancel_edit') delete item.editToken;
             else if (value.action === 'edit') {
               const suffix = item.wire.slice(item.text.length);
-              item.text = value.content; item.wire = value.content + suffix; delete item.editToken;
+              item.text = value.content; item.wire = value.content + suffix; delete item.editToken; delete item.recovered;
               meta.messages.push({ text: item.text, wire: item.wire, attachments: item.attachments });
             } else throw Error('Unknown queue action');
           }

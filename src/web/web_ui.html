@@ -502,7 +502,7 @@
           <strong id="title" class="hidden">Settings</strong>
           <button id="folderBtn" type="button" title="Set/change working folder" aria-label="Set/change working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
         </div>
-        <span id="usage"></span><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
+        <span id="usage"></span><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
       <div id="chat"><div id="chatInner" class="chat-inner"></div></div>
       <section id="settingsView" class="hidden">
@@ -1455,7 +1455,8 @@
         row.className = `queue-item ${item.kind === 'steer' ? 'steer' : ''} ${editingQueueId === item.id ? 'editing' : ''}`.trim();
         const kind = document.createElement('span');
         kind.className = 'queue-kind';
-        kind.textContent = item.editing ? 'editing' : item.kind;
+        kind.textContent = item.editing ? 'editing' : item.recovered ? 'draft' : item.kind;
+        if (item.recovered) kind.title = 'Recovered after Pi stopped. Review history before sending again.';
         const text = document.createElement('span');
         text.className = 'queue-text';
         text.textContent = item.content || (item.attachments?.length ? `${item.attachments.length} attachment(s)` : '(empty message)');
@@ -1465,9 +1466,9 @@
           const steer = document.createElement('button');
           steer.type = 'button';
           steer.className = 'queue-steer';
-          steer.textContent = 'Steer';
+          steer.textContent = item.recovered ? 'Send' : 'Steer';
           steer.title = 'Deliver at the next safe agent boundary';
-          steer.onclick = () => editingQueueId === item.id ? saveQueueEdit(true) : mutateQueued(item.id, 'promote');
+          steer.onclick = () => editingQueueId === item.id ? saveQueueEdit(!item.recovered) : mutateQueued(item.id, item.recovered ? 'send' : 'promote');
           row.append(steer);
         } else {
           row.append(document.createElement('span'));
@@ -1492,6 +1493,7 @@
       const value = await api(`/api/sessions/${current.id}/status`);
       if (view !== sessionView) return;
       renderQueueState(value.data);
+      updateInstanceControl(value.data?.stopped);
       renderGoal(value.data?.goal);
       if(value.data?.compacting!==undefined || !value.data?.busy)setCompacting(value.data?.compacting);
       applyModelSelection(value.data?.modelSelection);
@@ -1917,9 +1919,13 @@
       renderedEntries = new Set();
       resetUsage();
       $('#chatInner').innerHTML = '';
-      await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
+      const resumed = await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
       if (sessionView !== view) return;
-      await connectSession(session.id, renderEvent, view);
+      updateInstanceControl(resumed.stopped);
+      if (resumed.stopped) {
+        renderEvent({type:'snapshot', data:resumed.snapshot});
+        $('#composerHint').textContent = 'Pi is stopped. Press Start Pi to continue.';
+      } else await connectSession(session.id, renderEvent, view);
       if (sessionView !== view) return;
       setSidebar(false);
       if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
@@ -1934,6 +1940,7 @@
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
+      updateInstanceControl(false);
       oldestSegment = 0;
       showChatView();
       source?.close();
@@ -1964,6 +1971,25 @@
       setSidebar(false);
       $('#prompt').focus();
     }
+
+    function updateInstanceControl(stopped) {
+      const button = $('#piInstance');
+      button.classList.toggle('hidden', !current);
+      button.dataset.stopped = String(Boolean(stopped));
+      button.textContent = stopped ? '▶' : '■';
+      button.title = stopped ? 'Start Pi instance' : 'Stop Pi instance';
+      button.setAttribute('aria-label', button.title);
+    }
+    $('#piInstance').onclick = async () => {
+      if (!current) return;
+      const button = $('#piInstance'); button.disabled = true;
+      try {
+        if (button.dataset.stopped === 'true') await api(`/api/sessions/${current.id}/resume`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({start:true})});
+        else await api('/api/control', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({command:'pi-stop', id:current.id})});
+        await openSession(current);
+      } catch (error) { $('#composerHint').textContent = error.message; }
+      finally { button.disabled = false; }
+    };
 
     function addAttachments(files) {
       if (editingQueueId) { $('#composerHint').textContent = 'Save or cancel the queued edit before adding files'; return; }
