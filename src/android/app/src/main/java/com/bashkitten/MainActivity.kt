@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun confirmInstallation() {
         AppStore.confirmation(this)?.let { confirmation ->
-            runCatching { startActivity(confirmation) }.onFailure { notice = "Android installation confirmation could not open. Retry the installation." }
+            runCatching { startIntentSender(confirmation.intentSender, null, 0, 0, 0) }.onFailure { notice = "Android installation confirmation could not open. Retry the installation." }
         }
     }
     @Composable private fun AppRow(id: String) {

@@ -36,14 +36,18 @@ class StoreFlowTest {
         try { output.write(Base64.decode(catalog, Base64.NO_WRAP)); file.finishWrite(output) }
         catch (error: Exception) { file.failWrite(output); throw error }
         val id = args.getString("storePackage") ?: "com.termux.api"
+        if (args.getString("clearCandidateSession") == "true") {
+            context.packageManager.packageInstaller.mySessions.filter { it.appPackageName == id }.forEach { context.packageManager.packageInstaller.abandonSession(it.sessionId) }
+            AppStore.prefs(context).edit().putString("state:$id", "Failed · Previous test interrupted").remove("confirmation").remove("installSession:$id").apply()
+        }
         val entry = AppStore.entries(context).single { it.getString("packageId") == id }
         val expected = entry.getLong("versionCode")
         assertTrue("Use an older installed candidate for this update test", (AppStore.installed(context, id)?.longVersionCode ?: 0) < expected)
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             if (!context.packageManager.canRequestPackageInstalls()) {
                 scenario.onActivity { it.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))) }
-                assertTrue(device.wait(Until.hasObject(By.clazz("android.widget.Switch")), 10000))
-                val toggle = device.findObject(By.clazz("android.widget.Switch"))
+                assertTrue(device.wait(Until.hasObject(By.checkable(true)), 10000))
+                val toggle = device.findObject(By.checkable(true))
                 if (!toggle.isChecked) toggle.click()
                 device.pressBack()
                 assertTrue(context.packageManager.canRequestPackageInstalls())
@@ -53,7 +57,7 @@ class StoreFlowTest {
             for (attempt in 0 until 180) {
                 if ((AppStore.installed(context, id)?.longVersionCode ?: 0) >= expected) break
                 AppStore.confirmation(context)?.let { intent ->
-                    scenario.onActivity { it.startActivity(intent) }
+                    scenario.onActivity { it.startIntentSender(intent.intentSender, null, 0, 0, 0) }
                     if (device.wait(Until.hasObject(By.res("android:id/button1")), 5000)) device.findObject(By.res("android:id/button1")).click()
                 }
                 Thread.sleep(1000)

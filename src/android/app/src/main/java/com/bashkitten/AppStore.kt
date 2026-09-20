@@ -8,7 +8,6 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.UserManager
-import android.os.Parcel
 import android.util.Base64
 import android.util.AtomicFile
 import androidx.work.*
@@ -51,7 +50,7 @@ object AppStore {
             val expected = pref.getLong("installVersion:$id", Long.MAX_VALUE)
             if ((installed(context, id)?.longVersionCode ?: 0) >= expected) {
                 pref.edit().putString("state:$id", "Installed").remove("installSession:$id").remove("confirmation").apply()
-            } else if (sessions.none { it.sessionId == pref.getInt("installSession:$id", -1) && it.isCommitted }) {
+            } else if ((state.startsWith("Confirm") && confirmation(context) == null) || sessions.none { it.sessionId == pref.getInt("installSession:$id", -1) && it.isCommitted }) {
                 sessions.find { it.sessionId == pref.getInt("installSession:$id", -1) }?.let { context.packageManager.packageInstaller.abandonSession(it.sessionId) }
                 File(context.cacheDir, "$id.apk.part").delete()
                 pref.edit().putString("state:$id", "Failed · Installation was interrupted. Retry.").remove("installSession:$id").remove("confirmation").apply()
@@ -227,11 +226,10 @@ object AppStore {
             prefs(context).edit().putString("state:$id", "Failed · " + error.message).apply(); throw error
         } finally { apk.delete(); downloading.remove(id) }
     }
-    fun confirmation(context: Context): Intent? {
+    fun confirmation(context: Context): PendingIntent? {
         val saved = prefs(context).getString("confirmation", null) ?: return null
         return runCatching {
-            val parcel = Parcel.obtain()
-            try { val bytes = Base64.decode(saved, Base64.NO_WRAP); parcel.unmarshall(bytes, 0, bytes.size); parcel.setDataPosition(0); Intent.CREATOR.createFromParcel(parcel) } finally { parcel.recycle() }
+            PendingIntent.getActivity(context, prefs(context).getInt("confirmationSession", -1), Intent.parseUri(saved, Intent.URI_INTENT_SCHEME), PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
         }.getOrNull()
     }
 }
@@ -247,11 +245,15 @@ class InstallResultReceiver : BroadcastReceiver() {
         if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
             val confirmation = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java) else @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_INTENT)
             if (confirmation != null) {
-                val parcel = Parcel.obtain()
-                try { confirmation.writeToParcel(parcel, 0); pref.putString("confirmation", Base64.encodeToString(parcel.marshall(), Base64.NO_WRAP)) } finally { parcel.recycle() }
+                // The installer intent can contain Binder objects. Android keeps
+                // those in the token; only its lookup identity belongs on disk.
+                val sessionId = AppStore.prefs(context).getInt("installSession:$id", -1)
+                PendingIntent.getActivity(context, sessionId, confirmation, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                pref.putInt("confirmationSession", sessionId).putString("confirmation", confirmation.cloneFilter().toUri(Intent.URI_INTENT_SCHEME))
                 pref.putString("state:$id", "Confirm installation in Android")
             }
         } else {
+            AppStore.confirmation(context)?.cancel()
             pref.remove("confirmation").remove("installSession:$id").putString("state:$id", if (status == PackageInstaller.STATUS_SUCCESS) "Installed" else "Failed · " + intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty().take(400))
         }
         pref.apply()
