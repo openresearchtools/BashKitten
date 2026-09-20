@@ -20,7 +20,12 @@ jobs:
       - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ''platforms;android-37.0'' ''build-tools;35.0.0'''
       - name: Build production APK
         working-directory: src/android
-        run: ./gradlew --no-daemon assembleRelease assembleReleaseAndroidTest
+        run: ./gradlew --no-daemon :app:assembleRelease :app:assembleReleaseAndroidTest :permission-probe:assembleDebug
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: unrelated-signer-permission-probe
+          path: src/android/permission-probe/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: bashkitten-unsigned
