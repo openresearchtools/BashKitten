@@ -1,10 +1,12 @@
 # BashKitten Android and Termux suite: implementation plan
 
-Status: proposed implementation, researched 19–20 September 2026. The `main`
+Status: implementation in progress, researched 19–20 September 2026. The `main`
 branch supplies the web UI and native Pi adapter, promoted from `codex/pi-termux-rpc`. This
 document adds a plan for a portable shared server, the Android host, signed
 Termux distribution, APT/npm package maintenance, lifecycle controls and desktop
-integration. It does not describe those additions as already implemented or tested.
+integration. [Implementation status](suite-implementation-status.md) records the
+completed changes and actual checks; requirements below are not blanket claims
+that every feature has already been implemented or tested.
 
 ## 1. Product and process ownership
 
@@ -220,8 +222,8 @@ Signing procedure:
    backup password. Decode temporary keystore copies only into private working
    directories and remove them after use. Recovery from the saved file, Java
    keystore loading, RSA signing and Android APK v2/v3 signature verification
-   have passed using a temporary local signing fixture. No signing secrets have
-   been uploaded to GitHub yet. A second offline or encrypted backup is additional;
+   have passed using a temporary local signing fixture. The same four signing
+   Secrets have now been stored in both implementation repositories. A second offline or encrypted backup is additional;
    it never replaces this usable local file. Never commit it or put its contents
    in logs, release assets or caches.
 3. Upload the **same local keystore and credentials** as repository-level GitHub
