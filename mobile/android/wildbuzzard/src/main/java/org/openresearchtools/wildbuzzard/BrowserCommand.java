@@ -212,15 +212,61 @@ public final class BrowserCommand {
         if (!match.find()) throw new IOException("Install Wild Buzzard first");
         return Integer.parseInt(match.group(1));
     }
+    private static android.os.IBinder appEndpoint;
+    private static android.content.Context commandContext;
+    private static android.content.Context commandContext() throws Exception {
+        if (commandContext != null) return commandContext;
+        // app_process has no Application. Use Android's runtime context to send the
+        // discovery broadcast; authorization still uses Binder.getCallingUid().
+        android.os.Looper.prepareMainLooper();
+        Class<?> activityThread = Class.forName("android.app.ActivityThread");
+        Object thread = activityThread.getMethod("systemMain").invoke(null);
+        android.content.Context system = (android.content.Context) activityThread.getMethod("getSystemContext").invoke(thread);
+        String[] packages = system.getPackageManager().getPackagesForUid(android.os.Process.myUid());
+        if (packages == null || packages.length == 0) throw new SecurityException("Run this command from an Android app such as Termux");
+        commandContext = system.createPackageContext(packages[0], android.content.Context.CONTEXT_IGNORE_SECURITY);
+        return commandContext;
+    }
     private static JSONObject nativeRequest(int browserUid, JSONObject request) throws Exception {
         if (request.toString().length() > 200000) throw new IOException("Request too large");
-        try (android.net.LocalSocket socket = new android.net.LocalSocket()) {
-            socket.connect(new android.net.LocalSocketAddress(AppCommandGateway.socketName()));
-            if (socket.getPeerCredentials().getUid() != browserUid) throw new SecurityException("Command socket is not owned by the installed Wild Buzzard app");
-            socket.setSoTimeout(220000);
-            CommandProtocol.write(socket.getOutputStream(), request);
-            return CommandProtocol.read(socket.getInputStream(), 1200000);
+        if (appEndpoint == null || !appEndpoint.isBinderAlive()) {
+            java.util.concurrent.CompletableFuture<android.os.IBinder> connected = new java.util.concurrent.CompletableFuture<>();
+            android.os.Binder callback = new android.os.Binder() {
+                @Override protected boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) {
+                    if (code != AppCommandGateway.CONNECT) return false;
+                    data.enforceInterface(AppCommandGateway.CALLBACK);
+                    if (android.os.Binder.getCallingUid() != browserUid) throw new SecurityException("Connection is not from the installed Wild Buzzard app");
+                    connected.complete(data.readStrongBinder()); return true;
+                }
+            };
+            android.content.Intent intent = new android.content.Intent()
+                .setClassName(CommandProtocol.PACKAGE, "org.openresearchtools.wildbuzzard.AppCommandReceiver")
+                .setData(android.net.Uri.parse("wildbuzzard-command:" + UUID.randomUUID()))
+                .addFlags(android.content.Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
+            android.os.Bundle extras = new android.os.Bundle(); extras.putBinder("callback", callback); intent.putExtras(extras);
+            android.app.PendingIntent discovery = android.app.PendingIntent.getBroadcast(commandContext(), 0, intent,
+                android.app.PendingIntent.FLAG_IMMUTABLE | android.app.PendingIntent.FLAG_ONE_SHOT);
+            try {
+                discovery.send(); appEndpoint = connected.get(10, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (java.util.concurrent.TimeoutException error) { throw new IOException("Open Wild Buzzard to connect", error); }
+            finally { discovery.cancel(); }
         }
+        java.util.concurrent.CompletableFuture<String> result = new java.util.concurrent.CompletableFuture<>();
+        android.os.Binder callback = new android.os.Binder() {
+            @Override protected boolean onTransact(int code, android.os.Parcel data, android.os.Parcel reply, int flags) {
+                if (code != AppCommandGateway.RESULT) return false;
+                data.enforceInterface(AppCommandGateway.CALLBACK);
+                if (android.os.Binder.getCallingUid() != browserUid) throw new SecurityException("Response is not from Wild Buzzard");
+                result.complete(data.readString()); return true;
+            }
+        };
+        android.os.Parcel data = android.os.Parcel.obtain();
+        try {
+            data.writeInterfaceToken(AppCommandGateway.DESCRIPTOR); data.writeString(request.toString()); data.writeStrongBinder(callback);
+            appEndpoint.transact(AppCommandGateway.CONNECT, data, null, android.os.IBinder.FLAG_ONEWAY);
+        } catch (android.os.RemoteException error) { appEndpoint = null; throw new IOException("Browser connection closed", error); }
+        finally { data.recycle(); }
+        return new JSONObject(result.get(215, java.util.concurrent.TimeUnit.SECONDS));
     }
     private static void copyTransfer(JSONObject transfer, Path destination) throws Exception {
         URL url = new URL(transfer.getString("url"));

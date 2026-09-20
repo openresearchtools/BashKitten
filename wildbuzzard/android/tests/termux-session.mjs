@@ -52,6 +52,15 @@ try {
   const value = async (tabId, code) => (await call('evaluate', { tabId, code })).value;
   const loadedPage = (tabId, expression) => poll(() => value(tabId, 'return ' + expression + ';'), expression);
   let tabId;
+  await check('browser-owned CLI prints its offline license notices', async () => {
+    const execute = promisify(execFile);
+    const { stdout } = await execute('pm', ['path', 'org.openresearchtools.wildbuzzard']);
+    const env = { ...process.env, CLASSPATH: stdout.trim().replace(/^package:/, '') };
+    delete env.LD_PRELOAD; delete env.LD_LIBRARY_PATH;
+    const printed = await execute('/system/bin/app_process', ['/', 'org.openresearchtools.wildbuzzard.BrowserCommand', '--licenses'], { env, maxBuffer: 5000000 });
+    for (const name of ['Mozilla Public License', 'BrowserOS', 'Tor Project', 'Android dependencies from this APK']) assert(printed.stdout.includes(name), name);
+    report.licenseBytes = Buffer.byteLength(printed.stdout);
+  });
   await check('actual Pi extension loads and Android app identity authorizes', async () => {
     if (vendor === 'vendor') await browserCall(null, {}, { authorize: true });
     const caps = await call('capabilities'); report.capabilities = caps;
@@ -126,7 +135,7 @@ try {
     assert(!(await call('tabs.list')).some(tab => tab.id === second));
     await call('tabs.close', { tabId: second }, b);
   });
-  let exported;
+  let exported, exportedAt;
   await check('real browser download, private Pi file and bearer-protected wget', async () => {
     const contents = 'Wild Buzzard ' + vendor + ' real browser download\n';
     await value(tabId, `const a=document.createElement('a');a.download='termux-${vendor}.txt';a.href=URL.createObjectURL(new Blob([${JSON.stringify(contents)}.repeat(4096)],{type:'text/plain'}));document.body.append(a);a.click();return true;`);
@@ -141,6 +150,7 @@ try {
     assert.equal((await stat(result.details.path)).mode & 0o777, 0o600);
     assert(!JSON.stringify(result).includes('Bearer'));
     exported = (await browserCall('downloads.get', { downloadId: download.id }, sessionLocation(a))).transfer;
+    exportedAt = Date.now();
     assert.equal((await fetch(exported.url)).status, 403);
     assert.equal((await fetch(exported.url, { headers: { Authorization: 'Bearer wrong' } })).status, 403);
     assert.equal((await fetch(exported.url, { headers: { Authorization: 'Bearer ' + exported.token, Origin: 'https://example.com' } })).status, 403);
@@ -156,8 +166,17 @@ try {
     await call('capabilities');
     assert(!(await call('tabs.list')).some(tab => tab.id === tabId));
   });
+  if (process.env.WB_CHECK_EXPIRY === '1') await check('file grant expires while the authorized browser stays running', async () => {
+    const headers = { Authorization: 'Bearer ' + exported.token };
+    assert.equal((await fetch(exported.url, { headers })).status, 200);
+    await delay(Math.max(0, exported.expiresInSeconds * 1000 + 1000 - (Date.now() - exportedAt)));
+    assert.equal((await call('capabilities')).foregroundService, true);
+    try { assert.equal((await fetch(exported.url, { headers })).status, 403); }
+    catch (error) { if (error.cause?.code !== 'ECONNREFUSED') throw error; }
+  });
   report.ok = true; report.completed = new Date().toISOString(); await publish();
   console.log('PASS', report.checks.length, 'checks', directory);
 } catch (error) {
-  report.ok = false; report.error = String(error.message); await publish(); console.error(error); process.exitCode = 1;
+  report.ok = false; report.error = String(error.message).replace(/Bearer [a-f0-9]{64}/g, 'Bearer [redacted]');
+  await publish(); console.error(String(error.stack || error).replace(/Bearer [a-f0-9]{64}/g, 'Bearer [redacted]')); process.exitCode = 1;
 }

@@ -12,6 +12,10 @@ in Termux:
 pi install /path/to/wildbuzzard/android/pi
 ```
 
+Actions artifacts also include `pi-wildbuzzard-0.1.0.tgz`. Install it with
+`npm install /path/to/pi-wildbuzzard-0.1.0.tgz` in a private directory, then run
+`pi install "$PWD/node_modules/@openresearchtools/pi-wildbuzzard"` there.
+
 For a one-off session, install the pinned `typebox` dependency with `npm ci` in
 this directory and use `pi -e /path/to/extension.mjs`.
 The extension follows the public Pi 0.85.1 extension/session APIs.

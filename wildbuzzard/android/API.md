@@ -14,7 +14,7 @@ binary is required. In Termux, add this function to your shell configuration:
 ```sh
 wildbuzzard() {
     local browser_apk
-    browser_apk="$(pm path org.openresearchtools.wildbuzzard | sed -n 's/^package://p' | head -n 1)"
+    browser_apk="$(pm path org.openresearchtools.wildbuzzard </dev/null 2>/dev/null | tr -d '\r' | sed -n 's/^package://p' | head -n 1)"
     [ -n "$browser_apk" ] || { echo 'Install Wild Buzzard first' >&2; return 1; }
     env -u LD_PRELOAD -u LD_LIBRARY_PATH CLASSPATH="$browser_apk" \
         /system/bin/app_process / org.openresearchtools.wildbuzzard.BrowserCommand "$@"
@@ -38,10 +38,12 @@ lets the user allow or revoke installed apps and disable automatic publisher
 trust. Individual commands do not prompt again. Revoke-all disables existing
 grants and automatic publisher trust until it is enabled again.
 
-The default command interface needs no manually managed key. It uses an Android
-Unix-domain socket; both sides verify kernel-supplied peer UIDs, and the browser
-checks package signatures before dispatch. The caller verifies that the socket
-belongs to the installed browser. A supplied package name cannot impersonate an
+The default command interface needs no manually managed key. It uses Android
+Binder IPC, discovered through an explicit broadcast to the browser. The browser
+checks Binder's actual caller UID and package signatures before every dispatch;
+the caller checks that connection and result callbacks come from the installed
+browser UID. The discovery broadcast grants no authority. No command socket or
+shared-storage key is needed. A supplied package name cannot impersonate an
 app. Add `--session CHAT_ID` to partition a terminal app's tabs, downloads and
 website storage between chats. Session IDs namespace an app's authority; they
 are not an additional security boundary against programs already in that app.
