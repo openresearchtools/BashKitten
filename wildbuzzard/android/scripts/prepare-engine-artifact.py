@@ -37,6 +37,7 @@ allowed_files = {
     'README.md',
     'mobile/android/wildbuzzard/src/main/AndroidManifest.xml',
     'mobile/android/geckoview/src/main/java/org/mozilla/geckoview/GeckoSession.java',
+    'mobile/android/geckoview/src/main/java/org/mozilla/geckoview/GeckoView.java',
     'mobile/android/geckoview/src/main/java/org/mozilla/geckoview/WildBuzzardController.java',
     'mobile/shared/modules/geckoview/GeckoViewWildBuzzard.sys.mjs',
     'mobile/shared/modules/geckoview/WildBuzzardAndroid.sys.mjs',

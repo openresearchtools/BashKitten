@@ -7,6 +7,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
+import { inflateSync } from 'node:zlib';
 import { SessionManager, DefaultResourceLoader, createReadTool } from '@earendil-works/pi-coding-agent';
 import { browserCall, sessionLocation } from '@openresearchtools/pi-wildbuzzard/client.mjs';
 
@@ -33,6 +34,38 @@ const poll = async (action, label, timeout = 45000) => {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) { try { const result = await action(); if (result) return result; } catch {} await delay(400); }
   throw new Error('Timed out: ' + label);
+};
+// Android Bitmap PNGs use 8-bit RGB/RGBA; check rendered fixture pixels, not only decoding.
+const fixturePixels = encoded => {
+  assert.equal(encoded.readUInt32BE(0), 0x89504e47);
+  const width = encoded.readUInt32BE(16), height = encoded.readUInt32BE(20);
+  assert.equal(encoded[24], 8); assert([2, 6].includes(encoded[25])); assert.equal(encoded[28], 0);
+  const channels = encoded[25] === 6 ? 4 : 3, chunks = [];
+  for (let offset = 8; offset < encoded.length;) {
+    const length = encoded.readUInt32BE(offset);
+    if (encoded.toString('ascii', offset + 4, offset + 8) === 'IDAT') chunks.push(encoded.subarray(offset + 8, offset + 8 + length));
+    offset += length + 12;
+  }
+  const raw = inflateSync(Buffer.concat(chunks)), stride = width * channels;
+  assert.equal(raw.length, (stride + 1) * height);
+  let previous = Buffer.alloc(stride), offset = 0, light = 0, dark = 0;
+  for (let y = 0; y < height; y++) {
+    const filter = raw[offset++], row = Buffer.alloc(stride); assert(filter <= 4);
+    for (let x = 0; x < stride; x++) {
+      const left = x >= channels ? row[x - channels] : 0, above = previous[x], corner = x >= channels ? previous[x - channels] : 0;
+      const p = left + above - corner, a = Math.abs(p - left), b = Math.abs(p - above), c = Math.abs(p - corner);
+      const prediction = [0, left, above, Math.floor((left + above) / 2), a <= b && a <= c ? left : b <= c ? above : corner][filter];
+      row[x] = (raw[offset++] + prediction) & 255;
+    }
+    for (let x = 0; x < stride; x += channels) {
+      if (Math.min(row[x], row[x + 1], row[x + 2]) > 220) light++;
+      if (Math.max(row[x], row[x + 1], row[x + 2]) < 80) dark++;
+    }
+    previous = row;
+  }
+  assert(light > width * height / 2, 'Screenshot contains the rendered white fixture, not a blank surface');
+  assert(dark > width * height / 100, 'Screenshot includes the fixture text and controls');
+  return { lightPixels: light, darkPixels: dark };
 };
 try {
   const a = SessionManager.create(directory, join(directory, 'sessions'));
@@ -130,8 +163,9 @@ try {
     assert.equal((await stat(result.details.path)).mode & 0o777, 0o600);
     const imageRead = await createReadTool(directory).execute('read', { path: result.details.path });
     assert(imageRead.content.some(item => item.type === 'image' && item.data));
+    const encoded = await readFile(result.details.path);
     report.screenshot = { path: result.details.path, width: result.details.width, height: result.details.height,
-      sha256: createHash('sha256').update(await readFile(result.details.path)).digest('hex') };
+      sha256: createHash('sha256').update(encoded).digest('hex'), ...fixturePixels(encoded) };
   });
   await check('two native Pi sessions cannot list or close one another’s tabs', async () => {
     assert(!(await call('tabs.list', {}, b)).some(tab => tab.id === tabId));

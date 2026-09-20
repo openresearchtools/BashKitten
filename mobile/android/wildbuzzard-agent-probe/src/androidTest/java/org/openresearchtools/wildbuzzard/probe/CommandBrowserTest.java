@@ -85,6 +85,8 @@ public final class CommandBrowserTest {
         if (ProbeActivity.active != null && ProbeActivity.connected) {
             assertFalse("Binder identity cannot see shell-key tabs", ProbeActivity.active.command("tabs.list", new JSONObject()).toString().contains(first));
         }
+        String captureTitle = "CLI capture " + UUID.randomUUID();
+        call("evaluate", tab(first).put("code", "document.title = " + JSONObject.quote(captureTitle) + "; return true;"));
         JSONObject launch = (JSONObject) call("tabs.show", tab(first));
         context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.openresearchtools.wildbuzzard.CommandAccessActivity")
             .putExtra("launch", launch.getString("launch")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -93,9 +95,12 @@ public final class CommandBrowserTest {
         assertFixturePixels(android.util.Base64.decode(screenshot.getString("base64"), android.util.Base64.DEFAULT));
         UiObject2 counter = device.findObject(By.descStartsWith("Non-private Tabs Open:"));
         assertNotNull(counter); counter.click();
-        assertTrue(device.wait(Until.hasObject(By.desc("Page preview")), 15000));
+        UiObject2 capturedTab = device.wait(Until.findObject(By.text(captureTitle)), 15000);
+        assertNotNull("The captured tab is present in the tray", capturedTab);
+        while (capturedTab != null && capturedTab.findObject(By.desc("Page preview")) == null) capturedTab = capturedTab.getParent();
+        assertNotNull("The captured tab has a thumbnail", capturedTab);
         SystemClock.sleep(1000);
-        android.graphics.Rect preview = device.findObject(By.desc("Page preview")).getVisibleBounds();
+        android.graphics.Rect preview = capturedTab.findObject(By.desc("Page preview")).getVisibleBounds();
         android.graphics.Bitmap screen = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull(screen);
         android.graphics.Bitmap thumbnail = android.graphics.Bitmap.createBitmap(screen, preview.left, preview.top, preview.width(), preview.height());

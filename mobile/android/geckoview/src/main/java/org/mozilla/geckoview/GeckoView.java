@@ -99,6 +99,7 @@ public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfacePro
   private @Nullable SurfaceViewWrapper mSurfaceWrapper;
 
   private boolean mIsResettingFocus;
+  private boolean mSurfacePainted;
 
   private boolean mAutofillEnabled = true;
 
@@ -118,6 +119,7 @@ public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfacePro
     private int mDynamicToolbarMaxHeight;
 
     public void acquire(final GeckoDisplay display) {
+      mSurfacePainted = false;
       mDisplay = display;
 
       if (!mValid) {
@@ -143,6 +145,7 @@ public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfacePro
     }
 
     public GeckoDisplay release() {
+      mSurfacePainted = false;
       if (mValid) {
         if (mDisplay != null) {
           mDisplay.surfaceDestroyed();
@@ -161,6 +164,7 @@ public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfacePro
         @Nullable final SurfaceControl surfaceControl,
         final int width,
         final int height) {
+      mSurfacePainted = false;
       if (mDisplay != null) {
         mDisplay.surfaceChanged(
             new GeckoDisplay.SurfaceInfo.Builder(surface)
@@ -178,6 +182,7 @@ public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfacePro
 
     @Override // SurfaceListener
     public void onSurfaceDestroyed() {
+      mSurfacePainted = false;
       if (mDisplay != null) {
         mDisplay.surfaceDestroyed();
         GeckoView.this.setActive(false);
@@ -355,7 +360,19 @@ public class GeckoView extends FrameLayout implements GeckoDisplay.NewSurfacePro
   }
 
   private void uncover() {
+    mSurfacePainted = true;
     coverUntilFirstPaintInternal(Color.TRANSPARENT);
+  }
+
+  /**
+   * Whether Gecko has composited a frame since this display was acquired or resized.
+   *
+   * @return True when the current surface contains a rendered frame.
+   */
+  @UiThread
+  public boolean hasPaintedSurface() {
+    ThreadUtils.assertOnUiThread();
+    return mSurfacePainted;
   }
 
   private void coverUntilFirstPaintInternal(final int color) {

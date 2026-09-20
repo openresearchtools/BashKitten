@@ -49,7 +49,9 @@ Native adblocking can be toggled for one tab, with a reload; it does not create
 a site-wide exception for other tabs. Both controls are available to agents.
 Ordinary user tabs share website cookies and storage. Each approved agent app
 gets its own shared website storage, so its login tabs can work together without
-sharing another app's browsing session. Popups retain their opener's storage
+sharing another app's browsing session. `--session` further partitions that
+app's tabs, downloads and website storage; the Pi extension supplies a separate
+scope for each native Pi session. Popups retain their opener's storage
 context. Adblock exceptions use the individual Gecko browser ID, independent of
 that storage context.
 
@@ -130,20 +132,22 @@ python3 wildbuzzard/android/scripts/collect-artifacts.py artifacts
 
 The **Android ARM64 APK** GitHub Actions workflow cross-compiles native Gecko
 for `aarch64-linux-android` and builds installable APK artifacts. Debug artifacts
-use Android debug signing and are test builds. Their manifest records source
-revision and SHA-256 checksums. Build logs are retained even on failure.
+without publisher secrets use Android development signing. The manifest records
+the actual signing certificate, source revision and SHA-256 checksums. Build
+logs are retained even on failure.
 Repository publisher builds use `ANDROID_KEYSTORE_BASE64`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`, the
 same secret names as the Termux suite. Their current certificate must match the
 suite catalog. `WILDBUZZARD_SIGNING_LINEAGE_BASE64` preserves an in-place upgrade
 from the earlier browser development signer. Publisher browser APKs disable
 Android debuggability; `WILDBUZZARD_CI_DEBUG_KEYSTORE` signs only the independent
-vendor test probes and non-publisher development builds. Artifact collection verifies every APK
-against that certificate and records its fingerprint. Pull requests without
+vendor test probes and non-publisher development builds. Artifact collection verifies each APK
+against its intended certificate and records its fingerprint. Pull requests without
 access to the secret use an ephemeral test identity. Local builds can set
 `WILDBUZZARD_DEBUG_KEYSTORE` to a debug keystore with the standard `android`
-password and `androiddebugkey` alias. These identities are for development;
-production APKs require the publisher's production signing configuration.
+password and `androiddebugkey` alias. Development signing does not grant automatic
+access to a publisher-signed browser, including when that old certificate appears
+in the browser's upgrade lineage.
 
 Firefox's `about:license` remains available. **Licenses and source** includes
 Wild Buzzard, BrowserOS and Mozilla DevTools MCP provenance, Tor and linked
