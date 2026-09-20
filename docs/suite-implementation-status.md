@@ -25,25 +25,43 @@ after compaction. This checkpoint supplements it and does not narrow its scope.
 - Android `com.bashkitten` source and candidate workflow: Compose control screen,
   system WebView, persistent cookies, ordinary system upload picker, streaming
   authenticated Downloads, Pi login popup/external-browser handling and protected
-  Termux setup/command integration. Build/device validation is still in progress.
+  Termux setup/command integration. Production candidates compile and pass signing
+  checks. The fresh Cuttlefish profile initializes Termux and executes protected
+  commands with the correct native home; an unrelated shell caller is denied.
+- Signed catalog verification with a separate pinned public key, installer
+  identity/hash checks, Android installation confirmation handling and periodic
+  catalog checks. Catalog publication and real installer update tests remain.
+- Durable supervisor-owned package jobs, native APT progress, interrupted-job
+  recovery, independent APT/npm checks, tested immutable Pi manifests and one
+  runtime resolver for RPC, provider services and the terminal launcher.
+  Browser settings successfully updated Pi 0.85.1 to 0.86.0 and rolled it back.
+- Resumable protected Termux package bootstrap; native package/store controls,
+  owned X11 process groups, startup-method options and graphics dependency
+  preparation. X11 code has not yet passed real renderer/device checks.
+- Native Linux arm64/amd64 candidate build matrix and Termux aarch64 packaging;
+  package post-install retains Pi runtimes independently of dpkg-owned payloads.
 
-Local Linux arm64: **10 shared-server tests pass**. They exercise real unmodified
+Local Linux arm64: **15 shared-server tests pass**. They exercise real unmodified
 Pi RPC using local model fixtures, all seven tools, queue edits, attachments,
 fork/compaction, stopped instances, backend recovery, HTTPS, file confinement,
-environment context, notification delivery fixtures and fixture OAuth callbacks.
+environment context, notification delivery fixtures, runtime activation/rollback,
+package journal/progress and fixture OAuth callbacks.
 
-Cuttlefish Android 17 / Termux aarch64 / 4 KB pages: **7 shared tests pass** after
-the source move, including the real Pi RPC integration, context and supervisor.
-They use a separate source/profile directory and preserve existing credentials.
-The Linux-only file test and new notification test were not part of that run;
-the TLS test requires an openssl command absent from this emulator's package
-installation. Do not describe the Termux run as all ten tests or real-account OAuth.
+Cuttlefish Android 17 / Termux aarch64 / 4 KB pages: **13 shared tests passed**
+against unmodified Pi 0.86.0 and native Node 24.18.0, including HTTPS after
+installing upstream openssl-tool. This uses a separate source/profile directory
+and preserves existing credentials. The later graphics-conflict and native
+APT-progress tests still need their Termux rerun. Fixture OAuth is not a real
+provider account login. Pi 0.86.0 also passed 13 tests on Linux Node 22 and 24.
 
 Linux host: account creation and persistent login pass across separate processes
 on X11 and Wayland. A real X11 pointer click opens the native GTK folder chooser;
 synthetic native requests are rejected. Screenshots/logs are in local
 `test-results/linux`. Full upload/paste/external-launch/package tests and native
-AMD64 testing remain release gates.
+AMD64 testing remain release gates. The installed ARM64 .deb passed the real
+window, login and native folder-picker test. Both CI architectures pass the
+shared tests and build/install packages; WebKit's nested sandbox needs the
+disposable CI runner namespace configuration currently under test.
 
 ## Termux distribution repository
 
@@ -69,19 +87,22 @@ bootstrap pass 4 KB/16 KB load-alignment checks. This is not a 16 KB device test
 The original usable signing backup remains `/home/user/Documents/droid.txt`.
 The four repository Secrets are stored in BashKitten and termux-suite; no key
 material is tracked. Public certificate metadata is tracked for verification.
+The separate catalog private-key backup is `/home/user/Documents/droid-catalog.txt`
+(0600), with its own catalog-only repository Secret.
 
 ## Remaining work
 
 Finish and validate the native Android store/catalog/install/self-update flow;
-foreground Termux manager startup; resumable bootstrap/APT/Pi npm jobs and runtime
-selection; X11/GPU profile/package switching controls; APK lifecycle/download/
-picker/OAuth/notification tests; platform `.deb` packaging and AMD64 CI;
+fresh core/desktop bootstrap from actual packages; paired X11 APK/companion
+updates, GPU/profile controls and custom dependencies; APK lifecycle/download/
+picker/OAuth/notification tests; package upgrade/removal and AMD64 host CI;
 source/license release artifacts including exact bootstrap corresponding source;
 candidate upgrade/migration tests; final existing-APT publication and install
 checks. GPU claims require physical devices. Real-account OAuth and 16 KB device
 tests must be distinguished from fixtures and static alignment checks.
 
-Do not uninstall the existing emulator's differently signed Termux or destroy
-its profile. Cuttlefish snapshot attempts from earlier work failed; a disk backup
-exists locally but must be assessed before relying on it. Use a disposable
-instance/profile for signature migration and fresh-install tests.
+Do not uninstall the original emulator's differently signed Termux or destroy
+its profile (`192.168.97.2:5555`). A separate disposable Cuttlefish instance now
+runs as group `bashkittensuite`, ADB `0.0.0.0:6521`, with the suite-signed Termux,
+API, standalone X11 and BashKitten candidates. Use that instance for fresh setup,
+installer updates and signature/variant migration tests.
