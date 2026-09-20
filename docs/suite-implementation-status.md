@@ -21,7 +21,7 @@ unfinished steps. Pi 0.85.1 → 0.86.0 → rollback passed through browser setti
 **17 shared-server tests pass on local Linux ARM64.** Native Linux ARM64 and
 AMD64 CI both pass the shared suite and installed GTK/WebKit host checks,
 including package install/remove/reinstall and retained cookies. Recent successful
-runs include **35493031504** (0.2.1, both architectures). Local X11 and Wayland hosts pass
+runs include **35496733935** (0.2.2, both architectures). Local X11 and Wayland hosts pass
 account creation and persistent login; the installed ARM64 host opens the real
 native folder chooser. Browser clients retain the repository tree/ZIP controls;
 only the Linux host hides them. Real system image/text clipboard paste, HTML
@@ -38,7 +38,7 @@ shared pages repeatedly). This is a measured case, not a device minimum.
 Cuttlefish's original Termux profile passed **13 shared tests** against native
 Pi 0.86.0 and Node 24.18.0, including HTTPS, without changing its credentials.
 The fresh suite profile now passes **all 17 shared tests** against Pi 0.85.1,
-including HTTPS, with the native 0.2.1 package. The lifecycle test uses a longer
+including HTTPS, with the 0.2.2 server source and native dependencies. The lifecycle test uses a longer
 emulator allowance and TLS has its `openssl-tool` test dependency. Fixture OAuth is not a real provider-account authorization.
 
 ## Android device evidence
@@ -66,10 +66,10 @@ Termux device at `192.168.97.2:5555`.
 - Chrome separately passes login/render/reload-cookie checks against the same
   localhost server. Chrome usage/crash reporting was switched off during setup.
   Chrome file flow, clipboard paste and external-provider login remain to test.
-- **Actual turn notification delivery and tap pass** with API suite revision 2:
-  after the APK was force-stopped, a native Pi completion posts once and tapping
-  it opens that conversation. Notification permission was enabled through Android
-  settings; camera/microphone/location/contacts remain unrequested.
+- Completion notification delivery passed on the earlier API candidate. The final
+  suite restores unmodified upstream API; notifications now use its standard text
+  interface without a custom notification-link action. Camera/microphone/location/
+  contacts remain unrequested.
 - **Real Termux:API store update passes** on BashKitten APK code 3 (**35492190686**):
   signed catalog verification, GitHub HTTPS download, APK hash/certificate checks,
   Android installer confirmation, API code 1002 → 1003, durable service pause and
@@ -98,27 +98,29 @@ Device evidence is retained locally under `test-results/android`, including
 `openresearchtools/termux-suite` tracks pristine upstream sources, expanded X11
 submodules, hashes, licenses, upstream versions and the internal version ledger.
 The Termux patches add trusted setup/commands and bootstrap-path compatibility.
-A small Termux:API patch routes exact BashKitten notification URIs through a
-direct Android activity PendingIntent: Android 17 testing demonstrated that the
-upstream shell trampoline is blocked for background activity launches.
+API and all other add-ons retain upstream application behavior; the earlier
+notification-link patch has been removed.
 
 All eight apps, both X11 variants and the paired aarch64 companion pass Actions
-build/signing checks. **35488852785** includes API 0.53.0 suite revision 2/code
-1003. Termux remains 0.118.3 suite revision 2/code 1003. Upstream displayed
-versions and individual licenses are retained. No production release/catalog has
-been promoted to production. Complete source-backed **candidate-20260920**
-prereleases now exist in both repositories for actual installer tests. Their
-assets remain outside the production catalog and APT index. The first BashKitten
-prerelease is superseded for APK confirmation by the code 3 fix described above.
-Daily read-only upstream checks report new release/commit
-identities without importing or installing them automatically.
+build/signing checks in **35495776147**, published as **suite-35495776147**.
+API is 0.53.0 suite revision 3/code 1004; Termux is 0.118.3 suite revision 2/code
+1003. The companion is indexed in the existing APT repository. Upstream displayed
+versions and individual licenses are retained.
+
+The daily upstream workflow now imports official releases for each app and X11
+nightlies, checks the patches, commits the source update and dispatches the full
+build/sign/publish workflow. The current-release check passed in **35496320826**;
+all eight current upstream revisions match. A future changed-source import has
+not yet been exercised by an actual newer upstream release. Build-layout changes
+or rejected patches stop the update visibly. Unchanged X11 companion versions
+are reused across releases so APT never sees duplicate package identities.
 
 APK ELF/ZIP alignment is checked. The pinned official bootstrap contains **340
 ELFs** passing 4 KB/16 KB load-alignment checks. This is not a 16 KB device test.
 The bootstrap source collector verified **98 exact source/build inputs for 83
 packages**, retaining recipes, patches and toolchain provenance. A complete local
-suite release assembly passed with the API revision 2 artifacts and was used for
-the source-backed prerelease.
+suite release assembly includes the unmodified API revision 3 and is published
+with its bootstrap source inputs.
 
 BashKitten's source collector successfully verifies **202 npm archives**, keeps
 unmodified license/notice payloads, and includes exact Pi upstream source plus
@@ -141,13 +143,25 @@ A system-call trace of Pi service discovery, RPC startup and idle operation
 showed no IP network connections; offline/telemetry settings were effective.
 The separate requested store/package checks remain enabled.
 
-The daily signed catalog renewal workflow is implemented. It renews only explicitly
-selected release manifests pinned by SHA-256; no production channel is selected
-yet. APK replacement pause/recovery, X11 companion pairing, named custom graphics
-profiles/dependencies, are implemented. The custom Pi release-manifest gate and automatic runtime cleanup
-have been removed; package updates use npm registry releases.
-Cleanup preserves active, rollback, bundled, terminal-used, unowned and symlinked
-runtimes; its regression passes, with a seven-day grace period.
+The daily signed catalog renewal workflow uses release manifests pinned by
+SHA-256. APK replacement pause/recovery, X11 companion pairing and named custom
+graphics profiles/dependencies are implemented. Package updates use the npm
+registry directly; the custom Pi release-manifest gate and automatic runtime
+cleanup have been removed. Installed global npm packages are checked separately
+from APT, and APT-owned npm files remain managed by APT.
+
+A real **Update all** operation on Cuttlefish completed APT and global npm checks
+and updated native Pi **0.85.1 → 0.86.0**. Its actual runtime then completed all
+seven native tools: write, edit, read, bash, grep, find and ls. The previous runtime
+remains available. The final 0.2.2 server source passes all 17 shared tests in
+Termux; Android build **35496789356** and both native Linux builds pass.
+
+The Android host now has a separate hamburger menu, Apps store, Package updates,
+Desktop and Pi sessions screens. Store cards use upstream icons with license
+notices, installed/update states and pull to refresh. The WebView stays attached
+while native pages are open, preserving the chat document, selected session,
+unsent draft and cookies. Package update output is shown separately from the
+store with APT, global npm and selected Pi version status.
 
 The usable Android signing backup is `/home/user/Documents/droid.txt` (0600).
 The same four signing Secrets exist in both repositories. Catalog signing uses
