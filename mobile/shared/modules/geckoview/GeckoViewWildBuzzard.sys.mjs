@@ -41,9 +41,13 @@ export class GeckoViewWildBuzzard extends GeckoViewModule {
       context = BrowsingContext.get(Number(params.frameId));
       if (!context || context.top !== top) throw new Error("Frame is outside this tab");
     }
-    const principal = context.currentWindowGlobal?.documentPrincipal;
-    if (!principal || principal.isSystemPrincipal || !/^https?:$/.test(principal.URI?.scheme + ":")) {
-      throw new Error("Agent page controls are restricted to HTTP and HTTPS documents");
+    const windowGlobal = context.currentWindowGlobal;
+    const principal = windowGlobal?.documentPrincipal;
+    const webDocument = /^https?$/.test(principal?.URI?.scheme);
+    const webPdf = principal?.spec === "resource://pdf.js/web/viewer.html" &&
+      /^https?$/.test(windowGlobal.documentURI?.scheme);
+    if (!principal || principal.isSystemPrincipal || (!webDocument && !webPdf)) {
+      throw new Error("Agent page controls are restricted to HTTP and HTTPS documents and their PDF viewer");
     }
     if (method === "diagnostics") {
       const evaluated = await context.currentWindowGlobal.getActor("WildBuzzardBrowserControl").sendQuery("evaluate", {

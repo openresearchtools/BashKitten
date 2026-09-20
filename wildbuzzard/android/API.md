@@ -139,6 +139,10 @@ browser's selected tab.
 {"method":"tabs.close","params":{"tabId":"..."}}
 ```
 
+The built-in PDF viewer can be read and controlled when displaying an HTTP or
+HTTPS PDF in the caller’s tab, including its Download button. Internal browser
+pages and local files remain outside the page-control interface.
+
 Snapshots return at most 200 nodes within Android's response budget and mark
 `truncated` when limited. Use `depth` or `maxNodes` to request a smaller tree.
 To inspect a container in more detail, call `snapshot {tabId,target}` with its
