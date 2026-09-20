@@ -42,13 +42,13 @@ object TermuxBridge {
     }
     fun bootstrapStatus(context: Context, callback: (Result<JSONObject>) -> Unit) {
         val script = "dir=\"\$HOME/.local/share/bashkitten-pi/bootstrap\"; state=\$(cat \"\$dir/status.json\" 2>/dev/null || printf '{}'); log=\$(tail -c 24000 \"\$dir/output.log\" 2>/dev/null | base64 | tr -d '\\n'); printf '{\"bootstrap\":%s,\"logBase64\":\"%s\"}\\n' \"\$state\" \"\$log\""
-        execute(context, "$prefix/bin/bash", arrayOf("-c", script), null, callback)
+        execute(context, "$prefix/bin/bash", arrayOf("-c", script), null, callback = callback)
     }
 
     fun command(context: Context, command: String, args: JSONObject = JSONObject(), callback: (Result<JSONObject>) -> Unit) {
         // Bootstrap may still be preparing packages; avoid Termux's missing-executable dialog.
         val script = "if [ -x '$prefix/bin/bashkittenctl' ]; then exec '$prefix/bin/bashkittenctl' \"\$@\"; else printf 'BashKitten packages are not installed yet' >&2; exit 1; fi"
-        execute(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-control", command, args.toString()), null, callback)
+        execute(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-control", command, args.toString()), null, callback = callback)
     }
 
     fun execute(context: Context, path: String, args: Array<String>, stdin: String?, timeoutMillis: Long = 45000, callback: (Result<JSONObject>) -> Unit) {

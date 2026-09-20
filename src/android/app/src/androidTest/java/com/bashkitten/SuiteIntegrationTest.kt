@@ -70,7 +70,7 @@ class SuiteIntegrationTest {
                 TermuxBridge.execute(context, TermuxBridge.prefix + "/bin/bash", arrayOf("-c", "printf 'expected failure' >&2; exit 7"), null) { failure = it; failed.countDown() }
             }
             assertTrue(failed.await(60, TimeUnit.SECONDS))
-            assertEquals("expected failure", failure!!.exceptionOrNull()?.message)
+            assertEquals("expected failure", failure!!.exceptionOrNull()?.message?.trim())
             val output = File(context.getExternalFilesDir(null), "suite-control.png")
             device.takeScreenshot(output)
         }
