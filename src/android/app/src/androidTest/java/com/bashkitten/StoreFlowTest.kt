@@ -1,0 +1,64 @@
+package com.bashkitten
+
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import android.util.AtomicFile
+import android.util.Base64
+import androidx.test.core.app.ActivityScenario
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.Until
+import org.junit.Assert.*
+import org.junit.Assume.assumeNotNull
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
+
+/** A signed prerelease catalog may be seeded only by this separate test APK.
+ * All verification, HTTPS APK download and PackageInstaller work use production code.
+ */
+@RunWith(AndroidJUnit4::class)
+class StoreFlowTest {
+    @Test fun signedCatalogInstall() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val args = InstrumentationRegistry.getArguments()
+        val catalog = args.getString("storeCatalog")
+        assumeNotNull(catalog)
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        val file = AtomicFile(File(context.filesDir, "catalog.json"))
+        val output = file.startWrite()
+        try { output.write(Base64.decode(catalog, Base64.NO_WRAP)); file.finishWrite(output) }
+        catch (error: Exception) { file.failWrite(output); throw error }
+        val id = args.getString("storePackage") ?: "com.termux.api"
+        val entry = AppStore.entries(context).single { it.getString("packageId") == id }
+        val expected = entry.getLong("versionCode")
+        assertTrue("Use an older installed candidate for this update test", (AppStore.installed(context, id)?.longVersionCode ?: 0) < expected)
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            if (!context.packageManager.canRequestPackageInstalls()) {
+                scenario.onActivity { it.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))) }
+                assertTrue(device.wait(Until.hasObject(By.clazz("android.widget.Switch")), 10000))
+                val toggle = device.findObject(By.clazz("android.widget.Switch"))
+                if (!toggle.isChecked) toggle.click()
+                device.pressBack()
+                assertTrue(context.packageManager.canRequestPackageInstalls())
+            }
+            Thread.sleep(2000)
+            AppStore.install(context, entry)
+            for (attempt in 0 until 180) {
+                if ((AppStore.installed(context, id)?.longVersionCode ?: 0) >= expected) break
+                AppStore.confirmation(context)?.let { intent ->
+                    scenario.onActivity { it.startActivity(intent) }
+                    if (device.wait(Until.hasObject(By.res("android:id/button1")), 5000)) device.findObject(By.res("android:id/button1")).click()
+                }
+                Thread.sleep(1000)
+            }
+            assertEquals(expected, AppStore.installed(context, id)!!.longVersionCode)
+            AppStore.reconcile(context)
+            instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "Installed verified $id versionCode=$expected through PackageInstaller\n") })
+        }
+    }
+}
