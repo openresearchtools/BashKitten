@@ -1,0 +1,5 @@
+The Termux application icons are unmodified assets from the corresponding
+upstream Termux projects, at the commits recorded in termux-suite/upstream.lock.json.
+Copyright their respective Termux contributors; original project license terms apply.
+Sources and complete license notices: https://github.com/openresearchtools/termux-suite
+BashKitten's own icon is GPL-3.0-only, as is its application source.
