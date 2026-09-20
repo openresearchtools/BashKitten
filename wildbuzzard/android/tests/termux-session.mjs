@@ -62,7 +62,10 @@ try {
     report.licenseBytes = Buffer.byteLength(printed.stdout);
   });
   await check('actual Pi extension loads and Android app identity authorizes', async () => {
-    if (vendor === 'vendor') await browserCall(null, {}, { authorize: true });
+    if (vendor === 'vendor') {
+      if (process.env.WB_EXPECT_DENIAL === '1') await assert.rejects(call('capabilities'), /authorization/);
+      await browserCall(null, {}, { authorize: true });
+    }
     const caps = await call('capabilities'); report.capabilities = caps;
     assert.equal(caps.authorization, vendor === 'signed' ? 'publisher-signature' : 'user-grant');
     assert.equal(caps.debuggable, false); assert.equal(caps.androidAccessibilityService, false);

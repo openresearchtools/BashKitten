@@ -124,7 +124,8 @@ public final class AppCommandBrowserTest {
         scope += "-other";
         assertFalse(call("downloads.list", new JSONObject()).toString().contains(download.getString("id")));
         run(false, "downloads.get", new JSONObject().put("downloadId", download.getString("id")).toString()); scope = originalScope;
-        device.findObject(By.desc("More options")).click(); scrollToAndClick(device, "Settings"); scrollToAndClick(device, "Revoke agent access");
+        device.findObject(By.desc("More options")).click(); scrollToAndClick(device, "Settings"); scrollToAndClick(device, "Agent access");
+        scrollToAndClick(device, "Agent access " + context.getPackageName()); click(device, "Revoke");
         run(false, "tabs.list");
         try { transfer(transfer, transfer.getString("token"), false, 403); } catch (ConnectException ignored) {}
         assertNotNull("Revocation does not kill the browser", device.executeShellCommand("pidof org.openresearchtools.wildbuzzard"));
