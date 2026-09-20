@@ -60,15 +60,14 @@ fun PrivateBrowsingDescription(
             )
 
             Text(
-                text = stringResource(id = R.string.felt_privacy_desc_card_title),
+                text = stringResource(id = R.string.tab_manager_empty_private_tabs_page_header),
                 textAlign = TextAlign.Center,
                 style = FirefoxTheme.typography.headline5,
             )
 
             Text(
                 text = stringResource(
-                    id = R.string.felt_privacy_info_card_subtitle_3,
-                    stringResource(id = R.string.app_name),
+                    id = R.string.wildbuzzard_private_browsing_explanation,
                 ),
                 textAlign = TextAlign.Center,
                 style = FirefoxTheme.typography.subtitle1,

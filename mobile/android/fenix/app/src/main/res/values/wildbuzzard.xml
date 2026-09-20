@@ -8,4 +8,5 @@
     <string name="wildbuzzard_tracking_explanation">Blocks tracking cookies and scripts according to the protection mode you choose.</string>
     <string name="wildbuzzard_tracking_strict_explanation">Blocks additional trackers. Some sites may not work properly.</string>
     <string name="wildbuzzard_delete_history_explanation">Removes browsing history from this device.</string>
+    <string name="wildbuzzard_private_browsing_explanation">History, cookies and site data are cleared when all private tabs are closed. Bookmarks and downloaded files remain.</string>
 </resources>
