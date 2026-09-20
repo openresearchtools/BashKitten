@@ -16,6 +16,8 @@ import org.junit.Assume.assumeNotNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** A signed prerelease catalog may be seeded only by this separate test APK.
  * All verification, HTTPS APK download and PackageInstaller work use production code.
@@ -58,6 +60,20 @@ class StoreFlowTest {
             }
             assertEquals(expected, AppStore.installed(context, id)!!.longVersionCode)
             AppStore.reconcile(context)
+            if (id != "com.bashkitten") {
+                var recovered = false
+                for (attempt in 0 until 30) {
+                    val done = CountDownLatch(1)
+                    TermuxBridge.command(context, "status") { result ->
+                        recovered = result.getOrNull()?.let { it.isNull("appUpdate") && it.optJSONObject("web")?.optString("status") == "running" } == true
+                        done.countDown()
+                    }
+                    assertTrue(done.await(50, TimeUnit.SECONDS))
+                    if (recovered) break
+                    Thread.sleep(1000)
+                }
+                assertTrue("Services did not recover after the Android installation", recovered)
+            }
             instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "Installed verified $id versionCode=$expected through PackageInstaller\n") })
         }
     }
