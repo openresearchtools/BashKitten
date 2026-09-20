@@ -15,5 +15,14 @@
         <item name="colorControlNormal">@color/wildbuzzard_secondary</item>
         <item name="colorControlActivated">@color/wildbuzzard_secondary</item>
         <item name="colorButtonNormal">@color/wildbuzzard_button</item>
+        <item name="alertDialogTheme">@style/WildBuzzardDialogTheme</item>
+    </style>
+    <style name="WildBuzzardDialogTheme" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="buttonBarPositiveButtonStyle">@style/WildBuzzardDialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/WildBuzzardDialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/WildBuzzardDialogButton</item>
+    </style>
+    <style name="WildBuzzardDialogButton" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/wildbuzzard_text</item>
     </style>
 </resources>
