@@ -43,7 +43,7 @@ export async function updatePackages(job) {
     await apt(job, ['-y', 'full-upgrade']);
   }, { desktop: true }));
   const errors = [];
-  for (const operation of [updateNpm, installPi]) { try { await operation(job); } catch (error) { errors.push(error.message); } }
+  for (const operation of [updateNpm, installPi]) { try { await operation(job); } catch (error) { if (error.code === 'CANCELLED') throw error; errors.push(error.message); } }
   if (errors.length) throw Error('APT completed. npm: ' + errors.join('; '));
   await refreshApt(job);
 }

@@ -95,7 +95,7 @@ test('Update checks report registry Pi releases and global npm updates without a
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-npm-check-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const bin = path.join(directory, 'bin'); await fs.mkdir(bin);
-  await fs.writeFile(path.join(bin, 'npm'), `#!/bin/sh
+  await fs.writeFile(path.join(bin, 'npm'), `#!${process.platform === 'android' ? process.env.PREFIX + '/bin/sh' : '/bin/sh'}
 case "$1" in
  view) printf '%s' '{"version":"9.0.0","engines":{"node":">=22"}}';;
  outdated) printf '%s' '{"example-cli":{"current":"1.0.0","latest":"1.1.0"}}'; exit 1;;
