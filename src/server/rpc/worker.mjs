@@ -63,7 +63,7 @@ async function readState(follow) {
 async function adoptSession(state, follow) {
   const previous = id, oldServer = server, oldOwnership = ownership;
   await draftWrites;
-  id = randomUUID();
+  id = state.sessionId;
   meta = { ...meta, id, piFile: state.sessionFile, piSessionId: state.sessionId,
     title: state.sessionName || `Fork: ${meta.title}`, parentSession: previous, modified: Date.now() };
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
@@ -143,7 +143,7 @@ async function launch() {
 async function applyPending() {
   if (stopping || busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
   const version = await syncContext();
-  if (version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root) {
+  if (pendingContext || version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root) {
     changing = true;
     await rpc.close();
     try { await launch(); }
@@ -214,6 +214,7 @@ async function handle(req, res) {
     }
     if (req.url === '/status') return json(res, { data: status() });
     if (req.url === '/view') return json(res, snapshot());
+    if (req.url === '/fork-messages') return json(res, await rpc.command('get_fork_messages'));
     if (req.url === '/models') return json(res, await rpc.command('get_available_models'));
     const value = await jsonBody(req);
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
@@ -240,7 +241,7 @@ async function handle(req, res) {
       if (stopping) throw Error('Pi instance is stopping');
       if (req.url === '/barrier') { const state = await rpc.command('get_state'); return { idle: !state.isStreaming && !state.isCompacting && !dialogs.size && !queue.some(q => !q.held && !q.editToken) }; }
       if (!['/context', '/barrier'].includes(req.url)) allowRuntimeWork();
-      if (req.url === '/context') { pendingContext = (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
+      if (req.url === '/context') { pendingContext = Boolean(value.reload) || (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
       if (req.url === '/message') {
         await applyPending();
         meta.messages ||= [];
@@ -271,8 +272,8 @@ async function handle(req, res) {
         });
         await writeMeta(meta); return { data: status() };
       }
-      if (req.url === '/fork') {
-        const result = await rpc.command('fork', { entryId: value.entryId });
+      if (req.url === '/fork' || req.url === '/clone') {
+        const result = await rpc.command(req.url.slice(1), req.url === '/fork' ? { entryId: value.entryId } : {});
         if (result.cancelled) return result;
         await refresh(false);
         return { ...result, id };

@@ -7,6 +7,8 @@ import { dataDir, readJson, writeJson } from '../../common.mjs';
 import { selectedRuntime } from '../../rpc/runtime.mjs';
 import { platform } from '../index.mjs';
 
+import { wildbuzzardStatus, checkWildbuzzard, updateWildbuzzard } from './wildbuzzard.mjs';
+
 const exec = promisify(execFile);
 const options = ['-o', 'DPkg::Lock::Timeout=300', '-o', 'Dpkg::Use-Pty=0', '-o', 'APT::Status-Fd=3', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
 const environment = { DEBIAN_FRONTEND: 'noninteractive' };
@@ -31,7 +33,7 @@ export async function packageInventory() {
     npm = Object.entries(value.dependencies || {}).map(([name, item]) => ({ name, version: item.version || 'Unknown' }));
     npmError = value.error?.summary;
   } catch (error) { npmError = error.message; }
-  return { apt, npm, npmError, pi: selectedRuntime().version };
+  return { apt, npm, npmError, pi: selectedRuntime().version, wildbuzzard: await wildbuzzardStatus() };
 }
 const sourceFile = path.join(dataDir, 'termux.json');
 export async function termuxSource() { return (await readJson(sourceFile, {})).source || 'suite'; }
@@ -53,6 +55,7 @@ export async function checkPackages(job) {
   if (platform === 'termux') results.push(await refreshApt(job));
   await job.phase('Checking installed npm packages'); results.push(await checkNpm());
   await job.phase('Checking Pi on npm'); results.push(await checkPi());
+  if (platform === 'termux') results.push(await checkWildbuzzard());
   const errors = results.filter(result => result.error);
   if (errors.length) throw Error(errors.map(result => result.error).join('; '));
 }
@@ -69,7 +72,7 @@ export async function updatePackages(job) {
     await apt(job, ['-y', 'full-upgrade']);
   }, { desktop: true }));
   const errors = [];
-  for (const operation of [updateNpm, installPi]) { try { await operation(job); } catch (error) { if (error.code === 'CANCELLED') throw error; errors.push(error.message); } }
+  for (const operation of [updateNpm, installPi, updateWildbuzzard]) { try { await operation(job); } catch (error) { if (error.code === 'CANCELLED') throw error; errors.push(error.message); } }
   if (errors.length) throw Error('APT completed. npm: ' + errors.join('; '));
   await refreshApt(job);
 }

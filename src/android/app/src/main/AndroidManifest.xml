@@ -5,6 +5,7 @@
     <uses-permission android:name="com.termux.permission.RUN_TRUSTED_COMMAND" />
     <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <queries>
+        <package android:name="org.openresearchtools.wildbuzzard" />
         <package android:name="com.termux" /><package android:name="com.termux.api" />
         <package android:name="com.termux.x11" /><package android:name="com.termux.boot" />
         <package android:name="com.termux.widget" /><package android:name="com.termux.styling" />
@@ -12,10 +13,10 @@
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
     </queries>
     <application android:label="BashKitten" android:icon="@drawable/ic_bashkitten" android:allowBackup="false"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:theme="@style/BashKittenTheme"
         android:networkSecurityConfig="@xml/network_security_config" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask"
-            android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
+            android:configChanges="orientation|screenSize|keyboardHidden|uiMode" android:windowSoftInputMode="adjustResize">
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
             <intent-filter><action android:name="android.intent.action.VIEW" /><category android:name="android.intent.category.DEFAULT" /><category android:name="android.intent.category.BROWSABLE" /><data android:scheme="bashkitten" android:host="session" /></intent-filter>
         </activity>

@@ -10,6 +10,7 @@ import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, s
 import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
 import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } from './platform/termux/desktop.mjs';
+import { wildbuzzardStatus, setupWildbuzzard, authorizeWildbuzzard } from './platform/termux/wildbuzzard.mjs';
 import { Jobs } from './updates/jobs.mjs';
 import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
 import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
@@ -86,7 +87,7 @@ async function serve() {
   const nodeStamp = async () => { const stat = await fs.stat(process.execPath); return `${stat.dev}:${stat.ino}:${stat.mtimeMs}`; };
   const initialNode = await nodeStamp();
   let restarting = false;
-  const jobs = new Jobs({ 'finish-app-update': finishAppUpdate, 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
+  const jobs = new Jobs({ ...(platform === 'termux' ? { 'wildbuzzard-setup': setupWildbuzzard, 'wildbuzzard-authorize': authorizeWildbuzzard } : {}), 'finish-app-update': finishAppUpdate, 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
   await jobs.init();
   async function web() {
     return probeBackend();
@@ -127,7 +128,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 1, platform, appUpdate: await readJson(appUpdateFile, null), manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+    return { version: 1, platform, wildbuzzard: platform === 'termux' ? await wildbuzzardStatus() : undefined, appUpdate: await readJson(appUpdateFile, null), manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
   }
   async function prepareAppUpdate(job, input) {
     await atIdle(job, async () => {

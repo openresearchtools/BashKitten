@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
-import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
+import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
@@ -78,7 +78,37 @@ async function savedView(meta) {
     entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e), events: [],
     steeringMessages: drafts.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(queueItem) };
 }
+const hiddenSessionsFile = path.join(dataDir, 'hidden-pi-sessions.json');
+let discovery, discoveredAt = 0;
+async function discoverSessions() {
+  if (discovery) return discovery;
+  if (Date.now() - discoveredAt < 5000) return;
+  discovery = (async () => {
+    const { pi: { SessionManager } } = await loadPi();
+    const native = await SessionManager.listAll();
+    const hidden = await readJson(hiddenSessionsFile, []);
+    const known = new Map((await allMeta()).filter(meta => meta.piFile).map(meta => [meta.piFile, meta]));
+    for (const session of native) {
+      if (hidden.includes(session.path) || !session.cwd || !/^[a-f0-9-]{36}$/.test(session.id)) continue;
+      const existing = known.get(session.path);
+      if (existing) {
+        // A live worker owns its metadata. Pi's discovery remains read-only.
+        if (await running(existing.id)) continue;
+        const next = { ...existing, cwd: session.cwd, title: session.name || existing.title, modified: Number(session.modified) };
+        if (next.cwd !== existing.cwd || next.title !== existing.title || next.modified !== existing.modified) await writeMeta(next);
+      } else {
+        const meta = { id: session.id, cwd: session.cwd, title: session.name || session.firstMessage?.replace(/\s+/g, ' ').slice(0, 100) || 'Pi session',
+          piFile: session.path, piSessionId: session.id, imported: true, modified: Number(session.modified), messages: [] };
+        await privateDir(sessionDir(meta.id));
+        await createJson(path.join(sessionDir(meta.id), 'ui.json'), meta);
+      }
+    }
+    discoveredAt = Date.now();
+  })();
+  try { await discovery; } finally { discovery = null; }
+}
 async function sessionList() {
+  await discoverSessions();
   return Promise.all((await allMeta()).map(async meta => {
     const state = await running(meta.id);
     return { id: meta.id, title: meta.title, cwd: meta.cwd, model: meta.model, thinking: meta.thinking, modified: meta.modified, current_segment: 1, running: Boolean(state?.data.busy) };
@@ -94,6 +124,9 @@ async function createSession(value) {
   return meta;
 }
 async function deleteSession(id) {
+  if (discovery) await discovery;
+  const meta = await readMeta(id);
+  if (meta.piFile) await writeJson(hiddenSessionsFile, [...new Set([...(await readJson(hiddenSessionsFile, [])), meta.piFile])]);
   if (await running(id)) await workerRequest(id, '/shutdown', {});
   // Pi owns history, including native forks that may share a session directory.
   // Removing a sidebar entry must never remove another native session.
@@ -210,6 +243,7 @@ async function handler(req, res) {
       requireMethod(req, ['POST']); const input = await jsonBody(req);
       const found = (await SessionManager.listAll()).find(s => s.path === input.path);
       if (!found) throw Error('Choose a session from Pi’s session list');
+      await writeJson(hiddenSessionsFile, (await readJson(hiddenSessionsFile, [])).filter(file => file !== found.path));
       const existing = (await allMeta()).find(m => m.piFile === found.path);
       if (existing) return json(res, { id: existing.id });
       const meta = await createSession({ cwd: found.cwd, title: found.name || found.firstMessage });
@@ -248,6 +282,7 @@ async function handler(req, res) {
       if (!file) throw Object.assign(Error('Attachment not found'), { status: 404 });
       return await sendFile(req, res, file.path, url.searchParams.get('download') === 'true');
     }
+    if (action === 'fork-messages') { requireMethod(req, ['GET']); await ensureWorker(id); return json(res, await workerRequest(id, '/fork-messages')); }
     if (action === 'status') { requireMethod(req, ['GET']); return json(res, await running(id) || { data: await savedView(meta) }); }
     if (action.startsWith('segments/')) { requireMethod(req, ['GET']); const view = await workerRequest(id, '/view').catch(() => savedView(meta)); return json(res, { segment: 1, entries: view.entries }); }
     requireMethod(req, ['POST', 'DELETE', 'PATCH']);
@@ -273,7 +308,7 @@ async function handler(req, res) {
       return json(res, await workerRequest(id, '/message', { ...await promptWithAttachments(text, attachments), kind: form.get('delivery') === 'steer' ? 'steer' : 'queue' }));
     }
     const input = await jsonBody(req);
-    if (action === 'fork') return json(res, await workerRequest(id, '/fork', input));
+    if (['fork', 'clone'].includes(action)) return json(res, await workerRequest(id, '/' + action, input));
     if (action === 'title' || action === 'rename') {
       const title = String(input.title || input.name || '').trim(); if (!title || title.length > 200) throw Error('Choose a name of 1–200 characters');
       return json(res, await workerRequest(id, '/rename', { title }));

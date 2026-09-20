@@ -25,9 +25,10 @@ import java.util.concurrent.CountDownLatch
 
 /** Catalog metadata has its own key; it cannot authorize a different APK signing identity. */
 object AppStore {
+    const val wildbuzzard = "org.openresearchtools.wildbuzzard"
     const val certificate = "2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38"
     private const val catalogUrl = "https://github.com/openresearchtools/termux-suite/releases/download/catalog/catalog.json"
-    val names = linkedMapOf("com.termux" to "Termux", "com.termux.api" to "Termux:API", "com.bashkitten" to "BashKitten", "com.termux.x11" to "Termux:X11", "com.termux.boot" to "Termux:Boot", "com.termux.widget" to "Termux:Widget", "com.termux.styling" to "Termux:Styling", "com.termux.window" to "Termux:Float", "com.termux.tasker" to "Termux:Tasker")
+    val names = linkedMapOf("com.termux" to "Termux", "com.termux.api" to "Termux:API", "com.bashkitten" to "BashKitten", "com.termux.x11" to "Termux:X11", wildbuzzard to "WildBuzzard", "com.termux.boot" to "Termux:Boot", "com.termux.widget" to "Termux:Widget", "com.termux.styling" to "Termux:Styling", "com.termux.window" to "Termux:Float", "com.termux.tasker" to "Termux:Tasker")
     fun prefs(context: Context) = context.getSharedPreferences("store", Context.MODE_PRIVATE)
     fun installed(context: Context, id: String) = runCatching { context.packageManager.getPackageInfo(id, PackageManager.GET_SIGNING_CERTIFICATES) }.getOrNull()
     private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -35,10 +36,10 @@ object AppStore {
     fun externalTermux(context: Context) = installed(context, "com.termux")?.let { signer(it) != certificate } == true
     fun canInstall(context: Context, id: String): Boolean {
         if (installed(context, id)?.let { signer(it) != certificate } == true) return false
-        if (id == "com.bashkitten") return true
+        if (id == "com.bashkitten" || id == wildbuzzard) return true
         if (externalTermux(context)) return false
         // An orphaned external add-on can also reserve the shared UID/certificate.
-        return installed(context, "com.termux") != null || names.keys.filter { it != "com.bashkitten" }.none { name -> installed(context, name)?.let { signer(it) != certificate } == true }
+        return installed(context, "com.termux") != null || names.keys.filter { it.startsWith("com.termux") }.none { name -> installed(context, name)?.let { signer(it) != certificate } == true }
     }
     fun busy(context: Context) = names.keys.any { id -> prefs(context).getString("state:$id", "").orEmpty().let { state -> listOf("Queued", "Downloading", "Waiting", "Installing", "Confirm").any(state::startsWith) } }
     fun enqueueInstall(context: Context, entry: JSONObject) {
@@ -120,7 +121,7 @@ object AppStore {
     private fun releaseUrl(value: String) {
         val uri = URL(value)
         check(uri.protocol == "https" && uri.host == "github.com" && uri.userInfo == null && uri.port == -1 &&
-            (uri.path.startsWith("/openresearchtools/bashkitten/releases/download/") || uri.path.startsWith("/openresearchtools/termux-suite/releases/download/"))) { "Unexpected release URL" }
+            (uri.path.startsWith("/openresearchtools/bashkitten/releases/download/") || uri.path.startsWith("/openresearchtools/termux-suite/releases/download/") || uri.path.startsWith("/openresearchtools/wildbuzzard-android/releases/download/"))) { "Unexpected release URL" }
     }
     private fun connection(address: String, etag: String? = null): HttpURLConnection {
         var url = URL(address)
@@ -219,7 +220,7 @@ object AppStore {
             val archive = context.packageManager.getPackageArchiveInfo(apk.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: error("Invalid APK")
             check(archive.packageName == id && archive.longVersionCode == entry.getLong("versionCode") && archive.versionName == entry.getString("versionName") && signer(archive) == certificate) { "APK identity does not match the catalog" }
             check(archive.applicationInfo?.flags?.and(android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) { "Refusing a debug APK" }
-            if (current != null && id != "com.bashkitten" && prefs(context).getBoolean("termuxInitialized", false)) {
+            if (current != null && id.startsWith("com.termux") && prefs(context).getBoolean("termuxInitialized", false)) {
                 val input = JSONObject().put("packageId", id)
                 prefs(context).edit().putString("state:$id", "Waiting for managed work to finish…").apply()
                 var status = control(context, "app-update-prepare", input)
@@ -246,7 +247,7 @@ object AppStore {
                 session.commit(pending.intentSender)
             } } catch (error: Exception) { installer.abandonSession(sessionId); throw error }
         } catch (error: Exception) {
-            if (id != "com.bashkitten" && prefs(context).getBoolean("termuxInitialized", false)) runCatching { control(context, "app-update-finish", JSONObject().put("packageId", id)) }
+            if (id.startsWith("com.termux") && prefs(context).getBoolean("termuxInitialized", false)) runCatching { control(context, "app-update-finish", JSONObject().put("packageId", id)) }
             prefs(context).edit().putString("state:$id", "Failed · " + error.message).apply(); throw error
         } finally { apk.delete(); downloading.remove(id) }
     }

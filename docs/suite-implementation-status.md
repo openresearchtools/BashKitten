@@ -399,3 +399,24 @@ Actual signed-index reinstalls of 0.2.7 passed on Linux ARM64 and both Termux
 installations. Their normal backends remained available at their remembered
 addresses, running `f04f601`. Verification scripts, providers and fixtures stayed
 outside application repositories and release artifacts.
+
+### 0.2.8 candidate: native session actions and optional Android browser
+
+Added stock Pi RPC fork/clone actions and Pi's fork chooser, plus `/providers`,
+`/settings` and `/attach`. Saved native Pi sessions are discovered into project
+sidebars without editing JSONL. The first message locks the selected folder;
+returning from Settings preserves the lock. Appearance moves to each native
+shell's System / Light / Dark menu; browser-only clients follow their browser.
+
+WildBuzzard is optional. Its canonical extension stays in its own repository;
+Termux downloads hash-verified source and locked dependencies, then uses native
+Pi package registration for its extension and short Android skill. The existing
+manager owns setup, update and authorization jobs. No WildBuzzard code was moved
+or deleted. A public browser release is not yet available, so its store card
+identifies development builds honestly instead of exposing an authenticated
+Actions URL as an install link. The signed catalog accepts its future releases.
+
+External Linux checks passed native clone/fork extension hooks, terminal-created
+session discovery, preserved history, hidden sidebar rows, real GTK/WebKit slash
+navigation, native color preference and folder locking. Android build/device
+verification and release promotion are pending for this candidate.

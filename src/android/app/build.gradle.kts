@@ -9,8 +9,8 @@ android {
         applicationId = "com.bashkitten"
         minSdk = 31
         targetSdk = 37
-        versionCode = 11
-        versionName = "0.2.7"
+        versionCode = 12
+        versionName = "0.2.8"
     }
     sourceSets.getByName("main").assets.srcDir("../../server/platform/termux/bootstrap")
     buildFeatures { compose = true }
@@ -18,6 +18,7 @@ android {
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 dependencies {
+    implementation("androidx.appcompat:appcompat:1.7.1")
     implementation(platform("androidx.compose:compose-bom:2026.09.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.activity:activity-compose:1.13.0")

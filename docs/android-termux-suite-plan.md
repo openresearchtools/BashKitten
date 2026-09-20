@@ -43,9 +43,31 @@ Keep the expandable repository browser in the top bar for Android and ordinary
 browser clients. The optional Linux desktop host uses the system file manager
 instead of this file panel, as specified in section 10.
 
-WildBuzzard is not a dependency, installation requirement or implementation
-target for this work. A future app signed with the suite certificate can request
-the same Termux command permission independently.
+WildBuzzard Android is an **optional** app in Apps, using its own logo and the
+shared signing identity. Its canonical Pi extension remains in
+`openresearchtools/wildbuzzard-android`; BashKitten downloads a hash-pinned copy
+and locked npm dependencies into Termux when the browser is installed. Native
+`pi install` registers the extension and the short Android browser skill. No
+extension code runs in or is bundled into the APK, and Linux does not install it.
+Package updates reconcile the selected extension revision at an idle boundary.
+Existing independently installed Pi packages remain in charge. Same-publisher
+Termux is automatically authorized by WildBuzzard; external Termux uses the
+browser's own user approval. Connect browser opens that flow without a terminal.
+Until WildBuzzard publishes a release, install its latest successful signed APK
+Actions artifact manually. Do not delete or move files in the browser repository.
+
+The chat action menu and slash menu include `/fork`, `/clone`, `/providers` and
+`/settings`, alongside compact and native file attachment. Fork and clone use
+stock Pi RPC, including extension hooks; fork choices come from Pi itself.
+Providers is the visible name of the former Services settings tab. Discover saved
+sessions, forks and clones made directly in native Pi and group them by the
+working folder in Pi's session header. Removing a sidebar row hides it without
+removing Pi's history. The new-chat folder button has a green outline; lock it
+once the first sent message creates a session.
+
+Appearance belongs to the native Android/Linux menu: System, Light or Dark,
+persisted by each shell. The shared web UI has no separate appearance setting;
+it follows the browser/WebView's color preference, including at login and About.
 
 ## 2. Repositories and release ownership
 

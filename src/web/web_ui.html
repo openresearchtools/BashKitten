@@ -362,8 +362,12 @@
     #model { width: 100px; } #thinking { width: 82px; }
     .toolbar-spacer { flex: 1; }
     #attachBtn { width: 27px; height: 27px; }
+    #folderBtn:not(:disabled) { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
     #composerActions { position:absolute; z-index:12; bottom:43px; left:8px; min-width:180px; padding:5px; background:var(--surface); border:1px solid var(--line); box-shadow:0 4px 18px #0002; }
     #composerActions button { display:block; width:100%; text-align:left; border:0; padding:9px 12px; background:transparent; color:var(--text); }
+    #composerActions button.hidden { display:none; }
+    #forkMessages { display:grid; gap:6px; max-height:50vh; overflow:auto; }
+    #forkMessages button { text-align:left; white-space:pre-wrap; overflow-wrap:anywhere; }
     #composerActions button:hover, #composerActions button:focus-visible { background:var(--hover); }
     .compaction-output { max-height:330px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; margin:7px 0; }
     #compactionStatus { padding:10px 12px; border-top:1px solid var(--line); color:var(--text); font-size:13px; }
@@ -511,13 +515,12 @@
           <div class="settings-heading"><h2>Settings</h2><button id="settingsDone" type="button">Done</button></div>
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
-            <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Services</button>
+            <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
             <button id="tabAbout" type="button" role="tab" aria-selected="false" aria-controls="settingsAbout" tabindex="-1" data-settings-tab="about">About</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
             <label>Web port<input id="webPort" type="number" min="1024" max="65535"></label>
-            <label>Appearance<select id="theme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
             <label class="wide">Default working folder<span class="folder-field"><input id="defaultCwd"><button id="defaultCwdBrowse" type="button">Browse…</button></span></label>
             <label>Default model<select id="defaultModel"></select></label>
             <label>Default thinking<select id="defaultThinking"></select></label>
@@ -542,9 +545,9 @@
           </div>
           </section>
           <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
-            <h3>Pi services</h3>
+            <h3>Pi providers</h3>
             <p class="meta">Connect using Pi’s own browser login or API key setup. Credentials are shared with Pi in Termux.</p>
-            <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a service" aria-label="Find a service"><button id="refreshServices" type="button">Refresh</button></div>
+            <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a provider" aria-label="Find a provider"><button id="refreshServices" type="button">Refresh</button></div>
             <div id="serviceLogin" class="hidden settings-section" role="status"></div>
             <div id="servicesList"></div>
             <p class="meta">Custom models use Pi’s native ~/.pi/agent/models.json. Existing Pi configuration is loaded automatically.</p>
@@ -570,9 +573,13 @@
               <input id="files" class="hidden" type="file" multiple>
               <button id="attachBtn" class="icon-button" type="button" title="Add files or actions" aria-label="Add files or actions" aria-haspopup="menu" aria-expanded="false" aria-controls="composerActions">＋</button>
               <div id="composerActions" class="hidden" role="menu" aria-label="Composer actions">
-                <button id="menuAttach" type="button" role="menuitem">Attach files</button>
+                <button id="menuAttach" data-command="attach" type="button" role="menuitem">Attach files</button>
 
-                <button id="menuCompact" type="button" role="menuitem">Compact context</button>
+                <button id="menuCompact" data-command="compact" data-session type="button" role="menuitem">Compact context <small>/compact</small></button>
+                <button data-command="fork" data-session type="button" role="menuitem">Fork chat <small>/fork</small></button>
+                <button data-command="clone" data-session type="button" role="menuitem">Clone chat <small>/clone</small></button>
+                <button data-command="providers" type="button" role="menuitem">Providers <small>/providers</small></button>
+                <button data-command="settings" type="button" role="menuitem">Settings <small>/settings</small></button>
               </div>
               <select id="model" title="Model"></select>
               <select id="thinking" title="Thinking level"></select>
@@ -601,6 +608,7 @@
     </aside>
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
+  <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="piDialog"><form id="piDialogForm" class="dialog-body"><h2 id="piDialogTitle"></h2><p id="piDialogMessage"></p><div id="piDialogInput"></div><div class="dialog-actions"><button id="piDialogCancel" type="button">Cancel</button><button class="primary">Continue</button></div></form></dialog>
 
   <dialog id="folderDialog">
@@ -731,9 +739,7 @@
       return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
-    function applyTheme(theme) {
-      document.documentElement.dataset.theme = ['light', 'dark'].includes(theme) ? theme : 'system';
-    }
+
 
     function inlineMarkdown(value) {
       return escapeHtml(value)
@@ -901,19 +907,8 @@
           fork.disabled = true;
           fork.textContent = 'Forking…';
           try {
-            const result = await api(`/api/sessions/${encodeURIComponent(sourceId)}/fork`, {
-              method: 'POST',
-              headers: {'content-type': 'application/json'},
-              body: JSON.stringify({entryId})
-            });
-            if (result.cancelled) { fork.disabled = false; fork.textContent = 'Fork'; return; }
-            const sessions = await loadSessions();
-            const created = sessions.find(session => session.id === result.id);
-            if (!created) throw new Error('Fork was created but could not be opened');
-            await openSession(created);
-            $('#prompt').value = result.text || '';
-            $('#prompt').dispatchEvent(new Event('input'));
-            $('#prompt').focus();
+            await branchSession('fork', entryId, sourceId);
+            fork.disabled = false; fork.textContent = 'Fork';
           } catch (error) {
             fork.disabled = false;
             fork.textContent = 'Fork';
@@ -1279,7 +1274,7 @@
     function setRunButton(running) {
       const button = $('#sendBtn');
       const editing = Boolean(editingQueueId);
-      const command = !editing && (goalDraft || (!pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact)(?:\s|$)/.test($('#prompt').value.trim())));
+      const command = !editing && (goalDraft || (!pendingFiles.length && !pendingRetainedAttachments.length && isSessionCommand($('#prompt').value.trim())));
       button.dataset.mode = editing ? 'edit' : command ? 'command' : (running ? 'pause' : 'play');
       button.textContent = running && !editing && !command ? 'Ⅱ' : '▶';
       button.title = editing ? (queuedItems().find(item => item.id === editingQueueId)?.kind === 'steer' ? 'Send edited steering message' : 'Save queued message') : goalDraft ? 'Send goal' : command ? 'Run command' : (running ? 'Stop current run' : 'Send');
@@ -1459,10 +1454,8 @@
       $('#notifyHidden').checked = config.notifications?.onlyWhenHidden !== false;
       $('#notifyPreview').checked = config.notifications?.preview !== false;
       folderLocations = value.locations || [];
-      applyTheme(config.theme);
       pendingCwd = config.default_cwd;
       $('#webPort').value = config.web_port;
-      $('#theme').value = config.theme || 'system';
       $('#defaultCwd').value = displayFolder(config.default_cwd);
       if (activeSettingsTab === 'services') await refreshServices();
     }
@@ -1895,7 +1888,7 @@
       $('#usage').classList.remove('hidden');
       $('#title').classList.add('hidden');
       $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
-      $('#folderBtn').disabled = false;
+      $('#folderBtn').disabled = Boolean(current);
       setRunButton(queueState.busy || Boolean(current?.running));
       if (current) renderUsage();
       else $('#usage').textContent = '';
@@ -2042,7 +2035,7 @@
       $('#title').textContent = 'New chat';
       $('#composerHint').textContent = 'Paste, drag, or attach files';
       $('#folderLabel').textContent = displayFolder(pendingCwd) || 'Set folder';
-      $('#folderBtn').disabled = false;
+      $('#folderBtn').disabled = Boolean(current);
       $('#folderBtn').title = 'Set working folder';
       setRunButton(false);
       $('#usage').textContent = '';
@@ -2320,13 +2313,23 @@
     };
     document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => button.closest('dialog').close());
 
-    function closeComposerActions(){ $('#composerActions').classList.add('hidden'); $('#attachBtn').setAttribute('aria-expanded','false'); }
-    $('#attachBtn').onclick=()=>{const menu=$('#composerActions'),open=menu.classList.contains('hidden');menu.classList.toggle('hidden',!open);$('#attachBtn').setAttribute('aria-expanded',String(open));$('#menuCompact').disabled=!current;if(open)$('#menuAttach').focus();};
-    $('#menuAttach').onclick=()=>{closeComposerActions();$('#files').click();};
-    $('#menuCompact').onclick=()=>{closeComposerActions();runSessionCommand('/compact');};
+    let slashMenu = false;
+    const commandButtons = [...$('#composerActions').querySelectorAll('[data-command]')];
+    function closeComposerActions(){ slashMenu = false; $('#composerActions').classList.add('hidden'); $('#attachBtn').setAttribute('aria-expanded','false'); }
+    function showComposerActions(filter = '') {
+      for (const button of commandButtons) {
+        button.classList.toggle('hidden', !button.dataset.command.startsWith(filter));
+        button.disabled = button.hasAttribute('data-session') && !current;
+      }
+      const visible = commandButtons.some(button => !button.classList.contains('hidden'));
+      $('#composerActions').classList.toggle('hidden', !visible);
+      $('#attachBtn').setAttribute('aria-expanded', String(visible));
+    }
+    $('#attachBtn').onclick=()=>{if (!$('#composerActions').classList.contains('hidden')) closeComposerActions(); else { slashMenu=false; showComposerActions(); $('#menuAttach').focus(); }};
+    for (const button of commandButtons) button.onclick=()=>{const consume=slashMenu;closeComposerActions();runSessionCommand('/'+button.dataset.command,consume);};
     $('#removeGoalChip').onclick=()=>{goalDraft=false;renderGoalChip();$('#prompt').focus();};
-    document.addEventListener('click',event=>{if(!$('#composerActions').contains(event.target)&&!$('#attachBtn').contains(event.target))closeComposerActions();});
-    $('#composerActions').onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeComposerActions();$('#attachBtn').focus();}else if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();const items=[...$('#composerActions').querySelectorAll('button:not(:disabled)')],index=items.indexOf(document.activeElement);items[(index+(event.key==='ArrowDown'?1:items.length-1))%items.length]?.focus();}};
+    document.addEventListener('click',event=>{if(!$('#composerActions').contains(event.target)&&!$('#attachBtn').contains(event.target)&&event.target!==$('#prompt'))closeComposerActions();});
+    $('#composerActions').onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();closeComposerActions();$('#attachBtn').focus();}else if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();const items=[...$('#composerActions').querySelectorAll('button:not(:disabled):not(.hidden)')],index=items.indexOf(document.activeElement);items[(index+(event.key==='ArrowDown'?1:items.length-1))%items.length]?.focus();}};
     $('#viewerClose').onclick = closeImageViewer;
     $('#viewerOut').onclick = () => setViewerZoom(viewerZoom / 1.25);
     $('#viewerIn').onclick = () => setViewerZoom(viewerZoom * 1.25);
@@ -2356,9 +2359,11 @@
     composeBox.addEventListener('dragover', event => { event.preventDefault(); composeBox.classList.add('dragging'); });
     composeBox.addEventListener('dragleave', event => { if (!event.relatedTarget || !composeBox.contains(event.relatedTarget)) composeBox.classList.remove('dragging'); });
     composeBox.addEventListener('drop', event => { event.preventDefault(); composeBox.classList.remove('dragging'); addAttachments(event.dataTransfer.files); });
-    $('#prompt').addEventListener('input', event => { event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 190)}px`; setRunButton(queueState.busy || Boolean(current?.running)); });
+    $('#prompt').addEventListener('input', event => { event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 190)}px`; setRunButton(queueState.busy || Boolean(current?.running)); const match = /^\/([a-z]*)$/.exec(event.target.value); if (match && !editingQueueId && !pendingFiles.length && !pendingRetainedAttachments.length) { slashMenu=true; showComposerActions(match[1]); } else if (slashMenu) closeComposerActions(); });
     $('#prompt').addEventListener('keydown', event => {
-      if (event.key === 'Escape' && editingQueueId) { event.preventDefault(); cancelQueueEdit(); }
+      if (event.key === 'ArrowDown' && slashMenu) { event.preventDefault(); commandButtons.find(button=>!button.disabled&&!button.classList.contains('hidden'))?.focus(); }
+      else if (event.key === 'Escape' && slashMenu) { event.preventDefault(); closeComposerActions(); }
+      else if (event.key === 'Escape' && editingQueueId) { event.preventDefault(); cancelQueueEdit(); }
       else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('#composer').requestSubmit(); }
     });
 
@@ -2366,13 +2371,39 @@
     $('#thinking').onchange = async () => { try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
+    function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|providers|settings|attach)$/.test(text); }
+    async function branchSession(kind, entryId, sourceId = current?.id) {
+      const result = await api(`/api/sessions/${encodeURIComponent(sourceId)}/${kind}`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entryId})});
+      if (result.cancelled) return;
+      const sessions = await loadSessions(), created = sessions.find(session => session.id === result.id);
+      if (!created) throw Error('The new chat could not be opened');
+      await openSession(created);
+      if (kind === 'fork') { $('#prompt').value=result.text || ''; $('#prompt').dispatchEvent(new Event('input')); }
+      $('#prompt').focus();
+    }
     async function runSessionCommand(text, consumeDraft = false) {
+      const command = text.split(/\s/)[0];
+      const consume = () => { if (consumeDraft) { $('#prompt').value=''; $('#prompt').dispatchEvent(new Event('input')); } closeComposerActions(); };
+      if (command === '/attach') { $('#files').click(); consume(); return; }
+      if (command === '/settings' || command === '/providers') { consume(); showSettingsView(); if (command === '/providers') selectSettingsTab('services'); return; }
       if (!current) { $('#composerHint').textContent = 'Open a chat first.'; return; }
       try {
+        if (command === '/fork') {
+          const sourceId = current.id, result = await api(`/api/sessions/${sourceId}/fork-messages`), root=$('#forkMessages');
+          root.replaceChildren();
+          if (!result.messages.length) throw Error('This chat has no messages to fork yet.');
+          for (const message of result.messages) {
+            const button=document.createElement('button'); button.type='button'; button.textContent=message.text || '(Attachment)';
+            button.onclick=async()=>{button.disabled=true;try{await branchSession('fork',message.entryId,sourceId);$('#forkDialog').close();}catch(error){$('#composerHint').textContent=error.message;}finally{button.disabled=false;}};
+            root.append(button);
+          }
+          consume(); $('#forkDialog').showModal(); return;
+        }
+        if (command === '/clone') { await branchSession('clone'); consume(); return; }
         await api(`/api/sessions/${current.id}/resume`, {method:'POST'});
         if (!source) await connectSession(current.id);
         await api(`/api/sessions/${current.id}/compact`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({instructions:text.slice(8).trim()})});
-        if (consumeDraft) { $('#prompt').value = ''; $('#prompt').dispatchEvent(new Event('input')); }
+        consume();
       } catch (error) { $('#composerHint').textContent = error.message; }
     }
 
@@ -2382,7 +2413,7 @@
       const text = $('#prompt').value.trim();
       if (editingQueueId) { await saveQueueEdit(); return; }
       if (!text && !pendingFiles.length && !pendingRetainedAttachments.length) return;
-      if (!goalDraft && !pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact)(?:\s|$)/.test(text)) {
+      if (!goalDraft && !pendingFiles.length && !pendingRetainedAttachments.length && isSessionCommand(text)) {
         await runSessionCommand(text, true);
         return;
       }
@@ -2526,7 +2557,6 @@
       try {
       if (activeSettingsTab !== 'app') return;
       config.web_port = Number($('#webPort').value);
-      config.theme = $('#theme').value;
       config.default_cwd = $('#defaultCwd').value;
       config.default_model = $('#defaultModel').value;
       config.default_thinking = $('#defaultThinking').value;
@@ -2549,7 +2579,6 @@
         },1200);return;
       }
       await loadModels();
-      applyTheme(config.theme);
       if (!current) {
         pendingCwd = config.default_cwd;
         $('#model').value = config.default_model;

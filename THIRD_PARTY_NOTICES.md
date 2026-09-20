@@ -19,3 +19,7 @@ supplements in [licenses](licenses) for texts omitted from published packages.
 Releases include application source, dependency sources and their notices.
 Development-only tools are excluded from production packages. No third-party
 chat frontend was copied.
+
+The Android Apps screen uses WildBuzzard’s original logo, with its attribution
+and license in About. Its optional Pi extension and npm dependencies install
+separately inside Termux and retain their package licenses.

@@ -68,6 +68,12 @@ class BashKitten(Gtk.Application):
             return
         PROFILE.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(PROFILE, 0o700)
+        try:
+            appearance = json.loads((PROFILE / 'appearance.json').read_text())
+        except (OSError, ValueError):
+            appearance = 'system'
+        self.appearance = appearance if appearance in ('system', 'light', 'dark') else 'system'
+        self.set_appearance(self.appearance)
         self.window = Gtk.ApplicationWindow(application=self, title='BashKitten', default_width=1120, default_height=820)
         header = Gtk.HeaderBar()
         menu = Gtk.MenuButton(icon_name='open-menu-symbolic', tooltip_text='Menu')
@@ -85,6 +91,20 @@ class BashKitten(Gtk.Application):
         about = Gtk.Button(label='About')
         about.connect('clicked', lambda _: (popover.popdown(), self.about()))
         actions.append(about)
+        actions.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+        actions.append(Gtk.Label(label='Appearance', xalign=0))
+        themes = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        group = None
+        for mode, label in [('system', 'System'), ('light', 'Light'), ('dark', 'Dark')]:
+            button = Gtk.CheckButton(label=label)
+            if group:
+                button.set_group(group)
+            else:
+                group = button
+            button.set_active(self.appearance == mode)
+            button.connect('toggled', lambda button, mode=mode: self.set_appearance(mode) if button.get_active() else None)
+            themes.append(button)
+        actions.append(themes)
         popover.set_child(actions)
         menu.set_popover(popover)
         header.pack_start(menu)
@@ -112,6 +132,20 @@ class BashKitten(Gtk.Application):
         self.window.present()
         self.poll()
         GLib.timeout_add_seconds(5, self.poll)
+
+    def set_appearance(self, mode):
+        self.appearance = mode
+        settings = Gtk.Settings.get_default()
+        if settings.find_property('gtk-interface-color-scheme'):
+            if mode == 'system':
+                settings.reset_property('gtk-interface-color-scheme')
+            else:
+                settings.set_property('gtk-interface-color-scheme', Gtk.InterfaceColorScheme.DARK if mode == 'dark' else Gtk.InterfaceColorScheme.LIGHT)
+        if mode == 'system':
+            settings.reset_property('gtk-application-prefer-dark-theme')
+        else:
+            settings.set_property('gtk-application-prefer-dark-theme', mode == 'dark')
+        (PROFILE / 'appearance.json').write_text(json.dumps(mode) + '\n')
 
     def about(self):
         window = Gtk.Window(title='About BashKitten', transient_for=self.window, modal=True,

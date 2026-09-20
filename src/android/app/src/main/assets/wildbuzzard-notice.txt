@@ -1,0 +1,3 @@
+WildBuzzard logo © Open Research Tools. From openresearchtools/wildbuzzard-android, revision 3035aa4ee383ca5b9b07ea62cdc811c4366f5656. Original artwork and license preserved.
+
+The optional WildBuzzard Pi extension is downloaded separately into Termux from that repository. It is AGPL-3.0-or-later; its typebox dependency is MIT. Their full licenses accompany their installed packages. The browser and extension are not bundled in this APK.

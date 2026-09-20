@@ -11,7 +11,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.View
 import java.util.concurrent.Executors
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -43,7 +44,7 @@ import androidx.core.graphics.drawable.toBitmap
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private lateinit var web: WebSurface
     private var screen by mutableStateOf("chat")
     private fun back() = openChat()
@@ -90,7 +91,14 @@ class MainActivity : ComponentActivity() {
         if (granted) connectTermux() else notice = "Allow ‘Run commands in Termux’ in BashKitten’s Android permissions, then connect."
     }
 
+    private var appearance by mutableStateOf("system")
+    private fun setAppearance(mode: String) {
+        appearance = mode
+        AppStore.prefs(this).edit().putString("appearance", mode).apply()
+        AppCompatDelegate.setDefaultNightMode(when (mode) { "dark" -> AppCompatDelegate.MODE_NIGHT_YES; "light" -> AppCompatDelegate.MODE_NIGHT_NO; else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM })
+    }
     override fun onCreate(state: Bundle?) {
+        setAppearance(AppStore.prefs(this).getString("appearance", "system") ?: "system")
         super.onCreate(state)
         enableEdgeToEdge()
         session = requestedSession(intent)
@@ -159,6 +167,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun aboutScreen() = screen == "about"
     fun backendUnavailable() { if (screen == "chat") { firstReady = true; navigate("apps"); preflight() } }
+    private var browserSetupAttempted = false
     private fun preflight() {
         if (aboutScreen()) return
         firstReady = true; reconnectUntil = System.currentTimeMillis() + 60000
@@ -197,6 +206,11 @@ class MainActivity : ComponentActivity() {
             requesting = false
             result.onSuccess { value ->
                 status = value; managerAttempts = 0; setupActive = false; AppStore.recoverServices(this, value)
+                val browser = value.optJSONObject("wildbuzzard")
+                if (!browserSetupAttempted && browser != null && !browser.optBoolean("ready") && installed(AppStore.wildbuzzard) != null && !jobActive()) {
+                    browserSetupAttempted = true
+                    command("package-job", JSONObject().put("kind", "wildbuzzard-setup"))
+                }
                 if (webRunning() || !value.getJSONObject("web").optBoolean("desired", true)) reconnectUntil = 0
                 if (webRunning() && (firstReady || session != null)) {
                     firstReady = false
@@ -276,6 +290,11 @@ class MainActivity : ComponentActivity() {
                 DropdownMenuItem(text = { Text(name) }, onClick = { if (id == "chat") openChat() else navigate(id) })
             }
             HorizontalDivider()
+            Text("Appearance", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
+            Row(Modifier.padding(horizontal = 8.dp)) {
+                for ((mode, label) in listOf("system" to "System", "light" to "Light", "dark" to "Dark")) TextButton(onClick = { setAppearance(mode) }) { Text(label + if (appearance == mode) " ✓" else "") }
+            }
+            HorizontalDivider()
             Row(Modifier.width(260.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Server · " + if (webRunning()) "Running" else "Stopped", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 IconButton(onClick = { command(if (webRunning()) "stop" else "start") }, modifier = Modifier.semantics { contentDescription = if (webRunning()) "Stop server" else "Start server" }) { Text(if (webRunning()) "■" else "▶") }
@@ -304,14 +323,14 @@ class MainActivity : ComponentActivity() {
         var detail by remember { mutableStateOf(false) }
         var typesOpen by remember { mutableStateOf(false) }
         val description = when (id) {
-            "com.termux" -> "Your Linux environment"; "com.termux.api" -> "Android services for Termux"; "com.bashkitten" -> "Your Pi workspace"
+            AppStore.wildbuzzard -> "Browse with Pi · optional Android browser"; "com.termux" -> "Your Linux environment"; "com.termux.api" -> "Android services for Termux"; "com.bashkitten" -> "Your Pi workspace"
             "com.termux.x11" -> "Desktop display"; "com.termux.boot" -> "Start scripts after a reboot"; "com.termux.widget" -> "Home screen shortcuts"
             "com.termux.styling" -> "Terminal themes and fonts"; "com.termux.window" -> "Floating terminal window"; else -> "Tasker integration"
         }
         Card(onClick = { detail = true }, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    val resource = when (id) { "com.termux" -> R.drawable.store_termux; "com.termux.api" -> R.drawable.store_api; "com.termux.x11" -> R.drawable.store_x11; "com.termux.boot" -> R.drawable.store_boot; "com.termux.widget" -> R.drawable.store_widget; "com.termux.styling" -> R.drawable.store_styling; "com.termux.window" -> R.drawable.store_float; "com.termux.tasker" -> R.drawable.store_tasker; else -> R.drawable.ic_bashkitten }
+                    val resource = when (id) { AppStore.wildbuzzard -> R.drawable.store_wildbuzzard; "com.termux" -> R.drawable.store_termux; "com.termux.api" -> R.drawable.store_api; "com.termux.x11" -> R.drawable.store_x11; "com.termux.boot" -> R.drawable.store_boot; "com.termux.widget" -> R.drawable.store_widget; "com.termux.styling" -> R.drawable.store_styling; "com.termux.window" -> R.drawable.store_float; "com.termux.tasker" -> R.drawable.store_tasker; else -> R.drawable.ic_bashkitten }
                     if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(48.dp)) else Image(painterResource(resource), contentDescription = null, modifier = Modifier.size(48.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(AppStore.names.getValue(id), style = MaterialTheme.typography.titleMedium)
@@ -321,10 +340,10 @@ class MainActivity : ComponentActivity() {
                     }
                     if (!allowed && current == null) Text("Missing", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge)
                     else FilledTonalButton(enabled = (update && !AppStore.busy(this@MainActivity)) || (allowed && state.startsWith("Confirm")), onClick = { if (state.startsWith("Confirm")) confirmInstallation() else install(entry!!) }, contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)) {
-                        Text(if (allowed && state.startsWith("Confirm")) "Continue" else if (pending) "Installing" else if (state.startsWith("Failed") && update) "Retry" else if (current == null) "Install" else if (update) "Update" else "Installed", style = MaterialTheme.typography.labelMedium)
+                        Text(if (allowed && state.startsWith("Confirm")) "Continue" else if (pending) "Installing" else if (state.startsWith("Failed") && update) "Retry" else if (current == null && entry == null) "Not released" else if (current == null) "Install" else if (update) "Update" else "Installed", style = MaterialTheme.typography.labelMedium)
                     }
                 }
-                if (!allowed && id != "com.bashkitten") Text(if (current == null) "Install this app from the same source as your Termux." else "Managed by your Termux source.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!allowed && id.startsWith("com.termux")) Text(if (current == null) "Install this app from the same source as your Termux." else "Managed by your Termux source.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (id == "com.termux.x11" && allowed) {
                     if (current == null) Box {
                         TextButton(enabled = !pending, onClick = { typesOpen = true }, contentPadding = PaddingValues(horizontal = 0.dp)) { Text("Type · " + (if (x11Variant == "standalone") "Normal (recommended)" else "Shared UID") + " ▾") }
@@ -340,10 +359,22 @@ class MainActivity : ComponentActivity() {
                 }
                 if (pending) LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (allowed && state.isNotBlank() && state != "Installed") Text(state, style = MaterialTheme.typography.bodySmall)
+                if (id == AppStore.wildbuzzard) {
+                    if (current == null && entry == null) Text("Release coming soon. A signed development build can be installed from WildBuzzard’s GitHub Actions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!allowed && current != null) Text("Installed from another source. Use that source for browser updates.", style = MaterialTheme.typography.bodySmall)
+                    if (current != null) {
+                        val controls = status?.optJSONObject("wildbuzzard")
+                        Text(if (controls?.optBoolean("ready") == true) "Pi extension and skill installed in Termux" else "Pi controls install inside Termux when connected.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row {
+                            TextButton(onClick = { packageManager.getLaunchIntentForPackage(id)?.let { startActivity(it) } }) { Text("Open") }
+                            if (status != null) TextButton(enabled = !jobActive(), onClick = { packageJob(if (controls?.optBoolean("ready") == true) "wildbuzzard-authorize" else "wildbuzzard-setup"); logExpanded = true }) { Text(if (controls?.optBoolean("ready") == true) "Connect browser" else "Set up Pi controls") }
+                        }
+                    }
+                }
                 if (id == "com.termux" && current != null) ConnectionBlock()
             }
         }
-        if (detail) AlertDialog(onDismissRequest = { detail = false }, title = { Text(AppStore.names.getValue(id)) }, text = { Text(description + (if (allowed) entry?.optString("notes")?.takeIf { it.isNotBlank() }?.let { "\n\n$it" }.orEmpty() else "\n\nInstalled from another source. Use that source for updates and compatible add-ons.") + if (id == "com.termux.x11" && current != null && allowed) "\n\nTo change type, stop the desktop and remove X11 manually in Android settings, then choose a type here." else "") }, confirmButton = { TextButton(onClick = { detail = false }) { Text("Done") } }, dismissButton = { if (allowed && entry != null) TextButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.getString("sourceUrl")))) }) { Text("Source / licenses") } })
+        if (detail) AlertDialog(onDismissRequest = { detail = false }, title = { Text(AppStore.names.getValue(id)) }, text = { Text(description + (if (allowed) entry?.optString("notes")?.takeIf { it.isNotBlank() }?.let { "\n\n$it" }.orEmpty() else "\n\nInstalled from another source. Use that source for updates.") + if (id == "com.termux.x11" && current != null && allowed) "\n\nTo change type, stop the desktop and remove X11 manually in Android settings, then choose a type here." else "") }, confirmButton = { TextButton(onClick = { detail = false }) { Text("Done") } }, dismissButton = { if (id == AppStore.wildbuzzard) TextButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/openresearchtools/wildbuzzard-android"))) }) { Text("Source / builds") } else if (allowed && entry != null) TextButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(entry.getString("sourceUrl")))) }) { Text("Source / licenses") } })
     }
     @Composable private fun ConnectionBlock() {
         val external = AppStore.externalTermux(this)
@@ -413,9 +444,9 @@ class MainActivity : ComponentActivity() {
                         bootstrap?.optString("logBase64")?.takeIf { it.isNotBlank() }?.let { OutputLog(runCatching { android.util.Base64.decode(it, android.util.Base64.DEFAULT).toString(Charsets.UTF_8) }.getOrDefault("")) }
                     } else {
                         Button(enabled = !jobActive(), onClick = { packageJob("update-packages"); logExpanded = true }) { Text("Update packages") }
-                        for ((key, title) in listOf("apt" to "Termux", "npm" to "npm", "pi" to "Pi")) {
+                        for ((key, title) in listOf("apt" to "Termux", "npm" to "npm", "pi" to "Pi", "wildbuzzard" to "WildBuzzard Pi controls")) {
                             val source = sources?.optJSONObject(key)
-                            val text = if (source?.has("error") == true) source.optString("error") else if (source == null) "Not checked" else if (key == "pi") { if (source.optBoolean("upstreamAvailable")) "${source.optString("installed")} → ${source.optString("latest")}" else "Up to date" } else "${source.optInt("available")} updates available"
+                            val text = if (source?.has("error") == true) source.optString("error") else if (source == null) "Not checked" else if (key == "wildbuzzard") { if (!source.has("installed")) "Not installed" else if (source.optBoolean("updateAvailable")) "Update available" else "Up to date" } else if (key == "pi") { if (source.optBoolean("upstreamAvailable")) "${source.optString("installed")} → ${source.optString("latest")}" else "Up to date" } else "${source.optInt("available")} updates available"
                             Text("$title · $text", style = MaterialTheme.typography.bodySmall, color = if (source?.has("error") == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         TextButton(onClick = { listExpanded = !listExpanded; if (listExpanded) loadInventory() }, contentPadding = PaddingValues(0.dp)) { Text(if (listExpanded) "Hide installed packages ⌃" else "Installed packages ⌄") }
@@ -425,6 +456,7 @@ class MainActivity : ComponentActivity() {
                             inventory?.let { value ->
                                 val rows = buildList {
                                     add("Pi" to value.optString("pi"))
+                                    value.optJSONObject("wildbuzzard")?.optString("version")?.takeIf { it.isNotBlank() }?.let { add("WildBuzzard Pi controls" to it) }
                                     for (kind in listOf("apt", "npm")) value.optJSONArray(kind)?.let { array -> for (i in 0 until array.length()) { val item = array.getJSONObject(i); add("${item.getString("name")} · $kind" to item.getString("version")) } }
                                 }
                                 LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { items(rows) { (name, version) -> Row { Text(name, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall); Text(version, style = MaterialTheme.typography.labelSmall) } } }

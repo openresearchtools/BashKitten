@@ -89,6 +89,9 @@ assets = root / 'src/android/app/src/main/assets'
 records.append({'name': 'Termux app icons', 'version': '', 'license': 'Original project licenses',
                 'source': 'https://github.com/openresearchtools/termux-suite',
                 'text': '\n\n'.join(p.name + '\n\n' + p.read_text() for p in sorted(assets.glob('termux-*')))})
+records.append({'name': 'WildBuzzard logo', 'version': '', 'license': 'AGPL-3.0-or-later',
+                'source': 'https://github.com/openresearchtools/wildbuzzard-android',
+                'text': (assets / 'wildbuzzard-notice.txt').read_text() + '\n' + (assets / 'wildbuzzard-license.txt').read_text()})
 # The companion server is part of the app even though Termux installs it
 # separately. Include its release notices here so they need no server or login.
 server = report.parent / 'server-notices'
