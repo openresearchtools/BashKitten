@@ -40,7 +40,6 @@ class MainActivity : ComponentActivity() {
     private var checking by mutableStateOf(false)
     private var installing by mutableStateOf(false)
     private var x11Variant by mutableStateOf("standalone")
-    private var changeX11 by mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
     private var session: String? = null
     private var firstReady = true
@@ -340,13 +339,8 @@ class MainActivity : ComponentActivity() {
             val x11 = AppStore.installed(this@MainActivity, "com.termux.x11")
             @Suppress("DEPRECATION") val installedVariant = if (x11?.sharedUserId == "com.termux") "sharedUid" else "standalone"
             if (x11 != null && installedVariant != x11Variant) {
-                Text("Switching variant requires removing only the X11 viewer. Its settings may be reset; Termux projects stay in Termux.")
-                TextButton(onClick = { changeX11 = true }) { Text("Change X11 variant") }
+                Text("A different X11 variant is installed. To switch, stop the desktop, remove X11 manually in Android settings, then install the chosen variant here.")
             } else AppRow("com.termux.x11")
-            if (changeX11) AlertDialog(onDismissRequest = { changeX11 = false }, title = { Text("Remove the X11 viewer?") },
-                text = { Text("Stop the desktop and save its applications first. Android will ask to uninstall X11. Then install the selected variant here.") },
-                confirmButton = { TextButton(onClick = { changeX11 = false; startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:com.termux.x11"))) }) { Text("Continue") } },
-                dismissButton = { TextButton(onClick = { changeX11 = false }) { Text("Cancel") } })
             Text("Optional", style = MaterialTheme.typography.titleMedium)
             for (id in AppStore.names.keys.drop(4)) AppRow(id)
             HorizontalDivider()

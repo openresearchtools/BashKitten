@@ -44,19 +44,8 @@ class StoreFlowTest {
         val entry = AppStore.entries(context).single { it.getString("packageId") == id && (variant == null || it.optString("variant") == variant) }
         val expected = entry.getLong("versionCode")
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            if (args.getString("replaceX11Variant") == "true") {
-                assertEquals("com.termux.x11", id)
-                val stopped = CountDownLatch(1); var stop: Result<org.json.JSONObject>? = null
-                TermuxBridge.command(context, "desktop-stop") { stop = it; stopped.countDown() }
-                assertTrue(stopped.await(50, TimeUnit.SECONDS)); stop!!.getOrThrow()
-                AppStore.prefs(context).edit().putString("x11Variant", variant).apply()
-                scenario.onActivity { it.startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:com.termux.x11"))) }
-                assertTrue(device.wait(Until.hasObject(By.res("android:id/button1")), 10000))
-                device.findObject(By.res("android:id/button1")).click()
-                for (attempt in 0 until 30) { if (AppStore.installed(context, id) == null) break; Thread.sleep(500) }
-                assertNull("Only the X11 viewer should be removed", AppStore.installed(context, id))
-                assertNotNull(AppStore.installed(context, "com.termux"))
-            }
+            // Variant migration fixtures remove X11 manually outside the app.
+            if (variant != null) AppStore.prefs(context).edit().putString("x11Variant", variant).apply()
             assertTrue("Use an older installed candidate for this update test", (AppStore.installed(context, id)?.longVersionCode ?: 0) < expected)
             if (!context.packageManager.canRequestPackageInstalls()) {
                 scenario.onActivity { it.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))) }

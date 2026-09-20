@@ -706,9 +706,11 @@ Keep routine controls in a few rows with compact play/stop icons and accessible
 labels. Put logs, resolved commands and diagnostics in expandable details.
 
 Both X11 APK variants use `com.termux.x11`. They cannot be installed together.
-Switching shared-UID membership requires an X11 uninstall/reinstall flow, not an
-ordinary update. Explain that transition and preserve/export settings where
-supported. It must not uninstall Termux or delete projects. Shared UID is offered
+Switching shared-UID membership requires manually removing X11 in Android settings
+before installing the other variant. BashKitten never uninstalls applications:
+do not request uninstall permission or provide an uninstall action. Migration
+tests remove X11 manually on the disposable emulator, outside BashKitten.
+Explain the transition and preserve/export settings where supported. Shared UID is offered
 for upstream's foreground-scheduling benefit, with standalone as the compatibility
 choice; do not promise a fixed speedup on all phones.
 
