@@ -1,0 +1,74 @@
+name: Verify published APT packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+      options: --privileged
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      BASHKITTEN_TEST_INSTALLED: '1'
+      BASHKITTEN_DATA_DIR: /home/tester/bashkitten-test
+      PI_CODING_AGENT_DIR: /home/tester/pi-test
+      PI_TELEMETRY: '0'
+      PI_OFFLINE: '1'
+      DO_NOT_TRACK: '1'
+      GDK_BACKEND: x11
+      GDK_DEBUG: no-portals
+      PORT: '3987'
+    steps:
+      - name: Install test tools and the existing archive keyring
+        run: |
+          apt-get update
+          apt-get install -y git curl ca-certificates dbus-x11 xvfb xdotool xclip xauth
+          curl -fL https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-archive-keyring.deb -o /tmp/keyring.deb
+          apt-get install -y /tmp/keyring.deb
+          apt-get update
+          if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Create a real account using the earlier candidate
+        env:
+          ARCH: ${{ matrix.architecture }}
+        run: |
+          test "$(dpkg --print-architecture)" = "$ARCH"
+          for package in bashkitten bashkitten-desktop; do
+            curl -fL "https://github.com/openresearchtools/bashkitten/releases/download/candidate-20260920/${package}_0.2.0_${ARCH}.deb" -o "/tmp/${package}.deb"
+          done
+          apt-get install -y /tmp/bashkitten.deb /tmp/bashkitten-desktop.deb
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+          runuser -u tester -- dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py signup
+          runuser -u tester -- bashkittenctl stop
+          runuser -u tester -- bashkittenctl shutdown
+      - name: Upgrade from the signed APT index and retain the account
+        run: |
+          apt-get update
+          apt-get install -y --only-upgrade bashkitten bashkitten-desktop
+          test "$(dpkg-query -W -f='${Version}' bashkitten)" = 0.2.1
+          test "$(dpkg-query -W -f='${Version}' bashkitten-desktop)" = 0.2.1
+          runuser -u tester -- bashkittenctl start
+          runuser -u tester -- env BASHKITTEN_TEST_NATIVE_FILES=1 BASHKITTEN_TEST_LOGIN_UI=1 dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py restore
+          runuser -u tester -- bashkittenctl stop
+          runuser -u tester -- bashkittenctl shutdown
+          dpkg --remove bashkitten-desktop bashkitten
+          test -d /home/tester/bashkitten-test
+          apt-get install -y bashkitten-desktop
+          runuser -u tester -- dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py restore
+          runuser -u tester -- bashkittenctl stop
+          runuser -u tester -- bashkittenctl shutdown
