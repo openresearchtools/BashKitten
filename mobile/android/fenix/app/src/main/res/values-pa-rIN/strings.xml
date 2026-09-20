@@ -3505,7 +3505,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">ਇੱਕ ਮਹੀਨੇ ਬਾਅਦ ਆਪੇ ਬੰਦ ਕਰਨਾ ਹੈ?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox ਉਹਨਾਂ ਟੈਬਾਂ ਨੂੰ ਬੰਦ ਕਰ ਸਕਦਾ ਹੈ, ਜਿਨਾਂ ਨੂੰ ਤੁਸੀਂ ਪਿਛਲੇ ਮਹੀਨੇ ਭਰ ਤੋਂ ਨਹੀਂ ਵੇਖਿਆ ਹੈ।</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard ਉਹਨਾਂ ਟੈਬਾਂ ਨੂੰ ਬੰਦ ਕਰ ਸਕਦਾ ਹੈ, ਜਿਨਾਂ ਨੂੰ ਤੁਸੀਂ ਪਿਛਲੇ ਮਹੀਨੇ ਭਰ ਤੋਂ ਨਹੀਂ ਵੇਖਿਆ ਹੈ।</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">ਆਪੇ-ਬੰਦ ਕਰਨ ਨੂੰ ਚਾਲੂ ਕਰੋ</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

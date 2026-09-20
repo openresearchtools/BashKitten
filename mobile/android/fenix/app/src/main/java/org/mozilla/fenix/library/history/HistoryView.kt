@@ -38,7 +38,7 @@ class HistoryView(
     val onHistoryItemClicked: (History) -> Unit,
     val onDeleteInitiated: (Set<History>) -> Unit,
     val onEmptyStateChanged: (Boolean) -> Unit,
-    private val accountManager: FxaAccountManager,
+    private val accountManager: FxaAccountManager?,
     private val scope: CoroutineScope,
 ) : LibraryPageView(container) {
 
@@ -97,13 +97,7 @@ class HistoryView(
                 binding.swipeRefresh.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
             }
             store.dispatch(HistoryFragmentAction.StartSync)
-            scope.launch {
-                accountManager.syncNow(
-                    reason = SyncReason.User,
-                    debounce = true,
-                    customEngineSubset = listOf(SyncEngine.History),
-                )
-            }
+
             historyAdapter.refresh()
             store.dispatch(HistoryFragmentAction.FinishSync)
         }

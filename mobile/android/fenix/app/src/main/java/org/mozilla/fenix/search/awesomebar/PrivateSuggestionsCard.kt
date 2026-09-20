@@ -84,17 +84,7 @@ internal fun PrivateSuggestionsCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
-                    LinkText(
-                        text = stringResource(id = R.string.exceptions_empty_message_learn_more_link),
-                        linkTextStates = listOf(
-                            LinkTextState(
-                                text = stringResource(id = R.string.exceptions_empty_message_learn_more_link),
-                                url = "",
-                                onClick = { onLearnMoreClick() },
-                            ),
-                        ),
-                        linkTextColor = MaterialTheme.colorScheme.tertiary,
-                    )
+
 
                     Spacer(modifier = Modifier.height(12.dp))
 

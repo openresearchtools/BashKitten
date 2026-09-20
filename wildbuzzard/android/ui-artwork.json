@@ -3465,5 +3465,625 @@
       "type": ".webp",
       "action": "remove flavor override; inherit Wild Buzzard branding"
     }
+  },
+  "pdf_viewer_images": {
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-spreadEven.svg": {
+      "sha256": "ac385199d448c0d5ae5d4c06d2c76db0a31bb5db54d0fbd727f3dc889e73271b",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-editorInk.svg": {
+      "sha256": "081bf99d3c2390036a2d9c7e9485316bcd049f90a74e982f1eebcfd4d9b178e3",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/editor-toolbar-delete.svg": {
+      "sha256": "f1f47a2cb479a87807f9bd61bd5813c1fe857dbbcb4fb35ae7a77ca39114f920",
+      "action": "original cross icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/altText_add.svg": {
+      "sha256": "1a9591a23999e1924438b948a9f9671147f04e01e5be724391a3a8a2b58289d9",
+      "action": "original plus icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/altText_disclaimer.svg": {
+      "sha256": "5d19067a6b51e5bcc2d61325033a8450d301535505a97c50f4141f4cd9e2cf05",
+      "action": "original info icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-paperclip.svg": {
+      "sha256": "0213c8baed4f8c497881ffed0e49abb309291d51725aaf1a0a757174b4999368",
+      "action": "original link icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/checkmark.svg": {
+      "sha256": "424df6b8515df22424c9505a9e87d35d87d3fd59962d56692fcc4d17613f2165",
+      "action": "original check icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-download.svg": {
+      "sha256": "afa286c8ea1941eaec589ed6a2103c5a845f3ff76a7423ba985f449465005163",
+      "action": "original download icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/findbarButton-next.svg": {
+      "sha256": "3029879b7e1060d54c4edcfe0c93c8c3b8c1756fb794e5d4add64028b5f99fab",
+      "action": "original down icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/pages_closeButton.svg": {
+      "sha256": "03577a1fc1fc16be0331c65d45accc4d57c269381999e00b2bec9005225a7643",
+      "action": "original cross icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/comment-editButton.svg": {
+      "sha256": "e79c41bf53a89ced9a3ad364a49943813189d06fd96174952e5fb2636938b70f",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-viewAttachments.svg": {
+      "sha256": "e07fbf17b3c7ca2cda9c4e54cdd66cb0aa63d368232cbb2c9aed5559720bf96c",
+      "action": "original link icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/gv-toolbarButton-download.svg": {
+      "sha256": "010d9d77a425e80eb666a196f500cdd8b15758af69a19ad7f11279b78c29e3f5",
+      "action": "original download icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/messageBar_closingButton.svg": {
+      "sha256": "7393c7791916243eca6bbdda8bf137d36600fffc76d7a55d33a77bd4e7778193",
+      "action": "original cross icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-search.svg": {
+      "sha256": "32889acafd84edeec513db6131252fa97ffff00fee6272d05e35e2d95216e30f",
+      "action": "original search icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-handTool.svg": {
+      "sha256": "e968339ba921e68d4d83e6ec7a4321f1791c86f4eff552f28cf4c81c6f88155b",
+      "action": "original accessible icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-editorStamp.svg": {
+      "sha256": "18294793f2399a8a44ee246d63b20cd46cb3cd38a1bb72f00b826e7f756c5f52",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/comment-closeButton.svg": {
+      "sha256": "fdb819984e10758952bc35b5be3220538b21a787656794b1071fecd3d2648930",
+      "action": "original cross icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/altText_spinner.svg": {
+      "sha256": "4089182e21627182ed1d4020978b597d984fb8de4cf547e9f4ac2aec9af13179",
+      "action": "original reload icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-scrollWrapped.svg": {
+      "sha256": "8734aa2747f6fff9e8fd09f6e9509db43ec1b63935c8f6b8291e9347bc7e2706",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-currentOutlineItem.svg": {
+      "sha256": "5f6505f05dbc728301942b37de22d490f09276e6c9a6561b1894afa91f34439c",
+      "action": "original reader icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/messageBar_warning.svg": {
+      "sha256": "888a4bf2ad5150028663dde01fe71599336c87ca12697180e51bd8a13b88084f",
+      "action": "original warning icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-pageUp.svg": {
+      "sha256": "bac79138cb730c6bfa63bef02d7e5906aee727bb54df15878823426822badaaa",
+      "action": "original up icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-firstPage.svg": {
+      "sha256": "d46a7b0760fbc043a98f9b328f6b4ee56df8de140a2a290f0e2a915ff772e287",
+      "action": "original up icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-pushpin.svg": {
+      "sha256": "22197186d18445959e5fe5577d8e34440b31d87c811daf47318078310c0c5530",
+      "action": "original pin icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/treeitem-collapsed.svg": {
+      "sha256": "37c96d0dc2f626c541303a76067184ac09614f2390a8430e973a84e5184e2646",
+      "action": "original right icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-rotateCcw.svg": {
+      "sha256": "7eb24492df9f42c8ab053cbead5d985b0daaccced649392d1fbfde4931459451",
+      "action": "original reload icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-documentProperties.svg": {
+      "sha256": "735a4bc556610bc6dedaa40a36ccf444c31032be02ad20df5ac4c66ebaa5bbc3",
+      "action": "original info icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/cursor-editorInk.svg": {
+      "sha256": "0ae889debe01269b49b89d8845995281223b8ae289405758631076b763da3efe",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/cursor-editorTextHighlight.svg": {
+      "sha256": "c6252b0edcb68dac87557a027180fcbdbd93466841aa34792530f7cce54cec5d",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/altText_warning.svg": {
+      "sha256": "07264f4de78a45a4177ddefb48837217aa69b51462ef5b35d3fb9f90000c9ead",
+      "action": "original warning icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-note.svg": {
+      "sha256": "11a75c9f233dd3e5e3500edcdd733358394f28395337616e8b0430694bf0dba1",
+      "action": "original document icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-editorSignature.svg": {
+      "sha256": "32e07998fd55a7ed40ec2b542fe324ec097d9023fc4c59d6debe33becdf215c2",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/pages_viewArrow.svg": {
+      "sha256": "409d9a306df6e86bc433365f961be50c9b4256b7a89b741f2f858af5b456b2ce",
+      "action": "original down icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-insert.svg": {
+      "sha256": "b2153e2c88c62179029ea9876d463216529ecf581b77d52c971a2cdf3d3166c6",
+      "action": "original document icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/loading.svg": {
+      "sha256": "7d6e14cf6226c74c26e2141180eadc944ef4ce8565e9b6dd2670ec202417a764",
+      "action": "original reload icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-viewsManagerToggle.svg": {
+      "sha256": "88098d3e47fd921122c5263dce50ee67c662c9cb65908be0481891dfe521a6c5",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-menuArrow.svg": {
+      "sha256": "2db41f97615a8c912f676a62c88b12e2b8715f4ed188df325737423501aa4a8a",
+      "action": "original down icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-secondaryToolbarToggle.svg": {
+      "sha256": "ff717321d89309f51bcccc28f347e6a888e73570527845d6560a84f5d70cb3a0",
+      "action": "original more icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-viewThumbnail.svg": {
+      "sha256": "5fa35769db66b33d6408f378e8aa68fa060331f0cc9dd6ad41fb7366082aad34",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-scrollPage.svg": {
+      "sha256": "e60ae21987a2e6e5352ac3171363352cac9d2cae36bf828d1729cbfa286e085d",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-lastPage.svg": {
+      "sha256": "4cc4b92888b776ea3a09d5e86b17d7bb50a8f3e6d09854d4c2e3f050c34dc9f8",
+      "action": "original down icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-noicon.svg": {
+      "sha256": "76399e70d311834d11ab2d6239118b36847d79a78d7655b1f839d51c811304cf",
+      "action": "original empty icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-zoomIn.svg": {
+      "sha256": "722dfe315686a5841d0a0d00f34df8f706d2c6e24551d46a5ebe971fe4af62d2",
+      "action": "original plus icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/cursor-editorFreeHighlight.svg": {
+      "sha256": "90b04428328a67e184fe1b1a1f28cb0d62bf6e298614ca241b6564fb24cb9e7e",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-rotateCw.svg": {
+      "sha256": "03d2e7bad2fc95895334e43edf34309a64223f32504304034eb1f6b163954898",
+      "action": "original reload icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/findbarButton-previous.svg": {
+      "sha256": "766d12bb08b9f13c753d289f3c029f5ca202eda3a8be52afc9e31697335f4a80",
+      "action": "original up icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-spreadNone.svg": {
+      "sha256": "649934c2f447d7a239d6ffce8f8e0804b50dfe1d9421a1d16e9543c0aee9b03e",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/editor-toolbar-edit.svg": {
+      "sha256": "c6eacc709e4dd30a57120b6531856c003a4c931c46656c3625e2fd5886cf4ce6",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/treeitem-expanded.svg": {
+      "sha256": "df4a149c4eaed4573620621087f7bab816f049e3e341574654fab598435db086",
+      "action": "original down icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-pageDown.svg": {
+      "sha256": "09a14cbd902aad9fe40f2351db2ac5593ad897aed8810b9c6aeb0e56389ff100",
+      "action": "original down icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-scrollVertical.svg": {
+      "sha256": "79871e2329cbb4dc2b6df94aae5f3074b3fdebffba46fe7d3ade9aff5726bfb0",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/comment-actionsButton.svg": {
+      "sha256": "281b2348ed747ea3ee74763a01d56441d8c570b3e68f11556dc4084a14484d1f",
+      "action": "original document icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/altText_done.svg": {
+      "sha256": "5b40360d098d1a93227a0a5cdb110f6e5ff3a3eb4af97b61e856c49e17141621",
+      "action": "original check icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-zoomOut.svg": {
+      "sha256": "366a40c3627e67f97164976d5ff38b5484716e834d08fefe252a6ea37feda895",
+      "action": "original minus icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-check.svg": {
+      "sha256": "9a680f1212888ede7dcae6bfc8cafc447babf4ce531271c8d07277b0aedade96",
+      "action": "original check icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-selectTool.svg": {
+      "sha256": "332e08979379ff2f8a7bfd336e8ca6348546c78ce2a6bf464cd31dc2c64004ac",
+      "action": "original accessible icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-bookmark.svg": {
+      "sha256": "f2a335bc963e95344d26d61157b1511f5f78d705b38579004971d51a3c62401c",
+      "action": "original bookmark icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-editorFreeText.svg": {
+      "sha256": "9ec2202e18ba668ee1753179afead4e1786eac82da2cc82afc5a09584c242c43",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-paragraph.svg": {
+      "sha256": "efbcd2a6cfb4581dad74a1c09ad43cf2b8245611e5b19c966317da948f2bcb7c",
+      "action": "original document icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-newparagraph.svg": {
+      "sha256": "a583cca122263d94c3eebfefe83c965a1b305b9c84e5aa3c5ba10527941db7db",
+      "action": "original document icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-presentationMode.svg": {
+      "sha256": "2a08e4277e39a9faef69520570744650bb017c2e90fe7c15224144d6b4abfbe7",
+      "action": "original desktop icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-help.svg": {
+      "sha256": "74d9bba0814d12f5ae2715189e1747b7edf5ff6d82c4ca75bae86d717319b6eb",
+      "action": "original help icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-viewLayers.svg": {
+      "sha256": "e0b8a59c272dc9a1d9a07d461363f96c3b3bd3df2db778f8f99743dfffd51d78",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-print.svg": {
+      "sha256": "267745d6c176afe038630c3f7c0fcda78141fc7634f73898ffc6cbb1262c77ab",
+      "action": "original print icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-spreadOdd.svg": {
+      "sha256": "43b6862d35f86dbe5fec6b16e2cb59ca22c490bdf0787e4590c1ceb494d05244",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/messageBar_info.svg": {
+      "sha256": "050e838b982b1b3e993e06bd666f8693ea98e89fb568c39c4af32e128477aeef",
+      "action": "original info icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-editorHighlight.svg": {
+      "sha256": "df0aac50621777fb63da60b38c71c5bbbde746c4dd55c30dd141621cb30b7cc4",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/secondaryToolbarButton-scrollHorizontal.svg": {
+      "sha256": "c61fb184d5311255b627a9943c156bb1f00f835282d832241e01a7d82a22b678",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-key.svg": {
+      "sha256": "5772b8dd158b0f02bb2be689bb680f4903d84e202cb29a3dc0560af53134c6ba",
+      "action": "original key icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/cursor-editorFreeText.svg": {
+      "sha256": "fedb05ee0dd510514ed9edb24b3b4da2707931279a0bf48e2a1deb3a1f4cf581",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/toolbarButton-viewOutline.svg": {
+      "sha256": "eeb6cd0ce94dcfea6bd2aca222da7b1583d74800ea9c94640ff8fa06c13fb044",
+      "action": "original reader icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/comment-popup-editButton.svg": {
+      "sha256": "857c0198bc536885f2b486353d5719d0c1bb91d69325474f7d787ce5b43cfe1e",
+      "action": "original edit icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/annotation-comment.svg": {
+      "sha256": "c58b385b4a0be6de822a3262b8191073d1730f6420368bd9c6d80db7312327ff",
+      "action": "original document icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/pages_viewButton.svg": {
+      "sha256": "f49c2ddd994c602dcaceb3c6b1445ef37bfd6ca8e2cb468d894741368c3344af",
+      "action": "original tabs icon"
+    },
+    "toolkit/components/pdfjs/content/web/images/pages_selected.svg": {
+      "sha256": "a66ae84122fc40cc1282c68205909387e05a80061b9a7268a54b4bd0c9e7e2fc",
+      "action": "original check icon"
+    }
+  },
+  "engine_resources": {
+    "chrome/browser/content/browser/blocker/blockerShield.svg": {
+      "source": "browser/components/blocker/content/blockerShield.svg",
+      "original_sha256": "150fe3b6bcee722784ea2498410bb99212c8ddab385f00342f78bd74d1025a01",
+      "action": "original protection artwork",
+      "sha256": "846ae87663baf6cf851c7899553f653ddace5ea8c131b36ddd4b4f16366a6733"
+    },
+    "chrome/toolkit/content/global/elements/moz-checkbox-icon.svg": {
+      "source": "toolkit/content/widgets/moz-checkbox/moz-checkbox-icon.svg",
+      "original_sha256": "c96623c239c4e107b4ba4d103243f8e97dcb0f481453099e295338f8eb6a32a5",
+      "action": "original check artwork",
+      "sha256": "f854a49678a662fe99790e51c6bdd02ec2d03cdb9c7c57b6591f5acba5c756bc"
+    },
+    "chrome/toolkit/content/global/httpsonlyerror/secure-broken.svg": {
+      "source": "toolkit/components/httpsonlyerror/content/secure-broken.svg",
+      "original_sha256": "8d3bb669a6a8f6721a09d8ba1ca332a0cbba049c6dc9857e2417c26c80658202",
+      "action": "original warning artwork",
+      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+    },
+    "chrome/toolkit/content/global/megalist/icons/cpm-fox-illustration.svg": {
+      "source": "toolkit/components/satchel/megalist/content/icons/cpm-fox-illustration.svg",
+      "original_sha256": "815b6f447ad3baa56dc2c23d59a7baaf9e237697f7e7556e7acf7e22059add18",
+      "action": "original brand-svg artwork",
+      "sha256": "e189d8ed04ba0f7f13a1e951da125726e688acd697906df528023f1ef29fb844"
+    },
+    "chrome/toolkit/content/global/ml/mozilla-logo.webp": {
+      "source": "toolkit/components/ml/content/mozilla-logo.webp",
+      "original_sha256": "c47dbb392a6cb491011ed68fdfb29715dbb54c89c0ada9b6019b3161ed27e6ac",
+      "action": "original brand-webp artwork",
+      "sha256": "2c852a3223def40da5eb120aa461f85bd38fce3cdbea3cfc3f80dd18eb2cae73"
+    },
+    "chrome/toolkit/res/broken-image.png": {
+      "source": "layout/generic/broken-image.png",
+      "original_sha256": "a08450bd29bf68c4a279d475c5312782d1a174cc1a49cf97bbee07ed45a87e08",
+      "action": "original image artwork",
+      "sha256": "0c032ecfdd2b0360f54656ef69c2203e5db5aae33ae1daefe402d328f240578e"
+    },
+    "contentaccessible/close-12.svg": {
+      "source": "layout/style/res/close-12.svg",
+      "original_sha256": "5a7684bbeb81aff73d4c4b3216ee7d15b294c3f9c5d307b62579f4815b337c01",
+      "action": "original cross artwork",
+      "sha256": "bec45f871bee565b96912556a24c0060ac64a95d33d8fbc824255de8c99f31bd"
+    },
+    "contentaccessible/html/folder.png": {
+      "source": "toolkit/themes/shared/dirListing/folder.png",
+      "original_sha256": "afd0e84077de13b6dee6650bcfac756fb549874e850476bff4730b6868e7bcc3",
+      "action": "original folder artwork",
+      "sha256": "7e41a6b43ea557200708381da42b534a54094127164a25a6a0db8868821ce822"
+    },
+    "chrome/toolkit/skin/classic/global/illustrations/error-malformed-url.svg": {
+      "source": "toolkit/themes/shared/illustrations/error-malformed-url.svg",
+      "original_sha256": "97d83082296c26efc493edd0268fd9ce8a7b37dc09b70ca3e3b84d0b13a4c838",
+      "action": "original brand-svg artwork",
+      "sha256": "e189d8ed04ba0f7f13a1e951da125726e688acd697906df528023f1ef29fb844"
+    },
+    "chrome/toolkit/res/accessiblecaret-normal.svg": {
+      "source": "layout/style/res/accessiblecaret-normal.svg",
+      "original_sha256": "a23b8d2890a39de4da20a2a491386cc02cc08ffc8f671ab2016b92fc2e0c9a54",
+      "action": "original caret artwork",
+      "sha256": "be9802cf6901099108ad98e285aad70bbbc6d401a824dd706dc042f39455b450"
+    },
+    "chrome/toolkit/res/accessiblecaret-tilt-left.svg": {
+      "source": "layout/style/res/accessiblecaret-tilt-left.svg",
+      "original_sha256": "9e5c1e1727c642a0dd41e10b4518d4c82978e031f7b1dab0248ffe4e3f82a8f3",
+      "action": "original caret artwork",
+      "sha256": "be9802cf6901099108ad98e285aad70bbbc6d401a824dd706dc042f39455b450"
+    },
+    "chrome/toolkit/res/accessiblecaret-tilt-right.svg": {
+      "source": "layout/style/res/accessiblecaret-tilt-right.svg",
+      "original_sha256": "638adc97f2e9672d87e976b43d031fd4b86f1992154e6605e794c5cde3218a06",
+      "action": "original caret artwork",
+      "sha256": "be9802cf6901099108ad98e285aad70bbbc6d401a824dd706dc042f39455b450"
+    },
+    "chrome/toolkit/skin/classic/global/icons/edit-copy.svg": {
+      "source": "toolkit/themes/shared/icons/edit-copy.svg",
+      "original_sha256": "2547ba46f25d2ba0e3cb94d9bc249e3f5cba56f98be9f6fb79741ab1991a9b8c",
+      "action": "original copy artwork",
+      "sha256": "4df8f47604fd76ae8e83291a779d1eb5b9b85425047b9fc9c1c03796ecc194d9"
+    },
+    "chrome/toolkit/skin/classic/global/icons/error.svg": {
+      "source": "toolkit/themes/shared/icons/error.svg",
+      "original_sha256": "9aa4d65ddf59c9b6d3567fed0cde88471d880d3ca0190ffc9b0eb43a1f92a76e",
+      "action": "original warning artwork",
+      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+    },
+    "chrome/toolkit/skin/classic/global/icons/eye-slash.svg": {
+      "source": "toolkit/themes/shared/icons/eye-slash.svg",
+      "original_sha256": "5f772ff402755ac285e5b3e07cf7e0956349343287b254820cb34edca5f2be75",
+      "action": "original eye-slash artwork",
+      "sha256": "421ef050aa202df1f94bb2ae2ae1a4f4358502d35035f5e694715542df50ea6d"
+    },
+    "chrome/toolkit/skin/classic/global/icons/eye.svg": {
+      "source": "toolkit/themes/shared/icons/eye.svg",
+      "original_sha256": "4c8e469b2e65888a02f07cb0f7a273c86e24f6159fa313277e9798e299b6e326",
+      "action": "original eye artwork",
+      "sha256": "7ae243eacf15d244ff2d0e10941853d302e2022021626327b3508ceefa184286"
+    },
+    "chrome/toolkit/skin/classic/global/icons/more.svg": {
+      "source": "toolkit/themes/shared/icons/more.svg",
+      "original_sha256": "25a693c38c9d7cac6634066ac686416fa9bcf9a155c63ba5579f438de82d60b7",
+      "action": "original more artwork",
+      "sha256": "e4f7adee1d17631185260a139ef2886367f688ca81203d651b4036f6cb70de4f"
+    },
+    "chrome/toolkit/skin/classic/global/icons/open-in-new.svg": {
+      "source": "toolkit/themes/shared/icons/open-in-new.svg",
+      "original_sha256": "b66ff538f4f89404b578d5ae4341ad737eeb380bdbaaf028ad92b125f50eb220",
+      "action": "original external artwork",
+      "sha256": "359898b7af5f70d2b0ba58b8a7f57eb3e0cb7d622d167a6709dcb9e1f8ddaddd"
+    },
+    "chrome/toolkit/skin/classic/global/icons/resizer.svg": {
+      "source": "toolkit/themes/shared/icons/resizer.svg",
+      "original_sha256": "e21083555dfc6bc3443ade5d60a29e3d358da446bcc870f3e6108541d6d986a6",
+      "action": "original resize artwork",
+      "sha256": "ba35b45b7b40fab96b047923fde7a1dae53dd27123c91ead6e7d62c17ce46d8f"
+    },
+    "chrome/toolkit/skin/classic/global/media/audio-muted.svg": {
+      "source": "toolkit/themes/shared/media/audio-muted.svg",
+      "original_sha256": "a1268d60a1ac59ded9fde7578d2fa14bf5e7cb2074e3cc42edc9e07bc01e9d07",
+      "action": "original sound-slash artwork",
+      "sha256": "a61308797c89afa2f6df25d8d7fcfd2965b3438bd09c7406be1f0bb72ce1cb9b"
+    },
+    "chrome/toolkit/skin/classic/global/media/audio.svg": {
+      "source": "toolkit/themes/shared/media/audio.svg",
+      "original_sha256": "f1eb0365d209b40d339a37ef5cbbd9b96794806e95fb4c0f62ed4659abecfb6a",
+      "action": "original sound artwork",
+      "sha256": "c586de06dfd9742f12ef90b784a785270276e5107919bca71a44c2f2d5d800a7"
+    },
+    "chrome/toolkit/skin/classic/global/media/audioNoAudioButton.svg": {
+      "source": "toolkit/themes/shared/media/audioNoAudioButton.svg",
+      "original_sha256": "103b6f86a731c47944086d3b4a7ca6c7d3d9b2db270233f041315073076a258b",
+      "action": "original sound-slash artwork",
+      "sha256": "a61308797c89afa2f6df25d8d7fcfd2965b3438bd09c7406be1f0bb72ce1cb9b"
+    },
+    "chrome/toolkit/skin/classic/global/media/closed-caption-settings-button.svg": {
+      "source": "toolkit/themes/shared/media/closed-caption-settings-button.svg",
+      "original_sha256": "08e8ae5dbdb84d626a351f6442a5ee49f3e4ed83f1b5d51814e3776d19d34872",
+      "action": "original settings artwork",
+      "sha256": "a12bc48fd7241dbedc03f56d844df9782089efc48023c76fdba681edf1e64a04"
+    },
+    "chrome/toolkit/skin/classic/global/media/closedCaptionButton-cc-off.svg": {
+      "source": "toolkit/themes/shared/media/closedCaptionButton-cc-off.svg",
+      "original_sha256": "c933aaf8c1ee39e066f268152a34b9dfb77f3a17b888363786a1837836cdb297",
+      "action": "original caption-slash artwork",
+      "sha256": "94bcc45e84dc1faed5637525d892d5e49ed6798f4b6e62ddd34146177a44cc9d"
+    },
+    "chrome/toolkit/skin/classic/global/media/closedCaptionButton-cc-on.svg": {
+      "source": "toolkit/themes/shared/media/closedCaptionButton-cc-on.svg",
+      "original_sha256": "8fa469764fcba19842e23de2843d837fb9c3ee277631e6e7a729f8f75c0667ec",
+      "action": "original caption artwork",
+      "sha256": "2a6d35c8383378cd1ed60f1df431557aa6927fdc38f6407b681fc8ed7ed62fb6"
+    },
+    "chrome/toolkit/skin/classic/global/media/fullscreenEnterButton.svg": {
+      "source": "toolkit/themes/shared/media/fullscreenEnterButton.svg",
+      "original_sha256": "802743031681b74333677649ddf7960cbdddb279ac8a9a36a8266a1c34411d3d",
+      "action": "original focus artwork",
+      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+    },
+    "chrome/toolkit/skin/classic/global/media/fullscreenExitButton.svg": {
+      "source": "toolkit/themes/shared/media/fullscreenExitButton.svg",
+      "original_sha256": "c6e6e2ab6caec0040d0c6c497e4e7ddde8ed95a40022e7f0f8294b60958f8a7f",
+      "action": "original focus artwork",
+      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+    },
+    "chrome/toolkit/skin/classic/global/media/pause-fill.svg": {
+      "source": "toolkit/themes/shared/media/pause-fill.svg",
+      "original_sha256": "b626ee7b432d57fa95a2e678f580de5deac8d6e77e1e669766d1295eb98ed587",
+      "action": "original pause artwork",
+      "sha256": "86a63bd899df90cb6324bdb50856bd62a859bd269e4cc778ae1024a2d8fde90e"
+    },
+    "chrome/toolkit/skin/classic/global/media/play-fill.svg": {
+      "source": "toolkit/themes/shared/media/play-fill.svg",
+      "original_sha256": "24da5f0467e2a39971786fae8518fa7b108c6889408e0dbf2d173c33a20769a7",
+      "action": "original play artwork",
+      "sha256": "11f923585e6e13c3eac47b623222167eb48de3635f1cf7922f9bd6e3ac59be1c"
+    },
+    "chrome/toolkit/skin/classic/global/media/picture-in-picture-enter-fullscreen-button.svg": {
+      "source": "toolkit/themes/shared/media/picture-in-picture-enter-fullscreen-button.svg",
+      "original_sha256": "586cb9b68c7b37b195d41e951d05fa9a386709709f1235bea5ab2080dc841a14",
+      "action": "original focus artwork",
+      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+    },
+    "chrome/toolkit/skin/classic/global/media/picture-in-picture-exit-fullscreen-button.svg": {
+      "source": "toolkit/themes/shared/media/picture-in-picture-exit-fullscreen-button.svg",
+      "original_sha256": "197464ccaa49bf9c0bb3cd07ad5866dc4581dd56cf1ddd4567d1d079ffdef7fa",
+      "action": "original focus artwork",
+      "sha256": "cd98145d1fbdc416ebee7adb94746df6b8e1b4cba24d07ae935e0295d726a2cd"
+    },
+    "chrome/toolkit/skin/classic/global/media/picture-in-picture-seekBackward-button.svg": {
+      "source": "toolkit/themes/shared/media/picture-in-picture-seekBackward-button.svg",
+      "original_sha256": "05a8cc81a1ef5ae4867ece8cb52fbb79e77535c20527a82e97cefcf4b8ceb838",
+      "action": "original back artwork",
+      "sha256": "32279b41b208cab6b0a48aa68348bc75180b098c7d534d9be8258eb0884f31a6"
+    },
+    "chrome/toolkit/skin/classic/global/media/picture-in-picture-seekForward-button.svg": {
+      "source": "toolkit/themes/shared/media/picture-in-picture-seekForward-button.svg",
+      "original_sha256": "1a34ef8d862de45e7ecf5303232e3bc5a7e9febaecf0758fcbed21ebe184b4ae",
+      "action": "original forward artwork",
+      "sha256": "bedfa4e843ce257479a54fb10ffcd37ccf1b097526f151da9924cbbde58c6a43"
+    },
+    "chrome/toolkit/skin/classic/global/media/error.png": {
+      "source": "toolkit/themes/shared/media/error.png",
+      "original_sha256": "bb7bc4a3568eb1d2007e58a3c02d6a05f5e21fad2d766bf79da82fe7c1f4b737",
+      "action": "original warning artwork",
+      "sha256": "b018d285047ba61582aac70d5769e80d46ba169cfd8fd4dc64efb89a51c90b54"
+    },
+    "chrome/toolkit/skin/classic/global/media/stalled.png": {
+      "source": "toolkit/themes/shared/media/stalled.png",
+      "original_sha256": "2847bd9c2596de1b9c3ace1b244e0ebf2c55b81ff5fcde09a4f5482139e0e449",
+      "action": "original hourglass artwork",
+      "sha256": "0108617226a1935a70894af75d9628b10f4a26fdb54ea0c4dc903e21c9e12296"
+    },
+    "chrome/toolkit/skin/classic/global/media/throbber.png": {
+      "source": "toolkit/themes/shared/media/throbber.png",
+      "original_sha256": "50651f33395b2d00c2816be27595442061a0e363f83b77bf6aa019adeada43b2",
+      "action": "original hourglass artwork",
+      "sha256": "0108617226a1935a70894af75d9628b10f4a26fdb54ea0c4dc903e21c9e12296"
+    },
+    "chrome/toolkit/skin/classic/global/media/imagedoc-darknoise.png": {
+      "source": "toolkit/themes/shared/media/imagedoc-darknoise.png",
+      "original_sha256": "e0cdc88b93dcc56cf22fec780c39ec447d0a5f6af0b3ed94031730acffda899c",
+      "action": "original dark artwork",
+      "sha256": "1fe3f6ea8fb2dbaa5f2d3fab51bbe504196fbc1d3784836df5a75b7fd6c1d709"
+    },
+    "chrome/toolkit/skin/classic/global/media/imagedoc-lightnoise.png": {
+      "source": "toolkit/themes/shared/media/imagedoc-lightnoise.png",
+      "original_sha256": "dc245762d75580ad7f85a96b2d9d4a914f5ce5df3f9c535bb0327ae233284921",
+      "action": "original light artwork",
+      "sha256": "05525131116641a685f230f58297e342025d54a7af8a0cdcdb1f7b5820fb52f2"
+    },
+    "chrome/devtools/modules/devtools/shared/images/alert-small.svg": {
+      "source": "devtools/shared/images/alert-small.svg",
+      "original_sha256": "58e65e7a82773b42012663cd5d758fa0ff2b1e39253e2f70d3d4116de9017215",
+      "action": "original warning artwork",
+      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+    },
+    "chrome/devtools/modules/devtools/shared/images/command-pick-remote-touch.svg": {
+      "source": "devtools/shared/images/command-pick-remote-touch.svg",
+      "original_sha256": "3c54b7f3520b22209a213b1808406ecf9d1093ead7f9209fb1d502e842701097",
+      "action": "original accessible artwork",
+      "sha256": "e1782efec91134747de6606ae1b9b4ccfc44ebee637329e1e103bc216df44b07"
+    },
+    "chrome/devtools/modules/devtools/shared/images/command-pick.svg": {
+      "source": "devtools/shared/images/command-pick.svg",
+      "original_sha256": "b521da1167bc180e09409a768e186a6a15d076f4033bd557e976d28053828377",
+      "action": "original forward artwork",
+      "sha256": "bedfa4e843ce257479a54fb10ffcd37ccf1b097526f151da9924cbbde58c6a43"
+    },
+    "chrome/devtools/modules/devtools/shared/images/error-small.svg": {
+      "source": "devtools/shared/images/error-small.svg",
+      "original_sha256": "496eb638540c5076ae6a9282b947796e46c25ac57c286392685989a1e76eba32",
+      "action": "original warning artwork",
+      "sha256": "222038460daf5f189b4982e7c93de463512e62d397f28a8b8f8f9eb3151c01f7"
+    },
+    "chrome/devtools/modules/devtools/shared/images/info-small.svg": {
+      "source": "devtools/shared/images/info-small.svg",
+      "original_sha256": "67ba77cf84ee59a58e13813f4f0694ecb50323f81750fa027ebd94ae9cca8df8",
+      "action": "original info artwork",
+      "sha256": "ea41894e31de79eaa3641b27d45da6570c29632855749fb1aed21cc2fcfa16bc"
+    },
+    "chrome/devtools/modules/devtools/shared/images/resume.svg": {
+      "source": "devtools/shared/images/resume.svg",
+      "original_sha256": "57b07fde7c7e75f22390fe4d25d10eb9f428d9c4a92d0c9585266ce85da027cf",
+      "action": "original play artwork",
+      "sha256": "11f923585e6e13c3eac47b623222167eb48de3635f1cf7922f9bd6e3ac59be1c"
+    },
+    "chrome/devtools/modules/devtools/shared/images/stepOver.svg": {
+      "source": "devtools/shared/images/stepOver.svg",
+      "original_sha256": "aed152d8f52512bda2eae013ddd42549041da351374079d022a5b0b1ca6d016b",
+      "action": "original forward artwork",
+      "sha256": "bedfa4e843ce257479a54fb10ffcd37ccf1b097526f151da9924cbbde58c6a43"
+    },
+    "chrome/geckoview/skin/images/add.svg": {
+      "source": "mobile/android/themes/geckoview/images/add.svg",
+      "original_sha256": "dd87d23c38d868a49efea591f7c8c98dbcdfc991b1808b7f8e87d99364573f59",
+      "action": "original plus artwork",
+      "sha256": "7621d609b7f71f83c696fe7dccb6d9002a8da6716d97f5d7a5bd15e167e55677"
+    },
+    "chrome/geckoview/skin/images/arrow-down.svg": {
+      "source": "mobile/android/themes/geckoview/images/arrow-down.svg",
+      "original_sha256": "ebede02792f64cbebcfd6820d78ee8a0f65a214d1c7d1e202d836439b5bc6707",
+      "action": "original down artwork",
+      "sha256": "233960af5c7ee1c2729b3dccd50cca1951ae26dbf1eb3692c8e08f48e50e141f"
+    },
+    "chrome/geckoview/skin/images/arrow-up.svg": {
+      "source": "mobile/android/themes/geckoview/images/arrow-up.svg",
+      "original_sha256": "6998d866c3aa9759f29ba2e7f5563e626f0e9613dfe5c43404aa203829d6aa19",
+      "action": "original up artwork",
+      "sha256": "01f361e0f791d3c5a8873d2b1daa8bf054b73e689c2ff7482b461fc4b94536ef"
+    },
+    "chrome/geckoview/skin/images/dropmarker-right.svg": {
+      "source": "mobile/android/themes/geckoview/images/dropmarker-right.svg",
+      "original_sha256": "7e9869661c85fa32c0ebe160bad74478bdb3358b87fae00d2c20f20b0094493d",
+      "action": "original right artwork",
+      "sha256": "db069c03e8734368181c7b27fecfe6dc33debf5a99fb4e8b0e170abc3082758e"
+    },
+    "chrome/geckoview/skin/images/dropmarker.svg": {
+      "source": "mobile/android/themes/geckoview/images/dropmarker.svg",
+      "original_sha256": "624ebbcf2b1d28958f6052fa01158379b27ef8a88cd5767172ea119cd9446887",
+      "action": "original down artwork",
+      "sha256": "233960af5c7ee1c2729b3dccd50cca1951ae26dbf1eb3692c8e08f48e50e141f"
+    },
+    "chrome/geckoview/skin/images/lock.svg": {
+      "source": "mobile/android/themes/geckoview/images/lock.svg",
+      "original_sha256": "0f98bec36c418f91ee85b445c87437d159fd1bce0c71d06b76f7b03be2382bcb",
+      "action": "original lock artwork",
+      "sha256": "b7449e882a8e93c4ded99176cf1fd09ff651dcc96a6d8812bb53ca8f266aebef"
+    },
+    "chrome/geckoview/skin/images/search.svg": {
+      "source": "mobile/android/themes/geckoview/images/search.svg",
+      "original_sha256": "5eb72634641884df15686abf6bd799c233506ed81c4731a61ec91c1bb557c7e5",
+      "action": "original search artwork",
+      "sha256": "b09bda3e735a722782c0643c66237751695a4452f75d3e3c3f117aefb5f1d046"
+    }
   }
 }

@@ -2491,7 +2491,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">بعد از یک ماه، به صورت خودکار بسته شود؟</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">‏Firefox می‌تواند زبانه‌هایی را که در ماه گذشته مشاهده نکرده‌اید؛ ببندد.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">‏Wild Buzzard می‌تواند زبانه‌هایی را که در ماه گذشته مشاهده نکرده‌اید؛ ببندد.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">فعّال‌سازی بستن خودکار</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

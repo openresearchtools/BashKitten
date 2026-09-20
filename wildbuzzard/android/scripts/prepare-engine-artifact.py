@@ -37,6 +37,7 @@ allowed_prefixes = (
     'wildbuzzard/android/tests/',
     'wildbuzzard/android/scripts/',
     'wildbuzzard/android/pi/',
+    'toolkit/components/pdfjs/content/web/images/',
 )
 allowed_files = {
     'README.md',
@@ -70,6 +71,12 @@ allowed_files = {
     'wildbuzzard/android/VALIDATION.md',
     'wildbuzzard/android/mozconfig-artifact',
 }
+# These chrome images are repackaged by the artifact build; they are not native code.
+artwork = json.loads((root / 'wildbuzzard' / 'android' / 'ui-artwork.json').read_text())
+engine_art = {row['source'] for row in artwork.get('engine_resources', {}).values()}
+if any(Path(p).suffix not in {'.svg', '.png', '.webp'} for p in engine_art):
+    raise SystemExit('Engine artwork list contains a non-image file')
+allowed_files.update(engine_art)
 forbidden_suffixes = {'.c', '.cc', '.cpp', '.h', '.rs', '.S', '.so', '.aar', '.jar'}
 rejected = [p for p in changed if Path(p).suffix in forbidden_suffixes or not
             (p in allowed_files or p.startswith(allowed_prefixes))]

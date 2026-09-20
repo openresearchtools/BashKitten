@@ -125,10 +125,7 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                                 },
                             ),
                             BookmarksTelemetryMiddleware(),
-                            BookmarksSyncMiddleware(
-                                requireComponents.backgroundServices.syncStore,
-                                lifecycleScope,
-                            ),
+
                             BrowserToolbarSyncToBookmarksMiddleware(toolbarStore, lifecycleScope),
                             BookmarksMiddleware(
                                 lifecycleScope = lifecycleScope,
@@ -146,14 +143,7 @@ class BookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                                 navigateToBrowser = {
                                     navController.navigate(R.id.browserFragment)
                                 },
-                                navigateToSignIntoSync = {
-                                    navController
-                                        .navigate(
-                                            BookmarkFragmentDirections.actionGlobalTurnOnSync(
-                                                entrypoint = FenixFxAEntryPoint.BookmarkView,
-                                            ),
-                                        )
-                                },
+                                navigateToSignIntoSync = {},
                                 navigateToImportDialog = {
                                     ImportBookmarksDialogFragment().show(
                                         childFragmentManager,

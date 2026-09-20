@@ -1061,17 +1061,7 @@ private fun RootEmptyContent(
 
     Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static300))
 
-    if (showSignIn) {
-        Spacer(modifier = Modifier.height(FirefoxTheme.layout.space.static200))
 
-        OutlinedButton(
-            text = stringResource(R.string.bookmark_empty_list_guest_cta),
-            onClick = { dispatcher(SignIntoSyncClicked) },
-            modifier = Modifier
-                .heightIn(40.dp)
-                .fillMaxWidth(),
-        )
-    }
 }
 
 @Composable

@@ -50,8 +50,7 @@ class EditBookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                 val buildStore = { composeNavController: NavHostController ->
                     val appStore = requireComponents.appStore
                     val navController = findNavController()
-                    val isSignedIntoSync = requireComponents
-                        .backgroundServices.accountManager.authenticatedAccount() != null
+                    val isSignedIntoSync = false
 
                     val store by fragmentStore(
                         BookmarksState.default.copy(
@@ -75,14 +74,7 @@ class EditBookmarkFragment : Fragment(), SystemInsetsPaddedFragment {
                                     navigateToBrowser = {
                                         navController.navigate(R.id.browserFragment)
                                     },
-                                    navigateToSignIntoSync = {
-                                        navController
-                                            .navigate(
-                                                BookmarkFragmentDirections.actionGlobalTurnOnSync(
-                                                    entrypoint = FenixFxAEntryPoint.BookmarkView,
-                                                ),
-                                            )
-                                    },
+                                    navigateToSignIntoSync = {},
                                     navigateToImportDialog = {},
                                     shareBookmarks = { bookmarks ->
                                         requireComponents.useCases.shareUseCases.shareItems(

@@ -3355,7 +3355,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">بىر ئايدىن كېيىن ئاپتوماتىك ياپامدۇ؟</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox ئۆتكەن بىر ئايدا كۆرمىگەن بەتكۈچلەرنى تاقىۋېتەلەيدۇ.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard ئۆتكەن بىر ئايدا كۆرمىگەن بەتكۈچلەرنى تاقىۋېتەلەيدۇ.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">ئاپتوماتىك تاقاشنى ئاچىدۇ</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

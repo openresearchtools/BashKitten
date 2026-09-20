@@ -3452,7 +3452,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Chjusura autumatica dopu un mese ?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox pò chjode l’unghjette chì vo ùn avete micca fighjate durante un mese scorsu.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard pò chjode l’unghjette chì vo ùn avete micca fighjate durante un mese scorsu.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">ATTIVÀ A CHJUSURA AUTUMATICA</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

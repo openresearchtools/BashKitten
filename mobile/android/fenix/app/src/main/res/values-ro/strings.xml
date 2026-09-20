@@ -3510,7 +3510,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Închidere automată după o lună?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox poate închide filele pe care nu le-ai vizualizat în ultima lună.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard poate închide filele pe care nu le-ai vizualizat în ultima lună.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">PORNEȘTE ÎNCHIDERE AUTOMATĂ</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

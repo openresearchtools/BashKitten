@@ -1705,7 +1705,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">¿La ruyonil nitz\'apïx chi rij jun ik\'?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox nitikïr yerutz\'apij taq ruxaq man e\'atz\'eton ta pa ri ruk\'isib\'äl ik\'.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard nitikïr yerutz\'apij taq ruxaq man e\'atz\'eton ta pa ri ruk\'isib\'äl ik\'.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">TITZIJ RUYON NICHUPUTÄJ</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

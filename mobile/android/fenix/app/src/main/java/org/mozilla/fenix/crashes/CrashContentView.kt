@@ -75,14 +75,14 @@ class CrashContentView @JvmOverloads constructor(
         binding.restoreTabButton.apply {
             increaseTapArea(this)
             setOnClickListener {
-                controller.handleCloseAndRestore(binding.sendCrashCheckbox.isChecked)
+                controller.handleCloseAndRestore(false)
             }
         }
 
         binding.closeTabButton.apply {
             increaseTapArea(this)
             setOnClickListener {
-                controller.handleCloseAndRemove(binding.sendCrashCheckbox.isChecked)
+                controller.handleCloseAndRemove(false)
             }
         }
     }

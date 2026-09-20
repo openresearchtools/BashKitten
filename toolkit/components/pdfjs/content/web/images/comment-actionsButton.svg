@@ -1,3 +1,2 @@
-<svg width="25" height="24" viewBox="0 0 25 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path fill-rule="evenodd" clip-rule="evenodd" d="M7.51562 11H6.01562L5.51562 11.5V13L6.01562 13.5H7.51562L8.01562 13V11.5L7.51562 11ZM13.2656 11H11.7656L11.2656 11.5V13L11.7656 13.5H13.2656L13.7656 13V11.5L13.2656 11ZM17.5156 11H19.0156L19.5156 11.5V13L19.0156 13.5H17.5156L17.0156 13V11.5L17.5156 11Z" fill="black"/>
-</svg>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path d="M5,2H14L20,8V22H5ZM14,2V8H20M8,12H16M8,16H16" fill="none" stroke="#555555" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>

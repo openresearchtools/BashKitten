@@ -1345,7 +1345,7 @@
   -->
   <string name="inactive_tabs_title">Llingüetes inactives</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox pue zarrar les llingüetes que nun visitesti demientres el mes pasáu.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard pue zarrar les llingüetes que nun visitesti demientres el mes pasáu.</string>
   <!--
     Awesome bar suggestion's headers
 

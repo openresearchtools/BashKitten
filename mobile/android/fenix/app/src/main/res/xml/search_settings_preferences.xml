@@ -56,7 +56,7 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:title="@string/preference_search_address_bar_fx_suggest"
+        android:title="@string/wildbuzzard_address_bar"
         android:selectable="false"
         app:iconSpaceReserved="false"
         android:layout="@layout/preference_category_no_icon_style">

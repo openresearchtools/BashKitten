@@ -224,7 +224,7 @@ def main():
     for name in ('ic_launcher', 'ic_launcher_round'):
         (launcher / (name+'.xml')).write_text(HEADER + '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/wildbuzzard_launcher_background"/><foreground android:drawable="@drawable/wildbuzzard_logo"/><monochrome android:drawable="@drawable/wildbuzzard_logo"/></adaptive-icon>\n')
     (RES / 'values/wildbuzzard_launcher_colors.xml').write_text(HEADER + '<resources><color name="wildbuzzard_launcher_background">#1B1A17</color></resources>\n')
-    manifest_path.write_text(json.dumps({'description':'Original-resource audit; generated app overrides replace upstream illustration and icon geometry. Structural shapes/selectors retain upstream licenses. Website content and Android framework controls are outside app branding.','brand_aliases':sorted(aliases),'resources':dict(sorted(manifest.items()))},indent=2)+'\n')
+    manifest_path.write_text(json.dumps({'description':'Original-resource audit; generated app overrides replace upstream illustration and icon geometry. Structural shapes/selectors retain upstream licenses. Website content and Android framework controls are outside app branding.','brand_aliases':sorted(aliases),'resources':dict(sorted(manifest.items())), 'pdf_viewer_images':old.get('pdf_viewer_images', {}), 'engine_resources':old.get('engine_resources', {})},indent=2)+'\n')
     print(f'Audited {len(manifest)} drawable variants; {len(aliases)} brand aliases.')
 
 if __name__=='__main__':main()

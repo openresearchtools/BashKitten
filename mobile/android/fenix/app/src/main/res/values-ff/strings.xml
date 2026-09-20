@@ -990,7 +990,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Uddu e jaajol caggal lewru?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Firefox ena waawi uddude tabbe ɗe a yillaaki e lewru ɓennundu nduu.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard ena waawi uddude tabbe ɗe a yillaaki e lewru ɓennundu nduu.</string>
   <!-- Text indicating that the Pocket story that also displays this text is a sponsored story by other 3rd party entity. -->
   <string name="pocket_stories_sponsor_indication">Barjinaaɗi</string>
   <!-- Translations feature -->

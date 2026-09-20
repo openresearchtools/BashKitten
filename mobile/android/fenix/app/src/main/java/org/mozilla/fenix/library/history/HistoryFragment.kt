@@ -250,7 +250,7 @@ class HistoryFragment :
             onRecentlyClosedClicked = ::navigateToRecentlyClosed,
             onHistoryItemClicked = ::openItem,
             onDeleteInitiated = ::onDeleteInitiated,
-            accountManager = requireContext().components.backgroundServices.accountManager,
+            accountManager = null,
             scope = lifecycleScope,
         )
 
