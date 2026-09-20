@@ -1,0 +1,3 @@
+<resources>
+    <style name="BashKittenTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:windowActionModeOverlay">true</item><item name="android:isLightTheme">false</item></style>
+</resources>

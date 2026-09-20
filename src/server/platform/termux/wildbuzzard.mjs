@@ -97,8 +97,23 @@ export async function authorizeWildbuzzard(job) {
   const apk = await apkPath();
   await job.phase('Connecting WildBuzzard · allow Termux in the browser if asked');
   const env = { ...process.env, CLASSPATH: apk }; delete env.LD_PRELOAD; delete env.LD_LIBRARY_PATH;
-  const { stdout } = await exec('/system/bin/app_process', ['/', 'org.openresearchtools.wildbuzzard.BrowserCommand', '--authorize'], { env, timeout: 240000, maxBuffer: 1024 * 1024 });
-  const result = JSON.parse(stdout);
+  const request = async args => JSON.parse((await exec('/system/bin/app_process', ['/', 'org.openresearchtools.wildbuzzard.BrowserCommand', '--no-launch', ...args], { env, timeout: 30000, maxBuffer: 1024 * 1024 })).stdout);
+  const result = await request(['--authorize']);
   if (result.error) throw Error(result.error.message || String(result.error));
+  if (result.result?.appGrant) {
+    // The visible Android host opens the browser's consent activity. Background
+    // Termux commands cannot reliably launch activities on current Android.
+    job.job.browserGrant = result.result.appGrant;
+    await job.phase('Allow Termux in WildBuzzard', 'waiting');
+    try {
+      const deadline = Date.now() + 180000;
+      while (true) {
+        job.checkCancellation();
+        if (!(await request(['capabilities']).catch(() => ({ error: true }))).error) break;
+        if (Date.now() > deadline) throw Error('Browser access was not approved. Tap Connect browser to try again.');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    } finally { delete job.job.browserGrant; await job.save(); }
+  }
   await job.log('WildBuzzard accepted the Termux connection.\n');
 }

@@ -9,10 +9,10 @@ import android.provider.Settings
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.app.UiModeManager
 import android.view.View
 import java.util.concurrent.Executors
-import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.app.AppCompatDelegate
+import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -44,7 +44,7 @@ import androidx.core.graphics.drawable.toBitmap
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
-class MainActivity : AppCompatActivity() {
+class MainActivity : ComponentActivity() {
     private lateinit var web: WebSurface
     private var screen by mutableStateOf("chat")
     private fun back() = openChat()
@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
     private fun applyAppearance(mode: String) {
         appearance = mode
         AppStore.prefs(this).edit().putString("appearance", mode).apply()
-        AppCompatDelegate.setDefaultNightMode(when (mode) { "dark" -> AppCompatDelegate.MODE_NIGHT_YES; "light" -> AppCompatDelegate.MODE_NIGHT_NO; else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM })
+        getSystemService(UiModeManager::class.java).setApplicationNightMode(when (mode) { "dark" -> UiModeManager.MODE_NIGHT_YES; "light" -> UiModeManager.MODE_NIGHT_NO; else -> UiModeManager.MODE_NIGHT_AUTO })
     }
     override fun onCreate(state: Bundle?) {
         applyAppearance(AppStore.prefs(this).getString("appearance", "system") ?: "system")
@@ -207,6 +207,7 @@ class MainActivity : AppCompatActivity() {
             requesting = false
             result.onSuccess { value ->
                 status = value; managerAttempts = 0; setupActive = false; AppStore.recoverServices(this, value)
+                openBrowserGrant(value)
                 val browser = value.optJSONObject("wildbuzzard")
                 if (!browserSetupAttempted && browser != null && !browser.optBoolean("ready") && installed(AppStore.wildbuzzard) != null && !jobActive()) {
                     browserSetupAttempted = true
@@ -248,6 +249,16 @@ class MainActivity : AppCompatActivity() {
         }.onFailure { notice = it.message.orEmpty() } }
     }
     private fun packageJob(kind: String) { packagesExpanded = true; navigate("apps"); command("package-job", JSONObject().put("kind", kind)) }
+    private var openedBrowserGrant: String? = null
+    private fun openBrowserGrant(value: JSONObject) {
+        val job = value.optJSONObject("packages")?.optJSONObject("job") ?: return
+        val token = job.optString("browserGrant")
+        if (!visible || token.isBlank() || token == openedBrowserGrant || job.optString("status") !in setOf("waiting", "running")) return
+        runCatching {
+            startActivity(Intent().setComponent(ComponentName(AppStore.wildbuzzard, AppStore.wildbuzzard + ".CommandAccessActivity")).putExtra("appGrant", token))
+            openedBrowserGrant = token
+        }.onFailure { notice = it.message.orEmpty() }
+    }
     private fun checkUpdates() { checkCatalog(); if (status != null && !jobActive()) packageJob("check-packages") }
     private fun loadInventory() {
         if (inventoryLoading) return
