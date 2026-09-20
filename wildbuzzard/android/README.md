@@ -266,6 +266,8 @@ require a new full ARM64 build.
 
 Mozilla telemetry, Sync and crash uploads are disabled. Wild Buzzard does not
 register Firefox's Android diagnostic log sink or startup activity recorder.
+Firefox's development StrictMode violation logging and process-killing checks
+are disabled, including during agent startup before an activity is displayed.
 Gecko debug logging and page-console forwarding to Android logs are disabled,
 including in the APK build flavor used by CI. Embedded Tor runs with `--quiet`
 and sends its configured log destination to `/dev/null`; connection readiness

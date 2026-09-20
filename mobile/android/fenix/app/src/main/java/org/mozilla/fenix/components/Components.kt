@@ -274,7 +274,8 @@ class Components(private val context: Context) {
 
     val strictMode by lazyMonitored {
         StrictModeManager(
-            Config.channel.isDebug,
+            // Developer violation logging and process-killing checks are not product features.
+            false,
             this,
             BuildManufacturerChecker(),
         )
