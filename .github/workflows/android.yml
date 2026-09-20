@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['src/android/**', '.github/workflows/android.yml']
+    paths: ['src/android/**', 'src/server/platform/termux/bootstrap/**', '.github/workflows/android.yml']
   pull_request:
-    paths: ['src/android/**', '.github/workflows/android.yml']
+    paths: ['src/android/**', 'src/server/platform/termux/bootstrap/**', '.github/workflows/android.yml']
 permissions:
   contents: read
 jobs:
@@ -20,11 +20,13 @@ jobs:
       - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ''platforms;android-37.0'' ''build-tools;35.0.0'''
       - name: Build production APK
         working-directory: src/android
-        run: ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon assembleRelease assembleReleaseAndroidTest
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: bashkitten-unsigned
-          path: src/android/app/build/outputs/apk/release/*.apk
+          path: |
+            src/android/app/build/outputs/apk/release/*.apk
+            src/android/app/build/outputs/apk/androidTest/release/*.apk
           if-no-files-found: error
   sign:
     needs: build
@@ -47,13 +49,16 @@ jobs:
           trap 'rm -f "$RUNNER_TEMP/droid.p12"' EXIT
           tools="$ANDROID_HOME/build-tools/35.0.0"
           mkdir -p dist
-          "$tools/zipalign" -P 16 -f 4 candidate/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          "$tools/zipalign" -P 16 -f 4 candidate/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
           "$tools/apksigner" sign --ks "$RUNNER_TEMP/droid.p12" --ks-type PKCS12 --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --out dist/bashkitten-0.2.0-arm64-v8a.apk "$RUNNER_TEMP/aligned.apk"
           "$tools/apksigner" verify --verbose --print-certs dist/*.apk > dist/signature.txt
           grep -q 'certificate SHA-256 digest: 2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38' dist/signature.txt
           "$tools/aapt" dump badging dist/*.apk > dist/manifest.txt
           if grep -q application-debuggable dist/manifest.txt; then exit 1; fi
           "$tools/zipalign" -c -P 16 4 dist/*.apk
+          "$tools/zipalign" -P 16 -f 4 candidate/androidTest/release/app-release-androidTest.apk "$RUNNER_TEMP/test-aligned.apk"
+          "$tools/apksigner" sign --ks "$RUNNER_TEMP/droid.p12" --ks-type PKCS12 --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass env:ANDROID_KEYSTORE_PASSWORD --out dist/bashkitten-instrumentation.apk "$RUNNER_TEMP/test-aligned.apk"
+          "$tools/apksigner" verify --verbose dist/bashkitten-instrumentation.apk
           sha256sum dist/*.apk > dist/sha256sums
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
