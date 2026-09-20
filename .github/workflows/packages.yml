@@ -37,6 +37,7 @@ jobs:
       - name: Build server and desktop packages
         run: |
           test "$(dpkg --print-architecture)" = '${{ matrix.architecture }}'
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           python3 packaging/build.py linux
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
