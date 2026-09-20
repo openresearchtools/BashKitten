@@ -358,4 +358,44 @@ restoration and an extension's newSession command. A disposable HTTP provider
 supplied inference responses; no real-provider caching claim is made. Actual
 GTK/WebKit checks passed model/thinking defaults, the Fork button, editor prefill
 and the next turn. Existing port/process recovery and interrupted startup checks
-also passed. Android/package candidate verification follows the rebuild.
+also passed. The following release checks cover the installed Android and Linux
+packages with these native-RPC changes included.
+
+
+### Native working-folder restoration and 0.2.7 — 20 September 2026
+
+Pi restores cwd from its session header before loading project resources. Removed
+BashKitten’s ineffective in-place folder change; new chats choose a folder and
+existing chats display their saved folder. Resume reads that native path before
+spawning Pi, so a stale or nonexistent UI-cache path cannot prevent restoration.
+Offline history uses Pi’s parser and an in-memory session view without opening a
+second writable manager. The live Pi process remains the history writer.
+
+External checks passed on installed Linux ARM64 and both our signed Termux and
+external upstream Termux: native extension installation/default tools, extension
+commands/provider/tool execution, stock RPC fork hooks and cancellation, owned
+force-kill, and restoration of native session/model/thinking/cwd despite stale UI
+metadata. A real native bash `pwd` tool call confirmed both restored and newly
+selected folders. Reading saved history preserved its bytes. Fixture model
+responses were supplied by a disposable local HTTP service; no real-provider
+cache-hit claim is made.
+
+The actual GTK/WebKit UI passed default selectors, native fork/editor behavior,
+and folder selection only for new chats. Linux and both Android installations
+passed offline About/full licenses and normal restart/reconnect. Both Android
+Chromium browsers rendered their normal profiles; existing credentials, sessions
+and other apps were preserved. The external emulator needed two unreferenced old
+BashKitten runtime copies removed for disk space; this was manual device cleanup,
+not an application uninstall or a new cleanup feature.
+
+Release **v0.2.7** uses code `f04f601`, production Android build **35519871019**
+(versionCode 11) and native Linux ARM64/AMD64 builds **35519871029**. All 13
+published asset hashes match the verified candidates and source archives. Catalog
+renewal **35520376542** and APT publication **35520364793** passed; the public
+catalog signature/expiry/APK hash and all five APT package hashes were verified.
+AMD64 was built on native CI; desktop interaction checks ran on ARM64.
+
+Actual signed-index reinstalls of 0.2.7 passed on Linux ARM64 and both Termux
+installations. Their normal backends remained available at their remembered
+addresses, running `f04f601`. Verification scripts, providers and fixtures stayed
+outside application repositories and release artifacts.
