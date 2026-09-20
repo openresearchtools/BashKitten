@@ -89,9 +89,12 @@ check and CSRF token protect filesystem, session and credential endpoints.
 
 UI state defaults to `~/.local/share/bashkitten-pi/`; override it with
 `BASHKITTEN_DATA_DIR`. `PI_CODING_AGENT_DIR` selects an alternate native Pi profile.
-BashKitten stores native session JSONL plus small UI metadata and attachment files.
-Imported sessions keep their original Pi files. Forks preserve native history and
-share immutable attachments so deleting an original chat does not break its forks.
+Pi writes new sessions in its normal session directory. BashKitten stores UI
+metadata and attachments separately, and resumes older/imported sessions at their
+recorded paths. Removing a sidebar entry leaves native Pi history intact. Fork
+uses native RPC: it branches before a user message and returns that text to the
+editor. Pi owns tool selection and extension loading; install packages normally
+with `pi install` (or `bashkitten-pi install` to use the app's selected runtime).
 
 One detached worker owns each Pi RPC process. Closing the browser or restarting
 `npm start` does not stop a running session; reconnect restores history and live

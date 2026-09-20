@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
 
 import { selectedRuntime } from './runtime.mjs';
 
@@ -34,9 +35,14 @@ export class PiRpc extends EventEmitter {
   constructor(meta) {
     super();
     this.runtime = selectedRuntime();
-    const args = [this.runtime.cli, '--offline', '--mode', 'rpc', '--tools', 'read,bash,edit,write,grep,find,ls', '--session', meta.piFile];
-    if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
-    if (meta.thinking) args.push('--thinking', meta.thinking);
+    const args = [this.runtime.cli, '--offline', '--mode', 'rpc'];
+    if (meta.piFile) args.push('--session', meta.piFile);
+    // Pi owns tools/extensions and restores model/thinking from its session.
+    // Only a new chat receives the user's explicit initial selections.
+    if (!meta.piFile || !existsSync(meta.piFile)) {
+      if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
+      if (meta.thinking) args.push('--thinking', meta.thinking);
+    }
     this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {

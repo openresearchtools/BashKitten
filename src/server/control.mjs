@@ -183,7 +183,7 @@ async function serve() {
     if (force) {
       const pid = Number(await fs.readFile(socketPath(id) + '.lock', 'utf8').catch(() => '0'));
       const workerScript = fileURLToPath(new URL('./rpc/worker.mjs', import.meta.url));
-      if (await owned(pid, workerScript) && await owned(pid, id)) process.kill(-pid, 'SIGKILL');
+      if (await owned(pid, workerScript) && await owned(pid, meta.workerOwner || id)) process.kill(-pid, 'SIGKILL');
     }
   }
   async function action(command, value) {

@@ -18,7 +18,8 @@ The web server can restart without interrupting detached session workers. A cwd
 change restarts the idle Pi process against its same native session file. Changes
 requested during a turn apply after Pi's agent_settled event. Pi's own system
 prompt and tool cwd are rebuilt on restart. No Pi internals are patched.
-The RPC launch enables Pi's seven built-in read/bash/edit/write/grep/find/ls tools.
+RPC launches leave tool selection to Pi's defaults, native settings and extensions.
+Normal `pi install` packages and global/project resources use Pi's own loader.
 Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
 
 ## Transport and UI contract
@@ -42,10 +43,20 @@ Pi. A worker crash loses unconsumed in-memory queues, as native RPC does.
 
 For cwd changes Pi is reopened at an idle boundary, retaining its native session
 file and the web worker's socket. The UI metadata records the new working folder;
-the original native session header stays intact. A fork is made using Pi's public
-SessionManager API. For a branch ending before the first assistant response, the
-adapter persists the public native header/entries before passing the file to a new
-RPC process, because Pi otherwise defers saving that branch.
+the original native session header stays intact. Fork uses the stock `fork` RPC
+command on that live Pi process, including extension hooks and cancellation.
+It forks before the selected user message and returns Pi's text to the editor.
+The worker follows the new native session; Pi alone decides when to save it.
+BashKitten never writes or reconstructs Pi JSONL. New sessions use Pi's normal
+session directory; existing sessions resume by their recorded native file path.
+Saved model/thinking settings are restored by Pi, without cached UI overrides.
+Explicit choices in the UI use native model/thinking commands.
+
+Extension commands go through native `prompt` RPC. Their dialogs use Pi's
+extension UI sub-protocol, and model lists for running chats come from
+`get_available_models`, including extension-provided models. TUI-only extension
+widgets have the limitations documented by upstream RPC; BashKitten does not
+replace Pi's extension runtime.
 
 ## Files and authentication
 

@@ -43,7 +43,7 @@ const tls = certFile ? { cert: await fs.readFile(certFile), key: await fs.readFi
 const scheme = tls ? 'https' : 'http';
 const services = new Services(), starts = new Map();
 const configFile = path.join(dataDir, 'settings.json');
-let config = await readJson(configFile, { web_port: 3939, theme: 'system', default_cwd: os.homedir(), default_model: '', default_thinking: 'off' });
+let config = await readJson(configFile, { web_port: 3939, theme: 'system', default_cwd: os.homedir(), default_model: '', default_thinking: '' });
 const portOverride = process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || process.env.PORT;
 if (portOverride) config.web_port = Number(portOverride);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -88,15 +88,17 @@ async function createSession(value) {
   const id = randomUUID(), dir = sessionDir(id); await privateDir(dir);
   const title = String(value.title || value.prompt || 'New chat').trim().replace(/\s+/g, ' ').slice(0, 100) || 'Image session';
   const meta = { id, cwd, title, model: value.model || config.default_model, thinking: value.thinking || config.default_thinking,
-    piFile: path.join(dir, 'session.jsonl'), modified: Date.now(), messages: [] };
+    piFile: null, modified: Date.now(), messages: [] };
   await writeMeta(meta);
   return meta;
 }
 async function deleteSession(id) {
   if (await running(id)) await workerRequest(id, '/shutdown', {});
   const meta = await readMeta(id);
-  // Imported native Pi sessions remain in their original location.
-  await fs.rm(sessionDir(id), { recursive: true, force: true });
+  // Pi owns history, including native forks that may share a session directory.
+  // Removing a sidebar entry must never remove another native session.
+  for (const name of ['ui.json', 'drafts.json', 'lifecycle.json', 'worker.log']) await fs.rm(path.join(sessionDir(id), name), { force: true });
+  await fs.rmdir(sessionDir(id)).catch(() => {});
   await fs.rm(socketPath(id), { force: true }); await fs.rm(socketPath(id) + '.lock', { force: true });
   const referenced = new Set((await allMeta()).flatMap(m => (m.messages || []).flatMap(v => v.attachments.map(a => a.path))));
   for (const file of (meta.messages || []).flatMap(m => m.attachments)) if (!referenced.has(file.path)) await fs.rm(file.path, { force: true });
@@ -153,7 +155,7 @@ async function handler(req, res) {
       if (!mutation) return json(res, { config, locations: await folderLocations(), platform });
       const input = await jsonBody(req);
       const next = { web_port: Number(input.web_port), theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : 'system',
-        default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || 'off') };
+        default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || '') };
       if (platform === 'termux') next.notifications = { enabled: Boolean(input.notifications?.enabled), onlyWhenHidden: input.notifications?.onlyWhenHidden !== false, preview: input.notifications?.preview !== false };
       if (!Number.isInteger(next.web_port) || next.web_port < 1024 || next.web_port > 65535) throw Error('Port must be between 1024 and 65535');
       let restartUrl;
@@ -167,7 +169,12 @@ async function handler(req, res) {
       }
       config = next; await writeJson(configFile, config); return json(res, { config, restartUrl });
     }
-    if (route === '/api/models') { requireMethod(req, ['GET']); return json(res, { models: await services.models(), defaultModel: config.default_model, defaultThinking: config.default_thinking }); }
+    if (route === '/api/models') {
+      requireMethod(req, ['GET']);
+      const id = url.searchParams.get('session');
+      const native = id && await running(id) ? await workerRequest(id, '/models') : null;
+      return json(res, { models: await services.models(native?.models), defaultModel: config.default_model, defaultThinking: config.default_thinking });
+    }
     if (route === '/api/services') { requireMethod(req, ['GET']); return json(res, { services: await services.list(), login: services.state() }); }
     if (route === '/api/services/login-status') { requireMethod(req, ['GET']); return json(res, { login: services.state() }); }
     if (route.startsWith('/api/services/')) {
@@ -268,26 +275,7 @@ async function handler(req, res) {
       return json(res, await workerRequest(id, '/message', { ...await promptWithAttachments(text, attachments), kind: form.get('delivery') === 'steer' ? 'steer' : 'queue' }));
     }
     const input = await jsonBody(req);
-    if (action === 'fork') {
-      const { pi: { SessionManager } } = await loadPi();
-      const view = await workerRequest(id, '/view');
-      if (!view.entries.some(e => e.id === input.entryId && e.type === 'message')) throw Error('Message not found in this branch');
-      meta = await readMeta(id);
-      const next = await createSession({ cwd: meta.cwd, title: `Fork: ${meta.title}`, model: meta.model, thinking: meta.thinking });
-      const manager = SessionManager.open(meta.piFile, sessionDir(next.id), meta.cwd);
-      const file = manager.createBranchedSession(input.entryId);
-      if (!file) throw Error('Pi could not fork this message');
-      // Pi defers saving branches without an assistant response. The browser's
-      // Fork action must survive the handoff to a new RPC process, so persist
-      // the public native entries as-is (no fabricated assistant message).
-      try { await fs.access(file); } catch {
-        await fs.writeFile(file, [manager.getHeader(), ...manager.getEntries()].map(e => JSON.stringify(e)).join('\n') + '\n', { mode: 0o600, flag: 'wx' });
-      }
-      const retainedMessages = new Set(manager.getBranch().filter(e => e.type === 'message' && e.message.role === 'user').map(e =>
-        typeof e.message.content === 'string' ? e.message.content : e.message.content.filter(b => b.type === 'text').map(b => b.text).join('\n')));
-      next.piFile = file; next.messages = (meta.messages || []).filter(m => retainedMessages.has(m.wire)); next.parentSession = meta.id;
-      await writeMeta(next); return json(res, { id: next.id });
-    }
+    if (action === 'fork') return json(res, await workerRequest(id, '/fork', input));
     if (action === 'title' || action === 'rename') {
       const title = String(input.title || input.name || '').trim(); if (!title || title.length > 200) throw Error('Choose a name of 1–200 characters');
       return json(res, await workerRequest(id, '/rename', { title }));

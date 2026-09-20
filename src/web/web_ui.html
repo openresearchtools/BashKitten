@@ -890,11 +890,11 @@
       copy.title = 'Copy message';
       copy.onclick = () => copyText(messageCopyText(message), copy);
       actions.append(copy);
-      if (entryId && current?.id) {
+      if (entryId && current?.id && message.role === 'user') {
         const fork = document.createElement('button');
         fork.type = 'button';
         fork.textContent = 'Fork';
-        fork.title = 'Create a new chat through this message';
+        fork.title = 'Fork before this message and return it to the editor';
         fork.onclick = async () => {
           const sourceId = current?.id;
           if (!sourceId) return;
@@ -906,10 +906,14 @@
               headers: {'content-type': 'application/json'},
               body: JSON.stringify({entryId})
             });
+            if (result.cancelled) { fork.disabled = false; fork.textContent = 'Fork'; return; }
             const sessions = await loadSessions();
             const created = sessions.find(session => session.id === result.id);
             if (!created) throw new Error('Fork was created but could not be opened');
             await openSession(created);
+            $('#prompt').value = result.text || '';
+            $('#prompt').dispatchEvent(new Event('input'));
+            $('#prompt').focus();
           } catch (error) {
             fork.disabled = false;
             fork.textContent = 'Fork';
@@ -1284,6 +1288,10 @@
 
     function renderEvent(event) {
       if (event.type === 'session') return;
+      if (event.type === 'session_changed') {
+        loadSessions().then(sessions => openSession(sessions.find(session => session.id === event.id))).catch(error => { $('#composerHint').textContent = error.message; });
+        return;
+      }
       if (event.type === 'snapshot') { renderSnapshot(event.data); return; }
       if (event.type === 'extension_ui_request') { showPiRequest(event); return; }
       if (event.type === 'notice') { $('#composerHint').textContent = event.message; return; }
@@ -1420,22 +1428,22 @@
     }
 
     function fillSelect(element, list, chosen) {
-      element.innerHTML = list.map(model => `<option value="${escapeHtml(`${model.provider}/${model.id}`)}" ${model.available ? '' : 'disabled'}>${escapeHtml(model.name)}${model.available ? '' : ' (unavailable)'}</option>`).join('');
+      element.innerHTML = `<option value="" ${current && element.id === 'model' ? 'disabled' : ''}>Pi default</option>` + list.map(model => `<option value="${escapeHtml(`${model.provider}/${model.id}`)}" ${model.available ? '' : 'disabled'}>${escapeHtml(model.name)}${model.available ? '' : ' (unavailable)'}</option>`).join('');
       if (chosen && list.some(model => `${model.provider}/${model.id}` === chosen)) element.value = chosen;
-      setThinking(element);
+      setThinking(element, element.id === 'defaultModel' ? $('#defaultThinking') : $('#thinking'));
     }
 
     function setThinking(modelElement, target = $('#thinking')) {
       const model = models.find(value => `${value.provider}/${value.id}` === modelElement.value);
       const old = target.value;
-      target.innerHTML = (model?.thinking_levels || ['off']).map(level => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join('');
-      target.value = (model?.thinking_levels || []).includes(old) ? old : (model?.default_thinking || 'off');
+      target.innerHTML = `<option value="" ${current && target.id === 'thinking' ? 'disabled' : ''}>Pi default</option>` + (model?.thinking_levels || ['off']).map(level => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join('');
+      target.value = (model?.thinking_levels || []).includes(old) ? old : '';
     }
 
     async function loadModels() {
       const selected = $('#model').value;
       const thinking = $('#thinking').value;
-      const value = await api('/api/models');
+      const value = await api('/api/models' + (current ? '?session=' + current.id : ''));
       models = value.models;
       fillSelect($('#model'), models, current?.model || selected || value.defaultModel);
       fillSelect($('#defaultModel'), models, value.defaultModel);
@@ -1996,11 +2004,8 @@
       $('#folderBtn').disabled = false;
       $('#folderBtn').title = `Change working folder: ${displayFolder(session.cwd)}`;
       setRunButton(Boolean(session.running));
-      if (session.model) {
-        $('#model').value = session.model;
-        setThinking($('#model'));
-        $('#thinking').value = session.thinking || 'off';
-      }
+      fillSelect($('#model'), models, session.model);
+      $('#thinking').value = session.thinking || '';
       renderedTurn = null;
       renderedEntries = new Set();
       resetUsage();
@@ -2011,7 +2016,7 @@
       if (resumed.stopped) {
         renderEvent({type:'snapshot', data:resumed.snapshot});
         $('#composerHint').textContent = 'Pi is stopped. Press Start Pi to continue.';
-      } else await connectSession(session.id, renderEvent, view);
+      } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
       if (sessionView !== view) return;
       setSidebar(false);
       if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
@@ -2051,8 +2056,7 @@
       setRunButton(false);
       $('#usage').textContent = '';
       if (config) {
-        $('#model').value = config.default_model;
-        setThinking($('#model'));
+        fillSelect($('#model'), models, config.default_model);
         $('#thinking').value = config.default_thinking;
       }
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
@@ -2391,11 +2395,6 @@
       const text = $('#prompt').value.trim();
       if (editingQueueId) { await saveQueueEdit(); return; }
       if (!text && !pendingFiles.length && !pendingRetainedAttachments.length) return;
-      if (!$('#model').value) {
-        showSettingsView(); selectSettingsTab('services');
-        $('#settingsNotice').textContent = 'Connect a Pi service to choose a model. Your draft is kept.';
-        return;
-      }
       if (!goalDraft && !pendingFiles.length && !pendingRetainedAttachments.length && /^\/(compact)(?:\s|$)/.test(text)) {
         await runSessionCommand(text, true);
         return;

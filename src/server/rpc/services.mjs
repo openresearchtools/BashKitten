@@ -38,14 +38,12 @@ export class Services {
       ]
     }));
   }
-  async models() {
+  async models(models) {
     const { ai: { getSupportedThinkingLevels } } = await loadPi();
-    const runtime = await this.runtime();
-    const available = new Set(runtime.getAvailableSnapshot().map(m => `${m.provider}/${m.id}`));
-    return runtime.getAvailableSnapshot().map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
+    models ||= (await this.runtime()).getAvailableSnapshot();
+    return models.map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
       contextWindow: m.contextWindow, input: m.input,
-      available: available.has(`${m.provider}/${m.id}`), thinking_levels: getSupportedThinkingLevels(m),
-      default_thinking: getSupportedThinkingLevels(m).includes('medium') ? 'medium' : 'off' }));
+      available: true, thinking_levels: getSupportedThinkingLevels(m) }));
   }
   state() {
     if (!this.attempt) return null;

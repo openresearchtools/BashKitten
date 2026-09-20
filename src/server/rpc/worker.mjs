@@ -11,19 +11,19 @@ import { notifyTurn, deliverNotifications } from '../platform/termux/notificatio
 import { claimInstance } from '../instance.mjs';
 
 process.umask(0o077);
-const id = process.argv[2];
+let id = process.argv[2];
 let meta = await readMeta(id);
 let rpc, busy = false, compacting = false, stopping = false, changing = false;
 let lastAccess = Date.now();
 let entries = [], events = [], usage = null, queue = [], pendingCwd = null, pendingModel = null, pendingContext = false;
-const draftsFile = path.join(sessionDir(id), 'drafts.json');
+const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
 // Recover every remaining item as a held draft; only an explicit user send releases it.
-queue = (await readJson(draftsFile, [])).map(item => ({ ...item, held: true, recovered: true, editToken: undefined }));
+queue = (await readJson(draftsFile(), [])).map(item => ({ ...item, held: true, recovered: true, editToken: undefined }));
 let draftWrites = Promise.resolve();
 function checkpoint() {
-  const saved = structuredClone(queue);
-  const work = draftWrites.then(() => writeJson(draftsFile, saved));
+  const saved = structuredClone(queue), file = draftsFile();
+  const work = draftWrites.then(() => writeJson(file, saved));
   draftWrites = work.catch(error => emit({ type: 'notice', message: 'Could not save drafts: ' + error.message }, false));
   return work;
 }
@@ -40,16 +40,45 @@ function emit(event, remember = true) {
   for (const res of clients) if (!res.write(line) && res.writableLength > 8 * 1024 * 1024) res.destroy();
 }
 function queueChanged() { checkpoint().catch(() => {}); emit({ type: 'queue_state', data: status() }, false); }
-async function refresh() {
+let refreshes = Promise.resolve();
+function refresh(follow = true) {
+  const work = refreshes.then(() => readState(follow));
+  refreshes = work.catch(() => {});
+  return work;
+}
+async function readState(follow) {
   const [state, history, stats] = await Promise.all([rpc.command('get_state'), rpc.command('get_entries'), rpc.command('get_session_stats')]);
+  if (server && !changing && meta.piSessionId && state.sessionId !== meta.piSessionId) await adoptSession(state, follow);
   entries = activeBranch(history.entries, history.leafId);
   meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
   meta.thinking = state.thinkingLevel;
+  if (state.sessionName) meta.title = state.sessionName;
   meta.piSessionId = state.sessionId;
   meta.piFile = state.sessionFile || meta.piFile;
   meta.modified = Math.max(meta.modified, Date.parse(entries.at(-1)?.timestamp) || 0);
   usage = usageView(stats, entries);
   await writeMeta(meta);
+}
+// Pi can replace its session through RPC or an extension. Keep that live process
+// and bind a new sidebar row to the session Pi selected; never serialize history.
+async function adoptSession(state, follow) {
+  const previous = id, oldServer = server, oldOwnership = ownership;
+  await draftWrites;
+  id = randomUUID();
+  meta = { ...meta, id, piFile: state.sessionFile, piSessionId: state.sessionId,
+    title: state.sessionName || `Fork: ${meta.title}`, parentSession: previous, modified: Date.now() };
+  await writeMeta(meta);
+  ownership = await claimInstance('pi-' + id);
+  await listen();
+  oldServer.close();
+  await fs.rm(socketPath(previous) + '.lock', { force: true });
+  oldOwnership.close();
+  if (follow) emit({ type: 'session_changed', id }, false);
+  for (const client of clients) client.end();
+  clients.clear(); events = []; dialogs.clear(); queue = [];
+  busy = state.isStreaming; compacting = state.isCompacting;
+  pendingCwd = pendingModel = null;
+  await checkpoint();
 }
 function reconcileQueue(event) {
   const remaining = [];
@@ -65,6 +94,7 @@ function reconcileQueue(event) {
   queueChanged();
 }
 async function launch() {
+  const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
   rpc = new PiRpc(meta);
   rpc.on('event', event => {
@@ -107,7 +137,7 @@ async function launch() {
     server.close(() => process.exit(1));
   });
   await refresh();
-  if (meta.title) await rpc.command('set_session_name', { name: meta.title });
+  if (newSession && meta.title) await rpc.command('set_session_name', { name: meta.title });
 }
 async function applyPending() {
   if (stopping || busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
@@ -124,7 +154,7 @@ async function applyPending() {
     const selection = pendingModel; pendingModel = null;
     const at = selection.model.indexOf('/');
     await rpc.command('set_model', { provider: selection.model.slice(0, at), modelId: selection.model.slice(at + 1) });
-    await rpc.command('set_thinking_level', { level: selection.thinking });
+    if (selection.thinking) await rpc.command('set_thinking_level', { level: selection.thinking });
     await refresh(); emit({ type: 'model_change', model: meta.model, thinking: meta.thinking }, false);
   }
 }
@@ -133,6 +163,10 @@ async function send(item) {
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
   await rpc.command('prompt', { message: item.wire, images: item.images || [], streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
+  // A native extension may consume the input without starting a model turn.
+  const state = await rpc.command('get_state');
+  if (!state.isStreaming && !state.pendingMessageCount && queue.includes(item)) { queue.splice(queue.indexOf(item), 1); queueChanged(); }
+  if (item.wire.startsWith('/')) { await refresh(); emit({ type: 'snapshot', data: snapshot() }, false); }
 }
 async function rebuildQueue(mutate) {
   const old = [...queue];
@@ -167,7 +201,9 @@ async function rebuildQueue(mutate) {
   queueChanged();
   if (failure) throw failure;
 }
-const server = http.createServer(async (req, res) => {
+async function handle(req, res) {
+  // A native session switch rebinds this worker; do not reuse its old control connection.
+  res.setHeader('Connection', 'close');
   if (req.url !== '/status') lastAccess = Date.now();
   try {
     if (req.url === '/events') {
@@ -179,6 +215,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.url === '/status') return json(res, { data: status() });
     if (req.url === '/view') return json(res, snapshot());
+    if (req.url === '/models') return json(res, await rpc.command('get_available_models'));
     const value = await jsonBody(req);
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
@@ -235,6 +272,12 @@ const server = http.createServer(async (req, res) => {
         });
         await writeMeta(meta); return { data: status() };
       }
+      if (req.url === '/fork') {
+        const result = await rpc.command('fork', { entryId: value.entryId });
+        if (result.cancelled) return result;
+        await refresh(false);
+        return { ...result, id };
+      }
       if (req.url === '/cwd') { pendingCwd = (await pickerDirectory(value.cwd)).path; await applyPending(); return { queued: Boolean(pendingCwd), cwd: meta.cwd }; }
       if (req.url === '/model') { pendingModel = value; await applyPending(); return { data: status() }; }
       if (req.url === '/rename') { await rpc.command('set_session_name', { name: value.title }); meta.title = value.title; await writeMeta(meta); return { ok: true }; }
@@ -251,14 +294,25 @@ const server = http.createServer(async (req, res) => {
     });
     json(res, result);
   } catch (error) { json(res, { error: error.message }, 400); }
-});
+}
+let server, ownership;
+async function listen() {
+  const boundId = id;
+  server = http.createServer((req, res) => {
+    if (boundId !== id) return json(res, { error: 'Pi switched sessions. Reopen this chat.' }, 409);
+    return handle(req, res);
+  });
+  meta.workerOwner = process.argv[2]; await writeMeta(meta);
+  await fs.writeFile(socketPath(id) + '.lock', String(process.pid), { mode: 0o600 });
+  await fs.rm(socketPath(id), { force: true });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socketPath(id), resolve); });
+  await fs.chmod(socketPath(id), 0o600);
+}
 await privateDir(path.dirname(socketPath(id)));
 // Keep one worker per saved session, including simultaneous reconnects after a kill.
-const ownership = await claimInstance('pi-' + id);
+ownership = await claimInstance('pi-' + id);
 if (!ownership) process.exit(0);
-await fs.writeFile(socketPath(id) + '.lock', String(process.pid), { mode: 0o600 });
-await fs.rm(socketPath(id), { force: true });
-try { await launch(); await new Promise(resolve => server.listen(socketPath(id), resolve)); await fs.chmod(socketPath(id), 0o600); }
+try { await launch(); await listen(); }
 catch (error) { console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
 process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });
 setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();

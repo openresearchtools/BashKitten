@@ -25,6 +25,11 @@ except for the documented Termux integration/build patches.
 
 - Pi owns the agent loop, tools, providers, models, thinking, queues, compaction,
   native session history, credential storage and token refresh.
+- Do not force a tool allowlist or override native extension discovery. Use stock
+  RPC for session operations, including fork and its extension hooks; never write
+  Pi JSONL or substitute SessionManager mutations for available RPC commands.
+  Let Pi restore model/thinking from existing history and choose new-session
+  defaults unless the user explicitly selects them.
 - Run Pi as a separate RPC process per session. A detached Node worker owns the
   process; closing a browser or restarting the web server must not stop a turn.
 - Use Pi's public ModelRuntime for service login because RPC has no login command.

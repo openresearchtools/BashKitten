@@ -336,3 +336,26 @@ all five package hashes in the APT index. Actual signed-index reinstalls passed
 on Linux ARM64 and both Termux installations, with their backends running at the
 remembered addresses afterward. All verification scripts and fixtures remain
 outside application repositories and release artifacts.
+
+### Stock RPC session and extension behavior — 20 September 2026
+
+Removed the forced seven-tool allowlist. Pi now chooses tools, extensions and
+new-session defaults from its native configuration. Existing session model and
+thinking restore from Pi history. Running-chat model lists use native RPC and
+include extension providers. New history uses Pi's normal session directory;
+existing file paths continue to resume. Sidebar removal preserves native files.
+
+Fork now sends `fork` to the existing Pi RPC process. Its extension hooks,
+cancellation, before-user-message branch and returned editor text remain native.
+The worker follows Pi's selected session without serializing history or moving
+it to another Pi process. Extension session changes use the same binding; owned
+Stop/Kill controls follow it. Reopening no longer appends redundant name entries.
+
+External Linux Node 22 checks passed ordinary `pi install`, stock-versus-wrapper
+tool defaults, native defaultTools, extension commands and model-selected tool
+execution, fork cancellation/confirmation hooks, first-user forks, native history
+restoration and an extension's newSession command. A disposable HTTP provider
+supplied inference responses; no real-provider caching claim is made. Actual
+GTK/WebKit checks passed model/thinking defaults, the Fork button, editor prefill
+and the next turn. Existing port/process recovery and interrupted startup checks
+also passed. Android/package candidate verification follows the rebuild.
