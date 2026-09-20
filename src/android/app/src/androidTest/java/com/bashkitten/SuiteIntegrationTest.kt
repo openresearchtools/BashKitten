@@ -21,6 +21,8 @@ import java.util.concurrent.TimeUnit
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebView
+import android.webkit.WebChromeClient
+import android.webkit.ConsoleMessage
 import android.os.Bundle
 
 /** Runs on a disposable primary-user Cuttlefish image with the suite candidates. */
@@ -38,13 +40,26 @@ class SuiteIntegrationTest {
         }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             device.wait(Until.hasObject(By.clazz(WebView::class.java)), 30000)
-            val done = CountDownLatch(1); var document = ""
+            val errors = mutableListOf<String>()
             scenario.onActivity { activity ->
                 val web = webView(activity.window.decorView) ?: error("The server did not open in WebView")
-                web.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState,secure:window.isSecureContext,uuid:typeof crypto.randomUUID,text:document.body.innerText,error:document.querySelector('#authError')?.textContent,auth:document.querySelector('#auth')?.className})") { document = it; done.countDown() }
+                web.webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(message: ConsoleMessage): Boolean {
+                        if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) errors.add("Line ${message.lineNumber()}: ${message.message()}")
+                        return true
+                    }
+                }
+                web.reload()
             }
-            assertTrue(done.await(30, TimeUnit.SECONDS))
-            instrumentation.sendStatus(0, Bundle().apply { putString("stream", "WebView document: $document\n") })
+            var document = ""
+            for (attempt in 0 until 100) {
+                val done = CountDownLatch(1)
+                scenario.onActivity { activity -> webView(activity.window.decorView)!!.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState,secure:window.isSecureContext,uuid:typeof crypto.randomUUID,text:document.body?.innerText,error:document.querySelector('#authError')?.textContent,auth:document.querySelector('#auth')?.className})") { document = it; done.countDown() } }
+                assertTrue(done.await(5, TimeUnit.SECONDS))
+                if (document.contains("BashKitten") || document.contains("Projects")) break
+                Thread.sleep(200)
+            }
+            instrumentation.sendStatus(0, Bundle().apply { putString("stream", "WebView document: $document\nConsole: $errors\n") })
             assertTrue("The web login/app content is blank", document.contains("BashKitten") || document.contains("Projects"))
             device.takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), "suite-web.png"))
         }
