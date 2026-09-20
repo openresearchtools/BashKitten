@@ -32,7 +32,7 @@ dependencies {
 }
 
 val licenseAssets = layout.buildDirectory.dir("generated/licenses")
-android.sourceSets.getByName("main").assets.srcDir(licenseAssets)
+android.sourceSets.getByName("main").assets.srcDir(licenseAssets.get().asFile)
 val generateLicenses by tasks.registering {
     val runtime = configurations.named("releaseRuntimeClasspath")
     inputs.files(runtime)

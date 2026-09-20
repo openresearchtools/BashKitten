@@ -133,8 +133,9 @@ class MainActivity : ComponentActivity() {
                                     "about" -> ScrollPage {
                                         Text("BashKitten " + installed("com.bashkitten").orEmpty(), style = MaterialTheme.typography.headlineSmall)
                                         Text("A local interface for the Pi coding agent. GPL-3.0-only. No warranty.")
-                                        Text("This Android app does not bundle Termux, Node.js or Pi. They are installed separately and retain their own licenses. The BashKitten server package includes unmodified Pi and its dependencies.")
+                                        Text("The app connects to the separate BashKitten server, which includes unmodified Pi and its npm dependencies under their own licenses. Termux and Node.js are installed separately and retain their own licenses.")
                                         TextButton(onClick = { navigate("licenses") }) { Text("Licenses") }
+                                        if (webRunning()) TextButton(onClick = { openChat(); web.view.evaluateJavascript("showSettingsView();selectSettingsTab('about');document.querySelector('#viewLicenses').click()", null) }) { Text("Server licenses") }
                                         TextButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/openresearchtools/bashkitten"))) }) { Text("Source code") }
                                     }
                                     "licenses" -> LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
