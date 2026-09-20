@@ -3,9 +3,9 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['src/android/**', 'src/server/platform/termux/bootstrap/**', '.github/workflows/android.yml']
+    paths: ['src/android/**', 'licenses/**', 'LICENSE', 'package.json', 'src/server/platform/termux/bootstrap/**', '.github/workflows/android.yml']
   pull_request:
-    paths: ['src/android/**', 'src/server/platform/termux/bootstrap/**', '.github/workflows/android.yml']
+    paths: ['src/android/**', 'licenses/**', 'LICENSE', 'package.json', 'src/server/platform/termux/bootstrap/**', '.github/workflows/android.yml']
 permissions:
   contents: read
 jobs:
@@ -21,6 +21,11 @@ jobs:
       - name: Build production APK
         working-directory: src/android
         run: ./gradlew --no-daemon :app:assembleRelease :app:assembleReleaseAndroidTest :permission-probe:assembleDebug
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: android-dependency-sources
+          path: src/android/app/build/android-dependency-sources.tar.gz
+          if-no-files-found: error
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: unrelated-signer-permission-probe

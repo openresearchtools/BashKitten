@@ -10,8 +10,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 31
         targetSdk = 37
-        versionCode = 7
-        versionName = "0.2.3"
+        versionCode = 8
+        versionName = "0.2.4"
     }
     sourceSets.getByName("main").assets.srcDir("../../server/platform/termux/bootstrap")
     testBuildType = "release"
@@ -30,3 +30,27 @@ dependencies {
     implementation("androidx.webkit:webkit:1.17.0")
     implementation("androidx.work:work-runtime-ktx:2.11.2")
 }
+
+val licenseAssets = layout.buildDirectory.dir("generated/licenses")
+android.sourceSets.getByName("main").assets.srcDir(licenseAssets)
+val generateLicenses by tasks.registering {
+    val runtime = configurations.named("releaseRuntimeClasspath")
+    inputs.files(runtime)
+    inputs.files(rootProject.file("licenses.py"), rootProject.file("../../LICENSE"), rootProject.file("../../package.json"))
+    inputs.dir(rootProject.file("../../licenses"))
+    inputs.dir(file("src/main/assets"))
+    outputs.dir(licenseAssets)
+    outputs.file(layout.buildDirectory.file("android-dependency-sources.tar.gz"))
+    doLast {
+        val report = layout.buildDirectory.file("license-artifacts.json").get().asFile
+        val items = runtime.get().resolvedConfiguration.resolvedArtifacts.map {
+            mapOf("group" to it.moduleVersion.id.group, "name" to it.moduleVersion.id.name,
+                "version" to it.moduleVersion.id.version, "file" to it.file.absolutePath)
+        }.sortedBy { it["group"] + ":" + it["name"] }
+        report.writeText(groovy.json.JsonOutput.toJson(items))
+        val process = ProcessBuilder("python3", rootProject.file("licenses.py").absolutePath,
+            report.absolutePath, licenseAssets.get().asFile.absolutePath).inheritIO().start()
+        check(process.waitFor() == 0) { "Dependency license collection failed" }
+    }
+}
+tasks.named("preBuild").configure { dependsOn(generateLicenses) }

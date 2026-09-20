@@ -46,6 +46,11 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebSurface
     private var screen by mutableStateOf("chat")
+    private var licenses by mutableStateOf<List<JSONObject>>(emptyList())
+    private var licenseDetail by mutableStateOf<JSONObject?>(null)
+    private fun back() {
+        when (screen) { "license" -> { licenseDetail = null; screen = "licenses" }; "licenses" -> screen = "about"; else -> openChat() }
+    }
     private var menuOpen by mutableStateOf(false)
     private var status by mutableStateOf<JSONObject?>(null)
     private var notice by mutableStateOf("")
@@ -104,16 +109,16 @@ class MainActivity : ComponentActivity() {
             val colors = if (isSystemInDarkTheme()) darkColorScheme(primary = Color(0xffa9c7ff), background = Color(0xff1e1e1e), surface = Color(0xff1e1e1e), surfaceContainer = Color(0xff292929))
                 else lightColorScheme(primary = Color(0xff1764d8), background = Color(0xfff5f6fa), surface = Color(0xfff5f6fa), surfaceContainer = Color.White)
             MaterialTheme(colorScheme = colors) {
-                BackHandler { if (menuOpen) menuOpen = false else if (screen != "chat") openChat() else moveTaskToBack(true) }
+                BackHandler { if (menuOpen) menuOpen = false else if (screen != "chat") back() else moveTaskToBack(true) }
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (screen != "chat") IconButton(onClick = { openChat() }, modifier = Modifier.semantics { contentDescription = "Back to chat" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
+                            if (screen != "chat") IconButton(onClick = { back() }, modifier = Modifier.semantics { contentDescription = if (screen in setOf("licenses", "license")) "Back" else "Back to chat" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
                             Box {
                                 IconButton(onClick = { menuOpen = !menuOpen; if (menuOpen) refresh() }, modifier = Modifier.semantics { contentDescription = "Menu" }) { Text("☰", style = MaterialTheme.typography.titleLarge) }
                                 Menu()
                             }
-                            Text(when (screen) { "apps" -> "Apps"; "desktop" -> "Desktop"; "sessions" -> "Pi sessions"; else -> "BashKitten" }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Text(when (screen) { "apps" -> "Apps"; "desktop" -> "Desktop"; "sessions" -> "Pi sessions"; "about" -> "About"; "licenses", "license" -> "Licenses"; else -> "BashKitten" }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                             if (screen == "apps") IconButton(enabled = !checking, onClick = { checkUpdates() }, modifier = Modifier.semantics { contentDescription = "Refresh apps" }) { Text("↻", style = MaterialTheme.typography.headlineSmall) }
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
@@ -125,6 +130,26 @@ class MainActivity : ComponentActivity() {
                                     "apps" -> Store()
                                     "desktop" -> ScrollPage { DesktopBlock() }
                                     "sessions" -> ScrollPage { Sessions() }
+                                    "about" -> ScrollPage {
+                                        Text("BashKitten " + installed("com.bashkitten").orEmpty(), style = MaterialTheme.typography.headlineSmall)
+                                        Text("A local interface for the Pi coding agent. GPL-3.0-only. No warranty.")
+                                        Text("This Android app does not bundle Termux, Node.js or Pi. They are installed separately and retain their own licenses. The BashKitten server package includes unmodified Pi and its dependencies.")
+                                        TextButton(onClick = { navigate("licenses") }) { Text("Licenses") }
+                                        TextButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/openresearchtools/bashkitten"))) }) { Text("Source code") }
+                                    }
+                                    "licenses" -> LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
+                                        items(licenses) { entry -> TextButton(onClick = { licenseDetail = entry; screen = "license" }, modifier = Modifier.fillMaxWidth()) {
+                                            Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                                                Text(entry.getString("name"), color = MaterialTheme.colorScheme.onSurface)
+                                                Text(listOf(entry.optString("version"), entry.optString("license")).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
+                                            }
+                                        } }
+                                    }
+                                    "license" -> ScrollPage { licenseDetail?.let { entry ->
+                                        Text(entry.getString("name"), style = MaterialTheme.typography.titleLarge)
+                                        SelectionContainer { Text(entry.getString("text"), style = MaterialTheme.typography.bodySmall) }
+                                    } }
+
                                 }
                             } else if (!webRunning()) Surface(Modifier.fillMaxSize()) {
                                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -149,7 +174,11 @@ class MainActivity : ComponentActivity() {
     private fun navigate(destination: String) {
         menuOpen = false; screen = destination
         web.view.clearFocus(); (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(web.view.windowToken, 0)
-        if (destination != "chat") { refresh(); followWork() }
+        if (destination == "licenses" && licenses.isEmpty()) io.execute {
+            val entries = org.json.JSONArray(assets.open("licenses.json").bufferedReader().use { it.readText() })
+            runOnUiThread { licenses = (0 until entries.length()).map { entries.getJSONObject(it) } }
+        }
+        if (destination in setOf("apps", "desktop", "sessions")) { refresh(); followWork() }
     }
     fun backendUnavailable() { if (screen == "chat") { firstReady = true; navigate("apps"); preflight() } }
     private fun preflight() {
@@ -259,7 +288,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable private fun Menu() {
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            for ((id, name) in listOf("chat" to "Chat", "apps" to "Apps", "desktop" to "Desktop", "sessions" to "Pi sessions")) {
+            for ((id, name) in listOf("chat" to "Chat", "apps" to "Apps", "desktop" to "Desktop", "sessions" to "Pi sessions", "about" to "About")) {
                 DropdownMenuItem(text = { Text(name) }, onClick = { if (id == "chat") openChat() else navigate(id) })
             }
             HorizontalDivider()
