@@ -38,6 +38,12 @@ object AppStore {
         (0 until apps.length()).map { apps.getJSONObject(it) }
     }.getOrDefault(emptyList())
 
+    fun keyringChecksum(context: Context): String {
+        val catalog = verify(context, AtomicFile(File(context.filesDir, "catalog.json")).readFully(), false)
+        val hash = catalog.getJSONObject("bootstrap").getString("keyringSha256")
+        check(hash.matches(Regex("[a-f0-9]{64}"))) { "Invalid keyring checksum" }
+        return hash
+    }
     private fun verify(context: Context, bytes: ByteArray, advance: Boolean): JSONObject {
         val envelope = JSONObject(bytes.toString(Charsets.UTF_8))
         val payload = Base64.decode(envelope.getString("payload"), Base64.NO_WRAP)

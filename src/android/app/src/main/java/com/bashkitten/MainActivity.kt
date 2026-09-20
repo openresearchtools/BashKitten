@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -30,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private val io = Executors.newSingleThreadExecutor()
     private var catalog by mutableStateOf<List<JSONObject>>(emptyList())
     private var storeRevision by mutableIntStateOf(0)
+    private var bootstrap by mutableStateOf<JSONObject?>(null)
     private var checking by mutableStateOf(false)
     private var installing by mutableStateOf(false)
     private var x11Variant by mutableStateOf("standalone")
@@ -38,12 +40,14 @@ class MainActivity : ComponentActivity() {
     private var session: String? = null
     private val setup = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         notice = if (result.resultCode == RESULT_OK) "Termux is ready" else "Termux setup did not finish"
+        if (result.resultCode == RESULT_OK) startBootstrap()
         refresh()
     }
     private val poll = object : Runnable { override fun run() { refresh(); handler.postDelayed(this, 5000) } }
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        enableEdgeToEdge()
         session = requestedSession(intent)
         x11Variant = AppStore.variant(this)
         catalog = AppStore.entries(this)
@@ -65,7 +69,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); handler.post(poll) }
+    override fun onResume() { super.onResume(); if (TermuxBridge.trusted(this)) TermuxBridge.ensureManager(this); handler.post(poll) }
     override fun onPause() { handler.removeCallbacks(poll); web.flush(); super.onPause() }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); session = requestedSession(intent); if (status != null) openChat() }
     private fun requestedSession(intent: Intent): String? = intent.data?.takeIf { it.scheme == "bashkitten" && it.host == "session" }?.lastPathSegment?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
@@ -77,8 +81,14 @@ class MainActivity : ComponentActivity() {
         TermuxBridge.command(this, "status") { result ->
             requesting = false
             result.onSuccess { value -> status = value; if (!appsOpen && value.optJSONObject("web")?.optString("status") != "running") appsOpen = true }
-                .onFailure { notice = it.message.orEmpty() }
+                .onFailure { error ->
+                    TermuxBridge.bootstrapStatus(this) { value -> value.onSuccess { bootstrap = it }; notice = error.message.orEmpty() }
+                }
         }
+    }
+    private fun startBootstrap() {
+        runCatching { TermuxBridge.bootstrap(this, AppStore.keyringChecksum(this)); notice = "Preparing the Termux environment…" }
+            .onFailure { notice = it.message.orEmpty() }
     }
     private fun command(name: String, args: JSONObject = JSONObject()) {
         notice = "Working…"
@@ -138,6 +148,52 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    @Composable private fun PackageBlock() {
+        val packages = status?.optJSONObject("packages")
+        val pi = packages?.optJSONObject("sources")?.optJSONObject("pi")
+        val apt = packages?.optJSONObject("sources")?.optJSONObject("apt")
+        val job = packages?.optJSONObject("job")
+        val active = job?.optString("status") in setOf("running", "waiting")
+        var details by remember { mutableStateOf(false) }
+        fun run(kind: String) = command("package-job", JSONObject().put("kind", kind))
+        HorizontalDivider()
+        Text("Termux packages", style = MaterialTheme.typography.titleMedium)
+        if (packages == null) {
+            bootstrap?.optJSONObject("bootstrap")?.let { Text(it.optString("phase"), style = MaterialTheme.typography.bodySmall) }
+            bootstrap?.optString("logBase64")?.takeIf { it.isNotBlank() }?.let { encoded ->
+                val log = runCatching { android.util.Base64.decode(encoded, android.util.Base64.DEFAULT).toString(Charsets.UTF_8) }.getOrDefault("")
+                Text(log.lineSequence().toList().takeLast(5).joinToString("\n"), style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(enabled = TermuxBridge.trusted(this@MainActivity), onClick = { startBootstrap() }) { Text("Set up / resume") }
+        }
+        Row {
+            Button(enabled = packages != null && !active, onClick = { run("update-packages") }) { Text("Update packages") }
+            TextButton(enabled = packages != null && !active, onClick = { run("check-packages") }) { Text("Check updates") }
+        }
+        Text("Pi (npm) · " + (packages?.optJSONObject("runtime")?.optString("version") ?: "Not installed"), style = MaterialTheme.typography.bodyMedium)
+        pi?.let { Text(if (it.has("error")) "npm: " + it.optString("error") else "Upstream " + it.optString("latest") + " · Compatible " + it.optString("compatible"), style = MaterialTheme.typography.bodySmall) }
+        apt?.let { Text(if (it.has("error")) "APT: " + it.optString("error") else it.optInt("available").toString() + " package updates", style = MaterialTheme.typography.bodySmall) }
+        Row {
+            TextButton(enabled = packages != null && !active, onClick = { run("update-pi") }) { Text("Update Pi") }
+            if (packages?.optJSONObject("runtime")?.optString("previous")?.isNotBlank() == true) TextButton(enabled = !active, onClick = { run("rollback-pi") }) { Text("Roll back Pi") }
+            TextButton(onClick = { details = !details }) { Text(if (details) "Hide details" else "Details") }
+        }
+        if (job != null) {
+            Text(job.optString("phase") + " · " + job.optString("status"), style = MaterialTheme.typography.bodySmall)
+            if (active) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (job.has("error")) Text(job.optString("error"), style = MaterialTheme.typography.bodySmall)
+            if (job.optString("status") in setOf("failed", "interrupted")) TextButton(onClick = { command("package-job", JSONObject().put("retry", true)) }) { Text("Retry") }
+            Text(job.optString("log").lineSequence().toList().takeLast(5).joinToString("\n"), style = MaterialTheme.typography.bodySmall)
+        }
+        if (details) {
+            Row {
+                TextButton(enabled = packages != null && !active, onClick = { run("refresh-lists") }) { Text("Refresh lists") }
+                TextButton(enabled = packages != null && !active, onClick = { run("recover-packages") }) { Text("Repair packages") }
+            }
+            Text(job?.optString("log").orEmpty(), style = MaterialTheme.typography.bodySmall)
+        }
+        HorizontalDivider()
+    }
     @Composable private fun Store() {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Apps and services", style = MaterialTheme.typography.headlineSmall)
@@ -146,6 +202,7 @@ class MainActivity : ComponentActivity() {
                 if (AppStore.confirmation(this@MainActivity) != null) Button(onClick = { confirmInstallation() }) { Text("Confirm install") }
             }
             AppStore.prefs(this@MainActivity).getString("checkError", null)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            PackageBlock()
             Text("Required", style = MaterialTheme.typography.titleMedium)
             AppRow("com.termux"); AppRow("com.termux.api"); AppRow("com.bashkitten")
             Text("Desktop", style = MaterialTheme.typography.titleMedium)
