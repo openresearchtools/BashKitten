@@ -143,6 +143,8 @@ packages. An experimental rebuild passed static alignment checks, but this packa
 fork was removed from the product scope. Its release is marked withdrawn/prerelease
 and is not indexed in APT. Ordinary packages continue from upstream Termux. Full
 16 KB desktop compatibility is therefore not established by the current 4 KB test.
+The disposable device’s eight experimental packages were also restored to their
+official upstream versions through APT; no application was uninstalled.
 
 A system-call trace of Pi service discovery, RPC startup and idle operation
 showed no IP network connections; offline/telemetry settings were effective.
