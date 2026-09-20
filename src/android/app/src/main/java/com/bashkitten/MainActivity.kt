@@ -77,6 +77,7 @@ class MainActivity : ComponentActivity() {
     private fun requestedSession(intent: Intent): String? = intent.data?.takeIf { it.scheme == "bashkitten" && it.host == "session" }?.lastPathSegment?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
 
     private fun refresh() {
+        AppStore.reconcile(this)
         storeRevision++
         if (requesting || !initialized() || !TermuxBridge.trusted(this)) return
         requesting = true
@@ -89,7 +90,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun startBootstrap() {
-        runCatching { TermuxBridge.bootstrap(this, AppStore.keyringChecksum(this)); notice = "Preparing the Termux environment…" }
+        runCatching { AppStore.setupProblem(this, true)?.let { error(it) }; TermuxBridge.bootstrap(this, AppStore.keyringChecksum(this)); notice = "Preparing the Termux environment…" }
             .onFailure { notice = it.message.orEmpty() }
     }
     private fun command(name: String, args: JSONObject = JSONObject()) {
@@ -141,7 +142,8 @@ class MainActivity : ComponentActivity() {
                     Text(current?.versionName?.let { "Installed · $it" } ?: "Not installed", style = MaterialTheme.typography.bodySmall)
                     if (entry != null) Text(entry.optString("versionName") + " · suite " + entry.optInt("suiteRevision", 1), style = MaterialTheme.typography.bodySmall)
                 }
-                Button(enabled = update && !installing, onClick = { install(entry!!) }) { Text(if (current == null) "Install" else if (update) "Update" else "Installed") }
+                val pending = state.startsWith("Downloading") || state.startsWith("Installing") || state.startsWith("Confirm")
+                Button(enabled = update && !installing && !pending, onClick = { install(entry!!) }) { Text(if (pending) "Installing" else if (state.startsWith("Failed") && update) "Retry" else if (current == null) "Install" else if (update) "Update" else "Installed") }
             }
             if (state.isNotBlank() && state != "Installed") Text(state, style = MaterialTheme.typography.bodySmall)
             if (entry != null) Row {
@@ -268,6 +270,7 @@ class MainActivity : ComponentActivity() {
     @Composable private fun Store() {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Apps and services", style = MaterialTheme.typography.headlineSmall)
+            AppStore.setupProblem(this@MainActivity)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             Row {
                 TextButton(enabled = !checking, onClick = { checkCatalog() }) { Text(if (checking) "Checking…" else "Check app updates") }
                 if (AppStore.confirmation(this@MainActivity) != null) Button(onClick = { confirmInstallation() }) { Text("Confirm install") }

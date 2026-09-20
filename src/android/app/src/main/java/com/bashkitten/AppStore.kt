@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.UserManager
 import android.os.Parcel
 import android.util.Base64
 import android.util.AtomicFile
@@ -31,6 +32,30 @@ object AppStore {
     fun installed(context: Context, id: String) = runCatching { context.packageManager.getPackageInfo(id, PackageManager.GET_SIGNING_CERTIFICATES) }.getOrNull()
     private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     private fun signer(info: android.content.pm.PackageInfo) = info.signingInfo?.apkContentsSigners?.singleOrNull()?.toByteArray()?.let { digest(it) }
+    fun setupProblem(context: Context, coreSpace: Boolean = false): String? {
+        if ("arm64-v8a" !in Build.SUPPORTED_ABIS) return "This suite needs an aarch64 Android device."
+        if (!(context.getSystemService(Context.USER_SERVICE) as UserManager).isSystemUser) return "Install the suite in the primary Android user. Termux packages use that user's fixed private paths."
+        val termux = installed(context, "com.termux")
+        if ((termux?.applicationInfo?.flags ?: 0).and(android.content.pm.ApplicationInfo.FLAG_EXTERNAL_STORAGE) != 0) return "Move Termux to internal storage before setup."
+        if (coreSpace && context.filesDir.usableSpace < 2L * 1024 * 1024 * 1024) return "Free at least 2 GB on internal storage for the core Termux environment. Desktop applications need additional space."
+        return null
+    }
+    private val downloading = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    fun reconcile(context: Context) {
+        val pref = prefs(context)
+        val sessions = context.packageManager.packageInstaller.mySessions
+        for (id in names.keys) {
+            val state = pref.getString("state:$id", "").orEmpty()
+            if (id in downloading || !(state.startsWith("Downloading") || state.startsWith("Installing") || state.startsWith("Confirm"))) continue
+            val expected = pref.getLong("installVersion:$id", Long.MAX_VALUE)
+            if ((installed(context, id)?.longVersionCode ?: 0) >= expected) {
+                pref.edit().putString("state:$id", "Installed").remove("installSession:$id").remove("confirmation").apply()
+            } else if (sessions.none { it.sessionId == pref.getInt("installSession:$id", -1) }) {
+                File(context.cacheDir, "$id.apk.part").delete()
+                pref.edit().putString("state:$id", "Failed · Installation was interrupted. Retry.").remove("installSession:$id").remove("confirmation").apply()
+            }
+        }
+    }
     fun variant(context: Context) = prefs(context).getString("x11Variant", "standalone")!!
     fun entries(context: Context): List<JSONObject> = runCatching {
         val catalog = verify(context, AtomicFile(File(context.filesDir, "catalog.json")).readFully(), false)
@@ -118,6 +143,7 @@ object AppStore {
     }
     fun install(context: Context, entry: JSONObject) {
         val id = entry.getString("packageId")
+        setupProblem(context)?.let { error(it) }
         check(entries(context).any { it.toString() == entry.toString() }) { "Catalog changed or expired; check updates again" }
         check("arm64-v8a" in Build.SUPPORTED_ABIS && Build.VERSION.SDK_INT >= entry.getInt("minSdk")) { "This device is not supported" }
         val current = installed(context, id)
@@ -126,7 +152,8 @@ object AppStore {
             check(current.longVersionCode < entry.getLong("versionCode")) { "This version is already installed" }
         }
         val apk = File(context.cacheDir, "$id.apk.part")
-        prefs(context).edit().putString("state:$id", "Downloading…").apply()
+        downloading.add(id)
+        prefs(context).edit().putLong("installVersion:$id", entry.getLong("versionCode")).putString("state:$id", "Downloading…").apply()
         try {
             val connection = connection(entry.getString("url")); val expected = entry.getLong("size")
             check(context.cacheDir.usableSpace > expected * 2 + 33554432) { "Not enough space to download and install" }
@@ -151,6 +178,7 @@ object AppStore {
                 if (Build.VERSION.SDK_INT >= 34) setRequestUpdateOwnership(true)
             }
             val installer = context.packageManager.packageInstaller; val sessionId = installer.createSession(params)
+            prefs(context).edit().putInt("installSession:$id", sessionId).apply()
             try { installer.openSession(sessionId).use { session ->
                 session.openWrite("base.apk", 0, total).use { output -> apk.inputStream().use { it.copyTo(output) }; session.fsync(output) }
                 val callback = Intent(context, InstallResultReceiver::class.java).setAction("com.bashkitten.INSTALL.$sessionId").putExtra("packageId", id)
@@ -160,7 +188,7 @@ object AppStore {
             } } catch (error: Exception) { installer.abandonSession(sessionId); throw error }
         } catch (error: Exception) {
             prefs(context).edit().putString("state:$id", "Failed · " + error.message).apply(); throw error
-        } finally { apk.delete() }
+        } finally { apk.delete(); downloading.remove(id) }
     }
     fun confirmation(context: Context): Intent? {
         val saved = prefs(context).getString("confirmation", null) ?: return null
@@ -187,7 +215,7 @@ class InstallResultReceiver : BroadcastReceiver() {
                 pref.putString("state:$id", "Confirm installation in Android")
             }
         } else {
-            pref.remove("confirmation").putString("state:$id", if (status == PackageInstaller.STATUS_SUCCESS) "Installed" else "Failed · " + intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty().take(400))
+            pref.remove("confirmation").remove("installSession:$id").putString("state:$id", if (status == PackageInstaller.STATUS_SUCCESS) "Installed" else "Failed · " + intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE).orEmpty().take(400))
         }
         pref.apply()
     }

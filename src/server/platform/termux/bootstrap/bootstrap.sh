@@ -17,6 +17,8 @@ state() {
 trap 'state failed "Setup interrupted. Retry resumes completed steps."' EXIT
 apt_options=(-o DPkg::Lock::Timeout=300 -o Dpkg::Use-Pty=0 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 if [ ! -f "$bootstrap/core.done" ]; then
+  available=$(df -Pk "$PREFIX" | awk 'NR==2 {print $4}')
+  [ "$available" -ge 2097152 ] || { state failed 'Free at least 2 GB on internal storage before setup'; trap - EXIT; exit 1; }
   state running 'Refreshing upstream packages'
   apt-get "${apt_options[@]}" update
   state running 'Installing Node, Python, Git and GitHub CLI'
