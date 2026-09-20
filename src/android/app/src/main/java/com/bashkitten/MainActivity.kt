@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         session = requestedSession(intent)
         screen = state?.getString("screen") ?: if (initialized()) "chat" else "apps"
+        if (screen in setOf("licenses", "license")) loadLicenses(state?.getString("licenseName"))
         @Suppress("DEPRECATION")
         val x11 = AppStore.installed(this, "com.termux.x11")
         x11Variant = if (x11 == null) AppStore.variant(this) else if (x11.sharedUserId == "com.termux") "sharedUid" else "standalone"
@@ -166,7 +167,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    override fun onSaveInstanceState(state: Bundle) { state.putString("screen", screen); super.onSaveInstanceState(state) }
+    override fun onSaveInstanceState(state: Bundle) { state.putString("screen", screen); state.putString("licenseName", licenseDetail?.optString("name")); super.onSaveInstanceState(state) }
     override fun onResume() { super.onResume(); visible = true; preflight() }
     override fun onPause() { visible = false; handler.removeCallbacks(poll); web.flush(); super.onPause() }
     override fun onDestroy() { handler.removeCallbacks(poll); web.close(); io.shutdown(); super.onDestroy() }
@@ -175,14 +176,20 @@ class MainActivity : ComponentActivity() {
     private fun navigate(destination: String) {
         menuOpen = false; screen = destination
         web.view.clearFocus(); (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(web.view.windowToken, 0)
-        if (destination == "licenses" && licenses.isEmpty()) io.execute {
-            val entries = org.json.JSONArray(assets.open("licenses.json").bufferedReader().use { it.readText() })
-            runOnUiThread { licenses = (0 until entries.length()).map { entries.getJSONObject(it) } }
-        }
+        if (destination == "licenses" && licenses.isEmpty()) loadLicenses()
         if (destination in setOf("apps", "desktop", "sessions")) { refresh(); followWork() }
     }
+    private fun aboutScreen() = screen in setOf("about", "licenses", "license")
+    private fun loadLicenses(selected: String? = null) { io.execute {
+        val entries = org.json.JSONArray(assets.open("licenses.json").bufferedReader().use { it.readText() })
+        runOnUiThread {
+            licenses = (0 until entries.length()).map { entries.getJSONObject(it) }
+            if (selected != null) licenseDetail = licenses.find { it.getString("name") == selected }
+        }
+    } }
     fun backendUnavailable() { if (screen == "chat") { firstReady = true; navigate("apps"); preflight() } }
     private fun preflight() {
+        if (aboutScreen()) return
         AppStore.reconcile(this); storeRevision++
         if (essentialsMissing()) screen = "apps"
         if (AppStore.busy(this)) followWork()
@@ -225,7 +232,7 @@ class MainActivity : ComponentActivity() {
                 if (screen != "chat" && jobActive()) followWork()
             }.onFailure { error ->
                 if (managerAttempts > 0) managerAttempts--
-                if (managerAttempts == 0 && !setupActive) { screen = "apps"; connectExpanded = true; notice = error.message.orEmpty() }
+                if (managerAttempts == 0 && !setupActive && !aboutScreen()) { screen = "apps"; connectExpanded = true; notice = error.message.orEmpty() }
                 TermuxBridge.bootstrapStatus(this) { result -> result.onSuccess {
                     bootstrap = it
                     setupActive = it.optJSONObject("bootstrap")?.optString("status") == "running"

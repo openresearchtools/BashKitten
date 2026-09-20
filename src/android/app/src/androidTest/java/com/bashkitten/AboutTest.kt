@@ -25,6 +25,7 @@ class AboutTest {
         ActivityScenario.launch(MainActivity::class.java).use {
             assertTrue(device.wait(Until.hasObject(By.desc("Menu")), 10000))
             device.findObject(By.desc("Menu")).click()
+            assertTrue(device.wait(Until.hasObject(By.text("About")), 10000))
             device.findObject(By.text("About")).click()
             assertTrue(device.wait(Until.hasObject(By.textContains("Termux and Node.js are installed separately")), 5000))
             device.takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), "about.png"))
