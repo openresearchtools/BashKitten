@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
         screen = state?.getString("screen") ?: if (initialized()) "chat" else "apps"
         @Suppress("DEPRECATION")
         val x11 = AppStore.installed(this, "com.termux.x11")
-        x11Variant = if (x11 == null) "standalone" else if (x11.sharedUserId == "com.termux") "sharedUid" else "standalone"
+        x11Variant = if (x11 == null) AppStore.variant(this) else if (x11.sharedUserId == "com.termux") "sharedUid" else "standalone"
         AppStore.prefs(this).edit().putString("x11Variant", x11Variant).apply()
         catalog = AppStore.entries(this)
         AppStore.schedule(this)
