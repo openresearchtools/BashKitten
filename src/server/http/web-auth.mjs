@@ -18,7 +18,7 @@ export async function login(req) {
   return record && record.expires > Date.now() ? { ...record, key } : null;
 }
 export function checkOrigin(req) {
-  if (req.headers.origin !== `http://${req.headers.host}`) throw Object.assign(Error('Invalid request origin'), { status: 403 });
+  if (req.headers.origin !== `${req.socket.encrypted ? 'https' : 'http'}://${req.headers.host}`) throw Object.assign(Error('Invalid request origin'), { status: 403 });
 }
 export function checkCsrf(req, record) {
   if (!equal(digest(String(req.headers['x-bashkitten-csrf'] || '')), record.csrfHash)) throw Object.assign(Error('Invalid CSRF token'), { status: 403 });
@@ -50,7 +50,7 @@ export async function authenticate(value, signup, res) {
     for (const [key, record] of Object.entries(records)) if (record.expires <= Date.now()) delete records[key];
     records[digest(token)] = { csrfHash: digest(csrf), expires: Date.now() + 30 * 86400000 };
     await writeJson(loginFile, records);
-    res.setHeader('Set-Cookie', `${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000`);
+    res.setHeader('Set-Cookie', `${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${res.socket.encrypted ? '; Secure' : ''}`);
     return { csrf };
   });
 }

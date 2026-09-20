@@ -47,17 +47,28 @@ export async function formBody(req) {
   return new Response(await body(req), { headers: { 'Content-Type': req.headers['content-type'] } }).formData();
 }
 export function workerRequest(id, route, value) {
+  return socketRequest(socketPath(id), route, value);
+}
+export function socketRequest(socket, route, value, timeout = 120000) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ socketPath: socketPath(id), path: route, method: value === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } }, res => {
+    const req = http.request({ socketPath: socket, path: route, method: value === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } }, res => {
       body(res, 128 * 1024 * 1024).then(bytes => {
         const result = JSON.parse(bytes.toString());
         if (res.statusCode >= 400) reject(Error(result.error)); else resolve(result);
       }).catch(reject);
     });
-    req.setTimeout(120000, () => req.destroy(Error('Pi did not respond')));
+    req.setTimeout(timeout, () => req.destroy(Error('Local service did not respond')));
     req.on('error', reject);
     req.end(value === undefined ? undefined : JSON.stringify(value));
   });
+}
+
+export async function allMeta() {
+  const result = [];
+  for (const id of await fs.readdir(sessionsDir).catch(() => [])) {
+    try { result.push(await readMeta(id)); } catch {}
+  }
+  return result;
 }
 export async function existingDirectory(input) {
   const value = !input || input === '~' ? os.homedir() : input.startsWith('~/') ? path.join(os.homedir(), input.slice(2)) : input;

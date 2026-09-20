@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import http from 'node:http';
+import https from 'node:https';
 import fs from 'node:fs/promises';
 import { openSync, closeSync } from 'node:fs';
 import path from 'node:path';
@@ -20,6 +21,10 @@ process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
+const certFile = process.env.BASHKITTEN_TLS_CERT, keyFile = process.env.BASHKITTEN_TLS_KEY;
+if (Boolean(certFile) !== Boolean(keyFile)) throw Error('Configure both BASHKITTEN_TLS_CERT and BASHKITTEN_TLS_KEY');
+const tls = certFile ? { cert: await fs.readFile(certFile), key: await fs.readFile(keyFile) } : null;
+const scheme = tls ? 'https' : 'http';
 const services = new Services(), starts = new Map();
 const configFile = path.join(dataDir, 'settings.json');
 let config = await readJson(configFile, { web_port: 3939, theme: 'system', default_cwd: os.homedir(), default_model: '', default_thinking: 'off' });
@@ -87,7 +92,7 @@ async function handler(req, res) {
   try {
     const requestHost = req.headers.host || '';
     if (!/^(127\.0\.0\.1|localhost):\d+$/.test(requestHost)) throw Object.assign(Error('Invalid localhost host'), { status: 403 });
-    const url = new URL(req.url, `http://${requestHost}`), route = url.pathname;
+    const url = new URL(req.url, `${scheme}://${requestHost}`), route = url.pathname;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
@@ -116,7 +121,8 @@ async function handler(req, res) {
       let restartUrl;
       if (next.web_port !== config.web_port) {
         const old = activeServer; activeServer = await listen(next.web_port);
-        restartUrl = `http://${url.hostname}:${next.web_port}`;
+        restartUrl = `${scheme}://${url.hostname}:${next.web_port}`;
+        await announce(next.web_port);
         setTimeout(() => { old.close(); old.closeAllConnections(); }, 500);
       }
       config = next; await writeJson(configFile, config); return json(res, { config, restartUrl });
@@ -245,8 +251,10 @@ async function handler(req, res) {
     json(res, { error: error.message }, error.status || (error.code === 'ENOENT' ? 404 : 400));
   }
 }
-function listen(port) { return new Promise((resolve, reject) => { const server = http.createServer(handler); server.on('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }); }
+function listen(port) { return new Promise((resolve, reject) => { const server = tls ? https.createServer(tls, handler) : http.createServer(handler); server.on('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }); }
+const announce = port => writeJson(path.join(dataDir, 'server.json'), { pid: process.pid, script: fileURLToPath(import.meta.url), url: `${scheme}://127.0.0.1:${port}` });
 activeServer = await listen(config.web_port);
+await announce(activeServer.address().port);
 for (const meta of await allMeta()) if (await running(meta.id)) await workerRequest(meta.id, '/context', {}).catch(() => {});
-console.log(`BashKitten · Pi RPC · http://127.0.0.1:${config.web_port}`);
+console.log(`BashKitten · Pi RPC · ${scheme}://127.0.0.1:${config.web_port}`);
 process.on('SIGTERM', () => { activeServer.close(); activeServer.closeAllConnections(); services.cancel().finally(() => process.exit(0)); });

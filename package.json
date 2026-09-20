@@ -9,7 +9,8 @@
     "node": ">=22.19.0"
   },
   "bin": {
-    "bashkitten-web": "src/server/http/server.mjs"
+    "bashkitten-web": "src/server/http/server.mjs",
+    "bashkittenctl": "src/server/control.mjs"
   },
   "scripts": {
     "start": "node src/server/http/server.mjs",
