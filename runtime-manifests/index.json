@@ -7,7 +7,7 @@
       "android"
     ],
     "lock": "../package-lock.json",
-    "sha256": "f05f0e28cba7a1b6281f73cebf9bc8ef4f0730b334a78f0dad6773443eba68f7"
+    "sha256": "5c82636505ff8065a05af9ad8a502d2d4521f6b9f4b77d60084b997f0a4ae1c4"
   },
   {
     "version": "0.86.0",
@@ -17,6 +17,6 @@
       "android"
     ],
     "lock": "0.86.0.lock.json",
-    "sha256": "3d95ff19698ea70dfe7f659eb395c8862335d2d455fe7be790b3462b68a6ef00"
+    "sha256": "ba54c7361dee23189c5a79420f50511228e23d1bd0204bafc92cfeb0d0cb72b6"
   }
 ]
