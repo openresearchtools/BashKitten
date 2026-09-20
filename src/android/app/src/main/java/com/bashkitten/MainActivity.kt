@@ -13,13 +13,18 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.graphics.drawable.toBitmap
 import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
@@ -133,11 +138,17 @@ class MainActivity : ComponentActivity() {
     @Composable private fun AppRow(id: String) {
         val revision = storeRevision
         val current = AppStore.installed(this, id)
+        val icon = remember(id, current?.longVersionCode) { runCatching { packageManager.getApplicationIcon(id).toBitmap(96, 96).asImageBitmap() }.getOrNull() }
         val entry = catalog.find { it.optString("packageId") == id && (id != "com.termux.x11" || it.optString("variant") == x11Variant) }
         val state = remember(revision, id) { AppStore.prefs(this).getString("state:$id", "").orEmpty() }
         val update = entry != null && (current?.longVersionCode ?: 0) < entry.optLong("versionCode")
         Column {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(40.dp))
+                else Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+                    Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Text(when (id) { "com.termux" -> ">_"; "com.bashkitten" -> "BK"; else -> AppStore.names.getValue(id).substringAfter(':').take(2).uppercase() }) }
+                }
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(AppStore.names.getValue(id), style = MaterialTheme.typography.titleMedium)
                     Text(current?.versionName?.let { "Installed · $it" } ?: "Not installed", style = MaterialTheme.typography.bodySmall)

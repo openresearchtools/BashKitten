@@ -1,10 +1,25 @@
-# BashKitten · Pi in Termux
+# BashKitten
 
 BashKitten's existing browser UI, backed by the **native Pi coding agent**.
-Open `http://127.0.0.1:3939` in Chrome, Firefox, or another Android browser.
-Pi runs locally in Termux as an unmodified `pi --mode rpc` subprocess for each
+Open `http://127.0.0.1:3939` in an Android or Linux browser.
+Pi runs locally as an unmodified `pi --mode rpc` subprocess for each
 session. The frontend keeps BashKitten's transcript, thinking/tool work traces,
 image viewer, compaction display, themes, and project/chat sidebar.
+
+The Android host adds a signed Termux app store, package/desktop controls and
+service recovery. The optional Linux host uses system GTK/WebKit with persistent
+cookies and native file opening. Both use this same server and UI. The suite is
+currently undergoing candidate installation tests; see the
+[implementation status](docs/suite-implementation-status.md) for tested builds
+and remaining gates. Candidates are not yet in the production APT/catalog channel.
+
+## Run on Linux
+
+With Node >=22.19, npm, ripgrep and fd installed, run `npm ci --ignore-scripts`
+and `npm start`. The optional desktop host also needs Python/PyGObject, GTK >=4.10
+and WebKitGTK 6.0: run `python3 src/linux/host.py`. Browser-only use needs no GTK.
+See [native packaging](packaging/README.md) for arm64/amd64 builds and
+[Linux host integration](src/linux/README.md).
 
 ## Install in Termux
 
@@ -19,6 +34,10 @@ cd bashkitten
 npm ci --omit=dev --ignore-scripts
 npm start
 ```
+
+These source-install instructions work with ordinary upstream Termux. The native
+Android store/control host requires the matching suite-signed Termux apps; it
+cannot replace another publisher's signature in place.
 
 Pi 0.85.1 is installed by npm as a pinned local dependency. You can also use its
 terminal UI in this checkout with `./node_modules/.bin/pi`. No Rust build, GTK,
@@ -106,10 +125,10 @@ The fixture is test-only and never used by `npm start`.
 
 See [architecture and limits](docs/pi-termux.md) and
 [Cuttlefish test record](tests/live/2026-09-19-pi-termux.md).
-This branch contains the browser UI (`src/web/`), the shared Node server
-(`src/server/`, with Pi integration in `rpc/`), and native Pi integration tests
-(`tests/server/`). There is no Rust
-backend, Cargo project, GTK controller, Debian packaging, or copied agent engine.
+Source lives under `src/web/`, the shared Node server in `src/server/` (Pi
+integration in `rpc/`), and small native hosts in `src/android/` and `src/linux/`.
+`packaging/` builds native Termux aarch64 and Linux arm64/amd64 packages. There is
+no Rust backend or copied agent engine.
 The original Rust implementation remains in Git history and is preserved with
 its complete main-branch history in [bashkitten-rust](https://github.com/openresearchtools/bashkitten-rust).
 

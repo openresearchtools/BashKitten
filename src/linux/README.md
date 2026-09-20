@@ -28,5 +28,8 @@ application itself preserves the user's normal portal configuration.
 Verified locally on native Linux arm64 with GTK 4.22 / WebKitGTK 2.52.6:
 signup, persistent login after a separate process restart on X11 and Wayland,
 native folder chooser via pointer input, rejected synthetic native actions,
-and shared file-path/image-cache tests. AMD64 and packaged-install tests are
-separate release gates; this record does not claim those have passed yet.
+and shared file-path/image-cache tests. Native ARM64 and AMD64 CI also pass
+installed-package/reinstall checks, real image/text clipboard paste, upload
+selection, hot session links, and folder/file/URL launching through isolated
+system application associations. See `docs/suite-implementation-status.md` for
+run IDs, current device evidence and remaining release gates.
