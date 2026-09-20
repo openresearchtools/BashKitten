@@ -25,7 +25,7 @@ export async function packageInventory() {
   let npm = [], npmError;
   try {
     let output;
-    try { ({ stdout: output } = await exec('npm', ['ls', '--global', '--depth=0', '--json'], { timeout: 15000, maxBuffer: 1024 * 1024 })); }
+    try { ({ stdout: output } = await exec('npm', ['ls', '--global', '--depth=0', '--json', '--offline', '--update-notifier=false'], { timeout: 15000, maxBuffer: 1024 * 1024 })); }
     catch (error) { if (error.code !== 1 || !error.stdout) throw error; output = error.stdout; }
     const value = JSON.parse(output);
     npm = Object.entries(value.dependencies || {}).map(([name, item]) => ({ name, version: item.version || 'Unknown' }));
