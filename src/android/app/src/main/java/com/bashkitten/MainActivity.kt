@@ -264,6 +264,41 @@ class MainActivity : ComponentActivity() {
             OutlinedTextField(value = custom, onValueChange = { custom = it }, label = { Text("Custom startup command") }, modifier = Modifier.fillMaxWidth())
             Text("Custom: termux-x11 :$display -xstartup \"$custom\"", style = MaterialTheme.typography.bodySmall)
             TextButton(onClick = { command("desktop-settings", JSONObject().put("display", display.toIntOrNull() ?: 0).put("dpi", dpi.toIntOrNull() ?: 0).put("customCommand", custom)) }) { Text("Save options") }
+            var profileName by remember { mutableStateOf("") }
+            var requirements by remember { mutableStateOf("") }
+            var variables by remember { mutableStateOf("") }
+            var conflicts by remember { mutableStateOf("") }
+            Text("Custom graphics profile", style = MaterialTheme.typography.titleSmall)
+            OutlinedTextField(value = profileName, onValueChange = { profileName = it }, label = { Text("Profile name") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = requirements, onValueChange = { requirements = it }, label = { Text("Packages · one name=minimum-version per line") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = variables, onValueChange = { variables = it }, label = { Text("Environment · one NAME=value per line") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = conflicts, onValueChange = { conflicts = it }, label = { Text("Conflicting package names · optional") }, modifier = Modifier.fillMaxWidth())
+            Text("Only the packages you declare are managed. Select the saved profile to prepare and validate it; Start launches the saved startup command.", style = MaterialTheme.typography.bodySmall)
+            TextButton(enabled = !busy && profileName.isNotBlank(), onClick = {
+                runCatching {
+                    fun pairs(text: String): JSONObject = JSONObject().apply {
+                        text.lineSequence().filter { it.isNotBlank() }.forEach { line ->
+                            val parts = line.split('=', limit = 2); require(parts.size == 2 && parts[0].isNotBlank()) { "Use one name=value per line" }; put(parts[0].trim(), parts[1].trim())
+                        }
+                    }
+                    val profile = JSONObject().put("name", profileName).put("packages", pairs(requirements)).put("env", pairs(variables))
+                        .put("conflicts", org.json.JSONArray(conflicts.split(Regex("\\s+")).filter { it.isNotBlank() }))
+                    command("desktop-settings", JSONObject().put("customProfile", profile))
+                }.onFailure { notice = it.message.orEmpty() }
+            }) { Text("Save graphics profile") }
+            val saved = desktop.optJSONArray("customProfiles")
+            if (saved != null) for (i in 0 until saved.length()) {
+                val profile = saved.getJSONObject(i)
+                Row {
+                    TextButton(onClick = {
+                        profileName = profile.getString("name")
+                        fun lines(value: JSONObject) = value.keys().asSequence().joinToString("\n") { it + "=" + value.getString(it) }
+                        requirements = lines(profile.getJSONObject("packages")); variables = lines(profile.getJSONObject("env"))
+                        conflicts = profile.optJSONArray("conflicts")?.let { a -> (0 until a.length()).joinToString(" ") { a.getString(it) } }.orEmpty()
+                    }) { Text("Edit " + profile.getString("name")) }
+                    TextButton(enabled = !busy, onClick = { command("desktop-settings", JSONObject().put("removeProfile", profile.getString("id"))) }) { Text("Remove") }
+                }
+            }
             desktop.optString("renderer").takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
         desktop.optString("error").takeIf { it.isNotBlank() }?.let { Text(it) }

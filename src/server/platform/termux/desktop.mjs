@@ -21,25 +21,42 @@ export const profiles = [
 ];
 export const methods = ['xstartup', 'separator', 'separate', 'environment', 'no-dbus', 'custom'];
 export async function settings() { return readJson(file, { requested: 'software', confirmed: null, method: 'xstartup', display: 1, dpi: 160, legacyDrawing: false, forceBgra: false, customCommand: '', probes: {} }); }
+function availableProfiles(config) { return [...profiles, ...(config.customProfiles || [])]; }
+export function customProfile(value) {
+  if (!value || typeof value.name !== 'string' || !value.name.trim() || value.name.length > 60) throw Error('Give the custom graphics profile a short name');
+  const id = value.id || 'custom-' + value.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  if (!/^custom-[a-z0-9-]{1,60}$/.test(id)) throw Error('Invalid custom profile identifier');
+  const packages = value.packages || {}, env = value.env || {}, conflicts = value.conflicts || [];
+  if (Array.isArray(packages) || Array.isArray(env) || Object.keys(packages).length > 30 || Object.keys(env).length > 30 || !Array.isArray(conflicts) || conflicts.length > 30) throw Error('Too many custom requirements');
+  const packageName = /^[a-z0-9][a-z0-9+.-]{0,100}$/;
+  for (const [name, version] of Object.entries(packages)) if (!packageName.test(name) || typeof version !== 'string' || !/^[0-9][a-zA-Z0-9.+:~\-]{0,100}$/.test(version)) throw Error('Use package names and minimum Debian package versions');
+  for (const [name, value] of Object.entries(env)) if (!/^[A-Z_][A-Z0-9_]{0,80}$/.test(name) || typeof value !== 'string' || value.length > 2048 || value.includes('\0')) throw Error('Invalid graphics environment variable');
+  if (conflicts.some(name => typeof name !== 'string' || !packageName.test(name) || name in packages)) throw Error('Invalid conflicting package');
+  return { id, name: value.name.trim(), packages, env, conflicts, renderer: '.' };
+}
+let hardware;
+async function hardwareIdentity() {
+  return hardware ||= Promise.all(['ro.build.fingerprint', 'ro.vendor.build.fingerprint', 'ro.soc.model'].map(key => exec('getprop', [key]).then(r => r.stdout.trim(), () => ''))).then(values => [os.release(), os.arch(), ...values]);
+}
 async function alive(info) {
   if (!Number.isInteger(info?.pid) || info.pid < 2) return false;
   try { return (await fs.readFile(`/proc/${info.pid}/cmdline`, 'utf8')).split('\0').includes(runner); } catch { return false; }
 }
 export async function desktopRunning() { return alive(await readJson(processFile, null)); }
 async function installed(profile) {
-  const versions = await packageState(Object.keys(profile.packages));
+  const versions = await packageState([...Object.keys(profile.packages), 'bashkitten-termux-x11']);
   const missing = [];
   for (const [name, minimum] of Object.entries(profile.packages)) {
     if (!versions[name] || !await exec('dpkg', ['--compare-versions', versions[name], 'ge', minimum]).then(() => true, () => false)) missing.push(name);
   }
-  return { versions, missing, fingerprint: digest(JSON.stringify(versions)) };
+  return { versions, missing, fingerprint: digest(JSON.stringify({ versions, profile, hardware: await hardwareIdentity() })) };
 }
 export async function desktopStatus() {
-  requireTermux(); const config = await settings(), current = profiles.find(p => p.id === config.requested);
+  requireTermux(); const config = await settings(), choices = availableProfiles(config), current = choices.find(p => p.id === config.requested);
   const info = await readJson(processFile, null), running = await alive(info);
   const state = current ? await installed(current) : null;
   const ready = current && !state.missing.length && config.confirmed === current.id && config.probes?.[current.id]?.fingerprint === state.fingerprint;
-  return { ...config, profiles: profiles.map(p => ({ id: p.id, name: p.name })), methods, ready: Boolean(ready), running, runningProfile: running ? info.profile : null, error: info?.error, renderer: config.probes?.[config.requested]?.renderer };
+  return { ...config, profiles: choices.map(p => ({ id: p.id, name: p.name })), methods, ready: Boolean(ready), running, runningProfile: running ? info.profile : null, error: info?.error, renderer: config.probes?.[config.requested]?.renderer };
 }
 export async function saveDesktop(value) {
   requireTermux(); const config = await settings();
@@ -49,6 +66,17 @@ export async function saveDesktop(value) {
   }
   for (const name of ['legacyDrawing', 'forceBgra']) if (value[name] !== undefined) config[name] = Boolean(value[name]);
   if (value.customCommand !== undefined) { if (typeof value.customCommand !== 'string' || value.customCommand.length > 8192) throw Error('Custom command is too long'); config.customCommand = value.customCommand; }
+  if (value.customProfile !== undefined) {
+    const profile = customProfile(value.customProfile);
+    config.customProfiles = (config.customProfiles || []).filter(item => item.id !== profile.id);
+    if (config.customProfiles.length >= 20) throw Error('Remove a custom profile before adding another');
+    config.customProfiles.push(profile);
+  }
+  if (value.removeProfile !== undefined) {
+    if (!String(value.removeProfile).startsWith('custom-')) throw Error('Only custom profiles can be removed');
+    config.customProfiles = (config.customProfiles || []).filter(item => item.id !== value.removeProfile);
+    if (config.requested === value.removeProfile) { config.requested = 'software'; config.confirmed = null; }
+  }
   await writeJson(file, config); return desktopStatus();
 }
 export function allowedRemovals(output, profile) {
@@ -102,8 +130,9 @@ export async function stopDesktop() {
   await fs.rm(processFile, { force: true });
 }
 export async function selectProfile(job, { profile: id }) {
-  requireTermux(); const profile = profiles.find(p => p.id === id); if (!profile) throw Error('Unknown graphics profile');
-  let config = await settings(); config.requested = id; await writeJson(file, config);
+  requireTermux(); let config = await settings();
+  const profile = availableProfiles(config).find(p => p.id === id); if (!profile) throw Error('Unknown graphics profile');
+  config.requested = id; await writeJson(file, config);
   let state = await installed(profile);
   if (!state.missing.length && config.probes?.[id]?.fingerprint === state.fingerprint) {
     config.confirmed = id; await writeJson(file, config); return;
@@ -144,7 +173,7 @@ export async function startDesktop() {
   const config = await settings(), status = await desktopStatus();
   if (!status.ready) throw Error('Select and prepare a graphics profile first');
   if (config.method === 'custom' && !config.customCommand.trim()) throw Error('Save a custom startup command first');
-  try { await start(config, profiles.find(p => p.id === config.requested)); }
+  try { await start(config, availableProfiles(config).find(p => p.id === config.requested)); }
   catch (error) { await stopDesktop(); await writeJson(processFile, { error: error.message }); throw error; }
   return desktopStatus();
 }
