@@ -528,6 +528,7 @@
             <div class="subscription-actions"><button type="button" data-package-job="check-packages">Check updates</button><button type="button" data-package-job="update-pi">Update Pi</button><button type="button" data-package-job="rollback-pi" id="rollbackPi">Roll back Pi</button></div>
             <div class="subscription-actions hidden" id="termuxPackageActions"><button type="button" data-package-job="update-packages">Update packages</button><button type="button" data-package-job="refresh-lists">Refresh lists</button><button type="button" data-package-job="recover-packages">Repair interrupted update</button></div>
             <p id="packagePhase" role="status" class="meta"></p><button type="button" id="retryPackageJob" class="hidden">Retry</button>
+            <progress id="packageProgress" class="hidden" max="100" style="width:100%" aria-label="Package operation progress"></progress><p id="packageActivity" class="meta"></p>
             <details><summary>Package output</summary><pre id="packageOutput" style="max-height:16rem;overflow:auto;white-space:pre-wrap"></pre></details>
           </div>
           <div id="termuxNotifications" class="hidden settings-section">
@@ -1475,6 +1476,10 @@
         document.querySelectorAll('[data-package-job]').forEach(button => { button.disabled = Boolean(active); });
         $('#rollbackPi').classList.toggle('hidden', !packages.runtime.previous);
         $('#packagePhase').textContent = job ? job.phase + ' · ' + job.status + (job.error ? ' · ' + job.error : '') : '';
+        $('#packageProgress').classList.toggle('hidden', !active);
+        if (active && job.progress) $('#packageProgress').value = job.progress.percent;
+        else $('#packageProgress').removeAttribute('value');
+        $('#packageActivity').textContent = active && job.progress ? job.progress.message + ' · ' + Math.round(job.progress.percent) + '%' : '';
         $('#packageOutput').textContent = job?.log || '';
         $('#retryPackageJob').classList.toggle('hidden', !job || !['failed','interrupted'].includes(job.status));
       } catch (error) { $('#packagePhase').textContent = error.message; }

@@ -182,7 +182,13 @@ class MainActivity : ComponentActivity() {
         }
         if (job != null) {
             Text(job.optString("phase") + " · " + job.optString("status"), style = MaterialTheme.typography.bodySmall)
-            if (active) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (active) {
+                val progress = job.optJSONObject("progress")
+                if (progress != null) {
+                    LinearProgressIndicator(progress = { (progress.optDouble("percent", 0.0) / 100).toFloat() }, modifier = Modifier.fillMaxWidth())
+                    Text(progress.optString("message") + " · " + progress.optInt("percent") + "%", style = MaterialTheme.typography.bodySmall)
+                } else LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
             if (job.has("error")) Text(job.optString("error"), style = MaterialTheme.typography.bodySmall)
             if (job.optString("status") in setOf("failed", "interrupted")) TextButton(onClick = { command("package-job", JSONObject().put("retry", true)) }) { Text("Retry") }
             Text(job.optString("log").lineSequence().toList().takeLast(5).joinToString("\n"), style = MaterialTheme.typography.bodySmall)

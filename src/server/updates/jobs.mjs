@@ -42,7 +42,16 @@ export class Jobs {
     } catch (error) { this.job.status = 'failed'; this.job.error = error.message; this.job.finishedAt = Date.now(); }
     finally { await this.save(); this.busy = false; }
   }
-  async phase(name, status = 'running') { this.job.phase = name; this.job.status = status; await this.save(); }
+  async phase(name, status = 'running') { this.job.phase = name; this.job.status = status; delete this.job.progress; await this.save(); }
+  async progress(line) {
+    // Native APT status-fd protocol; preserve the translated action and package name.
+    const match = /^(dlstatus|pmstatus|pmerror|pmconffile):([^:]*):([0-9.]+):(.*)$/.exec(line);
+    if (!match || !Number.isFinite(Number(match[3]))) return;
+    const [, kind, item, percent, message] = match;
+    this.job.progress = { kind, percent: Math.max(0, Math.min(100, Number(percent))), message,
+      ...(kind === 'dlstatus' ? { downloadedPackages: Number(item) } : { package: item }) };
+    await this.save();
+  }
   async step(id, name, fn) {
     if (this.job.completed.includes(id)) return;
     await this.phase(name); await fn(); this.job.completed.push(id); await this.save();
@@ -58,12 +67,17 @@ export class Jobs {
     await this.log(`\n$ ${[command, ...args].join(' ')}\n`);
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });
-      let output = '', error, logs = Promise.resolve();
+      let output = '', error, logs = Promise.resolve(), status = '';
       const append = bytes => {
         const text = bytes.toString(); output = (output + text).slice(-128000);
         logs = logs.then(() => this.log(text)).catch(value => { error = value; });
       };
-      child.stdout.on('data', append); child.stderr.on('data', append); child.stdio[3].on('data', append);
+      child.stdout.setEncoding('utf8').on('data', append); child.stderr.setEncoding('utf8').on('data', append);
+      child.stdio[3].setEncoding('utf8').on('data', text => {
+        append(text); status += text;
+        const lines = status.split('\n'); status = lines.pop().slice(-8192);
+        for (const line of lines) logs = logs.then(() => this.progress(line)).catch(value => { error = value; });
+      });
       child.on('error', value => { error = value; });
       // Only non-dpkg probes/downloads use timeouts. Never kill an APT transaction.
       const timer = timeout ? setTimeout(() => child.kill('SIGTERM'), timeout) : null;

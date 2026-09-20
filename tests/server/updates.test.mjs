@@ -39,6 +39,18 @@ test('RPC, public Pi services and pi-ai resolve the same actual runtime', async 
   assert.equal(JSON.parse(await fs.readFile(path.join(selected.root, 'node_modules/@earendil-works/pi-coding-agent/package.json'))).version, selected.version);
 });
 
+test('Native package progress survives split status lines and keeps Unicode output', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-progress-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const jobs = new Jobs({ install: async job => {
+    await job.exec(process.execPath, ['-e', `const fs=require('fs'); fs.writeSync(3,'dlstatus:1:25.5:Downloading package\\n'); fs.writeSync(3,'pmstatus:nodejs-lts:80:Con'); setTimeout(()=>{fs.writeSync(3,'figuring nodejs-lts\\n'); process.stdout.write('Saved café 🍓\\n');},30);`]);
+    assert.deepEqual((await job.status()).progress, { kind: 'pmstatus', package: 'nodejs-lts', percent: 80, message: 'Configuring nodejs-lts' });
+  } }, directory);
+  await jobs.init(); await jobs.start('install');
+  while (jobs.busy) await new Promise(r => setTimeout(r, 10));
+  const status = await jobs.status(); assert.equal(status.status, 'complete'); assert.match(status.log, /Saved café 🍓/);
+});
+
 test('Runtime activation waits for login, switches all resolvers and retains rollback', async t => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-runtime-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
