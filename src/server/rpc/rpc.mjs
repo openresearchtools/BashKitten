@@ -2,8 +2,20 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
+import fs from 'node:fs/promises';
 
-import { selectedRuntime } from './runtime.mjs';
+import { selectedRuntime, loadPi } from './runtime.mjs';
+
+// Read native history without opening a second writable session manager.
+export async function savedSession(meta) {
+  if (!meta.piFile) return null;
+  const { pi: { SessionManager, parseSessionEntries } } = await loadPi();
+  const text = await fs.readFile(meta.piFile, 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; });
+  const entries = parseSessionEntries(text);
+  if (!entries.length) return null;
+  if (entries[0]?.type !== 'session') throw Error('Invalid native Pi session header');
+  return SessionManager.inMemory(entries[0].cwd || meta.cwd, undefined, entries);
+}
 
 export function displayMessage(meta, message) {
   if (message.role !== 'user') return message;

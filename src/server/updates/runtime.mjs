@@ -100,7 +100,7 @@ export async function installPi(job) {
     await selectPlatformPackages(temporary);
     await job.phase(`Checking Pi ${available.latest}`);
     const agent = 'file://' + path.join(temporary, 'node_modules/@earendil-works/pi-coding-agent/dist/');
-    const check = `import {ModelRuntime,SessionManager} from ${JSON.stringify(agent + 'index.js')}; import {createLlamaProvider} from ${JSON.stringify(agent + 'extensions/llama/provider.js')}; const r=await ModelRuntime.create({allowModelNetwork:false}); r.registerNativeProvider(createLlamaProvider().provider); await r.refresh({providers:['llama.cpp'],allowNetwork:false}); if(!r.getProvider('llama.cpp')?.auth.apiKey?.login||!SessionManager)process.exit(1);`;
+    const check = `import {ModelRuntime,SessionManager,parseSessionEntries} from ${JSON.stringify(agent + 'index.js')}; import {createLlamaProvider} from ${JSON.stringify(agent + 'extensions/llama/provider.js')}; const r=await ModelRuntime.create({allowModelNetwork:false}); r.registerNativeProvider(createLlamaProvider().provider); await r.refresh({providers:['llama.cpp'],allowNetwork:false}); if(!r.getProvider('llama.cpp')?.auth.apiKey?.login||!SessionManager.inMemory||!parseSessionEntries)process.exit(1);`;
     await job.exec(process.execPath, ['--input-type=module', '-e', check], { timeout: 60000 });
     const hash = digest(await fs.readFile(path.join(temporary, 'package-lock.json')));
     root = path.join(parent, available.latest + '-' + hash.slice(0, 12));

@@ -501,7 +501,7 @@
         <button id="sidebarToggle" class="icon-button" type="button" aria-label="Projects and chats" aria-expanded="false">☰</button>
         <div class="chat-heading">
           <strong id="title" class="hidden">Settings</strong>
-          <button id="folderBtn" type="button" title="Set/change working folder" aria-label="Set/change working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
+          <button id="folderBtn" type="button" title="Set working folder" aria-label="Working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
         </div>
         <span id="usage"></span><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
@@ -1375,15 +1375,6 @@
       } else if (event.type === 'model_change') {
         applyModelSelection(event);
         $('#composerHint').textContent = `Using ${event.model}`;
-      } else if (event.type === 'cwd_change') {
-        current.cwd = event.cwd;
-        if (!$('#filePanel').classList.contains('hidden')) openFiles(event.cwd);
-        $('#folderLabel').textContent = displayFolder(event.cwd);
-        $('#folderBtn').title = `Change working folder: ${displayFolder(event.cwd)}`;
-        $('#composerHint').textContent = `Working folder: ${displayFolder(event.cwd)}`;
-        loadSessions().catch(() => {});
-      } else if (event.type === 'cwd_error') {
-        $('#composerHint').textContent = event.message;
       } else if (event.type === 'compaction_start') {
         setCompacting(true);
         liveCompaction();
@@ -1838,7 +1829,7 @@
           if (updated.cwd !== current.cwd) {
             current.cwd = updated.cwd;
             $('#folderLabel').textContent = displayFolder(current.cwd);
-            $('#folderBtn').title = `Change working folder: ${displayFolder(current.cwd)}`;
+            $('#folderBtn').title = `Saved working folder: ${displayFolder(current.cwd)}. Start a new chat to choose another.`;
           }
         }
         renderSessionSidebar(sessionCache);
@@ -2001,8 +1992,8 @@
       renderAttachments();
       $('#title').textContent = session.title;
       $('#folderLabel').textContent = displayFolder(session.cwd) || 'Working folder';
-      $('#folderBtn').disabled = false;
-      $('#folderBtn').title = `Change working folder: ${displayFolder(session.cwd)}`;
+      $('#folderBtn').disabled = true;
+      $('#folderBtn').title = `Saved working folder: ${displayFolder(session.cwd)}. Start a new chat to choose another.`;
       setRunButton(Boolean(session.running));
       fillSelect($('#model'), models, session.model);
       $('#thinking').value = session.thinking || '';
@@ -2288,19 +2279,15 @@
       $('#newFolderName').value = '';
       $('#folderList').textContent = 'Loading folders…';
       $('#folderTitle').textContent = title;
-      $('#folderHint').textContent = title === 'Working folder' ? 'Changes apply after the current turn finishes. Session history and attachments stay in place.' : 'Choose a folder, then save the settings to apply it.';
+      $('#folderHint').textContent = title === 'Working folder' ? 'Pi saves this folder with the new chat and restores it when you reopen it.' : 'Choose a folder, then save the settings to apply it.';
       $('#folderDialog').showModal();
       try { await loadFolder(path || pendingCwd, true); }
       catch (error) { $('#folderPath').value = path || ''; $('#folderList').textContent = error.message; }
     }
     $('#folderDialog').addEventListener('close', () => { ++folderGeneration; folderSelection = null; });
-    $('#folderBtn').onclick = () => openFolderPicker('Working folder', current?.cwd || pendingCwd, async path => {
-      if (current) {
-        const reply = await api(`/api/sessions/${current.id}/cwd`, {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({cwd: path})});
-        $('#composerHint').textContent = reply.message;
-        await loadSessions();
-      } else $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
+    $('#folderBtn').onclick = () => !current && openFolderPicker('Working folder', pendingCwd, path => {
       pendingCwd = path;
+      $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
       $('#prompt').focus();
     });
     $('#defaultCwdBrowse').onclick = () => openFolderPicker('Default working folder', $('#defaultCwd').value, path => { $('#defaultCwd').value = displayFolder(path); });
@@ -2424,7 +2411,8 @@
           renderSessionSidebar(sessions);
           $('#title').textContent = current.title;
           $('#folderLabel').textContent = displayFolder(current.cwd);
-          $('#folderBtn').disabled = false;
+          $('#folderBtn').disabled = true;
+          $('#folderBtn').title = `Saved working folder: ${displayFolder(current.cwd)}. Start a new chat to choose another.`;
         }
         if (!source || !queueState.busy) {
           await api(`/api/sessions/${current.id}/resume`, {method:'POST'});
@@ -2584,7 +2572,16 @@
       if (!(data.entries || []).length && !(data.events || []).length) showWelcome();
       renderQueueState(data); applyModelSelection(data.modelSelection); renderUsage(data.usage);
       setCompacting(data.compacting);
-      if (current) current.running = Boolean(data.busy);
+      if (current) {
+        current.running = Boolean(data.busy);
+        if (data.cwd && current.cwd !== data.cwd) {
+          current.cwd = data.cwd;
+          $('#folderLabel').textContent = displayFolder(data.cwd);
+          $('#folderBtn').title = `Saved working folder: ${displayFolder(data.cwd)}. Start a new chat to choose another.`;
+          if (!$('#filePanel').classList.contains('hidden')) openFiles(data.cwd);
+          loadSessions().catch(() => {});
+        }
+      }
       for (const request of data.dialogs || []) showPiRequest(request);
       chat.scrollTop = follow ? chat.scrollHeight : position;
     }

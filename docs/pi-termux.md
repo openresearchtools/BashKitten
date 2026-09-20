@@ -14,10 +14,10 @@ Intentional differences from the historical Rust branch: Node runtime; Pi-native
 providers and authentication; Pi-native session tree files with separate UI
 metadata; a private detached RPC worker per session instead of systemd; server
 filesystem browsing, uploads, individual downloads, and streaming ZIP downloads.
-The web server can restart without interrupting detached session workers. A cwd
-change restarts the idle Pi process against its same native session file. Changes
-requested during a turn apply after Pi's agent_settled event. Pi's own system
-prompt and tool cwd are rebuilt on restart. No Pi internals are patched.
+The web server can restart without interrupting detached session workers. Pi
+restores the working folder from its native session header before loading project
+settings, extensions and tools. Choose a folder before starting a new chat;
+existing chats retain their saved folder. No Pi internals are patched.
 RPC launches leave tool selection to Pi's defaults, native settings and extensions.
 Normal `pi install` packages and global/project resources use Pi's own loader.
 Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
@@ -41,9 +41,9 @@ notifications. A message already consumed at a turn boundary is never replayed.
 An edit temporarily holds the selected message in the worker; Cancel returns it to
 Pi. A worker crash loses unconsumed in-memory queues, as native RPC does.
 
-For cwd changes Pi is reopened at an idle boundary, retaining its native session
-file and the web worker's socket. The UI metadata records the new working folder;
-the original native session header stays intact. Fork uses the stock `fork` RPC
+The header and file browser use Pi's saved working folder. BashKitten reads native
+history through Pi's parser into an in-memory view; it never opens a second
+writable session manager. Fork uses the stock `fork` RPC
 command on that live Pi process, including extension hooks and cancellation.
 It forks before the selected user message and returns Pi's text to the editor.
 The worker follows the new native session; Pi alone decides when to save it.

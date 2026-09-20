@@ -29,7 +29,9 @@ except for the documented Termux integration/build patches.
   RPC for session operations, including fork and its extension hooks; never write
   Pi JSONL or substitute SessionManager mutations for available RPC commands.
   Let Pi restore model/thinking from existing history and choose new-session
-  defaults unless the user explicitly selects them.
+  defaults unless the user explicitly selects them. Pi also restores the cwd
+  saved in its native header; only new chats choose a folder. Read saved history
+  through the native parser into an in-memory view without file writes.
 - Run Pi as a separate RPC process per session. A detached Node worker owns the
   process; closing a browser or restarting the web server must not stop a turn.
 - Use Pi's public ModelRuntime for service login because RPC has no login command.

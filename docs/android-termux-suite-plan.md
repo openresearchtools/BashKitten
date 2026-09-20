@@ -36,6 +36,9 @@ The current transcript renderer, tool/thinking streaming, output styling,
 compaction presentation, themes, session naming and project sidebar remain the
 UI. Preserve native Pi history and credentials. Narrow screens use collapsible
 project and file drawers; wide screens can show projects, chat and files together.
+Pi records the working folder in its native session header and restores it on
+reopen. Select a folder before creating a chat; existing chats display their saved
+folder. Do not substitute a launcher-directory change for a native session change.
 Keep the expandable repository browser in the top bar for Android and ordinary
 browser clients. The optional Linux desktop host uses the system file manager
 instead of this file panel, as specified in section 10.

@@ -98,8 +98,8 @@ with `pi install` (or `bashkitten-pi install` to use the app's selected runtime)
 
 One detached worker owns each Pi RPC process. Closing the browser or restarting
 `npm start` does not stop a running session; reconnect restores history and live
-work. Changing a working folder waits for the turn to settle, then reopens the
-same session with Pi in the new directory. Android can still stop Termux under
+work. Pi restores each chat’s saved working folder. To use another folder,
+start a new chat and choose it before sending. Android can still stop Termux under
 memory/battery pressure; use Termux's wake lock/battery settings for long runs.
 
 Set the port in App settings, or start with `npm start -- --port=3939`.

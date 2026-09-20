@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
-import { displayMessage, queueItem } from '../rpc/rpc.mjs';
+import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
 import { licenses } from '../licenses.mjs';
@@ -70,10 +70,11 @@ async function ensureWorker(id, explicit = false) {
   try { return await starting; } finally { starts.delete(id); }
 }
 async function savedView(meta) {
-  const { pi: { SessionManager } } = await loadPi();
-  const entries = await fs.access(meta.piFile).then(() => SessionManager.open(meta.piFile, undefined, meta.cwd).getBranch()).catch(() => []);
+  const native = await savedSession(meta);
+  if (native && native.getCwd() !== meta.cwd) { meta.cwd = native.getCwd(); await writeMeta(meta); }
+  const entries = native?.getBranch() || [];
   const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
-  return { busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
+  return { cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
     entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e), events: [],
     steeringMessages: drafts.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(queueItem) };
 }
@@ -277,7 +278,7 @@ async function handler(req, res) {
       const title = String(input.title || input.name || '').trim(); if (!title || title.length > 200) throw Error('Choose a name of 1–200 characters');
       return json(res, await workerRequest(id, '/rename', { title }));
     }
-    if (!['stop', 'queue', 'cwd', 'model', 'compact', 'reply'].includes(action)) throw Error('Unknown session action');
+    if (!['stop', 'queue', 'model', 'compact', 'reply'].includes(action)) throw Error('Unknown session action');
     return json(res, await workerRequest(id, '/' + action, input));
   } catch (error) {
     if (res.headersSent) { res.destroy(); return; }
