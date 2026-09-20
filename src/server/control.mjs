@@ -177,6 +177,9 @@ async function serve() {
       state.web = command !== 'stop'; await writeJson(stateFile, state);
       if (command !== 'start') await stopWeb();
       if (state.web) await startWeb();
+    } else if (command === 'pi-abort') {
+      if (!(await allMeta()).some(meta => meta.id === value.id)) throw Error('Session not found');
+      await socketRequest(socketPath(value.id), '/stop', {}, 10000);
     } else if (command === 'pi-stop' || command === 'pi-kill') {
       const ids = value?.id ? [value.id] : (await allMeta()).map(meta => meta.id);
       for (const id of ids) await stopPi(id, command === 'pi-kill');

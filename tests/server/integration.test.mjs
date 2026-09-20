@@ -88,6 +88,9 @@ test('Real Pi RPC, HTTP auth, native history, files, queues, fork, compaction an
   await send(id,'SLOW survives restart');await stop();await start();csrf=(await api('/api/bootstrap')).csrf;history=await settled(id);assert.ok(JSON.stringify(history).includes('survives restart'));
   await api(`/api/sessions/${id}/compact`,{instructions:'Preserve fixture facts'});history=await settled(id);assert.ok(history.entries.some(e=>e.type==='compaction'),JSON.stringify(history));
   await send(id,'SLOW cancel');await send(id,'keep draft');const stopped=await api(`/api/sessions/${id}/stop`,{});assert.ok(stopped.data.queuedMessages.some(m=>m.content==='keep draft'));assert.equal((await api(`/api/sessions/${id}/status`)).data.busy,false);
+  await send(id,'SLOW native abort'); manager=true; await api('/api/control',{command:'pi-abort',id});
+  assert.equal((await api(`/api/sessions/${id}/status`)).data.busy,false);
+  assert.equal((await api('/api/control')).sessions.find(s=>s.id===id).running,true);
   await send(id,'SLOW instance stop'); await send(id,'durable draft');
   manager=true; await api('/api/control',{command:'pi-stop',id});
   const reconnect=await api(`/api/sessions/${id}/resume`,{});

@@ -308,13 +308,18 @@ class MainActivity : ComponentActivity() {
                 TextButton(onClick = { command("restart") }) { Text("Restart backend") }
                 TextButton(onClick = { command("pi-stop") }) { Text("Stop all Pi") }
             }
+            TextButton(onClick = { startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, "com.termux.api")) }) { Text("Termux:API notification settings") }
             DesktopBlock()
             val sessions = status?.optJSONArray("sessions")
             for (i in 0 until (sessions?.length() ?: 0)) {
                 val item = sessions!!.getJSONObject(i)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     TextButton(onClick = { session = item.getString("id"); openChat() }) { Text(item.optString("title", "Chat")) }
-                    if (item.optBoolean("running")) TextButton(onClick = { command("pi-stop", JSONObject().put("id", item.getString("id"))) }) { Text("■") }
+                    if (item.optBoolean("running")) Column {
+                        if (item.optBoolean("busy")) TextButton(onClick = { command("pi-abort", JSONObject().put("id", item.getString("id"))) }) { Text("Stop turn") }
+                        TextButton(onClick = { command("pi-stop", JSONObject().put("id", item.getString("id"))) }) { Text("■ Stop instance") }
+                        TextButton(onClick = { command("pi-kill", JSONObject().put("id", item.getString("id"))) }) { Text("Force stop") }
+                    }
                 }
             }
             if (notice.isNotEmpty()) Text(notice)
