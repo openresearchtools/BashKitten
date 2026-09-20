@@ -60,8 +60,9 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --only-upgrade bashkitten bashkitten-desktop
-          test "$(dpkg-query -W -f='${Version}' bashkitten)" = 0.2.1
-          test "$(dpkg-query -W -f='${Version}' bashkitten-desktop)" = 0.2.1
+          expected=$(node -p 'require("./package.json").version')
+          test "$(dpkg-query -W -f='${Version}' bashkitten)" = "$expected"
+          test "$(dpkg-query -W -f='${Version}' bashkitten-desktop)" = "$expected"
           runuser -u tester -- bashkittenctl start
           runuser -u tester -- env BASHKITTEN_TEST_NATIVE_FILES=1 BASHKITTEN_TEST_LOGIN_UI=1 dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py restore
           runuser -u tester -- bashkittenctl stop
