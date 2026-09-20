@@ -5,8 +5,8 @@ processes. The old Rust implementation, build files, packages, differential
 fixtures and porting scripts are removed from the current tree. Git history and
 the separate [bashkitten-rust repository](https://github.com/openresearchtools/bashkitten-rust)
 retain the original Rust implementation and its complete main-branch history.
-Pi is pinned to npm `@earendil-works/pi-coding-agent@0.85.1`, upstream commit
-`d981de1229ef899957bbe968bc8dcda02a21f477` (tag v0.85.1). The lockfile pins its
+Pi is pinned to npm `@earendil-works/pi-coding-agent@0.86.1`, upstream commit
+`13cbf77df2396303013a41646bcfa77b4271ae56` (tag v0.86.1). The lockfile pins its
 runtime dependencies. Pi owns inference, tools, compaction, session JSONL, and
 credentials. The existing HTML/CSS transcript remains the presentation layer.
 
@@ -90,10 +90,18 @@ show the native verification code/link and poll using Pi's implementation.
 Keys/tokens are never included in service status. Cancellation aborts Pi's flow.
 Background model refresh is disabled. RPC launches use `--offline`/`PI_TELEMETRY=0`.
 
+Services also registers Pi's bundled llama.cpp provider, using its unmodified
+factory and native URL/optional-key prompts. Login and **Refresh models** contact
+only that configured HTTP service through Pi's model refresh API. Cached models
+remain available during offline startup. This is the same connection on Linux
+and Termux; the llama.cpp router runs wherever the user hosts it. Pi lists loaded
+models and eligible autoload presets. Its `/llama` management screen is currently
+TUI-only upstream. See [Pi's llama.cpp guide](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/docs/llama-cpp.md).
+
 Upstream references at the pinned release:
-[RPC protocol](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/docs/rpc.md),
-[native login API](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/core/model-runtime.ts),
-[browser callback implementation](https://github.com/earendil-works/pi/blob/v0.85.1/packages/ai/src/auth/oauth/openai-codex.ts).
+[RPC protocol](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/docs/rpc.md),
+[native login API](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/src/core/model-runtime.ts),
+[browser callback implementation](https://github.com/earendil-works/pi/blob/v0.86.1/packages/ai/src/auth/oauth/openai-codex.ts).
 
 ## Native boundaries
 

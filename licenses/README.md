@@ -11,7 +11,7 @@ publisher declares MIT in its package metadata but supplies no separate license
 file; its notice preserves that declaration, the standard MIT terms and original
 credits. Rust standard-library notices use the compiler revision embedded in its native binary.
 Its locked native crate notices are included, including other-target
-and build dependency notices. Esbuild's native notices include Go 1.26.4, x/sys
+and build dependency notices. Esbuild's native notices include Go 1.26.5, x/sys
 and the upstream xxhash license. Hash-wasm includes its embedded C notices.
 
 `source-archives.json` pins the supplemental native/source archives by SHA-256.

@@ -3,11 +3,28 @@ import { dataDir, writeJson } from '../common.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 
 /** The same ModelRuntime and auth.json used by Pi's CLI, with no catalog network refresh. */
 export class Services {
   attempt = null;
-  async runtime() { const { pi: { ModelRuntime } } = await loadPi(); return ModelRuntime.create({ allowModelNetwork: false }); }
+  async runtime() {
+    const { agent, pi: { ModelRuntime } } = await loadPi();
+    const runtime = await ModelRuntime.create({ allowModelNetwork: false });
+    // Pi registers this bundled provider through its llama extension in the CLI.
+    // Use that exact factory here too; Pi owns the connection and credentials.
+    const { createLlamaProvider } = await import(new URL('./extensions/llama/provider.js', pathToFileURL(agent)));
+    runtime.registerNativeProvider(createLlamaProvider().provider);
+    await runtime.refresh({ providers: ['llama.cpp'], allowNetwork: false });
+    return runtime;
+  }
+  async refresh(provider, runtime = null) {
+    allowRuntimeWork();
+    runtime ||= await this.runtime();
+    if (!runtime.getProvider(provider)) throw Error('Unknown Pi provider');
+    const result = await runtime.refresh({ providers: [provider], allowNetwork: true, force: true, signal: AbortSignal.timeout(15000) });
+    if (result.aborted || result.errors.size) throw Error('Pi could not refresh this service’s models. Check the server connection and retry.');
+  }
   async list() {
     const runtime = await this.runtime();
     const credentials = await runtime.listCredentials();
@@ -62,7 +79,10 @@ export class Services {
         attempt.controller.signal.addEventListener('abort', cancel, { once: true });
         if (prompt.signal?.aborted || attempt.controller.signal.aborted) cancel();
       })
-    }).then(() => { attempt.status = 'complete'; }).catch(() => {
+    }).then(async () => {
+      if (provider === 'llama.cpp') await this.refresh(provider, runtime);
+      attempt.status = 'complete';
+    }).catch(() => {
       attempt.status = attempt.controller.signal.aborted ? 'cancelled' : 'failed';
       // Do not expose provider response bodies, which may contain credentials.
       attempt.error = attempt.status === 'failed' ? 'Pi could not complete login. Check the selected method and try again.' : undefined;

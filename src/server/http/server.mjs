@@ -26,7 +26,7 @@ process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
 const ownership = await claimInstance('web');
 if (!ownership) {
-  for (let attempt = 0; attempt < 100; attempt++) {
+  for (const deadline = Date.now() + 15000; Date.now() < deadline;) {
     const existing = await probeBackend();
     if (existing) { console.log(`BashKitten already running at ${existing.url}`); process.exit(0); }
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -174,6 +174,7 @@ async function handler(req, res) {
       else if (route.endsWith('/answer')) services.answer(input.id, input.promptId, input.input);
       else if (route.endsWith('/cancel')) await services.cancel(input.id);
       else if (route.endsWith('/logout')) await services.logout(input.provider);
+      else if (route.endsWith('/refresh')) await services.refresh(input.provider);
       else throw Error('Unknown service action');
       return json(res, { login: services.state() });
     }

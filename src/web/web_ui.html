@@ -2676,7 +2676,8 @@
             }else{await servicePost('login',{provider:service.id,type:method.type});await refreshServices();}
           }catch(error){$('#settingsNotice').textContent=error.message;}};actions.append(button);}
         if(service.credentialType){const button=document.createElement('button');button.type='button';button.textContent='Log out';button.onclick=async()=>{try{await servicePost('logout',{provider:service.id});await refreshServices();await loadModels();}catch(error){$('#settingsNotice').textContent=error.message;}};actions.append(button);}
-        if(!service.methods.length){const hint=document.createElement('span');hint.className='meta';hint.textContent='Uses credentials configured in Termux';actions.append(hint);}
+        if(service.id==='llama.cpp'&&service.connected){const button=document.createElement('button');button.type='button';button.textContent='Refresh models';button.onclick=async()=>{button.disabled=true;try{await servicePost('refresh',{provider:service.id});await loadModels();$('#settingsNotice').textContent='Pi’s llama.cpp models refreshed.';}catch(error){$('#settingsNotice').textContent=error.message;}finally{button.disabled=false;}};actions.append(button);}
+        if(!service.methods.length){const hint=document.createElement('span');hint.className='meta';hint.textContent='Uses credentials configured in Pi';actions.append(hint);}
         row.append(name,state,actions);root.append(row);
       }
     }

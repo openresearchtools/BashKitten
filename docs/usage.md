@@ -35,7 +35,7 @@ npm start
 
 These source-install instructions work with ordinary upstream Termux. The Android host can connect to ordinary upstream Termux using its public command permission. Apps shows the setup instructions and keeps add-ons from the same source.
 
-Pi 0.85.1 is installed by npm as a pinned local dependency. You can also use its
+Pi 0.86.1 is installed by npm as a pinned local dependency. You can also use its
 terminal UI in this checkout with `./node_modules/.bin/pi`. No Rust build, GTK,
 systemd, proot, custom inference server, or changes to Pi are required.
 

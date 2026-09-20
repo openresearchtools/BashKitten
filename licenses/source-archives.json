@@ -15,11 +15,6 @@
     "sha256": "55eaf95319b8a3e99ddc795c1539f0e72f0988d89359f7d4e5a91764dc3fd268"
   },
   {
-    "file": "esbuild-bb9db84c02433fbe37b3509f53f9f3e3cc48725e.tar.gz",
-    "url": "https://codeload.github.com/evanw/esbuild/tar.gz/bb9db84c02433fbe37b3509f53f9f3e3cc48725e",
-    "sha256": "ab3d83d34f00117170518097c07ed05b534c64403c6f9f96c21898ce32bc6921"
-  },
-  {
     "file": "standardwebhooks-b4d2c14fc5b4ccff3ff271e3b087dff812254c59.tar.gz",
     "url": "https://codeload.github.com/standard-webhooks/standard-webhooks/tar.gz/b4d2c14fc5b4ccff3ff271e3b087dff812254c59",
     "sha256": "6543b0f8db7eed216fa67856e1d6607cadd87e3a50bd4d6481403694c315f3de"
@@ -633,5 +628,15 @@
     "file": "clipboard-crates/zune-jpeg-0.4.21.crate",
     "url": "https://static.crates.io/crates/zune-jpeg/zune-jpeg-0.4.21.crate",
     "sha256": "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
+  },
+  {
+    "file": "esbuild-609683d892977362a0f99026cb74b96263d728a9.tar.gz",
+    "url": "https://codeload.github.com/evanw/esbuild/tar.gz/609683d892977362a0f99026cb74b96263d728a9",
+    "sha256": "04cb2d38fb6af093577aa8bf174add7286099b65ef7854480cbbb8ff061cef1f"
+  },
+  {
+    "file": "proxy-agent-negotiate-b7e5f7ccce1a3ac5b339cc4c587974e8989cbc16.tar.gz",
+    "url": "https://codeload.github.com/TooTallNate/proxy-agents/tar.gz/b7e5f7ccce1a3ac5b339cc4c587974e8989cbc16",
+    "sha256": "d6a4204d6b590a823c739869ed390d53cbd4e0a49a2968b1f66a51461acf9f75"
   }
 ]

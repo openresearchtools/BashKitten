@@ -508,8 +508,8 @@ Draft Termux block, with placeholders expanded by the installer:
 Keep package inventories, desktop/GPU recipes and full skills out of this block.
 Pi's own skill discovery provides names/descriptions and loads full skill content
 on demand; respect native project trust and user skill settings. Documented
-sources: [Pi context files](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/docs/usage.md#context-files)
-and [Pi skills](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/docs/skills.md).
+sources: [Pi context files](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/docs/usage.md#context-files)
+and [Pi skills](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/docs/skills.md).
 
 Synchronize before launching Pi, and track the context version loaded by each
 worker. An update during a turn takes effect at the next safe idle boundary:
@@ -551,8 +551,8 @@ GH_NO_EXTENSION_UPDATE_NOTIFIER=1
 
 Also retain Pi's RPC `--offline` flag and merge `enableInstallTelemetry: false`
 into Pi's native settings without overwriting unrelated settings. The pinned Pi
-release supports these controls; see its [telemetry implementation](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/core/telemetry.ts)
-and [CLI options](https://github.com/earendil-works/pi/blob/v0.85.1/packages/coding-agent/src/cli/args.ts).
+release supports these controls; see its [telemetry implementation](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/src/core/telemetry.ts)
+and [CLI options](https://github.com/earendil-works/pi/blob/v0.86.1/packages/coding-agent/src/cli/args.ts).
 GitHub CLI documents its [telemetry and update-check environment settings](https://cli.github.com/manual/gh_help_environment).
 
 BashKitten, Termux and the shipped add-ons must have analytics and automatic
@@ -581,7 +581,7 @@ or a generic cross-platform `all` package. Build/select native npm dependencies
 for Android/Bionic and validate them in real Termux; a Debian/Ubuntu `arm64` build
 is not a Termux `aarch64` build. Ship the pinned production dependency graph,
 without a network-dependent `npm install` in package-maintainer scripts. Pi remains the ordinary upstream
-package, currently pinned to 0.85.1 in this branch.
+package, currently pinned to 0.86.1 in this branch.
 
 Install `bashkitten-web`, `bashkittenctl` and a launcher for the same managed Pi
 runtime, initially supplied by the package. Expose `pi` for terminal use where
@@ -703,6 +703,11 @@ Avoid oversized introductory blocks that push application cards off screen.
 The menu provides compact server start/stop status and links to Desktop and Pi
 session controls. Desktop controls retain remembered commands, graphics choices
 and play/stop; Pi controls retain per-session stop/kill and stop all.
+
+Both Android and Linux native menus include **About**, with short dependency
+notices and **Licenses**. Linux explicitly identifies GTK, WebKitGTK, PyGObject,
+Python and Node.js as system-installed dependencies under their own licenses.
+Native notices remain readable when the backend is stopped.
 
 Back from every native screen returns to the existing loaded chat. Keep the
 WebView attached and preserve its document, selected session, unsent draft and

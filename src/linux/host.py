@@ -18,6 +18,7 @@ gi.require_version('WebKit', '6.0')
 from gi.repository import Gio, GLib, Gtk, WebKit
 
 CONTROL = Path(__file__).resolve().parents[1] / 'server/control.mjs'
+APP_ROOT = CONTROL.parents[2]
 NODE = os.environ.get('BASHKITTEN_NODE') or shutil.which('node')
 DATA = Path(os.environ.get('BASHKITTEN_DATA_DIR', Path.home() / '.local/share/bashkitten-pi'))
 PROFILE = DATA / 'desktop'
@@ -69,7 +70,7 @@ class BashKitten(Gtk.Application):
         os.chmod(PROFILE, 0o700)
         self.window = Gtk.ApplicationWindow(application=self, title='BashKitten', default_width=1120, default_height=820)
         header = Gtk.HeaderBar()
-        menu = Gtk.MenuButton(icon_name='open-menu-symbolic', tooltip_text='Services')
+        menu = Gtk.MenuButton(icon_name='open-menu-symbolic', tooltip_text='Menu')
         popover = Gtk.Popover()
         actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=12, margin_bottom=12, margin_start=12, margin_end=12)
         for label, command in [('Start backend', 'start'), ('Stop backend', 'stop'), ('Restart backend', 'restart'), ('Stop all Pi instances', 'pi-stop')]:
@@ -81,6 +82,9 @@ class BashKitten(Gtk.Application):
         self.browser_link = Gtk.LinkButton(label='Open in browser', uri='http://127.0.0.1:3939')
         self.browser_link.set_sensitive(False)
         actions.append(self.browser_link)
+        about = Gtk.Button(label='About')
+        about.connect('clicked', lambda _: (popover.popdown(), self.about()))
+        actions.append(about)
         popover.set_child(actions)
         menu.set_popover(popover)
         header.pack_start(menu)
@@ -108,6 +112,49 @@ class BashKitten(Gtk.Application):
         self.window.present()
         self.poll()
         GLib.timeout_add_seconds(5, self.poll)
+
+    def about(self):
+        window = Gtk.Window(title='About BashKitten', transient_for=self.window, modal=True,
+                            destroy_with_parent=True, default_width=520)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16,
+                      margin_top=24, margin_bottom=24, margin_start=24, margin_end=24)
+        version = json.loads((APP_ROOT / 'package.json').read_text())['version']
+        for text in [f'BashKitten {version}', 'Native Pi coding sessions · GPL-3.0-only',
+                     'The BashKitten server includes unmodified Pi and its npm dependencies under their own licenses.',
+                     'GTK, WebKitGTK, PyGObject, Python and Node.js are installed by your system package manager. They are not bundled in this app and retain their own licenses.']:
+            box.append(Gtk.Label(label=text, wrap=True, xalign=0, max_width_chars=58))
+        licenses = Gtk.Button(label='Licenses')
+        licenses.connect('clicked', lambda _: self.show_licenses(window))
+        box.append(licenses)
+        box.append(Gtk.LinkButton(label='Source', uri='https://github.com/openresearchtools/bashkitten'))
+        window.set_child(box)
+        window.present()
+
+    def show_licenses(self, parent):
+        window = Gtk.Window(title='BashKitten licenses', transient_for=parent, modal=True,
+                            destroy_with_parent=True, default_width=760, default_height=600)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
+                      margin_top=16, margin_bottom=16, margin_start=16, margin_end=16)
+        state = Gtk.Label(label='Loading licenses…', wrap=True)
+        box.append(state)
+        window.set_child(box)
+        window.present()
+        def ready(records):
+            box.remove(state)
+            choices = Gtk.DropDown.new_from_strings([f"{r['name']} {r.get('version', '')}" for r in records])
+            box.append(choices)
+            view = Gtk.TextView(editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR)
+            scroll = Gtk.ScrolledWindow(vexpand=True)
+            scroll.set_child(view)
+            box.append(scroll)
+            def select(*_):
+                record = records[choices.get_selected()]
+                view.get_buffer().set_text(f"{record['name']} · {record.get('license', '')}\n\n{record['text']}")
+                scroll.get_vadjustment().set_value(0)
+            choices.connect('notify::selected', select)
+            select()
+        self.background(lambda: json.loads((APP_ROOT / 'licenses.json').read_text()), ready,
+                        lambda message: state.set_text('Could not read installed licenses: ' + message))
 
     def error(self, message):
         self.message.set_text(message)

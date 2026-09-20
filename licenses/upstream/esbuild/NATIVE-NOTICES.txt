@@ -1,4 +1,4 @@
-https://raw.githubusercontent.com/golang/go/go1.26.4/LICENSE
+https://raw.githubusercontent.com/golang/go/go1.26.5/LICENSE
 
 Copyright 2009 The Go Authors.
 
@@ -29,7 +29,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
-https://raw.githubusercontent.com/golang/go/go1.26.4/PATENTS
+https://raw.githubusercontent.com/golang/go/go1.26.5/PATENTS
 
 Additional IP Rights Grant (Patents)
 

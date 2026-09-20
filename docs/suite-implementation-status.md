@@ -277,3 +277,25 @@ Android external OAuth and Chrome clipboard paste; final platform telemetry
 audits. Real-provider account authorization, physical GPU tests, Android 12/16
 and 16 KB device coverage remain unverified. The production release, signed
 catalog and APT installs for all three targets are now published and tested.
+
+### Native About and Pi 0.86.1 — 20 September 2026
+
+Linux's native menu now opens About and full installed license texts, even when
+the backend is stopped. Its notice identifies GTK/WebKitGTK/PyGObject/Python/Node
+as system packages. Android retains its native Menu → About → Licenses.
+
+Pi is pinned to 0.86.1 and the npm updater validates its native llama.cpp provider
+alongside ModelRuntime before activation. Services uses Pi's bundled provider
+factory, native URL/key prompts, credential store and model refresh; login and
+explicit refresh contact the configured HTTP server. Startup uses the saved cache.
+The updated dependency notices include proxy-agent-negotiate and esbuild's actual
+Go 1.26.5 runtime, with matching source records.
+
+External Linux checks passed process-kill recovery, port conflicts, duplicate
+launches and intentional Stop against 0.86.1. Native GTK/WebKit checks passed
+Menu → About → Licenses with the backend stopped and confirmed that closing the
+window preserves the backend. A disposable HTTP router fixture verified native
+Pi llama.cpp login, stored credentials, model refresh/cache and logout; this is
+connection verification, not a claim of real-model inference. Production Android
+and package installation checks follow the rebuild. No verification code is
+included in the app source or artifacts.
