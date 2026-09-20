@@ -109,6 +109,9 @@ jobs:
           set -Eeuo pipefail
           ./mach gradle :fenix:assembleDebug :wildbuzzard-agent-probe:assembleDebug :wildbuzzard-agent-probe:assembleDebugAndroidTest 2>&1 | tee artifacts/apk-build.log
           python3 wildbuzzard/android/scripts/collect-artifacts.py artifacts
+      - name: Verify packaged product artwork
+        run: |
+          python3 wildbuzzard/android/scripts/check-product-artwork.py artifacts/wildbuzzard-arm64.apk --report artifacts/product-artwork-verification.json
       - name: Save Android toolchains and Gradle downloads
         if: always() && !cancelled() && steps.toolchain-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

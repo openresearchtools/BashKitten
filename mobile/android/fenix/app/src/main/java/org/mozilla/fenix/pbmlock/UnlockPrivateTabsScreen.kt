@@ -100,10 +100,9 @@ private fun Logo() {
             contentDescription = null,
         )
 
-        Image(
-            modifier = Modifier.height(28.dp),
-            painter = painterResource(getResolvedAttrResId(R.attr.fenixWordmarkText)),
-            contentDescription = stringResource(R.string.app_name),
+        Text(
+            text = stringResource(R.string.app_name),
+            style = FirefoxTheme.typography.headline6,
         )
     }
 }

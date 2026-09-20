@@ -142,10 +142,11 @@ def vector(name,width='24dp',height='24dp',path=None):
     geometry=path if path is not None else PATHS[key]
     if 'slash' in name or 'off_for_a_site' in name:
         geometry+='M2,2L22,22'
+    mirrored = '    android:autoMirrored="true"\n' if any(word in name for word in ('back_', 'forward_', 'chevron_left', 'chevron_right')) else ''
     return HEADER+f'''<vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="{width}" android:height="{height}"
     android:viewportWidth="24" android:viewportHeight="24"
-    android:tint="?android:attr/textColorPrimary">
+{mirrored}    android:tint="?android:attr/textColorPrimary">
     <path android:pathData="{geometry}" android:fillColor="@android:color/transparent"
         android:strokeColor="#FFFFFFFF" android:strokeWidth="1.65"
         android:strokeLineCap="round" android:strokeLineJoin="round" />
@@ -186,7 +187,13 @@ def main():
         elif 'toolbar' in name and ('preview' in name or 'onboarding' in name or 'selected' in name or 'active' in name):
             y=4 if 'top' in name else 17
             color='#FFB13B' if ('selected' in name and 'unselected' not in name) or ('active' in name and 'inactive' not in name) else '#888888'
-            out.write_text(vector(name,'96dp','112dp',f'M3,1H21V23H3ZM6,{y}H18V{y+3}H6ZM6,10H18M6,13H14').replace('?android:attr/textColorPrimary',color))
+            preview = f'M3,1H21V23H3ZM6,{y}H18V{y+3}H6ZM6,10H18M6,13H14'
+            if 'expanded' in name:
+                sy, ny = (4, 9) if 'top' in name else (14, 20)
+                preview = f'M3,1H21V23H3ZM6,{sy}H18V{sy+3}H6ZM7,{ny-1}L5,{ny}L7,{ny+1}M11,{ny}H13M18,{ny-1}V{ny+1}M17,{ny}H19'
+            elif 'shortcut' in name and 'no_shortcut' not in name:
+                preview = f'M3,1H21V23H3ZM5,{y}H14V{y+3}H5ZM18,{y}V{y+3}M16.5,{y+1.5}H19.5M6,10H18M6,13H14'
+            out.write_text(vector(name,'96dp','112dp',preview).replace('?android:attr/textColorPrimary',color))
             row['action']='original toolbar layout preview'
         else:
             node=ET.fromstring(data) if kind=='vector' else None

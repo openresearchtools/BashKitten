@@ -25,7 +25,10 @@ remaining upstream fox illustration and Mozilla logo. The inventory includes
 678 Android drawable variants, 76 PDF SVGs and 52 Gecko chrome images. Upstream resource identifiers remain for
 source compatibility; they do not imply the old artwork is used. Website
 favicons/content, Android framework widgets, and license/source attribution are
-not app branding.
+not app branding. Both ARM64 APK workflows run `check-product-artwork.py` against
+the final merged APK, resolving aliases and checking each functional vector,
+Android error asset and engine image. The previous APK fails this guard on its
+remaining upstream bookmark illustration.
 
 Device verification of this change is pending the signed ARM64 build. Earlier
 agent/Tor evidence in VALIDATION.md refers to its recorded source revisions.
