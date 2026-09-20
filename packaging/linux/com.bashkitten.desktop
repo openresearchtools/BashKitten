@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=BashKitten
+Comment=Native Pi coding sessions
+Exec=bashkitten
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Development;
+StartupNotify=true

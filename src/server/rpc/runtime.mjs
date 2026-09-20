@@ -10,6 +10,15 @@ export function selectedRuntime() {
   let selection;
   try { selection = JSON.parse(fs.readFileSync(runtimeFile, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (!selection) {
+    try {
+      const bundled = JSON.parse(fs.readFileSync(path.join(bundledRoot, 'runtime-default.json'), 'utf8'));
+      if (!fs.existsSync(path.join(bundled.root, 'ready'))) throw Error('The packaged Pi runtime is not ready; finish package configuration');
+      fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+      try { fs.writeFileSync(runtimeFile, JSON.stringify(bundled), { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+      selection = JSON.parse(fs.readFileSync(runtimeFile, 'utf8'));
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   const root = selection?.root || bundledRoot;
   const agent = path.join(root, 'node_modules/@earendil-works/pi-coding-agent');
   const ai = path.join(root, 'node_modules/@earendil-works/pi-ai');

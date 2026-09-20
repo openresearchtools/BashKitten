@@ -12,7 +12,8 @@ import time
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('bashkitten_host', ROOT / 'src/linux/host.py')
+host_path = Path('/usr/lib/bashkitten/src/linux/host.py') if os.environ.get('BASHKITTEN_TEST_INSTALLED') else ROOT / 'src/linux/host.py'
+spec = importlib.util.spec_from_file_location('bashkitten_host', host_path)
 host = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(host)
 from gi.repository import GLib, WebKit

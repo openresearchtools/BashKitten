@@ -17,7 +17,7 @@ async function isVisible(id) {
   const root = path.join(dataDir, 'visibility');
   for (const name of await fs.readdir(root).catch(() => [])) {
     const file = path.join(root, name), value = await readJson(file, null);
-    if (value?.expires < Date.now()) { await fs.rm(file, { force: true }); continue; }
+    if (value?.expires < Date.now()) continue;
     if (value?.id === id) return true;
   }
   return false;

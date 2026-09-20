@@ -1,0 +1,73 @@
+name: Native Linux packages
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['src/server/**', 'src/web/**', 'src/linux/**', 'tests/**', 'packaging/**', 'runtime-manifests/**', 'package*.json', '.github/workflows/packages.yml']
+  pull_request:
+    paths: ['src/server/**', 'src/web/**', 'src/linux/**', 'tests/**', 'packaging/**', 'runtime-manifests/**', 'package*.json', '.github/workflows/packages.yml']
+permissions:
+  contents: read
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    container: ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      PI_TELEMETRY: '0'
+      PI_OFFLINE: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      - name: Install the distribution runtime and test tools
+        run: |
+          apt-get update
+          apt-get install -y git ca-certificates nodejs npm python3 python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0 ripgrep fd-find openssl dbus-x11 xvfb xdotool xauth zstd
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Shared server and native dependency tests
+        run: |
+          test "$(dpkg --print-architecture)" = '${{ matrix.architecture }}'
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test
+      - name: Build and install server and desktop packages
+        run: |
+          python3 packaging/build.py linux
+          apt-get install -y ./dist/*.deb
+          useradd --create-home tester
+          chown -R tester:tester "$GITHUB_WORKSPACE"
+      - name: Installed GTK host, persistent cookies and package reinstall
+        env:
+          BASHKITTEN_TEST_INSTALLED: '1'
+          BASHKITTEN_DATA_DIR: /home/tester/bashkitten-test
+          PI_CODING_AGENT_DIR: /home/tester/pi-test
+          GDK_BACKEND: x11
+          GDK_DEBUG: no-portals
+          PORT: '3987'
+        run: |
+          runuser -u tester -- dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py signup
+          runuser -u tester -- bashkittenctl status
+          runuser -u tester -- bashkittenctl stop
+          runuser -u tester -- bashkittenctl shutdown
+          dpkg --remove bashkitten-desktop bashkitten
+          test -d /home/tester/bashkitten-test
+          apt-get install -y ./dist/*.deb
+          runuser -u tester -- bashkittenctl start
+          runuser -u tester -- dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py restore
+          runuser -u tester -- bashkittenctl stop
+          runuser -u tester -- bashkittenctl shutdown
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: linux-${{ matrix.architecture }}-candidates
+          path: |
+            dist/*.deb
+            test-results/linux/*.png
+          if-no-files-found: error

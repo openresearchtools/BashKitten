@@ -26,11 +26,22 @@ export async function writeJson(file, value) {
 }
 export async function createJson(file, value) {
   await privateDir(path.dirname(file));
-  const temp = `${file}.${randomToken().slice(0, 12)}.tmp`;
-  await fs.writeFile(temp, JSON.stringify(value) + '\n', { mode: 0o600 });
-  try { await fs.link(temp, file); return true; }
-  catch (error) { if (error.code === 'EEXIST') return false; throw error; }
-  finally { await fs.rm(temp, { force: true }); }
+  const lock = file + '.creating';
+  try { await fs.mkdir(lock, { mode: 0o700 }); }
+  catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const owner = await readJson(path.join(lock, 'owner.json'), null);
+    let stale = false;
+    if (owner) { try { process.kill(owner.pid, 0); } catch (error) { stale = error.code === 'ESRCH'; } }
+    else stale = Date.now() - (await fs.stat(lock).catch(() => ({ mtimeMs: Date.now() }))).mtimeMs > 30000;
+    if (stale) { await fs.rm(lock, { recursive: true, force: true }); return createJson(file, value); }
+    return false;
+  }
+  try {
+    await writeJson(path.join(lock, 'owner.json'), { pid: process.pid });
+    try { await fs.access(file); return false; } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    await writeJson(file, value); return true;
+  } finally { await fs.rm(lock, { recursive: true, force: true }); }
 }
 export const readMeta = id => readJson(path.join(sessionDir(id), 'ui.json'));
 export const writeMeta = meta => writeJson(path.join(sessionDir(meta.id), 'ui.json'), meta);
