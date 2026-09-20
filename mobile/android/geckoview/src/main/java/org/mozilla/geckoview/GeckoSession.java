@@ -7799,6 +7799,18 @@ public class GeckoSession {
   })
   public @interface RestartReason {}
 
+  // Give viewless agent tabs a layout viewport until GeckoView supplies real bounds.
+  @UiThread
+  /* package */ void setWildBuzzardInitialViewport(final int width, final int height) {
+    ThreadUtils.assertOnUiThread();
+    if (mDisplay != null || (mWidth > 0 && mHeight > 0)) {
+      return;
+    }
+    mWidth = Math.max(1, width);
+    mHeight = Math.max(1, height);
+    onWindowBoundsChanged();
+  }
+
   /* package */ void onSurfaceChanged(final @NonNull SurfaceInfo surfaceInfo) {
     ThreadUtils.assertOnUiThread();
 
@@ -7895,6 +7907,9 @@ public class GeckoSession {
 
     mAttachedCompositor = true;
     mCompositor.attachNPZC(mPanZoomController.mNative);
+    if (mSurfaceInfo == null && mWidth > 0 && mHeight > 0) {
+      onWindowBoundsChanged();
+    }
 
     if (mSurfaceInfo != null) {
       // If we have a valid surface, create the compositor now that we're attached.

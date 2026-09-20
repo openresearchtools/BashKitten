@@ -74,6 +74,8 @@ try {
   await check('real example.com navigation, tree and link action to IANA', async () => {
     tabId = (await call('tabs.create', { url: 'https://example.com' })).id;
     await loadedPage(tabId, 'document.title === "Example Domain"');
+    const viewport = await call('viewport', { tabId });
+    assert(viewport.width > 0 && viewport.height > 0, 'Background tab has a usable viewport');
     const tree = await call('snapshot', { tabId });
     await writeFile(join(directory, 'example-tree.json'), JSON.stringify(tree), { mode: 0o600 });
     const link = find(tree, 'a'); assert(link);
@@ -134,7 +136,10 @@ try {
   await check('two native Pi sessions cannot list or close one another’s tabs', async () => {
     assert(!(await call('tabs.list', {}, b)).some(tab => tab.id === tabId));
     await assert.rejects(call('tabs.close', { tabId }, b), /owned|authorized/);
-    const second = (await call('tabs.create', { url: 'https://example.com' }, b)).id;
+    await value(tabId, 'localStorage.setItem("wildbuzzard-session-test", "session-a"); return true;');
+    const second = (await call('tabs.create', { url: 'http://127.0.0.1:8765/' }, b)).id;
+    await poll(async () => (await call('evaluate', { tabId: second, code: 'return document.title === "Agent test page";' }, b)).value, 'second session page');
+    assert.equal((await call('evaluate', { tabId: second, code: 'return localStorage.getItem("wildbuzzard-session-test");' }, b)).value, null);
     assert(!(await call('tabs.list')).some(tab => tab.id === second));
     await call('tabs.close', { tabId: second }, b);
   });

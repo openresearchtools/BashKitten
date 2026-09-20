@@ -237,6 +237,8 @@ public final class BrowserApp extends ContextWrapper {
     }
     void page(Tab tab, String method, JSONObject params, Consumer<JSONObject> done, Consumer<String> fail) {
         try {
+            android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+            WildBuzzardController.initialViewport(tab.session, metrics.widthPixels, metrics.heightPixels);
             WildBuzzardController.request(tab.session, new JSONObject().put("method", method).put("params", params).toString()).accept(value -> {
                 try { JSONObject result = new JSONObject(value); if (result.has("error")) fail.accept(result.getString("error")); else done.accept(result); }
                 catch (Exception error) { fail.accept("Invalid page response"); }

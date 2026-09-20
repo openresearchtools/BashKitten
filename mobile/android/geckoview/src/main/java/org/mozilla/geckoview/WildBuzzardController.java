@@ -9,6 +9,10 @@ import org.mozilla.gecko.util.GeckoBundle;
 public final class WildBuzzardController {
     private WildBuzzardController() {}
     @UiThread
+    public static void initialViewport(@NonNull GeckoSession session, int width, int height) {
+        session.setWildBuzzardInitialViewport(width, height);
+    }
+    @UiThread
     public static @NonNull GeckoResult<String> request(
             @NonNull GeckoSession session, @NonNull String json) {
         GeckoBundle data = new GeckoBundle(1);
