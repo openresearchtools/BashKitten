@@ -104,6 +104,25 @@ public final class OnionBrowserTest {
         } else {
             assertFixtureLoaded(probe, privateTab);
             android.util.Log.i("WildBuzzardProbe", "PASS: saved onion key works after browser restart without re-import");
+            for (int restart = 0; restart < 2; restart++) {
+                device.pressHome();
+                device.executeShellCommand("am force-stop org.openresearchtools.wildbuzzard");
+                context.startActivity(new Intent().setClassName("org.openresearchtools.wildbuzzard", "org.mozilla.fenix.HomeActivity")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                context.startActivity(new Intent(context, ProbeActivity.class)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+                deadline = SystemClock.elapsedRealtime() + 30000;
+                while ((!ProbeActivity.connected || ProbeActivity.active == probe) && SystemClock.elapsedRealtime() < deadline)
+                    SystemClock.sleep(100);
+                assertTrue("Agent reconnects on repeated cold startup", ProbeActivity.connected);
+                assertNotSame("Fresh independent probe connection", probe, ProbeActivity.active);
+                probe = ProbeActivity.active;
+                privateTab = create(probe, "http://127.0.0.1:8765/", false);
+                probe.waitPage(privateTab);
+                probe.command("navigate", probe.params(privateTab).put("url", "https://" + fixture.getString("onion")));
+                assertFixtureLoaded(probe, privateTab);
+            }
+            android.util.Log.i("WildBuzzardProbe", "PASS: three cold starts restore Tor control and saved onion authentication");
             String otherPrivate = create(probe, "https://" + fixture.getString("otherPrivateOnion"), false);
             assertNavigationError(probe, otherPrivate, false, "Key is not tried on another private onion service");
             assertCertError(probe, create(probe, "https://wrong." + fixture.getString("onion"), true), "Enrolled onion hostname mismatch");

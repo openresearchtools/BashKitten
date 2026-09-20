@@ -5,19 +5,18 @@ package org.torproject.jni;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
 import android.os.Binder;
-import android.os.FileObserver;
 import android.os.IBinder;
 import android.os.Process;
+import android.os.SystemClock;
 
 import net.freehaven.tor.control.RawEventListener;
 import net.freehaven.tor.control.TorControlCommands;
 import net.freehaven.tor.control.TorControlConnection;
 
 import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -25,11 +24,8 @@ import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-import androidx.annotation.Nullable;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 /**
@@ -184,6 +180,8 @@ public class TorService extends Service implements TorControlCommands {
     private int torControlFd = -1;
 
     private volatile TorControlConnection torControlConnection;
+    private volatile LocalSocket controlConnectionSocket;
+    private volatile boolean controlStopped;
 
     /**
      * This lock must be acquired before calling createTorConfiguration() and
@@ -195,8 +193,6 @@ public class TorService extends Service implements TorControlCommands {
     private native boolean createTorConfiguration();
 
     private native void mainConfigurationFree();
-
-    private native static FileDescriptor prepareFileDescriptor(String path);
 
     @SuppressWarnings("BooleanMethodIsAlwaysInverted")
     private native boolean mainConfigurationSetCommandLine(String[] args);
@@ -249,52 +245,28 @@ public class TorService extends Service implements TorControlCommands {
         }
     };
 
-    /**
-     * This waits for {@link #CONTROL_SOCKET_NAME} to be created by {@code tor},
-     * then continues on to connect to the {@code ControlSocket} as described in
-     * {@link #getControlSocket(Context)}.  As a failsafe, this will only wait
-     * 10 seconds, after that it will check whether the {@code ControlSocket}
-     * file exists, and if not, throw a {@link IllegalStateException}.
-     */
+    // Creating a Unix socket path does not mean Tor has started listening yet.
     private final Thread controlPortThread = new Thread(CONTROL_SOCKET_NAME) {
         @Override
-        @SuppressWarnings("ResultOfMethodCallIgnored")
         public void run() {
             android.os.Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             try {
-                final var countDownLatch = new CountDownLatch(1);
-                final var observeDir = getAppTorServiceDataDir(TorService.this);
-                var controlPortFileObserver = new FileObserver(observeDir.getAbsolutePath()) {
-                    @Override
-                    public void onEvent(int event, @Nullable String name) {
-                        if ((event & FileObserver.CREATE) > 0 && CONTROL_SOCKET_NAME.equals(name)) {
-                            countDownLatch.countDown();
-                        }
-                    }
-                };
-                controlPortFileObserver.startWatching();
-                controlPortThreadStarted.countDown();
-                countDownLatch.await(10, TimeUnit.SECONDS);
-                controlPortFileObserver.stopWatching();
-                var controlSocket = new File(observeDir, CONTROL_SOCKET_NAME);
-                if (!controlSocket.canRead()) {
-                    throw new IOException("cannot read " + controlSocket);
-                }
-
-                var controlSocketFd = prepareFileDescriptor(getControlSocket(TorService.this).getAbsolutePath());
-                var is = new FileInputStream(controlSocketFd);
-                var os = new FileOutputStream(controlSocketFd);
-                var readyConnection = new TorControlConnection(is, os);
+                var socket = connectControlSocket();
+                controlConnectionSocket = socket;
+                var readyConnection = new TorControlConnection(socket.getInputStream(), socket.getOutputStream());
                 readyConnection.launchThread(true);
                 readyConnection.authenticate(new byte[0]);
                 readyConnection.addRawEventListener(startedEventListener);
                 readyConnection.setEvents(Collections.singletonList(EVENT_STATUS_CLIENT));
+                if (controlStopped) throw new IOException("Tor stopped during startup");
+                socket.setSoTimeout(0);
                 torControlConnection = readyConnection;
 
                 socksPort = getPortFromGetInfo("net/listeners/socks");
                 httpTunnelPort = getPortFromGetInfo("net/listeners/httptunnel");
 
             } catch (IOException | ArrayIndexOutOfBoundsException | InterruptedException e) {
+                closeControlSocket();
                 broadcastError(TorService.this, e);
                 broadcastStatus(TorService.this, STATUS_STOPPING);
                 stopSelf();
@@ -302,7 +274,30 @@ public class TorService extends Service implements TorControlCommands {
         }
     };
 
-    private volatile CountDownLatch controlPortThreadStarted;
+    private LocalSocket connectControlSocket() throws IOException, InterruptedException {
+        long deadline = SystemClock.elapsedRealtime() + 30000;
+        while (!controlStopped && SystemClock.elapsedRealtime() < deadline) {
+            var socket = new LocalSocket();
+            try {
+                socket.connect(new LocalSocketAddress(getControlSocket(this).getAbsolutePath(),
+                        LocalSocketAddress.Namespace.FILESYSTEM));
+                socket.setSoTimeout(5000);
+                return socket;
+            } catch (IOException error) {
+                socket.close();
+                Thread.sleep(100);
+            }
+        }
+        throw new IOException("Tor control connection is unavailable");
+    }
+
+    private void closeControlSocket() {
+        var socket = controlConnectionSocket;
+        controlConnectionSocket = null;
+        if (socket != null) {
+            try { socket.close(); } catch (IOException ignored) { }
+        }
+    }
 
     private final Thread torThread = new Thread("tor") {
         @Override
@@ -335,9 +330,7 @@ public class TorService extends Service implements TorControlCommands {
                     throw new IllegalArgumentException("Bad command flags: " + Arrays.toString(verifyLines));
                 }
 
-                controlPortThreadStarted = new CountDownLatch(1);
                 controlPortThread.start();
-                controlPortThreadStarted.await();
 
                 var runLines = new String[lines.size() - 1];
                 runLines[0] = "tor";
@@ -354,7 +347,7 @@ public class TorService extends Service implements TorControlCommands {
                     throw new IllegalStateException("Tor could not start!");
                 }
 
-            } catch (IllegalStateException | IllegalArgumentException | InterruptedException e) {
+            } catch (IllegalStateException | IllegalArgumentException e) {
                 broadcastError(context, e);
             } finally {
                 broadcastStatus(context, STATUS_STOPPING);
@@ -397,10 +390,8 @@ public class TorService extends Service implements TorControlCommands {
      * Start Tor in a {@link Thread} with the minimum required config.  The
      * rest of the config should happen via the Control Port.  First Tor
      * runs with {@code --verify-config} to check the command line flags and
-     * any {@code torrc} config.  If they are correct, then this waits for the
-     * {@link #controlPortThread} to start so it is running before Tor could
-     * potentially create the {@code ControlSocket}.  Then finally Tor is
-     * started in its own {@code Thread}.
+     * any {@code torrc} config. The control thread retries its connection while
+     * Tor starts listening on the private filesystem socket.
      * @see <a href="https://github.com/torproject/tor/blob/40be20d542a83359ea480bbaa28380b4137c88b2/src/app/config/config.c#L4730">options that must be on the command line</a>
      */
     private void startTorServiceThread() {
@@ -411,6 +402,8 @@ public class TorService extends Service implements TorControlCommands {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        controlStopped = true;
+        controlPortThread.interrupt();
         if (torControlConnection != null) {
             torControlConnection.removeRawEventListener(startedEventListener);
         }
@@ -418,6 +411,7 @@ public class TorService extends Service implements TorControlCommands {
             runLock.unlock();
         }
         shutdownTor();
+        closeControlSocket();
         broadcastStatus(TorService.this, STATUS_OFF);
     }
 

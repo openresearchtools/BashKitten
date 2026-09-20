@@ -201,7 +201,7 @@ public final class BrowserApp extends ContextWrapper {
         tab.port = 0;
         tab.session.stop();
         tab.session.loadUri("about:blank");
-        Consumer<String> failed = error -> { tab.preparing = false; message(error); };
+        Consumer<String> failed = error -> { tab.preparing = false; tab.error = "ERROR_TOR_UNAVAILABLE"; message(error); };
         String context = tab.session.getSettings().getContextId();
         if (context == null || !context.startsWith("wildbuzzard-tor-")) {
             host.isolate(tab, "wildbuzzard-tor-" + UUID.randomUUID(), () -> connectTor(tab, failed), failed);
@@ -209,7 +209,7 @@ public final class BrowserApp extends ContextWrapper {
     }
     private void connectTor(Tab tab, Consumer<String> failed) {
         configure(tab, Collections.emptyList(), ignored -> tor.ready(port -> {
-            tab.port = port; configure(tab, tor.identities(), result -> { tab.preparing = false; tab.session.loadUri(tab.pendingUrl); }, error -> { tab.preparing = false; message(error); });
+            tab.port = port; configure(tab, tor.identities(), result -> { tab.preparing = false; tab.session.loadUri(tab.pendingUrl); }, failed);
         }, failed), failed);
     }
     void configure(Tab tab, List<String> identities, Consumer<JSONObject> done, Consumer<String> fail) {
