@@ -1,5 +1,7 @@
 # BashKitten
 
+![Testing releases: current releases are for automated testing only. Not ready for production. Coming soon.](docs/testing-releases.svg)
+
 A local interface for the [Pi coding agent](https://github.com/earendil-works/pi),
 with project chats, streaming tools, image attachments and file browsing.
 Use the Android or Linux app, or open the same UI in a browser on localhost.

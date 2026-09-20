@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="180" viewBox="0 0 760 180" role="img" aria-labelledby="title description">
+  <title id="title">Testing releases</title>
+  <desc id="description">Current releases are for automated testing only. Not ready for production. Coming soon.</desc>
+  <rect width="760" height="180" rx="12" fill="#fff2a8"/>
+  <g fill="#b91c1c" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    <text x="28" y="53" font-size="34">TESTING RELEASES</text>
+    <text x="28" y="99" font-size="26">Current releases are for automated testing only.</text>
+    <text x="28" y="143" font-size="26">Not ready for production. Coming soon.</text>
+  </g>
+</svg>
