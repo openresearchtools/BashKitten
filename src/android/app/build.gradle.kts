@@ -37,7 +37,7 @@ val generateLicenses by tasks.registering {
     val runtime = configurations.named("releaseRuntimeClasspath")
     inputs.files(runtime)
     inputs.files(rootProject.file("licenses.py"), rootProject.file("../../LICENSE"), rootProject.file("../../package.json"))
-    inputs.dir(rootProject.file("../../licenses"))
+    inputs.file(rootProject.file("../../licenses/Apache-2.0.txt"))
     inputs.dir(file("src/main/assets"))
     outputs.dir(licenseAssets)
     outputs.file(layout.buildDirectory.file("android-dependency-sources.tar.gz"))
