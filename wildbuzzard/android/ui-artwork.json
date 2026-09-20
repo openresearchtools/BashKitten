@@ -3826,10 +3826,10 @@
       "sha256": "bec45f871bee565b96912556a24c0060ac64a95d33d8fbc824255de8c99f31bd"
     },
     "contentaccessible/html/folder.png": {
-      "source": "toolkit/themes/shared/dirListing/folder.png",
-      "original_sha256": "afd0e84077de13b6dee6650bcfac756fb549874e850476bff4730b6868e7bcc3",
+      "source": "layout/generic/folder.png",
+      "original_sha256": "aa16e1c56ada55414cb124cfdb1e6c81167e1a3cf1e2325127dbb82cbeaaa051",
       "action": "original folder artwork",
-      "sha256": "6617595aaa83ef40a031b0f81cd5a6403f498226e2ff2e8f9b021aa5340f507c"
+      "sha256": "3a3afe0aa46be08f590938d6aeb1ff5cf89d74fdc39fbffaf170e3ffc416533d"
     },
     "chrome/toolkit/skin/classic/global/illustrations/error-malformed-url.svg": {
       "source": "toolkit/themes/shared/illustrations/error-malformed-url.svg",

@@ -27,7 +27,7 @@ MAPPINGS={
  'chrome/toolkit/content/global/ml/mozilla-logo.webp':('toolkit/components/ml/content/mozilla-logo.webp','brand-webp'),
  'chrome/toolkit/res/broken-image.png':('layout/generic/broken-image.png','image'),
  'contentaccessible/close-12.svg':('layout/style/res/close-12.svg','cross'),
- 'contentaccessible/html/folder.png':('toolkit/themes/shared/dirListing/folder.png','folder'),
+ 'contentaccessible/html/folder.png':('layout/generic/folder.png','folder'),
  'chrome/toolkit/skin/classic/global/illustrations/error-malformed-url.svg':('toolkit/themes/shared/illustrations/error-malformed-url.svg','brand-svg'),
 }
 for name in ('normal','tilt-left','tilt-right'):

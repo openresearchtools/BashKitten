@@ -5,4 +5,6 @@
     <string name="wildbuzzard_licenses_and_source" translatable="false">Wild Buzzard licenses and source</string>
     <string name="wildbuzzard_saved_passwords_description">Passwords saved in %s are encrypted and stored on this device.</string>
     <string name="wildbuzzard_cookie_banner_unsupported">Automatic cookie-banner handling is not available for this site. You can choose the cookie options on the page.</string>
+    <string name="wildbuzzard_tracking_explanation">Blocks tracking cookies and scripts according to the protection mode you choose.</string>
+    <string name="wildbuzzard_tracking_strict_explanation">Blocks additional trackers. Some sites may not work properly.</string>
 </resources>
