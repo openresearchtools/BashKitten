@@ -9,6 +9,7 @@ final class UiNavigation {
         java.util.regex.Pattern label = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(text), java.util.regex.Pattern.CASE_INSENSITIVE);
         long deadline = android.os.SystemClock.elapsedRealtime() + 15000;
         do {
+            device.waitForIdle();
             UiObject2 item = device.findObject(By.desc(label));
             if (item == null) item = device.findObject(By.text(label));
             if (item != null) { item.click(); return; }
@@ -18,6 +19,7 @@ final class UiNavigation {
     }
     static void scrollToAndClick(UiDevice device, String label) {
         for (int attempt = 0; attempt < 10; attempt++) {
+            device.waitForIdle();
             UiObject2 item = device.findObject(By.desc(label));
             if (item == null) item = device.findObject(By.text(label));
             if (item != null) { item.click(); return; }
