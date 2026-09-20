@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Small system-WebKit host. The local Node server owns all chat and Pi behavior."""
 import concurrent.futures
+import base64
 import hashlib
 import json
 import os
@@ -97,6 +98,7 @@ class BashKitten(Gtk.Application):
         self.web = WebKit.WebView(network_session=network, user_content_manager=self.content)
         self.web.get_settings().set_enable_developer_extras(False)
         self.web.connect('decide-policy', self.navigate)
+        self.web.connect('create', self.popup)
         self.web.connect('load-failed', self.load_failed)
         self.stack.add_named(self.web, 'web')
         self.window.set_child(self.stack)
@@ -139,15 +141,16 @@ class BashKitten(Gtk.Application):
             script = """(() => {
               if (location.origin !== ORIGIN || location.pathname !== '/') return;
               const pending = new Map();
-              let activationUntil = 0;
+              let activationUntil = 0, pasteUntil = 0;
               document.addEventListener('click', event => { if (event.isTrusted) activationUntil = performance.now() + 1000; }, true);
+              document.addEventListener('paste', event => { if (event.isTrusted) pasteUntil = performance.now() + 1000; }, true);
               window.addEventListener('bashkitten-native-reply', e => {
                 const p = pending.get(e.detail.id); if (!p) return; pending.delete(e.detail.id);
                 e.detail.error ? p.reject(Error(e.detail.error)) : p.resolve(e.detail.value);
               });
               Object.defineProperty(window, 'bashkittenHost', {value: Object.freeze({platform:'linux', call(action, value={}) {
-                if (performance.now() > activationUntil) return Promise.reject(Error('Use a native action button'));
-                activationUntil = 0;
+                if (performance.now() > (action === 'paste-image' ? pasteUntil : activationUntil)) return Promise.reject(Error('Use a native action button'));
+                activationUntil = pasteUntil = 0;
                 return new Promise((resolve,reject) => {
                   const id=crypto.randomUUID(); pending.set(id,{resolve,reject});
                   window.webkit.messageHandlers.bashkitten.postMessage(JSON.stringify({id,action,value,nonce:NONCE}));
@@ -163,6 +166,28 @@ class BashKitten(Gtk.Application):
         self.stack.set_visible_child_name('status')
         return True
 
+    def popup(self, web, action):
+        if not action.is_user_gesture():
+            return None
+        uri = action.get_request().get_uri()
+        parsed = urlsplit(uri)
+        if parsed.scheme + '://' + parsed.netloc == self.origin and parsed.path == '/pi-login':
+            window = Gtk.Window(title='Pi service login', transient_for=self.window, default_width=560, default_height=660)
+            # A related view shares cookies/process context, with a fresh content
+            # manager so this helper never receives the host's native bridge.
+            helper = WebKit.WebView(related_view=web, user_content_manager=WebKit.UserContentManager())
+            helper.connect('decide-policy', self.navigate)
+            helper.connect('create', self.popup)
+            helper.connect('ready-to-show', lambda _: window.present())
+            helper.connect('close', lambda _: window.close())
+            window.set_child(helper)
+            return helper
+        if uri.startswith(self.origin + '/api/'):
+            self.background(lambda: control('native-file', {'url': uri}), self.open_file)
+        elif parsed.scheme in ('http', 'https', 'mailto'):
+            Gtk.UriLauncher.new(uri).launch(self.window, None, self.launched)
+        return None
+
     def navigate(self, web, decision, kind):
         if kind not in (WebKit.PolicyDecisionType.NAVIGATION_ACTION, WebKit.PolicyDecisionType.NEW_WINDOW_ACTION):
             return False
@@ -171,19 +196,14 @@ class BashKitten(Gtk.Application):
         parsed = urlsplit(uri)
         local = parsed.scheme + '://' + parsed.netloc == self.origin
         if local and parsed.path == '/pi-login':
-            if web is not self.web and kind == WebKit.PolicyDecisionType.NAVIGATION_ACTION:
+            if web is not self.web or kind == WebKit.PolicyDecisionType.NEW_WINDOW_ACTION:
                 decision.use()
             else:
                 decision.ignore()
-                if action.is_user_gesture():
-                    window = Gtk.Window(title='Pi service login', transient_for=self.window, default_width=560, default_height=660)
-                    # Share this host's authenticated cookie jar, with no native
-                    # bridge in the helper. Provider links use the system browser.
-                    helper = WebKit.WebView(network_session=self.network)
-                    helper.connect('decide-policy', self.navigate)
-                    window.set_child(helper)
-                    window.present()
+                helper = self.popup(web, action)
+                if helper:
                     helper.load_uri(uri)
+                    helper.get_root().present()
             return True
         if web is not self.web and local and parsed.path == '/':
             decision.ignore()
@@ -239,6 +259,19 @@ class BashKitten(Gtk.Application):
                     self.open_file(result)
                     self.reply(request, {'ok': True})
                 self.background(lambda: control('native-file', value), ready, lambda error: self.reply(request, error=error))
+            elif action == 'paste-image':
+                def pasted(clipboard, result):
+                    try:
+                        texture = clipboard.read_texture_finish(result)
+                        if texture.get_width() * texture.get_height() > 40_000_000:
+                            return self.reply(request, error='Clipboard image is too large')
+                        data = texture.save_to_png_bytes().get_data()
+                        if len(data) > 16 * 1024 * 1024:
+                            return self.reply(request, error='Clipboard image is too large')
+                        self.reply(request, {'base64': base64.b64encode(data).decode()})
+                    except GLib.Error:
+                        self.reply(request, None)  # Text-only clipboard: normal WebKit paste.
+                self.web.get_display().get_clipboard().read_texture_async(None, pasted)
             else:
                 self.reply(request, error='Unknown native action')
         except (ValueError, KeyError, TypeError):

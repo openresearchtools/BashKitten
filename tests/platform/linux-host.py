@@ -36,14 +36,14 @@ def until(test, timeout=30):
         pump()
     raise AssertionError('Timed out waiting for WebKit: ' + app.state_label.get_text())
 
-def js(script):
+def js(script, target=None):
     result = []
     def done(web, value):
         try:
             result.append((True, web.evaluate_javascript_finish(value).to_json(0)))
         except GLib.Error as error:
             result.append((False, error.message))
-    app.web.evaluate_javascript(script, -1, None, None, None, done)
+    (target or app.web).evaluate_javascript(script, -1, None, None, None, done)
     until(lambda: result)
     ok, value = result[0]
     assert ok, value
@@ -63,6 +63,9 @@ try:
     js("window.nativeResult='pending';window.bashkittenHost.call('open-file',{folder:'~'}).then(()=>window.nativeResult='opened',e=>window.nativeResult=e.message);true")
     until(lambda: js("window.nativeResult !== 'pending'"))
     assert js('window.nativeResult') == 'Use a native action button', js('window.nativeResult')
+    js("window.nativeResult='pending';window.bashkittenHost.call('paste-image').then(()=>window.nativeResult='read',e=>window.nativeResult=e.message);true")
+    until(lambda: js("window.nativeResult !== 'pending'"))
+    assert js('window.nativeResult') == 'Use a native action button'
     # A script handler message without the private main-frame capability is ignored.
     js("window.webkit.messageHandlers.bashkitten.postMessage(JSON.stringify({id:'wrong',nonce:'wrong',action:'choose-folder'}));true")
     if os.environ.get('GDK_BACKEND') == 'x11':
@@ -83,6 +86,57 @@ try:
         chooser.close()
         for _ in range(10): pump()
         print('PASS: a real pointer click opens the system working-folder chooser')
+        if os.environ.get('BASHKITTEN_TEST_NATIVE_FILES') == '1':
+            from gi.repository import Gdk
+            def tap(selector):
+                rect = js("(()=>{const r=document.querySelector(" + json.dumps(selector) + ").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
+                subprocess.run(['xdotool', 'windowfocus', '--sync', str(xid), 'mousemove', '--window', str(xid), str(int(bounds.get_x()+rect['x']+app.window.get_surface_transform()[0])), str(int(bounds.get_y()+rect['y']+app.window.get_surface_transform()[1])), 'click', '1'], check=True)
+                for _ in range(10): pump()
+            fixture = ROOT / 'tests/fixtures/images/small.png'
+            tap('#attachBtn'); tap('#menuAttach')
+            chooser = until(lambda: next((w for w in Gtk.Window.list_toplevels() if w is not app.window and w.get_visible()), None), 10)
+            chooser_id = chooser.get_surface().get_xid()
+            subprocess.run(['xdotool', 'windowfocus', '--sync', str(chooser_id), 'key', 'ctrl+l', 'type', '--clearmodifiers', str(fixture)], check=True)
+            for _ in range(15): pump()
+            subprocess.run(['xdotool', 'key', 'Return'], check=True)
+            for _ in range(15): pump()
+            if chooser.get_visible(): subprocess.run(['xdotool', 'key', 'Return'], check=True)
+            try:
+                until(lambda: js("[...document.querySelectorAll('#attachmentTray img')].some(img=>img.naturalWidth>0)"), 10)
+            except AssertionError:
+                print('Upload diagnostic:', [w.get_title() for w in Gtk.Window.list_toplevels() if w.get_visible()], js('document.querySelector("#composerHint").textContent'), js('document.querySelector("#attachmentTray").innerHTML'))
+                subprocess.run(['magick', 'import', '-window', str(chooser_id if chooser.get_visible() else xid), str(ROOT/'test-results/linux/upload-diagnostic.png')])
+                raise
+            before = js("document.querySelectorAll('#attachmentTray .attachment').length")
+            subprocess.run(['xclip', '-selection', 'clipboard', '-t', 'image/png', '-i', str(fixture)], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            js("document.addEventListener('paste',e=>window.pasteResult={trusted:e.isTrusted,types:[...e.clipboardData.types],files:e.clipboardData.files.length,items:[...e.clipboardData.items].map(i=>({kind:i.kind,type:i.type}))},true);true")
+            tap('#prompt')
+            subprocess.run(['xdotool', 'key', '--clearmodifiers', 'ctrl+v'], check=True)
+            try:
+                until(lambda: js("document.querySelectorAll('#attachmentTray .attachment').length") > before, 8)
+            except AssertionError:
+                print('Paste diagnostic:', app.web.get_display().get_clipboard().get_formats().to_string(), js('window.pasteResult || null'), js('document.activeElement.id'), js('document.querySelector("#composerHint").textContent'))
+                raise
+            print('PASS: system upload picker and real image clipboard paste reach the shared attachment tray')
+            subprocess.run(['xclip', '-selection', 'clipboard', '-i'], input=b'BashKitten clipboard text', check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['xdotool', 'key', '--clearmodifiers', 'ctrl+v'], check=True)
+            until(lambda: js("document.querySelector('#prompt').value.endsWith('BashKitten clipboard text')"))
+            if os.environ.get('BASHKITTEN_TEST_LOGIN_UI') == '1':
+                tap('#settingsBtn'); tap('#tabServices')
+                until(lambda: js("document.querySelectorAll('#servicesList button').length > 0"))
+                js("document.querySelector('#serviceFilter').value='openai-codex';document.querySelector('#serviceFilter').dispatchEvent(new Event('input'));true")
+                tap('#servicesList .service-row button')
+                login = until(lambda: next((w for w in Gtk.Window.list_toplevels() if w.get_title() == 'Pi service login'), None), 10)
+                helper = login.get_child()
+                until(lambda: js("Boolean(document.querySelector('#loginInput'))", helper))
+                assert js("typeof window.bashkittenHost", helper) == 'undefined'
+                js("document.querySelector('#loginInput').value='browser';document.querySelector('#steps button').click();true", helper)
+                until(lambda: js("Boolean(document.querySelector('#steps a[target]'))", helper))
+                assert js("new URL(document.querySelector('#steps a[target]').href).hostname", helper) == 'auth.openai.com'
+                js("document.querySelector('#cancel').click();true", helper)
+                until(lambda: js("document.querySelector('#cancel').hidden", helper))
+                login.close()
+                print('PASS: native Pi login helper shares authenticated cookies, has no host bridge, and presents the provider browser link (authorization cancelled)')
     output = ROOT / 'test-results/linux'
     output.mkdir(parents=True, exist_ok=True)
     captured = []

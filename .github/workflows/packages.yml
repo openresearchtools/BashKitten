@@ -32,7 +32,7 @@ jobs:
       - name: Install the distribution runtime and test tools
         run: |
           apt-get update
-          apt-get install -y git ca-certificates nodejs npm python3 python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0 ripgrep fd-find openssl dbus-x11 xvfb xdotool xauth zstd
+          apt-get install -y git ca-certificates nodejs npm python3 python3-gi gir1.2-gtk-4.0 gir1.2-webkit-6.0 ripgrep fd-find openssl dbus-x11 xvfb xdotool xclip xauth zstd
           if [ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
             sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
           fi
@@ -53,6 +53,8 @@ jobs:
       - name: Installed GTK host, persistent cookies and package reinstall
         env:
           BASHKITTEN_TEST_INSTALLED: '1'
+          BASHKITTEN_TEST_NATIVE_FILES: '1'
+          BASHKITTEN_TEST_LOGIN_UI: '1'
           BASHKITTEN_DATA_DIR: /home/tester/bashkitten-test
           PI_CODING_AGENT_DIR: /home/tester/pi-test
           GDK_BACKEND: x11

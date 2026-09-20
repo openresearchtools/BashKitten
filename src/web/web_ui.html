@@ -2314,6 +2314,15 @@
     $('#prompt').addEventListener('paste', event => {
       const files = [...(event.clipboardData?.files || [])];
       if (files.length) { event.preventDefault(); files.forEach(file=>clipboardFiles.add(file)); addAttachments(files); }
+      else if (event.isTrusted && nativeHost?.platform === 'linux' && !event.clipboardData?.types.length) {
+        // WebKitGTK currently withholds DataTransfer files; the host reads an
+        // image only in response to this real paste gesture.
+        nativeHost.call('paste-image').then(value => {
+          if (!value) return;
+          const bytes = Uint8Array.from(atob(value.base64), c => c.charCodeAt(0));
+          addAttachments([new File([bytes], 'clipboard.png', {type:'image/png'})]);
+        }).catch(error => { $('#composerHint').textContent = error.message; });
+      }
     });
     const composeBox = $('.compose-box');
     composeBox.addEventListener('dragenter', event => { event.preventDefault(); composeBox.classList.add('dragging'); });
