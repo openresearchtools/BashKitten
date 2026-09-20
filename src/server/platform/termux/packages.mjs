@@ -58,7 +58,24 @@ export async function desktopPackages(job, { companionVersion } = {}) {
   await job.step('x11-repo', 'Enabling the Termux X11 repository', () => apt(job, ['install', '-y', 'x11-repo']));
   await job.step('desktop-lists', 'Refreshing desktop packages', () => apt(job, ['update']));
   await job.step('desktop-packages', 'Installing XFCE and LibreOffice', async () => {
-    await apt(job, ['install', '-y', '--no-install-recommends', 'xfce4', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu', 'mesa', 'mesa-demos', 'vulkan-tools', `bashkitten-termux-x11=${companionVersion}`]);
+    await apt(job, ['install', '-y', '--no-install-recommends', '--allow-change-held-packages', 'xfce4', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu', 'mesa', 'mesa-demos', 'vulkan-tools', `bashkitten-termux-x11=${companionVersion}`]);
     await job.exec('apt-mark', ['hold', 'bashkitten-termux-x11']);
   });
+}
+export async function pairX11(job, companionVersion) {
+  requireTermux();
+  if (!/^[0-9][a-zA-Z0-9.+:~\-]{0,100}$/.test(companionVersion || '')) throw Error('The viewer update is missing its exact X11 companion version');
+  const versions = await packageState(['bashkitten-termux-x11']);
+  // Installing the viewer alone does not opt a user into the desktop bundle.
+  if (!versions['bashkitten-termux-x11']) return;
+  if (versions['bashkitten-termux-x11'] !== companionVersion) {
+    await job.phase('Refreshing the paired X11 companion'); await apt(job, ['update']);
+    const args = ['install', '-y', '--allow-change-held-packages', '--allow-downgrades', `bashkitten-termux-x11=${companionVersion}`];
+    const plan = await apt(job, ['-s', ...args]);
+    if (/^Remv /m.test(plan)) throw Error('The paired companion would remove installed packages; inspect the package output');
+    await job.phase('Downloading the paired X11 companion'); await apt(job, ['--download-only', ...args]);
+    await job.phase('Installing the paired X11 companion'); await apt(job, args);
+  }
+  await job.exec('apt-mark', ['hold', 'bashkitten-termux-x11']);
+  if ((await packageState(['bashkitten-termux-x11']))['bashkitten-termux-x11'] !== companionVersion) throw Error('The X11 companion did not reach the viewer’s required version');
 }

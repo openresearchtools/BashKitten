@@ -157,7 +157,12 @@ object AppStore {
             ?: return
         if (id in downloading) return
         val pending = context.packageManager.packageInstaller.mySessions.any { it.sessionId == prefs(context).getInt("installSession:$id", -1) && it.isCommitted }
-        if (!pending) TermuxBridge.command(context, "app-update-finish", JSONObject().put("packageId", id)) { }
+        if (!pending) {
+            val complete = (installed(context, id)?.longVersionCode ?: 0) >= prefs(context).getLong("installVersion:$id", Long.MAX_VALUE)
+            val input = JSONObject().put("packageId", id).put("installed", complete).put("companionVersion", prefs(context).getString("installCompanion:$id", ""))
+            if (job?.optString("kind") == "finish-app-update" && job.optString("status") in setOf("failed", "interrupted", "cancelled")) return // Keep the visible Retry decision.
+            TermuxBridge.command(context, "app-update-finish", input) { }
+        }
     }
     fun install(context: Context, entry: JSONObject) {
         val id = entry.getString("packageId")
@@ -171,7 +176,7 @@ object AppStore {
         }
         val apk = File(context.cacheDir, "$id.apk.part")
         downloading.add(id)
-        prefs(context).edit().putLong("installVersion:$id", entry.getLong("versionCode")).putString("state:$id", "Downloading…").apply()
+        prefs(context).edit().putLong("installVersion:$id", entry.getLong("versionCode")).putString("installCompanion:$id", entry.optString("companionVersion")).putString("state:$id", "Downloading…").apply()
         try {
             val connection = connection(entry.getString("url")); val expected = entry.getLong("size")
             check(context.cacheDir.usableSpace > expected * 2 + 33554432) { "Not enough space to download and install" }

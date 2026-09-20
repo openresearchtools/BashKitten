@@ -13,7 +13,7 @@ import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } 
 import { Jobs } from './updates/jobs.mjs';
 import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
 import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
-import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt } from './platform/termux/packages.mjs';
+import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt, pairX11 } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -91,7 +91,7 @@ async function serve() {
   const nodeStamp = async () => { const stat = await fs.stat(process.execPath); return `${stat.dev}:${stat.ino}:${stat.mtimeMs}`; };
   const initialNode = await nodeStamp();
   let restarting = false;
-  const jobs = new Jobs({ 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
+  const jobs = new Jobs({ 'finish-app-update': finishAppUpdate, 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
   await jobs.init();
   async function web() {
     const info = await readJson(serverFile, null);
@@ -141,6 +141,10 @@ async function serve() {
       if (job.job.cancelRequested) { await fs.rm(appUpdateFile, { force: true }); job.checkCancellation(); }
     }, { desktop: true });
   }
+  async function finishAppUpdate(job, input) {
+    if (input.packageId === 'com.termux.x11' && input.installed) await pairX11(job, input.companionVersion);
+    await fs.rm(appUpdateFile, { force: true });
+  }
   async function reloadServices(job) {
     if (platform === 'termux') await apt(job, ['check']); // Respect an external APT transaction too.
     await atIdle(job, async () => {
@@ -188,8 +192,10 @@ async function serve() {
     if (command === 'app-update-finish') {
       const held = await readJson(appUpdateFile, null);
       if (held && held.packageId !== value.packageId) throw Error('Another Android installation owns the service pause');
-      if (jobs.busy && jobs.job.kind === 'prepare-app-update') { await jobs.cancel(); }
-      await fs.rm(appUpdateFile, { force: true });
+      if (jobs.busy && jobs.job.kind === 'prepare-app-update') { await jobs.cancel(); return status(); }
+      if (held && value.packageId === 'com.termux.x11' && value.installed) {
+        await jobs.start('finish-app-update', value, jobs.job?.kind === 'finish-app-update' && ['failed', 'interrupted', 'cancelled'].includes(jobs.job.status));
+      } else await fs.rm(appUpdateFile, { force: true });
       return status();
     }
     if (command === 'app-update-prepare') {
@@ -200,6 +206,7 @@ async function serve() {
       } else await jobs.start('prepare-app-update', { packageId: value.packageId });
       return status();
     }
+    if (command === 'package-job' && value.retry && jobs.job?.kind === 'finish-app-update') { await jobs.start(jobs.job.kind, jobs.job.input, true); return status(); }
     if (await readJson(appUpdateFile, null) && !['stop', 'pi-abort', 'pi-stop', 'pi-kill', 'desktop-stop', 'shutdown'].includes(command)) throw Error('Finish or cancel the Android installation before starting work');
     if (jobs.busy && jobs.job.kind === 'prepare-app-update' && ['start', 'restart', 'desktop-start'].includes(command)) throw Error('Waiting for Android installation');
     if (command === 'package-cancel') { await jobs.cancel(); return status(); }
