@@ -42,6 +42,17 @@ for item in json.loads(report.read_text()):
     pom_file.write_bytes(pom)
     tree = ET.fromstring(pom)
     labels = [e.text for e in tree.findall('.//{*}licenses/{*}license/{*}name')]
+    while not labels:
+        parent = tree.find('{*}parent')
+        if parent is None:
+            break
+        pg, pn, pv = (parent.findtext('{*}' + field) for field in ('groupId', 'artifactId', 'version'))
+        parent_url = repository + pg.replace('.', '/') + '/' + pn + '/' + pv + '/' + pn + '-' + pv + '.pom'
+        parent_data = urlopen(parent_url, timeout=60).read()
+        (cache / (pg + '.' + pn + '-' + pv + '.pom')).write_bytes(parent_data)
+        tree = ET.fromstring(parent_data)
+        labels = [e.text for e in tree.findall('.//{*}licenses/{*}license/{*}name')]
+
     texts = notices(Path(item['file']).read_bytes())
     sources = cache / (group + '.' + name + '-' + version + '-sources.jar')
     sources.write_bytes(urlopen(base + '-sources.jar', timeout=60).read())
@@ -60,6 +71,15 @@ for item in json.loads(report.read_text()):
                     'source': base + '-sources.jar', 'sourceSha256': hashlib.sha256(sources.read_bytes()).hexdigest(),
                     'text': '\n\n'.join(sorted(copyrights)) + '\n\n' + '\n\n'.join(sorted(texts))})
 
+unique = {}
+for record in records:
+    key = record['name'], record['version']
+    if key in unique:
+        if record['text'] != unique[key]['text']:
+            unique[key]['text'] += '\n\n' + record['text']
+    else:
+        unique[key] = record
+records = list(unique.values())
 records.insert(0, {'name': 'BashKitten', 'version': json.loads((root / 'package.json').read_text())['version'],
                   'license': 'GPL-3.0-only', 'source': 'https://github.com/openresearchtools/bashkitten',
                   'text': (root / 'LICENSE').read_text()})
