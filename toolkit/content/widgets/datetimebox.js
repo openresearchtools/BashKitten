@@ -261,13 +261,8 @@ this.DateTimeBoxWidget = class {
                - elements here -->
           </span>
           <button data-l10n-id="datetime-calendar" class="datetime-picker-button" id="picker-button" aria-expanded="false">
-            <svg role="none" class="datetime-calendar-button-svg" xmlns="http://www.w3.org/2000/svg" id="calendar-16" viewBox="0 0 16 16" width="16" height="16">
-              <path d="M13.5 2H13V1c0-.6-.4-1-1-1s-1 .4-1 1v1H5V1c0-.6-.4-1-1-1S3 .4 3 1v1h-.5C1.1 2 0 3.1 0 4.5v9C0 14.9 1.1 16 2.5 16h11c1.4 0 2.5-1.1 2.5-2.5v-9C16 3.1 14.9 2 13.5 2zm0 12.5h-11c-.6 0-1-.4-1-1V6h13v7.5c0 .6-.4 1-1 1z"/>
-            </svg>
-            <svg role="none" class="datetime-time-button-svg" xmlns="http://www.w3.org/2000/svg" id="time-16" viewBox="0 0 16 16" width="16" height="16">
-              <path d="M7.625 1.75c3.446 0 6.25 2.804 6.25 6.25s-2.804 6.25-6.25 6.25-6.25-2.804-6.25-6.25 2.804-6.25 6.25-6.25m0-1.25a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15z"/>
-              <path d="M10.624 10.424a.625.625 0 0 1-.312-.084l-3-1.732L7 8.066l0-3.441a.625.625 0 0 1 1.25 0l0 3.081 2.688 1.552a.626.626 0 0 1-.314 1.166z"/>
-            </svg>
+            <svg role="none" class="datetime-calendar-button-svg" xmlns="http://www.w3.org/2000/svg" id="calendar-16" viewBox="0 0 16 16" width="16" height="16"><path d="M2,3H14V15H2ZM5,1V5M11,1V5M2,6H14M5,9H6M10,9H11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
+            <svg role="none" class="datetime-time-button-svg" xmlns="http://www.w3.org/2000/svg" id="time-16" viewBox="0 0 16 16" width="16" height="16"><path d="M15,8A7,7 0,1 1,1,8A7,7 0,1 1,15,8M8,4V8L11,10" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg>
           </button>
         </div>
       </div>`,

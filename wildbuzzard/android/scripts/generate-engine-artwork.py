@@ -101,7 +101,19 @@ def main():
    alpha=float(subprocess.check_output(['magick',str(p)+'[0]','-alpha','extract','-format','%[fx:mean]','info:'],text=True))
    if alpha<=0:raise ValueError('Renderer produced an empty image: '+source)
   row['sha256']=hashlib.sha256(p.read_bytes()).hexdigest();rows[member]=row
- path=ROOT/'wildbuzzard/android/ui-artwork.json';manifest=json.loads(path.read_text());manifest['engine_resources']=rows;path.write_text(json.dumps(manifest,indent=2)+'\n')
+ inline_source='toolkit/content/widgets/datetimebox.js';inline=ROOT/inline_source
+ code=inline.read_text()
+ icons={'calendar-16':'M2,3H14V15H2ZM5,1V5M11,1V5M2,6H14M5,9H6M10,9H11','time-16':'M15,8A7,7 0,1 1,1,8A7,7 0,1 1,15,8M8,4V8L11,10'}
+ for name,geometry in icons.items():
+  pattern=r'(<svg[^>]*id="'+re.escape(name)+r'"[^>]*>).*?(</svg>)'
+  replacement=lambda m: m[1]+'<path d="'+geometry+'" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>'+m[2]
+  code,count=re.subn(pattern,replacement,code,flags=re.S)
+  if count!=1:raise ValueError('Date/time inline icon layout changed: '+name)
+ inline.write_text(code)
+ original=subprocess.check_output(['git','show','ac1d153497b7:'+inline_source],cwd=ROOT)
+ path=ROOT/'wildbuzzard/android/ui-artwork.json';manifest=json.loads(path.read_text());manifest['engine_resources']=rows
+ manifest['inline_ui_resources']={'chrome/toolkit/content/global/elements/datetimebox.js':{'source':inline_source,'original_sha256':hashlib.sha256(original).hexdigest(),'icons':list(icons),'action':'original calendar and clock geometry; widget behavior retained'}}
+ path.write_text(json.dumps(manifest,indent=2)+'\n')
  print('Android Gecko artwork replaced:',len(rows))
 
 if __name__=='__main__':main()

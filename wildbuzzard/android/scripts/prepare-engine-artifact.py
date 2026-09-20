@@ -41,6 +41,7 @@ allowed_prefixes = (
 )
 allowed_files = {
     'README.md',
+    'toolkit/content/widgets/datetimebox.js',
     'mobile/android/fenix/app/src/main/AndroidManifest.xml',
     'mobile/android/fenix/app/src/main/ic_launcher-web.webp',
     'mobile/android/fenix/app/src/main/ic_launcher_private-web.webp',

@@ -86,7 +86,7 @@ def main():
     cache[member]=tuple(re.findall(r'pathData\([^)]*\)="([^"]*)"',dump))
    assert cache[member] in paths,'Packaged vector differs from original product geometry: '+name+' '+member
    vectors_checked+=1
- engine_checked=0;error_assets_checked=0;extension_assets_checked=0
+ engine_checked=0;error_assets_checked=0;extension_assets_checked=0;inline_resources_checked=0
  with zipfile.ZipFile(args.apk) as apk:
   for p in source_paths(ROOT/'mobile/android/fenix/app/src/main/assets'):
    if not p.name.startswith('mozac_error_') or p.suffix!='.svg':continue
@@ -109,7 +109,10 @@ def main():
     assert member in audited,'Unaudited image in packaged engine: '+member
     assert omni.read(member)==read_source(audited[member]),'Packaged engine image is stale: '+member
     engine_checked+=1
- result={'source':args.source or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'apk_sha256':hashlib.sha256(args.apk.read_bytes()).hexdigest(),'brand_aliases_verified':aliases_checked,'functional_vector_variants_verified':vectors_checked,'android_error_images_verified':error_assets_checked,'android_extension_images_verified':extension_assets_checked,'packaged_engine_images_verified':engine_checked,'all_passed':True}
+   for member,row in inventory.get('inline_ui_resources',{}).items():
+    assert omni.read(member)==read_source(ROOT/row['source']),'Stale inline widget artwork: '+member
+    inline_resources_checked+=1
+ result={'source':args.source or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'apk_sha256':hashlib.sha256(args.apk.read_bytes()).hexdigest(),'brand_aliases_verified':aliases_checked,'functional_vector_variants_verified':vectors_checked,'android_error_images_verified':error_assets_checked,'android_extension_images_verified':extension_assets_checked,'packaged_engine_images_verified':engine_checked,'inline_ui_resources_verified':inline_resources_checked,'all_passed':True}
  args.report.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 
 if __name__=='__main__':main()

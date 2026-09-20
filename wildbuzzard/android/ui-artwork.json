@@ -4264,5 +4264,16 @@
       "action": "transparent structural placeholder",
       "sha256": "a73237a07cec4d81b7cb7995220839f554e2e8936e5d5ae25cc47753f9737c07"
     }
+  },
+  "inline_ui_resources": {
+    "chrome/toolkit/content/global/elements/datetimebox.js": {
+      "source": "toolkit/content/widgets/datetimebox.js",
+      "original_sha256": "712694e384fc6897f46330bfca7ee4da29f27fa844cd7660f2505cc0243d453d",
+      "icons": [
+        "calendar-16",
+        "time-16"
+      ],
+      "action": "original calendar and clock geometry; widget behavior retained"
+    }
   }
 }
