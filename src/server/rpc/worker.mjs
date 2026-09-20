@@ -8,6 +8,7 @@ import { syncContext } from './context.mjs';
 import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
 import { notifyTurn, deliverNotifications } from '../platform/termux/notifications.mjs';
+import { claimInstance } from '../instance.mjs';
 
 process.umask(0o077);
 const id = process.argv[2];
@@ -42,7 +43,7 @@ function queueChanged() { checkpoint().catch(() => {}); emit({ type: 'queue_stat
 async function refresh() {
   const [state, history, stats] = await Promise.all([rpc.command('get_state'), rpc.command('get_entries'), rpc.command('get_session_stats')]);
   entries = activeBranch(history.entries, history.leafId);
-  meta.model = state.model ? `${state.model.provider}/${state.model.id}` : meta.model;
+  meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
   meta.thinking = state.thinkingLevel;
   meta.piSessionId = state.sessionId;
   meta.piFile = state.sessionFile || meta.piFile;
@@ -252,13 +253,13 @@ const server = http.createServer(async (req, res) => {
   } catch (error) { json(res, { error: error.message }, 400); }
 });
 await privateDir(path.dirname(socketPath(id)));
-// The web launcher serializes starts; the exclusive lock protects other launchers.
-let lock;
-try { lock = await fs.open(socketPath(id) + '.lock', 'wx', 0o600); await lock.writeFile(String(process.pid)); await lock.close(); }
-catch { process.exit(1); }
+// Keep one worker per saved session, including simultaneous reconnects after a kill.
+const ownership = await claimInstance('pi-' + id);
+if (!ownership) process.exit(0);
+await fs.writeFile(socketPath(id) + '.lock', String(process.pid), { mode: 0o600 });
 await fs.rm(socketPath(id), { force: true });
 try { await launch(); await new Promise(resolve => server.listen(socketPath(id), resolve)); await fs.chmod(socketPath(id), 0o600); }
-catch { await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
+catch (error) { console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
 process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });
 setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();
 // Release idle Pi processes on memory-constrained phones. Active turns, queues,

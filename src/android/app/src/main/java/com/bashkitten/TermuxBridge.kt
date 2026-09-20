@@ -99,7 +99,8 @@ object TermuxBridge {
         val stderr = bundle.getString("stderr").orEmpty()
         // Upstream ResultData uses Activity.RESULT_OK (-1), independently of shell exitCode.
         if (bundle.getInt("err", 0) != Activity.RESULT_OK || bundle.getInt("exitCode", -1) != 0) {
-            callback(Result.failure(IllegalStateException(error.ifEmpty { stderr.ifEmpty { "Termux command failed" } }.take(1200))))
+            val message = runCatching { JSONObject(stderr).optString("error") }.getOrNull().orEmpty()
+            callback(Result.failure(IllegalStateException(error.ifEmpty { message.ifEmpty { stderr.ifEmpty { "Termux command failed" } } }.take(1200))))
         } else {
             callback(runCatching { if (stdout.isBlank()) JSONObject() else JSONObject(stdout) })
         }

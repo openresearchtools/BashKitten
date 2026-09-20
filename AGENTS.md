@@ -63,7 +63,9 @@ Use Node >=22.19, plus ripgrep and fd. Keep BashKitten-owned test suites,
 fixtures, instrumentation apps, probes and test dependencies outside this
 repository and all application/release artifacts. Verify production builds on
 Linux and disposable Android devices with external tools. Never seed production
-profiles with test providers or chats. Preserve unmodified upstream sources and
+profiles with test providers or chats. External checks must reserve isolated ports,
+stop all their owned processes in cleanup, and verify normal-profile startup too.
+Preserve unmodified upstream sources and
 licenses. Do not commit runtime credentials, node_modules or personal sessions.
 
 ## User-facing documentation and license delivery

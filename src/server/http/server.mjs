@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem } from '../rpc/rpc.mjs';
@@ -20,9 +20,21 @@ import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttac
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
 import { visibleSession } from '../platform/termux/notifications.mjs';
+import { claimInstance, processStart, probeBackend, serverFile } from '../instance.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
+const ownership = await claimInstance('web');
+if (!ownership) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const existing = await probeBackend();
+    if (existing) { console.log(`BashKitten already running at ${existing.url}`); process.exit(0); }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw Error('The existing BashKitten backend is not responding. Use Restart backend.');
+}
+const instanceToken = randomBytes(32).toString('hex');
+const started = await processStart(process.pid);
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const certFile = process.env.BASHKITTEN_TLS_CERT, keyFile = process.env.BASHKITTEN_TLS_KEY;
@@ -47,11 +59,6 @@ async function ensureWorker(id, explicit = false) {
   const starting = (async () => {
     if (await running(id)) return;
     await readMeta(id);
-    const lockFile = socketPath(id) + '.lock';
-    try {
-      const pid = Number(await fs.readFile(lockFile, 'utf8'));
-      try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') await fs.rm(lockFile, { force: true }); }
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
     const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: process.env });
     closeSync(log); child.unref();
@@ -107,6 +114,10 @@ async function handler(req, res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
+    if (route === '/api/instance') {
+      if (req.method !== 'GET' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
+      return json(res, { pid: process.pid, instance: instanceToken });
+    }
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
     if (route === '/licenses.json' && req.method === 'GET') return json(res, await licenses());
@@ -145,7 +156,9 @@ async function handler(req, res) {
       if (!Number.isInteger(next.web_port) || next.web_port < 1024 || next.web_port > 65535) throw Error('Port must be between 1024 and 65535');
       let restartUrl;
       if (next.web_port !== config.web_port) {
-        const old = activeServer; activeServer = await listen(next.web_port);
+        const old = activeServer; activeServer = await listenAvailable(next.web_port);
+        requestedPort = next.web_port;
+        next.web_port = activeServer.address().port;
         restartUrl = `${scheme}://${url.hostname}:${next.web_port}`;
         await announce(next.web_port);
         setTimeout(() => { old.close(); old.closeAllConnections(); }, 500);
@@ -283,9 +296,18 @@ async function handler(req, res) {
     json(res, { error: error.message }, error.status || (error.code === 'ENOENT' ? 404 : 400));
   }
 }
-function listen(port) { return new Promise((resolve, reject) => { const server = tls ? https.createServer(tls, handler) : http.createServer(handler); server.on('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }); }
-const announce = port => writeJson(path.join(dataDir, 'server.json'), { pid: process.pid, script: fileURLToPath(import.meta.url), url: `${scheme}://127.0.0.1:${port}` });
-activeServer = await listen(config.web_port);
+function listen(port) { return new Promise((resolve, reject) => { const server = tls ? https.createServer(tls, handler) : http.createServer(handler); server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }); }
+async function listenAvailable(port) {
+  try { return await listen(port); }
+  catch (error) { if (error.code !== 'EADDRINUSE') throw error; return listen(0); }
+}
+let requestedPort = config.web_port;
+const announce = port => writeJson(serverFile, { pid: process.pid, started, token: instanceToken, script: fileURLToPath(import.meta.url), url: `${scheme}://127.0.0.1:${port}`, requestedPort });
+const previous = await readJson(serverFile, null);
+const remembered = previous?.requestedPort === requestedPort && /^https?:\/\/127\.0\.0\.1:\d+$/.test(previous.url || '') ? Number(new URL(previous.url).port) : requestedPort;
+activeServer = await listenAvailable(remembered);
+config.web_port = activeServer.address().port;
+await writeJson(configFile, config);
 await announce(activeServer.address().port);
 for (const meta of await allMeta()) if (await running(meta.id)) await workerRequest(meta.id, '/context', {}).catch(() => {});
 console.log(`BashKitten · Pi RPC · ${scheme}://127.0.0.1:${config.web_port}`);

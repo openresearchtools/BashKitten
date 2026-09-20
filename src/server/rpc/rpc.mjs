@@ -35,7 +35,7 @@ export class PiRpc extends EventEmitter {
     super();
     this.runtime = selectedRuntime();
     const args = [this.runtime.cli, '--offline', '--mode', 'rpc', '--tools', 'read,bash,edit,write,grep,find,ls', '--session', meta.piFile];
-    if (meta.model) args.push('--model', meta.model);
+    if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
     if (meta.thinking) args.push('--thinking', meta.thinking);
     this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');

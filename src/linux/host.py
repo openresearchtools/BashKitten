@@ -78,6 +78,9 @@ class BashKitten(Gtk.Application):
             actions.append(button)
         self.state_label = Gtk.Label(label='Checking services…', wrap=True)
         actions.append(self.state_label)
+        self.browser_link = Gtk.LinkButton(label='Open in browser', uri='http://127.0.0.1:3939')
+        self.browser_link.set_sensitive(False)
+        actions.append(self.browser_link)
         popover.set_child(actions)
         menu.set_popover(popover)
         header.pack_start(menu)
@@ -126,6 +129,7 @@ class BashKitten(Gtk.Application):
         web = value['web']
         self.state_label.set_text('Backend: ' + web['status'] + '\nPi instances: ' + str(sum(s['running'] for s in value['sessions'])))
         if web['status'] != 'running':
+            self.browser_link.set_sensitive(False)
             self.message.set_text(web.get('error') or ('Backend stopped' if not web['desired'] else 'Starting backend…'))
             self.stack.set_visible_child_name('status')
             return
@@ -133,6 +137,8 @@ class BashKitten(Gtk.Application):
         parsed = urlsplit(origin)
         if parsed.hostname != '127.0.0.1' or parsed.scheme not in ('http', 'https'):
             return self.error('Controller returned an invalid local address')
+        self.browser_link.set_uri(origin + '/')
+        self.browser_link.set_sensitive(True)
         if origin != self.origin or self.stack.get_visible_child_name() != 'web':
             self.origin = origin
             self.content.remove_all_scripts()

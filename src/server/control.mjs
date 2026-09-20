@@ -15,10 +15,10 @@ import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.m
 import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
 import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt, pairX11, packageInventory, configureTermux } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
+import { claimInstance, processStart, probeBackend, backendAlive, serverFile } from './instance.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
 const stateFile = path.join(dataDir, 'control.json');
-const serverFile = path.join(dataDir, 'server.json');
 const script = fileURLToPath(import.meta.url);
 const serverScript = fileURLToPath(new URL('./http/server.mjs', import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -34,7 +34,7 @@ export async function controlRequest(command, value) {
 }
 
 async function owned(pid, marker) {
-  if (!Number.isInteger(pid) || pid < 2) return false;
+  if (!await processStart(pid)) return false;
   try {
     const command = (await fs.readFile(`/proc/${pid}/cmdline`, 'utf8')).split('\0');
     return command.includes(marker);
@@ -42,16 +42,17 @@ async function owned(pid, marker) {
 }
 
 export async function ensureManager() {
-  try { await controlRequest('status'); return; } catch {}
+  try { await socketRequest(controlSocket, '/status', undefined, 3000); return; } catch {}
   if (process.env.BASHKITTEN_NO_AUTOSTART === '1') throw Error('The Termux service is starting; reopen Apps if it does not become ready');
   await privateDir(path.dirname(controlSocket));
   const log = openSync(path.join(dataDir, 'control.log'), 'a', 0o600);
   const child = spawn(process.execPath, [script, 'serve'], { detached: true, stdio: ['ignore', log, log], env: process.env });
   closeSync(log); child.unref();
   let error; child.on('error', value => { error = value; });
-  for (let i = 0; i < 100; i++) {
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
     if (error) throw error;
-    try { await controlRequest('status'); return; } catch {}
+    try { await socketRequest(controlSocket, '/status', undefined, 3000); return; } catch {}
     await sleep(100);
   }
   throw Error('Could not start local control service; see control.log');
@@ -61,27 +62,21 @@ async function serve() {
   process.umask(0o077);
   await privateDir(path.dirname(controlSocket));
   const lock = controlSocket + '.lock';
-  try {
-    const pid = Number(await fs.readFile(lock, 'utf8'));
-    if (await owned(pid, script)) {
-      if (process.env.BASHKITTEN_ATTACHED_MANAGER !== '1') return;
-      // Transfer an earlier detached manager to the real long-lived Termux task.
-      // Merely returning here lets Termux lose its foreground task and freeze.
-      while (await owned(pid, script)) {
-        const current = await controlRequest('status');
-        if (current.manager?.attached) return;
-        if (!['running', 'waiting'].includes(current.packages?.job?.status)) {
-          await controlRequest('shutdown', {});
-          for (let i = 0; i < 100 && await owned(pid, script); i++) await sleep(100);
-        } else await sleep(2000);
-      }
-    }
-    const current = await fs.readFile(lock, 'utf8').catch(() => null);
-    if (current !== null && Number(current) !== pid) return serve();
-    await fs.rm(lock, { force: true });
-  } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  try { await fs.writeFile(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); }
-  catch (error) { if (error.code === 'EEXIST') return process.env.BASHKITTEN_ATTACHED_MANAGER === '1' ? serve() : undefined; throw error; }
+  const previous = await socketRequest(controlSocket, '/status', undefined, 3000).catch(() => null);
+  if (previous?.manager && await processStart(previous.manager.pid)) {
+    if (process.env.BASHKITTEN_ATTACHED_MANAGER !== '1' || previous.manager.attached) return;
+    // Transfer a detached manager to Termux's foreground task without stopping Pi.
+    if (['running', 'waiting'].includes(previous.packages?.job?.status)) { await sleep(2000); return serve(); }
+    await controlRequest('shutdown', {});
+    await sleep(200);
+    return serve();
+  }
+  const ownership = await claimInstance('control');
+  if (!ownership) {
+    if (process.env.BASHKITTEN_ATTACHED_MANAGER === '1') { await sleep(200); return serve(); }
+    return;
+  }
+  await fs.writeFile(lock, String(process.pid), { mode: 0o600 });
   await fs.rm(controlSocket, { force: true });
   let state = await readJson(stateFile, { web: true }), serial = Promise.resolve(), starting = false, lastError = null;
   let retryAt = 0, failures = 0;
@@ -94,13 +89,15 @@ async function serve() {
   const jobs = new Jobs({ 'finish-app-update': finishAppUpdate, 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
   await jobs.init();
   async function web() {
-    const info = await readJson(serverFile, null);
-    return info && await owned(info.pid, info.script) && info.script === serverScript ? info : null;
+    return probeBackend();
   }
   async function startWeb() {
     if (starting || await readJson(appUpdateFile, null) || await web()) return;
     starting = true;
     try {
+      // Upgrade a pre-discovery backend before publishing a new endpoint.
+      const previous = await readJson(serverFile, null);
+      if (previous && !previous.token && await backendAlive(previous)) await stopWeb();
       const log = openSync(path.join(dataDir, 'server.log'), 'a', 0o600);
       const child = spawn(process.execPath, [serverScript], { stdio: ['ignore', log, log], env: process.env });
       closeSync(log);
@@ -117,10 +114,12 @@ async function serve() {
     } finally { starting = false; }
   }
   async function stopWeb() {
-    const info = await web(); if (!info) return;
+    const info = await readJson(serverFile, null); if (!await backendAlive(info)) return;
     process.kill(info.pid, 'SIGTERM');
-    for (let i = 0; i < 100 && await owned(info.pid, serverScript); i++) await sleep(50);
-    if (await owned(info.pid, serverScript)) throw Error('Backend has not stopped yet');
+    for (let i = 0; i < 100 && await backendAlive(info); i++) await sleep(50);
+    if (await backendAlive(info)) process.kill(info.pid, 'SIGKILL');
+    for (let i = 0; i < 100 && await backendAlive(info); i++) await sleep(50);
+    if (await backendAlive(info)) throw Error('Backend has not stopped yet');
   }
   async function status() {
     const info = await web();

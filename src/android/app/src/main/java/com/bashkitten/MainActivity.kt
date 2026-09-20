@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private var visible = false
     private var setupActive = false
     private var managerAttempts = 0
+    private var reconnectUntil = 0L
     private var x11Variant by mutableStateOf("standalone")
     private val handler = Handler(Looper.getMainLooper())
     private var session: String? = null
@@ -84,8 +85,9 @@ class MainActivity : ComponentActivity() {
     private val poll = object : Runnable { override fun run() {
         if (!visible) return
         refresh()
-        if (setupActive || AppStore.busy(this@MainActivity) || (screen != "chat" && jobActive()) || managerAttempts > 0) handler.postDelayed(this, 1500)
+        if (setupActive || AppStore.busy(this@MainActivity) || (screen != "chat" && jobActive()) || managerAttempts > 0 || reconnecting()) handler.postDelayed(this, 1500)
     } }
+    private fun reconnecting() = System.currentTimeMillis() < reconnectUntil && !webRunning() && status?.optJSONObject("web")?.optBoolean("desired", true) != false
     private fun followWork() { if (visible) { handler.removeCallbacks(poll); handler.postDelayed(poll, 1000) } }
     private fun essentialsMissing() = listOf("com.termux", "com.termux.api", "com.termux.x11").any { AppStore.installed(this, it) == null }
     private val commandPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -155,8 +157,8 @@ class MainActivity : ComponentActivity() {
                                 }
                             } else if (!webRunning()) Surface(Modifier.fillMaxSize()) {
                                 Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                    Text(if (status == null) "Connecting to Termux…" else "Server stopped", style = MaterialTheme.typography.headlineSmall)
-                                    Text(notice.ifBlank { "Your chats stay saved. Start the server to continue." })
+                                    Text(if (status == null) "Connecting to Termux…" else if (reconnecting()) "Starting server…" else "Server stopped", style = MaterialTheme.typography.headlineSmall)
+                                    Text(notice.ifBlank { status?.optJSONObject("web")?.optString("error").orEmpty().takeUnless { it == "null" }.orEmpty().ifBlank { "Your chats stay saved. Start the server to continue." } })
                                     if (TermuxBridge.available(this@MainActivity)) Button(onClick = { command("start") }) { Text("Start server") }
                                     TextButton(onClick = { navigate("apps") }) { Text("Open Apps") }
                                 }
@@ -190,6 +192,7 @@ class MainActivity : ComponentActivity() {
     fun backendUnavailable() { if (screen == "chat") { firstReady = true; navigate("apps"); preflight() } }
     private fun preflight() {
         if (aboutScreen()) return
+        firstReady = true; reconnectUntil = System.currentTimeMillis() + 60000
         AppStore.reconcile(this); storeRevision++
         if (essentialsMissing()) screen = "apps"
         if (AppStore.busy(this)) followWork()
@@ -225,14 +228,16 @@ class MainActivity : ComponentActivity() {
             requesting = false
             result.onSuccess { value ->
                 status = value; managerAttempts = 0; setupActive = false; AppStore.recoverServices(this, value)
+                if (webRunning() || !value.getJSONObject("web").optBoolean("desired", true)) reconnectUntil = 0
                 if (webRunning() && (firstReady || session != null)) {
                     firstReady = false
                     if (((screen == "chat" && !menuOpen) || session != null) && !essentialsMissing()) openChat() else web.open(value.getJSONObject("web").getString("url") + "/")
                 }
-                if (screen != "chat" && jobActive()) followWork()
+                if (reconnecting() || (screen != "chat" && jobActive())) followWork()
             }.onFailure { error ->
                 if (managerAttempts > 0) managerAttempts--
                 if (managerAttempts == 0 && !setupActive && !aboutScreen()) { screen = "apps"; connectExpanded = true; notice = error.message.orEmpty() }
+                if (reconnecting()) { TermuxBridge.ensureManager(this); followWork() }
                 TermuxBridge.bootstrapStatus(this) { result -> result.onSuccess {
                     bootstrap = it
                     setupActive = it.optJSONObject("bootstrap")?.optString("status") == "running"
@@ -254,7 +259,7 @@ class MainActivity : ComponentActivity() {
         TermuxBridge.command(this, name, args) { result -> result.onSuccess {
             status = it
             if (name == "desktop-start") openViewer()
-            if (name in setOf("start", "restart")) { firstReady = true; refresh() }
+            if (name in setOf("start", "restart")) { firstReady = true; reconnectUntil = System.currentTimeMillis() + 60000; refresh(); followWork() }
             if (jobActive()) followWork()
         }.onFailure { notice = it.message.orEmpty() } }
     }
@@ -271,7 +276,9 @@ class MainActivity : ComponentActivity() {
     private fun openChat() {
         val url = status?.optJSONObject("web")?.optString("url").orEmpty()
         if (url.matches(Regex("https?://127\\.0\\.0\\.1:[0-9]+"))) {
-            if (session != null || web.view.url == null || web.origin != url) web.open(url + "/" + (session?.let { "#session=$it" } ?: ""))
+            val fragment = web.view.url?.takeIf { it.startsWith(web.origin + "/") }?.let { Uri.parse(it).encodedFragment }?.takeIf { it.matches(Regex("session=[a-f0-9-]{36}")) }
+            val target = session?.let { "$url/#session=$it" } ?: fragment?.let { "$url/#$it" } ?: "$url/"
+            web.open(target)
             session = null
         }
         menuOpen = false; screen = "chat"
@@ -304,6 +311,10 @@ class MainActivity : ComponentActivity() {
                 Text("Server · " + if (webRunning()) "Running" else "Stopped", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                 IconButton(onClick = { command(if (webRunning()) "stop" else "start") }, modifier = Modifier.semantics { contentDescription = if (webRunning()) "Stop server" else "Start server" }) { Text(if (webRunning()) "■" else "▶") }
             }
+            if (webRunning()) DropdownMenuItem(text = { Text("Open in browser") }, onClick = {
+                menuOpen = false
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(status!!.getJSONObject("web").getString("url"))))
+            })
         }
     }
     @Composable private fun ScrollPage(content: @Composable ColumnScope.() -> Unit) {

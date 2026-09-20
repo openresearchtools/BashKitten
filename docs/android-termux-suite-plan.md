@@ -728,6 +728,15 @@ Use fixed command entry points and bounded structured arguments. Keep a
 single-instance lock, readiness probes, restart backoff and request IDs so
 repeated lifecycle callbacks cannot start duplicate servers.
 
+The manager, backend and each Pi worker use a kernel-held lock for their private
+profile/session. The lock vanishes when its process dies. Keep the current
+backend address, process identity and private health token in `server.json`;
+verify the live endpoint before attaching. Bind the remembered loopback port
+when available, otherwise let the OS assign a free port and persist it. Native
+hosts discover the address through the private controller and offer Open in
+browser with that actual address. Never attach to an unrelated listener merely
+because it occupies port 3939.
+
 On launch/resume, initialize Termux if needed, ensure the manager exists, and
 start the backend if it died unexpectedly. Closing the WebView, swiping away
 BashKitten, or closing a browser does not send a stop command. A deliberate Stop
