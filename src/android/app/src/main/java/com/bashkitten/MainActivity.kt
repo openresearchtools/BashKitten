@@ -380,7 +380,7 @@ class MainActivity : ComponentActivity() {
         var listExpanded by remember { mutableStateOf(false) }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                TextButton(onClick = { packagesExpanded = !packagesExpanded }, contentPadding = PaddingValues(0.dp), modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = { packagesExpanded = !packagesExpanded }, contentPadding = PaddingValues(0.dp), modifier = Modifier.fillMaxWidth().semantics { contentDescription = if (packagesExpanded) "Collapse packages" else "Expand packages" }) {
                     Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
                         Text("Packages", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
                         Text("Termux · npm · Pi" + packages?.optJSONObject("runtime")?.optString("version")?.let { " $it" }.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
