@@ -42,6 +42,7 @@ class WebFlowTest {
         val device = UiDevice.getInstance(instrumentation)
         device.wakeUp(); device.executeShellCommand("wm dismiss-keyguard")
         val name = "bashkitten-picker-${System.currentTimeMillis()}.png"
+        val folderName = "bashkitten-files-${System.currentTimeMillis()} 花"
         val values = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, name)
             put(MediaStore.Images.Media.MIME_TYPE, "image/png")
@@ -85,8 +86,8 @@ class WebFlowTest {
                 until("document.querySelector('#folderDialog').open && !document.querySelector('#folderUse').disabled")
                 js("document.querySelector('#folderPath').value='~';document.querySelector('#folderGo').click()")
                 until("document.querySelector('#folderUp').disabled && !document.querySelector('#folderUse').disabled")
-                js("document.querySelector('#newFolderName').value='bashkitten-files-${System.currentTimeMillis()} 花';document.querySelector('#createFolder').click()")
-                until("document.querySelector('#folderPath').value.includes('bashkitten-files-') && !document.querySelector('#folderUse').disabled")
+                js("document.querySelector('#newFolderName').value='$folderName';document.querySelector('#createFolder').click()")
+                until("document.querySelector('#folderPath').value.endsWith('$folderName') && !document.querySelector('#folderUse').disabled")
                 js("document.querySelector('#folderForm').requestSubmit()")
                 until("!document.querySelector('#folderDialog').open")
                 scenario.onActivity { activity -> (activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(activity.window.decorView.windowToken, 0) }
@@ -112,7 +113,7 @@ class WebFlowTest {
                 var zip: android.net.Uri? = null
                 for (attempt in 0 until 100) {
                     context.contentResolver.query(MediaStore.Downloads.EXTERNAL_CONTENT_URI, arrayOf("_id", "_display_name", "is_pending"), null, null, "_id DESC")?.use { cursor ->
-                        while (cursor.moveToNext()) if (cursor.getString(1).startsWith("bashkitten-files-") && cursor.getInt(2) == 0) { zip = android.content.ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0)); break }
+                        while (cursor.moveToNext()) if (cursor.getString(1).startsWith(folderName) && cursor.getInt(2) == 0) { zip = android.content.ContentUris.withAppendedId(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cursor.getLong(0)); break }
                     }
                     if (zip != null) break; Thread.sleep(200)
                 }
