@@ -139,6 +139,12 @@ browser's selected tab.
 {"method":"tabs.close","params":{"tabId":"..."}}
 ```
 
+Snapshots return at most 200 nodes within Android's response budget and mark
+`truncated` when limited. Use `depth` or `maxNodes` to request a smaller tree.
+To inspect a container in more detail, call `snapshot {tabId,target}` with its
+opaque reference from the preceding snapshot; this returns that subtree.
+A fresh snapshot replaces the previous snapshot's element references.
+
 Call `capabilities` to discover supported methods and authorization mode.
 `diagnostics {tabId}` reads the actual Gecko remote-debugging preferences,
 Marionette/remote-agent state preferences, `navigator.webdriver`, and Gecko's

@@ -106,7 +106,7 @@ function snapshotText(value, budget, maximum = MAX_SNAPSHOT_FIELD_CHARS) {
   const text = String(value ?? "");
   const remaining = Math.max(
     0,
-    Math.floor((MAX_SNAPSHOT_BYTES - budget.bytes) / 3)
+    Math.floor(((budget.maxBytes ?? MAX_SNAPSHOT_BYTES) - budget.bytes) / 3)
   );
   const limit = Math.min(maximum, remaining);
   const bounded = text.slice(0, limit);
@@ -119,8 +119,8 @@ function snapshotText(value, budget, maximum = MAX_SNAPSHOT_FIELD_CHARS) {
 
 function takeSnapshotNode(budget) {
   if (
-    budget.nodes >= MAX_SNAPSHOT_NODES ||
-    budget.bytes >= MAX_SNAPSHOT_BYTES
+    budget.nodes >= (budget.maxNodes ?? MAX_SNAPSHOT_NODES) ||
+    budget.bytes >= (budget.maxBytes ?? MAX_SNAPSHOT_BYTES)
   ) {
     budget.truncated = true;
     return false;
@@ -250,7 +250,7 @@ function snapshotAccessible(
       if (item) {
         children.push(item);
       }
-      if (budget.truncated && budget.bytes >= MAX_SNAPSHOT_BYTES) {
+      if (budget.truncated && budget.bytes >= (budget.maxBytes ?? MAX_SNAPSHOT_BYTES)) {
         break;
       }
     }
@@ -398,7 +398,7 @@ function snapshotDom(node, depth, maxDepth, budget) {
     if (item) {
       children.push(item);
     }
-    if (budget.truncated && budget.bytes >= MAX_SNAPSHOT_BYTES) {
+    if (budget.truncated && budget.bytes >= (budget.maxBytes ?? MAX_SNAPSHOT_BYTES)) {
       break;
     }
   }
@@ -1613,13 +1613,17 @@ export class WildBuzzardBrowserControlChild extends JSWindowActorChild {
     return logpoint ? structuredClone(logpoint.results) : null;
   }
 
-  async #snapshot({ depth = 100, domOnly = false } = {}) {
+  async #snapshot({ depth = 100, domOnly = false, target = null, maxNodes = MAX_SNAPSHOT_NODES, maxBytes = MAX_SNAPSHOT_BYTES } = {}) {
     const document = this.contentWindow.document;
     let root;
-    let budget = { nodes: 0, bytes: 0, truncated: false };
+    const limits = {
+      maxNodes: Math.min(MAX_SNAPSHOT_NODES, Math.max(1, Number(maxNodes) || MAX_SNAPSHOT_NODES)),
+      maxBytes: Math.min(MAX_SNAPSHOT_BYTES, Math.max(1024, Number(maxBytes) || MAX_SNAPSHOT_BYTES)),
+    };
+    let budget = { nodes: 0, bytes: 0, truncated: false, ...limits };
     const domSnapshot = () => {
-      budget = { nodes: 0, bytes: 0, truncated: false };
-      return snapshotDom(document.documentElement, 0, depth, budget);
+      budget = { nodes: 0, bytes: 0, truncated: false, ...limits };
+      return snapshotDom(target ? resolveTarget(target) : document.documentElement, 0, depth, budget);
     };
     if (domOnly) {
       root = domSnapshot();

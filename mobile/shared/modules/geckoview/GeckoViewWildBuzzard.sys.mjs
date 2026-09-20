@@ -58,9 +58,13 @@ export class GeckoViewWildBuzzard extends GeckoViewModule {
       };
     }
     const args = structuredClone(params);
-    if (method === "snapshot") args.domOnly = true;
+    if (method === "snapshot") {
+      args.domOnly = true;
+      args.maxNodes = Math.min(200, Math.max(1, Number(args.maxNodes) || 200));
+      args.maxBytes = 60000;
+    }
     delete args.frameId;
-    if (method === "act") {
+    if (method === "act" || method === "snapshot") {
       const decode = value => {
         if (typeof value !== "string" || !this.references.has(value)) throw new Error("Unknown or stale element reference");
         const ref = this.references.get(value);
@@ -73,9 +77,9 @@ export class GeckoViewWildBuzzard extends GeckoViewModule {
         return ref.reference;
       };
       if (args.target) args.target = decode(args.target);
-      if (args.fields) args.fields = args.fields.map(f => ({ ...f, target: decode(f.target) }));
+      if (method === "act" && args.fields) args.fields = args.fields.map(f => ({ ...f, target: decode(f.target) }));
       // The content actor must not accept caller-supplied raw Gecko node references.
-      if (!new Set(["click", "click_at", "hover", "focus", "fill", "type", "type_at", "press", "check", "uncheck", "select", "scroll"]).has(args.kind)) {
+      if (method === "act" && !new Set(["click", "click_at", "hover", "focus", "fill", "type", "type_at", "press", "check", "uncheck", "select", "scroll"]).has(args.kind)) {
         throw new Error("Unsupported action");
       }
     }
