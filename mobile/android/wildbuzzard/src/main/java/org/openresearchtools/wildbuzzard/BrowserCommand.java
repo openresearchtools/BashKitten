@@ -278,7 +278,12 @@ public final class BrowserCommand {
             appEndpoint.transact(AppCommandGateway.CONNECT, data, null, android.os.IBinder.FLAG_ONEWAY);
         } catch (android.os.RemoteException error) { appEndpoint = null; throw new IOException("Browser connection closed", error); }
         finally { data.recycle(); }
-        return new JSONObject(result.get(215, java.util.concurrent.TimeUnit.SECONDS));
+        try {
+            long timeout = request.optString("method").equals("app.prepare") ? 7 : 215;
+            return new JSONObject(result.get(timeout, java.util.concurrent.TimeUnit.SECONDS));
+        } catch (java.util.concurrent.TimeoutException error) {
+            throw new IOException("Browser did not respond; open your terminal or Wild Buzzard and retry", error);
+        }
     }
     private static void copyTransfer(JSONObject transfer, Path destination) throws Exception {
         URL url = new URL(transfer.getString("url"));
