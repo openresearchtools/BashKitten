@@ -400,7 +400,7 @@ installations. Their normal backends remained available at their remembered
 addresses, running `f04f601`. Verification scripts, providers and fixtures stayed
 outside application repositories and release artifacts.
 
-### 0.2.8 candidate: native session actions and optional Android browser
+### 0.2.8: native session actions and optional Android browser
 
 Added stock Pi RPC fork/clone actions and Pi's fork chooser, plus `/providers`,
 `/settings` and `/attach`. Saved native Pi sessions are discovered into project
@@ -416,7 +416,36 @@ or deleted. A public browser release is not yet available, so its store card
 identifies development builds honestly instead of exposing an authenticated
 Actions URL as an install link. The signed catalog accepts its future releases.
 
-External Linux checks passed native clone/fork extension hooks, terminal-created
-session discovery, preserved history, hidden sidebar rows, real GTK/WebKit slash
-navigation, native color preference and folder locking. Android build/device
-verification and release promotion are pending for this candidate.
+External checks passed on installed Linux ARM64 and both suite-signed and upstream
+Termux: native clone/fork extension hooks, terminal-created session discovery,
+preserved history, hidden sidebar rows, saved cwd and worker restoration. Actual
+GTK/WebKit checks passed slash navigation, fork/clone, native appearance and folder
+locking after returning from Settings. Android's native System / Light / Dark menu
+updates the existing WebView; Apps/Back preserves the chat surface. Pi remains the
+unmodified 0.86.1 runtime. Fixture inference stayed outside production profiles.
+
+Android build **35524091916** and Linux ARM64/AMD64 build **35524091899** passed at
+`a25d2b4`; native runtime interaction was tested on ARM64. The assembled release
+verifies the signing certificate, non-debuggable APK, all five packages, full
+notices and corresponding source. No verification suite is shipped.
+
+WildBuzzard Actions build **35516040809** (`3035aa4`, APK SHA-256
+`778bd419acc01a319688f3fd86d326c54aab32175aaf5e95f881594eb5fd516f`)
+was installed on both emulators. Native Pi discovered the extension and skill;
+page DOM, screenshots and downloads passed. Suite Termux used publisher-signature
+authorization; external Termux approved its own identity in WildBuzzard's native
+consent screen opened from BashKitten. Repeated setup performed no npm install.
+The emulator's previous browser displayed the same version but had a different
+checksum; replacing that stale build fixed its command permission failure.
+
+Current browser limitation: DOM access works with Termux and WildBuzzard hidden,
+but Android blocks that browser build's request to show a tab for a screenshot.
+Keep WildBuzzard or Termux visible for screenshots. This is recorded rather than
+bypassing Android permissions or modifying the other task's browser repository.
+The optional browser has no public release yet; its Actions APK is installed
+manually until a hash-pinned release is available in the suite catalog.
+
+All checks and fixtures remain outside the repositories. On the disposable
+emulators, unused old BashKitten verification runtimes were removed after checking
+active/previous/default runtime references and process usage. User data, current
+runtimes, rollback copies and installed applications were preserved.

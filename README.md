@@ -10,7 +10,7 @@ Existing Termux installations can connect using the instructions shown there.
 On Linux, install `bashkitten-desktop` from the
 [Open Research Tools APT repository](https://github.com/openresearchtools/apt).
 
-Create your local account, connect a provider in **Settings → Services**, and
+Create your local account, connect a provider in **Settings → Providers**, and
 choose a working folder. Closing the window leaves the server and active turns
 running. **Settings → About → Licenses** lists the bundled software.
 
