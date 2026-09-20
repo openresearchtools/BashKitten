@@ -22,7 +22,16 @@ const serverFile = path.join(dataDir, 'server.json');
 const script = fileURLToPath(import.meta.url);
 const serverScript = fileURLToPath(new URL('./http/server.mjs', import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-export const controlRequest = (command, value) => socketRequest(controlSocket, '/' + command, value, 30000);
+export async function controlRequest(command, value) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await socketRequest(controlSocket, '/' + command, value, 30000); }
+    catch (error) {
+      // A manager replacement can close an in-flight status connection. Never replay actions.
+      if (command !== 'status' || attempt >= 10 || !['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(error.code)) throw error;
+      await sleep(100);
+    }
+  }
+}
 
 async function owned(pid, marker) {
   if (!Number.isInteger(pid) || pid < 2) return false;

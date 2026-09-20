@@ -50,7 +50,8 @@ object AppStore {
             val expected = pref.getLong("installVersion:$id", Long.MAX_VALUE)
             if ((installed(context, id)?.longVersionCode ?: 0) >= expected) {
                 pref.edit().putString("state:$id", "Installed").remove("installSession:$id").remove("confirmation").apply()
-            } else if (sessions.none { it.sessionId == pref.getInt("installSession:$id", -1) }) {
+            } else if (sessions.none { it.sessionId == pref.getInt("installSession:$id", -1) && it.isCommitted }) {
+                sessions.find { it.sessionId == pref.getInt("installSession:$id", -1) }?.let { context.packageManager.packageInstaller.abandonSession(it.sessionId) }
                 File(context.cacheDir, "$id.apk.part").delete()
                 pref.edit().putString("state:$id", "Failed · Installation was interrupted. Retry.").remove("installSession:$id").remove("confirmation").apply()
             }
