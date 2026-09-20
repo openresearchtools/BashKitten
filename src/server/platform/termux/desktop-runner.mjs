@@ -1,5 +1,6 @@
 // Owned process group: the manager stops only this X11/session/helper group.
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { dataDir, readJson } from '../../common.mjs';
@@ -19,7 +20,8 @@ process.on('SIGTERM', () => stop()); process.on('SIGINT', () => stop());
 if (config.helper) {
   await fs.rm(env.VTEST_SOCKET_NAME, { force: true });
   run('virgl_test_server_android', [...config.helper, '--socket-path', env.VTEST_SOCKET_NAME]);
-  for (let i = 0; i < 60; i++) { if (await fs.stat(env.VTEST_SOCKET_NAME).catch(() => null)) break; await new Promise(r => setTimeout(r, 100)); }
+  for (let i = 0; i < 60 && !stopping; i++) { if (await fs.stat(env.VTEST_SOCKET_NAME).catch(() => null)) break; await new Promise(r => setTimeout(r, 100)); }
+  if (stopping || !await fs.stat(env.VTEST_SOCKET_NAME).catch(() => null)) { stop(1); throw Error('The renderer helper did not create its socket'); }
 }
 const args = [':' + config.display, '-nolisten', 'tcp', '-dpi', String(config.dpi)];
 if (config.legacyDrawing) args.push('-legacy-drawing');
@@ -30,5 +32,11 @@ else if (config.method === 'environment') run('termux-x11', args, { ...env, TERM
 else if (config.method === 'separator') run('termux-x11', [...args, '--', 'sh', '-c', command]);
 else if (config.method === 'separate') {
   run('termux-x11', args);
-  await new Promise(r => setTimeout(r, 1000)); run('sh', ['-c', command]);
+  let ready = false;
+  for (let i = 0; i < 40 && !stopping; i++) {
+    ready = await promisify(execFile)('glxinfo', ['-B'], { env, timeout: 1000 }).then(() => true, () => false);
+    if (ready) break; await new Promise(r => setTimeout(r, 100));
+  }
+  if (!ready || stopping) { stop(1); throw Error('X11 did not become ready for the desktop session'); }
+  run('sh', ['-c', command]);
 } else run('termux-x11', [...args, '-xstartup', command]);

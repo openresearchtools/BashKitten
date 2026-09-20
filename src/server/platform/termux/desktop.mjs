@@ -95,9 +95,9 @@ async function start(config, profile, probe = false) {
 export async function stopDesktop() {
   requireTermux(); const info = await readJson(processFile, null);
   if (await alive(info)) {
-    process.kill(-info.pid, 'SIGTERM');
+    try { process.kill(-info.pid, 'SIGTERM'); } catch (error) { if (error.code !== 'ESRCH') throw error; }
     for (let i = 0; i < 50 && await alive(info); i++) await sleep(100);
-    if (await alive(info)) process.kill(-info.pid, 'SIGKILL');
+    if (await alive(info)) { try { process.kill(-info.pid, 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } }
   }
   await fs.rm(processFile, { force: true });
 }
