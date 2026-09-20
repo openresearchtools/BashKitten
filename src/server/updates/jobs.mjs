@@ -10,7 +10,7 @@ export class Jobs {
   async init() {
     await privateDir(this.directory);
     this.job = await readJson(this.file, null);
-    if (this.job && !['complete', 'failed', 'interrupted'].includes(this.job.status)) {
+    if (this.job && !['complete', 'failed', 'interrupted', 'cancelled'].includes(this.job.status)) {
       this.job.status = 'interrupted'; this.job.error = 'The manager stopped during this operation. Inspect package state and Retry to resume completed steps.';
       await this.save();
     }
@@ -30,8 +30,8 @@ export class Jobs {
     if (!retry) {
       this.job = { id: randomUUID(), kind, input: value, completed: [], status: 'running', phase: 'Preparing', startedAt: Date.now() };
       await fs.writeFile(path.join(this.directory, 'output.log'), '', { mode: 0o600 });
-    } else if (!this.job || !['failed', 'interrupted'].includes(this.job.status)) throw Error('There is no interrupted operation to retry');
-    this.busy = true; this.job.status = 'running'; delete this.job.error; await this.save();
+    } else if (!this.job || !['failed', 'interrupted', 'cancelled'].includes(this.job.status)) throw Error('There is no interrupted operation to retry');
+    this.busy = true; this.job.status = 'running'; delete this.job.cancelRequested; delete this.job.error; await this.save();
     this.run().catch(() => {});
     return this.status();
   }
@@ -39,10 +39,16 @@ export class Jobs {
     try {
       await this.handlers[this.job.kind](this, this.job.input);
       this.job.status = 'complete'; this.job.phase = 'Complete'; this.job.finishedAt = Date.now();
-    } catch (error) { this.job.status = 'failed'; this.job.error = error.message; this.job.finishedAt = Date.now(); }
+    } catch (error) { this.job.status = error.code === 'CANCELLED' ? 'cancelled' : 'failed'; this.job.error = error.message; this.job.finishedAt = Date.now(); }
     finally { await this.save(); this.busy = false; }
   }
-  async phase(name, status = 'running') { this.job.phase = name; this.job.status = status; delete this.job.progress; await this.save(); }
+  checkCancellation() { if (this.job.cancelRequested) throw Object.assign(Error('Cancelled after the current package step finished safely.'), { code: 'CANCELLED' }); }
+  async cancel() {
+    if (!this.busy) return;
+    this.job.cancelRequested = true; await this.save();
+    await this.log('Cancellation requested. The current package transaction will finish safely.\n');
+  }
+  async phase(name, status = 'running') { this.checkCancellation(); this.job.phase = name; this.job.status = status; delete this.job.progress; await this.save(); }
   async progress(line) {
     // Native APT status-fd protocol; preserve the translated action and package name.
     const match = /^(dlstatus|pmstatus|pmerror|pmconffile):([^:]*):([0-9.]+):(.*)$/.exec(line);
@@ -64,6 +70,7 @@ export class Jobs {
     }
   }
   async exec(command, args = [], { env = {}, timeout = 0 } = {}) {
+    this.checkCancellation();
     await this.log(`\n$ ${[command, ...args].join(' ')}\n`);
     return new Promise((resolve, reject) => {
       const child = spawn(command, args, { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe', 'pipe'] });

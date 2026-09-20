@@ -73,3 +73,20 @@ test('Runtime activation waits for login, switches all resolvers and retains rol
   `;
   await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], { cwd: path.resolve(import.meta.dirname, '../..'), env: { ...process.env, BASHKITTEN_DATA_DIR: directory }, timeout: 20000 });
 });
+
+test('Cancellation finishes the current transaction and resumes at the next step', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-cancel-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  let release, entered, transactions = 0, next = 0;
+  const running = new Promise(r => { entered = r; }), finish = new Promise(r => { release = r; });
+  const jobs = new Jobs({ update: async job => {
+    await job.step('apt', 'Configuring', async () => { transactions++; entered(); await finish; });
+    await job.step('pi', 'Updating Pi', async () => { next++; });
+  } }, directory);
+  await jobs.init(); await jobs.start('update'); await running; await jobs.cancel();
+  assert.equal(jobs.busy, true); assert.equal((await jobs.status()).status, 'running');
+  release(); while (jobs.busy) await new Promise(r => setTimeout(r, 10));
+  assert.equal((await jobs.status()).status, 'cancelled'); assert.equal(next, 0);
+  await jobs.start('update', {}, true); while (jobs.busy) await new Promise(r => setTimeout(r, 10));
+  assert.equal(transactions, 1); assert.equal(next, 1); assert.equal((await jobs.status()).status, 'complete');
+});

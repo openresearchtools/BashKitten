@@ -174,6 +174,7 @@ async function serve() {
   }
   async function action(command, value) {
     if (command === 'status') return status();
+    if (command === 'package-cancel') { await jobs.cancel(); return status(); }
     if (command === 'package-job') {
       const current = await jobs.status();
       await jobs.start(value.retry ? current?.kind : value.kind, value.retry ? current?.input : value.input || {}, Boolean(value.retry));

@@ -191,8 +191,9 @@ class MainActivity : ComponentActivity() {
                     Text(progress.optString("message") + " · " + progress.optInt("percent") + "%", style = MaterialTheme.typography.bodySmall)
                 } else LinearProgressIndicator(Modifier.fillMaxWidth())
             }
+            if (active) TextButton(enabled = !job.optBoolean("cancelRequested"), onClick = { command("package-cancel") }) { Text(if (job.optBoolean("cancelRequested")) "Finishing current package step…" else "Cancel") }
             if (job.has("error")) Text(job.optString("error"), style = MaterialTheme.typography.bodySmall)
-            if (job.optString("status") in setOf("failed", "interrupted")) TextButton(onClick = { command("package-job", JSONObject().put("retry", true)) }) { Text("Retry") }
+            if (job.optString("status") in setOf("failed", "interrupted", "cancelled")) TextButton(onClick = { command("package-job", JSONObject().put("retry", true)) }) { Text("Retry") }
             Text(job.optString("log").lineSequence().toList().takeLast(5).joinToString("\n"), style = MaterialTheme.typography.bodySmall)
         }
         if (details) {
