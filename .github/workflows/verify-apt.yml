@@ -70,6 +70,7 @@ jobs:
           dpkg --remove bashkitten-desktop bashkitten
           test -d /home/tester/bashkitten-test
           apt-get install -y bashkitten-desktop
+          runuser -u tester -- bashkittenctl start
           runuser -u tester -- dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py restore
           runuser -u tester -- bashkittenctl stop
           runuser -u tester -- bashkittenctl shutdown
