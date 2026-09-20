@@ -18,19 +18,26 @@ stopped. Durable package jobs expose native APT progress and independent APT/npm
 results. Cancellation finishes the current transaction safely; Retry resumes
 unfinished steps. Pi 0.85.1 → 0.86.0 → rollback passed through browser settings.
 
-**16 shared-server tests pass on local Linux ARM64.** Native Linux ARM64 and
+**17 shared-server tests pass on local Linux ARM64.** Native Linux ARM64 and
 AMD64 CI both pass the shared suite and installed GTK/WebKit host checks,
 including package install/remove/reinstall and retained cookies. Recent successful
-runs include **35489082383** and **35489266621**. Local X11 and Wayland hosts pass
+runs include **35491692842** and **35491984061**. Local X11 and Wayland hosts pass
 account creation and persistent login; the installed ARM64 host opens the real
 native folder chooser. Browser clients retain the repository tree/ZIP controls;
-only the Linux host hides them. Full host paste, external file/URL launching and
-footprint checks remain.
+only the Linux host hides them. Real system image/text clipboard paste, HTML
+upload selection, hot session-link navigation, and native folder/file/URL launch
+checks pass locally and on both native CI architectures. File launch tests use
+isolated system application associations, including spaces/Unicode filenames.
+The native Pi login helper shares the app's authenticated cookie jar and exposes
+the external provider link; account authorization was deliberately cancelled.
+Footprint measurement and the newer host changes on Wayland remain.
 
 Cuttlefish's original Termux profile passed **13 shared tests** against native
 Pi 0.86.0 and Node 24.18.0, including HTTPS, without changing its credentials.
-The newer graphics-conflict, APT-progress and cancellation cases still need their
-Termux rerun. Fixture OAuth is not a real provider-account authorization.
+The fresh suite profile's first full rerun passed 15 tests; the expanded lifecycle
+test exceeded its old 45-second test timeout, and the TLS fixture lacked the
+`openssl-tool` test dependency. Rerun those checks with the dependency and longer
+emulator allowance. Fixture OAuth is not a real provider-account authorization.
 
 ## Android device evidence
 
@@ -60,6 +67,13 @@ Termux device at `192.168.97.2:5555`.
   after the APK was force-stopped, a native Pi completion posts once and tapping
   it opens that conversation. Notification permission was enabled through Android
   settings; camera/microphone/location/contacts remain unrequested.
+- **Real Termux:API store update passes** on BashKitten APK code 3 (**35492190686**):
+  signed catalog verification, GitHub HTTPS download, APK hash/certificate checks,
+  Android installer confirmation, API code 1002 → 1003, durable service pause and
+  automatic backend recovery. Android 17's confirmation intent contains Binder
+  data: store it in a system PendingIntent and persist only its lookup identity.
+  The earlier candidate's Parcel-to-disk implementation crashed in this test;
+  it is not suitable for release. Self-update remains to verify.
 - **Software X11/XFCE passes** with Mesa 26.2.3 llvmpipe (LLVM 21.1.8), OpenGL 4.6,
   glxinfo, glxgears and a rendered XFCE desktop. Closing the viewer preserves the
   desktop; stopping the desktop preserves the backend. Selecting the already
@@ -83,21 +97,36 @@ All eight apps, both X11 variants and the paired aarch64 companion pass Actions
 build/signing checks. **35488852785** includes API 0.53.0 suite revision 2/code
 1003. Termux remains 0.118.3 suite revision 2/code 1003. Upstream displayed
 versions and individual licenses are retained. No production release/catalog has
-been published. Daily read-only upstream checks report new release/commit
+been promoted to production. Complete source-backed **candidate-20260920**
+prereleases now exist in both repositories for actual installer tests. Their
+assets remain outside the production catalog and APT index. The first BashKitten
+prerelease is superseded for APK confirmation by the code 3 fix described above.
+Daily read-only upstream checks report new release/commit
 identities without importing or installing them automatically.
 
 APK ELF/ZIP alignment is checked. The pinned official bootstrap contains **340
 ELFs** passing 4 KB/16 KB load-alignment checks. This is not a 16 KB device test.
 The bootstrap source collector verified **98 exact source/build inputs for 83
 packages**, retaining recipes, patches and toolchain provenance. A complete local
-suite release assembly passed using an earlier candidate; rebuild its manifest
-with the API revision 2 artifacts before publication.
+suite release assembly passed with the API revision 2 artifacts and was used for
+the source-backed prerelease.
 
 BashKitten's source collector successfully verifies **202 npm archives**, keeps
 unmodified license/notice payloads, and includes exact Pi upstream source plus
 tracked application/build source. The root lock now supplies exact registry SRI
 where Pi's published shrinkwrap omitted internal-package integrity. Versions and
-package contents are unchanged.
+package contents are unchanged. The new 0.2.1 builder and Pi updater omit optional
+packages whose own OS/CPU metadata excludes the target, because npm retains
+foreign binaries below Pi's nested shrinkwrap. Pi and the selected dependency
+contents stay unmodified. The selected Termux payload's native ELF passes
+aarch64 and 4 KB/16 KB static alignment checks; device/runtime checks follow.
+
+The daily signed catalog renewal workflow is implemented. It renews only explicitly
+selected release manifests pinned by SHA-256; no production channel is selected
+yet. APK replacement pause/recovery, X11 companion pairing, named custom graphics
+profiles/dependencies, and conservative unused-runtime cleanup are implemented.
+Cleanup preserves active, rollback, bundled, terminal-used, unowned and symlinked
+runtimes; its regression passes, with a seven-day grace period.
 
 The usable Android signing backup is `/home/user/Documents/droid.txt` (0600).
 The same four signing Secrets exist in both repositories. Catalog signing uses
@@ -106,10 +135,9 @@ key remains separate. No private key is tracked.
 
 ## Remaining acceptance gates
 
-Finish native catalog/download/install/self-update and service quiescence tests;
-paired X11 APK/companion updates and variant migration; named custom graphics
-profiles/dependencies; unused-runtime cleanup; Android clipboard/open/OAuth and
-Chrome file tests; full Linux native file/paste/link checks; final source/notice
+Finish self-update and interrupted installer recovery; paired X11 APK/companion
+updates and variant migration; native custom-profile checks; Android clipboard/
+open/OAuth and Chrome file tests; Linux footprint/Wayland checks; final source/notice
 and telemetry audits; release assembly/publishing, signed catalog renewal, and
 actual install/upgrade from the existing APT repository for all three package
 targets. Keep real-provider login, physical GPU tests, Android 12/16 and 16 KB
