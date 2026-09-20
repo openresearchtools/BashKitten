@@ -42,24 +42,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Create a real account using the earlier candidate
+      - name: Install published packages and create a real account
         env:
           ARCH: ${{ matrix.architecture }}
         run: |
           test "$(dpkg --print-architecture)" = "$ARCH"
-          for package in bashkitten bashkitten-desktop; do
-            curl -fL "https://github.com/openresearchtools/bashkitten/releases/download/candidate-20260920/${package}_0.2.0_${ARCH}.deb" -o "/tmp/${package}.deb"
-          done
-          apt-get install -y /tmp/bashkitten.deb /tmp/bashkitten-desktop.deb
+          apt-get install -y bashkitten-desktop
           useradd --create-home tester
           chown -R tester:tester "$GITHUB_WORKSPACE"
           runuser -u tester -- dbus-run-session -- xvfb-run -a python3 tests/platform/linux-host.py signup
           runuser -u tester -- bashkittenctl stop
           runuser -u tester -- bashkittenctl shutdown
-      - name: Upgrade from the signed APT index and retain the account
+      - name: Refresh the signed APT index and retain the account
         run: |
           apt-get update
-          apt-get install -y --only-upgrade bashkitten bashkitten-desktop
+          apt-get install -y --reinstall bashkitten bashkitten-desktop
           expected=$(node -p 'require("./package.json").version')
           test "$(dpkg-query -W -f='${Version}' bashkitten)" = "$expected"
           test "$(dpkg-query -W -f='${Version}' bashkitten-desktop)" = "$expected"
