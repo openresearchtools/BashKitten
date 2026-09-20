@@ -193,8 +193,9 @@ inventory and the external/upstream versus suite X11 companion boundary. A real
 Update packages job completed APT full-upgrade, global npm and Pi checks while
 the native screen was closed; output correctly reported all packages and selected
 Pi 0.86.0 up to date. Its bounded output remains available in Apps. Android build
-**35503020916** supplies the final UI and passed the navigation/background-install
-checks. The installed local Linux 0.2.3 candidate passed native file/folder/URL,
+**35503020916** passed the navigation/background-install checks. Published build
+**35503594352** additionally preserves an explicit X11 type choice across Android
+permission screens and activity restarts. Normal remains the fresh-install default. The installed local Linux 0.2.3 candidate passed native file/folder/URL,
 image picker/paste, provider-login helper and persistent-cookie tests under Xvfb.
 
 BashKitten **v0.2.2** is a normal release with the Android APK, five native
@@ -214,6 +215,19 @@ and the backend recovered with the same account/session. The subsequent APT
 backend replacement reloaded services successfully and preserved selected Pi
 0.86.0. This records a recoverable timeout, not a claim that every install was
 uninterrupted.
+
+BashKitten **v0.2.3** is published with the signed APK, five native packages and
+matching application/Pi/202 dependency source archives. Final Linux build
+**35503218579** passes both architectures. Catalog renewal **35503885568** and APT
+publication **35503885573** succeeded; signed-index upgrade/reinstall and retained
+login pass on Linux arm64 and amd64 in **35503976327**. Native Termux installed
+0.2.3 from that signed index and reports revision `bfe332b`. The final local ARM64
+package passes the saved-login/window checks. External Termux's final offline
+inventory returned 473 APT packages, two global npm packages and its selected Pi
+0.85.1 with an unreachable test registry; Git, gh and Python were present. The
+suite device retained its explicitly selected Pi 0.86.0. Repositories remain on
+`main`; no upstream Termux application source or package behavior changed in this
+store/connection update.
 
 The usable Android signing backup is `/home/user/Documents/droid.txt` (0600).
 The same four signing Secrets exist in both repositories. Catalog signing uses
