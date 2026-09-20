@@ -17,7 +17,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ''platforms;android-37'' ''build-tools;35.0.0'''
+      - run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ''platforms;android-37.0'' ''build-tools;35.0.0'''
       - name: Build production APK
         working-directory: src/android
         run: ./gradlew --no-daemon assembleRelease

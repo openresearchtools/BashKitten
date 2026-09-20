@@ -49,14 +49,18 @@ class WebSurface(private val activity: MainActivity) {
         settings.javaScriptCanOpenWindowsAutomatically = false
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
+        var firstPopupNavigation = dialog != null // onCreateWindow already required a real user gesture.
         webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(web: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
                 val uri = request.url
+                val userNavigation = request.hasGesture() || firstPopupNavigation
+                firstPopupNavigation = false
                 if (local(uri) && uri.path in setOf("/", "/pi-login")) return false
-                if (request.hasGesture()) {
+                if (userNavigation) {
                     if (local(uri) && uri.path?.startsWith("/api/") == true) download(uri.toString(), null, null)
                     else external(uri)
+                    dialog?.dismiss()
                 }
                 return true
             }

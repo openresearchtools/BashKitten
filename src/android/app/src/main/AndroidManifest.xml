@@ -7,7 +7,7 @@
         <package android:name="com.termux" /><package android:name="com.termux.api" />
         <package android:name="com.termux.x11" /><package android:name="com.termux.boot" />
         <package android:name="com.termux.widget" /><package android:name="com.termux.styling" />
-        <package android:name="com.termux.float" /><package android:name="com.termux.tasker" />
+        <package android:name="com.termux.window" /><package android:name="com.termux.tasker" />
         <intent><action android:name="android.intent.action.VIEW" /><data android:scheme="https" /></intent>
     </queries>
     <application android:label="BashKitten" android:allowBackup="false"
