@@ -50,7 +50,7 @@ def js(script, target=None):
     return json.loads(value) if value else None
 
 try:
-    until(lambda: app.origin and app.web.get_uri() == app.origin + '/' and not app.web.is_loading())
+    until(lambda: app.origin and (app.web.get_uri() or '').split('#')[0] == app.origin + '/' and not app.web.is_loading())
     until(lambda: js('Boolean(document.querySelector("#authForm"))'))
     assert js('window.bashkittenHost.platform') == 'linux'
     if sys.argv[-1] == 'signup':
@@ -59,6 +59,27 @@ try:
     until(lambda: js('!document.querySelector("#app").classList.contains("hidden")'))
     assert js('document.querySelector("#filesToggle").title') == 'Open project folder'
     assert js('document.querySelector("#filePanel").classList.contains("hidden")')
+    # A second notification changes the fragment of an already-open app.
+    js("""window.linkFixture=null; (async()=>{
+      const {csrf}=await (await fetch('/api/bootstrap')).json();
+      const ids=[];
+      for(const title of ['Session link one','Session link two']) {
+        const body=new FormData(); body.set('title',title);
+        const response=await fetch('/api/sessions',{method:'POST',headers:{'x-bashkitten-csrf':csrf},body});
+        if(!response.ok) throw Error(await response.text()); ids.push((await response.json()).id);
+      }
+      window.linkFixture={ids,csrf};
+    })().catch(e=>window.linkFixture={error:e.message}); true""")
+    links = until(lambda: js('window.linkFixture'))
+    assert 'error' not in links, links
+    for index, session_id in enumerate(links['ids']):
+        app.web.load_uri(app.origin + '/#session=' + session_id)
+        until(lambda: js('document.querySelector("#title").textContent') == ['Session link one', 'Session link two'][index])
+        until(lambda: js('document.querySelector(".session.active")?.dataset.id') == session_id)
+        assert js('Boolean(window.linkFixture)'), 'Session links must not reload the document'
+    js('document.querySelector(' + json.dumps('[data-id="' + links['ids'][0] + '"]') + ').click();true')
+    until(lambda: app.web.get_uri().endswith('#session=' + links['ids'][0]))
+    print('PASS: hot session links switch the displayed conversation and sidebar clicks update the link')
     # Native methods reject synthetic calls; a presentation flag cannot grant control.
     js("window.nativeResult='pending';window.bashkittenHost.call('open-file',{folder:'~'}).then(()=>window.nativeResult='opened',e=>window.nativeResult=e.message);true")
     until(lambda: js("window.nativeResult !== 'pending'"))
@@ -137,6 +158,10 @@ try:
                 until(lambda: js("document.querySelector('#cancel').hidden", helper))
                 login.close()
                 print('PASS: native Pi login helper shares authenticated cookies, has no host bridge, and presents the provider browser link (authorization cancelled)')
+    js("document.querySelector('#newBtn').click();true")
+    until(lambda: app.web.get_uri() == app.origin + '/')
+    js("window.linksRemoved=false;Promise.all(window.linkFixture.ids.map(id=>fetch('/api/sessions/'+id,{method:'DELETE',headers:{'x-bashkitten-csrf':window.linkFixture.csrf}}))).then(()=>window.linksRemoved=true);true")
+    until(lambda: js('window.linksRemoved'))
     output = ROOT / 'test-results/linux'
     output.mkdir(parents=True, exist_ok=True)
     captured = []

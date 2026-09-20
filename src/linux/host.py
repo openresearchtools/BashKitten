@@ -211,7 +211,7 @@ class BashKitten(Gtk.Application):
                 web.get_root().close()
                 self.window.present()
             return True
-        if kind == WebKit.PolicyDecisionType.NAVIGATION_ACTION and uri in (self.origin + '/', 'about:blank'):
+        if kind == WebKit.PolicyDecisionType.NAVIGATION_ACTION and ((local and parsed.path == '/') or uri == 'about:blank'):
             decision.use()
         else:
             decision.ignore()
@@ -239,7 +239,8 @@ class BashKitten(Gtk.Application):
     def native_message(self, manager, message):
         try:
             request = json.loads(message.to_string())
-            if request.get('nonce') != self.nonce or self.web.get_uri() != self.origin + '/':
+            current = urlsplit(self.web.get_uri())
+            if request.get('nonce') != self.nonce or current.scheme + '://' + current.netloc != self.origin or current.path != '/':
                 return
             action, value = request['action'], request.get('value', {})
             if action == 'choose-folder':

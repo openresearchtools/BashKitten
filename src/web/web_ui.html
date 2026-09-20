@@ -1973,6 +1973,7 @@
       if (sessionView !== view) return;
       closeImageViewer();
       current = {...session};
+      history.replaceState(null, '', '#session=' + session.id);
       sendVisibility();
       oldestSegment = 0;
       setCompacting(false);
@@ -2021,6 +2022,7 @@
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
+      history.replaceState(null, '', location.pathname + location.search);
       sendVisibility();
       updateInstanceControl(false);
       oldestSegment = 0;
@@ -2167,6 +2169,20 @@
       $('#authHint').textContent = signup ? 'Create the one local Web UI account.' : 'Sign in to the local Web UI.';
     }
 
+    async function linkedSession(sessions) {
+      const id = /^#session=([a-f0-9-]{36})$/.exec(location.hash)?.[1];
+      if (!id) return null;
+      let found = sessions.find(session => session.id === id);
+      while (!found && nextSessionOffset !== null) {
+        sessions = await loadSessions(true); found = sessions.find(session => session.id === id);
+      }
+      return found;
+    }
+    window.addEventListener('hashchange', async () => {
+      if (!csrf) return;
+      try { const session = await linkedSession(await loadSessions()); if (session && session.id !== current?.id) await openSession(session); }
+      catch (error) { $('#composerHint').textContent = error.message; }
+    });
     async function boot() {
       const value = await api('/api/bootstrap');
       if (!value.hasUser) return authScreen(true);
@@ -2177,8 +2193,7 @@
       await loadSettings();
       await loadModels();
       const sessions = await loadSessions();
-      const requested = /^#session=([a-f0-9-]{36})$/.exec(location.hash)?.[1];
-      if (sessions.length) await openSession(sessions.find(s=>s.id===requested) || sessions[0]);
+      if (sessions.length) await openSession(await linkedSession(sessions) || sessions[0]);
       else beginNewSession();
     }
 
