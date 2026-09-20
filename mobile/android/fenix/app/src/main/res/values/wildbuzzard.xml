@@ -7,4 +7,5 @@
     <string name="wildbuzzard_cookie_banner_unsupported">Automatic cookie-banner handling is not available for this site. You can choose the cookie options on the page.</string>
     <string name="wildbuzzard_tracking_explanation">Blocks tracking cookies and scripts according to the protection mode you choose.</string>
     <string name="wildbuzzard_tracking_strict_explanation">Blocks additional trackers. Some sites may not work properly.</string>
+    <string name="wildbuzzard_delete_history_explanation">Removes browsing history from this device.</string>
 </resources>

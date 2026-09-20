@@ -144,7 +144,6 @@ class DefaultShareSheetLauncher(
 
     companion object {
         private const val PRINT_REQUEST_CODE_OFFSET = 1
-        private const val SEND_TO_DEVICES_REQUEST_CODE_OFFSET = 2
         private const val QR_CODE_REQUEST_CODE_OFFSET = 3
     }
 
@@ -176,7 +175,6 @@ class DefaultShareSheetLauncher(
                     actions = listOfNotNull(
                         savePDFChooserAction(applicationContext, id),
                         printAction(applicationContext, id),
-                        sendToDevicesAction(applicationContext, id, url, title, isPrivate),
                         qrCodeAction,
                     ).toTypedArray(),
                 )
@@ -224,55 +222,6 @@ class DefaultShareSheetLauncher(
         return ChooserAction.Builder(
             icon,
             context.getString(R.string.share_save_to_pdf),
-            pendingIntent,
-        ).build()
-    }
-
-    /**
-     * Create a [ChooserAction] for sending the current tab to other devices.
-     *
-     * @param context The context used to create intents.
-     * @param id The session ID of the tab to send.
-     * @param url The URL of the tab to send.
-     * @param title The title of the tab to send.
-     * @param isPrivate Whether the tab is in private browsing mode.
-     * @return A [ChooserAction] that can be added to the share intent chooser.
-     */
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private fun sendToDevicesAction(
-        context: Context,
-        id: String,
-        url: String,
-        title: String?,
-        isPrivate: Boolean,
-    ): ChooserAction {
-        val icon = Icon.createWithResource(context, iconsR.drawable.mozac_ic_device_desktop_send_24)
-
-        val actionIntent = Intent(context, homeActivityClass).apply {
-            action = SEND_TO_DEVICES_ACTION
-            putExtra(SendToDevicesDialogFragment.EXTRA_URL, url)
-            putExtra(SendToDevicesDialogFragment.EXTRA_TITLE, title)
-            putExtra(
-                SendToDevicesDialogFragment.EXTRA_PRIVACY,
-                if (isPrivate) {
-                    SendToDevicesDialogFragment.PRIVACY_PRIVATE
-                } else {
-                    SendToDevicesDialogFragment.PRIVACY_NORMAL
-                },
-            )
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-
-        val pendingIntent = PendingIntent.getActivity(
-            context,
-            id.hashCode() + SEND_TO_DEVICES_REQUEST_CODE_OFFSET,
-            actionIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        return ChooserAction.Builder(
-            icon,
-            context.getString(R.string.share_device_subheader),
             pendingIntent,
         ).build()
     }
