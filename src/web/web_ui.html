@@ -2040,6 +2040,7 @@
       renderQueueState();
       pendingCwd = config?.default_cwd || '';
       $('#title').textContent = 'New chat';
+      $('#composerHint').textContent = 'Paste, drag, or attach files';
       $('#folderLabel').textContent = displayFolder(pendingCwd) || 'Set folder';
       $('#folderBtn').disabled = false;
       $('#folderBtn').title = 'Set working folder';
