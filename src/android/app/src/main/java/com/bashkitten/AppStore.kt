@@ -22,6 +22,7 @@ import java.security.MessageDigest
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
 
 /** Catalog metadata has its own key; it cannot authorize a different APK signing identity. */
 object AppStore {
@@ -46,7 +47,7 @@ object AppStore {
         val sessions = context.packageManager.packageInstaller.mySessions
         for (id in names.keys) {
             val state = pref.getString("state:$id", "").orEmpty()
-            if (id in downloading || !(state.startsWith("Downloading") || state.startsWith("Installing") || state.startsWith("Confirm"))) continue
+            if (id in downloading || !(state.startsWith("Downloading") || state.startsWith("Waiting") || state.startsWith("Installing") || state.startsWith("Confirm"))) continue
             val expected = pref.getLong("installVersion:$id", Long.MAX_VALUE)
             if ((installed(context, id)?.longVersionCode ?: 0) >= expected) {
                 pref.edit().putString("state:$id", "Installed").remove("installSession:$id").remove("confirmation").apply()
@@ -142,6 +143,22 @@ object AppStore {
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork("catalog", ExistingPeriodicWorkPolicy.KEEP, request)
     }
+    private fun control(context: Context, command: String, args: JSONObject = JSONObject()): JSONObject {
+        check(android.os.Looper.myLooper() != android.os.Looper.getMainLooper())
+        val done = CountDownLatch(1); var result: Result<JSONObject>? = null
+        TermuxBridge.command(context, command, args) { result = it; done.countDown() }
+        check(done.await(50, TimeUnit.SECONDS)) { "Termux update control timed out" }
+        return result!!.getOrThrow()
+    }
+    fun recoverServices(context: Context, status: JSONObject) {
+        val job = status.optJSONObject("packages")?.optJSONObject("job")
+        val id = status.optJSONObject("appUpdate")?.optString("packageId")
+            ?: job?.takeIf { it.optString("kind") == "prepare-app-update" && it.optString("status") in setOf("running", "waiting") }?.optJSONObject("input")?.optString("packageId")
+            ?: return
+        if (id in downloading) return
+        val pending = context.packageManager.packageInstaller.mySessions.any { it.sessionId == prefs(context).getInt("installSession:$id", -1) && it.isCommitted }
+        if (!pending) TermuxBridge.command(context, "app-update-finish", JSONObject().put("packageId", id)) { }
+    }
     fun install(context: Context, entry: JSONObject) {
         val id = entry.getString("packageId")
         setupProblem(context)?.let { error(it) }
@@ -173,6 +190,19 @@ object AppStore {
             val archive = context.packageManager.getPackageArchiveInfo(apk.path, PackageManager.GET_SIGNING_CERTIFICATES) ?: error("Invalid APK")
             check(archive.packageName == id && archive.longVersionCode == entry.getLong("versionCode") && archive.versionName == entry.getString("versionName") && signer(archive) == certificate) { "APK identity does not match the catalog" }
             check(archive.applicationInfo?.flags?.and(android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) == 0) { "Refusing a debug APK" }
+            if (current != null && id != "com.bashkitten" && prefs(context).getBoolean("termuxInitialized", false)) {
+                val input = JSONObject().put("packageId", id)
+                prefs(context).edit().putString("state:$id", "Waiting for managed work to finish…").apply()
+                var status = control(context, "app-update-prepare", input)
+                val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(30)
+                while (status.optJSONObject("appUpdate")?.optString("packageId") != id) {
+                    val job = status.optJSONObject("packages")?.optJSONObject("job")
+                    check(job?.optString("kind") == "prepare-app-update" && job.optString("status") in setOf("running", "waiting", "complete")) { job?.optString("error") ?: "Android update preparation stopped" }
+                    check(System.nanoTime() < deadline) { "Still waiting for managed work. Retry when Pi and the desktop are idle." }
+                    prefs(context).edit().putString("state:$id", "Waiting · " + job.optString("phase")).apply()
+                    Thread.sleep(1000); status = control(context, "status")
+                }
+            }
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
                 setAppPackageName(id); setSize(total)
                 setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
@@ -188,6 +218,7 @@ object AppStore {
                 session.commit(pending.intentSender)
             } } catch (error: Exception) { installer.abandonSession(sessionId); throw error }
         } catch (error: Exception) {
+            if (id != "com.bashkitten" && prefs(context).getBoolean("termuxInitialized", false)) runCatching { control(context, "app-update-finish", JSONObject().put("packageId", id)) }
             prefs(context).edit().putString("state:$id", "Failed · " + error.message).apply(); throw error
         } finally { apk.delete(); downloading.remove(id) }
     }

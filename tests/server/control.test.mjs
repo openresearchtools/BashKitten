@@ -53,4 +53,27 @@ test('Local supervisor attaches once, preserves intentional stop and restarts a 
   for (let i = 0; i < 80 && !(await ctl('status')).manager.attached; i++) await new Promise(r => setTimeout(r, 100));
   const adopted = await ctl('status'); assert.equal(adopted.manager.attached, true);
   assert.notEqual(adopted.manager.pid, updated.manager.pid); assert.equal(adopted.web.desired, false);
+  // APK installation waits for provider activity, keeps the UI available while
+  // waiting, and survives the manager dying during Android package replacement.
+  await ctl('start');
+  const loginFile = path.join(home, 'data/run/login.json');
+  await fs.writeFile(loginFile, JSON.stringify({ pid: process.pid }));
+  await ctl('app-update-prepare', { packageId: 'com.termux.api' });
+  await new Promise(r => setTimeout(r, 300));
+  const waiting = await ctl('status'); assert.equal(waiting.web.status, 'running'); assert.equal(waiting.appUpdate, null);
+  assert.equal(waiting.packages.job.status, 'waiting');
+  await fs.rm(loginFile);
+  for (let i = 0; i < 80 && !(await ctl('status')).appUpdate; i++) await new Promise(r => setTimeout(r, 100));
+  const held = await ctl('status'); assert.equal(held.appUpdate.packageId, 'com.termux.api');
+  assert.equal(held.web.status, 'stopped'); assert.equal(held.web.desired, true);
+  await assert.rejects(ctl('start'), /Finish or cancel/);
+  process.kill(held.manager.pid, 'SIGKILL'); await new Promise(r => setTimeout(r, 200));
+  const recovered = await ctl('status'); assert.notEqual(recovered.manager.pid, held.manager.pid);
+  assert.equal(recovered.web.status, 'stopped'); assert.equal(recovered.appUpdate.packageId, 'com.termux.api');
+  await assert.rejects(ctl('app-update-finish', { packageId: 'com.termux' }), /Another Android installation/);
+  await ctl('app-update-finish', { packageId: 'com.termux.api' }); await ready();
+  await ctl('stop'); await ctl('app-update-prepare', { packageId: 'com.termux' });
+  for (let i = 0; i < 80 && !(await ctl('status')).appUpdate; i++) await new Promise(r => setTimeout(r, 100));
+  await ctl('app-update-finish', { packageId: 'com.termux' });
+  assert.equal((await ctl('status')).web.desired, false);
 });

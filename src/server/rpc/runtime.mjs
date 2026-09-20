@@ -6,6 +6,7 @@ import { dataDir } from '../common.mjs';
 export const bundledRoot = fileURLToPath(new URL('../../../', import.meta.url));
 export const runtimeFile = path.join(dataDir, 'runtime.json');
 export const maintenanceFile = path.join(dataDir, 'run/maintenance.json');
+export const appUpdateFile = path.join(dataDir, 'run/app-update.json');
 export function selectedRuntime() {
   let selection;
   try { selection = JSON.parse(fs.readFileSync(runtimeFile, 'utf8')); }
@@ -33,6 +34,10 @@ export async function loadPi() {
   return { ...runtime, pi, ai };
 }
 export function maintenance() {
+  // APK replacement can kill the manager and its shared-UID processes. Keep
+  // this barrier until Android reconciles the actual installer session.
+  try { return JSON.parse(fs.readFileSync(appUpdateFile, 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
   try {
     const value = JSON.parse(fs.readFileSync(maintenanceFile, 'utf8'));
     try { process.kill(value.pid, 0); return value; } catch (error) { if (error.code !== 'ESRCH') throw error; }

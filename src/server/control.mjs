@@ -12,7 +12,7 @@ import { nativeFile } from './platform/linux/files.mjs';
 import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } from './platform/termux/desktop.mjs';
 import { Jobs } from './updates/jobs.mjs';
 import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
-import { bundledRoot } from './rpc/runtime.mjs';
+import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
 import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
 
@@ -91,14 +91,14 @@ async function serve() {
   const nodeStamp = async () => { const stat = await fs.stat(process.execPath); return `${stat.dev}:${stat.ino}:${stat.mtimeMs}`; };
   const initialNode = await nodeStamp();
   let restarting = false;
-  const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
+  const jobs = new Jobs({ 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
   await jobs.init();
   async function web() {
     const info = await readJson(serverFile, null);
     return info && await owned(info.pid, info.script) && info.script === serverScript ? info : null;
   }
   async function startWeb() {
-    if (starting || await web()) return;
+    if (starting || await readJson(appUpdateFile, null) || await web()) return;
     starting = true;
     try {
       const log = openSync(path.join(dataDir, 'server.log'), 'a', 0o600);
@@ -128,7 +128,18 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 1, platform, manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+    return { version: 1, platform, appUpdate: await readJson(appUpdateFile, null), manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+  }
+  async function prepareAppUpdate(job, input) {
+    await atIdle(job, async () => {
+      await job.phase('Pausing services for Android installation');
+      await stopWeb();
+      for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/shutdown', { restart: true }, 10000).catch(error => {
+        if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
+      });
+      await writeJson(appUpdateFile, { packageId: input.packageId, ready: true, createdAt: Date.now() });
+      if (job.job.cancelRequested) { await fs.rm(appUpdateFile, { force: true }); job.checkCancellation(); }
+    }, { desktop: true });
   }
   async function reloadServices(job) {
     if (platform === 'termux') await apt(job, ['check']); // Respect an external APT transaction too.
@@ -143,7 +154,7 @@ async function serve() {
     }, { desktop: true });
   }
   async function reconcilePackage() {
-    if (jobs.busy) return;
+    if (jobs.busy || await readJson(appUpdateFile, null)) return;
     if (restarting) {
       clearInterval(monitor);
       await new Promise(resolve => server.close(resolve));
@@ -174,6 +185,23 @@ async function serve() {
   }
   async function action(command, value) {
     if (command === 'status') return status();
+    if (command === 'app-update-finish') {
+      const held = await readJson(appUpdateFile, null);
+      if (held && held.packageId !== value.packageId) throw Error('Another Android installation owns the service pause');
+      if (jobs.busy && jobs.job.kind === 'prepare-app-update') { await jobs.cancel(); }
+      await fs.rm(appUpdateFile, { force: true });
+      return status();
+    }
+    if (command === 'app-update-prepare') {
+      if (!/^com\.termux(?:\.(api|x11|boot|widget|styling|window|tasker))?$/.test(value.packageId)) throw Error('Unsupported Android package');
+      const held = await readJson(appUpdateFile, null);
+      if (held) {
+        if (held.packageId !== value.packageId) throw Error('Another Android installation owns the service pause');
+      } else await jobs.start('prepare-app-update', { packageId: value.packageId });
+      return status();
+    }
+    if (await readJson(appUpdateFile, null) && !['stop', 'pi-abort', 'pi-stop', 'pi-kill', 'desktop-stop', 'shutdown'].includes(command)) throw Error('Finish or cancel the Android installation before starting work');
+    if (jobs.busy && jobs.job.kind === 'prepare-app-update' && ['start', 'restart', 'desktop-start'].includes(command)) throw Error('Waiting for Android installation');
     if (command === 'package-cancel') { await jobs.cancel(); return status(); }
     if (command === 'package-job') {
       const current = await jobs.status();
@@ -226,7 +254,7 @@ async function serve() {
   const monitor = setInterval(() => {
     const operation = serial.then(async () => {
       await reconcilePackage();
-      if (!restarting && !(jobs.busy && jobs.job.kind === 'reload-services') && state.web && Date.now() > retryAt) await startWeb();
+      if (!restarting && !(jobs.busy && ['reload-services', 'prepare-app-update'].includes(jobs.job.kind)) && state.web && Date.now() > retryAt) await startWeb();
     });
     serial = operation.catch(() => {});
   }, 2000);

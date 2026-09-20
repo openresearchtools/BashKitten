@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
         requesting = true
         TermuxBridge.command(this, "status") { result ->
             requesting = false
-            result.onSuccess { value -> status = value; if (firstReady && value.optJSONObject("web")?.optString("status") == "running" && installed("com.termux.api") != null) { firstReady = false; openChat() }; if (!appsOpen && value.optJSONObject("web")?.optString("status") != "running") appsOpen = true }
+            result.onSuccess { value -> status = value; AppStore.recoverServices(this, value); if (firstReady && value.optJSONObject("web")?.optString("status") == "running" && installed("com.termux.api") != null) { firstReady = false; openChat() }; if (!appsOpen && value.optJSONObject("web")?.optString("status") != "running") appsOpen = true }
                 .onFailure { error ->
                     TermuxBridge.bootstrapStatus(this) { value -> value.onSuccess { bootstrap = it }; notice = error.message.orEmpty() }
                 }
@@ -142,7 +142,7 @@ class MainActivity : ComponentActivity() {
                     Text(current?.versionName?.let { "Installed · $it" } ?: "Not installed", style = MaterialTheme.typography.bodySmall)
                     if (entry != null) Text(entry.optString("versionName") + " · suite " + entry.optInt("suiteRevision", 1), style = MaterialTheme.typography.bodySmall)
                 }
-                val pending = state.startsWith("Downloading") || state.startsWith("Installing") || state.startsWith("Confirm")
+                val pending = state.startsWith("Downloading") || state.startsWith("Waiting") || state.startsWith("Installing") || state.startsWith("Confirm")
                 Button(enabled = update && !installing && !pending, onClick = { install(entry!!) }) { Text(if (pending) "Installing" else if (state.startsWith("Failed") && update) "Retry" else if (current == null) "Install" else if (update) "Update" else "Installed") }
             }
             if (state.isNotBlank() && state != "Installed") Text(state, style = MaterialTheme.typography.bodySmall)
