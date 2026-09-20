@@ -1,12 +1,15 @@
 package com.bashkitten
 
 import android.content.ContentValues
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
+import android.view.KeyEvent
 import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -93,6 +96,13 @@ class WebFlowTest {
                 device.findObject(By.text(name)).click()
                 device.findObject(By.text("Open"))?.click()
                 until("[...document.querySelectorAll('#attachmentTray .attachment')].some(item => item.title === '$name' && item.querySelector('img')?.naturalWidth === 32)")
+                val attached = js("document.querySelectorAll('#attachmentTray .attachment').length").toInt()
+                scenario.onActivity { activity ->
+                    (activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newUri(activity.contentResolver, "BashKitten image fixture", image))
+                }
+                tap("#prompt"); device.pressKeyCode(KeyEvent.KEYCODE_V, KeyEvent.META_CTRL_ON)
+                until("document.querySelectorAll('#attachmentTray .attachment').length > $attached")
+                scenario.onActivity { activity -> (activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(activity.window.decorView.windowToken, 0) }
                 tap("#filesToggle"); until("!document.querySelector('#filePanel').classList.contains('hidden')")
                 tap("#uploadRepo")
                 assertTrue(device.wait(Until.hasObject(By.text(name)), 15000)); device.findObject(By.text(name)).click()
@@ -111,6 +121,15 @@ class WebFlowTest {
                 ZipInputStream(context.contentResolver.openInputStream(zip!!)!!).use { stream -> while (true) { val entry = stream.nextEntry ?: break; entries.add(entry.name) } }
                 assertTrue("ZIP does not contain the uploaded image: $entries", entries.any { it.endsWith(name) })
                 device.takeScreenshot(File(context.getExternalFilesDir(null), "suite-files.png"))
+                tap("#fileTree .file-row a")
+                if (device.wait(Until.hasObject(By.text("Gallery")), 8000)) {
+                    device.findObject(By.text("Gallery")).click()
+                    device.findObject(By.text("Just once"))?.click()
+                }
+                assertTrue("Downloaded image did not open in Android's image viewer", device.wait(Until.hasObject(By.pkg("com.android.gallery3d")), 15000))
+                device.takeScreenshot(File(context.getExternalFilesDir(null), "suite-open-image.png"))
+                device.pressBack()
+                instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "Picker, image clipboard paste, repository ZIP and Android image open passed\n") })
             }
         } finally { context.contentResolver.delete(image, null, null) }
     }

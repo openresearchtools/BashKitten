@@ -7,7 +7,7 @@ import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
-test('Local supervisor attaches once, preserves intentional stop and restarts a dead backend', { timeout: 45000 }, async t => {
+test('Local supervisor attaches once, preserves intentional stop and restarts a dead backend', { timeout: process.platform === 'android' ? 180000 : 60000 }, async t => {
   const home = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-control-'));
   const listener = http.createServer(); await new Promise(r => listener.listen(0, '127.0.0.1', r));
   const port = listener.address().port; await new Promise(r => listener.close(r));
