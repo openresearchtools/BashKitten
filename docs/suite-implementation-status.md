@@ -261,6 +261,15 @@ payloads have no app test script or development dependency. Unmodified upstream
 source archives retain their original contents and licenses. Historical checks
 above describe earlier verification, not a suite shipped with the application.
 
+BashKitten **v0.2.4** and rebuilt suite **suite-35505368171** are published
+with short user-facing release notes and matching source/license archives.
+All preceding application releases were deleted, and the catalog release was
+recreated. Catalog renewal **35507618879** and APT publication **35507634926**
+succeeded. The public catalog signature/expiry and all ten APK entries were
+verified. The signed APT index selects the five 0.2.4 packages and matching X11
+companion; actual APT reinstalls completed on local Linux ARM64 and native Termux
+aarch64. The emulator's old fixture work directories were also removed.
+
 ## Remaining acceptance gates
 
 Finish paired X11 APK/companion upgrade and variant-migration device coverage;
