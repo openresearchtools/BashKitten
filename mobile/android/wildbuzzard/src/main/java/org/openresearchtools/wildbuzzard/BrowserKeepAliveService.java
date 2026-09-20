@@ -8,6 +8,7 @@ import android.os.IBinder;
 /** Non-exported foreground lifetime for approved agent work and active Tor browsing. */
 public final class BrowserKeepAliveService extends Service {
     static volatile boolean active;
+    public static boolean isActive() { return active; }
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public void onDestroy() { active = false; super.onDestroy(); }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
