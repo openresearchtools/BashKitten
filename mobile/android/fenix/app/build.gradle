@@ -137,7 +137,10 @@ android {
         debug {
             debuggable = !publisherSigning
             shrinkResources = false
-            minifyEnabled = false
+            minifyEnabled = publisherSigning
+            if (publisherSigning) {
+                proguardFiles = [getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'wildbuzzard-quiet.pro']
+            }
             applicationIdSuffix ""
             resValue "bool", "IS_DEBUG", publisherSigning ? "false" : "true"
             pseudoLocalesEnabled = true

@@ -270,6 +270,8 @@ Gecko debug logging and page-console forwarding to Android logs are disabled,
 including in the APK build flavor used by CI. Embedded Tor runs with `--quiet`
 and sends its configured log destination to `/dev/null`; connection readiness
 is read over its private control socket. Tor errors remain visible in the UI.
+Publisher-signed APKs also remove Java/Kotlin calls to Android's `Log` API at
+build time, including dependency calls that otherwise bypass runtime settings.
 
 This does not mean the browser stores no data: tabs, cookies, saved passwords,
 onion credentials and downloads support the requested browser features. Agent

@@ -45,6 +45,7 @@ allowed_files = {
     'mobile/android/android-components/components/feature/downloads/src/main/java/mozilla/components/feature/downloads/DownloadsFeature.kt',
     'wildbuzzard/android/validation-results.json',
     'mobile/android/fenix/app/build.gradle',
+    'mobile/android/fenix/app/wildbuzzard-quiet.pro',
     'mobile/android/fenix/app/src/main/assets/shared_error_style.css',
     'mobile/android/fenix/app/src/main/assets/low_and_medium_risk_error_style.css',
     'mobile/android/fenix/app/src/main/assets/high_risk_error_style.css',
