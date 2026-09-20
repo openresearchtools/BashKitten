@@ -77,6 +77,15 @@ export async function installPi(job) {
   if (available.error) throw Error(available.error);
   if (available.reason && available.upstreamAvailable) throw Error(available.reason);
   if (!available.updateAvailable) { await job.log(`Pi ${available.installed} is up to date on npm.\n`); return; }
+  const packaged = await readJson(path.join(bundledRoot, 'runtime-default.json'), null);
+  if (packaged?.version === available.latest) {
+    await fs.access(path.join(packaged.root, 'ready'));
+    await job.phase(`Activating packaged Pi ${available.latest}`);
+    await activateRuntime(job, packaged);
+    await checkPi();
+    await job.log(`Pi ${available.latest} activated from the installed BashKitten package.\n`);
+    return;
+  }
   const parent = process.platform === 'android' ? path.join(process.env.PREFIX, 'var/lib/bashkitten/runtimes') : path.join(dataDir, 'runtimes');
   await privateDir(parent);
   const temporary = await fs.mkdtemp(path.join(parent, '.install-'));
