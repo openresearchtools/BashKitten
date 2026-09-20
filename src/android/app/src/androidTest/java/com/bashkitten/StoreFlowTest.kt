@@ -56,10 +56,12 @@ class StoreFlowTest {
                 assertTrue(context.packageManager.canRequestPackageInstalls())
             }
             Thread.sleep(2000)
-            AppStore.install(context, entry)
+            AppStore.enqueueInstall(context, entry)
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
             for (attempt in 0 until 180) {
                 if ((AppStore.installed(context, id)?.longVersionCode ?: 0) >= expected) break
                 AppStore.confirmation(context)?.let { intent ->
+                    scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
                     scenario.onActivity { it.startIntentSender(intent.intentSender, null, 0, 0, 0) }
                     if (device.wait(Until.hasObject(By.res("android:id/button1")), 5000)) device.findObject(By.res("android:id/button1")).click()
                 }
