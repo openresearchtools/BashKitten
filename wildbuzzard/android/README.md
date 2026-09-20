@@ -34,15 +34,20 @@ commands both use the browser's own dispatcher and tab ownership checks.
 
 See [API.md](API.md). The AIDL contract lives in
 `mobile/android/wildbuzzard-sdk/src/main/aidl`. External apps bind to the
-explicit Wild Buzzard service, obtain a user authorization PendingIntent, then
-control their own tabs. Publisher-signed apps are allowed automatically. Other app grants are tied to
-package names and current signing certificates. **Settings → Agent access** can
-allow another vendor’s Termux or any installed app and revoke it individually. They can be revoked from **Settings → Revoke agent access**.
+explicit Wild Buzzard service and control their own tabs. Apps signed with the
+browser's current publisher certificate, including our Termux, are allowed by
+default without a key or approval dialog. Other apps request a user authorization
+PendingIntent once; their grants are tied to package names and current signing
+certificates. **Settings → Agent access** can allow another vendor's Termux or
+any installed app and revoke it individually. Commands do not prompt separately.
 
 Tab closure removes a tab from Fenix. It never requests application shutdown,
 force-stops a process, or stops Tor. Android can still reclaim or terminate an
 app according to its normal process lifecycle. A foreground service keeps
 user-authorized automation visible while it is active.
+If Android blocks restarting a force-stopped browser from a background app,
+the startup handshake returns a bounded error. Bring the terminal or browser
+forward and retry. This platform restriction is separate from app authorization.
 
 Desktop mode calls Fenix's existing per-tab desktop-site implementation.
 Native adblocking can be toggled for one tab, with a reload; it does not create
@@ -117,6 +122,8 @@ The [Pi extension](pi/README.md) exposes browser tools, returns screenshot image
 and private file paths, and saves browser downloads under each native Pi chat’s
 session storage. Plain terminal programs can use `--output` or the short-lived,
 per-file localhost bearer transfer returned by `downloads.get`.
+Approved terminal programs can accept downloads while their terminal stays in
+front, using the browser's running foreground service.
 
 ## Build and licenses
 
