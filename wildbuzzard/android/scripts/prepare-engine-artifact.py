@@ -76,7 +76,7 @@ allowed_files = {
 # These chrome images are repackaged by the artifact build; they are not native code.
 artwork = json.loads((root / 'wildbuzzard' / 'android' / 'ui-artwork.json').read_text())
 engine_art = {row['source'] for row in artwork.get('engine_resources', {}).values()}
-if any(Path(p).suffix not in {'.svg', '.png', '.webp'} for p in engine_art):
+if any(Path(p).suffix not in {'.svg', '.png', '.webp', '.gif'} for p in engine_art):
     raise SystemExit('Engine artwork list contains a non-image file')
 allowed_files.update(engine_art)
 forbidden_suffixes = {'.c', '.cc', '.cpp', '.h', '.rs', '.S', '.so', '.aar', '.jar'}

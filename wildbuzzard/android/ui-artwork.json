@@ -558,7 +558,7 @@
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_avatar_warning_circle_fill_critical_private_24.xml": {
       "sha256": "0b6cfe1bedae1a495136882bbd683c8a70dbd3bfd8f493fe4e6e5cc1b2e4b529",
       "type": "vector",
-      "action": "original private icon"
+      "action": "original warning icon"
     },
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_back_24.xml": {
       "sha256": "9669fac208c210d178bb41508472f30ebac375fd1afb2fba6b925414fdd68475",
@@ -888,7 +888,7 @@
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_extension_warning_private_24.xml": {
       "sha256": "1cdbaf49faac76a6f1c6a3ab6c2893db8ea2148875ac38b6f7f4db9890c45bc4",
       "type": "vector",
-      "action": "original private icon"
+      "action": "original warning icon"
     },
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_external_link_24.xml": {
       "sha256": "b812b9aebf5441c37ba511ef4fb559a499253de646fbb37773337cfa854ced69",
@@ -1103,12 +1103,12 @@
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_lock_warning_24.xml": {
       "sha256": "5e1d5d9fb590346b539322ad331326349bc6da33e2f4f7d2eddaaff86020fd67",
       "type": "vector",
-      "action": "original lock icon"
+      "action": "original warning icon"
     },
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_lock_warning_fill_24.xml": {
       "sha256": "d0386401cc14d1464a56fe8c4cd24050df361e63ceb2ede4057cbeddf92ba506",
       "type": "vector",
-      "action": "original lock icon"
+      "action": "original warning icon"
     },
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_login_24.xml": {
       "sha256": "0f7f6316d6c9a197da379dc351d8a309b1c3c29c527aa03b3101b4afe1934390",
@@ -1458,7 +1458,7 @@
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_shield_exclamation_mark_24.xml": {
       "sha256": "a29b07702d9acc36f4412cf375b80512e575d105d867a5f2d144e4ce269de344",
       "type": "vector",
-      "action": "original protection icon"
+      "action": "original warning icon"
     },
     "mobile/android/android-components/components/ui/icons/src/main/res/drawable/mozac_ic_shield_slash_20.xml": {
       "sha256": "e97522e25fbd62acd7cdc49f9096208b737ca0644b3a7721408fa97333136e37",
@@ -3013,12 +3013,12 @@
     "mobile/android/fenix/app/src/main/res/drawable/protection_panel_not_protected.xml": {
       "sha256": "656858503af66260a97519ef45c622ba79847836bb59e1c7ee040c0da57bbe81",
       "type": "vector",
-      "action": "original protection icon"
+      "action": "original warning icon"
     },
     "mobile/android/fenix/app/src/main/res/drawable/protection_panel_not_secure.xml": {
       "sha256": "8149f8efa6833ed1fb95ebebe567b8a0576fa10d7815ab7910e16a005d60dedb",
       "type": "vector",
-      "action": "original protection icon"
+      "action": "original warning icon"
     },
     "mobile/android/fenix/app/src/main/res/drawable/recent_apps_background.xml": {
       "sha256": "8979a4682a0a8fdbaffa1dcc68571edba56b87b2949e52bad9eef2ef6b40c038",
@@ -3817,7 +3817,7 @@
       "source": "layout/generic/broken-image.png",
       "original_sha256": "a08450bd29bf68c4a279d475c5312782d1a174cc1a49cf97bbee07ed45a87e08",
       "action": "original image artwork",
-      "sha256": "0c032ecfdd2b0360f54656ef69c2203e5db5aae33ae1daefe402d328f240578e"
+      "sha256": "02eb70cc2069e267874892568c168a7cac5c4817329d89102dfb03d656970e8b"
     },
     "contentaccessible/close-12.svg": {
       "source": "layout/style/res/close-12.svg",
@@ -3829,7 +3829,7 @@
       "source": "toolkit/themes/shared/dirListing/folder.png",
       "original_sha256": "afd0e84077de13b6dee6650bcfac756fb549874e850476bff4730b6868e7bcc3",
       "action": "original folder artwork",
-      "sha256": "7e41a6b43ea557200708381da42b534a54094127164a25a6a0db8868821ce822"
+      "sha256": "6617595aaa83ef40a031b0f81cd5a6403f498226e2ff2e8f9b021aa5340f507c"
     },
     "chrome/toolkit/skin/classic/global/illustrations/error-malformed-url.svg": {
       "source": "toolkit/themes/shared/illustrations/error-malformed-url.svg",
@@ -3985,19 +3985,19 @@
       "source": "toolkit/themes/shared/media/error.png",
       "original_sha256": "bb7bc4a3568eb1d2007e58a3c02d6a05f5e21fad2d766bf79da82fe7c1f4b737",
       "action": "original warning artwork",
-      "sha256": "b018d285047ba61582aac70d5769e80d46ba169cfd8fd4dc64efb89a51c90b54"
+      "sha256": "03b2655fd2d85d8d461dfca0ed003636466451ec9e0d86c6ce3d85153c133b33"
     },
     "chrome/toolkit/skin/classic/global/media/stalled.png": {
       "source": "toolkit/themes/shared/media/stalled.png",
       "original_sha256": "2847bd9c2596de1b9c3ace1b244e0ebf2c55b81ff5fcde09a4f5482139e0e449",
       "action": "original hourglass artwork",
-      "sha256": "0108617226a1935a70894af75d9628b10f4a26fdb54ea0c4dc903e21c9e12296"
+      "sha256": "19694b5eeccb38a969bed50dc393b385ccbdc15b275be0aa823e4422bd2f394e"
     },
     "chrome/toolkit/skin/classic/global/media/throbber.png": {
       "source": "toolkit/themes/shared/media/throbber.png",
       "original_sha256": "50651f33395b2d00c2816be27595442061a0e363f83b77bf6aa019adeada43b2",
       "action": "original hourglass artwork",
-      "sha256": "0108617226a1935a70894af75d9628b10f4a26fdb54ea0c4dc903e21c9e12296"
+      "sha256": "19694b5eeccb38a969bed50dc393b385ccbdc15b275be0aa823e4422bd2f394e"
     },
     "chrome/toolkit/skin/classic/global/media/imagedoc-darknoise.png": {
       "source": "toolkit/themes/shared/media/imagedoc-darknoise.png",
@@ -4094,6 +4094,126 @@
       "original_sha256": "5eb72634641884df15686abf6bd799c233506ed81c4731a61ec91c1bb557c7e5",
       "action": "original search artwork",
       "sha256": "b09bda3e735a722782c0643c66237751695a4452f75d3e3c3f117aefb5f1d046"
+    },
+    "res/table-remove-column-active.gif": {
+      "source": "editor/composer/res/table-remove-column-active.gif",
+      "original_sha256": "1ba095a2abd0fd53efb16480111e199cb06cdc0f7205c73691ce83e302af1c03",
+      "action": "original cross artwork",
+      "sha256": "6018e0a178872d7d4ee86707b72bbcfb8bbb764f2113f8f9276f1f5d88355e4a"
+    },
+    "res/table-remove-row-hover.gif": {
+      "source": "editor/composer/res/table-remove-row-hover.gif",
+      "original_sha256": "f19d34969cef9b58e845f4f3630ec3df5a3cc054831f3880c1b68a34afa431d8",
+      "action": "original cross artwork",
+      "sha256": "c8290ded108cc3faf97fc03cd91871274a623d3631703d623b07ffb6c78045fa"
+    },
+    "res/table-remove-column-hover.gif": {
+      "source": "editor/composer/res/table-remove-column-hover.gif",
+      "original_sha256": "f19d34969cef9b58e845f4f3630ec3df5a3cc054831f3880c1b68a34afa431d8",
+      "action": "original cross artwork",
+      "sha256": "c8290ded108cc3faf97fc03cd91871274a623d3631703d623b07ffb6c78045fa"
+    },
+    "res/table-remove-row.gif": {
+      "source": "editor/composer/res/table-remove-row.gif",
+      "original_sha256": "dd6549e0c43acaa44bba371928f96cb02f71440149f6ae4d2e9ad4706cbe2231",
+      "action": "original cross artwork",
+      "sha256": "273254fed8815d71e3e18fd25fd3c83b9790f9bfae9452d183fc3c72923704c3"
+    },
+    "res/table-add-column-before-hover.gif": {
+      "source": "editor/composer/res/table-add-column-before-hover.gif",
+      "original_sha256": "ee08fb30bbf7a2bc1fa0351276c18d87315f43d1dcd6e721a076c7f4850d8576",
+      "action": "original left artwork",
+      "sha256": "047fc5517065ee536b0970304a7a45e6d2f7fb1ce46d13f3fbe8d6c267650a59"
+    },
+    "res/table-add-column-after-hover.gif": {
+      "source": "editor/composer/res/table-add-column-after-hover.gif",
+      "original_sha256": "5b25b7884bf6be16aa6cf99875ceecf33c40d03c9f3cfec30625b8ad17bfdb5c",
+      "action": "original right artwork",
+      "sha256": "d00950a7605332176adb27cd0b7bfaefb0d508d5a5953d464980d9f26d752c56"
+    },
+    "res/grabber.gif": {
+      "source": "editor/composer/res/grabber.gif",
+      "original_sha256": "f281e4469914b472b2371fd402e02dca347577b7803ca1ae99fa1beee5ae85a0",
+      "action": "original grid artwork",
+      "sha256": "6a87374d46e8acddba6af9fe1689783ee2ce8962a5a9eb7e734765e056319bf8"
+    },
+    "res/table-add-column-before.gif": {
+      "source": "editor/composer/res/table-add-column-before.gif",
+      "original_sha256": "7aa10dc5f73e868a1cc4790fc4c0de63f7c8be43d9557b5e3a63089fc576aefe",
+      "action": "original left artwork",
+      "sha256": "72f0321f0bbafecc21f20b06176b5b8c7854dc00ec6a0edbbe91bf5ceb0d04c7"
+    },
+    "res/table-add-row-after-active.gif": {
+      "source": "editor/composer/res/table-add-row-after-active.gif",
+      "original_sha256": "6ff130978951266493cbbdcc6be6e0a4cfe249b6bc31c4dd0223849bdc493421",
+      "action": "original down artwork",
+      "sha256": "a79c9d68e456163d209a3355f1246caab901d538add0a3af25205c8cc72fb354"
+    },
+    "res/table-add-row-before.gif": {
+      "source": "editor/composer/res/table-add-row-before.gif",
+      "original_sha256": "48a964d88c52616ebd70d146fdd7d98bf585c8488b997963842b0ecb5ee16cb3",
+      "action": "original up artwork",
+      "sha256": "95e30f2487362dcb392f01fe048101190a0ed312e16842ef72040ed902547c1a"
+    },
+    "res/table-add-column-after.gif": {
+      "source": "editor/composer/res/table-add-column-after.gif",
+      "original_sha256": "c4a26dfcdf51f779b80ac85fc417f9c71bfb4544da6fde889de6180db5ea1b32",
+      "action": "original right artwork",
+      "sha256": "7fcd667ab629d0c7170ba48b16c5b92faac9a2e1cea69db45271be7415219ca0"
+    },
+    "res/table-add-column-after-active.gif": {
+      "source": "editor/composer/res/table-add-column-after-active.gif",
+      "original_sha256": "d2701eb10b21db555251244ecffdf20f79b0372ba19d85ac16471e06a004d371",
+      "action": "original right artwork",
+      "sha256": "a2d37ec6c2ced45590a274bfd40dde81f2bf3ae24d00929b257d8d990a1c633e"
+    },
+    "res/table-remove-column.gif": {
+      "source": "editor/composer/res/table-remove-column.gif",
+      "original_sha256": "dd6549e0c43acaa44bba371928f96cb02f71440149f6ae4d2e9ad4706cbe2231",
+      "action": "original cross artwork",
+      "sha256": "273254fed8815d71e3e18fd25fd3c83b9790f9bfae9452d183fc3c72923704c3"
+    },
+    "res/table-add-row-after.gif": {
+      "source": "editor/composer/res/table-add-row-after.gif",
+      "original_sha256": "4314043ba7acd3ff7d7b068c01039306a6162a706ed9e74ecb4ff9f81512b726",
+      "action": "original down artwork",
+      "sha256": "38dcd6883c9b17cda6a1f3be613e927db437c0e97d593eda444feb210e412b1d"
+    },
+    "res/table-add-row-before-hover.gif": {
+      "source": "editor/composer/res/table-add-row-before-hover.gif",
+      "original_sha256": "82d2c0c94973797f588c41cb17f5965d2979d42032b87a74a66b19b4ca881722",
+      "action": "original up artwork",
+      "sha256": "a5d39b0e7d13773e19cf988122fb03b4caf586ddbfd6e43d7a82ff5c812a595f"
+    },
+    "res/table-add-column-before-active.gif": {
+      "source": "editor/composer/res/table-add-column-before-active.gif",
+      "original_sha256": "f149f7c1cf9e31ae3918cc9c467c1f6feaeec6a94a8f12e95ba518c0d8f47309",
+      "action": "original left artwork",
+      "sha256": "8a69b79ee9cee6af4b75872558bec2e760013f0f10d260ea410326df52955a41"
+    },
+    "res/table-remove-row-active.gif": {
+      "source": "editor/composer/res/table-remove-row-active.gif",
+      "original_sha256": "1ba095a2abd0fd53efb16480111e199cb06cdc0f7205c73691ce83e302af1c03",
+      "action": "original cross artwork",
+      "sha256": "6018e0a178872d7d4ee86707b72bbcfb8bbb764f2113f8f9276f1f5d88355e4a"
+    },
+    "res/table-add-row-before-active.gif": {
+      "source": "editor/composer/res/table-add-row-before-active.gif",
+      "original_sha256": "b3364df0289ecfba9920e101b8563d36702170ce75fca5d4b8c7963566bf08ce",
+      "action": "original up artwork",
+      "sha256": "60130e2a2e9ae64c4edb39563db74f2329345e76522e8db02c5e04805a3a2e14"
+    },
+    "res/table-add-row-after-hover.gif": {
+      "source": "editor/composer/res/table-add-row-after-hover.gif",
+      "original_sha256": "7f95f83b24a702e701808d2d294827c37a260c4cab54970d8a89cffca311aa3a",
+      "action": "original down artwork",
+      "sha256": "25e8a126a1730dd37ba1249a03b7131506ce459b283c9e9ddcbf3394870a6adb"
+    },
+    "chrome/pdfjs/content/web/images/loading-icon.gif": {
+      "source": "toolkit/components/pdfjs/content/web/images/loading-icon.gif",
+      "original_sha256": "483c4a0396691993a641ec409c44b8b7e1daab0ae7e2b2944c4bc59520bb7655",
+      "action": "original spinner artwork",
+      "sha256": "64f3c31cb696dcf2633d1b483109ab643962a8693e1514257c9565035278a5a2"
     }
   },
   "android_extension_assets": {

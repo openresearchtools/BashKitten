@@ -105,6 +105,7 @@ def symbol(name):
     """Map every named resource to a functional concept, before state modifiers."""
     n=name.removeprefix('mozac_ic_').removeprefix('ic_')
     if n.startswith('flag_'): return 'globe'
+    if any(state in n for state in ('warning', 'exclamation', 'not_secure', 'not_protected')): return 'warning'
     rules=[
      ('chevron|dropdown','down'),('arrow_counter|arrow_clockwise|refresh|reload|sync|update','reload'),
      ('arrow_trending|chart|profiler','chart'),('append|forward','forward'),('back','back'),

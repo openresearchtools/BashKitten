@@ -22,7 +22,7 @@ features and must not be offered by the UI.
 hashes and generates app overrides. `generate-pdf-artwork.py` and
 `generate-engine-artwork.py` cover PDF and packaged engine artwork, including the
 remaining upstream fox illustration and Mozilla logo. `generate-auxiliary-artwork.py` also covers browser-owned web-compatibility assets and removes unused upstream store graphics. The inventory includes
-680 Android drawable/store variants, 76 PDF SVGs, 52 Gecko chrome images, and 8 browser-owned extension asset images (including a structural transparent placeholder). Upstream resource identifiers remain for
+680 Android drawable/store variants, 76 PDF SVGs, 72 Gecko chrome images (including GIF table controls and the animated PDF loader), and 8 browser-owned extension asset images (including a structural transparent placeholder). Upstream resource identifiers remain for
 source compatibility; they do not imply the old artwork is used. Website
 favicons/content, Android framework widgets, and license/source attribution are
 not app branding. Both ARM64 APK workflows run `check-product-artwork.py` against
@@ -30,5 +30,7 @@ the final merged APK, resolving aliases and checking each functional vector,
 Android error asset and engine image. The previous APK fails this guard on its
 remaining upstream bookmark illustration.
 
-Device verification of this change is pending the signed ARM64 build. Earlier
+Raster generation uses librsvg (`rsvg-convert`, optionally selected with `WILDBUZZARD_RSVG_CONVERT`) and ImageMagick. Generated rasters are checked for visible pixels, and the PDF loading indicator retains animation. The APK guard also covers GIF images; an earlier candidate exposed the previously missed editor/PDF GIF resources.
+
+Device verification of this change is pending the final signed ARM64 build. Earlier
 agent/Tor evidence in VALIDATION.md refers to its recorded source revisions.
