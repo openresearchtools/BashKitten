@@ -32,6 +32,7 @@ class WebSurface(private val activity: MainActivity) {
     val view: WebView = create()
 
     fun flush() = CookieManager.getInstance().flush()
+    fun close() { flush(); chooser?.onReceiveValue(null); chooser = null; view.destroy(); downloads.shutdown() }
     fun open(url: String) { origin = Uri.parse(url).let { "${it.scheme}://${it.host}:${it.port}" }; if (view.url != url) view.loadUrl(url) }
     private fun local(uri: Uri) = "${uri.scheme}://${uri.host}:${uri.port}" == origin
     private fun external(uri: Uri) {

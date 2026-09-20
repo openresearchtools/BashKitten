@@ -73,6 +73,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() { super.onResume(); if (initialized() && TermuxBridge.trusted(this)) TermuxBridge.ensureManager(this); handler.post(poll) }
     override fun onPause() { handler.removeCallbacks(poll); web.flush(); super.onPause() }
+    override fun onDestroy() { handler.removeCallbacks(poll); web.close(); io.shutdown(); super.onDestroy() }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); session = requestedSession(intent); if (status != null) openChat() }
     private fun requestedSession(intent: Intent): String? = intent.data?.takeIf { it.scheme == "bashkitten" && it.host == "session" }?.lastPathSegment?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
 
