@@ -1,4 +1,4 @@
-# BashKitten · native Pi / Termux
+# BashKitten · native Pi / Linux and Termux
 
 This branch reuses BashKitten's browser UI with unmodified Pi 0.85.1
 (`d981de1229ef899957bbe968bc8dcda02a21f477`). It contains no Rust backend or
@@ -17,6 +17,9 @@ revert. Run the relevant checks before committing, push to the current branch's
 remote, and report the commit IDs and push result.
 Stage only files belonging to the task; preserve unrelated work and never commit
 credentials, signing keys or personal runtime data.
+Read `docs/android-termux-suite-plan.md` in full before implementation and after
+compaction. Keep the shared code small; reuse upstream components unmodified
+except for the documented Termux integration/build patches.
 
 ## Runtime ownership
 
@@ -36,9 +39,10 @@ credentials, signing keys or personal runtime data.
 
 - Preserve the existing transcript, thinking/tool streaming, compaction styling,
   image viewer, themes and project/chat sidebar. Adapt layout for narrow screens.
-- Working-folder choices are writable directories inside Termux home only. Show
-  `~` and `~/project`, stop parent navigation at home, and omit shared storage and
-  inaccessible system folders.
+- On Termux, working-folder choices are writable directories inside home only.
+  Show `~` and `~/project`, stop parent navigation at home, and omit shared storage
+  and inaccessible system folders. Linux additionally allows explicitly chosen
+  project roots through its platform adapter.
 - Uploads use the browser's ordinary file picker, clipboard and drag/drop. Never
   substitute a custom Android picker or require Android storage permissions.
 - Browse repositories on the backend. Open/download files through normal browser

@@ -13,9 +13,12 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
 import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
+import { syncContext } from '../rpc/context.mjs';
+import { platform } from '../platform/index.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
+await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const services = new Services(), starts = new Map();
 const configFile = path.join(dataDir, 'settings.json');
@@ -58,7 +61,7 @@ async function sessionList() {
   })).then(items => items.sort((a, b) => b.modified - a.modified));
 }
 async function createSession(value) {
-  const cwd = await existingDirectory(value.cwd || config.default_cwd);
+  const cwd = (await pickerDirectory(value.cwd || config.default_cwd)).path;
   const id = randomUUID(), dir = sessionDir(id); await privateDir(dir);
   const title = String(value.title || value.prompt || 'New chat').trim().replace(/\s+/g, ' ').slice(0, 100) || 'Image session';
   const meta = { id, cwd, title, model: value.model || config.default_model, thinking: value.thinking || config.default_thinking,
@@ -105,7 +108,7 @@ async function handler(req, res) {
     if (route === '/api/logout') { requireMethod(req, ['POST']); await auth.logout(record, res); return json(res, { ok: true }); }
     if (route === '/api/settings') {
       requireMethod(req, ['GET', 'POST']);
-      if (!mutation) return json(res, { config, locations: await folderLocations() });
+      if (!mutation) return json(res, { config, locations: await folderLocations(), platform });
       const input = await jsonBody(req);
       const next = { web_port: Number(input.web_port), theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : 'system',
         default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || 'off') };
@@ -138,7 +141,7 @@ async function handler(req, res) {
     if (route === '/api/files' || route === '/api/files/content' || route === '/api/files/archive') {
       requireMethod(req, route === '/api/files' ? ['GET', 'POST'] : ['GET']);
       // The selected root is an explicit filesystem choice, same as the folder picker.
-      const root = await existingDirectory(url.searchParams.get('root'));
+      const root = (await pickerDirectory(url.searchParams.get('root'))).path;
       const relative = url.searchParams.get('path') || '';
       if (route.endsWith('/content')) return await sendFile(req, res, await withinRoot(root, relative), url.searchParams.get('download') === 'true');
       if (route.endsWith('/archive')) return await sendZip(res, root);
@@ -244,5 +247,6 @@ async function handler(req, res) {
 }
 function listen(port) { return new Promise((resolve, reject) => { const server = http.createServer(handler); server.on('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }); }
 activeServer = await listen(config.web_port);
+for (const meta of await allMeta()) if (await running(meta.id)) await workerRequest(meta.id, '/context', {}).catch(() => {});
 console.log(`BashKitten · Pi RPC · http://127.0.0.1:${config.web_port}`);
 process.on('SIGTERM', () => { activeServer.close(); activeServer.closeAllConnections(); services.cancel().finally(() => process.exit(0)); });

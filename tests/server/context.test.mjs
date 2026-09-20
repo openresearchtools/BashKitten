@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { loadProjectContextFiles } from '@earendil-works/pi-coding-agent';
+import { syncContext } from '../../src/server/rpc/context.mjs';
+
+test('Pi loads a short platform context, preserving global overrides, settings and project instructions', async t => {
+  const home = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-context-'));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const agentDir = path.join(home, '.pi/agent'), project = path.join(home, 'project');
+  await fs.mkdir(agentDir, { recursive: true }); await fs.mkdir(project);
+  await fs.writeFile(path.join(agentDir, 'CLAUDE.md'), 'Personal instructions.\n');
+  await fs.writeFile(path.join(agentDir, 'AGENTS.override.md'), 'Personal override.\n');
+  await fs.writeFile(path.join(agentDir, 'settings.json'), '{"theme":"dark","enableInstallTelemetry":true}');
+  await fs.writeFile(path.join(project, 'AGENTS.md'), 'Project instructions.\n');
+  const options = { agentDir, home, prefix: '/data/data/com.termux/files/usr', target: 'termux' };
+  const first = await syncContext(options);
+  assert.equal(await syncContext(options), first);
+  const global = await fs.readFile(path.join(agentDir, 'AGENTS.md'), 'utf8');
+  assert.ok(global.startsWith('Personal instructions.'));
+  assert.equal(global.split('## Termux environment').length, 2);
+  let loaded = loadProjectContextFiles({ cwd: project, agentDir }).map(f => f.content).join('\n');
+  for (const text of ['Personal override.', 'Project instructions.', 'pkg install NAME', 'skills/']) assert.ok(loaded.includes(text));
+  const settings = JSON.parse(await fs.readFile(path.join(agentDir, 'settings.json'), 'utf8'));
+  assert.equal(settings.enableInstallTelemetry, false); assert.equal(settings.theme, 'dark');
+  await syncContext({ ...options, target: 'linux' });
+  loaded = loadProjectContextFiles({ cwd: project, agentDir }).map(f => f.content).join('\n');
+  assert.ok(loaded.includes('Linux environment')); assert.ok(!loaded.includes('pkg install'));
+  assert.equal(await fs.readFile(path.join(agentDir, 'AGENTS.override.md.bashkitten-backup'), 'utf8'), 'Personal override.\n');
+});

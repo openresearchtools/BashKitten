@@ -1,14 +1,11 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
-import os from 'node:os';
 import { existingDirectory } from '../common.mjs';
+import { projectLocations } from '../platform/index.mjs';
 
 const contains = (root, target) => { const relative = path.relative(root, target); return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative); };
-export async function folderLocations() {
-  const home = await fs.realpath(os.homedir());
-  return [{ path: home, label: process.platform === 'android' ? 'Termux home' : 'Home', display: '~' }];
-}
+export const folderLocations = projectLocations;
 export async function pickerDirectory(input, nearest = false) {
   const locations = await folderLocations();
   let requested = input || '~';

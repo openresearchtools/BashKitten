@@ -4,13 +4,15 @@ import { randomUUID } from 'node:crypto';
 import { PiRpc, translateEvent, activeBranch, usageView } from './rpc.mjs';
 import { readMeta, writeMeta, socketPath, privateDir, json, jsonBody, existingDirectory } from '../common.mjs';
 import path from 'node:path';
+import { syncContext } from './context.mjs';
+import { pickerDirectory } from '../files/folders.mjs';
 
 process.umask(0o077);
 const id = process.argv[2];
 let meta = await readMeta(id);
 let rpc, busy = false, compacting = false, stopping = false, changing = false;
 let lastAccess = Date.now();
-let entries = [], events = [], usage = null, queue = [], pendingCwd = null, pendingModel = null;
+let entries = [], events = [], usage = null, queue = [], pendingCwd = null, pendingModel = null, pendingContext = false;
 const clients = new Set(), dialogs = new Map();
 let operations = Promise.resolve(), eventWork = Promise.resolve();
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
@@ -22,7 +24,7 @@ function displayMessage(message) {
 }
 function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(e.message) } : e); }
 function queueItem(item) { return { id: item.id, content: item.text, attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken) }; }
-function status() { return { busy, compacting, usage, modelSelection: { model: meta.model, thinking: meta.thinking }, pendingCwd,
+function status() { return { busy, compacting, usage, contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking }, pendingCwd,
   steeringMessages: queue.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: queue.filter(q => q.kind !== 'steer').map(queueItem) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
 function emit(event, remember = true) {
@@ -56,6 +58,7 @@ function reconcileQueue(event) {
   queueChanged();
 }
 async function launch() {
+  meta.contextVersion = await syncContext();
   rpc = new PiRpc(meta);
   rpc.on('event', event => {
     // State transitions are synchronous with the RPC input stream. Slow history
@@ -100,13 +103,14 @@ async function launch() {
 }
 async function applyPending() {
   if (busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
-  if (pendingCwd) {
-    const target = pendingCwd; pendingCwd = null; changing = true;
+  const version = await syncContext();
+  if (pendingCwd || version !== meta.contextVersion) {
+    const target = pendingCwd || meta.cwd; pendingCwd = null; changing = true;
     await rpc.close();
     const previous = meta.cwd; meta.cwd = target;
     try { await launch(); emit({ type: 'cwd_change', cwd: target }, false); }
     catch (error) { meta.cwd = previous; await launch(); emit({ type: 'cwd_error', message: error.message }, false); }
-    finally { changing = false; }
+    finally { changing = false; pendingContext = false; }
   }
   if (pendingModel) {
     const selection = pendingModel; pendingModel = null;
@@ -180,7 +184,9 @@ const server = http.createServer(async (req, res) => {
       server.close(() => process.exit(0)); return;
     }
     const result = await serial(async () => {
+      if (req.url === '/context') { pendingContext = (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
       if (req.url === '/message') {
+        await applyPending();
         meta.messages ||= [];
         meta.messages.push({ text: value.text, wire: value.wire, attachments: value.attachments });
         await writeMeta(meta);
@@ -208,7 +214,7 @@ const server = http.createServer(async (req, res) => {
         });
         await writeMeta(meta); return { data: status() };
       }
-      if (req.url === '/cwd') { pendingCwd = await existingDirectory(value.cwd); await applyPending(); return { queued: Boolean(pendingCwd), cwd: meta.cwd }; }
+      if (req.url === '/cwd') { pendingCwd = (await pickerDirectory(value.cwd)).path; await applyPending(); return { queued: Boolean(pendingCwd), cwd: meta.cwd }; }
       if (req.url === '/model') { pendingModel = value; await applyPending(); return { data: status() }; }
       if (req.url === '/rename') { await rpc.command('set_session_name', { name: value.title }); meta.title = value.title; await writeMeta(meta); return { ok: true }; }
       if (req.url === '/compact') {
