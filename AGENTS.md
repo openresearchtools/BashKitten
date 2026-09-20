@@ -10,9 +10,10 @@ the individual license metadata of dependencies.
 
 ## Change tracking
 
-Always stage and commit completed changes, including documentation and plans.
+Always stage, commit and push completed changes, including documentation and plans.
 Use focused commits for logical changes so features are easy to track, fix and
-revert. Run the relevant checks before committing and report the commit IDs.
+revert. Run the relevant checks before committing, push to the current branch's
+remote, and report the commit IDs and push result.
 Stage only files belonging to the task; preserve unrelated work and never commit
 credentials, signing keys or personal runtime data.
 
