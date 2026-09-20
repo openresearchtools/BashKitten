@@ -449,3 +449,11 @@ All checks and fixtures remain outside the repositories. On the disposable
 emulators, unused old BashKitten verification runtimes were removed after checking
 active/previous/default runtime references and process usage. User data, current
 runtimes, rollback copies and installed applications were preserved.
+
+Release **v0.2.8** is published from `2fc2c2c`. All 13 public asset hashes match
+the verified release. Catalog renewal **35524784305** and APT publication
+**35524784678** passed; the public catalog signature/expiry/APK hash and all five
+APT package hashes were verified. Actual signed-index reinstalls passed on Linux
+ARM64 and both Termux installations, retaining their normal backend addresses.
+Both Android Chromium browsers rendered the updated normal profiles. Android
+System mode also followed a real system light/dark change in the existing chat.
