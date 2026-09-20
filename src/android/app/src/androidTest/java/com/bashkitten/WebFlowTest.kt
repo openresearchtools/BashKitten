@@ -82,7 +82,7 @@ class WebFlowTest {
                 until("document.querySelector('#folderDialog').open && !document.querySelector('#folderUse').disabled")
                 js("document.querySelector('#folderPath').value='~';document.querySelector('#folderGo').click()")
                 until("document.querySelector('#folderUp').disabled && !document.querySelector('#folderUse').disabled")
-                js("document.querySelector('#newFolderName').value='bashkitten-files-${System.currentTimeMillis()}';document.querySelector('#createFolder').click()")
+                js("document.querySelector('#newFolderName').value='bashkitten-files-${System.currentTimeMillis()} 花';document.querySelector('#createFolder').click()")
                 until("document.querySelector('#folderPath').value.includes('bashkitten-files-') && !document.querySelector('#folderUse').disabled")
                 js("document.querySelector('#folderForm').requestSubmit()")
                 until("!document.querySelector('#folderDialog').open")

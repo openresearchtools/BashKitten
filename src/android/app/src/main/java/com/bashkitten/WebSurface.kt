@@ -9,7 +9,7 @@ import android.os.Message
 import android.view.ViewGroup
 import android.provider.MediaStore
 import android.webkit.CookieManager
-import android.webkit.URLUtil
+import androidx.webkit.URLUtilCompat
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -61,7 +61,7 @@ class WebSurface(private val activity: MainActivity) {
                 firstPopupNavigation = false
                 if (local(uri) && uri.path in setOf("/", "/pi-login")) return false
                 if (userNavigation) {
-                    if (local(uri) && uri.path?.startsWith("/api/") == true) download(uri.toString(), null, null)
+                    if (local(uri) && uri.path?.startsWith("/api/") == true) download(uri.toString(), null, null, uri.getQueryParameter("download") != "true" && uri.path != "/api/files/archive")
                     else external(uri)
                     dialog?.dismiss()
                 }
@@ -89,7 +89,7 @@ class WebSurface(private val activity: MainActivity) {
         setDownloadListener { url, _, disposition, mime, _ -> if (local(Uri.parse(url))) download(url, disposition, mime) else external(Uri.parse(url)) }
     }
 
-    private fun download(url: String, disposition: String?, mime: String?) {
+    private fun download(url: String, disposition: String?, mime: String?, openAfter: Boolean = false) {
         val cookies = CookieManager.getInstance().getCookie(url).orEmpty()
         downloads.execute {
             var saved: Uri? = null
@@ -101,7 +101,8 @@ class WebSurface(private val activity: MainActivity) {
                 try {
                     check(connection.responseCode == 200) { "Download failed (${connection.responseCode})" }
                     val type = connection.contentType?.substringBefore(';') ?: mime ?: "application/octet-stream"
-                    val name = URLUtil.guessFileName(url, connection.getHeaderField("Content-Disposition") ?: disposition, type).substringAfterLast('/').take(180)
+                    val header = (connection.getHeaderField("Content-Disposition") ?: disposition)?.replaceFirst(Regex("^inline(?=;)"), "attachment")
+                    val name = URLUtilCompat.guessFileName(url, header, type).substringAfterLast('/').take(180)
                     val values = ContentValues().apply {
                         put(MediaStore.Downloads.DISPLAY_NAME, name); put(MediaStore.Downloads.MIME_TYPE, type)
                         put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/BashKitten")
@@ -114,8 +115,10 @@ class WebSurface(private val activity: MainActivity) {
                     activity.contentResolver.update(saved!!, ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }, null, null)
                     val uri = saved!!
                     activity.runOnUiThread {
-                        val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, type).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        runCatching { activity.startActivity(intent) }.onFailure { toast("Saved $name to Downloads/BashKitten") }
+                        if (openAfter) {
+                            val intent = Intent(Intent.ACTION_VIEW).setDataAndType(uri, type).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            runCatching { activity.startActivity(intent) }.onFailure { toast("Saved $name to Downloads/BashKitten") }
+                        } else toast("Saved $name to Downloads/BashKitten")
                     }
                 } finally { connection.disconnect() }
             } catch (error: Exception) {
