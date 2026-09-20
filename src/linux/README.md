@@ -3,6 +3,10 @@
 Run `python3 src/linux/host.py` with Node >=22.19, Python/PyGObject, GTK >=4.10
 and WebKitGTK 6.0 installed. `BASHKITTEN_NODE` can select a Node executable
 outside PATH. The server remains independently usable in ordinary browsers.
+For a source checkout, first run `node src/server/licenses.mjs` and
+`python3 packaging/about.py linux licenses.json about.html`. Installed packages
+already include this offline **About → Licenses** page, using the same layout
+as the web UI with notices for the Linux shell and system dependencies.
 
 The host uses the shared private controller, preserves cookies in its private
 desktop profile, and leaves the server/Pi running when closed. Its Services menu

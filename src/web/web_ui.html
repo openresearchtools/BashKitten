@@ -2188,19 +2188,35 @@
       try { const session = await linkedSession(await loadSessions()); if (session && session.id !== current?.id) await openSession(session); }
       catch (error) { $('#composerHint').textContent = error.message; }
     });
+    let bootPending = true, booting = false;
     async function boot() {
-      const value = await api('/api/bootstrap');
-      if (!value.hasUser) return authScreen(true);
-      if (!value.authenticated) return authScreen(false);
-      csrf = value.csrf;
-      $('#auth').classList.add('hidden');
-      $('#app').classList.remove('hidden');
-      await loadSettings();
-      await loadModels();
-      const sessions = await loadSessions();
-      if (sessions.length) await openSession(await linkedSession(sessions) || sessions[0]);
-      else beginNewSession();
+      if (booting) return;
+      booting = true;
+      bootPending = true;
+      $('#app').inert = true;
+      try {
+        const value = await api('/api/bootstrap');
+        if (!value.hasUser || !value.authenticated) {
+          bootPending = false;
+          return authScreen(!value.hasUser);
+        }
+        csrf = value.csrf;
+        $('#auth').classList.add('hidden');
+        $('#app').classList.remove('hidden');
+        await loadSettings();
+        await loadModels();
+        const sessions = await loadSessions();
+        if (sessions.length) await openSession(await linkedSession(sessions) || sessions[0]);
+        else await beginNewSession();
+        bootPending = false;
+        $('#app').inert = false;
+        $('#authError').textContent = '';
+      } catch (error) {
+        $('#authError').textContent = error.message;
+        $('#composerHint').textContent = 'Connecting to server… ' + error.message;
+      } finally { booting = false; }
     }
+    window.addEventListener('focus', () => { if (bootPending) boot(); });
 
     $('#sessions').addEventListener('scroll', () => {
       const panel = $('#sessions');
@@ -2723,8 +2739,10 @@
     $('#piDialogCancel').onclick=()=>answerPi(true);
     $('#piDialog').oncancel=event=>{event.preventDefault();answerPi(true);};
 
-    boot().catch(error => { $('#authError').textContent = error.message; $('#composerHint').textContent = error.message; });
+    boot();
     setInterval(() => {
+      // Finish interrupted startup without reloading an initialized chat or its draft.
+      if (bootPending) { boot(); return; }
       if (!csrf) return;
       loadSessions().catch(() => {});
       if (current) refreshQueue().catch(() => {});

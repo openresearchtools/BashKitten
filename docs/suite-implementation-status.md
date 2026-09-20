@@ -309,6 +309,15 @@ GTK/WebKitGTK/PyGObject/Python/Node as system dependencies. Native pages require
 neither the backend nor login and have no command bridge. They replace the
 earlier native list/dropdown implementations; the web About entry remains.
 
-The external GTK/WebKit check rendered and expanded the full GPL text with the
-backend stopped. Closing About preserved that stopped state. The shared server
-recovery checks still pass. Production Android verification follows its rebuild.
+The installed GTK/WebKit host and production Android APK rendered and expanded
+the full GPL text with the backend stopped. Android passed on both our signed
+Termux and an external upstream Termux installation. The APK includes 217 notice
+records covering its libraries and the separately delivered server. Closing
+About preserves the existing chat document and stopped/running service state.
+
+The Android check exposed an interrupted web startup that remained half-loaded
+after the backend returned. Startup now retries until initialized, using the
+existing status interval, without reloading an initialized chat. An external
+WebKit check with a failed startup request passed recovery in the same document
+and verified that later focus/status checks preserve an unsent draft. Production
+packages are being rebuilt with this correction.
