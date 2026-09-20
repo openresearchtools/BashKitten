@@ -1,6 +1,7 @@
 package com.bashkitten
 
 import android.app.PendingIntent
+import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
@@ -45,7 +46,9 @@ object TermuxBridge {
     }
 
     fun command(context: Context, command: String, args: JSONObject = JSONObject(), callback: (Result<JSONObject>) -> Unit) {
-        execute(context, "$prefix/bin/bashkittenctl", arrayOf(command, args.toString()), null, callback)
+        // Bootstrap may still be preparing packages; avoid Termux's missing-executable dialog.
+        val script = "if [ -x '$prefix/bin/bashkittenctl' ]; then exec '$prefix/bin/bashkittenctl' \"\$@\"; else printf 'BashKitten packages are not installed yet' >&2; exit 1; fi"
+        execute(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-control", command, args.toString()), null, callback)
     }
 
     fun execute(context: Context, path: String, args: Array<String>, stdin: String?, callback: (Result<JSONObject>) -> Unit) {
@@ -77,7 +80,8 @@ object TermuxBridge {
         val error = bundle.getString("errmsg").orEmpty()
         val stdout = bundle.getString("stdout").orEmpty()
         val stderr = bundle.getString("stderr").orEmpty()
-        if (bundle.getInt("err") != 0 || bundle.getInt("exitCode") != 0) {
+        // Upstream ResultData uses Activity.RESULT_OK (-1), independently of shell exitCode.
+        if (bundle.getInt("err", 0) != Activity.RESULT_OK || bundle.getInt("exitCode", -1) != 0) {
             callback(Result.failure(IllegalStateException(error.ifEmpty { stderr.ifEmpty { "Termux command failed" } }.take(1200))))
         } else {
             callback(runCatching { if (stdout.isBlank()) JSONObject() else JSONObject(stdout) })

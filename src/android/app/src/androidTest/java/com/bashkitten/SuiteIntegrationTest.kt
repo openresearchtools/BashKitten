@@ -44,6 +44,12 @@ class SuiteIntegrationTest {
             val reply = result!!.getOrThrow()
             assertEquals("termux", reply.getString("platform"))
             assertEquals("/data/data/com.termux/files/home", reply.getString("home"))
+            val failed = CountDownLatch(1); var failure: Result<JSONObject>? = null
+            instrumentation.runOnMainSync {
+                TermuxBridge.execute(context, TermuxBridge.prefix + "/bin/bash", arrayOf("-c", "printf 'expected failure' >&2; exit 7"), null) { failure = it; failed.countDown() }
+            }
+            assertTrue(failed.await(60, TimeUnit.SECONDS))
+            assertEquals("expected failure", failure!!.exceptionOrNull()?.message)
             val output = File(context.getExternalFilesDir(null), "suite-control.png")
             device.takeScreenshot(output)
         }
