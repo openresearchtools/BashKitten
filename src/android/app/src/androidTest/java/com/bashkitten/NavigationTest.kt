@@ -54,6 +54,7 @@ class NavigationTest {
             assertEquals(url, js("location.href"))
             assertEquals("\"unsent navigation draft\"", js("document.querySelector('#prompt').value"))
             device.findObject(By.desc("Menu")).click()
+            assertNotNull(device.wait(Until.findObject(By.text("Package updates")), 5000))
             device.findObject(By.text("Package updates")).click()
             assertTrue(device.wait(Until.hasObject(By.text("Keep everything up to date")), 5000))
             assertNotNull(device.findObject(By.text("npm packages")))
