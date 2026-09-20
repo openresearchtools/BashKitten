@@ -10,6 +10,7 @@ This repository preserves the complete history of
 at `0bd2d7da099a365d2243b320e1e6b38e8ad76cf4`.
 
 - [Android build, architecture, licenses and device tests](wildbuzzard/android/README.md)
+- [Recorded APK and ARM64 device validation](wildbuzzard/android/VALIDATION.md)
 - [External-app agent API and AIDL integration](wildbuzzard/android/API.md)
 - [ARM64 APK build workflow](https://github.com/openresearchtools/wildbuzzard-android/actions/workflows/android-arm64.yml)
 - [Report Wild Buzzard Android issues](https://github.com/openresearchtools/wildbuzzard-android/issues)
@@ -20,9 +21,9 @@ tab, and close tabs without terminating the browser. DuckDuckGo is the default
 search engine. Desktop torrents, bundled agent runtimes and Wild Buzzard search
 extensions are excluded from the Android product.
 
-The **Private Tor sites** menu imports the complete address/key pair from a
-TorKitten/Orbot QR code or `.auth_private` file, names the site and adds a normal
-browser bookmark. Opening any `.onion` address automatically uses Tor, with
+The Tor tab tray's **Private Tor sites** screen imports the complete address/key
+pair from a TorKitten/Orbot QR code or `.auth_private` file, names the site and
+adds it to quick access by default. Opening any `.onion` address automatically uses Tor, with
 keys bound to their exact service identities. Manual entry is also available. Enrolled onion identities use Tor's native
 authentication to permit private-CA HTTPS without installing that CA. Hostname,
 expiry, other-onion and clearnet certificate checks remain in force.

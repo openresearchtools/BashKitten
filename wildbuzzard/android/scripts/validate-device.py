@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 import uuid
@@ -25,8 +26,8 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     adb = ["adb", "-s", args.serial]
 
-    def command(*values, timeout=120):
-        result = subprocess.run([*adb, *values], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
+    def command(*values, timeout=120, input=None):
+        result = subprocess.run([*adb, *values], input=input, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=timeout)
         if result.returncode:
             (args.output / "failed-command.log").write_text(result.stdout)
             raise RuntimeError(result.stdout.strip())
@@ -77,20 +78,35 @@ def main():
     command("shell", "rm", "-rf", "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/screenshots")
     suites = [] if args.onion_only else ["AgentBrowserTest", "CommandBrowserTest"]
     credential_name = None
-    if args.onion_fixture:
-        suites.append("OnionBrowserTest")
-        destination = "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files"
-        command("shell", "mkdir", "-p", destination)
-        command("push", str(args.onion_fixture), destination + "/probe-fixture.json")
-        fixture = json.loads(args.onion_fixture.read_text())
-        credential_name = "wildbuzzard-test-" + uuid.uuid4().hex + ".auth_private"
-        with tempfile.TemporaryDirectory(prefix="wildbuzzard-enrollment-") as temporary:
-            credential = Path(temporary) / credential_name
-            credential.write_text(fixture["onion"].removesuffix(".onion") + ":descriptor:x25519:" + fixture["key"] + "\n")
-            credential.chmod(0o600)
-            command("push", str(credential), "/sdcard/Download/" + credential_name)
+    credential_collection = None
     failed_suites = []
     try:
+        if args.onion_fixture:
+            suites.append("OnionBrowserTest")
+            destination = "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files"
+            command("shell", "mkdir", "-p", destination)
+            command("push", str(args.onion_fixture), destination + "/probe-fixture.json")
+            fixture = json.loads(args.onion_fixture.read_text())
+            credential_name = "wildbuzzard-test-" + uuid.uuid4().hex + ".auth_private"
+            credential_data = fixture["onion"].removesuffix(".onion") + ":descriptor:x25519:" + fixture["key"] + "\n"
+            if int(device["sdk"]) >= 29:
+                # A raw adb push is not indexed by the scoped-storage Downloads picker.
+                credential_collection = "content://media/external_primary/downloads"
+                command("shell", "content", "insert", "--uri", credential_collection,
+                        "--bind", "_display_name:s:" + credential_name,
+                        "--bind", "mime_type:s:application/octet-stream", "--bind", "relative_path:s:Download/")
+                row = command("shell", shlex.join(["content", "query", "--uri", credential_collection,
+                              "--projection", "_id", "--where", "_display_name='" + credential_name + "'"]))
+                match = re.search(r"\b_id=(\d+)", row)
+                if not match:
+                    raise RuntimeError("Android Downloads did not register the test enrollment file")
+                command("shell", "content", "write", "--uri", credential_collection + "/" + match[1], input=credential_data)
+            else:
+                with tempfile.TemporaryDirectory(prefix="wildbuzzard-enrollment-") as temporary:
+                    credential = Path(temporary) / credential_name
+                    credential.write_text(credential_data)
+                    credential.chmod(0o600)
+                    command("push", str(credential), "/sdcard/Download/" + credential_name)
         for suite in suites:
             extra = ["-e", "credentialFile", credential_name] if suite == "OnionBrowserTest" else []
             result = command("shell", "am", "instrument", "-w", "-e", "class",
@@ -105,7 +121,10 @@ def main():
             if not report["tests"][suite]:
                 failed_suites.append(suite)
     finally:
-        if credential_name:
+        if credential_collection:
+            command("shell", shlex.join(["content", "delete", "--uri", credential_collection,
+                    "--where", "_display_name='" + credential_name + "'"]))
+        elif credential_name:
             command("shell", "rm", "-f", "/sdcard/Download/" + credential_name)
         log = command("logcat", "-d", "-v", "threadtime", "WildBuzzardProbe:I", "AndroidRuntime:E", "*:S")
         (args.output / "device-logcat.log").write_text(log + "\n")

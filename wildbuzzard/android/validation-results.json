@@ -1,0 +1,105 @@
+{
+  "device_run": {
+    "source": "677332e1b326703a76f802c7e0e844c9a0e0aa6e",
+    "started": "2026-09-20T00:03:29.865827+00:00",
+    "device": {
+      "abi": "arm64-v8a",
+      "product": "aosp_cf_arm64_only_phone",
+      "android": "17",
+      "sdk": "37",
+      "page_size": "4096"
+    },
+    "apks": {
+      "wildbuzzard-arm64-debug.apk": "956c7e391ed9596ba29cbea73f3f2a8dc0c3f813bdb33162c59929398a3e85f9",
+      "wildbuzzard-agent-probe.apk": "1a178a750c5afc82c946e83157516e86f4e1ae23366be68b3e00185a7b436916",
+      "wildbuzzard-agent-probe-test.apk": "133712fb54a13b87c757969e0f59c8ea873312cfead2e82e2e9430827cb2ebc5"
+    },
+    "tests": {
+      "AgentBrowserTest": true,
+      "CommandBrowserTest": true,
+      "OnionBrowserTest": true
+    },
+    "finished": "2026-09-20T00:07:12.801779+00:00"
+  },
+  "update": {
+    "source": "677332e1b326703a76f802c7e0e844c9a0e0aa6e",
+    "installUpdateSucceeded": true,
+    "encryptedOnionVaultPreserved": true
+  },
+  "artifact_verification": {
+    "source": "677332e1b326703a76f802c7e0e844c9a0e0aa6e",
+    "browser_sha256": "956c7e391ed9596ba29cbea73f3f2a8dc0c3f813bdb33162c59929398a3e85f9",
+    "all_apk_hashes_match": true,
+    "all_apk_signatures_verified": true,
+    "native_aarch64_libraries": 19,
+    "min_elf_load_alignment": 16384,
+    "native_libraries_extracted_for_loading": true,
+    "dependency_license_entries": 647,
+    "product_and_native_notices_present": true
+  },
+  "additional_ui_checks": {
+    "menu-controls": {
+      "source": "399d8e49943dd206d6a1b920151030e3eda360f5",
+      "checks": [
+        "Normal-menu desktop checkbox changes only the selected tab",
+        "Desktop checkbox returns the selected tab to mobile mode",
+        "Normal-menu adblock checkbox changes only the selected tab",
+        "Re-enabling blocking from the menu rejects the cached image"
+      ],
+      "ok": true
+    },
+    "adaptive-layout": {
+      "source": "399d8e49943dd206d6a1b920151030e3eda360f5",
+      "before": {
+        "pid": "13490",
+        "size": "Physical size: 720x1280\n",
+        "density": "Physical density: 320\n"
+      },
+      "checks": [
+        {
+          "layout": "phone",
+          "widthDp": 360,
+          "tabStrip": false,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        },
+        {
+          "layout": "unfolded",
+          "widthDp": 800,
+          "tabStrip": true,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        },
+        {
+          "layout": "tablet-landscape",
+          "widthDp": 960,
+          "tabStrip": true,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        },
+        {
+          "layout": "folded",
+          "widthDp": 360,
+          "tabStrip": false,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        }
+      ],
+      "ok": true
+    },
+    "tor-quick-access": {
+      "source": "399d8e49943dd206d6a1b920151030e3eda360f5",
+      "checks": [
+        "Normal, Private and Tor tabs are separate tray pages",
+        "Saved Tor quick access opens its authenticated private-CA HTTPS site",
+        "Rendered Tor tab has a page thumbnail",
+        "Tor shortcut and Tor tab are absent from the Normal tray"
+      ],
+      "ok": true
+    }
+  }
+}

@@ -148,6 +148,9 @@ python3 wildbuzzard/android/scripts/notices.py --licenses
 
 ## Device validation
 
+See [VALIDATION.md](VALIDATION.md) for the tested APK revision, build provenance,
+device results and remaining validation limits.
+
 The separate **Wild Buzzard Agent Probe** app uses the public Binder contract
 under a different Android UID. Run it on a real ARM64 Android device or an
 ARM64 Cuttlefish instance, with a local test server:
@@ -201,16 +204,24 @@ onion, and an unenrolled public onion. Keep its directory outside the checkout:
 
 ```sh
 python3 wildbuzzard/android/tests/onion-fixture.py --tor /path/to/tor --directory /private/test-fixture
-adb reverse tcp:9443 tcp:9443
-adb push /private/test-fixture/probe-fixture.json /sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/probe-fixture.json
-adb push /private/test-fixture/fixture.auth_private /sdcard/Download/fixture.auth_private
-adb shell am instrument -w -e credentialFile fixture.auth_private -e class org.openresearchtools.wildbuzzard.probe.OnionBrowserTest org.openresearchtools.wildbuzzard.probe.test/androidx.test.runner.AndroidJUnitRunner
-adb shell rm /sdcard/Download/fixture.auth_private
 ```
+
+Keep the fixture running and use the recorded-build runner from another shell:
+
+```sh
+python3 wildbuzzard/android/scripts/validate-device.py /path/to/downloaded-artifacts \
+  --serial DEVICE_SERIAL --output /path/to/onion-results --onion-only \
+  --onion-fixture /private/test-fixture/probe-fixture.json
+```
+
+This verifies the already-installed APKs and imports a generated credential
+through the document picker. On Android 10 and later, the runner registers the
+credential with the Downloads provider; an unindexed file copied with `adb push`
+may not appear in that picker. It removes the generated Downloads entry afterward.
 
 Never commit the generated credential file. Send `SIGHUP` to the fixture's Python
 process and rerun the test to verify a renewed leaf under the persistent CA.
-Send `SIGUSR1` and repush its fixture JSON to test certificate expiry. These
+Send `SIGUSR1` and rerun the runner to test certificate expiry. These
 signals preserve the running Tor service and onion identity. `--expired` is
 also available when starting the fixture.
 Send `SIGUSR2` to test a self-signed leaf, or start with `--self-signed-leaf`.
