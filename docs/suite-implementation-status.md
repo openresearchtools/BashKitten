@@ -234,6 +234,33 @@ The same four signing Secrets exist in both repositories. Catalog signing uses
 its separate key and `/home/user/Documents/droid-catalog.txt`; the existing APT
 key remains separate. No private key is tracked.
 
+## License delivery and production-only source (20 September 2026)
+
+BashKitten 0.2.4 adds offline Android About/Licenses and shared web/Linux
+Settings → About. The Android APK contains 76 license records, the Termux server
+168 and each Linux server 170, including full texts and native dependency
+notices. Release sources include exact Android source jars, locked npm/Pi source
+and the supplemental native sources. Node, Termux and system web engines remain
+separately installed; the server package includes Pi and its dependencies.
+
+Production Android build **35507158209** and both Linux architectures in
+**35507272186** succeeded. The actual installed Android app opens About, its
+license list and full GPL text. The installed Linux ARM64 host retains its login
+and displays the same shared About/license content. The Termux server on the
+suite Cuttlefish device reports the production package revision `bbb2e87` and
+serves 168 license records. Termux suite build **35505368171** rebuilt all nine
+APK variants and the matching companion; its short Termux-only About notice
+was checked on that device. Add-on source and app screens remain upstream.
+
+BashKitten-owned test suites, fixtures, instrumentation, permission probes and
+test dependencies were removed from the app repository and build workflows.
+Local verification material is outside the repository. Both test-only APKs and
+the two fixture chats/provider were removed from the disposable suite emulator;
+only `com.bashkitten` remains among BashKitten package IDs. Production package
+payloads have no app test script or development dependency. Unmodified upstream
+source archives retain their original contents and licenses. Historical checks
+above describe earlier verification, not a suite shipped with the application.
+
 ## Remaining acceptance gates
 
 Finish paired X11 APK/companion upgrade and variant-migration device coverage;
