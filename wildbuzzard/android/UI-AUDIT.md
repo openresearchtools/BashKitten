@@ -21,8 +21,8 @@ features and must not be offered by the UI.
 `wildbuzzard/android/scripts/generate-ui-artwork.py` records the original resource
 hashes and generates app overrides. `generate-pdf-artwork.py` and
 `generate-engine-artwork.py` cover PDF and packaged engine artwork, including the
-remaining upstream fox illustration and Mozilla logo. The inventory includes
-678 Android drawable variants, 76 PDF SVGs and 52 Gecko chrome images. Upstream resource identifiers remain for
+remaining upstream fox illustration and Mozilla logo. `generate-auxiliary-artwork.py` also covers browser-owned web-compatibility assets and removes unused upstream store graphics. The inventory includes
+680 Android drawable/store variants, 76 PDF SVGs, 52 Gecko chrome images, and 8 browser-owned extension asset images (including a structural transparent placeholder). Upstream resource identifiers remain for
 source compatibility; they do not imply the old artwork is used. Website
 favicons/content, Android framework widgets, and license/source attribution are
 not app branding. Both ARM64 APK workflows run `check-product-artwork.py` against

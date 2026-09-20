@@ -42,6 +42,8 @@ allowed_prefixes = (
 allowed_files = {
     'README.md',
     'mobile/android/fenix/app/src/main/AndroidManifest.xml',
+    'mobile/android/fenix/app/src/main/ic_launcher-web.webp',
+    'mobile/android/fenix/app/src/main/ic_launcher_private-web.webp',
     'wildbuzzard/android/ui-artwork.json',
     'wildbuzzard/android/UI-AUDIT.md',
     'mobile/android/fenix/app/src/debug/ic_launcher-playstore.png',

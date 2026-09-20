@@ -3464,6 +3464,16 @@
       "sha256": "58371ca09a83a4c559c51a018c003c6b6aaccdb3c9c1037f2a1160941f552a2d",
       "type": ".webp",
       "action": "remove flavor override; inherit Wild Buzzard branding"
+    },
+    "mobile/android/fenix/app/src/main/ic_launcher-web.webp": {
+      "sha256": "9ecfeea79a35ad6256c7a37f95a4f2ba1447002b7a908054f6711a4a3e8ad1ac",
+      "type": ".webp",
+      "action": "remove unused upstream store artwork; launcher uses Wild Buzzard logo"
+    },
+    "mobile/android/fenix/app/src/main/ic_launcher_private-web.webp": {
+      "sha256": "19b9235c2dbbcd76e4d7b68ecd3d1ca33a81a790347ec7e396109f8a98b16f1d",
+      "type": ".webp",
+      "action": "remove unused upstream store artwork; launcher uses Wild Buzzard logo"
     }
   },
   "pdf_viewer_images": {
@@ -4084,6 +4094,55 @@
       "original_sha256": "5eb72634641884df15686abf6bd799c233506ed81c4731a61ec91c1bb557c7e5",
       "action": "original search artwork",
       "sha256": "b09bda3e735a722782c0643c66237751695a4452f75d3e3c3f117aefb5f1d046"
+    }
+  },
+  "android_extension_assets": {
+    "assets/extensions/webcompat-reporter/icons/lightbulb.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat-reporter/icons/lightbulb.svg",
+      "original_source": "mobile/android/android-components/components/feature/webcompat-reporter/src/main/assets/extensions/webcompat-reporter/icons/lightbulb.svg",
+      "original_sha256": "c66ac72f674f3dafb319bd48df7b08c11abb5fd42264c917dd87eb2d28c2781d",
+      "action": "original info icon"
+    },
+    "assets/extensions/webcompat/shims/disqus.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat/shims/disqus.svg",
+      "original_source": "browser/extensions/webcompat/shims/disqus.svg",
+      "original_sha256": "3cfada2ba463ec58c7c82482ceba87c68dac5ccdc9f73caa3681651787516696",
+      "action": "original document icon"
+    },
+    "assets/extensions/webcompat/shims/facebook.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat/shims/facebook.svg",
+      "original_source": "browser/extensions/webcompat/shims/facebook.svg",
+      "original_sha256": "6f1f063740dd0a3cca1ba97850f997364d8fc5aa2dd603151528333d576224a1",
+      "action": "original person icon"
+    },
+    "assets/extensions/webcompat/shims/instagram.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat/shims/instagram.svg",
+      "original_source": "browser/extensions/webcompat/shims/instagram.svg",
+      "original_sha256": "0d71d5e5e7d571faa05fb397fca92cf84a285e4baef876b96c68592629de41bd",
+      "action": "original image icon"
+    },
+    "assets/extensions/webcompat/shims/play.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat/shims/play.svg",
+      "original_source": "browser/extensions/webcompat/shims/play.svg",
+      "original_sha256": "38b70069ec125c344bad7684fc1cbcf448f654aa39ac80dee1a4c128e6d1acef",
+      "action": "original play icon"
+    },
+    "assets/extensions/webcompat/shims/tiktok.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat/shims/tiktok.svg",
+      "original_source": "browser/extensions/webcompat/shims/tiktok.svg",
+      "original_sha256": "90fe4358aa6c0887f545f455ecad9d88b14dd020d62b0e771e6c30010c588de5",
+      "action": "original play icon"
+    },
+    "assets/extensions/webcompat/shims/x-logo.svg": {
+      "source": "mobile/android/fenix/app/src/main/assets/extensions/webcompat/shims/x-logo.svg",
+      "original_source": "browser/extensions/webcompat/shims/x-logo.svg",
+      "original_sha256": "312ed2f9826e199b31507ff17cc963b031f052e09d16642d321a53bcc623658b",
+      "action": "original document icon"
+    },
+    "assets/extensions/webcompat/shims/tracking-pixel.png": {
+      "source": "browser/extensions/webcompat/shims/tracking-pixel.png",
+      "action": "transparent structural placeholder",
+      "sha256": "a73237a07cec4d81b7cb7995220839f554e2e8936e5d5ae25cc47753f9737c07"
     }
   }
 }

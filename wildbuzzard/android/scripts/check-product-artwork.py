@@ -86,12 +86,19 @@ def main():
     cache[member]=tuple(re.findall(r'pathData\([^)]*\)="([^"]*)"',dump))
    assert cache[member] in paths,'Packaged vector differs from original product geometry: '+name+' '+member
    vectors_checked+=1
- engine_checked=0;error_assets_checked=0
+ engine_checked=0;error_assets_checked=0;extension_assets_checked=0
  with zipfile.ZipFile(args.apk) as apk:
   for p in source_paths(ROOT/'mobile/android/fenix/app/src/main/assets'):
    if not p.name.startswith('mozac_error_') or p.suffix!='.svg':continue
    assert apk.read('assets/'+p.name)==read_source(p),'Old Android error illustration: '+p.name
    error_assets_checked+=1
+  extension_assets=inventory.get('android_extension_assets', {})
+  for member in apk.namelist():
+   if not member.startswith('assets/') or not member.endswith(('.svg','.png','.webp','.jpg','.jpeg','.gif','.ico','.avif')):continue
+   if Path(member).name.startswith('mozac_error_'):continue
+   assert member in extension_assets,'Unaudited Android asset image: '+member
+   assert apk.read(member)==read_source(ROOT/extension_assets[member]['source']),'Old browser extension artwork: '+member
+   extension_assets_checked+=1
   with zipfile.ZipFile(io.BytesIO(apk.read('assets/omni.ja'))) as omni:
    audited={member:ROOT/row['source'] for member,row in inventory['engine_resources'].items()}
    audited.update({'chrome/pdfjs/content/web/images/'+Path(source).name:ROOT/source for source in inventory['pdf_viewer_images']})
@@ -102,7 +109,7 @@ def main():
     assert member in audited,'Unaudited image in packaged engine: '+member
     assert omni.read(member)==read_source(audited[member]),'Packaged engine image is stale: '+member
     engine_checked+=1
- result={'source':args.source or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'apk_sha256':hashlib.sha256(args.apk.read_bytes()).hexdigest(),'brand_aliases_verified':aliases_checked,'functional_vector_variants_verified':vectors_checked,'android_error_images_verified':error_assets_checked,'packaged_engine_images_verified':engine_checked,'all_passed':True}
+ result={'source':args.source or subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'apk_sha256':hashlib.sha256(args.apk.read_bytes()).hexdigest(),'brand_aliases_verified':aliases_checked,'functional_vector_variants_verified':vectors_checked,'android_error_images_verified':error_assets_checked,'android_extension_images_verified':extension_assets_checked,'packaged_engine_images_verified':engine_checked,'all_passed':True}
  args.report.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
 
 if __name__=='__main__':main()
