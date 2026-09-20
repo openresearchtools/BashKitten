@@ -90,7 +90,7 @@ class WebFlowTest {
                 assertTrue("Fixture image not listed in the picker", device.wait(Until.hasObject(By.text(name)), 15000))
                 device.findObject(By.text(name)).click()
                 device.findObject(By.text("Open"))?.click()
-                until("document.querySelector('#attachmentTray').innerText.includes('$name')")
+                until("[...document.querySelectorAll('#attachmentTray .attachment')].some(item => item.title === '$name' && item.querySelector('img')?.naturalWidth === 32)")
                 tap("#filesToggle"); until("!document.querySelector('#filePanel').classList.contains('hidden')")
                 tap("#uploadRepo")
                 assertTrue(device.wait(Until.hasObject(By.text(name)), 15000)); device.findObject(By.text(name)).click()
