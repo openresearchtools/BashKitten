@@ -319,5 +319,20 @@ The Android check exposed an interrupted web startup that remained half-loaded
 after the backend returned. Startup now retries until initialized, using the
 existing status interval, without reloading an initialized chat. An external
 WebKit check with a failed startup request passed recovery in the same document
-and verified that later focus/status checks preserve an unsent draft. Production
-packages are being rebuilt with this correction.
+and verified that later focus/status checks preserve an unsent draft.
+
+Production Android build **35512248234** and Linux ARM64/AMD64 build
+**35512248212** at `09fabc7` passed. The final APK opens the shared offline About
+and full licenses on both signed-suite and external-upstream Termux devices;
+Back → Start returns to the normal chat/login. The installed Linux ARM64 host
+passes the same offline view and interrupted-startup checks. Pi 0.86.1 is selected
+on all three normal installations. AMD64 packages were built on native CI; this
+change's desktop interaction checks ran on ARM64.
+
+**v0.2.5** is published with its APK, five packages and matching source/license
+archives. Catalog renewal **35512636900** and APT publication **35512635577**
+passed. The public catalog signature and exact APK hash were verified, as were
+all five package hashes in the APT index. Actual signed-index reinstalls passed
+on Linux ARM64 and both Termux installations, with their backends running at the
+remembered addresses afterward. All verification scripts and fixtures remain
+outside application repositories and release artifacts.
