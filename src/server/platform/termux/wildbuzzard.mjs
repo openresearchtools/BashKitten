@@ -16,8 +16,9 @@ const appId = 'org.openresearchtools.wildbuzzard';
 const upstream = () => readJson(new URL('upstream.json', template));
 export async function wildbuzzardStatus() {
   const pin = await upstream(), installed = await readJson(stateFile, {});
+  const integrationVersion = digest((await fs.readFile(new URL('package.json', template), 'utf8')) + (await fs.readFile(new URL('skills/browser/SKILL.md', template), 'utf8')));
   const present = await fs.access(path.join(directory, 'upstream/extension.mjs')).then(() => true, () => false);
-  return { ...installed, ready: present && installed.revision === pin.revision, latest: pin.version, latestRevision: pin.revision };
+  return { ...installed, ready: present && installed.revision === pin.revision && installed.integrationVersion === integrationVersion, latestIntegrationVersion: integrationVersion, latest: pin.version, latestRevision: pin.revision };
 }
 async function apkPath() {
   if (platform !== 'termux') throw Error('WildBuzzard Android controls require Termux');
@@ -74,7 +75,7 @@ export async function setupWildbuzzard(job) {
       try {
         await fs.rename(stage, directory);
         await job.exec(process.execPath, [runtime.cli, 'install', directory], { env: { PI_OFFLINE: '1', PI_TELEMETRY: '0', DO_NOT_TRACK: '1' } });
-        await writeJson(stateFile, { revision: pin.revision, version: pin.version, external });
+        await writeJson(stateFile, { revision: pin.revision, integrationVersion: previous.latestIntegrationVersion, version: pin.version, external });
       } catch (error) {
         await fs.rm(directory, { recursive: true, force: true });
         if (existed) await fs.rename(backup, directory);

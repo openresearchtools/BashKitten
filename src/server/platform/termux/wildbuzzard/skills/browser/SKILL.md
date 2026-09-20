@@ -1,6 +1,6 @@
 ---
 name: wildbuzzard-android
-description: Control the WildBuzzard Android browser from Termux: browse pages, interact with tabs, take screenshots and retrieve downloads.
+description: "Control the WildBuzzard Android browser from Termux: browse pages, interact with tabs, take screenshots and retrieve downloads."
 ---
 
 Use the native Pi tools `wildbuzzard_browser`, `wildbuzzard_screenshot` and
