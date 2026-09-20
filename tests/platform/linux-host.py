@@ -139,6 +139,7 @@ try:
             tap('#filesToggle')
             until(lambda: launches.exists())
             native_file = ROOT / 'test-results/linux/Open file π with spaces.txt'
+            native_file.parent.mkdir(parents=True, exist_ok=True)
             native_file.write_text('Open this existing project file, without downloading a copy.\n')
             host.control('project-root', {'path': str(native_file.parent)})
             from urllib.parse import urlencode
