@@ -42,7 +42,12 @@ def collect(item):
     with file.open('rb') as stream: actual = hashlib.file_digest(stream, algorithm).digest()
     assert actual == base64.b64decode(encoded), 'npm integrity mismatch: ' + value['name']
     with tarfile.open(file) as archive:
-        package = json.load(archive.extractfile('package/package.json'))
+        # Older npm publishers (including @types/node) used their package name
+        # as the tar root. Read metadata without extracting any archive paths.
+        roots = [member for member in archive if member.name.count('/') == 1 and member.name.endswith('/package.json')]
+        assert len(roots) == 1, 'Ambiguous npm metadata: ' + value['name']
+        package = json.load(archive.extractfile(roots[0]))
+        assert package['name'] == value['name'] and package['version'] == value['version'], 'npm package identity mismatch: ' + value['name']
         notices = [member.name for member in archive if re.search(r'(^|/)(licen[cs]e|copying|notice)([./-]|$)', member.name, re.I)]
     return {'name': value['name'], 'version': value['version'], 'license': package.get('license'), 'repository': package.get('repository'), 'url': url, 'integrity': value['integrity'], 'file': file.name, 'notices': notices}
 
