@@ -58,7 +58,7 @@ export async function desktopPackages(job, { companionVersion } = {}) {
   await job.step('x11-repo', 'Enabling the Termux X11 repository', () => apt(job, ['install', '-y', 'x11-repo']));
   await job.step('desktop-lists', 'Refreshing desktop packages', () => apt(job, ['update']));
   await job.step('desktop-packages', 'Installing XFCE and LibreOffice', async () => {
-    await apt(job, ['install', '-y', 'xfce4', 'dbus', 'libreoffice', 'ttf-dejavu', 'mesa', 'mesa-demos', 'vulkan-tools', `bashkitten-termux-x11=${companionVersion}`]);
+    await apt(job, ['install', '-y', '--no-install-recommends', 'xfce4', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu', 'mesa', 'mesa-demos', 'vulkan-tools', `bashkitten-termux-x11=${companionVersion}`]);
     await job.exec('apt-mark', ['hold', 'bashkitten-termux-x11']);
   });
 }

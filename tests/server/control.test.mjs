@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
 test('Local supervisor attaches once, preserves intentional stop and restarts a dead backend', { timeout: 45000 }, async t => {
@@ -48,4 +48,9 @@ test('Local supervisor attaches once, preserves intentional stop and restarts a 
   for (let i = 0; i < 80 && (await ctl('status')).manager.revision !== 'stopped-update'; i++) await new Promise(r => setTimeout(r, 100));
   const updated = await ctl('status'); assert.equal(updated.manager.revision, 'stopped-update');
   assert.equal(updated.web.desired, false); assert.equal(updated.web.status, 'stopped');
+  const attached = spawn(process.execPath, [script, 'serve'], { env: { ...env, BASHKITTEN_ATTACHED_MANAGER: '1' }, stdio: 'ignore' });
+  t.after(() => { if (attached.exitCode === null) attached.kill(); });
+  for (let i = 0; i < 80 && !(await ctl('status')).manager.attached; i++) await new Promise(r => setTimeout(r, 100));
+  const adopted = await ctl('status'); assert.equal(adopted.manager.attached, true);
+  assert.notEqual(adopted.manager.pid, updated.manager.pid); assert.equal(adopted.web.desired, false);
 });

@@ -47,7 +47,7 @@ object TermuxBridge {
 
     fun command(context: Context, command: String, args: JSONObject = JSONObject(), callback: (Result<JSONObject>) -> Unit) {
         // Bootstrap may still be preparing packages; avoid Termux's missing-executable dialog.
-        val script = "if [ -x '$prefix/bin/bashkittenctl' ]; then exec '$prefix/bin/bashkittenctl' \"\$@\"; else printf 'BashKitten packages are not installed yet' >&2; exit 1; fi"
+        val script = "export BASHKITTEN_NO_AUTOSTART=1; if [ -x '$prefix/bin/bashkittenctl' ]; then exec '$prefix/bin/bashkittenctl' \"\$@\"; else printf 'BashKitten packages are not installed yet' >&2; exit 1; fi"
         execute(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-control", command, args.toString()), null, callback = callback)
     }
 

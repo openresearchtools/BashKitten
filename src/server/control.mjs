@@ -34,6 +34,7 @@ async function owned(pid, marker) {
 
 export async function ensureManager() {
   try { await controlRequest('status'); return; } catch {}
+  if (process.env.BASHKITTEN_NO_AUTOSTART === '1') throw Error('The Termux service is starting; reopen Apps if it does not become ready');
   await privateDir(path.dirname(controlSocket));
   const log = openSync(path.join(dataDir, 'control.log'), 'a', 0o600);
   const child = spawn(process.execPath, [script, 'serve'], { detached: true, stdio: ['ignore', log, log], env: process.env });
@@ -53,11 +54,25 @@ async function serve() {
   const lock = controlSocket + '.lock';
   try {
     const pid = Number(await fs.readFile(lock, 'utf8'));
-    if (await owned(pid, script)) return;
+    if (await owned(pid, script)) {
+      if (process.env.BASHKITTEN_ATTACHED_MANAGER !== '1') return;
+      // Transfer an earlier detached manager to the real long-lived Termux task.
+      // Merely returning here lets Termux lose its foreground task and freeze.
+      while (await owned(pid, script)) {
+        const current = await controlRequest('status');
+        if (current.manager?.attached) return;
+        if (!['running', 'waiting'].includes(current.packages?.job?.status)) {
+          await controlRequest('shutdown', {});
+          for (let i = 0; i < 100 && await owned(pid, script); i++) await sleep(100);
+        } else await sleep(2000);
+      }
+    }
+    const current = await fs.readFile(lock, 'utf8').catch(() => null);
+    if (current !== null && Number(current) !== pid) return serve();
     await fs.rm(lock, { force: true });
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
   try { await fs.writeFile(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); }
-  catch (error) { if (error.code === 'EEXIST') return; throw error; }
+  catch (error) { if (error.code === 'EEXIST') return process.env.BASHKITTEN_ATTACHED_MANAGER === '1' ? serve() : undefined; throw error; }
   await fs.rm(controlSocket, { force: true });
   let state = await readJson(stateFile, { web: true }), serial = Promise.resolve(), starting = false, lastError = null;
   let retryAt = 0, failures = 0;
@@ -104,7 +119,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 1, platform, manager: { pid: process.pid, revision }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+    return { version: 1, platform, manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
   }
   async function reloadServices(job) {
     if (platform === 'termux') await apt(job, ['check']); // Respect an external APT transaction too.
