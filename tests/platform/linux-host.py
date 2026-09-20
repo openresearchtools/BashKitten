@@ -198,6 +198,13 @@ try:
     until(lambda: app.web.get_uri() == app.origin + '/')
     js("window.linksRemoved=false;Promise.all(window.linkFixture.ids.map(id=>fetch('/api/sessions/'+id,{method:'DELETE',headers:{'x-bashkitten-csrf':window.linkFixture.csrf}}))).then(()=>window.linksRemoved=true);true")
     until(lambda: js('window.linksRemoved'))
+    js("showSettingsView();document.querySelector('#tabAbout').click();document.querySelector('#viewLicenses').click();true")
+    until(lambda: js("document.querySelectorAll('#licenseList details').length > 100"))
+    assert js("document.querySelector('#settingsAbout').textContent.includes('server package includes unmodified Pi')")
+    js("document.querySelector('#licenseList details').open=true;true")
+    until(lambda: js("document.querySelector('#licenseList pre')?.textContent.includes('GNU GENERAL PUBLIC LICENSE')"))
+    assert js("Array.from(document.querySelectorAll('#licenseList summary')).some(s=>s.textContent.includes('@earendil-works/pi-coding-agent'))")
+    print('PASS: About explains the separate server and opens full bundled dependency licenses')
     output = ROOT / 'test-results/linux'
     output.mkdir(parents=True, exist_ok=True)
     captured = []
