@@ -51,9 +51,12 @@
         notice.textContent = login.status === 'complete' ? 'Connected. You can close this tab and return to BashKitten.' : login.error || 'Login cancelled.';
         return;
       }
-      notice.textContent = 'Sign in with ' + provider + '. Pi completes authorization in Termux automatically.';
+      notice.textContent = 'Sign in with ' + provider + '. Pi completes authorization automatically.';
       const authorization = login.events.find(event => event.type === 'auth_url' && /^https?:\/\//.test(event.url));
-      if (authorization) { location.replace(authorization.url); return; }
+      if (authorization) {
+        const link = document.createElement('a'); link.href = authorization.url;
+        link.textContent = 'Continue in browser'; link.target = '_blank'; link.rel = 'noopener'; steps.append(link);
+      }
       for (const event of login.events) {
         if (event.message || event.instructions) { const line = document.createElement('p'); line.textContent = event.message || event.instructions; steps.append(line); }
         if (event.userCode) { const code = document.createElement('strong'); code.textContent = event.userCode; steps.append(code); }

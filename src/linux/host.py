@@ -89,7 +89,7 @@ class BashKitten(Gtk.Application):
         retry.connect('clicked', lambda _: self.background(lambda: control('start'), self.status))
         fallback.append(retry)
         self.stack.add_named(fallback, 'status')
-        network = WebKit.NetworkSession.new(str(PROFILE / 'data'), str(PROFILE / 'cache'))
+        network = self.network = WebKit.NetworkSession.new(str(PROFILE / 'data'), str(PROFILE / 'cache'))
         network.get_cookie_manager().set_persistent_storage(str(PROFILE / 'cookies.sqlite'), WebKit.CookiePersistentStorage.SQLITE)
         self.content = WebKit.UserContentManager()
         self.content.register_script_message_handler('bashkitten')
@@ -168,6 +168,29 @@ class BashKitten(Gtk.Application):
             return False
         action = decision.get_navigation_action()
         uri = action.get_request().get_uri()
+        parsed = urlsplit(uri)
+        local = parsed.scheme + '://' + parsed.netloc == self.origin
+        if local and parsed.path == '/pi-login':
+            if web is not self.web and kind == WebKit.PolicyDecisionType.NAVIGATION_ACTION:
+                decision.use()
+            else:
+                decision.ignore()
+                if action.is_user_gesture():
+                    window = Gtk.Window(title='Pi service login', transient_for=self.window, default_width=560, default_height=660)
+                    # Share this host's authenticated cookie jar, with no native
+                    # bridge in the helper. Provider links use the system browser.
+                    helper = WebKit.WebView(network_session=self.network)
+                    helper.connect('decide-policy', self.navigate)
+                    window.set_child(helper)
+                    window.present()
+                    helper.load_uri(uri)
+            return True
+        if web is not self.web and local and parsed.path == '/':
+            decision.ignore()
+            if action.is_user_gesture():
+                web.get_root().close()
+                self.window.present()
+            return True
         if kind == WebKit.PolicyDecisionType.NAVIGATION_ACTION and uri in (self.origin + '/', 'about:blank'):
             decision.use()
         else:
