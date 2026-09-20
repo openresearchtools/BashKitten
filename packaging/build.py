@@ -39,6 +39,7 @@ if termux:
     assert int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10, 'Use npm >=10 for explicit Android dependency selection'
     command += ['--os=android', '--cpu=arm64']
 subprocess.run(command, check=True)
+subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app), 'android' if termux else 'linux', 'arm64' if arch in ('aarch64', 'arm64') else 'x64'], check=True)
 # npm chooses the platform's upstream binaries; no lifecycle scripts compile host binaries.
 installation = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/installed.json'
 (app / 'build-platform.json').write_text(json.dumps({'platform': 'android' if termux else 'linux', 'architecture': arch, 'lockSha256': lock_hash, 'piVersion': pi_version, 'installationStamp': installation, 'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}) + '\n')

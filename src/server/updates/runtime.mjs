@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { selectPlatformPackages } from './platform-packages.mjs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -91,6 +92,7 @@ export async function installPi(job) {
     await fs.writeFile(path.join(root, 'package-lock.json'), lockBytes);
     // npm verifies every locked tarball's integrity; no dependency lifecycle scripts run.
     await job.exec('npm', ['ci', '--prefix', root, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']);
+    await selectPlatformPackages(root);
     const check = `import {ModelRuntime,SessionManager} from ${JSON.stringify('file://' + path.join(root, 'node_modules/@earendil-works/pi-coding-agent/dist/index.js'))}; const r=await ModelRuntime.create({allowModelNetwork:false}); if(!r.getProviders().length||!SessionManager)process.exit(1);`;
     await job.exec(process.execPath, ['--input-type=module', '-e', check], { timeout: 60000 });
     await writeJson(path.join(root, 'managed.json'), { owner: 'bashkitten', version: manifest.version, lockSha256: manifest.sha256 });

@@ -4,6 +4,11 @@ Build with `python3 packaging/build.py linux` or
 `python3 packaging/build.py termux`. The Termux target requires npm 10+ and
 selects upstream Android/Bionic dependencies explicitly. Native Linux ARM64 and
 AMD64 Actions jobs build and test their own packages; do not relabel binaries.
+After npm installation, the package builder and Pi updater omit optional packages
+whose published OS/CPU constraints exclude the target. npm otherwise retains
+foreign binaries below Pi's nested shrinkwrap. The lock and all selected package
+contents stay unchanged; Pi itself is not patched. Old active runtimes remain
+intact until normal replacement and garbage collection.
 
 After the device and host checks pass, collect one signed Android candidate
 (including its `manifest.txt` and `sha256sums`), the four Linux packages from one
