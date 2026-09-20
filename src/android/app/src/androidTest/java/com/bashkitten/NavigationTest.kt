@@ -36,7 +36,7 @@ class NavigationTest {
                 assertTrue(done.await(5, TimeUnit.SECONDS)); return result
             }
             for (i in 0 until 150) {
-                if (js("document.querySelector('#app')?.classList.contains('hidden') === false") == "true") break
+                if (js("document.querySelector('#app')?.classList.contains('hidden') === false && location.hash.startsWith('#session=')") == "true") break
                 Thread.sleep(200)
             }
             assertEquals("true", js("document.querySelector('#app')?.classList.contains('hidden') === false"))
