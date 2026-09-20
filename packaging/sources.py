@@ -65,4 +65,15 @@ with tarfile.open(args.output / ('bashkitten-dependency-source-' + revision[:12]
     archive.add(manifest_path, arcname='dependencies/components.json')
     archive.add(pi_source, arcname='dependencies/' + pi_source.name)
     for component in components: archive.add(cache / component['file'], arcname='dependencies/' + component['file'])
+# Native sources and license supplements omitted from npm distributions.
+extra_cache = ROOT / 'work/license-sources'
+with tarfile.open(args.output / ('bashkitten-native-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
+    for value in json.loads(tracked('licenses/source-archives.json')):
+        file = extra_cache / value['file']
+        file.parent.mkdir(parents=True, exist_ok=True)
+        if not file.exists():
+            subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '3', '--proto', '=https', '--proto-redir', '=https', value['url'], '-o', str(file)], check=True)
+        with file.open('rb') as stream: actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+        assert actual == value['sha256'], 'Native source checksum mismatch: ' + value['file']
+        archive.add(file, arcname='native-dependencies/' + value['file'])
 print('Collected', len(components), 'integrity-verified dependency archives, Pi upstream source and BashKitten source at', revision)

@@ -511,6 +511,7 @@
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Services</button>
+            <button id="tabAbout" type="button" role="tab" aria-selected="false" aria-controls="settingsAbout" tabindex="-1" data-settings-tab="about">About</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
@@ -548,6 +549,14 @@
             <p class="meta">Custom models use Pi’s native ~/.pi/agent/models.json. Existing Pi configuration is loaded automatically.</p>
             <div class="subscription-actions"><button id="importPiSessions" type="button">Open an existing Pi session</button></div>
             <div id="piSessions"></div>
+          </section>
+          <section id="settingsAbout" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabAbout">
+            <h3>BashKitten</h3>
+            <p>A local interface for the Pi coding agent. GPL-3.0-only. No warranty.</p>
+            <p>The Android app and Linux desktop host connect to the separate BashKitten server. The server package includes unmodified Pi and its npm dependencies under their own licenses. Termux, Node.js and system libraries are installed separately and retain their own licenses.</p>
+            <p><a href="https://github.com/openresearchtools/bashkitten" target="_blank" rel="noopener">Source code</a></p>
+            <button type="button" id="viewLicenses">Licenses</button>
+            <div id="licenseList" class="settings-section"></div>
           </section>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
           <p id="settingsNotice" class="meta" role="status"></p>
@@ -2505,6 +2514,27 @@
         if (next !== undefined) { event.preventDefault(); selectSettingsTab(settingsTabs[next].dataset.settingsTab, true); }
       };
     }
+    $('#viewLicenses').onclick = async () => {
+      const button = $('#viewLicenses'), list = $('#licenseList');
+      button.disabled = true;
+      try {
+        const response = await fetch('/licenses.json');
+        if (!response.ok) throw Error('Could not load licenses');
+        const records = await response.json();
+        list.replaceChildren();
+        for (const entry of records) {
+          const detail = document.createElement('details'), summary = document.createElement('summary');
+          summary.textContent = [entry.name, entry.version, entry.license].filter(Boolean).join(' · ');
+          detail.append(summary);
+          detail.ontoggle = () => { if (detail.open && detail.childElementCount === 1) {
+            const text = document.createElement('pre'); text.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto';
+            text.textContent = entry.text; detail.append(text);
+          } };
+          list.append(detail);
+        }
+        button.textContent = 'Licenses loaded';
+      } catch (error) { button.disabled = false; list.textContent = error.message; }
+    };
     $('#settingsDone').onclick = showChatView;
     $('#settingsForm').onsubmit = async event => {
       event.preventDefault();

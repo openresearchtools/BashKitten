@@ -13,6 +13,7 @@ import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, read
 import { displayMessage, queueItem } from '../rpc/rpc.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
+import { licenses } from '../licenses.mjs';
 import { Services } from '../rpc/services.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
 import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
@@ -108,6 +109,7 @@ async function handler(req, res) {
     res.setHeader('X-Frame-Options', 'DENY');
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
+    if (route === '/licenses.json' && req.method === 'GET') return json(res, await licenses());
     if (route === '/favicon.ico') { res.writeHead(204); return res.end(); }
     const mutation = !['GET', 'HEAD'].includes(req.method);
     if (mutation) auth.checkOrigin(req);

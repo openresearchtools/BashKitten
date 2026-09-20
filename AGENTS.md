@@ -64,3 +64,13 @@ local fixtures. Preserve those tests and test relevant UI changes in native
 Android browsers with Termux. Real account authorization must be distinguished
 from fixture OAuth callbacks in test reports. Do not commit runtime credentials,
 node_modules or personal session data.
+
+## User-facing documentation and license delivery
+
+Keep README and release notes short, factual and for users. Preserve developer
+details in docs/usage.md, packaging/README.md and the implementation status.
+The native apps are thin hosts, but the separate server is part of BashKitten:
+its .deb bundles Pi/npm dependencies; Node/Termux/system web engines are external.
+Keep About text accurate for both. Generate full offline license texts from
+actual bundled artifacts; fail builds on missing texts. Preserve source licenses,
+including native transitive dependencies, and publish matching source archives.

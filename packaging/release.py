@@ -11,7 +11,7 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
-SERVER_INPUTS = ['src/server', 'src/web', 'src/linux', 'packaging/build.py', 'package.json', 'package-lock.json', 'reference', 'LICENSE', 'PI_UPSTREAM.md']
+SERVER_INPUTS = ['src/server', 'src/web', 'src/linux', 'packaging/build.py', 'package.json', 'package-lock.json', 'reference', 'licenses', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']
 
 def sha(file):
     with file.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -47,12 +47,14 @@ def main():
     args = parser.parse_args()
     assert re.fullmatch('[A-Za-z0-9._-]+', args.tag)
     subprocess.run(['git', 'diff', '--quiet', 'HEAD'], cwd=ROOT, check=True)
-    android_commit = build(args.android_run, ['src/android', 'src/server/platform/termux/bootstrap', '.github/workflows/android.yml'])
+    android_commit = build(args.android_run, ['src/android', 'licenses', 'LICENSE', 'package.json', 'src/server/platform/termux/bootstrap', '.github/workflows/android.yml'])
     linux_commit = build(args.linux_run, SERVER_INPUTS + ['.github/workflows/packages.yml'])
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     args.output.mkdir(parents=True, exist_ok=True)
     assert not any(args.output.iterdir()), 'Use an empty release directory'
     subprocess.run(['python3', str(ROOT / 'packaging/sources.py'), str(args.output)], check=True)
+    android_sources, = args.candidates.rglob('android-dependency-sources.tar.gz')
+    shutil.copy2(android_sources, args.output / android_sources.name)
     base = f'https://github.com/openresearchtools/bashkitten/releases/download/{args.tag}/'
     source = next(args.output.glob('bashkitten-source-*.tar.gz'))
     manifests = list(args.candidates.rglob('manifest.txt')); assert len(manifests) == 1

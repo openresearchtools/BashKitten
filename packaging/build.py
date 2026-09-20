@@ -26,10 +26,10 @@ if stage.exists():
 stage.mkdir(parents=True)
 app = stage / prefix.lstrip('/') / 'lib/bashkitten'
 app.mkdir(parents=True)
-for folder in ['src/server', 'src/web', 'reference']:
+for folder in ['src/server', 'src/web', 'reference', 'licenses']:
     if (ROOT / folder).exists():
         shutil.copytree(ROOT / folder, app / folder, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-for name in ['package.json', 'package-lock.json', 'LICENSE', 'PI_UPSTREAM.md']:
+for name in ['package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']:
     if (ROOT / name).exists():
         shutil.copy2(ROOT / name, app / name)
 command = ['npm', 'ci', '--prefix', str(app), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']
@@ -38,6 +38,7 @@ if termux:
     command += ['--os=android', '--cpu=arm64']
 subprocess.run(command, check=True)
 subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app), 'android' if termux else 'linux', 'arm64' if arch in ('aarch64', 'arm64') else 'x64'], check=True)
+subprocess.run(['node', str(ROOT / 'src/server/licenses.mjs'), str(app)], check=True)
 # npm chooses the platform's upstream binaries; no lifecycle scripts compile host binaries.
 installation = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/installed.json'
 (app / 'build-platform.json').write_text(json.dumps({'platform': 'android' if termux else 'linux', 'architecture': arch, 'lockSha256': lock_hash, 'piVersion': pi_version, 'installationStamp': installation, 'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}) + '\n')
@@ -94,7 +95,7 @@ for metadata in sorted(app.glob('node_modules/**/package.json')):
         pass
 (app / 'components.json').write_text(json.dumps(components, indent=2) + '\n')
 doc = stage / prefix.lstrip('/') / 'share/doc/bashkitten'; doc.mkdir(parents=True)
-for source in [ROOT / 'LICENSE', ROOT / 'PI_UPSTREAM.md', app / 'components.json']:
+for source in [ROOT / 'LICENSE', ROOT / 'PI_UPSTREAM.md', ROOT / 'THIRD_PARTY_NOTICES.md', app / 'components.json', app / 'licenses.json']:
     if source.exists(): shutil.copy2(source, doc / source.name)
 
 def deb(directory, name, description, dependencies):
@@ -116,4 +117,7 @@ if not termux:
     launcher.write_text('#!/bin/sh\nexec /usr/bin/python3 /usr/lib/bashkitten/src/linux/host.py "$@"\n'); launcher.chmod(0o755)
     applications = desktop / 'usr/share/applications'; applications.mkdir(parents=True)
     shutil.copy2(ROOT / 'packaging/linux/com.bashkitten.desktop', applications)
+    desktop_doc = desktop / 'usr/share/doc/bashkitten-desktop'; desktop_doc.mkdir(parents=True)
+    shutil.copy2(ROOT / 'LICENSE', desktop_doc / 'copyright')
+    shutil.copy2(ROOT / 'THIRD_PARTY_NOTICES.md', desktop_doc)
     deb(desktop, 'bashkitten-desktop', 'BashKitten GTK and system WebKit desktop host', f'bashkitten (= {version}), python3 (>= 3.10), python3-gi, gir1.2-gtk-4.0 (>= 4.10), gir1.2-webkit-6.0 (>= 2.40)')
