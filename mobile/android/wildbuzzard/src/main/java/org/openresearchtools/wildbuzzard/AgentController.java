@@ -75,6 +75,7 @@ final class AgentController extends ContextWrapper {
             send.accept(new JSONObject().put("result", new JSONObject().put("protocol", 2).put("engine", "gecko")
                 .put("authorization", uid < 0 ? "command-key" : app.grants.samePublisher(uid) ? "publisher-signature" : "user-grant")
                 .put("androidAccessibilityService", false).put("debuggable", (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0)
+                .put("foregroundService", BrowserKeepAliveService.active)
                 .put("methods", methods)
                 .put("foreground", access.shell ? "tabs.show" : "Call showTab(tabId), then send its PendingIntent")
                 .put("source", "https://github.com/openresearchtools/wildbuzzard-android")));

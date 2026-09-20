@@ -39,7 +39,24 @@ final class AppCommandGateway {
                 try {
                     AgentController.Access access = app.controller.forUid(uid, request.optString("session"), true);
                     CompletableFuture<String> result = new CompletableFuture<>();
-                    app.controller.execute(access, request.toString(), result::complete);
+                    if (method.equals("app.prepare")) {
+                        app.main.post(() -> {
+                            try {
+                                access.check.run();
+                                if (!BrowserKeepAliveService.active) app.keepAlive();
+                                long deadline = android.os.SystemClock.elapsedRealtime() + 5000;
+                                Runnable started = new Runnable() {
+                                    @Override public void run() {
+                                        if (BrowserKeepAliveService.active) result.complete("{\"result\":{\"foregroundRequired\":false}}");
+                                        else if (android.os.SystemClock.elapsedRealtime() >= deadline) result.complete("{\"error\":\"Browser foreground service did not start\"}");
+                                        else app.main.postDelayed(this, 25);
+                                    }
+                                };
+                                started.run();
+                            } catch (SecurityException error) { result.complete("{\"error\":\"App authorization required\"}"); }
+                            catch (IllegalStateException error) { result.complete("{\"result\":{\"foregroundRequired\":true}}"); }
+                        });
+                    } else app.controller.execute(access, request.toString(), result::complete);
                     response = new JSONObject(result.get(215, TimeUnit.SECONDS));
                 } catch (SecurityException error) {
                     response = new JSONObject().put("error", "App authorization required; run --authorize or allow this app in Settings > Agent access");

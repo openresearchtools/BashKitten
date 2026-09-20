@@ -7,7 +7,9 @@ import android.os.IBinder;
 
 /** Non-exported foreground lifetime for approved agent work and active Tor browsing. */
 public final class BrowserKeepAliveService extends Service {
+    static volatile boolean active;
     @Override public IBinder onBind(Intent intent) { return null; }
+    @Override public void onDestroy() { active = false; super.onDestroy(); }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         BrowserApp app = BrowserApp.get(this);
         NotificationManager manager = getSystemService(NotificationManager.class);
@@ -16,6 +18,7 @@ public final class BrowserKeepAliveService extends Service {
         startForeground(1, new Notification.Builder(this, "browser").setContentTitle("Wild Buzzard is available")
             .setContentText("Browser tabs and Tor connections stay active").setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(open).setOngoing(true).build());
+        active = true;
         return START_NOT_STICKY;
     }
 }

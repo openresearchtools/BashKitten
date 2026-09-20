@@ -57,6 +57,7 @@ try {
     const caps = await call('capabilities'); report.capabilities = caps;
     assert.equal(caps.authorization, vendor === 'signed' ? 'publisher-signature' : 'user-grant');
     assert.equal(caps.debuggable, false); assert.equal(caps.androidAccessibilityService, false);
+    assert.equal(caps.foregroundService, true);
   });
   await check('real example.com navigation, tree and link action to IANA', async () => {
     tabId = (await call('tabs.create', { url: 'https://example.com' })).id;
@@ -105,7 +106,7 @@ try {
   });
   await check('actual remote/debugging/accessibility/WebDriver flags remain off after snapshots', async () => {
     report.diagnostics = await call('diagnostics', { tabId });
-    for (const key of ['devtoolsRemoteEnabled', 'marionetteEnabled', 'remoteAgentEnabled', 'webdriver']) assert.equal(report.diagnostics[key], false, key);
+    for (const key of ['devtoolsRemoteEnabled', 'marionetteEnabled', 'remoteAgentEnabled', 'webdriver', 'engineAccessibilityEnabled']) assert.equal(report.diagnostics[key], false, key);
     assert.equal(report.diagnostics.snapshotBackend, 'dom');
   });
   await check('private screenshot returned as a Pi image and read again with Pi read', async () => {

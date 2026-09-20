@@ -148,17 +148,31 @@ public final class BrowserCommand {
             command.put("params", params.put("transfer", true));
         }
         int browserUid = browserUid();
+        JSONObject initial = authorize ? command : new JSONObject().put("method", "app.prepare");
         JSONObject response;
-        try { response = nativeRequest(browserUid, command); }
+        try { response = nativeRequest(browserUid, initial); }
         catch (IOException error) {
             if (noLaunch) throw error;
             launch(null, null);
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
             do {
                 Thread.sleep(250);
-                try { response = nativeRequest(browserUid, command); break; }
+                try { response = nativeRequest(browserUid, initial); break; }
                 catch (IOException retry) { if (System.nanoTime() >= deadline) throw retry; }
             } while (true);
+        }
+        if (!authorize && !response.has("error")) {
+            if (response.getJSONObject("result").getBoolean("foregroundRequired")) {
+                if (noLaunch) throw new IOException("Open Wild Buzzard once to activate background browser control");
+                launch(null, null);
+                long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
+                do {
+                    Thread.sleep(250); response = nativeRequest(browserUid, initial);
+                    if (response.has("error") || !response.getJSONObject("result").getBoolean("foregroundRequired")) break;
+                    if (System.nanoTime() >= deadline) throw new IOException("Android did not allow browser background work; open Wild Buzzard and retry");
+                } while (true);
+            }
+            if (!response.has("error")) response = nativeRequest(browserUid, command);
         }
         JSONObject result = response.optJSONObject("result");
         if (authorize && result != null && result.has("appGrant") && !noLaunch) {
