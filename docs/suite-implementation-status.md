@@ -304,7 +304,7 @@ included in the app source or artifacts.
 
 The native About pages now use the same web renderer and CSS as Settings →
 About, including its expandable license list. Android bundles an offline page
-with its APK notices; Linux bundles the server notices and explicitly identifies
+with its APK and companion-server notices; Linux bundles the server notices and explicitly identifies
 GTK/WebKitGTK/PyGObject/Python/Node as system dependencies. Native pages require
 neither the backend nor login and have no command bridge. They replace the
 earlier native list/dropdown implementations; the web About entry remains.

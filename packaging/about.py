@@ -11,7 +11,7 @@ parser.add_argument('shell', choices=['android', 'linux'])
 parser.add_argument('licenses', type=Path)
 parser.add_argument('output', type=Path)
 args = parser.parse_args()
-notice = ('The app connects to the separate BashKitten server, which includes unmodified Pi and its npm dependencies under their own licenses. Termux and Node.js are installed separately and retain their own licenses. These notices cover the libraries bundled in this APK.' if args.shell == 'android' else
+notice = ('The app connects to the separate BashKitten server, which includes unmodified Pi and its npm dependencies under their own licenses. Termux and Node.js are installed separately and retain their own licenses. These notices cover this APK and its companion server release.' if args.shell == 'android' else
           'The BashKitten server includes unmodified Pi and its npm dependencies under their own licenses. GTK, WebKitGTK, PyGObject, Python and Node.js are installed by your system package manager. They are not bundled in this app and retain their own licenses.')
 data = {'version': json.loads((ROOT / 'package.json').read_text())['version'],
         'notice': notice, 'licenses': json.loads(args.licenses.read_text())}
