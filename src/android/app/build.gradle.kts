@@ -10,7 +10,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 31
         targetSdk = 37
-        versionCode = 4
+        versionCode = 5
         versionName = "0.2.1"
     }
     sourceSets.getByName("main").assets.srcDir("../../server/platform/termux/bootstrap")
