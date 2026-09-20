@@ -2401,6 +2401,7 @@
           const result = await api('/api/sessions', {method: 'POST', body: createForm});
           const sessions = await loadSessions();
           current = sessions.find(session => session.id === result.id) || {id: result.id, title: text || 'Image session', cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value, running: true};
+          history.replaceState(null, '', '#session=' + current.id);
           renderSessionSidebar(sessions);
           $('#title').textContent = current.title;
           $('#folderLabel').textContent = displayFolder(current.cwd);
