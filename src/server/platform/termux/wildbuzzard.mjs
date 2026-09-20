@@ -73,7 +73,7 @@ export async function setupWildbuzzard(job) {
       if (existed) await fs.rename(directory, backup);
       try {
         await fs.rename(stage, directory);
-        await job.exec(process.execPath, [runtime.cli, 'install', directory, '--offline']);
+        await job.exec(process.execPath, [runtime.cli, 'install', directory], { env: { PI_OFFLINE: '1', PI_TELEMETRY: '0', DO_NOT_TRACK: '1' } });
         await writeJson(stateFile, { revision: pin.revision, version: pin.version, external });
       } catch (error) {
         await fs.rm(directory, { recursive: true, force: true });
