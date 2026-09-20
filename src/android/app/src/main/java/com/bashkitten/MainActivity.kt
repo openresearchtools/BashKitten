@@ -63,6 +63,7 @@ class MainActivity : AppCompatActivity() {
     private var inventoryLoading by mutableStateOf(false)
     private var inventoryError by mutableStateOf("")
     private var packagesExpanded by mutableStateOf(false)
+    private var logExpanded by mutableStateOf(false)
     private var visible = false
     private var setupActive = false
     private var managerAttempts = 0
@@ -424,7 +425,6 @@ class MainActivity : AppCompatActivity() {
         val packages = status?.optJSONObject("packages")
         val sources = packages?.optJSONObject("sources")
         val job = packages?.optJSONObject("job")
-        var logExpanded by remember { mutableStateOf(false) }
         var listExpanded by remember { mutableStateOf(false) }
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer), shape = RoundedCornerShape(20.dp)) {
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
