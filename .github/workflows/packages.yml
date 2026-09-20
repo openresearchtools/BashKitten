@@ -37,13 +37,13 @@ jobs:
         run: |
           test "$(dpkg --print-architecture)" = '${{ matrix.architecture }}'
           npm ci --ignore-scripts --no-audit --no-fund
-          npm test
-      - name: Build and install server and desktop packages
-        run: |
-          python3 packaging/build.py linux
-          apt-get install -y ./dist/*.deb
           useradd --create-home tester
           chown -R tester:tester "$GITHUB_WORKSPACE"
+          runuser -u tester -- npm test
+      - name: Build and install server and desktop packages
+        run: |
+          runuser -u tester -- python3 packaging/build.py linux
+          apt-get install -y ./dist/*.deb
       - name: Installed GTK host, persistent cookies and package reinstall
         env:
           BASHKITTEN_TEST_INSTALLED: '1'
