@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { PiRpc, translateEvent, activeBranch, usageView } from './rpc.mjs';
-import { readMeta, writeMeta, socketPath, privateDir, json, jsonBody, existingDirectory } from './common.mjs';
+import { readMeta, writeMeta, socketPath, privateDir, json, jsonBody, existingDirectory } from '../common.mjs';
 import path from 'node:path';
 
 process.umask(0o077);

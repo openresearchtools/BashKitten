@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { timingSafeEqual, randomBytes } from 'node:crypto';
 import { argon2id, argon2Verify } from 'hash-wasm';
-import { dataDir, readJson, writeJson, digest, randomToken } from './common.mjs';
+import { dataDir, readJson, writeJson, digest, randomToken } from '../common.mjs';
 
 const authFile = path.join(dataDir, 'web-auth.json');
 const loginFile = path.join(dataDir, 'web-logins.json');

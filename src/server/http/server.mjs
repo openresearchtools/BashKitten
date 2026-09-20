@@ -8,11 +8,11 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { SessionManager } from '@earendil-works/pi-coding-agent';
-import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, existingDirectory, safeName, withinRoot } from './common.mjs';
+import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, json, jsonBody, formBody, workerRequest, existingDirectory, safeName, withinRoot } from '../common.mjs';
 import * as auth from './web-auth.mjs';
-import { Services } from './services.mjs';
-import { folderLocations, pickerDirectory, listFolders } from './folders.mjs';
-import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from './files.mjs';
+import { Services } from '../rpc/services.mjs';
+import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
+import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -35,7 +35,7 @@ async function ensureWorker(id) {
       try { process.kill(pid, 0); } catch (error) { if (error.code === 'ESRCH') await fs.rm(lockFile, { force: true }); }
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
-    const child = spawn(process.execPath, [path.join(here, 'worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: process.env });
+    const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: process.env });
     closeSync(log); child.unref();
     let failure; child.on('error', error => { failure = error; });
     for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
@@ -76,8 +76,8 @@ async function deleteSession(id) {
   for (const file of (meta.messages || []).flatMap(m => m.attachments)) if (!referenced.has(file.path)) await fs.rm(file.path, { force: true });
 }
 function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 }); }
-const html = await fs.readFile(path.join(here, '../src/web_ui.html'));
-const loginHtml = await fs.readFile(path.join(here, '../src/pi_login.html'));
+const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));
+const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 let activeServer;
 async function handler(req, res) {

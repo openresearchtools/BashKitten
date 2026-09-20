@@ -106,8 +106,9 @@ The fixture is test-only and never used by `npm start`.
 
 See [architecture and limits](docs/pi-termux.md) and
 [Cuttlefish test record](tests/live/2026-09-19-pi-termux.md).
-This branch contains the browser UI (`src/*.html`), the Node/Termux adapter
-(`termux/`), and native Pi integration tests (`tests/termux/`). There is no Rust
+This branch contains the browser UI (`src/web/`), the shared Node server
+(`src/server/`, with Pi integration in `rpc/`), and native Pi integration tests
+(`tests/server/`). There is no Rust
 backend, Cargo project, GTK controller, Debian packaging, or copied agent engine.
 The original Rust implementation remains in Git history and is preserved with
 its complete main-branch history in [bashkitten-rust](https://github.com/openresearchtools/bashkitten-rust).

@@ -10,6 +10,7 @@ the individual license metadata of dependencies.
 
 ## Change tracking
 
+Work directly on `main` unless the user explicitly asks for a branch.
 Always stage, commit and push completed changes, including documentation and plans.
 Use focused commits for logical changes so features are easy to track, fix and
 revert. Run the relevant checks before committing, push to the current branch's

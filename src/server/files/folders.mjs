@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { existingDirectory } from './common.mjs';
+import { existingDirectory } from '../common.mjs';
 
 const contains = (root, target) => { const relative = path.relative(root, target); return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative); };
 export async function folderLocations() {

@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
-  "description": "BashKitten's browser UI for native Pi RPC sessions in Termux",
+  "description": "BashKitten's browser UI for native Pi RPC sessions on Linux and Termux",
   "engines": {
     "node": ">=22.19.0"
   },
   "bin": {
-    "bashkitten-web": "termux/server.mjs"
+    "bashkitten-web": "src/server/http/server.mjs"
   },
   "scripts": {
-    "start": "node termux/server.mjs",
-    "test": "node --test tests/termux/*.test.mjs"
+    "start": "node src/server/http/server.mjs",
+    "test": "node --test tests/server/*.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",

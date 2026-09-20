@@ -10,7 +10,7 @@ test('Native Pi browser callback validates state, completes login, stores creden
   process.env.PI_CODING_AGENT_DIR = agent;
   process.env.BASHKITTEN_TEST_OAUTH = '1';
   const { exchanges } = await import('./oauth-token-fixture.mjs');
-  const { Services } = await import('../../termux/services.mjs');
+  const { Services } = await import('../../src/server/rpc/services.mjs');
   const services = new Services();
   t.after(async () => { await services.cancel(); await fs.rm(agent, { recursive: true, force: true }); });
   async function until(fn) {

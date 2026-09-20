@@ -4,7 +4,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import yazl from 'yazl';
-import { dataDir, privateDir, withinRoot, safeName } from './common.mjs';
+import { dataDir, privateDir, withinRoot, safeName } from '../common.mjs';
 
 const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json', '.html': 'text/html', '.js': 'text/plain', '.ts': 'text/plain', '.css': 'text/plain', '.csv': 'text/csv', '.zip': 'application/zip', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
 export const mimeType = filename => types[path.extname(filename).toLowerCase()] || 'application/octet-stream';
