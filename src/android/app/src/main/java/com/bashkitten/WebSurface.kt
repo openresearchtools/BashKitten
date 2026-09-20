@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Environment
 import android.os.Message
+import android.view.ViewGroup
 import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.URLUtil
@@ -41,6 +42,8 @@ class WebSurface(private val activity: MainActivity) {
     private fun toast(text: String) = activity.runOnUiThread { Toast.makeText(activity, text, Toast.LENGTH_LONG).show() }
 
     private fun create(dialog: Dialog? = null): WebView = WebView(activity).apply {
+        // A viewport-based page needs a bounded view, including when Compose attaches it.
+        layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         settings.javaScriptEnabled = true
         settings.domStorageEnabled = true
         settings.allowFileAccess = false

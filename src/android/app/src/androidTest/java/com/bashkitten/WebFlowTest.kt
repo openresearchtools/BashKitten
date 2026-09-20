@@ -60,6 +60,7 @@ class WebFlowTest {
                     fail("Web state did not become ready: $script; " + js("document.body.innerText"))
                 }
                 fun tap(selector: String) {
+                    until("document.querySelector('$selector').getBoundingClientRect().height > 0")
                     val coordinates = JSONArray(js("(()=>{const r=document.querySelector('$selector').getBoundingClientRect();return [(r.x+r.width/2)*devicePixelRatio,(r.y+r.height/2)*devicePixelRatio]})()"))
                     var location = IntArray(2)
                     scenario.onActivity { findWeb(it.window.decorView)!!.getLocationOnScreen(location) }
@@ -73,6 +74,9 @@ class WebFlowTest {
                 scenario.recreate()
                 assertTrue(device.wait(Until.hasObject(By.clazz(WebView::class.java)), 30000))
                 until("!document.querySelector('#app').classList.contains('hidden')")
+                val viewport = js("JSON.stringify({innerHeight,innerWidth,dpr:devicePixelRatio,app:document.querySelector('#app').getBoundingClientRect().toJSON()})")
+                instrumentation.sendStatus(0, android.os.Bundle().apply { putString("stream", "Viewport: $viewport\n") })
+                until("document.querySelector('#app').getBoundingClientRect().height > 300")
                 tap("#folderBtn")
                 until("document.querySelector('#folderDialog').open && !document.querySelector('#folderUse').disabled")
                 assertEquals("true", js("document.querySelector('#folderUp').disabled"))
