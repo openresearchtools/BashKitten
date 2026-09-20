@@ -55,8 +55,11 @@ from Android app identity. Never put it in shared storage or a repository.
 
 Commands return JSON to stdout, diagnostics to stderr, and a nonzero exit code
 on errors. A complete request may be passed with `--json` or on stdin. The CLI
-opens the browser when needed using Termux's `am` command; Android's foreground
-launch restrictions still apply. `tabs.show` brings a particular tab forward.
+uses browser-owned, single-use PendingIntents for approval and tab activation,
+with Android's visibility-based launch opt-ins. This also works when the browser
+is already in front and Termux is in the background. Cold-start preparation can
+use Termux's `am` command. Android still requires a visible caller or browser to
+bring an activity forward. `tabs.show` brings a particular tab forward.
 Native Android callers handling their own foreground launch can use `--no-launch`
 and send the returned single-use `launch` ticket as an extra to
 `org.openresearchtools.wildbuzzard.CommandAccessActivity` within 30 seconds.

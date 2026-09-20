@@ -176,7 +176,7 @@ public final class BrowserCommand {
         }
         JSONObject result = response.optJSONObject("result");
         if (authorize && result != null && result.has("appGrant") && !noLaunch) {
-            launch("appGrant", result.getString("appGrant"));
+            launchNative("appGrant", result.getString("appGrant"));
             long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(3);
             do {
                 Thread.sleep(500);
@@ -186,7 +186,7 @@ public final class BrowserCommand {
             throw new IOException("App access was not approved");
         }
         if (result != null && result.has("launch") && !noLaunch) {
-            launch("launch", result.getString("launch")); response = new JSONObject().put("result", true);
+            launchNative("launch", result.getString("launch")); response = new JSONObject().put("result", true);
         }
         if (output != null && !response.has("error")) {
             if (result == null || !result.has("transfer")) throw new IOException("No file transfer returned");
@@ -213,6 +213,16 @@ public final class BrowserCommand {
         return Integer.parseInt(match.group(1));
     }
     private static android.os.IBinder appEndpoint;
+    private static android.app.PendingIntent pendingLaunch;
+    private static void launchNative(String field, String value) throws Exception {
+        android.app.PendingIntent launch = pendingLaunch; pendingLaunch = null;
+        if (launch == null) { launch(field, value); return; }
+        android.app.ActivityOptions options = android.app.ActivityOptions.makeBasic();
+        if (android.os.Build.VERSION.SDK_INT >= 34) options.setPendingIntentBackgroundActivityStartMode(
+            android.os.Build.VERSION.SDK_INT >= 36 ? android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE
+                : android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+        launch.send(null, 0, null, null, null, null, options.toBundle());
+    }
     private static android.content.Context commandContext;
     private static android.content.Context commandContext() throws Exception {
         if (commandContext != null) return commandContext;
@@ -257,7 +267,9 @@ public final class BrowserCommand {
                 if (code != AppCommandGateway.RESULT) return false;
                 data.enforceInterface(AppCommandGateway.CALLBACK);
                 if (android.os.Binder.getCallingUid() != browserUid) throw new SecurityException("Response is not from Wild Buzzard");
-                result.complete(data.readString()); return true;
+                String response = data.readString();
+                pendingLaunch = data.readTypedObject(android.app.PendingIntent.CREATOR);
+                result.complete(response); return true;
             }
         };
         android.os.Parcel data = android.os.Parcel.obtain();
