@@ -342,7 +342,11 @@ the user may briefly see a setup progress window, but never has to enter termina
 commands. This also gives first initialization a proper Android activity
 lifecycle. A command service alone cannot assume `$PREFIX` already exists.
 
-Termux:API needs no planned behavioral patch. X11 needs signing/build adjustments
+Termux:API has one small compatibility patch: the exact BashKitten session URI
+in a notification action becomes a direct Android activity PendingIntent.
+Android 17 device testing confirmed that the upstream shell trampoline cannot
+open the app in the background, even through TermuxAm. Other API actions remain
+unchanged; no additional permission or Pi change is required. X11 needs signing/build adjustments
 and its existing variant selection; no GPU or session-management fork is planned.
 Keep any additional upstream compatibility fixes separately justified and tested.
 
@@ -1073,6 +1077,9 @@ settled Pi turn with a final assistant message. The Termux implementation lives
 under `src/server/platform/termux/`. It must work while the HTTP server or UI is
 closed. Persist a small deduplicated outbox keyed by session and turn ID so
 reconnection does not produce duplicate notifications.
+
+The notification action is `bashkitten://session/UUID`; the suite API patch
+opens this exact URI directly in `com.bashkitten.MainActivity`.
 
 When enabled on Termux, deliver through the installed `termux-notification` CLI
 and Termux:API. Use the chat name as title and a configurable, Unicode-safe text
