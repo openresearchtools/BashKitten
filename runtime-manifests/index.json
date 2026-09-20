@@ -8,5 +8,15 @@
     ],
     "lock": "../package-lock.json",
     "sha256": "f05f0e28cba7a1b6281f73cebf9bc8ef4f0730b334a78f0dad6773443eba68f7"
+  },
+  {
+    "version": "0.86.0",
+    "node": ">=22.19.0",
+    "platforms": [
+      "linux",
+      "android"
+    ],
+    "lock": "0.86.0.lock.json",
+    "sha256": "3d95ff19698ea70dfe7f659eb395c8862335d2d455fe7be790b3462b68a6ef00"
   }
 ]
