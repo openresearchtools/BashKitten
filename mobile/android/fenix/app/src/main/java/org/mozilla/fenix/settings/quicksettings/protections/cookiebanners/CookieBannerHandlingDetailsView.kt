@@ -75,17 +75,9 @@ class CookieBannerHandlingDetailsView(
     }
 
     private fun setUiForReportSiteMode() {
-        binding.cancelButton.visibility = View.VISIBLE
-        binding.requestSupport.visibility = View.VISIBLE
+        binding.cancelButton.visibility = View.GONE
+        binding.requestSupport.visibility = View.GONE
         binding.cookieBannerSwitch.visibility = View.GONE
-        binding.requestSupport.setOnClickListener {
-            interactor.handleRequestSiteSupportPressed()
-            onDismiss.invoke()
-        }
-        binding.cancelButton.setOnClickListener {
-            CookieBanners.reportSiteCancelButton.record(NoExtras())
-            interactor.onBackPressed()
-        }
     }
 
     @VisibleForTesting
@@ -132,8 +124,7 @@ class CookieBannerHandlingDetailsView(
                 appName,
             )
             CookieBannerUIMode.SITE_NOT_SUPPORTED -> context.getString(
-                R.string.reduce_cookie_banner_details_panel_title_unsupported_site_request_2,
-                appName,
+                R.string.wildbuzzard_cookie_banner_unsupported,
             )
             else -> ""
         }

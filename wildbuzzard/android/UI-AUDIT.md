@@ -12,7 +12,7 @@ features and must not be offered by the UI.
 | Main and custom-tab menus | Browser navigation, bookmarks, history, downloads, passwords, desktop mode, per-tab adblocking and settings; no extensions, default-browser promotion or Mozilla VPN. |
 | Main settings | Only shipped capabilities; no runtime Nimbus/account callbacks that can re-enable hidden entries. |
 | Search and toolbar customization | Search engine controls and local suggestions; no Sync search, Firefox Suggest, translation shortcut or Mozilla AI gesture. |
-| HTTPS, site permissions and tracking controls | Keep local security settings and explanations; remove Mozilla help buttons. Android DNS is used for ordinary sites; onion routing remains owned by Tor. |
+| HTTPS, site permissions and tracking controls | Keep local security settings and explanations; remove Mozilla help buttons, protection marketing, the weekly dashboard and requests to report unsupported cookie banners. Android DNS is used for ordinary sites; onion routing remains owned by Tor. |
 | Passwords and autofill | Local storage and Android integration, without Sync initialization or sign-in rows; bookmarks and history use local storage without account-service callbacks. |
 | About | Wild Buzzard version, project links, dependency libraries and locally packaged licenses/source notices. No dead about:rights/about:license buttons or secret debug menu. Crash recovery only offers restore/close; it cannot submit reports. |
 | Legacy entry points | Unsupported extension/AI deep links and about:addons/about:glean shortcuts no longer open feature screens. Website-triggered extension installation is not started. |

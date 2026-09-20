@@ -90,19 +90,7 @@ internal fun TrackersBlockedPanel(
                     }
             }
 
-            Spacer(Modifier.height(FirefoxTheme.layout.space.static200))
 
-            MenuGroup {
-                MenuItem(
-                    label = pluralStringResource(
-                        R.plurals.trackers_blocked_panel_num_trackers_blocked_this_week_2,
-                        numberOfTrackersBlockedThisWeek,
-                        numberOfTrackersBlockedThisWeek,
-                    ),
-                    beforeIconPainter = painterResource(iconsR.drawable.mozac_ic_shield_checkmark_24),
-                    onClick = { onTrackersBlockedThisWeekClicked() },
-                )
-            }
         }
     }
 }

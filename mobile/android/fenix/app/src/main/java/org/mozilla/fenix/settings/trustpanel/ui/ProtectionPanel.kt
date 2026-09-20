@@ -123,27 +123,25 @@ internal fun ProtectionPanel(
             )
         },
     ) {
-        TrackingProtectionHeader(
-            websiteIsSecured = websiteInfoState.isSecured,
-            isLocalPdf = isLocalPdf,
-            isTrackingProtectionEnabled = isTrackingProtectionEnabled,
-            isGlobalTrackingProtectionEnabled = isGlobalTrackingProtectionEnabled,
-            numberOfTrackersBlocked = numberOfTrackersBlocked,
-            onTrackerBlockedMenuClick = onTrackerBlockedMenuClick,
-        )
+        if (!isLocalPdf && numberOfTrackersBlocked > 0) {
+            MenuGroup {
+                MenuItem(
+                    label = pluralStringResource(
+                        R.plurals.trackers_blocked_panel_total_num_trackers_blocked_2,
+                        numberOfTrackersBlocked,
+                        numberOfTrackersBlocked,
+                    ),
+                    beforeIconPainter = painterResource(iconsR.drawable.mozac_ic_shield_checkmark_24),
+                    onClick = onTrackerBlockedMenuClick,
+                )
+            }
+        }
 
         TrackingProtectionMenuGroup(
             isLocalPdf = isLocalPdf,
             isGlobalTrackingProtectionEnabled = isGlobalTrackingProtectionEnabled,
             isSiteProtectionEnabled = isSiteProtectionEnabled,
             onTrackingProtectionToggleClick = onTrackingProtectionToggleClick,
-        )
-
-        IPProtectionMenuGroup(
-            visible = showIPProtection,
-            ipProtectionMenuState = ipProtectionMenuState,
-            onIPProtectionToggle = onIPProtectionToggle,
-            onIPProtectionNavigate = onIPProtectionNavigate,
         )
 
         ConnectionSecurityMenuGroup(
