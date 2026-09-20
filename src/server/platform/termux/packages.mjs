@@ -40,7 +40,7 @@ export async function updatePackages(job) {
     if (/^(Inst|Remv) bashkitten-termux-x11(?: |:)/m.test(simulation)) throw Error('X11 companion changes must be installed together with the matching viewer update');
     await apt(job, ['--download-only', '-y', 'full-upgrade']);
     await apt(job, ['-y', 'full-upgrade']);
-  }));
+  }, { desktop: true }));
   if (piCheck.error) throw Error('APT completed. Pi update check failed: ' + piCheck.error);
   await installPi(job);
 }

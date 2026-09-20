@@ -38,9 +38,11 @@ class MainActivity : ComponentActivity() {
     private var changeX11 by mutableStateOf(false)
     private val handler = Handler(Looper.getMainLooper())
     private var session: String? = null
+    private var firstReady = true
+    private fun initialized() = AppStore.prefs(this).getBoolean("termuxInitialized", false)
     private val setup = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         notice = if (result.resultCode == RESULT_OK) "Termux is ready" else "Termux setup did not finish"
-        if (result.resultCode == RESULT_OK) startBootstrap()
+        if (result.resultCode == RESULT_OK) { AppStore.prefs(this).edit().putBoolean("termuxInitialized", true).apply(); startBootstrap() }
         refresh()
     }
     private val poll = object : Runnable { override fun run() { refresh(); handler.postDelayed(this, 5000) } }
@@ -69,18 +71,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    override fun onResume() { super.onResume(); if (TermuxBridge.trusted(this)) TermuxBridge.ensureManager(this); handler.post(poll) }
+    override fun onResume() { super.onResume(); if (initialized() && TermuxBridge.trusted(this)) TermuxBridge.ensureManager(this); handler.post(poll) }
     override fun onPause() { handler.removeCallbacks(poll); web.flush(); super.onPause() }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); session = requestedSession(intent); if (status != null) openChat() }
     private fun requestedSession(intent: Intent): String? = intent.data?.takeIf { it.scheme == "bashkitten" && it.host == "session" }?.lastPathSegment?.takeIf { it.matches(Regex("[a-f0-9-]{36}")) }
 
     private fun refresh() {
         storeRevision++
-        if (requesting || !TermuxBridge.trusted(this)) return
+        if (requesting || !initialized() || !TermuxBridge.trusted(this)) return
         requesting = true
         TermuxBridge.command(this, "status") { result ->
             requesting = false
-            result.onSuccess { value -> status = value; if (!appsOpen && value.optJSONObject("web")?.optString("status") != "running") appsOpen = true }
+            result.onSuccess { value -> status = value; if (firstReady && value.optJSONObject("web")?.optString("status") == "running" && installed("com.termux.api") != null) { firstReady = false; openChat() }; if (!appsOpen && value.optJSONObject("web")?.optString("status") != "running") appsOpen = true }
                 .onFailure { error ->
                     TermuxBridge.bootstrapStatus(this) { value -> value.onSuccess { bootstrap = it }; notice = error.message.orEmpty() }
                 }
@@ -92,7 +94,7 @@ class MainActivity : ComponentActivity() {
     }
     private fun command(name: String, args: JSONObject = JSONObject()) {
         notice = "Working…"
-        TermuxBridge.command(this, name, args) { result -> result.onSuccess { status = it; notice = "" }.onFailure { notice = it.message.orEmpty() } }
+        TermuxBridge.command(this, name, args) { result -> result.onSuccess { status = it; notice = ""; if (name == "desktop-start") openViewer() }.onFailure { notice = it.message.orEmpty() } }
     }
     private fun openChat() {
         val url = status?.optJSONObject("web")?.optString("url").orEmpty()
@@ -194,6 +196,69 @@ class MainActivity : ComponentActivity() {
         }
         HorizontalDivider()
     }
+    private fun openViewer() {
+        packageManager.getLaunchIntentForPackage("com.termux.x11")?.let { startActivity(it) }
+    }
+    @Composable private fun DesktopBlock() {
+        val desktop = status?.optJSONObject("desktop") ?: return
+        var profilesOpen by remember { mutableStateOf(false) }
+        var methodsOpen by remember { mutableStateOf(false) }
+        var advanced by remember { mutableStateOf(false) }
+        var custom by remember(desktop.optString("customCommand")) { mutableStateOf(desktop.optString("customCommand")) }
+        val running = desktop.optBoolean("running")
+        val busy = status?.optJSONObject("packages")?.optJSONObject("job")?.optString("status") in setOf("running", "waiting")
+        val profiles = desktop.getJSONArray("profiles")
+        val selected = (0 until profiles.length()).map { profiles.getJSONObject(it) }.find { it.getString("id") == desktop.optString("requested") }
+        val companion = catalog.find { it.optString("packageId") == "com.termux.x11" && it.optString("variant") == x11Variant }
+        if (companion != null && installed("com.termux.x11") == companion.optString("versionName")) TextButton(enabled = !busy, onClick = {
+            command("package-job", JSONObject().put("kind", "install-desktop").put("input", JSONObject().put("companionVersion", companion.optString("companionVersion"))))
+        }) { Text("Install XFCE / LibreOffice") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Desktop · " + if (running) "Running" else "Stopped")
+            TextButton(enabled = running || (!busy && desktop.optBoolean("ready")), onClick = { command(if (running) "desktop-stop" else "desktop-start") }) { Text(if (running) "■ Stop desktop" else "▶ Start desktop") }
+        }
+        Box {
+            TextButton(enabled = !busy, onClick = { profilesOpen = true }) { Text((selected?.optString("name") ?: "Choose graphics") + if (desktop.optBoolean("ready")) " ✓" else "") }
+            DropdownMenu(expanded = profilesOpen, onDismissRequest = { profilesOpen = false }) {
+                for (i in 0 until profiles.length()) {
+                    val profile = profiles.getJSONObject(i)
+                    DropdownMenuItem(text = { Text(profile.getString("name") + if (profile.getString("id") == desktop.optString("requested") && desktop.optBoolean("ready")) " ✓" else "") }, onClick = {
+                        profilesOpen = false; command("package-job", JSONObject().put("kind", "graphics-profile").put("input", JSONObject().put("profile", profile.getString("id"))))
+                    })
+                }
+            }
+        }
+        Box {
+            TextButton(onClick = { methodsOpen = true }) { Text("Startup · " + desktop.optString("method")) }
+            DropdownMenu(expanded = methodsOpen, onDismissRequest = { methodsOpen = false }) {
+                for ((id, label) in linkedMapOf("xstartup" to "XFCE with D-Bus (-xstartup)", "separator" to "Command separator (--)", "separate" to "Separate server / session", "environment" to "TERMUX_X11_XSTARTUP", "no-dbus" to "XFCE without D-Bus", "custom" to "Custom command")) {
+                    DropdownMenuItem(text = { Text(label) }, onClick = { methodsOpen = false; command("desktop-settings", JSONObject().put("method", id)) })
+                }
+            }
+        }
+        Row {
+            TextButton(onClick = { openViewer() }) { Text("Open X11 viewer") }
+            TextButton(onClick = { sendBroadcast(Intent("com.termux.x11.ACTION_STOP").setPackage("com.termux.x11")) }) { Text("Close viewer") }
+            TextButton(onClick = { advanced = !advanced }) { Text("Options") }
+        }
+        if (advanced) {
+            Text("Stopping the desktop closes its applications. Closing only the viewer keeps them running.", style = MaterialTheme.typography.bodySmall)
+            for ((key, label) in listOf("legacyDrawing" to "Legacy drawing", "forceBgra" to "Force BGRA")) Row {
+                Checkbox(checked = desktop.optBoolean(key), onCheckedChange = { command("desktop-settings", JSONObject().put(key, it)) }); Text(label)
+            }
+            var dpi by remember(desktop.optInt("dpi")) { mutableStateOf(desktop.optInt("dpi").toString()) }
+            var display by remember(desktop.optInt("display")) { mutableStateOf(desktop.optInt("display").toString()) }
+            Row {
+                OutlinedTextField(value = display, onValueChange = { display = it }, label = { Text("Display") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(value = dpi, onValueChange = { dpi = it }, label = { Text("DPI") }, modifier = Modifier.weight(1f))
+            }
+            OutlinedTextField(value = custom, onValueChange = { custom = it }, label = { Text("Custom startup command") }, modifier = Modifier.fillMaxWidth())
+            Text("Custom: termux-x11 :$display -xstartup \"$custom\"", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = { command("desktop-settings", JSONObject().put("display", display.toIntOrNull() ?: 0).put("dpi", dpi.toIntOrNull() ?: 0).put("customCommand", custom)) }) { Text("Save options") }
+            desktop.optString("renderer").takeIf { it.isNotBlank() }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
+        desktop.optString("error").takeIf { it.isNotBlank() }?.let { Text(it) }
+    }
     @Composable private fun Store() {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Apps and services", style = MaterialTheme.typography.headlineSmall)
@@ -205,6 +270,10 @@ class MainActivity : ComponentActivity() {
             PackageBlock()
             Text("Required", style = MaterialTheme.typography.titleMedium)
             AppRow("com.termux"); AppRow("com.termux.api"); AppRow("com.bashkitten")
+            if (installed("com.termux") != null && !TermuxBridge.trusted(this@MainActivity)) Text("This Termux uses a different signing certificate. Back up its home before migrating to the suite.")
+            Button(enabled = TermuxBridge.trusted(this@MainActivity), onClick = {
+                runCatching { setup.launch(Intent().setComponent(ComponentName("com.termux", "com.termux.app.SuiteSetupActivity"))) }.onFailure { notice = it.message.orEmpty() }
+            }) { Text("Initialize Termux") }
             Text("Desktop", style = MaterialTheme.typography.titleMedium)
             Row {
                 for (variant in listOf("standalone", "sharedUid")) FilterChip(selected = x11Variant == variant, onClick = {
@@ -223,10 +292,6 @@ class MainActivity : ComponentActivity() {
                 dismissButton = { TextButton(onClick = { changeX11 = false }) { Text("Cancel") } })
             Text("Optional", style = MaterialTheme.typography.titleMedium)
             for (id in AppStore.names.keys.drop(4)) AppRow(id)
-            if (installed("com.termux") != null && !TermuxBridge.trusted(this@MainActivity)) Text("This Termux uses a different signing certificate. Back up its home before migrating to the suite.")
-            Button(enabled = TermuxBridge.trusted(this@MainActivity), onClick = {
-                runCatching { setup.launch(Intent().setComponent(ComponentName("com.termux", "com.termux.app.SuiteSetupActivity"))) }.onFailure { notice = it.message.orEmpty() }
-            }) { Text("Initialize Termux") }
             HorizontalDivider()
             val running = status?.optJSONObject("web")?.optString("status") == "running"
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -237,6 +302,7 @@ class MainActivity : ComponentActivity() {
                 TextButton(onClick = { command("restart") }) { Text("Restart backend") }
                 TextButton(onClick = { command("pi-stop") }) { Text("Stop all Pi") }
             }
+            DesktopBlock()
             val sessions = status?.optJSONArray("sessions")
             for (i in 0 until (sessions?.length() ?: 0)) {
                 val item = sessions!!.getJSONObject(i)

@@ -19,7 +19,10 @@ jobs:
           - runner: ubuntu-24.04-arm
             architecture: arm64
     runs-on: ${{ matrix.runner }}
-    container: ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+    container:
+      image: ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78
+      # Let WebKit create its own sandbox namespaces inside the disposable CI container.
+      options: --security-opt seccomp=unconfined --security-opt apparmor=unconfined
     env:
       DEBIAN_FRONTEND: noninteractive
       PI_TELEMETRY: '0'

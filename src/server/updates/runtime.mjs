@@ -37,7 +37,11 @@ export async function updateStatus() {
   return { sources: await readJson(stateFile, {}), runtime: { version: runtime.version, previous: runtime.previous?.version }, maintenance: await readJson(maintenanceFile, null) };
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
-export async function atIdle(job, fn) {
+export async function atIdle(job, fn, { desktop = false } = {}) {
+  if (desktop && process.platform === 'android') {
+    const { desktopRunning } = await import('../platform/termux/desktop.mjs');
+    while (await desktopRunning()) { await job.phase('Waiting for desktop stop', 'waiting'); await delay(2000); }
+  }
   await writeJson(maintenanceFile, { pid: process.pid, job: job.job.id });
   try {
     while (true) {
