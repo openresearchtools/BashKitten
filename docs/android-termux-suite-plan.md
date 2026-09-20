@@ -73,8 +73,6 @@ src/
   linux/                     # Small Python/PyGObject GTK 4 + WebKitGTK desktop host
 packaging/termux/             # .deb recipes and installation assets, not copied source
 packaging/linux/              # Desktop launcher, icons and host dependency declarations
-tests/server/                # Shared server/RPC/files tests
-tests/platform/              # Platform integration tests
 ```
 
 The current `termux/server.mjs`, `rpc.mjs`, `worker.mjs`, `services.mjs`,
@@ -1102,7 +1100,7 @@ normal user-controlled OS setting. Desktop web deployments disable this adapter.
 | Phase | Deliverable | Required evidence before moving on |
 | --- | --- | --- |
 | 0. Shared source and platform boundaries | One `src/web/`, shared `src/server/` with Pi controls in `rpc/`, thin Linux/Termux adapters and native APK source under `src/android/` | Same UI/RPC fixtures run on Linux and Termux; Linux starts without Android components; folder roots adapt correctly; source moves preserve sessions, credentials and rendering |
-| 1. Source and signed IPC | Suite sources/locks, upstream-based build recipes, tiny Termux patch, notices, test APKs and a minimal BashKitten native controller | Matching certificate can initialize and run a command without manual Termux configuration; a differently signed test app is denied; upstream versions and all build deviations are recorded |
+| 1. Source and signed IPC | Suite sources/locks, upstream-based build recipes, tiny Termux patch, notices and a minimal BashKitten native controller | Matching certificate can initialize and run a command without manual Termux configuration; a differently signed test app is denied; upstream versions and all build deviations are recorded |
 | 2. Installation and packaging | Native store, certificate checks, keyring bootstrap, native `.deb`, APT indexing, Git/GitHub CLI, short Pi environment context and telemetry-off defaults | Fresh setup reaches the localhost UI; `git` and `gh` work; correct global context loads without losing personal instructions; template refresh waits for idle and preserves sessions/queues; telemetry opt-outs apply to terminal and background launches; interrupted setup resumes |
 | 3. Runtime lifecycle | Supervisor, backend controls, Pi stop/kill and recovery | Closing APK/browser preserves a real turn; backend restart preserves workers; no duplicate server or prompt replay; deliberate stops stay stopped |
 | 4. Browser integration | Persistent WebView, picker/paste/download/open/OAuth behavior | Same chat and files work in APK and Chrome; uploads use the real Android picker; provider callback returns to native Pi |
@@ -1121,7 +1119,9 @@ instructions remain effective, and a relevant skill body can be read on demand
 without injecting all skill contents. Test the Linux host separately from the
 ordinary browser, including files with spaces/Unicode, external/new-window links,
 persistent cookies, image attachments and desktop integration on Wayland and X11.
-Add focused Android integration tests for the new boundaries.
+Verify Android integration using external tools. Keep BashKitten-owned test
+suites, fixtures, probes and instrumentation outside the app repositories and
+release sources. Do not install test providers or chats into production profiles.
 Use a disposable emulator snapshot for signing-migration tests rather than
 destroying the existing development profile.
 

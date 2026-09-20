@@ -61,7 +61,7 @@ def main():
     manifest = manifests[0].read_text()
     identity = re.search(r"package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']+)'", manifest)
     assert identity and identity[1] == 'com.bashkitten' and 'application-debuggable' not in manifest
-    apk, = (file for file in manifests[0].parent.glob('*.apk') if 'instrumentation' not in file.name)
+    apk, = manifests[0].parent.glob('*.apk')
     sums = (apk.parent / 'sha256sums').read_text()
     assert any(line.split()[0] == sha(apk) and Path(line.split()[-1]).name == apk.name for line in sums.splitlines())
     signature = subprocess.check_output([args.java, '-jar', str(args.apksigner_jar), 'verify', '--print-certs', str(apk)], text=True)

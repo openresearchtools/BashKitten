@@ -17,19 +17,6 @@ folder. The existing browser UI keeps its files panel and downloads. Native
 actions require a real click and a capability injected into the trusted top
 frame; repository documents and remote pages never receive it.
 
-`tests/platform/linux-host.py signup` then `restore` checks a disposable profile
-selected with `BASHKITTEN_DATA_DIR` and `PI_CODING_AGENT_DIR`. Give it an unused
-`PORT`. It exercises system WebKit and captures screenshots in `test-results`.
-Run with `GDK_BACKEND=wayland` on Wayland. For isolated X11 tests, use
-`GDK_BACKEND=x11 GDK_DEBUG=no-portals dbus-run-session -- xvfb-run -a ...`.
-The test-only portal switch selects GTK's ordinary chooser inside Xvfb; the
-application itself preserves the user's normal portal configuration.
-
-Verified locally on native Linux arm64 with GTK 4.22 / WebKitGTK 2.52.6:
-signup, persistent login after a separate process restart on X11 and Wayland,
-native folder chooser via pointer input, rejected synthetic native actions,
-and shared file-path/image-cache tests. Native ARM64 and AMD64 CI also pass
-installed-package/reinstall checks, real image/text clipboard paste, upload
-selection, hot session links, and folder/file/URL launching through isolated
-system application associations. See `docs/suite-implementation-status.md` for
-run IDs, current device evidence and remaining release gates.
+Verify the installed host with external tools and a disposable profile, separate
+from the application repository. The implementation status records previous
+Linux and Android checks.

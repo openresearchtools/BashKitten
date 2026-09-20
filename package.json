@@ -13,8 +13,7 @@
     "bashkittenctl": "src/server/control.mjs"
   },
   "scripts": {
-    "start": "node src/server/http/server.mjs",
-    "test": "node --test tests/server/*.test.mjs"
+    "start": "node src/server/http/server.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
@@ -22,8 +21,5 @@
     "hash-wasm": "4.12.0",
     "semver": "7.8.5",
     "yazl": "3.3.1"
-  },
-  "devDependencies": {
-    "playwright-core": "1.63.0"
   }
 }

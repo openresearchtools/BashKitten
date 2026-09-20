@@ -104,23 +104,11 @@ Pi is launched with `--offline` and `PI_TELEMETRY=0` to disable startup catalog,
 package/update checks and telemetry. Configured inference and explicit login
 requests still work.
 
-## Development and verification
+## Development
 
-```sh
-npm ci --ignore-scripts
-npm test
-```
-
-Tests execute **real Pi RPC processes** against a deterministic local provider,
-including all seven real filesystem/shell tools, image payloads, native session persistence,
-queue edits, forks, compaction, cwd changes and a web-server restart during a turn.
-OAuth tests use Pi's real loopback listener, state/PKCE validation and credential
-store with a test-only token response. Live provider account authorization is a
-separate user sign-in.
-The fixture is test-only and never used by `npm start`.
-
-See [architecture and limits](pi-termux.md) and
-[Cuttlefish test record](../tests/live/2026-09-19-pi-termux.md).
+Install locked dependencies with `npm ci --ignore-scripts`.
+Verification tools and fixtures are maintained outside the application repository.
+See [architecture and limits](pi-termux.md).
 Source lives under `src/web/`, the shared Node server in `src/server/` (Pi
 integration in `rpc/`), and small native hosts in `src/android/` and `src/linux/`.
 `packaging/` builds native Termux aarch64 and Linux arm64/amd64 packages. There is
