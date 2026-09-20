@@ -34,6 +34,7 @@ def notices(data):
 
 for item in json.loads(report.read_text()):
     group, name, version = item['group'], item['name'], item['version']
+    print('Collecting', group, name, version, flush=True)
     repository = 'https://dl.google.com/dl/android/maven2/' if group.startswith('androidx.') else 'https://repo.maven.apache.org/maven2/'
     base = repository + group.replace('.', '/') + '/' + name + '/' + version + '/' + name + '-' + version
     pom = urlopen(base + '.pom', timeout=60).read()

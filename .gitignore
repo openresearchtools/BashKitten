@@ -21,3 +21,5 @@ __pycache__/
 *.jks
 *.keystore
 *.p12
+
+/licenses.json

@@ -49,7 +49,8 @@ val generateLicenses by tasks.registering {
         }.sortedBy { it["group"] + ":" + it["name"] }
         report.writeText(groovy.json.JsonOutput.toJson(items))
         val process = ProcessBuilder("python3", rootProject.file("licenses.py").absolutePath,
-            report.absolutePath, licenseAssets.get().asFile.absolutePath).inheritIO().start()
+            report.absolutePath, licenseAssets.get().asFile.absolutePath).redirectErrorStream(true).start()
+        println(process.inputStream.bufferedReader().readText())
         check(process.waitFor() == 0) { "Dependency license collection failed" }
     }
 }
