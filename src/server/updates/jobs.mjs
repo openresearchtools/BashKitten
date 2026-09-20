@@ -81,7 +81,7 @@ export class Jobs {
       };
       child.stdout.setEncoding('utf8').on('data', append); child.stderr.setEncoding('utf8').on('data', append);
       child.stdio[3].setEncoding('utf8').on('data', text => {
-        append(text); status += text;
+        status += text;
         const lines = status.split('\n'); status = lines.pop().slice(-8192);
         for (const line of lines) logs = logs.then(() => this.progress(line)).catch(value => { error = value; });
       });
