@@ -6,6 +6,7 @@ import path from 'node:path';
 import http from 'node:http';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { socketRequest, digest } from '../../src/server/common.mjs';
 import { createMockProvider, configureMockPi } from './mock-provider.mjs';
 const root=path.resolve(import.meta.dirname,'../..');
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
@@ -104,5 +105,10 @@ test('Real Pi RPC, HTTP auth, native history, files, queues, fork, compaction an
   await api(`/api/sessions/${id}/queue`,{id:draft.id,action:'send'});
   history=await settled(id);
   assert.equal(history.entries.filter(e=>e.message?.role==='user'&&JSON.stringify(e.message.content).includes('durable draft')).length,1);
+  await socketRequest(path.join(data,'run',digest(id).slice(0,16)+'.sock'),'/shutdown',{restart:true});
+  await wait(200);
+  assert.notEqual((await api(`/api/sessions/${id}/resume`,{})).stopped,true,'a package reload must not become a deliberate user stop');
+  await send(id,'Session after package reload'); history=await settled(id);
+  assert.ok(JSON.stringify(history).includes('Session after package reload'));
   abort.abort();await consume;
 });

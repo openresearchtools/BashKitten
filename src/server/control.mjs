@@ -126,7 +126,7 @@ async function serve() {
     await atIdle(job, async () => {
       await job.phase('Reloading updated BashKitten / Node');
       await stopWeb();
-      for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/shutdown', {}, 10000).catch(error => {
+      for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/shutdown', { restart: true }, 10000).catch(error => {
         if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
       });
       // Preserve native sessions and intentional stops; new workers load updated code.

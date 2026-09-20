@@ -189,7 +189,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.url === '/shutdown') {
       stopping = true;
-      await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
+      if (!value.restart) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
       await serial(async () => {
         await rebuildQueue(items => { for (const item of items) { item.recovered = true; item.held = true; delete item.editToken; } });
         await rpc.command('abort'); await checkpoint(); await rpc.close();
