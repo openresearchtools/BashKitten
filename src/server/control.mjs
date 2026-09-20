@@ -13,7 +13,7 @@ import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } 
 import { Jobs } from './updates/jobs.mjs';
 import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
 import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
-import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt, pairX11 } from './platform/termux/packages.mjs';
+import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt, pairX11, packageInventory, configureTermux } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -189,6 +189,8 @@ async function serve() {
   }
   async function action(command, value) {
     if (command === 'status') return status();
+    if (command === 'package-inventory') return packageInventory();
+    if (command === 'termux-source') { await configureTermux(value); return status(); }
     if (command === 'app-update-finish') {
       const held = await readJson(appUpdateFile, null);
       if (held && held.packageId !== value.packageId) throw Error('Another Android installation owns the service pause');

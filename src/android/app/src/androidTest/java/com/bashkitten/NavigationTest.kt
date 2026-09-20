@@ -8,6 +8,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
+import androidx.test.uiautomator.UiScrollable
+import androidx.test.uiautomator.UiSelector
 import androidx.test.uiautomator.Until
 import org.junit.Assert.*
 import org.junit.Assume.assumeNotNull
@@ -46,7 +48,7 @@ class NavigationTest {
             assertTrue(device.wait(Until.hasObject(By.text("Apps")), 5000))
             device.findObject(By.text("Apps")).click()
             assertTrue(device.wait(Until.hasObject(By.text("Your apps")), 5000))
-            assertNotNull(device.findObject(By.text("Essential")))
+            assertNotNull(device.findObject(By.text("Your environment")))
             device.takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), "store-redesign.png"))
             device.pressBack()
             assertTrue(device.wait(Until.gone(By.text("Your apps")), 5000))
@@ -54,10 +56,14 @@ class NavigationTest {
             assertEquals(url, js("location.href"))
             assertEquals("\"unsent navigation draft\"", js("document.querySelector('#prompt').value"))
             device.findObject(By.desc("Menu")).click()
-            assertNotNull(device.wait(Until.findObject(By.text("Package updates")), 5000))
-            device.findObject(By.text("Package updates")).click()
-            assertTrue(device.wait(Until.hasObject(By.text("Keep everything up to date")), 5000))
-            assertNotNull(device.findObject(By.text("npm packages")))
+            assertNull(device.findObject(By.text("Package updates")))
+            device.findObject(By.text("Apps")).click()
+            UiScrollable(UiSelector().scrollable(true)).scrollTextIntoView("Packages")
+            device.findObject(By.text("Packages")).click()
+            UiScrollable(UiSelector().scrollable(true)).scrollTextIntoView("Installed packages ⌄")
+            device.findObject(By.text("Installed packages ⌄")).click()
+            assertTrue(device.wait(Until.hasObject(By.textContains("Hide installed packages")), 5000))
+            Thread.sleep(3000)
             assertNull(device.findObject(By.text("Not installed")))
             device.takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), "updates-redesign.png"))
             device.findObject(By.desc("Back to chat")).click()

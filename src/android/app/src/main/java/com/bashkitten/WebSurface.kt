@@ -12,6 +12,7 @@ import android.webkit.CookieManager
 import androidx.webkit.URLUtilCompat
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -28,12 +29,13 @@ class WebSurface(private val activity: MainActivity) {
     private val picker = activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         chooser?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)); chooser = null
     }
+    private var failed = false
     var origin: String = "http://127.0.0.1:3939"
     val view: WebView = create()
 
     fun flush() = CookieManager.getInstance().flush()
     fun close() { flush(); chooser?.onReceiveValue(null); chooser = null; view.destroy(); downloads.shutdown() }
-    fun open(url: String) { origin = Uri.parse(url).let { "${it.scheme}://${it.host}:${it.port}" }; if (view.url != url) view.loadUrl(url) }
+    fun open(url: String) { origin = Uri.parse(url).let { "${it.scheme}://${it.host}:${it.port}" }; if (view.url != url || failed) { failed = false; view.loadUrl(url) } }
     private fun local(uri: Uri) = "${uri.scheme}://${uri.host}:${uri.port}" == origin
     private fun external(uri: Uri) {
         if (uri.scheme !in setOf("https", "http", "mailto")) return
@@ -55,6 +57,9 @@ class WebSurface(private val activity: MainActivity) {
         CookieManager.getInstance().setAcceptThirdPartyCookies(this, false)
         var firstPopupNavigation = dialog != null // onCreateWindow already required a real user gesture.
         webViewClient = object : WebViewClient() {
+            override fun onReceivedError(web: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (dialog == null && request.isForMainFrame && local(request.url)) { failed = true; activity.backendUnavailable() }
+            }
             override fun shouldOverrideUrlLoading(web: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
                 val uri = request.url

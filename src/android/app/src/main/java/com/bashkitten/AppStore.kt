@@ -32,6 +32,24 @@ object AppStore {
     fun installed(context: Context, id: String) = runCatching { context.packageManager.getPackageInfo(id, PackageManager.GET_SIGNING_CERTIFICATES) }.getOrNull()
     private fun digest(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     private fun signer(info: android.content.pm.PackageInfo) = info.signingInfo?.apkContentsSigners?.singleOrNull()?.toByteArray()?.let { digest(it) }
+    fun externalTermux(context: Context) = installed(context, "com.termux")?.let { signer(it) != certificate } == true
+    fun canInstall(context: Context, id: String): Boolean {
+        if (installed(context, id)?.let { signer(it) != certificate } == true) return false
+        if (id == "com.bashkitten") return true
+        if (externalTermux(context)) return false
+        // An orphaned external add-on can also reserve the shared UID/certificate.
+        return installed(context, "com.termux") != null || names.keys.filter { it != "com.bashkitten" }.none { name -> installed(context, name)?.let { signer(it) != certificate } == true }
+    }
+    fun busy(context: Context) = names.keys.any { id -> prefs(context).getString("state:$id", "").orEmpty().let { state -> listOf("Queued", "Downloading", "Waiting", "Installing", "Confirm").any(state::startsWith) } }
+    fun enqueueInstall(context: Context, entry: JSONObject) {
+        val id = entry.getString("packageId")
+        check(canInstall(context, id)) { "Install Termux add-ons from the same source as your Termux." }
+        prefs(context).edit().putString("state:$id", "Queued · Waiting for download").apply()
+        val request = OneTimeWorkRequestBuilder<InstallWorker>()
+            .setInputData(workDataOf("packageId" to id, "variant" to entry.optString("variant")))
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
+        WorkManager.getInstance(context).enqueueUniqueWork("install:$id", ExistingWorkPolicy.KEEP, request)
+    }
     fun setupProblem(context: Context, coreSpace: Boolean = false): String? {
         if ("arm64-v8a" !in Build.SUPPORTED_ABIS) return "This suite needs an aarch64 Android device."
         if (!(context.getSystemService(Context.USER_SERVICE) as UserManager).isSystemUser) return "Install the suite in the primary Android user. Termux packages use that user's fixed private paths."
@@ -104,17 +122,18 @@ object AppStore {
         check(uri.protocol == "https" && uri.host == "github.com" && uri.userInfo == null && uri.port == -1 &&
             (uri.path.startsWith("/openresearchtools/bashkitten/releases/download/") || uri.path.startsWith("/openresearchtools/termux-suite/releases/download/"))) { "Unexpected release URL" }
     }
-    private fun connection(address: String): HttpURLConnection {
+    private fun connection(address: String, etag: String? = null): HttpURLConnection {
         var url = URL(address)
         repeat(5) {
             check(url.protocol == "https" && url.host in setOf("github.com", "release-assets.githubusercontent.com", "objects.githubusercontent.com") && url.userInfo == null && url.port == -1) { "Unsafe download redirect" }
             val connection = url.openConnection() as HttpURLConnection
             connection.connectTimeout = 15000; connection.readTimeout = 60000; connection.instanceFollowRedirects = false
-            if (connection.responseCode in 300..399) {
+            if (etag != null) connection.setRequestProperty("If-None-Match", etag)
+            if (connection.responseCode in 300..399 && connection.responseCode != 304) {
                 val next = connection.getHeaderField("Location") ?: error("Missing download location")
                 connection.disconnect(); url = URL(url, next)
             } else {
-                check(connection.responseCode == 200) { "Download failed (${connection.responseCode})" }
+                check(connection.responseCode == 200 || (etag != null && connection.responseCode == 304)) { "Download failed (${connection.responseCode})" }
                 return connection
             }
         }
@@ -122,25 +141,28 @@ object AppStore {
     }
     @Synchronized fun check(context: Context) {
         try {
-            val connection = connection(catalogUrl)
-            val bytes = try { connection.inputStream.use { input ->
+            val file = AtomicFile(File(context.filesDir, "catalog.json"))
+            val cached = runCatching { file.readFully().also { verify(context, it, false) } }.getOrNull()
+            val connection = connection(catalogUrl, if (cached != null) prefs(context).getString("catalogEtag", null) else null)
+            val etag = connection.getHeaderField("ETag")
+            val bytes = try { if (connection.responseCode == 304) cached!! else connection.inputStream.use { input ->
                 val output = ByteArrayOutputStream(); val buffer = ByteArray(8192)
                 while (true) { val count = input.read(buffer); if (count < 0) break; check(output.size() + count <= 1048576) { "Catalog is too large" }; output.write(buffer, 0, count) }
                 output.toByteArray()
             } } finally { connection.disconnect() }
             check(bytes.size <= 1048576) { "Catalog is too large" }; verify(context, bytes, false)
-            val file = AtomicFile(File(context.filesDir, "catalog.json")); val out = file.startWrite()
+            val out = file.startWrite()
             try { out.write(bytes); file.finishWrite(out) } catch (error: Exception) { file.failWrite(out); throw error }
             verify(context, bytes, true)
-            prefs(context).edit().putLong("checkedAt", System.currentTimeMillis()).remove("checkError").apply()
+            prefs(context).edit().putLong("checkedAt", System.currentTimeMillis()).putString("catalogEtag", etag ?: prefs(context).getString("catalogEtag", null)).remove("checkError").apply()
         } catch (error: Exception) {
             prefs(context).edit().putString("checkError", error.message ?: "Catalog check failed").apply(); throw error
         }
     }
     fun schedule(context: Context) {
-        val request = PeriodicWorkRequestBuilder<CatalogWorker>(6, TimeUnit.HOURS)
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()).build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork("catalog", ExistingPeriodicWorkPolicy.KEEP, request)
+        val request = PeriodicWorkRequestBuilder<CatalogWorker>(24, TimeUnit.HOURS)
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).setRequiresBatteryNotLow(true).build()).build()
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork("catalog", ExistingPeriodicWorkPolicy.UPDATE, request)
     }
     private fun control(context: Context, command: String, args: JSONObject = JSONObject()): JSONObject {
         check(android.os.Looper.myLooper() != android.os.Looper.getMainLooper())
@@ -165,6 +187,7 @@ object AppStore {
     }
     fun install(context: Context, entry: JSONObject) {
         val id = entry.getString("packageId")
+        check(canInstall(context, id)) { "Install Termux add-ons from the same source as your Termux." }
         setupProblem(context)?.let { error(it) }
         check(entries(context).any { it.toString() == entry.toString() }) { "Catalog changed or expired; check updates again" }
         check("arm64-v8a" in Build.SUPPORTED_ABIS && Build.VERSION.SDK_INT >= entry.getInt("minSdk")) { "This device is not supported" }
@@ -173,6 +196,7 @@ object AppStore {
             check(signer(current) == certificate) { "This app uses another signing certificate. Back up its data before migrating." }
             check(current.longVersionCode < entry.getLong("versionCode")) { "This version is already installed" }
         }
+        val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(8)
         val apk = File(context.cacheDir, "$id.apk.part")
         downloading.add(id)
         prefs(context).edit().putLong("installVersion:$id", entry.getLong("versionCode")).putString("installCompanion:$id", entry.optString("companionVersion")).putString("state:$id", "Downloading…").apply()
@@ -183,6 +207,7 @@ object AppStore {
             try { connection.inputStream.use { input -> apk.outputStream().use { output ->
                 val buffer = ByteArray(65536)
                 while (true) {
+                    check(System.nanoTime() < deadline && !Thread.currentThread().isInterrupted) { "Download timed out. Retry when connected." }
                     val count = input.read(buffer); if (count < 0) break
                     total += count; check(total <= expected) { "Download exceeds its signed size" }
                     sha.update(buffer, 0, count); output.write(buffer, 0, count)
@@ -198,7 +223,6 @@ object AppStore {
                 val input = JSONObject().put("packageId", id)
                 prefs(context).edit().putString("state:$id", "Waiting for managed work to finish…").apply()
                 var status = control(context, "app-update-prepare", input)
-                val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(30)
                 while (status.optJSONObject("appUpdate")?.optString("packageId") != id) {
                     val job = status.optJSONObject("packages")?.optJSONObject("job")
                     check(job?.optString("kind") == "prepare-app-update" && job.optString("status") in setOf("running", "waiting", "complete")) { job?.optString("error") ?: "Android update preparation stopped" }
@@ -236,6 +260,19 @@ object AppStore {
 
 class CatalogWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
     override fun doWork(): Result = runCatching { AppStore.check(applicationContext); Result.success() }.getOrElse { Result.retry() }
+}
+class InstallWorker(context: Context, params: WorkerParameters) : Worker(context, params) {
+    override fun doWork(): Result {
+        val id = inputData.getString("packageId") ?: return Result.failure()
+        return runCatching {
+            val entry = AppStore.entries(applicationContext).single { it.getString("packageId") == id && it.optString("variant") == inputData.getString("variant").orEmpty() }
+            AppStore.install(applicationContext, entry)
+            Result.success()
+        }.getOrElse {
+            AppStore.prefs(applicationContext).edit().putString("state:$id", "Failed · " + it.message.orEmpty().take(400)).apply()
+            Result.failure()
+        }
+    }
 }
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

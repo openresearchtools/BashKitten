@@ -114,3 +114,29 @@ esac
   `;
   await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], { cwd: path.resolve(import.meta.dirname, '../..'), env: { ...process.env, PATH: bin + ':' + process.env.PATH, BASHKITTEN_DATA_DIR: directory }, timeout: 15000 });
 });
+
+test('External Termux desktop uses upstream X11 and refuses suite companion pairing', { skip: process.platform !== 'android' }, async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'bk-external-'));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const script = `
+    import assert from 'node:assert/strict';
+    import {configureTermux, desktopPackages, pairX11, packageInventory} from './src/server/platform/termux/packages.mjs';
+    await configureTermux({source:'external'});
+    const calls=[], job={step:async (_,__,fn)=>fn(),exec:async (file,args)=>{calls.push([file,...args]);return '';}};
+    await desktopPackages(job);
+    assert(calls.some(args=>args.includes('termux-x11-nightly')));
+    assert(!calls.some(args=>args.some(arg=>arg.includes('bashkitten-termux-x11'))));
+    await assert.rejects(pairX11(job,'1.0'),/same source/);
+    await configureTermux({source:'suite'}); calls.length=0;
+    await assert.rejects(desktopPackages(job),/matching companion/);
+    await desktopPackages(job,{companionVersion:'1.2.3'});
+    assert(calls.some(args=>args.includes('bashkitten-termux-x11=1.2.3')));
+    assert(!calls.some(args=>args.includes('termux-x11-nightly')));
+    const inventory=await packageInventory();
+    assert(inventory.apt.some(item=>item.name==='bash' && item.version));
+    assert(Array.isArray(inventory.npm)); assert.match(inventory.pi,/^\\d+\\.\\d+/);
+  `;
+  await promisify(execFile)(process.execPath, ['--input-type=module', '-e', script], { cwd: path.resolve(import.meta.dirname, '../..'), env: { ...process.env, BASHKITTEN_DATA_DIR: directory }, timeout: 45000 });
+});

@@ -96,8 +96,8 @@ class SuiteIntegrationTest {
         assertEquals(PackageManager.PERMISSION_GRANTED, context.packageManager.checkPermission("com.termux.permission.RUN_TRUSTED_COMMAND", context.packageName))
         ActivityScenario.launch(MainActivity::class.java).use {
             assertTrue(device.wait(Until.hasObject(By.text("Your apps")), 15000))
-            UiScrollable(UiSelector().scrollable(true)).scrollTextIntoView("Set up environment")
-            device.findObject(By.text("Set up environment")).click()
+            UiScrollable(UiSelector().scrollable(true)).scrollTextIntoView("Set up")
+            device.findObject(By.text("Set up")).click()
             device.wait(Until.gone(By.pkg("com.bashkitten")), 5000)
             assertTrue("Setup did not return to BashKitten", device.wait(Until.hasObject(By.pkg("com.bashkitten")), 120000))
             val done = CountDownLatch(1); var result: Result<JSONObject>? = null

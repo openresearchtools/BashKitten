@@ -1,10 +1,11 @@
-# Executed by Termux's protected command task after its normal bootstrap installer.
+# Executed by Termux's command task after its normal bootstrap installer.
 set -eu
 umask 077
 export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1 GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1
 export DEBIAN_FRONTEND=noninteractive
 case "${1:-}" in *[!0-9a-f]*|'') echo 'Invalid keyring checksum'; exit 1;; esac
 [ "${#1}" -eq 64 ] || exit 1
+case "${2:-suite}" in suite|external) ;; *) echo 'Invalid Termux source'; exit 1;; esac
 bootstrap="$HOME/.local/share/bashkitten-pi/bootstrap"
 mkdir -p "$bootstrap"
 exec 9>"$bootstrap/lock"
@@ -45,6 +46,7 @@ cat >"$PREFIX/etc/profile.d/bashkitten-privacy.sh" <<'PROFILE'
 export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1
 export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1
 PROFILE
+printf '{"source":"%s"}\n' "${2:-suite}" >"$bootstrap/../termux.json"
 state complete 'Termux environment is ready'
 trap - EXIT
 flock -u 9

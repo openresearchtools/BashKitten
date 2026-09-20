@@ -44,7 +44,7 @@ async function alive(info) {
 }
 export async function desktopRunning() { return alive(await readJson(processFile, null)); }
 async function installed(profile) {
-  const versions = await packageState([...Object.keys(profile.packages), 'bashkitten-termux-x11']);
+  const versions = await packageState([...Object.keys(profile.packages), 'bashkitten-termux-x11', 'termux-x11-nightly']);
   const missing = [];
   for (const [name, minimum] of Object.entries(profile.packages)) {
     if (!versions[name] || !await exec('dpkg', ['--compare-versions', versions[name], 'ge', minimum]).then(() => true, () => false)) missing.push(name);

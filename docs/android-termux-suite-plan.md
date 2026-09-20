@@ -367,18 +367,37 @@ First launch opens the native store with a guided setup flow:
 5. Start the supervisor/backend, wait for authenticated application readiness,
    and open the existing BashKitten web login/setup page.
 
-An existing Termux installation signed by F-Droid, upstream GitHub or another
-publisher cannot be updated in place using our different certificate. Show a
-backup/migration flow before any uninstall. Restore home data and reinstall
-compatible packages afterward; never silently erase the user's Termux data or
-current emulator profile.
+### Existing Termux installations and inexpensive preflight
 
-The updater checks a signed catalog on a bounded foreground interval and with
-periodic WorkManager work. Catalog entries contain package ID, version code,
-version name, ABI, minimum/target SDK, APK URL, size, SHA-256, certificate hash,
-variant, source commit, release notes and compatibility requirements. Enforce
-catalog signature, freshness and rollback checks before trusting assets. Read
-actual installed state from PackageManager, using a finite `<queries>` list.
+Support an existing external Termux through its ordinary `RUN_COMMAND` service.
+Detect its signing certificate locally. If Termux is not signed with our suite
+key, never offer or install our Termux/add-on APKs alongside it. Missing API/X11
+cards show **Missing** in red and say to install from the same source as Termux;
+installed external apps show Installed and are not checked for our APK updates.
+BashKitten itself can still receive its own updates. Never uninstall anything.
+
+Under the Termux card, **Connect to Termux** exposes a copyable command enabling
+`allow-external-apps`, Open Termux, and instructions/buttons for allowing
+BashKitten's normal Termux command permission in Android app settings. Verify the
+connection through a real command before marking it connected. Our signed
+Termux uses the existing protected route without those manual steps. Both routes
+run the same package/bootstrap manager and install the required environment.
+External X11 uses its upstream companion; never substitute our signed loader.
+
+Preflight runs when opening/resuming the app or when the backend cannot open.
+Missing Termux/API/X11 or an unusable command connection opens Apps automatically.
+Do not keep polling installed apps after they are present. Successful chat
+startup stops native status polling; native screens request state when needed,
+and active setup/install/package jobs poll only while visible. Reopening follows
+the existing durable job. Closing native screens does not own or stop commands.
+
+A small cached signed catalog supplies our APK updates. Conditional HTTP requests
+and infrequent scheduled checks avoid repeated downloads. Only suite-signed apps
+are eligible for suite updates. APT/npm network checks happen only on explicit
+**Check for updates** or **Update packages** in Apps, including external Termux.
+No package check runs merely because chat or Apps opens. Installed-package lists
+are loaded locally on expansion. Keep APK work in the existing background worker
+module and package work in the existing Termux manager, separate from HTTP/chat.
 
 Use `REQUEST_INSTALL_PACKAGES`, `UPDATE_PACKAGES_WITHOUT_USER_ACTION`,
 `USER_ACTION_NOT_REQUIRED`, and initial-install update ownership where supported.
@@ -661,15 +680,27 @@ The store has real application icons, titles, short descriptions, installed and
 available versions, and Install / Installing / Installed / Update / Retry states.
 Use required, desktop and optional sections, pull to refresh and a refresh button.
 Release notes and source/license links belong in each app's details. X11 has the
-standalone/shared-UID selector. The current selected installed graphics profile
+standalone/shared-UID selector inside **one X11 app card**, shown before installation.
+Default to **normal / standalone (non-shared UID)** for device compatibility.
+An installed X11 card shows its actual variant, rather than a second app or a
+competing install choice. The current selected installed graphics profile
 gets one tick, as specified in section 9.
 
-A compact **Package updates** card near the store's top opens a separate update
-screen. The menu also links directly to it. Show APT and npm package lists,
-including the Pi runtime, and Check updates / Update all actions. Updating shows
-a progress window with the current phase, actual package names, downloads,
-unpacking/configuration and npm installation output. Reopening follows the same
-job. Unknown/disconnected status must never label an installed Pi as missing.
+Below the application cards, an expandable **Packages** block contains installed
+APT/npm packages and the selected Pi version, plus **Update packages**. Package
+management belongs inside Apps, not in a separate menu destination. The store's
+**Check for updates** and pull-to-refresh check our APK metadata and, when
+connected, APT/npm. Opening Apps alone does not perform those network checks.
+
+Show actual update phases, package names, downloads, unpacking/configuration and
+npm output in a compact expandable, height-bounded scrollable log. Keep rendering
+cheap and read progress from the manager-owned job. Reopening follows the same
+job. Unknown/disconnected status never labels an installed Pi as missing.
+
+Use compact app-store rows/cards with the real upstream icons, clear titles,
+short descriptions, versions and pill-shaped Install / Installed / Update /
+Missing states. Keep explanatory setup/missing-source text inside its app card.
+Avoid oversized introductory blocks that push application cards off screen.
 
 The menu provides compact server start/stop status and links to Desktop and Pi
 session controls. Desktop controls retain remembered commands, graphics choices

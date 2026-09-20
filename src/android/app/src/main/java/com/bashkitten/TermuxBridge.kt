@@ -13,13 +13,22 @@ import org.json.JSONObject
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
-/** Uses Termux's existing result protocol through the suite signature permission. */
+/** One result protocol for our protected service and upstream's user-granted service. */
 object TermuxBridge {
     private val callbacks = ConcurrentHashMap<String, (Result<JSONObject>) -> Unit>()
     private val main = Handler(Looper.getMainLooper())
     const val prefix = "/data/data/com.termux/files/usr"
+    const val permission = "com.termux.permission.RUN_COMMAND"
+    const val connectCommand = "mkdir -p ~/.termux && printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties && termux-reload-settings"
 
     fun trusted(context: Context): Boolean = context.packageManager.checkSignatures(context.packageName, "com.termux") == PackageManager.SIGNATURE_MATCH
+    fun available(context: Context): Boolean = AppStore.installed(context, "com.termux") != null &&
+        (trusted(context) || context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED)
+    private fun component(context: Context) = ComponentName("com.termux", if (trusted(context)) "com.termux.app.SuiteRunCommandService" else "com.termux.app.RunCommandService")
+    fun probe(context: Context, callback: (Result<JSONObject>) -> Unit) {
+        val script = "if [ -x '$prefix/bin/bashkittenctl' ]; then printf '{\"connected\":true,\"packages\":true}'; else printf '{\"connected\":true,\"packages\":false}'; fi"
+        execute(context, "$prefix/bin/bash", arrayOf("-c", script), null, 15000, callback)
+    }
 
     fun ensureManager(context: Context) {
         // The long-lived task belongs to Termux's foreground service, not this Activity.
@@ -29,11 +38,11 @@ object TermuxBridge {
     fun bootstrap(context: Context, sha256: String) {
         require(sha256.matches(Regex("[a-f0-9]{64}")))
         val script = context.assets.open("bootstrap.sh").bufferedReader().use { it.readText() }
-        task(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-bootstrap", sha256))
+        task(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-bootstrap", sha256, if (trusted(context)) "suite" else "external"))
     }
     private fun task(context: Context, path: String, args: Array<String>) {
-        check(trusted(context)) { "Install the suite-signed Termux first" }
-        val intent = Intent("com.termux.RUN_COMMAND").setComponent(ComponentName("com.termux", "com.termux.app.SuiteRunCommandService"))
+        check(available(context)) { "Connect to Termux in Apps first" }
+        val intent = Intent("com.termux.RUN_COMMAND").setComponent(component(context))
             .putExtra("com.termux.RUN_COMMAND_PATH", path)
             .putExtra("com.termux.RUN_COMMAND_ARGUMENTS", args)
             .putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
@@ -52,12 +61,12 @@ object TermuxBridge {
     }
 
     fun execute(context: Context, path: String, args: Array<String>, stdin: String?, timeoutMillis: Long = 45000, callback: (Result<JSONObject>) -> Unit) {
-        if (!trusted(context)) return callback(Result.failure(IllegalStateException("Install the suite-signed Termux before starting services. Back up an existing installation before changing its certificate.")))
+        if (!available(context)) return callback(Result.failure(IllegalStateException("Allow BashKitten’s Termux command permission, then connect in Apps.")))
         val id = UUID.randomUUID().toString()
         callbacks[id] = callback
         val result = Intent(context, CommandResultReceiver::class.java).setAction("com.bashkitten.RESULT.$id").putExtra("requestId", id)
         val pending = PendingIntent.getBroadcast(context, id.hashCode(), result, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_ONE_SHOT)
-        val intent = Intent("com.termux.RUN_COMMAND").setComponent(ComponentName("com.termux", "com.termux.app.SuiteRunCommandService"))
+        val intent = Intent("com.termux.RUN_COMMAND").setComponent(component(context))
             .putExtra("com.termux.RUN_COMMAND_PATH", path)
             .putExtra("com.termux.RUN_COMMAND_ARGUMENTS", args)
             .putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
