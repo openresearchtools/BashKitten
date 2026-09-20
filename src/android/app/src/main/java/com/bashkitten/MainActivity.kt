@@ -93,13 +93,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private var appearance by mutableStateOf("system")
-    private fun setAppearance(mode: String) {
+    private fun applyAppearance(mode: String) {
         appearance = mode
         AppStore.prefs(this).edit().putString("appearance", mode).apply()
         AppCompatDelegate.setDefaultNightMode(when (mode) { "dark" -> AppCompatDelegate.MODE_NIGHT_YES; "light" -> AppCompatDelegate.MODE_NIGHT_NO; else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM })
     }
     override fun onCreate(state: Bundle?) {
-        setAppearance(AppStore.prefs(this).getString("appearance", "system") ?: "system")
+        applyAppearance(AppStore.prefs(this).getString("appearance", "system") ?: "system")
         super.onCreate(state)
         enableEdgeToEdge()
         session = requestedSession(intent)
@@ -293,7 +293,7 @@ class MainActivity : AppCompatActivity() {
             HorizontalDivider()
             Text("Appearance", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall)
             Row(Modifier.padding(horizontal = 8.dp)) {
-                for ((mode, label) in listOf("system" to "System", "light" to "Light", "dark" to "Dark")) TextButton(onClick = { setAppearance(mode) }) { Text(label + if (appearance == mode) " ✓" else "") }
+                for ((mode, label) in listOf("system" to "System", "light" to "Light", "dark" to "Dark")) TextButton(onClick = { applyAppearance(mode) }) { Text(label + if (appearance == mode) " ✓" else "") }
             }
             HorizontalDivider()
             Row(Modifier.width(260.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
