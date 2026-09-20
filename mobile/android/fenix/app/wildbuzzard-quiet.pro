@@ -4,6 +4,12 @@
 -dontobfuscate
 -keep,allowoptimization class ** { *; }
 
+# Optional annotations and the unused legacy Firebase KTX facade are absent from
+# the upstream debug dependency graph. No Firebase service is initialized here.
+-dontwarn com.google.android.gms.common.annotation.NoNullnessRewrite
+-dontwarn org.mockito.DoNotMock
+-dontwarn com.google.firebase.ktx.Firebase
+
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int) return false;
     public static int v(...) return 0;

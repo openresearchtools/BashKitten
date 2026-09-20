@@ -122,12 +122,15 @@ for source in outputs:
             raise SystemExit('APK did not use the configured signing identity: ' + destination)
         signers[destination] = expected
 if not browser: raise SystemExit('No real Gecko ARM64 APK produced')
+if publisher_signing:
+    subprocess.run([sys.executable, str(root/'wildbuzzard/android/scripts/check-android-logs.py'),
+                    str(out/roles['browser'])], check=True)
 if not {'browser', 'agent_probe', 'instrumentation'} <= roles.keys():
     raise SystemExit('Browser, independent agent probe and instrumentation APKs are all required')
 shutil.copytree(root/'wildbuzzard/android/notices', out/'notices', dirs_exist_ok=True)
 subprocess.run([sys.executable, str(root/'wildbuzzard/android/scripts/notices.py'), str(out)], check=True)
 manifest = {'source': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
-            'publisher_signed':publisher_signing,'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'signing_certificates':signers,
+            'publisher_signed':publisher_signing,'java_android_log_output_references':0 if publisher_signing else None,'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'signing_certificates':signers,
             'apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
 if os.environ.get('WILDBUZZARD_ENGINE_PROVENANCE'):
     manifest['native_engine_artifact'] = json.loads(Path(os.environ['WILDBUZZARD_ENGINE_PROVENANCE']).read_text())
