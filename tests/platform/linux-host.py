@@ -10,6 +10,22 @@ from pathlib import Path
 import sys
 import time
 import subprocess
+import tempfile
+
+# Exercise the real desktop launchers without changing the user's default apps.
+launch_environment = None
+if os.environ.get('BASHKITTEN_TEST_NATIVE_FILES') == '1':
+    launch_environment = tempfile.TemporaryDirectory(prefix='bashkitten-launch-test-')
+    launch_root = Path(launch_environment.name)
+    os.environ['XDG_CONFIG_HOME'] = str(launch_root / 'config')
+    os.environ['XDG_DATA_HOME'] = str(launch_root / 'data')
+    applications = launch_root / 'data/applications'
+    applications.mkdir(parents=True)
+    launches = launch_root / 'launched.jsonl'
+    recorder = launch_root / 'record.py'
+    recorder.write_text('import json,sys\nwith open(' + repr(str(launches)) + ", 'a') as output: output.write(json.dumps(sys.argv[1:])+'\\n')\n")
+    desktop = applications / 'bashkitten-launch-test.desktop'
+    desktop.write_text('[Desktop Entry]\nType=Application\nName=BashKitten launcher fixture\nExec=python3 ' + str(recorder) + ' %U\nNoDisplay=true\n')
 
 ROOT = Path(__file__).resolve().parents[2]
 host_path = Path('/usr/lib/bashkitten/src/linux/host.py') if os.environ.get('BASHKITTEN_TEST_INSTALLED') else ROOT / 'src/linux/host.py'
@@ -17,6 +33,11 @@ spec = importlib.util.spec_from_file_location('bashkitten_host', host_path)
 host = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(host)
 from gi.repository import GLib, WebKit
+if launch_environment:
+    from gi.repository import Gio
+    launcher = Gio.DesktopAppInfo.new_from_filename(str(desktop))
+    for mime in ['text/plain', 'inode/directory', 'x-scheme-handler/https']:
+        assert launcher.set_as_default_for_type(mime)
 
 app = host.BashKitten()
 app.register(None)
@@ -113,6 +134,20 @@ try:
                 rect = js("(()=>{const r=document.querySelector(" + json.dumps(selector) + ").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()")
                 subprocess.run(['xdotool', 'windowfocus', '--sync', str(xid), 'mousemove', '--window', str(xid), str(int(bounds.get_x()+rect['x']+app.window.get_surface_transform()[0])), str(int(bounds.get_y()+rect['y']+app.window.get_surface_transform()[1])), 'click', '1'], check=True)
                 for _ in range(10): pump()
+            def launched(value):
+                return launches.exists() and any(value in json.loads(line) for line in launches.read_text().splitlines())
+            tap('#filesToggle')
+            until(lambda: launches.exists())
+            native_file = ROOT / 'test-results/linux/Open file π with spaces.txt'
+            native_file.write_text('Open this existing project file, without downloading a copy.\n')
+            host.control('project-root', {'path': str(native_file.parent)})
+            from urllib.parse import urlencode
+            for target, uri in [('', app.origin + '/api/files/content?' + urlencode({'root': str(native_file.parent), 'path': native_file.name})), ('_blank', 'https://bashkitten.com/launcher-test')]:
+                js("(()=>{const a=document.createElement('a');a.id='launchFixture';a.textContent='Open fixture';a.href=" + json.dumps(uri) + ";a.target=" + json.dumps(target) + ";a.style='position:fixed;top:120px;left:400px;z-index:9999';document.body.append(a)})();true")
+                tap('#launchFixture')
+                until(lambda: launched(uri if target else native_file.as_uri()) or (not target and launched(str(native_file))))
+                js("document.querySelector('#launchFixture').remove();true")
+            print('PASS: project folder, Unicode/spaced local file and new-window URL launch through actual system application associations')
             fixture = ROOT / 'tests/fixtures/images/small.png'
             tap('#attachBtn'); tap('#menuAttach')
             chooser = until(lambda: next((w for w in Gtk.Window.list_toplevels() if w is not app.window and w.get_visible()), None), 10)
@@ -176,3 +211,5 @@ finally:
     app.quit()
     for _ in range(20):
         pump()
+    if launch_environment:
+        launch_environment.cleanup()
