@@ -11,7 +11,7 @@ import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
 import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } from './platform/termux/desktop.mjs';
 import { Jobs } from './updates/jobs.mjs';
-import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
+import { installPi, rollbackPi, updateStatus, atIdle, collectRuntimes } from './updates/runtime.mjs';
 import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
 import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt, pairX11 } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
@@ -256,6 +256,10 @@ async function serve() {
     } catch (error) { json(res, { error: error.message }, 400); }
   });
   function jsonShutdown() { if (jobs.busy) return; setTimeout(async () => { clearInterval(monitor); await fs.rm(lock, { force: true }); server.close(() => process.exit(0)); }, 50); }
+  if (!await web()) {
+    const workers = await Promise.all((await allMeta()).map(meta => socketRequest(socketPath(meta.id), '/status', undefined, 1000).then(() => true, () => false)));
+    if (!workers.some(Boolean)) await collectRuntimes().catch(error => console.error('Runtime cleanup: ' + error.message));
+  }
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
   const monitor = setInterval(() => {

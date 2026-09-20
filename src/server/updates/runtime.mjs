@@ -93,6 +93,7 @@ export async function installPi(job) {
     await job.exec('npm', ['ci', '--prefix', root, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund']);
     const check = `import {ModelRuntime,SessionManager} from ${JSON.stringify('file://' + path.join(root, 'node_modules/@earendil-works/pi-coding-agent/dist/index.js'))}; const r=await ModelRuntime.create({allowModelNetwork:false}); if(!r.getProviders().length||!SessionManager)process.exit(1);`;
     await job.exec(process.execPath, ['--input-type=module', '-e', check], { timeout: 60000 });
+    await writeJson(path.join(root, 'managed.json'), { owner: 'bashkitten', version: manifest.version, lockSha256: manifest.sha256 });
   });
   await job.step('activate-pi', 'Activating Pi', () => activateRuntime(job, { root, version: manifest.version }));
 }
@@ -101,4 +102,29 @@ export async function rollbackPi(job) {
   if (!previous) throw Error('No previous managed runtime is available');
   await fs.access(path.join(previous.root, 'node_modules/@earendil-works/pi-coding-agent/package.json'));
   await activateRuntime(job, previous);
+}
+
+export async function pruneRuntimes(parent, keep, commands) {
+  for (const entry of await fs.readdir(parent, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; })) {
+    if (!entry.isDirectory() || !/^[0-9]+\.[0-9]+\.[0-9]+-[a-f0-9]{12}$/.test(entry.name)) continue;
+    const root = path.join(parent, entry.name), marker = await readJson(path.join(root, 'managed.json'), null);
+    if (marker?.owner !== 'bashkitten' || entry.name !== marker.version + '-' + marker.lockSha256?.slice(0, 12)) continue;
+    if (Date.now() - (await fs.stat(path.join(root, 'managed.json'))).mtimeMs < 7 * 86400000) continue;
+    if (keep.has(root) || commands.some(command => command.some(argument => argument.startsWith(root + '/')))) continue;
+    await fs.rm(root, { recursive: true });
+  }
+}
+export async function collectRuntimes() {
+  // Only called before starting services, with no surviving web/worker process.
+  // Terminal Pi processes still keep their exact runtime through /proc ownership.
+  const current = selectedRuntime(), bundled = await readJson(path.join(bundledRoot, 'runtime-default.json'), null);
+  const keep = new Set([current.root, current.previous?.root, bundled?.root].filter(Boolean));
+  const commands = [];
+  for (const pid of (await fs.readdir('/proc')).filter(value => /^[0-9]+$/.test(value))) {
+    try { commands.push((await fs.readFile('/proc/' + pid + '/cmdline', 'utf8')).split('\0')); }
+    catch (error) { if (!['ENOENT', 'ESRCH', 'EACCES', 'EPERM'].includes(error.code)) throw error; }
+  }
+  if (commands.some(args => /^(apt|apt-get|dpkg|npm|pkg)$/.test(path.basename(args[0] || '')))) return;
+  const parent = process.platform === 'android' ? path.join(process.env.PREFIX, 'var/lib/bashkitten/runtimes') : path.join(dataDir, 'runtimes');
+  await pruneRuntimes(parent, keep, commands);
 }

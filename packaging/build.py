@@ -66,6 +66,7 @@ if [ ! -f "$runtime/ready" ]; then
   cp '{prefix}/lib/bashkitten/package.json' "$runtime/"
   touch "$runtime/ready"
 fi
+printf '%s\\n' '{json.dumps({'owner': 'bashkitten', 'version': pi_version, 'lockSha256': lock_hash})}' > "$runtime/managed.json"
 if ! command -v pi >/dev/null 2>&1 && [ ! -e '{prefix}/bin/pi' ] && [ ! -L '{prefix}/bin/pi' ]; then ln -s bashkitten-pi '{prefix}/bin/pi'; fi
 # Publish readiness only after extraction and retained-runtime configuration finish.
 cp '{prefix}/lib/bashkitten/build-platform.json' '{installation}.tmp'
