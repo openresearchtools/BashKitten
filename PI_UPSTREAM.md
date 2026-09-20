@@ -7,6 +7,9 @@ This branch runs unmodified Pi rather than porting its behavior:
 - Commit: `d981de1229ef899957bbe968bc8dcda02a21f477`
 - Packages: `@earendil-works/pi-coding-agent@0.85.1`, `@earendil-works/pi-ai@0.85.1`
 - Full transitive dependency resolution and tarball integrity: `package-lock.json`
+- Pi’s published shrinkwrap omits integrity for five internal packages. The root
+  lock records the exact-version npm registry SRI for those entries as well;
+  package contents and versions remain unchanged.
 - License: MIT (see `reference/PI-LICENSE`)
 
 The RPC documentation and public types shipped with that release are the adapter's
