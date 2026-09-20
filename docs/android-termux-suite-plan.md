@@ -49,7 +49,7 @@ the same Termux command permission independently.
 | Repository | Responsibility | Published artifacts |
 | --- | --- | --- |
 | `openresearchtools/bashkitten` | Shared `src/web/` and `src/server/`, hosts in `src/android/` and `src/linux/`, platform adapters and packaging | BashKitten APK, Termux `aarch64` server `.deb`, Linux `arm64`/`amd64` server and desktop `.deb` packages, source and release metadata |
-| Proposed `openresearchtools/termux-suite` | Tracked upstream Termux sources, patch series, build/signing workflows and suite catalog | Termux/add-on APKs, both X11 variants, matched X11 companion `.deb`, complete source archive and signed catalog |
+| `openresearchtools/termux-suite` | Tracked upstream Termux sources, patch series, build/signing workflows and suite catalog | Termux/add-on APKs, both X11 variants, matched X11 companion `.deb`, complete source archive and signed catalog |
 | Existing `openresearchtools/apt` | Final signed APT distribution for Linux `arm64`/`amd64` and native Termux `aarch64` packages | Platform-specific keyring packages and the existing shared signed index referencing application release assets |
 
 ### Shared BashKitten source layout
@@ -136,6 +136,12 @@ submodules, including X11 dependencies, so a source download contains their
 contents. Keep upstream trees pristine and apply the documented patch series to
 a build staging directory. Updating upstream is a source-import commit followed
 by explicit patch refreshes; CI fails when a patch no longer applies.
+
+Check every app’s official stable release daily, with X11 following its nightly
+release. Import changed source and submodules, update its version ledger, verify
+the existing patch series, then build/sign/publish the suite and refresh the app
+catalog automatically. A rejected patch or changed build layout stops that
+update visibly. Ordinary Termux APT packages stay in upstream repositories.
 
 ### Upstream build fidelity and license preservation
 
@@ -1070,7 +1076,7 @@ normal user-controlled OS setting. Desktop web deployments disable this adapter.
 | 3. Runtime lifecycle | Supervisor, backend controls, Pi stop/kill and recovery | Closing APK/browser preserves a real turn; backend restart preserves workers; no duplicate server or prompt replay; deliberate stops stay stopped |
 | 4. Browser integration | Persistent WebView, picker/paste/download/open/OAuth behavior | Same chat and files work in APK and Chrome; uploads use the real Android picker; provider callback returns to native Pi |
 | 5. Desktop | Both X11 builds, matching companion, XFCE/LibreOffice, profiles/custom commands and dependency switching | Start/stop and variant migration work; selecting a ready profile never reinstalls; conflicting-package swaps show real progress and recover from failure; reopen/repeated selection creates no duplicate job; each GPU claim has rendered evidence |
-| 6. Notifications and updates | Worker notifications, signed catalog, APK/APT/Pi npm update orchestration and top package-progress block | One notification per turn; correct session opens; APK update paths work; Pi and installed npm updates are detected even with no APT changes; staged Pi updates preserve active workers; progress survives UI closure/backend restart and exposes per-source errors/recovery |
+| 6. Notifications and updates | Worker notifications, signed catalog, APK/APT/Pi npm update orchestration and top package-progress block | One text notification per turn; APK update paths work; Pi and installed npm updates are detected even with no APT changes; staged Pi updates preserve active workers; progress survives UI closure/backend restart and exposes per-source errors/recovery |
 | 6L. Linux host and packages | GTK/WebKitGTK wrapper, persistent profile, server attachment, native file/link actions and `arm64`/`amd64` server/desktop `.deb` builds | ARM64 tested on this machine and AMD64 on its native test host; login survives restart; uploads/paste work; local paths open externally; file panel is hidden only in the host; provider login works; closing preserves Pi turns; both architectures pass package install/upgrade/removal checks |
 | 7. Release | Production signed artifacts, exact source/license/notice artifacts, upstream version mapping, Linux/Termux APT publication, usable local signing-key backup and recovery instructions | Local signing succeeds without GitHub; same-upstream patch and next-upstream APK upgrades pass; Linux `arm64`/`amd64` and Termux `aarch64` install/upgrade from the final APT index; complete product, telemetry, source/license and signature checks pass before catalog promotion |
 

@@ -53,7 +53,8 @@ Termux device at `192.168.97.2:5555`.
   (`PASS: unrelated signer denied`). The public external-command policy remains.
 - Core setup installed native Node, Python, Git, gh, ripgrep, fd, API CLI and the
   existing Termux APT keyring. Candidate BashKitten packages are installed through
-  the protected command path; final APT publication has not occurred.
+  the protected command path. The published 0.2.2 package also installs from the
+  existing signed APT repository; the manager reloads it and retains Pi 0.86.0.
 - The manager runs as a real long-lived task in Termux's foreground service.
   A native Pi turn using a local model fixture completes after force-stopping
   BashKitten; the backend and worker remain alive.
@@ -65,7 +66,9 @@ Termux device at `192.168.97.2:5555`.
   the normal Open With path. Repeated ZIP tests match the current archive.
 - Chrome separately passes login/render/reload-cookie checks against the same
   localhost server. Chrome usage/crash reporting was switched off during setup.
-  Chrome file flow, clipboard paste and external-provider login remain to test.
+  Its normal Android picker uploaded rose.jpg into a native Pi turn; repository
+  upload and a browser-downloaded backend ZIP containing strawberries.jpg pass.
+  Chrome clipboard paste and external-provider login remain to test.
 - Completion notification delivery passed on the earlier API candidate. The final
   suite restores unmodified upstream API; notifications now use its standard text
   interface without a custom notification-link action. Camera/microphone/location/
@@ -104,7 +107,9 @@ notification-link patch has been removed.
 All eight apps, both X11 variants and the paired aarch64 companion pass Actions
 build/signing checks in **35495776147**, published as **suite-35495776147**.
 API is 0.53.0 suite revision 3/code 1004; Termux is 0.118.3 suite revision 2/code
-1003. The companion is indexed in the existing APT repository. Upstream displayed
+1003. The companion and BashKitten 0.2.2 are indexed in the existing APT repository.
+The production signed catalog contains all ten APK entries (including both X11
+variants); renewal **35497362022** passed. Upstream displayed
 versions and individual licenses are retained.
 
 The daily upstream workflow now imports official releases for each app and X11
@@ -159,9 +164,28 @@ Termux; Android build **35496789356** and both native Linux builds pass.
 The Android host now has a separate hamburger menu, Apps store, Package updates,
 Desktop and Pi sessions screens. Store cards use upstream icons with license
 notices, installed/update states and pull to refresh. The WebView stays attached
-while native pages are open, preserving the chat document, selected session,
-unsent draft and cookies. Package update output is shown separately from the
+while native pages are open. The final Android navigation test passed and verified
+the same chat document, selected session and unsent draft after Apps and Package
+updates; previous recreation tests cover persistent cookies. Package update output is shown separately from the
 store with APT, global npm and selected Pi version status.
+
+BashKitten **v0.2.2** is a normal release with the Android APK, five native
+packages, tracked application source and 202 dependency source archives. APT
+publisher **35497361590** succeeded. Actual signed-index upgrade/reinstall and
+retained-login checks passed on native **arm64 and amd64** in **35497614997**;
+the local ARM64 machine and native Termux **aarch64** also installed 0.2.2 from
+that index. The installed local GTK host passes native folder/file/URL launch,
+system image picker, clipboard paste and persistent login under Xvfb. The first
+local pointer test was obscured in the shared desktop; its isolated-display rerun
+passed. No product code changed for that test failure.
+
+The production store's Refresh and Termux:API Update buttons were exercised on
+Cuttlefish, upgrading API **1003 → 1004** through Android's confirmation screen.
+The first attempt timed out while shutting down an idle worker; Retry completed,
+and the backend recovered with the same account/session. The subsequent APT
+backend replacement reloaded services successfully and preserved selected Pi
+0.86.0. This records a recoverable timeout, not a claim that every install was
+uninterrupted.
 
 The usable Android signing backup is `/home/user/Documents/droid.txt` (0600).
 The same four signing Secrets exist in both repositories. Catalog signing uses
@@ -170,8 +194,8 @@ key remains separate. No private key is tracked.
 
 ## Remaining acceptance gates
 
-Finish paired X11 APK/companion updates and variant migration; Android external
-OAuth and Chrome file checks; final source/notice and platform telemetry audits; release assembly/publishing, signed catalog renewal, and
-actual install/upgrade from the existing APT repository for all three package
-targets. Keep real-provider login, physical GPU tests, Android 12/16 and 16 KB
-device availability explicit. Candidate compilation is not the final product gate.
+Finish paired X11 APK/companion upgrade and variant-migration device coverage;
+Android external OAuth and Chrome clipboard paste; final platform telemetry
+audits. Real-provider account authorization, physical GPU tests, Android 12/16
+and 16 KB device coverage remain unverified. The production release, signed
+catalog and APT installs for all three targets are now published and tested.
