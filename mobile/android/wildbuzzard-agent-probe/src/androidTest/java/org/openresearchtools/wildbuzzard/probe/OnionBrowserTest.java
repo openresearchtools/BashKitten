@@ -65,7 +65,14 @@ public final class OnionBrowserTest {
         click(device, "Choose .auth_private file");
         UiObject2 roots = device.wait(Until.findObject(By.desc("Show roots")), 10000);
         assertNotNull("Android document picker", roots); roots.click();
-        click(device, "Downloads");
+        UiObject2 rootList = device.wait(Until.findObject(By.res("com.android.documentsui", "roots_list")), 10000);
+        assertNotNull("Document picker roots", rootList);
+        SystemClock.sleep(750); // Drawer translation does not reliably emit accessibility idle events.
+        UiObject2 downloadsRoot = rootList.findObject(By.text("Downloads"));
+        assertNotNull("Downloads root", downloadsRoot); downloadsRoot.click();
+        assertTrue("Downloads drawer closes", device.wait(Until.gone(By.res("com.android.documentsui", "roots_list")), 10000));
+        assertTrue("Downloads directory selected", device.wait(Until.hasObject(
+            By.res("com.android.documentsui", "toolbar").hasDescendant(By.text("Downloads"))), 10000));
         if (!device.wait(Until.hasObject(By.text(credentialFile)), 3000))
             new UiScrollable(new UiSelector().scrollable(true)).scrollTextIntoView(credentialFile);
         click(device, credentialFile);

@@ -20,6 +20,7 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--onion-fixture", type=Path)
     parser.add_argument("--onion-only", action="store_true")
+    parser.add_argument("--probe-artifacts", type=Path, help="Separately built, recorded test APKs from the Java/Kotlin workflow")
     args = parser.parse_args()
     if args.onion_only and not args.onion_fixture:
         parser.error("--onion-only requires --onion-fixture")
@@ -34,6 +35,7 @@ def main():
         return result.stdout.strip()
 
     manifest = json.loads((args.artifacts / "build-manifest.json").read_text())
+    apk_paths = {name: args.artifacts / name for name in manifest["apks"]}
     for name, expected in manifest["apks"].items():
         path = args.artifacts / name
         if path.parent != args.artifacts or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
@@ -51,6 +53,18 @@ def main():
         raise RuntimeError("Device is not native ARM64: " + device["abi"])
     report = {"source": manifest["source"], "started": datetime.now(timezone.utc).isoformat(),
               "device": device, "apks": manifest["apks"], "tests": {}}
+    if args.probe_artifacts:
+        probes = json.loads((args.probe_artifacts / "probe-manifest.json").read_text())
+        expected_names = {manifest["roles"][role] for role in ("agent_probe", "instrumentation")}
+        if set(probes["apks"]) != expected_names:
+            raise RuntimeError("Expected only the two independent test APKs")
+        for name, expected in probes["apks"].items():
+            path = args.probe_artifacts / name
+            if path.parent != args.probe_artifacts or hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise RuntimeError("Test APK checksum or filename mismatch: " + name)
+            apk_paths[name] = path
+        report["probe_source"] = probes["source"]
+        report["apks"].update(probes["apks"])
     report_path = args.output / "device-results.json"
     report_path.write_text(json.dumps(report, indent=2) + "\n")
     for role in ("browser", "agent_probe", "instrumentation"):
@@ -68,7 +82,7 @@ def main():
                 raise RuntimeError("Installed APK differs from the recorded build: " + package)
             result = "Retained matching installed APK and running browser process"
         else:
-            result = command("install", "-r", str(args.artifacts / name), timeout=300)
+            result = command("install", "-r", str(apk_paths[name]), timeout=300)
         (args.output / (role + "-install.log")).write_text(result + "\n")
     if int(device["sdk"]) >= 33:
         command("shell", "pm", "grant", "org.openresearchtools.wildbuzzard",

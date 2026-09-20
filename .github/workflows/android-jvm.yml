@@ -64,7 +64,23 @@ jobs:
       - name: Compile Android product and independent agent tests
         run: |
           set -Eeuo pipefail
-          ./mach gradle --continue :fenix:compileDebugKotlin :fenix:compileDebugJavaWithJavac :wildbuzzard-agent-probe:compileDebugJavaWithJavac :wildbuzzard-agent-probe:compileDebugAndroidTestJavaWithJavac 2>&1 | tee artifacts/jvm-build.log
+          ./mach gradle --continue :fenix:compileDebugKotlin :fenix:compileDebugJavaWithJavac :wildbuzzard-agent-probe:assembleDebug :wildbuzzard-agent-probe:assembleDebugAndroidTest 2>&1 | tee artifacts/jvm-build.log
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path(os.environ['GITHUB_WORKSPACE'])
+          apks = {}
+          probe = root.parent / 'obj-wildbuzzard-android/gradle/build/mobile/android/wildbuzzard-agent-probe'
+          for role, pattern in [('agent_probe', '**/outputs/apk/debug/*.apk'), ('instrumentation', '**/outputs/apk/androidTest/debug/*.apk')]:
+              matches = list(probe.glob(pattern))
+              if len(matches) != 1:
+                  raise SystemExit(f'Expected one {role} APK, found {len(matches)}')
+              name = {'agent_probe': 'wildbuzzard-agent-probe.apk', 'instrumentation': 'wildbuzzard-agent-probe-test.apk'}[role]
+              data = matches[0].read_bytes()
+              (root / 'artifacts' / name).write_bytes(data)
+              apks[name] = hashlib.sha256(data).hexdigest()
+          (root / 'artifacts' / 'probe-manifest.json').write_text(json.dumps({'source': os.environ['GITHUB_SHA'], 'apks': apks}, indent=2) + '\n')
+          PY
       - name: Save Android toolchains and Gradle downloads
         if: always() && !cancelled() && steps.toolchain-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
