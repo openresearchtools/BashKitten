@@ -11,8 +11,9 @@ import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
 import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } from './platform/termux/desktop.mjs';
 import { Jobs } from './updates/jobs.mjs';
-import { installPi, rollbackPi, updateStatus } from './updates/runtime.mjs';
-import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages } from './platform/termux/packages.mjs';
+import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
+import { bundledRoot } from './rpc/runtime.mjs';
+import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt } from './platform/termux/packages.mjs';
 import { deliverNotifications } from './platform/termux/notifications.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -60,7 +61,13 @@ async function serve() {
   await fs.rm(controlSocket, { force: true });
   let state = await readJson(stateFile, { web: true }), serial = Promise.resolve(), starting = false, lastError = null;
   let retryAt = 0, failures = 0;
-  const jobs = new Jobs({ 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
+  const manifestFile = path.join(bundledRoot, 'build-platform.json');
+  const packageFile = (await readJson(manifestFile, null))?.installationStamp || manifestFile;
+  const revision = (await readJson(packageFile, null))?.revision;
+  const nodeStamp = async () => { const stat = await fs.stat(process.execPath); return `${stat.dev}:${stat.ino}:${stat.mtimeMs}`; };
+  const initialNode = await nodeStamp();
+  let restarting = false;
+  const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
   await jobs.init();
   async function web() {
     const info = await readJson(serverFile, null);
@@ -97,7 +104,36 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 1, platform, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+    return { version: 1, platform, manager: { pid: process.pid, revision }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
+  }
+  async function reloadServices(job) {
+    if (platform === 'termux') await apt(job, ['check']); // Respect an external APT transaction too.
+    await atIdle(job, async () => {
+      await job.phase('Reloading updated BashKitten / Node');
+      await stopWeb();
+      for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/shutdown', {}, 10000).catch(error => {
+        if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
+      });
+      // Preserve native sessions and intentional stops; new workers load updated code.
+      restarting = true;
+    }, { desktop: true });
+  }
+  async function reconcilePackage() {
+    if (jobs.busy) return;
+    if (restarting) {
+      clearInterval(monitor);
+      await new Promise(resolve => server.close(resolve));
+      await fs.rm(lock, { force: true });
+      if (process.env.BASHKITTEN_ATTACHED_MANAGER === '1') process.exit(75);
+      const log = openSync(path.join(dataDir, 'control.log'), 'a', 0o600);
+      const child = spawn(process.execPath, [script, 'serve'], { detached: true, stdio: ['ignore', log, log], env: process.env });
+      closeSync(log); child.unref();
+      child.once('error', error => { console.error(error); process.exit(1); });
+      child.once('spawn', () => process.exit(0));
+      return;
+    }
+    const next = (await readJson(packageFile, null))?.revision;
+    if ((next && next !== revision) || initialNode !== await nodeStamp()) await jobs.start('reload-services');
   }
   async function stopPi(id, force) {
     const meta = (await allMeta()).find(item => item.id === id);
@@ -160,7 +196,11 @@ async function serve() {
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
   const monitor = setInterval(() => {
-    if (state.web && Date.now() > retryAt) { const operation = serial.then(startWeb); serial = operation.catch(() => {}); }
+    const operation = serial.then(async () => {
+      await reconcilePackage();
+      if (!restarting && !(jobs.busy && jobs.job.kind === 'reload-services') && state.web && Date.now() > retryAt) await startWeb();
+    });
+    serial = operation.catch(() => {});
   }, 2000);
   setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();
   process.on('SIGTERM', jsonShutdown);

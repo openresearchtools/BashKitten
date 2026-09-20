@@ -38,7 +38,8 @@ if termux:
     command += ['--os=android', '--cpu=arm64']
 subprocess.run(command, check=True)
 # npm chooses the platform's upstream binaries; no lifecycle scripts compile host binaries.
-(app / 'build-platform.json').write_text(json.dumps({'platform': 'android' if termux else 'linux', 'architecture': arch, 'lockSha256': lock_hash, 'piVersion': pi_version}) + '\n')
+installation = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/installed.json'
+(app / 'build-platform.json').write_text(json.dumps({'platform': 'android' if termux else 'linux', 'architecture': arch, 'lockSha256': lock_hash, 'piVersion': pi_version, 'installationStamp': installation, 'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}) + '\n')
 runtime = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/runtimes/' + pi_version + '-' + lock_hash[:12]
 (app / 'runtime-default.json').write_text(json.dumps({'root': runtime, 'version': pi_version}) + '\n')
 bin_dir = stage / prefix.lstrip('/') / 'bin'
@@ -64,6 +65,10 @@ if [ ! -f "$runtime/ready" ]; then
   touch "$runtime/ready"
 fi
 if ! command -v pi >/dev/null 2>&1 && [ ! -e '{prefix}/bin/pi' ] && [ ! -L '{prefix}/bin/pi' ]; then ln -s bashkitten-pi '{prefix}/bin/pi'; fi
+# Publish readiness only after extraction and retained-runtime configuration finish.
+cp '{prefix}/lib/bashkitten/build-platform.json' '{installation}.tmp'
+chmod 644 '{installation}.tmp'
+mv '{installation}.tmp' '{installation}'
 ''')
 control.joinpath('postinst').chmod(0o755)
 control.joinpath('postrm').write_text(f'''#!{shell}
