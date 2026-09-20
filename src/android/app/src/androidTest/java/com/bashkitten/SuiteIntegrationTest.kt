@@ -54,13 +54,14 @@ class SuiteIntegrationTest {
             var document = ""
             for (attempt in 0 until 100) {
                 val done = CountDownLatch(1)
-                scenario.onActivity { activity -> webView(activity.window.decorView)!!.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState,secure:window.isSecureContext,uuid:typeof crypto.randomUUID,text:document.body?.innerText,error:document.querySelector('#authError')?.textContent,auth:document.querySelector('#auth')?.className})") { document = it; done.countDown() } }
+                scenario.onActivity { activity -> webView(activity.window.decorView)!!.evaluateJavascript("({url:location.href,ready:document.readyState,secure:window.isSecureContext,uuid:typeof crypto.randomUUID,text:document.body?.innerText,error:document.querySelector('#authError')?.textContent,appVisible:document.querySelector('#app')?.classList.contains('hidden')===false,authVisible:document.querySelector('#auth')?.classList.contains('hidden')===false})") { document = it; done.countDown() } }
                 assertTrue(done.await(5, TimeUnit.SECONDS))
-                if (document.contains("BashKitten") || document.contains("Projects")) break
+                if (JSONObject(document).optBoolean("appVisible") || JSONObject(document).optBoolean("authVisible")) break
                 Thread.sleep(200)
             }
             instrumentation.sendStatus(0, Bundle().apply { putString("stream", "WebView document: $document\nConsole: $errors\n") })
-            assertTrue("The web login/app content is blank", document.contains("BashKitten") || document.contains("Projects"))
+            assertTrue("The web login/app content is blank", JSONObject(document).optBoolean("appVisible") || JSONObject(document).optBoolean("authVisible"))
+            if (InstrumentationRegistry.getArguments().getString("restoredCookies") == "true") assertTrue("Login should survive the APK update", JSONObject(document).optBoolean("appVisible"))
             device.takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), "suite-web.png"))
         }
     }
