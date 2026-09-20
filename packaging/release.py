@@ -11,7 +11,7 @@ import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
-SERVER_INPUTS = ['src/server', 'src/web', 'src/linux', 'packaging/build.py', 'package.json', 'package-lock.json', 'reference', 'licenses', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']
+SERVER_INPUTS = ['src/server', 'src/web', 'src/linux', 'packaging/build.py', 'packaging/about.py', 'package.json', 'package-lock.json', 'reference', 'licenses', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']
 
 def sha(file):
     with file.open('rb') as stream: return hashlib.file_digest(stream, 'sha256').hexdigest()
@@ -47,7 +47,7 @@ def main():
     args = parser.parse_args()
     assert re.fullmatch('[A-Za-z0-9._-]+', args.tag)
     subprocess.run(['git', 'diff', '--quiet', 'HEAD'], cwd=ROOT, check=True)
-    android_commit = build(args.android_run, ['src/android', 'licenses/Apache-2.0.txt', 'LICENSE', 'package.json', 'src/server/platform/termux/bootstrap', '.github/workflows/android.yml'])
+    android_commit = build(args.android_run, ['src/android', 'licenses/Apache-2.0.txt', 'LICENSE', 'package.json', 'packaging/about.py', 'src/web/about.js', 'src/web/web_ui.html', 'src/server/platform/termux/bootstrap', '.github/workflows/android.yml'])
     linux_commit = build(args.linux_run, SERVER_INPUTS + ['.github/workflows/packages.yml'])
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     args.output.mkdir(parents=True, exist_ok=True)

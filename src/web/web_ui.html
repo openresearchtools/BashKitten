@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BashKitten</title>
+  <script src="/about.js"></script>
   <style>
     :root, :root[data-theme="dark"] {
       color-scheme: dark;
@@ -551,12 +552,6 @@
             <div id="piSessions"></div>
           </section>
           <section id="settingsAbout" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabAbout">
-            <h3>BashKitten</h3>
-            <p>A local interface for the Pi coding agent. GPL-3.0-only. No warranty.</p>
-            <p>The Android app and Linux desktop host connect to the separate BashKitten server. The server package includes unmodified Pi and its npm dependencies under their own licenses. Termux, Node.js and system libraries are installed separately and retain their own licenses.</p>
-            <p><a href="https://github.com/openresearchtools/bashkitten" target="_blank" rel="noopener">Source code</a></p>
-            <button type="button" id="viewLicenses">Licenses</button>
-            <div id="licenseList" class="settings-section"></div>
           </section>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
           <p id="settingsNotice" class="meta" role="status"></p>
@@ -2514,27 +2509,14 @@
         if (next !== undefined) { event.preventDefault(); selectSettingsTab(settingsTabs[next].dataset.settingsTab, true); }
       };
     }
-    $('#viewLicenses').onclick = async () => {
-      const button = $('#viewLicenses'), list = $('#licenseList');
-      button.disabled = true;
-      try {
+    renderBashKittenAbout($('#settingsAbout'), {
+      notice: 'The Android app and Linux desktop host connect to the separate BashKitten server. The server package includes unmodified Pi and its npm dependencies under their own licenses. Termux, Node.js and system libraries are installed separately and retain their own licenses.',
+      loadLicenses: async () => {
         const response = await fetch('/licenses.json');
         if (!response.ok) throw Error('Could not load licenses');
-        const records = await response.json();
-        list.replaceChildren();
-        for (const entry of records) {
-          const detail = document.createElement('details'), summary = document.createElement('summary');
-          summary.textContent = [entry.name, entry.version, entry.license].filter(Boolean).join(' · ');
-          detail.append(summary);
-          detail.ontoggle = () => { if (detail.open && detail.childElementCount === 1) {
-            const text = document.createElement('pre'); text.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;max-height:24rem;overflow:auto';
-            text.textContent = entry.text; detail.append(text);
-          } };
-          list.append(detail);
-        }
-        button.textContent = 'Licenses loaded';
-      } catch (error) { button.disabled = false; list.textContent = error.message; }
-    };
+        return response.json();
+      }
+    });
     $('#settingsDone').onclick = showChatView;
     $('#settingsForm').onsubmit = async event => {
       event.preventDefault();

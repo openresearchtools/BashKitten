@@ -115,46 +115,25 @@ class BashKitten(Gtk.Application):
 
     def about(self):
         window = Gtk.Window(title='About BashKitten', transient_for=self.window, modal=True,
-                            destroy_with_parent=True, default_width=520)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16,
-                      margin_top=24, margin_bottom=24, margin_start=24, margin_end=24)
-        version = json.loads((APP_ROOT / 'package.json').read_text())['version']
-        for text in [f'BashKitten {version}', 'Native Pi coding sessions · GPL-3.0-only',
-                     'The BashKitten server includes unmodified Pi and its npm dependencies under their own licenses.',
-                     'GTK, WebKitGTK, PyGObject, Python and Node.js are installed by your system package manager. They are not bundled in this app and retain their own licenses.']:
-            box.append(Gtk.Label(label=text, wrap=True, xalign=0, max_width_chars=58))
-        licenses = Gtk.Button(label='Licenses')
-        licenses.connect('clicked', lambda _: self.show_licenses(window))
-        box.append(licenses)
-        box.append(Gtk.LinkButton(label='Source', uri='https://github.com/openresearchtools/bashkitten'))
-        window.set_child(box)
+                            destroy_with_parent=True, default_width=740, default_height=660)
+        view = WebKit.WebView(network_session=WebKit.NetworkSession.new_ephemeral())
+        def navigate(web, decision, kind):
+            if kind not in (WebKit.PolicyDecisionType.NAVIGATION_ACTION, WebKit.PolicyDecisionType.NEW_WINDOW_ACTION):
+                return False
+            action = decision.get_navigation_action()
+            uri = action.get_request().get_uri()
+            if uri == 'about:blank':
+                return False
+            decision.ignore()
+            if action.is_user_gesture() and urlsplit(uri).scheme in ('https', 'http'):
+                Gtk.UriLauncher.new(uri).launch(window, None, self.launched)
+            return True
+        view.connect('decide-policy', navigate)
+        window.set_child(view)
         window.present()
-
-    def show_licenses(self, parent):
-        window = Gtk.Window(title='BashKitten licenses', transient_for=parent, modal=True,
-                            destroy_with_parent=True, default_width=760, default_height=600)
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12,
-                      margin_top=16, margin_bottom=16, margin_start=16, margin_end=16)
-        state = Gtk.Label(label='Loading licenses…', wrap=True)
-        box.append(state)
-        window.set_child(box)
-        window.present()
-        def ready(records):
-            box.remove(state)
-            choices = Gtk.DropDown.new_from_strings([f"{r['name']} {r.get('version', '')}" for r in records])
-            box.append(choices)
-            view = Gtk.TextView(editable=False, cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR)
-            scroll = Gtk.ScrolledWindow(vexpand=True)
-            scroll.set_child(view)
-            box.append(scroll)
-            def select(*_):
-                record = records[choices.get_selected()]
-                view.get_buffer().set_text(f"{record['name']} · {record.get('license', '')}\n\n{record['text']}")
-                scroll.get_vadjustment().set_value(0)
-            choices.connect('notify::selected', select)
-            select()
-        self.background(lambda: json.loads((APP_ROOT / 'licenses.json').read_text()), ready,
-                        lambda message: state.set_text('Could not read installed licenses: ' + message))
+        self.background(lambda: (APP_ROOT / 'about.html').read_text(),
+                        lambda html: view.load_html(html, 'about:blank'),
+                        lambda message: window.set_child(Gtk.Label(label=message, wrap=True)))
 
     def error(self, message):
         self.message.set_text(message)

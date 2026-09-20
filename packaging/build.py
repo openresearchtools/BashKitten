@@ -39,6 +39,8 @@ if termux:
 subprocess.run(command, check=True)
 subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app), 'android' if termux else 'linux', 'arm64' if arch in ('aarch64', 'arm64') else 'x64'], check=True)
 subprocess.run(['node', str(ROOT / 'src/server/licenses.mjs'), str(app)], check=True)
+if not termux:
+    subprocess.run(['python3', str(ROOT / 'packaging/about.py'), 'linux', str(app / 'licenses.json'), str(app / 'about.html')], check=True)
 # npm chooses the platform's upstream binaries; no lifecycle scripts compile host binaries.
 installation = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/installed.json'
 (app / 'build-platform.json').write_text(json.dumps({'platform': 'android' if termux else 'linux', 'architecture': arch, 'lockSha256': lock_hash, 'piVersion': pi_version, 'installationStamp': installation, 'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}) + '\n')

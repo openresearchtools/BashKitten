@@ -707,7 +707,10 @@ and play/stop; Pi controls retain per-session stop/kill and stop all.
 Both Android and Linux native menus include **About**, with short dependency
 notices and **Licenses**. Linux explicitly identifies GTK, WebKitGTK, PyGObject,
 Python and Node.js as system-installed dependencies under their own licenses.
-Native notices remain readable when the backend is stopped.
+Native notices remain readable when the backend is stopped or the user is not
+logged in. Reuse the web About renderer and styling inside both native shells,
+with shell-specific dependency notices and license records. Keep the web About
+entry as well.
 
 Back from every native screen returns to the existing loaded chat. Keep the
 WebView attached and preserve its document, selected session, unsent draft and

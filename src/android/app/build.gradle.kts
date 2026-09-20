@@ -33,6 +33,7 @@ val generateLicenses by tasks.registering {
     inputs.files(rootProject.file("licenses.py"), rootProject.file("../../LICENSE"), rootProject.file("../../package.json"))
     inputs.file(rootProject.file("../../licenses/Apache-2.0.txt"))
     inputs.dir(file("src/main/assets"))
+    inputs.files(rootProject.file("../../packaging/about.py"), rootProject.file("../web/about.js"), rootProject.file("../web/web_ui.html"))
     outputs.dir(licenseAssets)
     outputs.file(layout.buildDirectory.file("android-dependency-sources.tar.gz"))
     doLast {

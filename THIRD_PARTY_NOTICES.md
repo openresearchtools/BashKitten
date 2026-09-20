@@ -7,10 +7,10 @@ Termux, Node.js, GTK, WebKitGTK, Python and other system packages are installed
 separately and retain their own licenses.
 
 **About → Licenses** in the Android app covers its bundled AndroidX, Kotlin and
-other libraries and the original Termux icons. **Server licenses**, or
-**Settings → About → Licenses** in the web UI, shows the bundled server libraries.
-The Linux app's **Menu → About → Licenses** also reads these installed notices
-directly, including when the backend is stopped.
+other libraries and the original Termux icons. **Settings → About → Licenses** in the web UI shows the bundled server libraries.
+The Linux app’s **Menu → About → Licenses** also reads these installed notices
+directly, including when the backend is stopped. Both native menus use the same
+About page styling and expandable license list as the web UI.
 Full license, copyright and notice texts are included offline. Package copies
 are installed under `share/doc/bashkitten` and `share/doc/bashkitten-desktop`.
 

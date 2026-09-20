@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import re
+import subprocess
 import sys
 import tarfile
 from urllib.error import HTTPError
@@ -88,6 +89,7 @@ records.append({'name': 'Termux app icons', 'version': '', 'license': 'Original 
                 'source': 'https://github.com/openresearchtools/termux-suite',
                 'text': '\n\n'.join(p.name + '\n\n' + p.read_text() for p in sorted(assets.glob('termux-*')))})
 (output / 'licenses.json').write_text(json.dumps(records, ensure_ascii=False) + '\n')
+subprocess.run(['python3', str(root / 'packaging/about.py'), 'android', str(output / 'licenses.json'), str(output / 'about.html')], check=True)
 (cache / 'components.json').write_text(json.dumps(records, indent=2, ensure_ascii=False) + '\n')
 with tarfile.open(report.parent / 'android-dependency-sources.tar.gz', 'w:gz') as archive:
     for file in sorted(cache.iterdir()):

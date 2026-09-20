@@ -46,11 +46,7 @@ import org.json.JSONObject
 class MainActivity : ComponentActivity() {
     private lateinit var web: WebSurface
     private var screen by mutableStateOf("chat")
-    private var licenses by mutableStateOf<List<JSONObject>>(emptyList())
-    private var licenseDetail by mutableStateOf<JSONObject?>(null)
-    private fun back() {
-        when (screen) { "license" -> { licenseDetail = null; screen = "licenses" }; "licenses" -> screen = "about"; else -> openChat() }
-    }
+    private fun back() = openChat()
     private var menuOpen by mutableStateOf(false)
     private var status by mutableStateOf<JSONObject?>(null)
     private var notice by mutableStateOf("")
@@ -99,7 +95,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         session = requestedSession(intent)
         screen = state?.getString("screen") ?: if (initialized()) "chat" else "apps"
-        if (screen in setOf("licenses", "license")) loadLicenses(state?.getString("licenseName"))
+        if (screen in setOf("licenses", "license")) screen = "about"
         @Suppress("DEPRECATION")
         val x11 = AppStore.installed(this, "com.termux.x11")
         x11Variant = if (x11 == null) AppStore.variant(this) else if (x11.sharedUserId == "com.termux") "sharedUid" else "standalone"
@@ -116,12 +112,12 @@ class MainActivity : ComponentActivity() {
                 Surface(Modifier.fillMaxSize()) {
                     Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                         Row(Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            if (screen != "chat") IconButton(onClick = { back() }, modifier = Modifier.semantics { contentDescription = if (screen in setOf("licenses", "license")) "Back" else "Back to chat" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
+                            if (screen != "chat") IconButton(onClick = { back() }, modifier = Modifier.semantics { contentDescription = "Back to chat" }) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
                             Box {
                                 IconButton(onClick = { menuOpen = !menuOpen; if (menuOpen) refresh() }, modifier = Modifier.semantics { contentDescription = "Menu" }) { Text("☰", style = MaterialTheme.typography.titleLarge) }
                                 Menu()
                             }
-                            Text(when (screen) { "apps" -> "Apps"; "desktop" -> "Desktop"; "sessions" -> "Pi sessions"; "about" -> "About"; "licenses", "license" -> "Licenses"; else -> "BashKitten" }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            Text(when (screen) { "apps" -> "Apps"; "desktop" -> "Desktop"; "sessions" -> "Pi sessions"; "about" -> "About"; else -> "BashKitten" }, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                             if (screen == "apps") IconButton(enabled = !checking, onClick = { checkUpdates() }, modifier = Modifier.semantics { contentDescription = "Refresh apps" }) { Text("↻", style = MaterialTheme.typography.headlineSmall) }
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .4f))
@@ -133,26 +129,7 @@ class MainActivity : ComponentActivity() {
                                     "apps" -> Store()
                                     "desktop" -> ScrollPage { DesktopBlock() }
                                     "sessions" -> ScrollPage { Sessions() }
-                                    "about" -> ScrollPage {
-                                        Text("BashKitten " + installed("com.bashkitten").orEmpty(), style = MaterialTheme.typography.headlineSmall)
-                                        Text("A local interface for the Pi coding agent. GPL-3.0-only. No warranty.")
-                                        Text("The app connects to the separate BashKitten server, which includes unmodified Pi and its npm dependencies under their own licenses. Termux and Node.js are installed separately and retain their own licenses.")
-                                        TextButton(onClick = { navigate("licenses") }) { Text("Licenses") }
-                                        if (webRunning()) TextButton(onClick = { openChat(); web.view.evaluateJavascript("showSettingsView();selectSettingsTab('about');document.querySelector('#viewLicenses').click()", null) }) { Text("Server licenses") }
-                                        TextButton(onClick = { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/openresearchtools/bashkitten"))) }) { Text("Source code") }
-                                    }
-                                    "licenses" -> LazyColumn(Modifier.fillMaxSize().padding(16.dp)) {
-                                        items(licenses) { entry -> TextButton(onClick = { licenseDetail = entry; screen = "license" }, modifier = Modifier.fillMaxWidth()) {
-                                            Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                                                Text(entry.getString("name"), color = MaterialTheme.colorScheme.onSurface)
-                                                Text(listOf(entry.optString("version"), entry.optString("license")).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall)
-                                            }
-                                        } }
-                                    }
-                                    "license" -> ScrollPage { licenseDetail?.let { entry ->
-                                        Text(entry.getString("name"), style = MaterialTheme.typography.titleLarge)
-                                        SelectionContainer { Text(entry.getString("text"), style = MaterialTheme.typography.bodySmall) }
-                                    } }
+                                    "about" -> AndroidView(factory = { AboutView(this@MainActivity) }, modifier = Modifier.fillMaxSize(), onRelease = { it.destroy() })
 
                                 }
                             } else if (!webRunning()) Surface(Modifier.fillMaxSize()) {
@@ -169,7 +146,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    override fun onSaveInstanceState(state: Bundle) { state.putString("screen", screen); state.putString("licenseName", licenseDetail?.optString("name")); super.onSaveInstanceState(state) }
+    override fun onSaveInstanceState(state: Bundle) { state.putString("screen", screen); super.onSaveInstanceState(state) }
     override fun onResume() { super.onResume(); visible = true; preflight() }
     override fun onPause() { visible = false; handler.removeCallbacks(poll); web.flush(); super.onPause() }
     override fun onDestroy() { handler.removeCallbacks(poll); web.close(); io.shutdown(); super.onDestroy() }
@@ -178,17 +155,9 @@ class MainActivity : ComponentActivity() {
     private fun navigate(destination: String) {
         menuOpen = false; screen = destination
         web.view.clearFocus(); (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(web.view.windowToken, 0)
-        if (destination == "licenses" && licenses.isEmpty()) loadLicenses()
         if (destination in setOf("apps", "desktop", "sessions")) { refresh(); followWork() }
     }
-    private fun aboutScreen() = screen in setOf("about", "licenses", "license")
-    private fun loadLicenses(selected: String? = null) { io.execute {
-        val entries = org.json.JSONArray(assets.open("licenses.json").bufferedReader().use { it.readText() })
-        runOnUiThread {
-            licenses = (0 until entries.length()).map { entries.getJSONObject(it) }
-            if (selected != null) licenseDetail = licenses.find { it.getString("name") == selected }
-        }
-    } }
+    private fun aboutScreen() = screen == "about"
     fun backendUnavailable() { if (screen == "chat") { firstReady = true; navigate("apps"); preflight() } }
     private fun preflight() {
         if (aboutScreen()) return

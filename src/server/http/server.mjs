@@ -105,6 +105,7 @@ function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw 
 const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
+const aboutScript = await fs.readFile(path.join(here, '../../web/about.js'));
 let activeServer;
 async function handler(req, res) {
   try {
@@ -120,6 +121,7 @@ async function handler(req, res) {
     }
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
+    if (route === '/about.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(aboutScript); }
     if (route === '/licenses.json' && req.method === 'GET') return json(res, await licenses());
     if (route === '/favicon.ico') { res.writeHead(204); return res.end(); }
     const mutation = !['GET', 'HEAD'].includes(req.method);

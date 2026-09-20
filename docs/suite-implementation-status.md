@@ -299,3 +299,16 @@ Pi llama.cpp login, stored credentials, model refresh/cache and logout; this is
 connection verification, not a claim of real-model inference. Production Android
 and package installation checks follow the rebuild. No verification code is
 included in the app source or artifacts.
+
+### Shared offline About presentation — 20 September 2026
+
+The native About pages now use the same web renderer and CSS as Settings →
+About, including its expandable license list. Android bundles an offline page
+with its APK notices; Linux bundles the server notices and explicitly identifies
+GTK/WebKitGTK/PyGObject/Python/Node as system dependencies. Native pages require
+neither the backend nor login and have no command bridge. They replace the
+earlier native list/dropdown implementations; the web About entry remains.
+
+The external GTK/WebKit check rendered and expanded the full GPL text with the
+backend stopped. Closing About preserved that stopped state. The shared server
+recovery checks still pass. Production Android verification follows its rebuild.
