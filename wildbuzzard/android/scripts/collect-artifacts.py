@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import struct
+import tarfile
 import zipfile
 
 root = Path(__file__).resolve().parents[3]
@@ -108,6 +109,7 @@ for source in outputs:
             '--ks-key-alias', os.environ['ANDROID_KEY_ALIAS'], '--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD',
             '--key-pass', 'env:ANDROID_KEY_PASSWORD', '--lineage', os.environ['WILDBUZZARD_SIGNING_LINEAGE'],
             '--rotation-min-sdk-version', '28', '--min-sdk-version', '28', '--v4-signing-enabled', 'false',
+            '--v1-signing-enabled', 'false', '--v2-signing-enabled', 'false',
             str(out/destination)], check=True)
     if expected:
         verification = subprocess.check_output([
@@ -130,3 +132,8 @@ manifest = {'source': subprocess.check_output(['git','rev-parse','HEAD'],cwd=roo
 if os.environ.get('WILDBUZZARD_ENGINE_PROVENANCE'):
     manifest['native_engine_artifact'] = json.loads(Path(os.environ['WILDBUZZARD_ENGINE_PROVENANCE']).read_text())
 (out/'build-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
+pi = root/'wildbuzzard/android/pi'
+package = json.loads((pi/'package.json').read_text())
+with tarfile.open(out/f"pi-wildbuzzard-{package['version']}.tgz", 'w:gz') as archive:
+    for name in ('package.json', 'package-lock.json', 'extension.mjs', 'client.mjs', 'README.md', 'LICENSE'):
+        archive.add(pi/name, arcname='package/' + name)
