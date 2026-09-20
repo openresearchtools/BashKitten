@@ -13,6 +13,7 @@ import androidx.test.uiautomator.Until
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Assume.assumeNotNull
 import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
@@ -21,6 +22,26 @@ import java.util.concurrent.TimeUnit
 /** Runs on a disposable primary-user Cuttlefish image with the suite candidates. */
 @RunWith(AndroidJUnit4::class)
 class SuiteIntegrationTest {
+    /** Test-only candidate provisioning through the same protected IPC as the product. */
+    @Test fun candidateCommand() {
+        val encoded = InstrumentationRegistry.getArguments().getString("candidateCommand")
+        assumeNotNull(encoded)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val device = UiDevice.getInstance(instrumentation)
+        device.wakeUp(); device.executeShellCommand("wm dismiss-keyguard")
+        val script = android.util.Base64.decode(encoded, android.util.Base64.DEFAULT).toString(Charsets.UTF_8)
+        ActivityScenario.launch(MainActivity::class.java).use {
+            assertTrue(device.wait(Until.hasObject(By.pkg("com.bashkitten")), 15000))
+            val done = CountDownLatch(1); var result: Result<JSONObject>? = null
+            instrumentation.runOnMainSync {
+                TermuxBridge.execute(context, TermuxBridge.prefix + "/bin/bash", arrayOf("-c", script), null, 1800000) { result = it; done.countDown() }
+            }
+            assertTrue("Candidate command timed out", done.await(30, TimeUnit.MINUTES))
+            println("Candidate result: " + result!!.getOrThrow().toString())
+            device.takeScreenshot(File(context.getExternalFilesDir(null), "suite-candidate.png"))
+        }
+    }
     @Test fun protectedSetupAndCommand() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext

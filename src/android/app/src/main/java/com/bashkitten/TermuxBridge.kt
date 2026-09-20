@@ -51,7 +51,7 @@ object TermuxBridge {
         execute(context, "$prefix/bin/bash", arrayOf("-c", script, "bashkitten-control", command, args.toString()), null, callback)
     }
 
-    fun execute(context: Context, path: String, args: Array<String>, stdin: String?, callback: (Result<JSONObject>) -> Unit) {
+    fun execute(context: Context, path: String, args: Array<String>, stdin: String?, timeoutMillis: Long = 45000, callback: (Result<JSONObject>) -> Unit) {
         if (!trusted(context)) return callback(Result.failure(IllegalStateException("Install the suite-signed Termux before starting services. Back up an existing installation before changing its certificate.")))
         val id = UUID.randomUUID().toString()
         callbacks[id] = callback
@@ -66,7 +66,7 @@ object TermuxBridge {
         if (stdin != null) intent.putExtra("com.termux.RUN_COMMAND_STDIN", stdin)
         try {
             context.startForegroundService(intent)
-            main.postDelayed({ callbacks.remove(id)?.invoke(Result.failure(IllegalStateException("Termux did not return a result. Open Apps to retry."))); pending.cancel() }, 45000)
+            main.postDelayed({ callbacks.remove(id)?.invoke(Result.failure(IllegalStateException("Termux did not return a result. Open Apps to retry."))); pending.cancel() }, timeoutMillis)
         } catch (error: Exception) {
             pending.cancel(); callbacks.remove(id)?.invoke(Result.failure(error))
         }
