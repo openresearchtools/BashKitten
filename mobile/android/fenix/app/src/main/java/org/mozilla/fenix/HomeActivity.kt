@@ -539,7 +539,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                 if (!shouldStartOnHome()) {
                     navigateToBrowserOnColdStart()
                 }
-                maybeShowSetAsDefaultBrowserPrompt()
             } else {
                 StartOnHome.enterHomeScreen.record(NoExtras())
             }
