@@ -227,7 +227,7 @@ class MainActivity : ComponentActivity() {
                 status = value; managerAttempts = 0; setupActive = false; AppStore.recoverServices(this, value)
                 if (webRunning() && (firstReady || session != null)) {
                     firstReady = false
-                    if ((screen == "chat" || session != null) && !essentialsMissing()) openChat() else web.open(value.getJSONObject("web").getString("url") + "/")
+                    if (((screen == "chat" && !menuOpen) || session != null) && !essentialsMissing()) openChat() else web.open(value.getJSONObject("web").getString("url") + "/")
                 }
                 if (screen != "chat" && jobActive()) followWork()
             }.onFailure { error ->
