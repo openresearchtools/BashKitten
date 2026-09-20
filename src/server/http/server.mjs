@@ -94,14 +94,11 @@ async function createSession(value) {
 }
 async function deleteSession(id) {
   if (await running(id)) await workerRequest(id, '/shutdown', {});
-  const meta = await readMeta(id);
   // Pi owns history, including native forks that may share a session directory.
   // Removing a sidebar entry must never remove another native session.
   for (const name of ['ui.json', 'drafts.json', 'lifecycle.json', 'worker.log']) await fs.rm(path.join(sessionDir(id), name), { force: true });
   await fs.rmdir(sessionDir(id)).catch(() => {});
   await fs.rm(socketPath(id), { force: true }); await fs.rm(socketPath(id) + '.lock', { force: true });
-  const referenced = new Set((await allMeta()).flatMap(m => (m.messages || []).flatMap(v => v.attachments.map(a => a.path))));
-  for (const file of (meta.messages || []).flatMap(m => m.attachments)) if (!referenced.has(file.path)) await fs.rm(file.path, { force: true });
 }
 function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 }); }
 const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));

@@ -624,8 +624,8 @@
 
   <div id="sessionActions" class="hidden" role="menu" aria-label="Chat actions">
     <button id="renameChat" type="button" role="menuitem">Rename chat</button>
-    <button id="deleteChat" type="button" role="menuitem">Delete chat</button>
-    <button id="deleteProject" type="button" role="menuitem" class="hidden">Delete project chats</button>
+    <button id="deleteChat" type="button" role="menuitem">Remove chat</button>
+    <button id="deleteProject" type="button" role="menuitem" class="hidden">Remove project chats</button>
   </div>
   <dialog id="renameChatDialog" aria-labelledby="renameChatHeading">
     <form id="renameChatForm" class="dialog-body">
@@ -637,12 +637,12 @@
   </dialog>
   <dialog id="deleteChatDialog" aria-labelledby="deleteChatHeading">
     <form id="deleteChatForm" class="dialog-body">
-      <h2 id="deleteChatHeading">Delete chat?</h2>
+      <h2 id="deleteChatHeading">Remove chat?</h2>
       <p id="deleteChatName"></p>
-      <p id="deleteChatDescription">This permanently deletes this chat’s history and stored attachments. Any running work in this chat will stop.</p>
+      <p id="deleteChatDescription">This removes the chat from BashKitten and stops its running work. Native Pi history, attachments and project files are kept.</p>
       <p><strong>Your working folder and project files will be kept.</strong></p>
       <p id="deleteChatError" class="meta" role="alert"></p>
-      <div class="dialog-actions"><button id="cancelChatDelete" type="button" data-close autofocus>Cancel</button><button id="confirmChatDelete" class="primary delete-confirm">Delete chat</button></div>
+      <div class="dialog-actions"><button id="cancelChatDelete" type="button" data-close autofocus>Cancel</button><button id="confirmChatDelete" class="primary delete-confirm">Remove chat</button></div>
     </form>
   </dialog>
 
@@ -1770,10 +1770,10 @@
     $('#renameChat').onclick=()=>{closeSessionActions();$('#chatName').value=managedChat.title;$('#renameChatError').textContent='';$('#renameChatDialog').showModal();$('#chatName').select();};
     async function showDeleteConfirmation(){
       closeSessionActions();const target=managedChat;
-      $('#deleteChatHeading').textContent=target.project?'Delete project chats?':'Delete chat?';
+      $('#deleteChatHeading').textContent=target.project?'Remove project chats?':'Remove chat?';
       $('#deleteChatName').textContent=target.project?target.cwd:target.title;
-      $('#deleteChatDescription').textContent=target.project?'Counting project chats…':'This permanently deletes this chat’s history and stored attachments. Any running work in this chat will stop.';
-      $('#confirmChatDelete').textContent=target.project?'Delete project chats':'Delete chat';
+      $('#deleteChatDescription').textContent=target.project?'Counting project chats…':'This removes the chat from BashKitten and stops its running work. Native Pi history, attachments and project files are kept.';
+      $('#confirmChatDelete').textContent=target.project?'Remove project chats':'Remove chat';
       $('#confirmChatDelete').disabled=!!target.project;$('#deleteChatError').textContent='';
       $('#deleteChatDialog').showModal();$('#cancelChatDelete').focus();
       if(target.project){
@@ -1781,7 +1781,7 @@
           if(managedChat!==target||!$('#deleteChatDialog').open)return;
           target.sessionIds=result.sessionIds;
           const count=target.sessionIds.length;
-          $('#deleteChatDescription').textContent=`This permanently deletes ${count} ${count===1?'chat':'chats'} and all their stored history and attachments. Any running work in these chats will stop.`;
+          $('#deleteChatDescription').textContent=`This removes ${count} ${count===1?'chat':'chats'} from BashKitten and stops their running work. Native Pi history, attachments and project files are kept.`;
           $('#confirmChatDelete').disabled=!count;
         }catch(error){if(managedChat===target)$('#deleteChatError').textContent=error.message;}
       }
