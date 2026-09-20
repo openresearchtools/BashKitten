@@ -18,10 +18,37 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import android.os.Bundle
 
 /** Runs on a disposable primary-user Cuttlefish image with the suite candidates. */
 @RunWith(AndroidJUnit4::class)
 class SuiteIntegrationTest {
+    @Test fun installedWebView() {
+        assumeNotNull(InstrumentationRegistry.getArguments().getString("installedWebView"))
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val device = UiDevice.getInstance(instrumentation)
+        device.wakeUp(); device.executeShellCommand("wm dismiss-keyguard")
+        fun webView(view: View): WebView? = when (view) {
+            is WebView -> view
+            is ViewGroup -> (0 until view.childCount).firstNotNullOfOrNull { webView(view.getChildAt(it)) }
+            else -> null
+        }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            device.wait(Until.hasObject(By.clazz(WebView::class.java)), 30000)
+            val done = CountDownLatch(1); var document = ""
+            scenario.onActivity { activity ->
+                val web = webView(activity.window.decorView) ?: error("The server did not open in WebView")
+                web.evaluateJavascript("JSON.stringify({url:location.href,ready:document.readyState,secure:window.isSecureContext,uuid:typeof crypto.randomUUID,text:document.body.innerText,error:document.querySelector('#authError')?.textContent,auth:document.querySelector('#auth')?.className})") { document = it; done.countDown() }
+            }
+            assertTrue(done.await(30, TimeUnit.SECONDS))
+            instrumentation.sendStatus(0, Bundle().apply { putString("stream", "WebView document: $document\n") })
+            assertTrue("The web login/app content is blank", document.contains("BashKitten") || document.contains("Projects"))
+            device.takeScreenshot(File(instrumentation.targetContext.getExternalFilesDir(null), "suite-web.png"))
+        }
+    }
     /** Test-only candidate provisioning through the same protected IPC as the product. */
     @Test fun candidateCommand() {
         val encoded = InstrumentationRegistry.getArguments().getString("candidateCommand")
@@ -38,7 +65,7 @@ class SuiteIntegrationTest {
                 TermuxBridge.execute(context, TermuxBridge.prefix + "/bin/bash", arrayOf("-c", script), null, 1800000) { result = it; done.countDown() }
             }
             assertTrue("Candidate command timed out", done.await(30, TimeUnit.MINUTES))
-            println("Candidate result: " + result!!.getOrThrow().toString())
+            instrumentation.sendStatus(0, Bundle().apply { putString("stream", "Candidate result: " + result!!.getOrThrow().toString() + "\n") })
             device.takeScreenshot(File(context.getExternalFilesDir(null), "suite-candidate.png"))
         }
     }
