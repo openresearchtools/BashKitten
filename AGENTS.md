@@ -8,6 +8,14 @@ agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
 BashKitten's own code is GPL-3.0-only. Preserve third-party license notices and
 the individual license metadata of dependencies.
 
+## Change tracking
+
+Always stage and commit completed changes, including documentation and plans.
+Use focused commits for logical changes so features are easy to track, fix and
+revert. Run the relevant checks before committing and report the commit IDs.
+Stage only files belonging to the task; preserve unrelated work and never commit
+credentials, signing keys or personal runtime data.
+
 ## Runtime ownership
 
 - Pi owns the agent loop, tools, providers, models, thinking, queues, compaction,
