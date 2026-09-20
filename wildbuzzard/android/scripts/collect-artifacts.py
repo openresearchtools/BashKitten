@@ -29,14 +29,15 @@ signers = {}
 signing_key = os.environ.get('WILDBUZZARD_DEBUG_KEYSTORE')
 expected_signer = None
 publisher_signer = None
+if signing_key or publisher_signing:
+    state = Path(os.environ.get('MOZBUILD_STATE_PATH', Path.home()/'.mozbuild'))
+    signing_tools = sorted(state.glob('android-sdk-*/build-tools/*/apksigner'))
+    if not signing_tools: raise SystemExit('APK signing verification tool not found')
 if signing_key:
     expected_signer = hashlib.sha256(subprocess.check_output([
         'keytool', '-exportcert', '-keystore', signing_key, '-storepass', 'android',
         '-alias', 'androiddebugkey',
     ])).hexdigest()
-    state = Path(os.environ.get('MOZBUILD_STATE_PATH', Path.home()/'.mozbuild'))
-    signing_tools = sorted(state.glob('android-sdk-*/build-tools/*/apksigner'))
-    if not signing_tools: raise SystemExit('APK signing verification tool not found')
 if publisher_signing:
     publisher_signer = hashlib.sha256(subprocess.check_output([
         'keytool', '-exportcert', '-keystore', publisher_key, '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD',
@@ -53,8 +54,8 @@ for source in outputs:
             if 'lib/arm64-v8a/libtor.so' not in libraries: raise SystemExit('Tor not packaged')
             for notice in ('THIRD-PARTY-NOTICES', 'WILDBUZZARD-NOTICES', 'TOR-NOTICES', 'BLOCKER-NOTICES', 'QR-NOTICES'):
                 if 'assets/' + notice + '.txt' not in apk.namelist(): raise SystemExit('Missing legal notices: ' + notice)
-            metadata = apk.read('res/raw/third_party_license_metadata')
-            licenses = apk.read('res/raw/third_party_licenses')
+            metadata = apk.read('assets/raw/third_party_license_metadata')
+            licenses = apk.read('assets/raw/third_party_licenses')
             if b'Debug License Info' in metadata or len(metadata.splitlines()) < 10 or not licenses:
                 raise SystemExit('Android dependency licenses are missing or contain a debug placeholder')
             for entry in metadata.splitlines():

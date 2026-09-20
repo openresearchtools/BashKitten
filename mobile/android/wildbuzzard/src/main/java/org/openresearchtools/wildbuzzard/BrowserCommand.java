@@ -263,8 +263,8 @@ public final class BrowserCommand {
                     byte[] buffer = new byte[8192]; int count;
                     while ((count = input.read(buffer)) != -1) System.out.write(buffer, 0, count);
                 }
-                byte[] metadata = apkBytes(apk, "res/raw/third_party_license_metadata");
-                byte[] texts = apkBytes(apk, "res/raw/third_party_licenses");
+                byte[] metadata = apkBytes(apk, "assets/raw/third_party_license_metadata");
+                byte[] texts = apkBytes(apk, "assets/raw/third_party_licenses");
                 System.out.println("\n\nAndroid dependencies from this APK\n");
                 for (String line : new String(metadata, StandardCharsets.UTF_8).trim().split("\n")) {
                     int separator = line.indexOf(' ');

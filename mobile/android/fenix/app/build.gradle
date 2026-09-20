@@ -290,6 +290,11 @@ android {
 
 androidComponents {
     if (!project.hasProperty('android-lint')) {
+        onVariants(selector().all()) { variant ->
+            // CLI consumers need stable paths even when AAPT shortens resource paths.
+            variant.sources.assets.addGeneratedSourceDirectory(
+                tasks.named("${variant.name}OssLicensesTask"), { it.generatedDirectory })
+        }
         onVariants(selector().withBuildType('debug')) { variant ->
             // AGP omits its dependency protobuf for debug APKs. Feed the same
             // OSS license generator the actual resolved runtime coordinates.
