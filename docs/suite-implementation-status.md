@@ -163,13 +163,39 @@ seven native tools: write, edit, read, bash, grep, find and ls. The previous run
 remains available. The final 0.2.2 server source passes all 17 shared tests in
 Termux; Android build **35496789356** and both native Linux builds pass.
 
-The Android host now has a separate hamburger menu, Apps store, Package updates,
-Desktop and Pi sessions screens. Store cards use upstream icons with license
-notices, installed/update states and pull to refresh. The WebView stays attached
-while native pages are open. The final Android navigation test passed and verified
-the same chat document, selected session and unsent draft after Apps and Package
-updates; previous recreation tests cover persistent cookies. Package update output is shown separately from the
-store with APT, global npm and selected Pi version status.
+The Android host has a hamburger menu with Apps, Desktop and Pi sessions.
+Apps contains compact cards with upstream icons and an expandable Packages block
+below the required apps. There is no separate package-updates menu destination.
+The single X11 card offers Normal (standalone, the default) or Shared UID before
+installation, and shows the actual installed type afterwards. The WebView stays
+attached: the final navigation test verifies the same document, selected session
+and unsent draft across both Apps and the expanded package list.
+
+External Termux installations use upstream's public RUN_COMMAND service after
+Android's normal permission grant and the copyable allow-external-apps command.
+The card explains those steps. Suite Termux/add-on APK installs are rejected at
+both the UI and worker boundary for external Termux; missing add-ons show Missing
+and the same-source instruction. Our protected route remains unchanged. A real
+external installation passed permission/command tests, the shared bootstrap,
+APT registration and candidate package installation without replacing Termux.
+Its files and other installed applications were preserved.
+
+APK installs now run in WorkManager, independently of the Activity. The production
+signed catalog, download, signature checks and Android installer successfully
+installed Termux:Boot (versionCode 1000) while the store Activity was paused.
+Catalog checks use conditional requests and a daily schedule. Healthy chat stops
+native polling. Initial setup reconnects to its durable log on reopen and detects
+an interrupted bootstrap. Package network checks require an explicit store action;
+local inventory uses offline npm with its automatic update notifier disabled.
+
+All **18 shared-server tests pass inside external Termux**, including actual
+inventory and the external/upstream versus suite X11 companion boundary. A real
+Update packages job completed APT full-upgrade, global npm and Pi checks while
+the native screen was closed; output correctly reported all packages and selected
+Pi 0.86.0 up to date. Its bounded output remains available in Apps. Android build
+**35503020916** supplies the final UI and passed the navigation/background-install
+checks. The installed local Linux 0.2.3 candidate passed native file/folder/URL,
+image picker/paste, provider-login helper and persistent-cookie tests under Xvfb.
 
 BashKitten **v0.2.2** is a normal release with the Android APK, five native
 packages, tracked application source and 202 dependency source archives. APT
