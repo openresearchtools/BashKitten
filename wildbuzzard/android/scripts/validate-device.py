@@ -77,6 +77,8 @@ def main():
     command("reverse", "tcp:9443", "tcp:9443")
     command("shell", "rm", "-rf", "/sdcard/Android/data/org.openresearchtools.wildbuzzard.probe/files/screenshots")
     suites = [] if args.onion_only else ["AgentBrowserTest", "CommandBrowserTest"]
+    if not args.onion_only and manifest.get("publisher_signed"):
+        suites.append("AppCommandBrowserTest")
     credential_name = None
     credential_collection = None
     failed_suites = []

@@ -23,6 +23,11 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.96.0'
       MACH_SHOW_PIP_OUTPUT: '1'
       SCCACHE_GHA_ENABLED: 'true'
+      WILDBUZZARD_PUBLISHER_KEYSTORE: ${{ github.workspace }}-publisher.p12
+      WILDBUZZARD_SIGNING_LINEAGE: ${{ github.workspace }}-signing-lineage
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       WILDBUZZARD_DEBUG_KEYSTORE: ${{ github.workspace }}-ci-debug.p12
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g'
     steps:
@@ -79,6 +84,11 @@ jobs:
             echo 'WILDBUZZARD_CI_DEBUG_KEYSTORE must be configured for stable installable builds' >&2
             exit 1
           fi
+      - name: Prepare publisher signing identity
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          LINEAGE_BASE64: ${{ secrets.WILDBUZZARD_SIGNING_LINEAGE_BASE64 }}
+        run: python3 wildbuzzard/android/scripts/prepare-signing.py
       - name: Enable compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
         with:

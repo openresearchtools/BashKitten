@@ -2,7 +2,7 @@
 import { GeckoViewModule } from "resource://gre/modules/GeckoViewModule.sys.mjs";
 import { WildBuzzardAndroid } from "resource://gre/modules/WildBuzzardAndroid.sys.mjs";
 
-const commands = new Set(["snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport"]);
+const commands = new Set(["snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "diagnostics"]);
 
 export class GeckoViewWildBuzzard extends GeckoViewModule {
   onInit() {
@@ -45,7 +45,20 @@ export class GeckoViewWildBuzzard extends GeckoViewModule {
     if (!principal || principal.isSystemPrincipal || !/^https?:$/.test(principal.URI?.scheme + ":")) {
       throw new Error("Agent page controls are restricted to HTTP and HTTPS documents");
     }
+    if (method === "diagnostics") {
+      const evaluated = await context.currentWindowGlobal.getActor("WildBuzzardBrowserControl").sendQuery("evaluate", {
+        code: "return navigator.webdriver;", timeout: 10000,
+      });
+      return {
+        transport: "browser-native", devtoolsRemoteEnabled: Services.prefs.getBoolPref("devtools.debugger.remote-enabled", false),
+        marionetteEnabled: Services.prefs.getBoolPref("marionette.enabled", false),
+        remoteAgentEnabled: Services.prefs.getBoolPref("remote.enabled", false),
+        engineAccessibilityEnabled: Services.appinfo.accessibilityEnabled,
+        snapshotBackend: "dom", webdriver: evaluated.value,
+      };
+    }
     const args = structuredClone(params);
+    if (method === "snapshot") args.domOnly = true;
     delete args.frameId;
     if (method === "act") {
       const decode = value => {

@@ -596,10 +596,7 @@ class Settings(
         default = CrashReportOption.Ask.toString(),
     )
 
-    val isRemoteDebuggingEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_remote_debugging),
-        default = false,
-    )
+    val isRemoteDebuggingEnabled: Boolean get() = false
 
     var isTelemetryEnabled: Boolean
         get() = false

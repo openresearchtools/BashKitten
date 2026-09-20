@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: AGPL-3.0-or-later
-"""Reuse this fork's native engine only across explicitly permitted Android UI changes."""
+"""Reuse this fork's native engine only across explicitly permitted Android UI and packaged JavaScript changes."""
 import argparse
 import hashlib
 import json
@@ -31,8 +31,16 @@ allowed_prefixes = (
     'mobile/android/wildbuzzard-agent-probe/',
     'wildbuzzard/android/tests/',
     'wildbuzzard/android/scripts/',
+    'wildbuzzard/android/pi/',
 )
 allowed_files = {
+    'README.md',
+    'mobile/android/wildbuzzard/src/main/AndroidManifest.xml',
+    'mobile/shared/modules/geckoview/GeckoViewWildBuzzard.sys.mjs',
+    'mobile/shared/modules/geckoview/WildBuzzardAndroid.sys.mjs',
+    'remote/wildbuzzard/BrowserControlChild.sys.mjs',
+    'mobile/android/android-components/components/feature/downloads/src/main/java/mozilla/components/feature/downloads/DownloadsFeature.kt',
+    'wildbuzzard/android/validation-results.json',
     'mobile/android/fenix/app/build.gradle',
     'mobile/android/fenix/app/src/main/assets/shared_error_style.css',
     'mobile/android/fenix/app/src/main/assets/low_and_medium_risk_error_style.css',
@@ -45,7 +53,7 @@ allowed_files = {
 forbidden_suffixes = {'.c', '.cc', '.cpp', '.h', '.rs', '.S', '.so', '.aar', '.jar'}
 rejected = [p for p in changed if Path(p).suffix in forbidden_suffixes or not
             (p in allowed_files or p.startswith(allowed_prefixes))]
-# Native Tor construction and packaged engine resources must also stay unchanged.
+# Native Tor construction must stay unchanged. The listed JS modules are repackaged by mach build.
 rejected += [p for p in changed if p == 'wildbuzzard/android/scripts/tor.py']
 if rejected:
     raise SystemExit('Full native build required for: ' + ', '.join(sorted(set(rejected))))

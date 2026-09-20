@@ -1,6 +1,8 @@
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Agent access lets the user choose installed vendor apps and verifies their actual UID/signers. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -10,6 +12,7 @@
     <application 
         android:allowBackup="false"
         android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <activity android:name="org.openresearchtools.wildbuzzard.AgentAccessActivity" android:exported="false" />
         <activity android:name="org.openresearchtools.wildbuzzard.TabOptionsActivity" android:exported="false" />
         <activity android:name="org.openresearchtools.wildbuzzard.ActivateTabActivity" android:exported="false" />
         <activity android:name="org.openresearchtools.wildbuzzard.LicensesActivity" android:exported="false" />

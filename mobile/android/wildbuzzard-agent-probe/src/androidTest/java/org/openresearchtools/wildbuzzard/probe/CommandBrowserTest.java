@@ -95,8 +95,12 @@ public final class CommandBrowserTest {
         assertNotNull(counter); counter.click();
         assertTrue(device.wait(Until.hasObject(By.desc("Page preview")), 15000));
         SystemClock.sleep(1000);
-        String thumbnail = device.executeShellCommand("run-as org.openresearchtools.wildbuzzard base64 no_backup/mozac_browser_thumbnails/thumbnails/" + first + ".0");
-        assertFixturePixels(android.util.Base64.decode(thumbnail, android.util.Base64.DEFAULT));
+        android.graphics.Rect preview = device.findObject(By.desc("Page preview")).getVisibleBounds();
+        android.graphics.Bitmap screen = InstrumentationRegistry.getInstrumentation().getUiAutomation().takeScreenshot();
+        assertNotNull(screen);
+        android.graphics.Bitmap thumbnail = android.graphics.Bitmap.createBitmap(screen, preview.left, preview.top, preview.width(), preview.height());
+        screen.recycle();
+        assertFixturePixels(thumbnail);
         device.pressBack();
         UiObject2 menu = device.wait(Until.findObject(By.desc("More options")), 15000); assertNotNull(menu); menu.click();
         scrollToAndClick(device, "Settings");
@@ -107,6 +111,9 @@ public final class CommandBrowserTest {
     }
     void assertFixturePixels(byte[] encoded) {
         android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(encoded, 0, encoded.length);
+        assertFixturePixels(bitmap);
+    }
+    void assertFixturePixels(android.graphics.Bitmap bitmap) {
         assertNotNull("Page image decodes", bitmap);
         int light = 0, dark = 0, total = 0;
         for (int y = 4; y < bitmap.getHeight(); y += 8) {

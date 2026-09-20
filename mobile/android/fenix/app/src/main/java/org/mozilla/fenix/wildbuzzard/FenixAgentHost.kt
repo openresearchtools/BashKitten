@@ -12,7 +12,12 @@ import java.lang.ref.WeakReference
 import java.util.function.Consumer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import mozilla.components.browser.state.action.ContentAction
+import mozilla.components.browser.state.action.DownloadAction
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import mozilla.components.browser.engine.gecko.GeckoEngineSession
@@ -33,6 +38,15 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
 
     init {
         windows.start()
+        CoroutineScope(Dispatchers.Main).launch {
+            components.core.store.flow().map { state ->
+                state.downloads.values.map { it.id to it.sessionId } +
+                    state.tabs.mapNotNull { tab -> tab.content.download?.let { it.id to tab.id } }
+            }.distinctUntilChanged().collect { downloads ->
+                val app = BrowserApp.get(application)
+                downloads.forEach { (id, tabId) -> app.rememberDownload(id, tabId) }
+            }
+        }
         application.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(value: Activity) { if (value is HomeActivity) activity = WeakReference(value) }
             override fun onActivityDestroyed(value: Activity) { if (activity.get() === value) activity.clear() }
@@ -151,6 +165,27 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     override fun launchIntent() = Intent(application, HomeActivity::class.java)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         .putExtra(HomeActivity.OPEN_TO_BROWSER, true)
+
+    override fun downloads(): List<BrowserApp.Download> {
+        val state = components.core.store.state
+        val downloads = (state.downloads.values + state.tabs.mapNotNull { it.content.download }).distinctBy { it.id }
+        return downloads.map { value ->
+            BrowserApp.Download(
+                value.id, value.sessionId, value.fileName ?: "download", value.contentType ?: "application/octet-stream",
+                value.status.name, value.filePath, value.contentLength ?: value.currentBytesCopied,
+            )
+        }
+    }
+
+    override fun acceptDownload(tabId: String, downloadId: String) {
+        val store = components.core.store
+        val download = store.state.tabs.find { it.id == tabId }?.content?.download
+            ?: throw IllegalStateException("No pending download in this tab")
+        require(download.id == downloadId) { "Download does not belong to this tab" }
+        BrowserApp.get(application).rememberDownload(download.id, tabId)
+        store.dispatch(ContentAction.ConsumeDownloadAction(tabId, download.id))
+        store.dispatch(DownloadAction.AddDownloadAction(download.copy(sessionId = tabId, skipConfirmation = true, openInApp = false)))
+    }
 
     override fun screenshot(id: String, result: Consumer<Bitmap?>) {
         val tab = components.core.store.state.tabs.find { it.id == id }

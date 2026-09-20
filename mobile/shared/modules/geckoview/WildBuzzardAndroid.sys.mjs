@@ -11,6 +11,10 @@ let ready;
 export const WildBuzzardAndroid = {
   init() {
     if (!ready) {
+      for (const name of ["devtools.debugger.remote-enabled", "marionette.enabled", "remote.enabled"]) {
+        Services.prefs.getDefaultBranch("").setBoolPref(name, false);
+        Services.prefs.lockPref(name);
+      }
       proxy.registerChannelFilter(this, 0);
       WildBuzzardBlockerStartup.init();
       ready = WildBuzzardBlockerService.whenEngineReady().then(() => {

@@ -43,6 +43,8 @@ apply from: 'benchmark.gradle'
 def isAppBundle = gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") }
 
 android {
+    def publisherKeystore = System.getenv('WILDBUZZARD_PUBLISHER_KEYSTORE')
+    def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
     def ciDebugKeystore = System.getenv('WILDBUZZARD_DEBUG_KEYSTORE')
     if (ciDebugKeystore) {
         signingConfigs.debug {
@@ -50,6 +52,14 @@ android {
             storePassword = 'android'
             keyAlias = 'androiddebugkey'
             keyPassword = 'android'
+        }
+    }
+    if (publisherSigning) {
+        signingConfigs.debug {
+            storeFile = file(publisherKeystore)
+            storePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            keyAlias = System.getenv('ANDROID_KEY_ALIAS')
+            keyPassword = System.getenv('ANDROID_KEY_PASSWORD')
         }
     }
     project.maybeConfigForJetpackBenchmark(it)
@@ -125,10 +135,11 @@ android {
 
     buildTypes {
         debug {
+            debuggable = !publisherSigning
             shrinkResources = false
             minifyEnabled = false
             applicationIdSuffix ""
-            resValue "bool", "IS_DEBUG", "true"
+            resValue "bool", "IS_DEBUG", publisherSigning ? "false" : "true"
             pseudoLocalesEnabled = true
         }
         nightly releaseTemplate >> {

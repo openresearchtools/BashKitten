@@ -1613,7 +1613,7 @@ export class WildBuzzardBrowserControlChild extends JSWindowActorChild {
     return logpoint ? structuredClone(logpoint.results) : null;
   }
 
-  async #snapshot({ depth = 100 } = {}) {
+  async #snapshot({ depth = 100, domOnly = false } = {}) {
     const document = this.contentWindow.document;
     let root;
     let budget = { nodes: 0, bytes: 0, truncated: false };
@@ -1621,7 +1621,9 @@ export class WildBuzzardBrowserControlChild extends JSWindowActorChild {
       budget = { nodes: 0, bytes: 0, truncated: false };
       return snapshotDom(document.documentElement, 0, depth, budget);
     };
-    try {
+    if (domOnly) {
+      root = domSnapshot();
+    } else try {
       const service = Cc["@mozilla.org/accessibilityService;1"].getService(
         Ci.nsIAccessibilityService
       );

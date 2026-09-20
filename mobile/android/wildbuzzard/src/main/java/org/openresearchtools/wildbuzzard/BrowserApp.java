@@ -27,6 +27,8 @@ public final class BrowserApp extends ContextWrapper {
         void screenshot(String id, Consumer<Bitmap> result);
         void bookmark(String url, String title, Consumer<String> done, Consumer<String> fail);
         void quickAccess(String url, String title, Consumer<String> done, Consumer<String> fail);
+        List<Download> downloads();
+        void acceptDownload(String tabId, String downloadId);
         Intent launchIntent();
     }
     public static BrowserApp get(Context context) { return ((Provider) context.getApplicationContext()).wildBuzzard(); }
@@ -34,11 +36,25 @@ public final class BrowserApp extends ContextWrapper {
     final AppGrants grants;
     final AgentController controller;
     final CommandGateway commands;
+    final AppCommandGateway appCommands;
+    final FileTransfers transfers;
     final TorManager tor;
     final SharedPreferences policies;
     public final Host host;
     final LinkedHashMap<String, Tab> tabs = new LinkedHashMap<>();
     public static final String USER = "local-user";
+    public static final class Download {
+        public final String id, tabId, name, mime, status;
+        public final java.io.File file;
+        public final long size;
+        public Download(String id, String tabId, String name, String mime, String status, String path, long size) {
+            this.id = id; this.tabId = tabId; this.name = name; this.mime = mime; this.status = status;
+            this.file = new java.io.File(path); this.size = size;
+        }
+        JSONObject json() throws JSONException {
+            return new JSONObject().put("id", id).put("name", name).put("mimeType", mime).put("status", status).put("size", size);
+        }
+    }
     public static final class Tab {
         public final String id, owner;
         public GeckoSession session;
@@ -60,6 +76,8 @@ public final class BrowserApp extends ContextWrapper {
         policies.getAll();
         controller = new AgentController(this);
         commands = new CommandGateway(this);
+        transfers = new FileTransfers(this);
+        appCommands = new AppCommandGateway(this);
     }
     void keepAlive() {
         startForegroundService(new Intent(this, BrowserKeepAliveService.class));
@@ -255,8 +273,23 @@ public final class BrowserApp extends ContextWrapper {
         });
     }
 
+    public void rememberDownload(String id, String tabId) {
+        if (tabId == null || policies.contains("download." + id + ".owner")) return;
+        String owner = policies.getString(tabId + ".owner", USER);
+        policies.edit().putString("download." + id + ".owner", owner).apply();
+    }
+    boolean ownsDownload(String id, String owner) { return owner.equals(policies.getString("download." + id + ".owner", USER)); }
+    public boolean agentTab(String id) { return !USER.equals(policies.getString(id + ".owner", USER)); }
+    public void closeUnapprovedTabs() {
+        HashSet<String> allowed = new HashSet<>();
+        for (android.content.pm.ApplicationInfo info : getPackageManager().getInstalledApplications(0))
+            if (grants.allowed(info.uid)) allowed.add(grants.identity(info.uid));
+        refresh();
+        for (Tab tab : new ArrayList<>(tabs.values())) if (!tab.owner.equals(USER) && !tab.owner.startsWith("command:")
+                && !allowed.contains(tab.owner.split("\n", 2)[0])) close(tab);
+    }
     public void revokeAgentAccess() {
-        grants.revokeAll(); commands.revokeAll(); refresh();
+        grants.revokeAll(); commands.revokeAll(); transfers.revokeAll(); refresh();
         for (Tab tab : new ArrayList<>(tabs.values())) if (!tab.owner.equals(USER)) close(tab);
         message("Agent access revoked");
     }

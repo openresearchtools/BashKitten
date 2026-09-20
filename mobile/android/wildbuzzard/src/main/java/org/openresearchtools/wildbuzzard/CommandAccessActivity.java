@@ -10,6 +10,12 @@ public final class CommandAccessActivity extends ProductActivity {
         super.onCreate(saved);
         BrowserApp app = BrowserApp.get(this);
         try {
+            String appGrant = getIntent().getStringExtra("appGrant");
+            if (appGrant != null) {
+                startActivity(new android.content.Intent(this, GrantActivity.class)
+                    .setData(android.net.Uri.parse("wildbuzzard-grant:" + appGrant)));
+                finish(); return;
+            }
             String launch = getIntent().getStringExtra("launch");
             if (launch != null) { app.commands.show(launch); finish(); return; }
             String key = getIntent().getStringExtra("key");

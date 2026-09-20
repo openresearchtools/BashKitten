@@ -15,7 +15,9 @@ import zipfile
 root = Path(__file__).resolve().parents[3]
 out = Path(sys.argv[1]).resolve()
 out.mkdir(parents=True, exist_ok=True)
-(out/'INSTALL.txt').write_text('Install wildbuzzard-arm64-debug.apk. This is the complete browser, including agent control and Tor.\n\nThe agent-probe and agent-probe-test APKs are optional developer test tools. They are not required by users or agents.\nThese are debug-signed test builds, not production releases.\n')
+publisher_key = os.environ.get('WILDBUZZARD_PUBLISHER_KEYSTORE')
+publisher_signing = bool(publisher_key and Path(publisher_key).is_file())
+(out/'INSTALL.txt').write_text(('Install wildbuzzard-arm64.apk.' if publisher_signing else 'Install wildbuzzard-arm64-debug.apk.') + ' This is the complete browser, including agent control and Tor.\n\nThe agent-probe and agent-probe-test APKs are optional developer test tools. They are not required by users or agents.\nSee build-manifest.json for signing identity and build provenance.\n')
 obj = root.parent/'obj-wildbuzzard-android'
 outputs = list((obj/'gradle/build/mobile/android/fenix').rglob('*.apk')) + list((obj/'gradle/build/mobile/android/wildbuzzard-agent-probe').rglob('*.apk'))
 if not outputs:
@@ -26,6 +28,7 @@ roles = {}
 signers = {}
 signing_key = os.environ.get('WILDBUZZARD_DEBUG_KEYSTORE')
 expected_signer = None
+publisher_signer = None
 if signing_key:
     expected_signer = hashlib.sha256(subprocess.check_output([
         'keytool', '-exportcert', '-keystore', signing_key, '-storepass', 'android',
@@ -34,11 +37,16 @@ if signing_key:
     state = Path(os.environ.get('MOZBUILD_STATE_PATH', Path.home()/'.mozbuild'))
     signing_tools = sorted(state.glob('android-sdk-*/build-tools/*/apksigner'))
     if not signing_tools: raise SystemExit('APK signing verification tool not found')
+if publisher_signing:
+    publisher_signer = hashlib.sha256(subprocess.check_output([
+        'keytool', '-exportcert', '-keystore', publisher_key, '-storepass:env', 'ANDROID_KEYSTORE_PASSWORD',
+        '-alias', os.environ['ANDROID_KEY_ALIAS'],
+    ])).hexdigest()
 for source in outputs:
     with zipfile.ZipFile(source) as apk:
         libraries = [name for name in apk.namelist() if name.startswith('lib/')]
         if any(name.endswith('/libxul.so') for name in libraries):
-            destination = 'wildbuzzard-arm64-debug.apk'
+            destination = 'wildbuzzard-arm64.apk' if publisher_signing else 'wildbuzzard-arm64-debug.apk'
             role = 'browser'
             if any(not name.startswith('lib/arm64-v8a/') for name in libraries):
                 raise SystemExit('APK contains non-ARM64 native libraries: ' + str(source))
@@ -93,23 +101,30 @@ for source in outputs:
             continue
     shutil.copy2(source, out/destination)
     roles[role] = destination
-    if expected_signer:
+    expected = publisher_signer if role == 'browser' and publisher_signing else expected_signer
+    if role == 'browser' and publisher_signing and Path(os.environ.get('WILDBUZZARD_SIGNING_LINEAGE', '')).is_file():
+        subprocess.run([str(signing_tools[-1]), 'sign', '--ks', publisher_key,
+            '--ks-key-alias', os.environ['ANDROID_KEY_ALIAS'], '--ks-pass', 'env:ANDROID_KEYSTORE_PASSWORD',
+            '--key-pass', 'env:ANDROID_KEY_PASSWORD', '--lineage', os.environ['WILDBUZZARD_SIGNING_LINEAGE'],
+            '--rotation-min-sdk-version', '28', '--min-sdk-version', '28', '--v4-signing-enabled', 'false',
+            str(out/destination)], check=True)
+    if expected:
         verification = subprocess.check_output([
             str(signing_tools[-1]), 'verify', '--print-certs', str(out/destination),
         ], text=True)
         certificates = {value.lower() for value in re.findall(
             r'^(?:Signer #\d+|V[1-4](?:\.\d+)? Signer):? certificate SHA-256 digest: ([0-9a-fA-F]{64})$',
             verification, re.MULTILINE)}
-        if certificates != {expected_signer}:
+        if certificates != {expected}:
             raise SystemExit('APK did not use the configured signing identity: ' + destination)
-        signers[destination] = expected_signer
+        signers[destination] = expected
 if not browser: raise SystemExit('No real Gecko ARM64 APK produced')
 if not {'browser', 'agent_probe', 'instrumentation'} <= roles.keys():
     raise SystemExit('Browser, independent agent probe and instrumentation APKs are all required')
 shutil.copytree(root/'wildbuzzard/android/notices', out/'notices', dirs_exist_ok=True)
 subprocess.run([sys.executable, str(root/'wildbuzzard/android/scripts/notices.py'), str(out)], check=True)
 manifest = {'source': subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),
-            'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'signing_certificates':signers,
+            'publisher_signed':publisher_signing,'architecture':'arm64-v8a','roles':roles,'native_libraries':native,'signing_certificates':signers,
             'apks':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in out.glob('*.apk')}}
 if os.environ.get('WILDBUZZARD_ENGINE_PROVENANCE'):
     manifest['native_engine_artifact'] = json.loads(Path(os.environ['WILDBUZZARD_ENGINE_PROVENANCE']).read_text())

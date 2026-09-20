@@ -207,6 +207,15 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
         preferenceScreen.addPreference(category)
         with(category) {
             category.addPreference(androidx.preference.Preference(requireContext()).apply {
+                title = "Agent access"
+                summary = "Allow or revoke access for Termux and other apps"
+                setOnPreferenceClickListener {
+                    startActivity(android.content.Intent(requireContext(),
+                        org.openresearchtools.wildbuzzard.AgentAccessActivity::class.java))
+                    true
+                }
+            })
+            category.addPreference(androidx.preference.Preference(requireContext()).apply {
                 title = "Revoke agent access"
                 summary = "Disconnect all authorized apps and shell programs and close their tabs"
                 setOnPreferenceClickListener {
@@ -620,7 +629,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
         preferenceRemoteDebugging?.isVisible = true
         preferenceRemoteDebugging?.setOnPreferenceChangeListener<Boolean> { preference, newValue ->
             settings.preferences.edit { putBoolean(preference.key, newValue) }
-            requireComponents.core.engine.settings.remoteDebuggingEnabled = newValue
+            requireComponents.core.engine.settings.remoteDebuggingEnabled = false
             true
         }
 

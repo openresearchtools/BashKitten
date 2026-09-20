@@ -146,6 +146,7 @@ class DownloadsFeature(
     private val fragmentManager: FragmentManager? = null,
     private val promptsStyling: PromptsStyling? = null,
     private val onDownloadStartedListener: ((String) -> Unit) = {},
+    private val shouldSkipConfirmation: (String) -> Boolean = { false },
     private val shouldForwardToThirdParties: () -> Boolean = { false },
     private val customFirstPartyDownloadDialog: (
         (
@@ -246,10 +247,13 @@ class DownloadsFeature(
      * Notifies the [DownloadManager] that a new download must be processed.
      */
     @VisibleForTesting
-    internal fun processDownload(tab: SessionState, download: DownloadState): Boolean {
+    internal fun processDownload(tab: SessionState, download: DownloadState): Boolean =
+        processDownloadRequest(tab, if (shouldSkipConfirmation(tab.id)) download.copy(skipConfirmation = true, openInApp = false) else download)
+
+    private fun processDownloadRequest(tab: SessionState, download: DownloadState): Boolean {
         val apps = getDownloaderApps(applicationContext, download)
         // We only show the dialog If we have multiple apps that can handle the download.
-        val shouldShowAppDownloaderDialog = shouldForwardToThirdParties() && apps.size > 1
+        val shouldShowAppDownloaderDialog = !shouldSkipConfirmation(tab.id) && shouldForwardToThirdParties() && apps.size > 1
 
         return if (shouldShowAppDownloaderDialog) {
             when (customThirdPartyDownloadDialog) {

@@ -109,12 +109,7 @@ final class CommandGateway {
                 app.main.post(() -> {
                     try {
                         access.check.run(); app.owned(tab, access.owner);
-                        String nonce = UUID.randomUUID().toString();
-                        synchronized (launches) {
-                            launches.entrySet().removeIf(entry -> entry.getValue().expires < android.os.SystemClock.elapsedRealtime());
-                            if (launches.size() >= 32) throw new IllegalStateException("Too many launch requests");
-                            launches.put(nonce, new Launch(access, tab));
-                        }
+                        String nonce = launch(access, tab);
                         result.complete(new JSONObject().put("result", new JSONObject().put("launch", nonce)).toString());
                     } catch (Exception error) { result.complete("{\"error\":\"Cannot show this tab\"}"); }
                 });
@@ -122,6 +117,16 @@ final class CommandGateway {
             String response = result.get(215, TimeUnit.SECONDS);
             CommandProtocol.write(connection.getOutputStream(), CommandProtocol.encrypt(key, "response\n" + transcript, response));
         } catch (Exception ignored) { /* Invalid or abandoned connections receive no unauthenticated data. */ }
+    }
+    String launch(AgentController.Access access, String tab) {
+        access.check.run(); app.owned(tab, access.owner);
+        String nonce = UUID.randomUUID().toString();
+        synchronized (launches) {
+            launches.entrySet().removeIf(entry -> entry.getValue().expires < android.os.SystemClock.elapsedRealtime());
+            if (launches.size() >= 32) throw new IllegalStateException("Too many launch requests");
+            launches.put(nonce, new Launch(access, tab));
+        }
+        return nonce;
     }
     void show(String nonce) {
         Launch launch;
