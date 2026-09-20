@@ -233,23 +233,9 @@ class BrowserToolbarSearchMiddleware(
                 )
             }
 
-            "about:addons" -> {
-                navController.navigate(
-                    NavGraphDirections.actionGlobalAddonsManagementFragment(),
-                )
-                browserStore.dispatch(EngagementFinished(abandoned = false))
+            "about:addons", "about:glean", "moz://a" -> {
+                browserStore.dispatch(EngagementFinished(abandoned = true))
             }
-
-            "about:glean" -> {
-                navController.navigate(
-                    NavGraphDirections.actionGlobalGleanDebugToolsFragment(),
-                )
-            }
-
-            "moz://a" -> openSearchOrUrl(
-                SupportUtils.getMozillaPageUrl(SupportUtils.MozillaPage.MANIFESTO),
-                navController,
-            )
 
             else -> if (url.isNotBlank()) {
                 openSearchOrUrl(url, navController)

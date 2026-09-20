@@ -52,6 +52,10 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.customization_preferences, rootKey)
+        with(requireComponents.settings) {
+            if (toolbarSimpleShortcutKey == ShortcutType.TRANSLATE.value) toolbarSimpleShortcutKey = ShortcutType.NONE.value
+            if (toolbarExpandedShortcutKey == ShortcutType.TRANSLATE.value) toolbarExpandedShortcutKey = ShortcutType.BOOKMARK.value
+        }
 
         setupPreferences(
             isSummarizationEnabled = false,

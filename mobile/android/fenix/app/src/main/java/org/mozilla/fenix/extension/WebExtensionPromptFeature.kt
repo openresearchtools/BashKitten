@@ -95,7 +95,7 @@ class WebExtensionPromptFeature(
 
                 when (promptRequest) {
                     is WebExtensionPromptRequest.InstallationRequested -> {
-                        handleInstallationStartedRequest(promptRequest)
+                        // Wild Buzzard ships its internal browser extensions only.
                         consumePromptRequest()
                     }
 

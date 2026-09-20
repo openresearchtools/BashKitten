@@ -407,13 +407,11 @@ class Core(
                 ),
                 RecordingDevicesMiddleware(context, context.components.notificationsDelegate),
                 PromptMiddleware(),
-                AdsTelemetryMiddleware(adsTelemetry),
                 LastMediaAccessMiddleware(),
                 HistoryMetadataMiddleware(historyMetadataService),
                 ProtectionsDashboardMiddleware(protectionsStorage),
                 SessionPrioritizationMiddleware(),
                 SaveToPDFMiddleware(context),
-                FxSuggestFactsMiddleware(),
                 FileUploadsDirCleanerMiddleware(fileUploadsDirCleaner),
                 DesktopModeMiddleware(
                     repository = DefaultDesktopModeRepository(
@@ -458,21 +456,6 @@ class Core(
         ).apply {
             // Install the "icons" WebExtension to automatically load icons for every visited website.
             icons.install(engine, this)
-
-            CoroutineScope(Dispatchers.Main).launch {
-                val readJson = { context.assets.readJSONObject("search/search_telemetry_v2.json") }
-                val providerList = withContext(Dispatchers.IO) {
-                    SerpTelemetryRepository(
-                        readJson = readJson,
-                        collectionName = COLLECTION_NAME,
-                        remoteSettingsService = context.components.remoteSettingsService.value,
-                    ).updateProviderList()
-                }
-                // Install the "ads" WebExtension to get the links in an partner page.
-                adsTelemetry.install(engine, this@apply, providerList)
-                // Install the "cookies" WebExtension and tracks user interaction with SERPs.
-                searchTelemetry.install(engine, this@apply, providerList)
-            }
 
             WebNotificationFeature(
                 context,

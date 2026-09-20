@@ -163,7 +163,7 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         setupToolbarSwipeBehavior(settings, components)
 
         initBrowserToolbarComposableUpdates(view)
-        initTranslationsUpdates(context = context, rootView = view)
+        // Translation models and UI are not shipped by Wild Buzzard.
         initIPProtectionOnboarding(context, view)
 
         thumbnailsFeature.set(

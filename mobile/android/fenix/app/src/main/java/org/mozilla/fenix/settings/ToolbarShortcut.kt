@@ -28,7 +28,7 @@ enum class ShortcutType(val value: String) {
          * Returns the [ShortcutType] for the given string [value], or null if no matching type is found.
          */
         fun fromValue(value: String): ShortcutType? =
-            entries.find { it.value == value }
+            entries.find { it.value == value && it != TRANSLATE }
     }
 }
 
@@ -63,12 +63,7 @@ internal val allShortcutOptions: List<ShortcutOption> = listOf(
         R.string.toolbar_customize_shortcut_add_bookmark,
         setOf(ShortcutAvailability.SIMPLE, ShortcutAvailability.EXPANDED),
     ),
-    ShortcutOption(
-        ShortcutType.TRANSLATE,
-        iconsR.drawable.mozac_ic_translate_24,
-        R.string.toolbar_customize_shortcut_translate,
-        setOf(ShortcutAvailability.SIMPLE, ShortcutAvailability.EXPANDED),
-    ),
+
     ShortcutOption(
         ShortcutType.HOMEPAGE,
         iconsR.drawable.mozac_ic_home_24,

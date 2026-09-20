@@ -40,7 +40,10 @@ interface TranslationsEnabledSettings {
          * A [DataStore] backed version.
          */
         fun dataStore(context: Context): TranslationsEnabledSettings =
-            DataStoreBackedTranslationsEnabledSettings(context.translationsDataStore)
+            object : TranslationsEnabledSettings {
+                override val isEnabled: Flow<Boolean> = kotlinx.coroutines.flow.flowOf(false)
+                override suspend fun setEnabled(isEnabled: Boolean) = Unit
+            }
     }
 }
 

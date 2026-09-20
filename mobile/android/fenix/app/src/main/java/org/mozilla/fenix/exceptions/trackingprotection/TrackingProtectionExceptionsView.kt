@@ -22,11 +22,6 @@ class TrackingProtectionExceptionsView(
             adapter = exceptionsAdapter
         }
 
-        with(binding.exceptionsLearnMore) {
-            addUnderline()
-
-            movementMethod = LinkMovementMethod.getInstance()
-            setOnClickListener { interactor.onLearnMore() }
-        }
+        binding.exceptionsLearnMore.visibility = android.view.View.GONE
     }
 }

@@ -254,44 +254,6 @@ fun MainMenu(
             }
         }
 
-        if (accessPoint == MenuAccessPoint.Home && showBanner) {
-            MenuBanner(
-                onDismiss = {
-                    onBannerDismiss()
-                },
-                onClick = {
-                    onBannerClick()
-                },
-            )
-        }
-
-        if (showIPProtection) {
-            MenuGroup {
-                IPProtectionMenuItem(
-                    state = ipProtectionMenuState,
-                    onToggle = onIPProtectionClick,
-                    onNavigate = onIPProtectionNavigate,
-                )
-            }
-        }
-
-
-        if (accessPoint == MenuAccessPoint.Home) {
-            MenuGroup {
-                ExtensionsMenuItem(
-                    inCustomTab = false,
-                    isPrivate = isPrivate,
-                    isExtensionsProcessDisabled = isExtensionsProcessDisabled,
-                    isExtensionsExpanded = isExtensionsExpanded,
-                    isAllWebExtensionsDisabled = isAllWebExtensionsDisabled,
-                    webExtensionMenuCount = webExtensionMenuCount,
-                    extensionsMenuItemDescription = extensionsMenuItemDescription,
-                    onExtensionsMenuClick = onExtensionsMenuClick,
-                    extensionSubmenu = extensionSubmenu,
-                )
-            }
-        }
-
         if (accessPoint == MenuAccessPoint.Browser) {
             ToolsAndActionsMenuGroup(
                 isBookmarked = isBookmarked,
@@ -326,8 +288,6 @@ fun MainMenu(
 
         MenuGroup {
             // Mozilla accounts and Sync are not product features in Wild Buzzard.
-
-
 
             MenuItem(
                 label = stringResource(id = R.string.browser_menu_settings),
@@ -459,18 +419,6 @@ private fun ToolsAndActionsMenuGroup(
 
             androidx.compose.material3.Checkbox(checked = isDesktopMode, onCheckedChange = null)
         }
-
-        ExtensionsMenuItem(
-            inCustomTab = false,
-            isPrivate = isPrivate,
-            isExtensionsProcessDisabled = isExtensionsProcessDisabled,
-            isExtensionsExpanded = isExtensionsExpanded,
-            isAllWebExtensionsDisabled = isAllWebExtensionsDisabled,
-            webExtensionMenuCount = webExtensionMenuCount,
-            extensionsMenuItemDescription = extensionsMenuItemDescription,
-            onExtensionsMenuClick = onExtensionsMenuClick,
-            extensionSubmenu = extensionSubmenu,
-        )
 
         if (!moreMenuExpanded) {
             MoreMenuButtonGroup(

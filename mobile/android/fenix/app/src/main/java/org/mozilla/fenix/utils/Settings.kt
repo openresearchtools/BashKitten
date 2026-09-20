@@ -270,18 +270,16 @@ class Settings(
     /**
      * Indicates whether or not the privacy report should be shown on the home screen.
      */
-    var showPrivacyReportFeature by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_privacy_report),
-        default = { homescreenSections[HomeScreenSection.PRIVACY_REPORT] == true },
-    )
+    var showPrivacyReportFeature: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Indicates whether or not the privacy report should be shown in the tab manager.
      */
-    var showPrivacyReportInTabManager by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_privacy_report_tab_manager),
-        default = true,
-    )
+    var showPrivacyReportInTabManager: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     private val homescreenSections: Map<HomeScreenSection, Boolean>
         get() = FxNimbus.features.homescreen.value().sectionsEnabled
@@ -564,10 +562,9 @@ class Settings(
         false,
     )
 
-    var shouldShowMenuBanner by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_show_menu_banner),
-        default = true,
-    )
+    var shouldShowMenuBanner: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     var defaultSearchEngineName by stringPreference(
         appContext.getPreferenceKey(R.string.pref_key_search_engine),
@@ -1009,10 +1006,9 @@ class Settings(
     /**
      * Indicates if the user wants translations to automatically be offered as a popup of the dialog.
      */
-    var offerTranslation: Boolean by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_translations_offer),
-        default = true,
-    )
+    var offerTranslation: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Indicates if the user denies to ever see again the Remote Settings crash
@@ -2068,7 +2064,6 @@ class Settings(
         get() = showTabStripOnWideWindows && browserWindowWidthDp >= 600
         set(value) { showTabStripOnWideWindows = value }
 
-
     var isDynamicToolbarEnabled by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_dynamic_toolbar),
         default = true,
@@ -2108,7 +2103,6 @@ class Settings(
     /**
      * Returns true if the the device has the prerequisites to enable the tab strip.
      */
-
 
     /**
      * Show the Addresses autofill feature.
@@ -2406,10 +2400,9 @@ class Settings(
     /**
      * Indicates if the Mozilla Ads Client is enabled.
      */
-    var enableMozillaAdsClient by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_mozilla_ads_client),
-        default = { FxNimbus.features.mozillaAdsClient.value().enabled },
-    )
+    var enableMozillaAdsClient: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Indicates if Firefox Labs is enabled.
@@ -2686,15 +2679,13 @@ class Settings(
      * Nimbus controlled feature flag that Indicates if the Shake to Summarize feature should be
      * enabled
      */
-    var shakeToSummarizeFeatureFlagEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_shake_to_summarize),
-        default = { FxNimbus.features.shakeToSummarize.value().enabled },
-    )
+    var shakeToSummarizeFeatureFlagEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
-    var aiControlsFeatureFlagEnabled by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_enable_ai_controls),
-        default = true,
-    )
+    var aiControlsFeatureFlagEnabled: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Feature flag that indicates if the Import Bookmarks feature is enabled.
@@ -2924,10 +2915,7 @@ class Settings(
     /**
      * Indicates whether or not to show the entry point for the DNS over HTTPS settings
      */
-    val showDohEntryPoint by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_doh_settings_enabled),
-        default = { FxNimbus.features.doh.value().showUi },
-    )
+    val showDohEntryPoint: Boolean = false
 
     /**
      * Stores the current DoH mode as an integer preference.
@@ -2970,15 +2958,7 @@ class Settings(
     /**
      * Retrieves the current DohSettingsMode based on trrMode
      */
-    fun getDohSettingsMode(): Engine.DohSettingsMode {
-        return when (trrMode) {
-            DOH_SETTINGS_DEFAULT -> Engine.DohSettingsMode.DEFAULT
-            DOH_SETTINGS_INCREASED -> Engine.DohSettingsMode.INCREASED
-            DOH_SETTINGS_MAX -> Engine.DohSettingsMode.MAX
-            DOH_SETTINGS_OFF -> Engine.DohSettingsMode.OFF
-            else -> Engine.DohSettingsMode.DEFAULT
-        }
-    }
+    fun getDohSettingsMode(): Engine.DohSettingsMode = Engine.DohSettingsMode.OFF
 
     /**
      * Updates trrMode by converting the given DohSettingsMode
@@ -3043,13 +3023,9 @@ class Settings(
     /**
      * Indicates whether or not to show the checklist feature.
      */
-    var showSetupChecklist by booleanPreference(
-        key = appContext.getPreferenceKey(R.string.pref_key_setup_checklist_complete),
-        default = {
-            FxNimbus.features.setupChecklist.value().enabled &&
-                    canShowAddSearchWidgetPrompt(AppWidgetManager.getInstance(appContext))
-        },
-    )
+    var showSetupChecklist: Boolean
+        get() = false
+        set(@Suppress("UNUSED_PARAMETER") value) = Unit
 
     /**
      * Distribution ID that represents if the app was installed via a distribution deal

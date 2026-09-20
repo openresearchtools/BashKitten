@@ -17,21 +17,5 @@ import org.mozilla.fenix.settings.SupportUtils.SumoTopic
  */
 class FenixSitePermissionLearnMoreUrlProvider : SitePermissionsLearnMoreUrlProvider {
 
-    override fun getUrl(permission: Permission): String? {
-        return when (permission) {
-            is Permission.ContentCrossOriginStorageAccess -> STORAGE_ACCESS_MDN_URL
-            is Permission.ContentLocalNetworkAccess,
-            is Permission.ContentLocalDeviceAccess,
-                -> SupportUtils.getGenericSumoURLForTopic(
-                topic = SumoTopic.LOCAL_NETWORK_AND_DEVICE_ACCESS,
-            )
-
-            else -> null
-        }
-    }
-
-    private companion object {
-        const val STORAGE_ACCESS_MDN_URL =
-            "https://developer.mozilla.org/en-US/docs/Web/API/Storage_Access_API"
-    }
+    override fun getUrl(permission: Permission): String? = null
 }

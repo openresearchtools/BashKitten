@@ -84,18 +84,9 @@ class SaveSearchEngineFragment : Fragment(R.layout.fragment_save_search_engine),
             binding.editSuggestString.setText(suggestUrl.toEditableUrl())
         }
 
-        val learnMoreListener: (View) -> Unit = {
-            findNavController().openToBrowser()
-            requireComponents.useCases.fenixBrowserUseCases.loadUrlOrSearch(
-                searchTermOrURL = SupportUtils.getSumoURLForTopic(
-                    requireContext(),
-                    SupportUtils.SumoTopic.CUSTOM_SEARCH_ENGINES,
-                ),
-                newTab = true,
-            )
-        }
-        binding.customSearchEnginesLearnMoreWrapper.setOnClickListener(learnMoreListener)
-        binding.customSearchSuggestionsLearnMoreWrapper.setOnClickListener(learnMoreListener)
+        binding.customSearchEnginesLearnMoreWrapper.visibility = View.GONE
+        binding.customSearchSuggestionsLearnMoreWrapper.visibility = View.GONE
+
     }
 
     override fun onResume() {

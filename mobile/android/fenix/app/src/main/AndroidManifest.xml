@@ -524,17 +524,13 @@
                 <data android:host="open"/>
                 <data android:host="settings"/>
                 <data android:host="settings_accessibility"/>
-                <data android:host="settings_addon_manager"/>
-                <data android:host="settings_ai_controls"/>
                 <data android:host="settings_delete_browsing_data"/>
                 <data android:host="settings_logins"/>
                 <data android:host="settings_notifications"/>
                 <data android:host="settings_privacy"/>
                 <data android:host="settings_search_engine"/>
                 <data android:host="settings_tracking_protection"/>
-                <data android:host="settings_app_icon"/>
                 <data android:host="share_sheet"/>
-                <data android:host="turn_on_sync"/>
                 <data android:host="urls_bookmarks"/>
                 <data android:host="urls_history"/>
                 <data android:host="settings_private_browsing"/>

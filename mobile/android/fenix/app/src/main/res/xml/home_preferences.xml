@@ -13,11 +13,11 @@
         android:dependency="@string/pref_key_show_top_sites"
         android:layout="@layout/checkbox_left_sub_preference"
         android:key="@string/pref_key_enable_contile"
-        android:title="@string/customize_toggle_contile" />
+        android:title="@string/customize_toggle_contile"  app:isPreferenceVisible="false" />
 
     <androidx.preference.SwitchPreferenceCompat
         android:key="@string/pref_key_privacy_report"
-        android:title="@string/customize_toggle_privacy_report" />
+        android:title="@string/customize_toggle_privacy_report"  app:isPreferenceVisible="false" />
 
     <androidx.preference.SwitchPreferenceCompat
         android:key="@string/pref_key_recent_tabs"
@@ -25,7 +25,7 @@
 
     <androidx.preference.SwitchPreferenceCompat
         android:key="@string/pref_key_show_homepage_sports_widget"
-        android:title="@string/customize_toggle_world_cup" />
+        android:title="@string/customize_toggle_world_cup"  app:isPreferenceVisible="false" />
 
     <androidx.preference.SwitchPreferenceCompat
         android:key="@string/pref_key_customization_bookmarks"
@@ -37,17 +37,17 @@
 
     <androidx.preference.SwitchPreferenceCompat
         android:key="@string/pref_key_pocket_homescreen_recommendations"
-        android:title="@string/customize_toggle_pocket_3" />
+        android:title="@string/customize_toggle_pocket_3"  app:isPreferenceVisible="false" />
 
     <androidx.preference.CheckBoxPreference
         android:dependency="@string/pref_key_pocket_homescreen_recommendations"
         android:layout="@layout/checkbox_left_sub_preference"
         android:key="@string/pref_key_pocket_sponsored_stories"
-        android:title="@string/customize_toggle_pocket_sponsored" />
+        android:title="@string/customize_toggle_pocket_sponsored"  app:isPreferenceVisible="false" />
 
     <androidx.preference.Preference
         android:key="@string/pref_key_wallpapers"
-        android:title="@string/customize_wallpapers" />
+        android:title="@string/customize_wallpapers"  app:isPreferenceVisible="false" />
 
     <androidx.preference.PreferenceCategory
         android:layout="@layout/preference_cat_style"

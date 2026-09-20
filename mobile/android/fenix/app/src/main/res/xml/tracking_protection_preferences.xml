@@ -8,7 +8,7 @@
         android:key="@string/pref_key_etp_learn_more"
         android:layout="@layout/tracking_protection_learn_more_preference"
         android:summary="@string/preference_enhanced_tracking_protection_explanation_2"
-        app:allowDividerBelow="false" />
+        app:allowDividerBelow="false"  app:isPreferenceVisible="false" />
     <org.mozilla.fenix.settings.FenixSwitchPreference
         android:defaultValue="true"
         android:key="@string/pref_key_tracking_protection"

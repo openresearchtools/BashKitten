@@ -74,27 +74,6 @@ fun PrivateBrowsingDescription(
                 style = FirefoxTheme.typography.subtitle1,
             )
 
-            Box(
-                modifier = Modifier.semantics {
-                    testTagsAsResourceId = true
-                    testTag = HOMEPAGE_PRIVATE_BROWSING_LEARN_MORE_LINK
-                },
-            ) {
-                LinkText(
-                    text = stringResource(id = R.string.felt_privacy_info_card_subtitle_link_text),
-                    linkTextStates = listOf(
-                        LinkTextState(
-                            text = stringResource(id = R.string.felt_privacy_info_card_subtitle_link_text),
-                            url = "",
-                            onClick = { onLearnMoreClick() },
-                        ),
-                    ),
-                    style = FirefoxTheme.typography.subtitle1,
-                    linkTextColor = MaterialTheme.colorScheme.onSurface,
-                    linkTextDecoration = TextDecoration.Underline,
-                    textAlign = TextAlign.Center,
-                )
-            }
         }
     }
 }

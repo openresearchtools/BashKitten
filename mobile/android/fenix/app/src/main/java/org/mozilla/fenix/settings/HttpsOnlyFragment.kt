@@ -35,15 +35,7 @@ class HttpsOnlyFragment : Fragment(), SystemInsetsPaddedFragment {
     ): View {
         val binding = SettingsHttpsOnlyBinding.inflate(inflater)
 
-        val summary = requireContext().getString(R.string.preferences_https_only_summary)
-        val learnMore = requireContext().getString(R.string.preferences_http_only_learn_more)
-
-        binding.httpsOnlySummary.run {
-            text = combineTextWithLink(summary, learnMore).apply {
-                setActionToUrlClick(this)
-            }
-            movementMethod = LinkMovementMethod.getInstance()
-        }
+        binding.httpsOnlySummary.text = getString(R.string.preferences_https_only_summary)
 
         binding.httpsOnlySwitch.run {
             isChecked = context.components.settings.shouldUseHttpsOnly
@@ -80,39 +72,4 @@ class HttpsOnlyFragment : Fragment(), SystemInsetsPaddedFragment {
             requireComponents.settings.getHttpsOnlyMode()
     }
 
-    private fun combineTextWithLink(
-        text: String,
-        linkTitle: String,
-    ): SpannableStringBuilder {
-        val rawTextWithLink = HtmlCompat.fromHtml(
-            "$text <a href=\"\">$linkTitle</a>",
-            HtmlCompat.FROM_HTML_MODE_COMPACT,
-        )
-
-        return SpannableStringBuilder(rawTextWithLink)
-    }
-
-    private fun setActionToUrlClick(
-        spannableStringBuilder: SpannableStringBuilder,
-    ) {
-        val link = spannableStringBuilder.getSpans<URLSpan>()[0]
-        val linkStart = spannableStringBuilder.getSpanStart(link)
-        val linkEnd = spannableStringBuilder.getSpanEnd(link)
-        val linkFlags = spannableStringBuilder.getSpanFlags(link)
-        val linkClickListener: ClickableSpan = object : ClickableSpan() {
-            override fun onClick(view: View) {
-                view.setOnClickListener {
-                    findNavController().openToBrowser()
-                    requireComponents.useCases.fenixBrowserUseCases.loadUrlOrSearch(
-                        searchTermOrURL = SupportUtils.getGenericSumoURLForTopic(
-                            SupportUtils.SumoTopic.HTTPS_ONLY_MODE,
-                        ),
-                        newTab = true,
-                    )
-                }
-            }
-        }
-        spannableStringBuilder.setSpan(linkClickListener, linkStart, linkEnd, linkFlags)
-        spannableStringBuilder.removeSpan(link)
-    }
 }

@@ -61,10 +61,6 @@ open class SettingsSearchFragment : Fragment(), SystemInsetsPaddedFragment {
     }
 
     protected open fun buildSettingsSearchStore(): SettingsSearchStore {
-        val recentSettingsSearchesRepository = FenixRecentSettingsSearchesRepository(
-            dataStore = requireContext().recentSearchesDataStore,
-            preferenceFileInformationList = defaultPreferenceFileInformationList,
-        )
 
         return storeProvider.get { restoredState ->
             SettingsSearchStore(
@@ -73,7 +69,7 @@ open class SettingsSearchFragment : Fragment(), SystemInsetsPaddedFragment {
                     SettingsSearchMiddleware(
                         fenixSettingsIndexer = requireContext().components.settingsIndexer,
                         navController = findNavController(),
-                        recentSettingsSearchesRepository = recentSettingsSearchesRepository,
+                        recentSettingsSearchesRepository = null,
                         scope = viewLifecycleOwner.lifecycle.coroutineScope,
                     ),
                 ),

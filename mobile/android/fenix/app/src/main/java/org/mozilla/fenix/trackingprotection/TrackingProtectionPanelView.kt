@@ -156,7 +156,7 @@ class TrackingProtectionPanelView(
         }
 
         binding.smartblockDescription.isVisible = containASmartBlockItem
-        binding.smartblockLearnMore.isVisible = containASmartBlockItem
+        binding.smartblockLearnMore.isVisible = false
 
         val trackersList = bucketedTrackers.get(category, categoryBlocked).joinToString("<br/>") {
             createTrackerItem(it, containASmartBlockItem)

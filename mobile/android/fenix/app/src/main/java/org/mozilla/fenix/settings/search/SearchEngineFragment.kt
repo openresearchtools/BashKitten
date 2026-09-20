@@ -123,6 +123,7 @@ class SearchEngineFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragm
 
         val showSyncedTabsSuggestions =
             requirePreference<SwitchPreferenceCompat>(R.string.pref_key_search_synced_tabs).apply {
+            isVisible = false
                 isChecked = context.components.settings.shouldShowSyncedTabsSuggestions
             }
 

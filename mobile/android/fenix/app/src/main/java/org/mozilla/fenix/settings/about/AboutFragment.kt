@@ -78,7 +78,7 @@ class AboutFragment(
             )
         }
 
-        setupDebugMenu(binding.wordmark, view.context.components.settings, lifecycle)
+        binding.wordmark.isClickable = false
 
         populateAboutHeader()
         aboutPageAdapter?.submitList(populateAboutList())
@@ -213,10 +213,7 @@ class AboutFragment(
                 ),
                 getString(R.string.about_support),
             ),
-            AboutPageItem(
-                AboutItem.Crashes,
-                getString(R.string.about_crashes),
-            ),
+
             AboutPageItem(
                 AboutItem.ExternalLink(
                     PRIVACY_NOTICE,
@@ -224,17 +221,7 @@ class AboutFragment(
                 ),
                 getString(R.string.about_privacy_notice),
             ),
-            AboutPageItem(
-                AboutItem.ExternalLink(
-                    RIGHTS,
-                    "about:rights",
-                ),
-                getString(R.string.about_know_your_rights),
-            ),
-            AboutPageItem(
-                AboutItem.ExternalLink(LICENSING_INFO, ABOUT_LICENSE_URL),
-                getString(R.string.about_licensing_information),
-            ),
+
             AboutPageItem(
                 AboutItem.Libraries,
                 getString(R.string.about_other_open_source_libraries),

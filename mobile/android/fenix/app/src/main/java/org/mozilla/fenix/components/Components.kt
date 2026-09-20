@@ -456,16 +456,7 @@ class Components(private val context: Context) {
                     emptySet()
                 }
             },
-            additionalProviders = listOf(
-                DataChoicesSearchProvider,
-                AIControlsSearchProvider,
-                PageSummariesSettingsSearchProvider(
-                    summarizationFeatureConfiguration = core.summarizeFeatureSettings,
-                ),
-                FirefoxLabsSettingsSearchProvider(
-                    isLabsEnabled = { settings.enableFirefoxLabs },
-                ),
-            ),
+            additionalProviders = emptyList(),
         )
     }
 

@@ -65,7 +65,7 @@ class HomeSettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragm
         setupPreferences()
         listOf(R.string.pref_key_wallpapers, R.string.pref_key_enable_contile,
             R.string.pref_key_pocket_homescreen_recommendations, R.string.pref_key_pocket_sponsored_stories,
-            R.string.pref_key_show_homepage_sports_widget).forEach {
+            R.string.pref_key_show_homepage_sports_widget, R.string.pref_key_privacy_report).forEach {
             findPreference<Preference>(getString(it))?.isVisible = false
         }
     }

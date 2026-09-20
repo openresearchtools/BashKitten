@@ -68,7 +68,7 @@ class HomeDeepLinkIntentProcessor(
             "settings_search_engine" -> GlobalDirections.SearchEngine
             "settings_accessibility" -> GlobalDirections.Accessibility
             "settings_delete_browsing_data" -> GlobalDirections.DeleteData
-            "settings_addon_manager" -> GlobalDirections.SettingsAddonManager
+            "settings_addon_manager" -> return
             "settings_logins" -> GlobalDirections.SettingsLogins
             "settings_tracking_protection" -> GlobalDirections.SettingsTrackingProtection
             // We'd like to highlight views within the fragment
@@ -79,7 +79,7 @@ class HomeDeepLinkIntentProcessor(
             "home_collections" -> GlobalDirections.Home
             "settings_private_browsing" -> GlobalDirections.SettingsPrivateBrowsing
             "settings_app_icon" -> GlobalDirections.Settings
-            "settings_ai_controls" -> GlobalDirections.SettingsAIControls
+            "settings_ai_controls" -> return
 
             else -> return
         }

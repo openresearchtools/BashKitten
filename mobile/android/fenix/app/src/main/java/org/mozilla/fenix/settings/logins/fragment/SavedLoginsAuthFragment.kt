@@ -90,31 +90,7 @@ class SavedLoginsAuthFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFr
             true
         }
 
-        SyncPreferenceView(
-            syncPreference = requirePreference(R.string.pref_key_sync_logins),
-            lifecycleOwner = viewLifecycleOwner,
-            coroutineScope = viewLifecycleOwner.lifecycleScope,
-            accountManager = requireComponents.backgroundServices.accountManager,
-            syncEngine = SyncEngine.Passwords,
-            loggedOffTitle = requireContext()
-                .getString(R.string.preferences_passwords_sync_logins_across_devices_2),
-            loggedInTitle = requireContext()
-                .getString(R.string.preferences_passwords_sync_logins_2),
-            onSyncSignInClicked = {
-                val directions =
-                    SavedLoginsAuthFragmentDirections.actionSavedLoginsAuthFragmentToTurnOnSyncFragment(
-                        entrypoint = FenixFxAEntryPoint.SavedLogins,
-                    )
-                findNavController().navigate(directions)
-            },
-            onReconnectClicked = {
-                val directions =
-                    SavedLoginsAuthFragmentDirections.actionGlobalAccountProblemFragment(
-                        entrypoint = FenixFxAEntryPoint.SavedLogins,
-                    )
-                findNavController().navigate(directions)
-            },
-        )
+        requirePreference<Preference>(R.string.pref_key_sync_logins).isVisible = false
 
         BiometricAuthenticationManager.biometricAuthenticationNeededInfo.shouldShowAuthenticationPrompt =
             true

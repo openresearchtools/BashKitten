@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="21dp" android:height="20dp"
+    android:viewportWidth="24" android:viewportHeight="24"
+    android:tint="?android:attr/textColorPrimary">
+    <path android:pathData="M12,2L15,10L22,14V16L14,14V19L17,21H7L10,19V14L2,16V14L9,10Z" android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFFFF" android:strokeWidth="1.65"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

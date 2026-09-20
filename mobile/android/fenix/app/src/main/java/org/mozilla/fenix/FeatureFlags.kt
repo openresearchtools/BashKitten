@@ -14,7 +14,7 @@ object FeatureFlags {
      * This feature does not only depend on this flag. It requires the AMO collection override to
      * be enabled which is behind the Secret Settings.
      * */
-    val customExtensionCollectionFeature = Config.channel.isNightlyOrDebug || Config.channel.isBeta
+    const val customExtensionCollectionFeature = false
 
     /**
      * Pull-to-refresh allows you to pull the web content down far enough to have the page to
@@ -25,7 +25,7 @@ object FeatureFlags {
     /**
      * Allows users to enable Firefox Suggest.
      */
-    const val FX_SUGGEST = true
+    const val FX_SUGGEST = false
 
     /**
      * Disables the Onboarding feature for debug builds by default. Set this to `true` if you need

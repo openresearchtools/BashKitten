@@ -365,9 +365,6 @@ class DefaultFenixSettingsIndexer(
             PreferenceFileInformation.TabsPreferences,
             PreferenceFileInformation.TrackingProtectionPreferences,
             PreferenceFileInformation.SaveLoginsPreferences,
-            PreferenceFileInformation.DataChoicesPreferences,
-            PreferenceFileInformation.AIControlsPreferences,
-            PreferenceFileInformation.FirefoxLabsPreferences,
         )
 
         /**

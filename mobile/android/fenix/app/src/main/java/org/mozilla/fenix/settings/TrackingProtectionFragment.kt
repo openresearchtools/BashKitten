@@ -122,20 +122,7 @@ class TrackingProtectionFragment : PreferenceFragmentCompat(), SystemInsetsPadde
             true
         }
 
-        val learnMorePreference = requirePreference<Preference>(R.string.pref_key_etp_learn_more)
-        learnMorePreference.setOnPreferenceClickListener {
-            findNavController().openToBrowser()
-            requireComponents.useCases.fenixBrowserUseCases.loadUrlOrSearch(
-                searchTermOrURL = SupportUtils.getGenericSumoURLForTopic
-                    (SupportUtils.SumoTopic.TRACKING_PROTECTION),
-                newTab = true,
-            )
-            true
-        }
-        learnMorePreference.summary = getString(
-            R.string.preference_enhanced_tracking_protection_explanation_2,
-            getString(R.string.app_name),
-        )
+        requirePreference<Preference>(R.string.pref_key_etp_learn_more).isVisible = false
 
         val preferenceExceptions =
             requirePreference<Preference>(R.string.pref_key_tracking_protection_exceptions)
@@ -192,13 +179,8 @@ class TrackingProtectionFragment : PreferenceFragmentCompat(), SystemInsetsPadde
         strictAllowListTrackingProtectionSubheader =
             requirePreference(R.string.pref_key_tracking_protection_strict_allow_list_subheader)
 
-        val learnMore =
-            getString(R.string.preference_enhanced_tracking_protection_allow_list_learn_more)
-        strictAllowListTrackingProtectionSubheader.summary = getLink(learnMore)
-        strictAllowListTrackingProtectionSubheader.setOnPreferenceClickListener {
-            openSumoArticle()
-            true
-        }
+        strictAllowListTrackingProtectionSubheader.summary = null
+        strictAllowListTrackingProtectionSubheader.isSelectable = false
 
         strictAllowListBaselineTrackingProtection.onPreferenceChangeListener = object : SharedPreferenceUpdater() {
             override fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean {
@@ -266,13 +248,8 @@ class TrackingProtectionFragment : PreferenceFragmentCompat(), SystemInsetsPadde
         customAllowListTrackingProtectionSubheader =
             requirePreference(R.string.pref_key_tracking_protection_custom_allow_list_subheader)
 
-        val learnMore =
-            getString(R.string.preference_enhanced_tracking_protection_allow_list_learn_more)
-        customAllowListTrackingProtectionSubheader.summary = getLink(learnMore)
-        customAllowListTrackingProtectionSubheader.setOnPreferenceClickListener {
-            openSumoArticle()
-            true
-        }
+        customAllowListTrackingProtectionSubheader.summary = null
+        customAllowListTrackingProtectionSubheader.isSelectable = false
 
         customCookies.onPreferenceChangeListener = object : SharedPreferenceUpdater() {
             override fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean {
@@ -431,24 +408,6 @@ class TrackingProtectionFragment : PreferenceFragmentCompat(), SystemInsetsPadde
                 it.core.engine.settings.fingerprintingProtectionPrivateBrowsing = true
             }
         }
-    }
-
-    private fun getLink(text: String): SpannableStringBuilder {
-        val rawTextWithLink = HtmlCompat.fromHtml(
-            "<a href=\"\">$text</a>",
-            HtmlCompat.FROM_HTML_MODE_COMPACT,
-        )
-        return SpannableStringBuilder(rawTextWithLink)
-    }
-
-    private fun openSumoArticle() {
-        findNavController().openToBrowser()
-        requireComponents.useCases.fenixBrowserUseCases.loadUrlOrSearch(
-            searchTermOrURL = SupportUtils.getGenericSumoURLForTopic(
-                SupportUtils.SumoTopic.TRACKING_PROTECTION,
-            ),
-            newTab = true,
-        )
     }
 
     /**

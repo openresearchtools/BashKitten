@@ -58,15 +58,7 @@ internal fun MoreSettingsSubmenu(
     Column(
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        TranslationSection(
-            translationInfo = translationInfo,
-            isReaderViewActive = isReaderViewActive,
-        )
-        SummarizationMenuItem(
-            summarizationMenuState = summarizationMenuState,
-            onSummarizePageMenuExposed = onSummarizePageMenuExposed,
-            onSummarizePageClick = onSummarizePageClick,
-        )
+
         MoveToNonPrivateTabMenuItem(
             isPrivate = isPrivate,
             onMoveToNonPrivateTabMenuClick = onMoveToNonPrivateTabMenuClick,
