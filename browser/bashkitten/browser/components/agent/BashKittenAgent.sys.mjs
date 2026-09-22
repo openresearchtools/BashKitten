@@ -127,7 +127,7 @@ class AgentView {
     this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "Agent", class: "toolbarbutton-1", tooltiptext: "Show or hide Agent" });
     this.button.addEventListener("command", () => this.pane.hidden ? this.show() : this.hide());
     doc.getElementById("urlbar-container").before(this.button);
-    const appMenu = doc.getElementById("appMenu-settings-button");
+    const appMenu = this.win.PanelUI.mainView.querySelector("#appMenu-settings-button");
     const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-agent", label: "Agent · Appearance · About", class: "subviewbutton" });
     nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.menu(); });
     appMenu.before(nativeMenu);
