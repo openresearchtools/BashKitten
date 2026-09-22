@@ -7,9 +7,6 @@
 const { Troubleshoot } = ChromeUtils.importESModule(
   "resource://gre/modules/Troubleshoot.sys.mjs"
 );
-const { ResetProfile } = ChromeUtils.importESModule(
-  "resource://gre/modules/ResetProfile.sys.mjs"
-);
 const { AppConstants } = ChromeUtils.importESModule(
   "resource://gre/modules/AppConstants.sys.mjs"
 );
@@ -111,7 +108,6 @@ var snapshotFormatters = {
       "XREExeF",
       Ci.nsIFile
     ).path;
-    $("supportLink").href = data.supportURL;
     let version = AppConstants.MOZ_APP_VERSION_DISPLAY;
     if (data.vendor) {
       version += " (" + data.vendor + ")";
@@ -857,11 +853,6 @@ var snapshotFormatters = {
 
           let failureIdSpan = $.new("span", "");
           if (bugNumber) {
-            let bugHref = $.new("a");
-            bugHref.href =
-              "https://bugzilla.mozilla.org/show_bug.cgi?id=" + bugNumber;
-            bugHref.setAttribute("data-l10n-name", "bug-link");
-            failureIdSpan.append(bugHref);
             document.l10n.setAttributes(
               failureIdSpan,
               "support-blocklisted-bug",
@@ -1546,16 +1537,7 @@ var snapshotFormatters = {
             status: data[key],
           }
         );
-        let supportLink = document.createElement("a", {
-          is: "moz-support-link",
-        });
-        supportLink.classList.add("user-namespaces-unavailabe-support-link");
-        supportLink.setAttribute(
-          "support-page",
-          "install-firefox-linux#w_install-firefox-from-mozilla-builds"
-        );
         td.appendChild(span);
-        td.appendChild(supportLink);
       }
       tbody.appendChild($.new("tr", [th, td]));
     }
@@ -2060,13 +2042,8 @@ function openProfileDirectory() {
   new nsLocalFile(profileDir).reveal();
 }
 
-/**
- * Profile reset is only supported for the default profile if the appropriate migrator exists.
- */
+/** Show the available local troubleshooting actions. */
 function populateActionBox() {
-  if (ResetProfile.resetSupported()) {
-    $("reset-box").hidden = false;
-  }
   if (!Services.appinfo.inSafeMode && AppConstants.platform !== "android") {
     $("safe-mode-box").hidden = false;
 
@@ -2095,13 +2072,7 @@ function safeModeRestart() {
  * Set up event listeners for buttons.
  */
 function setupEventListeners() {
-  let button = $("reset-box-button");
-  if (button) {
-    button.addEventListener("click", function () {
-      ResetProfile.openConfirmationDialog(window);
-    });
-  }
-  button = $("clear-startup-cache-button");
+  let button = $("clear-startup-cache-button");
   if (button) {
     button.addEventListener("click", async function () {
       const [promptTitle, promptBody, restartButtonLabel] =

@@ -20,10 +20,6 @@
           type="text/css"/>
 
     <script src="chrome://global/content/aboutSupport.js"/>
-    <script
-      type="module"
-      src="chrome://global/content/elements/moz-support-link.mjs"
-    />
     <link rel="localization" href="branding/brand.ftl"/>
     <link rel="localization" href="toolkit/about/aboutSupport.ftl"/>
     <link rel="localization" href="toolkit/global/resetProfile.ftl"/>
@@ -34,9 +30,7 @@
     <h1 data-l10n-id="page-title"/>
     <div class="header-flex">
       <div class="content-flex">
-        <div class="page-subtitle" data-l10n-id="page-subtitle">
-          <a id="supportLink" data-l10n-name="support-link"></a>
-        </div>
+        <div class="page-subtitle" data-l10n-id="page-subtitle"></div>
         <div>
           <button id="copy-raw-data-to-clipboard" data-l10n-id="copy-raw-data-to-clipboard-label"/>
           <button id="copy-to-clipboard" data-l10n-id="copy-text-to-clipboard-label"/>
@@ -45,10 +39,6 @@
 
 #ifndef ANDROID
       <div class="action-box">
-        <div id="reset-box" hidden="hidden">
-          <h3 data-l10n-id="refresh-profile"/>
-          <button id="reset-box-button" data-l10n-id="refresh-profile-button"/>
-        </div>
         <div id="safe-mode-box" hidden="hidden">
           <h3 data-l10n-id="troubleshoot-mode-title"/>
           <button id="restart-in-safe-mode-button" data-l10n-id="restart-in-troubleshoot-mode-label"/>
@@ -294,16 +284,6 @@
             <td id="disk-available-box">
             </td>
           </tr>
-
-#ifndef ANDROID
-          <tr class="no-copy">
-            <th class="column" data-l10n-id="app-basics-profiles"/>
-
-            <td>
-              <a href="about:profiles">about:profiles</a>
-            </td>
-          </tr>
-#endif
 
 #if defined(XP_WIN)
           <tr>
@@ -643,12 +623,6 @@
         <tbody id="remote-experiments-tbody">
         </tbody>
       </table>
-
-      <section id="about-studies-section" class="no-copy">
-        <p data-l10n-id="support-remote-experiments-see-about-studies">
-          <a data-l10n-name="support-about-studies-link" href="about:studies"></a>
-        </p>
-      </section>
 
 #endif
       <!-- - - - - - - - - - - - - - - - - - - - - -->

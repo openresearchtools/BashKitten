@@ -261,7 +261,8 @@ nsAboutRedirector::NewChannel(nsIURI* aURI, nsILoadInfo* aLoadInfo,
   NS_ENSURE_SUCCESS(rv, rv);
 
   if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
-      path.EqualsLiteral("profiles")) {
+      (path.EqualsLiteral("profiles") || path.EqualsLiteral("glean") ||
+       path.EqualsLiteral("telemetry"))) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 
@@ -341,7 +342,8 @@ nsAboutRedirector::GetURIFlags(nsIURI* aURI, uint32_t* aResult) {
     if (name.EqualsASCII(redir.id)) {
       *aResult = redir.flags;
       if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
-          name.EqualsLiteral("profiles")) {
+          (name.EqualsLiteral("profiles") || name.EqualsLiteral("glean") ||
+           name.EqualsLiteral("telemetry"))) {
         *aResult |= nsIAboutModule::HIDE_FROM_ABOUTABOUT;
       }
       return NS_OK;

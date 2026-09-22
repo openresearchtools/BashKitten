@@ -610,21 +610,6 @@ function init() {
     $("#buttons-disabled").hidden = false;
     toggleLoggingButton.disabled = true;
   }
-
-  // Initialize the uploaded profiles manager if profile uploading is enabled
-  const shouldUpload = Services.prefs.getBoolPref(
-    "toolkit.aboutLogging.uploadProfileToCloud",
-    false
-  );
-  if (shouldUpload) {
-    import("chrome://global/content/aboutLogging/uploadedProfilesManager.mjs")
-      .then(({ UploadedProfilesManager }) => {
-        new UploadedProfilesManager();
-      })
-      .catch(error => {
-        console.error("Error initializing uploaded profiles manager:", error);
-      });
-  }
 }
 
 function maybeEnsureButtonInNavbar() {
@@ -635,28 +620,9 @@ function maybeEnsureButtonInNavbar() {
   }
 }
 
-let gProfileSaveOrUpload = null;
 async function captureProfile() {
-  const shouldUploadToCloud = Services.prefs.getBoolPref(
-    "toolkit.aboutLogging.uploadProfileToCloud",
-    false
-  );
-  if (shouldUploadToCloud) {
-    const { profileCaptureResult } =
-      await lazy.RecordingUtils.getProfileDataAsGzippedArrayBufferThenStop();
-    if (profileCaptureResult.type === "ERROR") {
-      throw profileCaptureResult.error;
-    }
-    if (!gProfileSaveOrUpload) {
-      const { ProfileSaveOrUploadDialog } =
-        await import("chrome://global/content/aboutLogging/profileSaveUploadLogic.mjs");
-      gProfileSaveOrUpload = new ProfileSaveOrUploadDialog();
-    }
-    gProfileSaveOrUpload.init(new Uint8Array(profileCaptureResult.profile));
-  } else {
-    // Open the profiler in a new tab
-    await lazy.ProfilerPopupBackground.captureProfile("aboutlogging");
-  }
+  // The shared native capture path saves the profile locally.
+  await lazy.ProfilerPopupBackground.captureProfile("aboutlogging");
 }
 
 function updateLogFile(file) {
@@ -852,10 +818,6 @@ function startStopLogging() {
 function startLogging() {
   setLogModules();
   if (gLoggingSettings.loggingOutputType === "profiler") {
-    if (gProfileSaveOrUpload) {
-      gProfileSaveOrUpload.reset();
-    }
-
     const supportedFeatures = Services.profiler.GetFeatures();
     if (
       gLoggingSettings.loggingPreset != "custom" ||
