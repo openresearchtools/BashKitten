@@ -22,9 +22,17 @@ after compaction. It records the requested replacement of the native wrappers
 and Termux suite with one Android/Linux browser, Caddy/Authelia authentication
 and optional desktop llama runtime/relay. It supersedes the older plan and the
 current-implementation descriptions below where those requirements differ;
-it does not claim that migration is already implemented. For existing-suite
-maintenance, also read `docs/android-termux-suite-plan.md` in full. Keep shared
-code small and preserve upstream components and licenses.
+it does not claim that migration is already implemented. The migration keeps
+one product repository: `/agent` for the existing shared app, `/browser` for the
+Gecko subtree and `/auth` for tracked Authelia/Caddy/Tor source and isolated
+Termux build patches. Any installed `com.termux` must be able to request native
+browser approval, regardless of signer; already authorized calls run directly.
+Preserve dynamic-port discovery. One Agent power control owns both Android wake
+locks and whole-group start/stop, including owned Pi workers. Target full Linux
+amd64/arm64 .deb packages, a Termux aarch64 .deb with the Pi browser extension,
+and the Android APK. For existing-suite maintenance, also read
+`docs/android-termux-suite-plan.md` in full. Keep shared code small and preserve
+upstream components and licenses.
 
 ## Runtime ownership
 

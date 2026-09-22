@@ -13,7 +13,8 @@ Make BashKitten a Firefox-based browser on Android and Linux, using the existing
 WildBuzzard browser code. Keep the current BashKitten web UI and shared server.
 The browser displays the Agent interface and controls its local service; Node,
 Pi, Caddy and Authelia run outside the browser, in Termux or native Linux.
-Server-only installations remain supported.
+Server-only operation remains supported; running it does not require opening
+the browser, even when the Linux package contains both components.
 
 Preserve the chat renderer, project/session sidebar, thinking and tool streaming,
 compaction display, attachments, repository browsing, backend ZIP downloads,
@@ -34,49 +35,63 @@ permissions. Remove the external WildBuzzard extensions repository dependency.
 Ordinary address-bar search, downloads and normal Firefox extension support are
 not the custom search implementation being removed.
 
-## 2. Repositories and Firefox updates
+## 2. One repository, source ownership and Firefox updates
 
-Use **two product repositories**, with Android and desktop sharing **one browser
-repository and one product branch**:
+Keep everything in **`openresearchtools/bashkitten`**, on its current product
+branch. Firefox/WildBuzzard can live under `/browser`; preserve the complete
+Mozilla source layout inside that directory. Move the existing shared app under
+`/agent`, excluding the obsolete desktop/Android wrappers. Track the access-stack
+sources under `/auth`. These are tracked source directories in one repository,
+not Git submodules or a second product repository:
 
 ```text
-openresearchtools/bashkitten                 # existing small web/server repo
-  src/web/                                  # existing shared UI
-  src/server/
-    rpc/                                    # existing stock Pi integration
-    files/                                  # existing files/folders/ZIPs
-    http/                                   # private backend behind Caddy
-    access/                                 # Caddy/Authelia/Tor configuration
-    platform/termux/                         # bootstrap, pkg, environment note
-    platform/linux/                         # Linux service/files/llama runtime
-    updates/                                # existing package/npm job machinery
-    control.mjs                             # existing lifecycle owner, extended
-  packaging/{termux,linux}/
-  docs/
-
-openresearchtools/bashkitten-browser         # proposed merged Gecko fork
-  browser/                                  # Firefox desktop, normal layout
-  mobile/android/                           # GeckoView/Fenix, same Gecko tree
-  toolkit/, dom/, netwerk/, ...              # required upstream Mozilla tree
-  bashkitten/                               # renamed existing wildbuzzard/
-    browser/                                # retained browser features
-    android/                                # branding, Binder, Termux bridge
-    components/                             # shared native browser tools
-    pi/                                     # one extension, platform transports
-    branding/, scripts/, licenses/
-    upstreams.toml, ports.toml, UPDATING-FIREFOX.md
-  .github/workflows/                        # Android + Linux build matrix
-
-openresearchtools/apt                        # existing final .deb distribution
+openresearchtools/bashkitten/
+  agent/
+    src/web/                                # current UI, moved intact
+    src/server/
+      rpc/, files/, http/                    # existing shared implementation
+      access/                               # access-stack config/lifecycle glue
+      platform/{termux,linux}/
+      updates/, control.mjs, instance.mjs
+    pi/                                     # one browser extension/skill package
+    packaging/{termux,linux}/
+    package.json, package-lock.json          # existing runtime/build metadata
+  browser/                                  # full Gecko source root
+    mach, moz.build, ...
+    browser/                                # Mozilla desktop subtree
+    mobile/android/                         # GeckoView/Fenix, same Gecko tree
+    toolkit/, dom/, netwerk/, ...
+    bashkitten/                             # renamed existing wildbuzzard/
+      browser/, android/, components/
+      branding/, scripts/, licenses/
+      upstreams.toml, ports.toml, UPDATING-FIREFOX.md
+  auth/
+    authelia/                               # tracked upstream source
+    caddy/                                  # tracked upstream source
+    tor/                                    # tracked upstream source
+    authelia-termux/                         # build recipe + required patches
+    caddy-termux/                            # upstream Termux recipe/patch inputs
+    tor-termux/                              # upstream Termux recipe/patch inputs
+    upstreams.lock.json, build/              # exact revisions and build entry
+  docs/, AGENTS.md
+  .github/workflows/                        # one release/build matrix
 ```
 
-These are ownership boundaries, not instructions to create every directory or
-rewrite existing modules. Keep the existing Mozilla layout to make upstream
-merges manageable. The browser release owns its Pi extension; the server
-package/updater installs that exact release through Pi's normal package support.
-Do not keep separate copied Android and desktop extension implementations.
-Remove `src/android/` and `src/linux/` from the server repository only after their
-replacement features and upgrade paths work.
+Move the current UI/server/build files together instead of rewriting them. The
+single Pi browser extension lives under `agent/pi/`, with Android Binder and
+Linux socket transports; install/update it through Pi's supported package
+mechanism from the same release. It runs beside Pi, not inside the APK. Extract
+the useful native Termux/setup/update integration from the current wrappers into
+the browser, then remove the wrappers after their replacements work. Do not
+keep two implementations. The existing `openresearchtools/apt` remains only the
+distribution index, not another product-code repository.
+
+Run Gecko builds from `browser/` using its `mach`; put build outputs outside
+source. Adapt the small product scripts that assume the Gecko tree is the Git
+root, and verify Mozilla's source/VCS metadata generation in this nested layout.
+Keep Android and Linux on one Gecko source revision; do not create platform
+branches or duplicate engine trees. All product release assets and corresponding
+source come from this repository.
 
 ### Starting sources, checked on 22 September
 
@@ -103,10 +118,15 @@ Waterfox or recovery branch. Preserve the initial ESR baseline, retained donor
 commit records and license provenance. The current Waterfox donor is
 `8ae6e039a06bcff8173cb4a4c0262beb21f81286`; keep applicable `ports.toml` records.
 
-Reuse `firefox_release.py`: detect a new 153.x ESR release, fetch its exact tag,
-merge it into the product line, update the pin, resolve actual conflicts and
-build both platforms. First reconcile the donors, then update the unified tree
-to 153.3.0esr or the newer verified 153.x release. Do not automatically change
+Import the browser with a history-preserving Git subtree at prefix `browser/`.
+Keep native upstream commit IDs/ancestry; do not rewrite every Mozilla commit to
+add the prefix. Reuse `firefox_release.py` for version checks and pins, adapting
+its root-level `git merge` to a subtree-aware merge at `browser/`: detect a new
+153.x ESR release, fetch its exact tag, merge into that prefix, update the pin,
+resolve actual conflicts and build both platforms. Verify the merge cannot
+write Mozilla files into `/agent`, `/auth` or the repository root. First reconcile
+the donors, then update the unified tree to 153.3.0esr or the newer verified
+153.x release. Do not automatically change
 ESR major or rebase every product commit for each update. CI can propose the
 update and build it; failed merges/builds cannot publish a release.
 
@@ -114,6 +134,32 @@ Removing branches and unused features reduces maintenance and build inputs.
 It does not erase objects already in retained Git history. Use shallow/partial
 clones for ordinary builds and a checkout with sufficient ancestry for upstream
 merges; do not rewrite Mozilla ancestry just to make the repository look small.
+
+### Tracked authentication and Tor sources
+
+Import complete Authelia, Caddy and Tor source at recorded upstream commits,
+following Torkitten's source/provenance approach. Track each project's actual
+main/default branch and import newer commits through source-update changes;
+record the branch, exact commit, version and source provenance in the lock.
+Build from checked-in source, never a moving network `main` during release.
+Preserve notices, dependency locks and any required nested source. Updates build
+and pass the relevant checks before publication; a failed update keeps the
+previous working release.
+
+`*-termux/` holds only reproducible build recipes and the minimal patch series,
+not another copy of each project's source. Record the exact Termux-packages
+revision and package patches used for Caddy/Tor. Keep any new Authelia Android/
+Bionic adaptation here, with upstream source untouched until patches apply in
+the build staging tree. A patch that no longer applies stops the build; do not
+silently drop it or change authentication behavior to make compilation pass.
+
+Build Linux arm64/amd64 and native Termux aarch64 from this one source inventory.
+Ship the owned executables and required libraries with the server's package in
+private BashKitten paths, so they cannot replace unrelated system `caddy`, `tor`
+or `authelia` installations. Include their full dependency licenses and matching
+source/build material. The browser's Tor client and backend Tor publisher remain
+separate runtime instances; reuse `/auth/tor` source for compatible build targets
+while retaining the necessary Android/JNI/browser integration and its notices.
 
 Rename product names, package namespaces, executable/control names, branding,
 URLs and preferences deliberately. Android keeps **`com.bashkitten`**, the
@@ -141,7 +187,10 @@ session restore and agent tab commands cannot remove, duplicate or replace it.
 The user can still quit the application normally.
 
 On phones, place **Agent** to the left of the address bar while browsing. In
-Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/menu bar.
+Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/power/menu bar.
+Use one small power control showing On, Starting, Stopping or Off. Its On action
+is **Turn off**; its Off action is **Turn on**. Do not add a separate wake-lock
+toolbar or crowd the mobile bar with service switches.
 On desktop, tablets and unfolded phones, show Agent beside the selected ordinary
 tab. Agent toggles the pane; hiding it gives web content the full area without
 destroying the chat document. Narrow layouts switch between Agent and browsing.
@@ -163,10 +212,37 @@ network/debugging and file actions. Closing the last ordinary tab leaves Agent.
 Concurrent Pi sessions use explicit tab IDs rather than a shared selected-tab
 variable. Pi's own session identities and history are unaffected.
 
-Reuse Android Binder and the desktop private Unix socket. Authorize callers
-through the existing native permission flow; do not revive the legacy Android
-TCP command-key service. If a selected remote Pi is allowed to control this
-client browser, the browser opens an authenticated outbound connection through
+Reuse Android Binder and the desktop private Unix socket. **Any installed
+`com.termux` can attempt browser control**, including official GitHub, F-Droid
+and independently signed builds. Do not gate the exported discovery/Binder
+entry point behind our signature or a vendor certificate allowlist. A matching
+publisher signature may keep its existing optional trust shortcut; it is not a
+compatibility requirement. Other Android apps use the same approval mechanism.
+
+On an ordinary first command, look up the real caller using Binder's UID and
+PackageManager. An already approved/trusted caller runs immediately. Otherwise
+return a browser-owned approval PendingIntent, open the native Android approval
+screen naming that caller, and run the held command once after approval. The
+current donor CLI only opens this flow for explicit `--authorize`; extend it
+to normal calls rather than leaving an error telling the user to authorize
+manually. Keep denial/cancellation distinct from transport errors, and do not
+repeatedly prompt or replay an already executed action. Calls from other apps
+can receive/send the same PendingIntent. If Android blocks a background activity
+launch, expose the pending approval when BashKitten is foregrounded instead of
+claiming a popup can always be forced.
+
+This is a native BashKitten allow/deny screen, not a new signature-only Android
+permission. Remember approval against the installed app/signing identity and
+verify actual UID/identity on every call; package-name strings alone cannot
+authorize a caller. A different replacement APK requires approval again. Grants
+are revocable in Agent access. Pi and other programs in Termux share Termux's
+Android identity, and any shared-UID peers share that authority; do not pretend
+these are per-Pi Android permissions. Keep the user-facing prompt understandable.
+Do not revive the legacy TCP command-key service or require manually copied
+browser-control keys.
+
+If a selected remote Pi is allowed to control this client browser, the browser
+opens an authenticated outbound connection through
 the selected server. The user grants that connection browser control in native
 UI. Reuse the same tab dispatcher over that channel; do not expose a public
 browser-control listener or another MCP server. Close/revoke it on logout or
@@ -176,6 +252,60 @@ This protects browser automation interfaces. Stock Pi retains its unrestricted
 shell: on the same OS account it can still run OS commands such as killing a
 process. Preventing that would require a separate OS sandbox and would conflict
 with the requirement to leave native Pi unrestricted.
+
+### One power control and Android wake locks
+
+On a fresh app launch, default to **Turn on**. On Android, the browser's existing
+foreground keep-alive service acquires one non-reference-counted partial CPU
+wake lock and the Termux controller runs stock `termux-wake-lock` once the command
+permission is ready. Then attach to the healthy service group or start it.
+Show Starting/setup until the required work succeeds. A screen rotation, settings
+return or repeated lifecycle callback must neither accumulate locks nor undo
+an explicit Turn off during the same app run. A later fresh user launch defaults
+to On again, as requested. The ordinary screen may still turn off: this is a
+CPU wake lock, not a request to keep the display illuminated.
+
+Use the current Android foreground-service integration and ordinary WAKE_LOCK
+permission. Hold/release at the app/controller level, never per Pi session or
+per tool call. Fifty agents still mean one browser lock and one Termux lock.
+There is no lease, expiry scheme or new Termux patch. Termux's stock wake lock is
+app-wide, so Turn off releases that Termux lock; it is not an isolated lock for
+BashKitten inside Termux. This does not terminate other Termux jobs.
+See [Android wake locks](https://developer.android.com/develop/background-work/background-tasks/awake/wakelock/set)
+and the upstream [lock](https://github.com/termux/termux-tools/blob/master/scripts/termux-wake-lock.in)
+and [unlock](https://github.com/termux/termux-tools/blob/master/scripts/termux-wake-unlock.in) commands.
+
+**Turn off** is one idempotent controller action:
+
+1. Record the Off intent so reconnect/restart logic cannot undo it; stop accepting
+   new turns and disconnect Agent control/stream connections.
+2. Abort active owned Pi turns through stock RPC, checkpoint existing queues,
+   close all BashKitten-owned workers and stop the owned web backend, Caddy,
+   Authelia, backend Tor and managed llama processes. Use graceful shutdown with
+   a bounded force-kill fallback for those exact process identities/groups.
+   Leave native Pi session files, projects and credentials intact. Do not kill
+   independently launched terminal Pi, unrelated daemons, Termux or the browser.
+3. Do not kill dpkg during a package transaction. Show Stopping until an active
+   package operation reaches a safe stopping point, retaining its actual log.
+4. Run `termux-wake-unlock`, release the browser's wake lock, and exit the owned
+   runtime controller after reporting completion. The browser-owned protected
+   view shows **Agent off · Turn on** without needing a login/server connection.
+   If shutdown cannot be confirmed, show that state and Retry rather than a
+   false Off. Turn on can launch the controller through Termux even when all
+   backend processes are gone.
+
+On Linux the same control stops/starts the owned service group and Pi workers,
+without Android wake-lock commands, and leaves the browser open on Agent off.
+The browser's ordinary Tor tabs are distinct from the backend Tor service and
+are not shut down by this Agent control. The desktop llama relay used for Agent
+is disconnected on Turn off. This client control does not silently shut down a
+remote machine: in remote-only mode it disconnects the client and releases its
+browser lock, without requiring Termux or attempting remote OS power management.
+
+Closing/hiding the browser UI is not Turn off. Its foreground service can keep
+the browser lock while alive and Termux can keep its own lock. Android can still
+kill either process; wake locks prevent CPU suspension, not process termination.
+Reopening reconciles the actual services and reacquires the required locks.
 
 ## 4. Android setup with ordinary Termux
 
@@ -249,16 +379,30 @@ flowchart LR
     Onion --> Caddy
     Caddy -->|authorization check| Auth[Authelia: mandatory two-factor login]
     Caddy -->|authorized requests| UI[BashKitten web UI and API]
-    UI --> Workers[Existing detached stock Pi RPC workers]
+    UI --> Workers[Owned stock Pi RPC workers]
     Caddy --> Llama[Optional Linux llama-server: native bearer auth]
     Manager[Existing BashKitten service manager] -. owns .-> Caddy
     Manager -. owns .-> Auth
     Manager -. owns .-> UI
+    Manager -. owns .-> Onion
+    Manager -. owns .-> Workers
 ```
 
 Reuse Torkitten's configuration patterns, source attribution and private socket
-boundaries, not its OCI container deployment. Extend the existing Node manager
-to launch native Caddy, Authelia and the shared web backend as one service group.
+boundaries, not its OCI container deployment. Build the vendored `/auth` sources
+and extend the existing controller under `agent/src/server/` to own the complete
+service group. The browser never hosts the Node backend itself.
+
+**One lifecycle, not a claim of one PID:** Caddy and Authelia are Go programs,
+Tor is native C, and the existing server is Node. Copying their source into this
+repository or packaging their executables together does not link them into the
+Node process. Embedding all four literally would require substantial integration
+patches/runtime changes, contrary to retaining their normal upstream behavior.
+The proposed implementation is one foreground launcher/owned process group with
+one On/Off state, child-exit handling and group shutdown. Do not describe that
+as an in-process library implementation. If one PID becomes a hard requirement,
+resolve that architecture separately rather than claiming this satisfies it.
+
 Use Authelia's file user store, SQLite storage and built-in memory sessions;
 no Redis, LDAP, second BashKitten account database or custom authentication layer.
 Reuse Torkitten's local account/TOTP enrollment approach, calling Authelia's own
@@ -281,9 +425,9 @@ See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/
 **Local address:** use `https://127.0.0.1:<port>` directly, with the actual
 dynamic, unprivileged port obtained from the existing verified service discovery.
 `<port>` is not a new fixed port or a permanent part of the server's identity.
-There is no public domain, DNS lookup, domain registration, hosts-file edit or dependency on
-`bashkitten.com`; that domain remains the user's website. The earlier claim
-that the pinned Authelia version needs a registered hostname was incorrect:
+There is no public domain, DNS lookup, domain registration, hosts-file edit or
+dependency on `bashkitten.com`; that domain remains the user's website. The
+earlier claim that the pinned Authelia version needs a registered hostname was incorrect:
 Authelia v4.39.20 explicitly accepts IP cookie scopes, including `127.0.0.1`, in
 its [validator](https://github.com/authelia/authelia/blob/v4.39.20/internal/configuration/validator/session.go#L124-L142)
 and [upstream validation cases](https://github.com/authelia/authelia/blob/v4.39.20/internal/configuration/validator/session_test.go#L839-L868).
@@ -314,22 +458,33 @@ scope on desktop. No user certificate import is needed in BashKitten. Other
 browsers retain their normal certificate trust rules.
 [Caddy local HTTPS](https://caddyserver.com/docs/automatic-https#local-https).
 
-The service group is ready only when all three components are healthy. An exit
-or failed health check stops the public edge and restarts the group with bounded
-backoff. Authentication failure never falls back to direct backend access.
-This gives coupled lifecycle, not literally one process. Keep component output
-bounded and credentials redacted. Optional Tor failure removes remote readiness;
-it need not destroy a working local chat. Optional llama failure is handled by
-its own restart path, not by restarting authentication.
+The core group is ready only when Node, Caddy and Authelia are healthy, plus the
+backend Tor process when remote publishing is enabled. A core child exit or
+fatal health failure stops ingress and shuts down the remaining owned group,
+including BashKitten's Pi workers, using the same shutdown path as Turn off.
+Release the wake locks, show **Agent off** with the error, and let **Turn on**
+start the complete group again. Do not leave three independent crash/restart
+loops or report On for a partially functioning stack. A temporary Tor network
+outage is connection status, not by itself a crashed process. The previously
+requested llama process recovery remains an owned optional operation while
+Agent is On; it cannot restart after Turn off.
 
-If the manager itself is killed, the proxy's authentication rules still apply.
-On recovery, reconcile recorded process identities and either attach to the
-complete healthy group or replace only its owned incomplete group. Do not claim
-an already-dead supervisor can immediately coordinate the surviving processes.
+Keep the lifecycle owner outside the HTTP child. Track owned process identities
+and start times, include all BashKitten-owned Pi workers in group shutdown, and
+use native parent-death/cleanup support where needed. If the existing Node
+launcher cannot enforce cleanup when killed, use one small native process-group
+guard; do not patch each upstream daemon or add a generic supervisor framework.
+Prove this with SIGKILL of the owner as well as individual children before
+claiming coupled failure handling. An already-dead JS controller cannot execute
+cleanup. On recovery, reconcile the recorded group and either attach to a
+complete healthy instance or clean up its owned incomplete remnants before
+starting. Proxy authentication continues to fail closed throughout; credentials
+never go to a direct backend fallback. Keep bounded, credential-redacted logs.
 
 Keep the existing single-instance locks and dynamic-port discovery in
-`src/server/instance.mjs` and `src/server/http/server.mjs`. The current server
-falls back to an OS-assigned port on `EADDRINUSE`, writes the actual URL to
+the current `src/server/instance.mjs` and `src/server/http/server.mjs`, relocated
+under `agent/`. The current server falls back to an OS-assigned port on
+`EADDRINUSE`, writes the actual URL to
 `server.json`, and the Android host reads the controller's `web.url`. Preserve
 that discovery contract when Caddy becomes the HTTPS entry point: publish
 Caddy's actual bound URL, not the private backend address. Reuse an available
@@ -344,30 +499,37 @@ automatic trust of whatever certificate a new listener presents. Verify TLS
 before sending credentials or private instance tokens. Preserve drafts across
 an origin/port change through existing state handling or the protected browser
 host; never replay a consumed prompt as part of reconnecting.
-On Android resume, request status through Termux and recover unexpectedly dead
-components. Closing the browser does not stop the service. A deliberate Stop
-stays stopped until Play. Pi workers remain detached across web/auth restarts;
-their native session files remain the recovery source. Stop/kill Pi stays an
-explicit separate action.
+On Android resume, request status through Termux. An explicit Turn off or a
+failed group remains Off during that app run, with Turn on available; a fresh
+user launch defaults to On as specified above. Closing the UI does not stop the
+service. Workers remain independent of UI lifetime, but no longer outlive an
+explicit whole-group shutdown or fatal core-group failure. This supersedes the
+previous plan's independent Pi survival across an access-stack failure. Native
+session files remain the recovery source: restarting opens the existing history
+without replaying an interrupted prompt. Keep individual Pi stop/kill controls
+in settings as well as the compact whole-Agent power button.
 
 Browser cookies survive browser restarts. Authelia's stock memory session store
 does not survive an Authelia restart, so that restart requires login again;
 do not add Redis merely to conceal this distinction.
 
-**First technical gate:** Termux currently packages Caddy, but an Authelia recipe
-was not present at the checked upstream package path. Build a pinned native
-Android/Bionic Authelia package, including its frontend assets and dependencies,
-and publish it through our APT when verified. Prove SQLite, password hashing,
-TOTP enrollment and Caddy forward-auth on unrooted Termux before replacing the
-working login. Do not relabel a Linux/glibc ARM64 binary as Termux aarch64 or
-quietly introduce a container/proot fallback. This portability is not yet tested.
+**First technical gate:** build the vendored Caddy/Tor for Termux using the
+recorded upstream Termux recipes/patches. Authelia had no recipe at the checked
+upstream package path; its `auth/authelia-termux/` recipe must prove a native
+Android/Bionic build, including frontend assets and dependencies. Prove SQLite,
+password hashing, TOTP enrollment, Caddy forward-auth, whole-group lifecycle and
+both wake locks on unrooted Termux before replacing the working login. Publish
+the verified bundled server package through our existing APT. Do not relabel
+a Linux/glibc ARM64 binary as Termux aarch64 or quietly introduce a container/
+proot fallback. This portability and shutdown behavior are not yet tested.
 
 ## 6. Remote Agent connections and Tor
 
 Every backend has **Settings → Remote access**: off/on, address, QR, save/import
 connection file and copy/reveal controls. Keys are masked by default. Publish
 through a backend-owned Tor onion service, separate from the browser's client
-Tor process. Closing the browser must not stop the published server.
+Tor process. Closing the browser UI must not stop the published server; explicit
+Turn off on its hosting machine does stop that service with the rest of Agent.
 
 Use Torkitten's v3 client authorization and Caddy/Authelia route pattern. A remote
 connection record contains its name, kind, onion endpoint, client authorization
@@ -460,14 +622,38 @@ model. [llama.cpp server interface](https://github.com/ggml-org/llama.cpp/tree/m
 
 ## 8. Delivery, retained behavior and licenses
 
-Build the browser for Android `arm64-v8a` and Linux `arm64`/`amd64`; keep the
-server's native Termux `aarch64` package separate. Verify both 4 KB and 16 KB
-Android execution for the APK's native libraries and executable Termux packages.
-Keep the APK's current signing identity. Linux browser/server packages use the
-existing APT repository. Make the existing `bashkitten-desktop` package upgrade
-to the browser-based app with a dependency on the shared server; a browser can
-also connect to a remote without running its local backend. The server package
-does not acquire a browser dependency.
+Build these **four primary binary artifacts from this one repository**:
+
+| Artifact | Complete product payload |
+| --- | --- |
+| `bashkitten_VERSION_amd64.deb` | Linux x86-64 browser, Agent web UI/server, native Pi and production npm dependencies, browser-control Pi extension/skill, Caddy/Authelia/Tor and lifecycle tools |
+| `bashkitten_VERSION_arm64.deb` | The same complete Linux product built for ARM64 |
+| `bashkitten_VERSION_aarch64.deb` | Native Termux/Bionic Agent web UI/server, Pi and production npm dependencies, browser-control Pi extension/skill, native Caddy/Authelia/Tor, lifecycle/bootstrap/package tools; browser control executes in Termux beside Pi |
+| `bashkitten_VERSION_arm64-v8a.apk` | Android browser, protected Agent/onboarding UI, native Binder/Termux integration, power/wake controls, browser Tor client and offline notices; the backend and Pi extension run from the Termux package |
+
+No separate WildBuzzard install, separately maintained browser repository or
+manual extension download is required. One release publishes all four verified
+artifacts plus checksums, licenses and complete corresponding source/build
+material. The existing APT repository indexes the three `.deb` targets; Android
+installs/updates the APK through its normal package installer. Linux uses one
+complete `.deb` per architecture rather than separate new server/wrapper packages.
+Provide a proper APT upgrade/replacement from the old `bashkitten` server and
+`bashkitten-desktop` wrapper, preserving user data and resolving owned-file
+overlap through package metadata, not deleting arbitrary files.
+
+Bundle the product's own access-stack executables and Pi/npm/extension payloads.
+Declare ordinary platform runtime libraries, Node and the existing Python/git/gh
+environment dependencies through APT/Termux bootstrap; do not vendor a second
+OS package manager, the Termux APK, GPU drivers or model weights into these files.
+Register the bundled extension using Pi's supported package mechanism for the
+selected runtime without overwriting an existing independent Pi installation.
+The same updater updates that bundled extension and its skill with the product.
+
+Verify both 4 KB and 16 KB Android execution for the APK's native libraries and
+executable Termux packages. Keep the APK's current signing identity and the
+separate APT signing identity. A Linux browser can connect remotely without
+starting its local backend; the packaged server CLI can likewise run while the
+browser is closed. Package contents do not couple their process lifetimes.
 
 Reuse current APK update checking/signing and APT/npm jobs, replacing suite
 catalog ownership with browser/server release metadata. Preserve selected
@@ -515,14 +701,14 @@ release notes stay short; implementation detail belongs here and in AGENTS.md.
 
 | Step | Work | Evidence required |
 | --- | --- | --- |
-| 1 | Native access stack feasibility | Real Authelia enrollment, TOTP login, Caddy, scoped local TLS and private backend on Linux ARM64 and unrooted Cuttlefish Termux; no direct login bypass |
-| 2 | Reconcile browser sources and strip removed features | Both browser targets build from one ESR pin; retained Waterfox/Tor features work; no torrent/search-extension binaries or dependency fetches; licenses match artifacts |
+| 1 | Native access stack and coupled lifecycle | Build tracked `/auth` sources for Linux and Termux; real Authelia/TOTP/Caddy flow; no direct login bypass; whole-group shutdown and recovery including owner SIGKILL; native Termux patches stay isolated |
+| 2 | One repository and stripped browser sources | Both targets build under `/browser` from one ESR pin; an ESR subtree update changes only its prefix; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
 | 3 | Rename and add protected Agent view | Existing BashKitten APK upgrades; one profile/window; new-window requests become tabs; protected view survives close-all, restore and crashes and rejects all automation/extension access |
-| 4 | Local integration | Existing UI and real stock Pi turn on Linux and Android; official/external and existing suite Termux; one-command return/permission flow; bootstrap, files, OAuth and explicit update jobs |
-| 5 | Recovery and wide layout | Kill browser, content process, manager, Caddy, Authelia, backend and Termux separately; reopen finds the correct instance; no port hijack, duplicate servers/prompts or lost Pi history; fold/rotate/toggle preserves chat |
+| 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
+| 5 | Power, wake locks, recovery and layout | Fresh launch On; actual browser and Termux CPU locks remain one each with 50 agents; Turn off stops all owned services/Pi and releases locks while leaving browser/Termux/unrelated tasks; Turn on discovers the actual dynamic port; core crash shows Off; owner/browser/Termux deaths recover without duplicates or prompt replay; rotate/fold preserves state |
 | 6 | Tor Agent remotes | QR/file/manual enrollment, 2FA, TLS renewal, rejected changed identity, revocation, offline/reconnect, ordinary private onion tabs and permission-controlled remote browser tools |
 | 7 | Desktop llama | arm64 and amd64 runtime selection; real ready model, crash/restart, wrong token, token-free health distinction; onion relay streams unchanged paths and never leaks credentials/falls back to direct access |
-| 8 | Upgrade/release | APK and APT upgrade from installed versions; external Pi preserved; About/licenses without backend; normal independent browser reaches the authenticated server; matching source/notices and no testing payloads |
+| 8 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension and native auth stack, Android APK; actual installs/upgrades through APT/Android; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
 
 Use the running Cuttlefish and local Linux ARM64 for actual app interaction,
 screenshots and process-failure checks, plus native AMD64 validation. Physical
