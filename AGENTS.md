@@ -105,7 +105,11 @@ Use Node >=22.19, plus ripgrep and fd. Keep BashKitten-owned test suites,
 fixtures, instrumentation apps, probes and test dependencies outside this
 repository and all application/release artifacts. Verify production builds on
 Linux and disposable Android devices with external tools. Never seed production
-profiles with test providers or chats. External checks must reserve isolated ports,
+profiles with test providers or chats. Use stock, hardware-accelerated Cuttlefish
+with 64 GiB userdata for Android testing. The user explicitly rejected a separate
+16 KB software-emulated guest; do not recreate it or change the stock kernel.
+Keep build-time 16 KB alignment checks and report runtime coverage accurately.
+External checks must reserve isolated ports,
 stop all their owned processes in cleanup, and verify normal-profile startup too.
 Preserve unmodified upstream sources and
 licenses. Do not commit runtime credentials, node_modules or personal sessions.

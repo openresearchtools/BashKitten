@@ -979,8 +979,12 @@ release notes stay short; implementation detail belongs here and in AGENTS.md.
 | 8 | Built-in DDGS and native Pi skill | Real searches using our packaged native runtime in stock terminal Pi and UI/RPC Pi on Linux amd64/arm64 and unrooted Termux, with no preinstalled DDGS or separate search package; skill discovery/on-demand loading; one query-or-url call and response contract without provider switches; HTML/text, PDF, repository and available transcript reads save complete Markdown, including content beyond the inline limit; paths survive reconnect/restart; concurrent saves, cancellation and real network failures; native imports and package upgrades work; no SearXNG requirement |
 | 9 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension, DDGS skill/runtime and native auth stack, Android APK; actual installs/upgrades through APT/Android; Firefox-aligned product versions and metadata agree across artifacts; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
 
-Use the running Cuttlefish and local Linux ARM64 for actual app interaction,
-screenshots and process-failure checks, plus native AMD64 validation. Physical
+Use stock, hardware-accelerated Cuttlefish with 64 GiB userdata and local Linux
+ARM64 for actual app interaction, screenshots and process-failure checks, plus
+native AMD64 validation. The user explicitly rejected a separate 16 KB
+software-emulated guest; do not recreate one or replace the stock kernel. Keep
+build-time 16 KB alignment checks; do not claim 16 KB execution without a
+suitable device. Physical
 device checks are required for claimed GPU behavior and foldable behavior the
 emulator does not cover. Keep BashKitten-owned verification tools, fixtures,
 test profiles and results outside product repositories/artifacts; do not remove
