@@ -90,7 +90,7 @@ jobs:
             -v "$GITHUB_WORKSPACE/dist:/candidate:ro" \
             -e PACKAGE_ARCHITECTURE='${{ matrix.architecture }}' \
             -e PRODUCT_VERSION="$(cat browser/bashkitten/config/version.txt)" \
-            -e FIREFOX_VERSION="$(cat browser/browser/config/version.txt)" \
+            -e FIREFOX_VERSION="$(cat browser/browser/config/version_display.txt)" \
             -e SOURCE_REVISION="$GITHUB_SHA" \
             ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 bash -se <<'CONTAINER'
           set -euo pipefail
@@ -152,6 +152,7 @@ jobs:
           INSTALLED
           CONTAINER
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: ${{ !cancelled() && hashFiles('dist/*.deb') != '' }}
         with:
           name: bashkitten-${{ matrix.component }}-candidate
           path: dist/
