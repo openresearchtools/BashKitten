@@ -25,6 +25,7 @@
             <html:span id="protections-popup-mainView-panel-header-span"/>
           </html:h1>
           <toolbarbutton id="protections-popup-info-button" class="panel-info-button"
+                         data-bashkitten-unavailable="true" hidden="true"
                          data-l10n-id="protections-panel-etp-more-info">
             <image/>
           </toolbarbutton>
@@ -33,7 +34,8 @@
         </box>
         <toolbarseparator></toolbarseparator>
 
-        <html:div id="info-message-container" disabled="true">
+        <html:div id="info-message-container" disabled="true"
+                  data-bashkitten-unavailable="true" hidden="true">
           <!-- Info message will render in this container -->
         </html:div>
       </vbox>
@@ -48,8 +50,10 @@
           </hbox>
         </vbox>
 
-        <toolbarseparator observes="cmd_reportBrokenSite"></toolbarseparator>
+        <toolbarseparator observes="cmd_reportBrokenSite"
+                          data-bashkitten-unavailable="true" hidden="true"></toolbarseparator>
         <toolbarbutton id="protections-popup-report-broken-site-button"
+                     data-bashkitten-unavailable="true" hidden="true"
                      command="cmd_reportBrokenSite"
                      class="subviewbutton subviewbutton-nav"
                      data-l10n-id="protections-panel-report-broken-site"

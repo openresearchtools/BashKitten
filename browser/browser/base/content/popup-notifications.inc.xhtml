@@ -146,26 +146,10 @@
     <popupnotification id="addon-install-blocked-notification" hidden="true">
       <popupnotificationcontent id="addon-install-blocked-content" orient="vertical">
         <description id="addon-install-blocked-message" class="popup-notification-description"></description>
-        <hbox>
-          <html:a
-              is="moz-support-link"
-              id="addon-install-blocked-info"
-              class="popup-notification-learnmore-link"
-              data-l10n-id="popup-notification-xpinstall-prompt-learn-more"
-            />
-        </hbox>
       </popupnotificationcontent>
     </popupnotification>
 
     <popupnotification id="addon-install-failed-blocklist-notification" hidden="true">
-      <popupnotificationcontent id="addon-install-failed-blocklist-content" orient="vertical">
-        <html:a
-            id="addon-install-failed-blocklist-info"
-            is="addon-notification-blocklist-url"
-            class="popup-notification-learnmore-link"
-            data-l10n-id="popup-notification-xpinstall-prompt-block-url"
-          />
-      </popupnotificationcontent>
     </popupnotification>
 
     <popupnotification id="canvas-permissions-prompt-notification" hidden="true">
@@ -266,7 +250,8 @@
       </popupnotificationcontent>
     </popupnotification>
 
-    <popupnotification id="relay-integration-offer-notification" hidden="true">
+    <popupnotification id="relay-integration-offer-notification"
+                       data-bashkitten-unavailable="true" hidden="true">
       <popupnotificationcontent orient="vertical">
         <html:div>
           <html:p data-l10n-id="firefox-relay-offer-why-to-use-relay-1">
@@ -282,7 +267,8 @@
       </popupnotificationcontent>
     </popupnotification>
 
-    <popupnotification id="fxa-and-relay-integration-offer-with-domain-and-value-prop-notification" hidden="true">
+    <popupnotification id="fxa-and-relay-integration-offer-with-domain-and-value-prop-notification"
+                       data-bashkitten-unavailable="true" hidden="true">
       <popupnotificationcontent orient="vertical">
         <html:div>
           <html:p data-l10n-id="firefox-relay-and-fxa-popup-notification-first-sentence">
@@ -294,7 +280,8 @@
       </popupnotificationcontent>
     </popupnotification>
 
-    <popupnotification id="relay-integration-reuse-masks-notification" hidden="true">
+    <popupnotification id="relay-integration-reuse-masks-notification"
+                       data-bashkitten-unavailable="true" hidden="true">
       <popupnotificationcontent orient="vertical">
         <html:div>
           <html:p class="error-message"></html:p>

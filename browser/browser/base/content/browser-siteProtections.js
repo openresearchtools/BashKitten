@@ -3033,6 +3033,9 @@ var gProtectionsHandler = {
    * info button in the panel header.
    */
   _insertProtectionsPanelInfoMessage(event) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      return;
+    }
     // const PROTECTIONS_PANEL_INFOMSG_PREF =
     //   "browser.protections_panel.infoMessage.seen";
     const message = {

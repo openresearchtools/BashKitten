@@ -3214,6 +3214,12 @@ var CustomizableUIInternal = {
 
     lazy.log.debug("Iterating the actual nodes of the window palette");
     for (let node of aWindowPalette.children) {
+      if (
+        AppConstants.MOZ_APP_NAME == "bashkitten" &&
+        node.hasAttribute("data-bashkitten-unavailable")
+      ) {
+        continue;
+      }
       lazy.log.debug("In palette children: " + node.id);
       if (node.id && !this.getPlacementOfWidget(node.id)) {
         widgets.add(node.id);

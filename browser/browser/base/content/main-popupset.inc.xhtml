@@ -76,7 +76,8 @@
               data-lazy-l10n-id="private-tab"
               data-l10n-args='{"isPrivate": false}'/>
     <menuseparator/>
-    <menu id="context_askChat"/>
+    <menu id="context_askChat"
+          data-bashkitten-unavailable="true" hidden="true"/>
     <menuseparator/>
     <menuitem id="context_bookmarkSelectedTabs"
               hidden="true"
@@ -95,8 +96,9 @@
         <menuitem id="context_moveToEnd"
                   data-lazy-l10n-id="move-to-end"
                   tbattr="tabbrowser-multiple-visible"/>
-        <menuitem id="context_openTabInWindow" data-lazy-l10n-id="move-to-new-window"
-                  tbattr="tabbrowser-multiple-visible"/>
+        <menuitem id="context_openTabInWindow"
+                  data-bashkitten-unavailable="true" data-lazy-l10n-id="move-to-new-window"
+                  tbattr="tabbrowser-multiple-visible" hidden="true"/>
         <menuseparator id="moveTabSeparator" hidden="true"/>
       </menupopup>
     </menu>
@@ -112,12 +114,14 @@
           data-lazy-l10n-id="tab-context-share-selected-tabs"/>
     <menuseparator id="context_shareSelectedTabsSeparator" hidden="true"/>
     <menu id="context_sendTabToDevice"
+          data-bashkitten-unavailable="true"
           class="sync-ui-item"
           data-lazy-l10n-id="tab-context-send-to-device"
-          data-l10n-args='{"tabCount": 1}'>
+          data-l10n-args='{"tabCount": 1}' hidden="true">
       <menupopup id="context_sendTabToDevicePopupMenu" class="sync-ui-item"/>
     </menu>
-    <menuseparator id="context_sendTabToDeviceSeparator" class="sync-ui-item"/>
+    <menuseparator id="context_sendTabToDeviceSeparator"
+                   data-bashkitten-unavailable="true" class="sync-ui-item" hidden="true"/>
     <menuitem id="context_closeTab"
               data-lazy-l10n-id="tab-context-close-n-tabs"
               data-l10n-args='{"tabCount": 1}'/>
@@ -167,13 +171,15 @@
 
   <menupopup id="open-tab-group-context-menu">
     <menuitem id="open-tab-group-context-menu_moveToThisWindow" data-l10n-id="tab-group-context-move-to-this-window"/>
-    <menuitem id="open-tab-group-context-menu_moveToNewWindow" data-l10n-id="tab-group-context-move-to-new-window"/>
+    <menuitem id="open-tab-group-context-menu_moveToNewWindow"
+              data-bashkitten-unavailable="true" data-l10n-id="tab-group-context-move-to-new-window" hidden="true"/>
     <menuitem id="open-tab-group-context-menu_delete" data-l10n-id="tab-group-context-delete"/>
   </menupopup>
 
   <menupopup id="saved-tab-group-context-menu">
     <menuitem id="saved-tab-group-context-menu_openInThisWindow" data-l10n-id="tab-group-context-open-saved-group-in-this-window"/>
-    <menuitem id="saved-tab-group-context-menu_openInNewWindow" data-l10n-id="tab-group-context-open-saved-group-in-new-window"/>
+    <menuitem id="saved-tab-group-context-menu_openInNewWindow"
+              data-bashkitten-unavailable="true" data-l10n-id="tab-group-context-open-saved-group-in-new-window" hidden="true"/>
     <menuitem id="saved-tab-group-context-menu_delete" data-l10n-id="tab-group-context-delete"/>
   </menupopup>
 
@@ -356,7 +362,8 @@
               key="key_gotoHistory"/>
     <menuitem id="sidebar-switcher-tabs"
               data-l10n-id="sidebar-menu-synced-tabs"
-              class="sync-ui-item"/>
+              class="sync-ui-item"
+            data-bashkitten-unavailable="true" hidden="true"/>
     <menuseparator/>
     <!-- Extension toolbarbuttons go here. -->
     <menuseparator id="sidebar-extensions-separator"/>
@@ -372,9 +379,6 @@
               contexttype="extension-action"/>
     <menuitem data-l10n-id="sidebar-context-menu-remove-extension2"
               id="sidebar-context-menu-remove-extension"
-              contexttype="extension-action"/>
-    <menuitem data-l10n-id="sidebar-context-menu-report-extension"
-              id="sidebar-context-menu-report-extension"
               contexttype="extension-action"/>
     <menuseparator/>
     <menuitem data-l10n-id="sidebar-context-menu-unpin-extension"
@@ -421,8 +425,9 @@
       <menupopup id="sidebar-history-context-menu-container-popup"/>
     </menu>
     <menuitem data-l10n-id="sidebar-context-menu-open-in-window"
-              id="sidebar-history-context-open-in-window"/>
-    <menuitem data-l10n-id="sidebar-context-menu-open-in-private-window"
+              id="sidebar-history-context-open-in-window"
+              data-bashkitten-unavailable="true" hidden="true"/>
+    <menuitem data-l10n-id="open-link-private"
               id="sidebar-history-context-open-in-private-window"/>
     <menuseparator/>
     <menuitem data-l10n-id="sidebar-history-context-menu-delete-page-2"
@@ -444,7 +449,8 @@
               class="sidebar-history-multiselect-command"/>
   </menupopup>
 
-  <menupopup id="sidebar-synced-tabs-context-menu">
+  <menupopup id="sidebar-synced-tabs-context-menu"
+            data-bashkitten-unavailable="true" hidden="true">
     <menuitem data-l10n-id="sidebar-context-menu-open-in-tab"
               id="sidebar-synced-tabs-context-open-in-tab"/>
     <menu id="sidebar-synced-tabs-context-menu-container-tab"
@@ -456,8 +462,9 @@
       <menupopup id="sidebar-synced-tabs-context-menu-container-popup"/>
     </menu>
     <menuitem data-l10n-id="sidebar-context-menu-open-in-window"
-              id="sidebar-synced-tabs-context-open-in-window"/>
-    <menuitem data-l10n-id="sidebar-context-menu-open-in-private-window"
+              id="sidebar-synced-tabs-context-open-in-window"
+              data-bashkitten-unavailable="true" hidden="true"/>
+    <menuitem data-l10n-id="open-link-private"
               id="sidebar-synced-tabs-context-open-in-private-window"/>
     <menuseparator/>
     <menuitem data-l10n-id="sidebar-context-menu-close-remote-tab"
@@ -491,8 +498,9 @@
       <menupopup id="sidebar-bookmarks-context-container-tab-popup"/>
     </menu>
     <menuitem data-l10n-id="sidebar-context-menu-open-in-window"
-              id="sidebar-bookmarks-context-open-in-window"/>
-    <menuitem data-l10n-id="sidebar-context-menu-open-in-private-window"
+              id="sidebar-bookmarks-context-open-in-window"
+              data-bashkitten-unavailable="true" hidden="true"/>
+    <menuitem data-l10n-id="open-link-private"
               id="sidebar-bookmarks-context-open-in-private-window"/>
     <menuitem data-l10n-id="places-show-in-folder"
               id="sidebar-bookmarks-context-show-in-folder"/>
@@ -545,7 +553,8 @@
     <menuitem id="toolbar-context-report-extension"
               data-lazy-l10n-id="toolbar-context-menu-report-extension"
               contexttype="toolbaritem"
-              class="customize-context-reportExtension"/>
+              class="customize-context-reportExtension"
+              data-bashkitten-unavailable="true" hidden="true"/>
     <menuseparator/>
     <menuitem id="toolbar-context-openANewTab"
               contexttype="tabbar"
@@ -816,7 +825,8 @@
 
   <tooltip id="dynamic-shortcut-tooltip"/>
 
-  <menupopup id="SyncedTabsSidebarContext">
+  <menupopup id="SyncedTabsSidebarContext"
+            data-bashkitten-unavailable="true" hidden="true">
     <menuitem data-lazy-l10n-id="synced-tabs-context-open"
               id="syncedTabsOpenSelected" where="current"/>
     <menuitem data-lazy-l10n-id="synced-tabs-context-open-in-tab"
@@ -844,7 +854,8 @@
               id="syncedTabsRefresh"/>
   </menupopup>
   <menupopup id="SyncedTabsSidebarTabsFilterContext"
-             class="textbox-contextmenu">
+             class="textbox-contextmenu"
+            data-bashkitten-unavailable="true" hidden="true">
     <menuitem data-l10n-id="text-action-undo"
               cmd="cmd_undo"/>
     <menuseparator/>
@@ -929,7 +940,8 @@
               id="unified-extensions-context-menu-remove-extension"/>
     <menuitem data-lazy-l10n-id="unified-extensions-context-menu-report-extension"
               class="unified-extensions-context-menu-report-extension"
-              id="unified-extensions-context-menu-report-extension"/>
+              id="unified-extensions-context-menu-report-extension"
+              data-bashkitten-unavailable="true" hidden="true"/>
   </menupopup>
 
   <menupopup id="full-page-translations-panel-settings-menupopup">

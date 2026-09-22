@@ -410,6 +410,9 @@ const PanelUI = {
   onCommand(aEvent) {
     let { target } = aEvent;
     switch (target.id) {
+      case "appMenu-new-private-tab-button":
+        openTrustedLinkIn("about:blank", "tab", { private: true });
+        break;
       case "appMenu-update-banner":
         this._onBannerItemSelected(aEvent);
         break;
@@ -789,7 +792,7 @@ const PanelUI = {
       fragment.insertBefore(
         helpPolicySupport,
         fragment.querySelector("#appMenu_menu_HelpPopup_reportPhishingtoolmenu")
-          .nextSibling
+          ?.nextSibling ?? null
       );
     }
 

@@ -37,12 +37,13 @@
       <toolbartabstop/>
       <hbox id="TabsToolbar-customization-target" flex="1">
         <toolbarbutton id="firefox-view-button"
+                       data-bashkitten-unavailable="true"
                        class="toolbarbutton-1 chromeclass-toolbar-additional"
                        data-l10n-id="toolbar-button-firefox-view-2"
                        role="button"
                        aria-pressed="false"
                        cui-areatype="toolbar"
-                       removable="true"/>
+                       removable="true" hidden="true"/>
 
         <tabs id="tabbrowser-tabs"
               is="tabbrowser-tabs"
@@ -477,14 +478,15 @@
         </box>
       </toolbarbutton>
 
-      <toolbarbutton id="fxa-toolbar-menu-button" class="toolbarbutton-1 chromeclass-toolbar-additional subviewbutton-nav"
+      <toolbarbutton id="fxa-toolbar-menu-button"
+                     data-bashkitten-unavailable="true" class="toolbarbutton-1 chromeclass-toolbar-additional subviewbutton-nav"
                      badged="true"
                      delegatesanchor="true"
                      consumeanchor="fxa-toolbar-menu-button"
                      closemenu="none"
                      data-l10n-id="toolbar-button-account"
                      cui-areatype="toolbar"
-                     removable="true">
+                     removable="true" hidden="true">
                     <hbox align="center">
                       <div class="avatar-container">
                         <image id="fxa-avatar-image"/>
@@ -510,14 +512,16 @@
                     removable="false" overflows="false"/>
 
     <toolbaritem id="smartwindow-ask-button"
+                 data-bashkitten-unavailable="true"
                  class="chromeclass-toolbar-additional"
                  hidden="true"
                  overflows="false"
                  removable="false">
       <toolbarbutton id="smartwindow-ask-button-inner"
+                      data-bashkitten-unavailable="true"
                       class="toolbarbutton-1"
                       aria-expanded="false"
-                      data-l10n-id="smartwindow-ask-button">
+                      data-l10n-id="smartwindow-ask-button" hidden="true">
       </toolbarbutton>
     </toolbaritem>
 
@@ -614,10 +618,11 @@
                    class="toolbarbutton-1 chromeclass-toolbar-additional"
                    data-l10n-id="browser-import-button2"/>
 
-    <toolbarbutton id="new-window-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
+    <toolbarbutton id="new-window-button"
+                   data-bashkitten-unavailable="true" class="toolbarbutton-1 chromeclass-toolbar-additional"
                    data-l10n-id="appmenuitem-new-window"
                    command="cmd_newNavigator"
-                   tooltip="dynamic-shortcut-tooltip"/>
+                   tooltip="dynamic-shortcut-tooltip" hidden="true"/>
 
     <toolbarbutton id="fullscreen-button" class="toolbarbutton-1 chromeclass-toolbar-additional"
                    observes="View:FullScreen"

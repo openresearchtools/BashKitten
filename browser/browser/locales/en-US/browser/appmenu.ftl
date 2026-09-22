@@ -151,16 +151,16 @@ profiler-popup-button-capturing =
   .label = Profiler
   .tooltiptext = The profiler is capturing a profile
 
-profiler-popup-header-text = { -profiler-brand-name }
+profiler-popup-header-text = Profiler
 
 profiler-popup-reveal-description-button =
   .aria-label = Reveal more information
 
 profiler-popup-description-title =
-  .value = Record, analyze, share
+  .value = Record performance
 
 profiler-popup-description =
-  Collaborate on performance issues by publishing profiles to share with your team.
+  Save recordings to a local profile file for analysis.
 
 profiler-popup-learn-more-button =
   .label = Learn more
@@ -181,7 +181,7 @@ profiler-popup-discard-button =
   .label = Discard
 
 profiler-popup-capture-button =
-  .label = Capture
+  .label = Save profile…
 
 profiler-popup-start-shortcut =
   { PLATFORM() ->

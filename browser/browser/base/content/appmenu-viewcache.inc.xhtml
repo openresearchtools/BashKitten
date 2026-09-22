@@ -7,16 +7,19 @@
              lockpanelvertical="true">
     <vbox class="panel-subview-body">
       <vbox id="appMenu-addon-banners"/>
-      <toolbarbutton id="appMenu-update-banner" class="panel-banner-item subviewbutton"
+      <toolbarbutton id="appMenu-update-banner"
+                     data-bashkitten-unavailable="true" class="panel-banner-item subviewbutton"
                      wrap="true"
                      hidden="true"/>
 
       <toolbaritem id="appMenu-menu-message"
-                   closemenu="none">
+                   data-bashkitten-unavailable="true"
+                   closemenu="none" hidden="true">
       </toolbaritem>
       <toolbaritem id="appMenu-fxa-status2"
+                   data-bashkitten-unavailable="true"
                    closemenu="none"
-                   class="subviewbutton toolbaritem-combined-buttons">
+                   class="subviewbutton toolbaritem-combined-buttons" hidden="true">
         <html:div id="appMenu-fxa-text" data-l10n-id="appmenu-fxa-sync-and-save-data2"/>
         <toolbarbutton id="appMenu-fxa-label2"
                       class="subviewbutton"
@@ -30,43 +33,53 @@
         </toolbarbutton>
       </toolbaritem>
       <toolbarbutton id="appMenu-empty-profiles-button"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton subviewbutton-nav"
                      closemenu="none"
                      data-l10n-id="appmenu-profiles-2"
                      hidden="true"/>
       <toolbarbutton id="appMenu-profiles-button"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton subviewbutton-nav subviewbutton-iconic"
                      closemenu="none"
                      hidden="true"/>
-      <toolbarseparator id="appMenu-fxa-separator" class="proton-zap"/>
+      <toolbarseparator id="appMenu-fxa-separator"
+                        data-bashkitten-unavailable="true" class="proton-zap" hidden="true"/>
       <toolbarbutton id="appMenu-new-tab-button2"
                      class="subviewbutton"
                      data-l10n-id="appmenuitem-new-tab"
                      key="key_newNavigatorTab"
                      command="cmd_newNavigatorTab"/>
+      <toolbarbutton id="appMenu-new-private-tab-button"
+                     class="subviewbutton"
+                     data-l10n-id="new-private-tab"/>
       <toolbarbutton id="appMenu-new-window-button2"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton"
                      data-l10n-id="appmenuitem-new-window"
                      key="key_newNavigator"
-                     command="cmd_newNavigator"/>
+                     command="cmd_newNavigator" hidden="true"/>
       <toolbarbutton id="appMenu-new-ai-window-button"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton"
                      command="Tools:AIWindow"
-                     aria-describedby="appMenu-new-ai-window-badge">
+                     aria-describedby="appMenu-new-ai-window-badge" hidden="true">
         <label class="toolbarbutton-text" crop="end"
                data-l10n-id="appmenuitem-new-ai-window"/>
         <html:moz-badge id="appMenu-new-ai-window-badge"
                         type="beta"/>
       </toolbarbutton>
       <toolbarbutton id="appMenu-new-classic-window-button"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton"
                      data-l10n-id="appmenuitem-new-classic-window"
-                     command="Tools:ClassicWindow"/>
+                     command="Tools:ClassicWindow" hidden="true"/>
       <toolbarbutton id="appMenu-new-private-window-button2"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton"
                      data-l10n-id="appmenuitem-new-private-window"
                      key="key_privatebrowsing"
-                     command="Tools:PrivateBrowsing"/>
+                     command="Tools:PrivateBrowsing" hidden="true"/>
       <toolbarseparator/>
       <toolbarbutton id="appMenu-bookmarks-button"
                      class="subviewbutton subviewbutton-nav"
@@ -85,9 +98,10 @@
                      hidden="true"
                      />
       <toolbarbutton id="appMenu-chats-history-button"
+                     data-bashkitten-unavailable="true"
                      class="subviewbutton"
                      data-l10n-id="menu-history-chats"
-                     command="Tools:ChatsHistory"/>
+                     command="Tools:ChatsHistory" hidden="true"/>
       <toolbarbutton id="appMenu-downloads-button"
                      class="subviewbutton"
                      data-l10n-id="appmenuitem-downloads"
@@ -165,6 +179,7 @@
                      closemenu="none"
                      />
       <toolbarbutton id="appMenu-report-broken-site-button"
+                     data-bashkitten-unavailable="true"
                      hidden="true"
                      class="subviewbutton subviewbutton-nav"
                      data-l10n-id="appmenuitem-report-broken-site"
@@ -200,10 +215,10 @@
                      closemenu="none"
                      />
       <toolbarbutton id="appMenuRecentlyClosedWindows"
+                     data-bashkitten-unavailable="true"
                      data-l10n-id="appmenu-recently-closed-windows"
                      class="subviewbutton subviewbutton-nav"
-                     closemenu="none"
-                     />
+                     closemenu="none" hidden="true"/>
       <toolbarbutton id="appMenuSearchHistory"
                      data-l10n-id="appmenu-search-history"
                      class="subviewbutton"
@@ -239,8 +254,9 @@
   </panelview>
 
   <panelview id="PanelUI-profiles"
+             data-bashkitten-unavailable="true"
              flex="1"
-             has-custom-header="true">
+             has-custom-header="true" hidden="true">
     <box id="PanelUI-profiles-header"
          class="panel-header panel-header-with-additional-element">
       <toolbarbutton class="subviewbutton subviewbutton-iconic subviewbutton-back"
@@ -345,9 +361,10 @@
         <description class="PanelUI-profiler-description" data-l10n-id="profiler-popup-description" />
         <hbox>
           <button id="PanelUI-profiler-learn-more"
+                  data-bashkitten-unavailable="true"
                   class="PanelUI-profiler-button-link text-link"
                   tabindex="-1"
-                  data-l10n-id="profiler-popup-learn-more-button" />
+                  data-l10n-id="profiler-popup-learn-more-button" hidden="true"/>
         </hbox>
       </vbox>
     </vbox>
@@ -469,7 +486,8 @@
     </vbox>
   </panelview>
 
-  <panelview id="PanelUI-remotetabs" class="PanelUI-subView">
+  <panelview id="PanelUI-remotetabs"
+             data-bashkitten-unavailable="true" class="PanelUI-subView" hidden="true">
     <vbox class="panel-subview-body">
       <!-- this widget has 3 boxes in the body, but only 1 is ever visible -->
       <!-- When Sync is ready to sync -->
@@ -602,7 +620,8 @@
     </vbox>
   </panelview>
 
-  <panelview id="PanelUI-fxa" class="PanelUI-subView">
+  <panelview id="PanelUI-fxa"
+             data-bashkitten-unavailable="true" class="PanelUI-subView" hidden="true">
     <vbox id="PanelUI-fxa-menu" class="panel-subview-body">
       <toolbaritem id="PanelUI-fxa-menu-message"
                    closemenu="none">
@@ -758,7 +777,8 @@
   </panelview>
 
   <!-- This panelview is used to contain the dynamically created buttons for send tab to devices -->
-  <panelview id="PanelUI-sendTabToDevice" class="PanelUI-subView">
+  <panelview id="PanelUI-sendTabToDevice" class="PanelUI-subView"
+            data-bashkitten-unavailable="true" hidden="true">
     <vbox class="panel-subview-body">
       <toolbarbutton id="PanelUI-sendTabToDevice-syncingDevices" class="subviewbutton subviewbutton-iconic pageAction-sendToDevice-notReady"
                      data-l10n-id="fxa-menu-send-tab-to-device-syncnotready"
@@ -766,7 +786,8 @@
     </vbox>
   </panelview>
 
-  <panelview id="PanelUI-fxa-menu-sendtab-sign-in" class="PanelUI-subView">
+  <panelview id="PanelUI-fxa-menu-sendtab-sign-in" class="PanelUI-subView"
+            data-bashkitten-unavailable="true" hidden="true">
     <vbox id="PanelUI-fxa-sendtab-sign-in" class="panel-subview-body">
       <toolbarbutton id="PanelUI-fxa-menu-sendtab-sign-in-button" class="subviewbutton panel-subview-footer-button"
                      data-l10n-id="fxa-menu-send-to-mobile-sign-in"
@@ -774,7 +795,8 @@
     </vbox>
   </panelview>
 
-  <panelview id="PanelUI-fxa-menu-sendtab-enable-sync" class="PanelUI-subView">
+  <panelview id="PanelUI-fxa-menu-sendtab-enable-sync" class="PanelUI-subView"
+            data-bashkitten-unavailable="true" hidden="true">
     <vbox id="PanelUI-fxa-sendtab-enable-sync" class="panel-subview-body">
       <toolbarbutton id="PanelUI-fxa-menu-sendtab-enable-sync-button" class="subviewbutton panel-subview-footer-button"
                      data-l10n-id="fxa-menu-send-to-mobile-turn-on-sync"
@@ -782,7 +804,8 @@
     </vbox>
   </panelview>
 
-  <panelview id="PanelUI-fxa-menu-sendtab-verify-account" class="PanelUI-subView">
+  <panelview id="PanelUI-fxa-menu-sendtab-verify-account" class="PanelUI-subView"
+            data-bashkitten-unavailable="true" hidden="true">
     <vbox id="PanelUI-fxa-sendtab-verify-account" class="panel-subview-body">
       <toolbarbutton id="PanelUI-fxa-menu-sendtab-unverified-button" disabled="true" class="subviewbutton panel-subview-footer-button"
                      data-l10n-id="fxviewtabrow-send-to-mobile-not-verified"
@@ -794,7 +817,8 @@
     </vbox>
   </panelview>
 
-  <panelview id="PanelUI-fxa-menu-sendtab-connect-phone" class="PanelUI-subView">
+  <panelview id="PanelUI-fxa-menu-sendtab-connect-phone" class="PanelUI-subView"
+            data-bashkitten-unavailable="true" hidden="true">
     <vbox id="PanelUI-fxa-sendtab-connect-phone" class="panel-subview-body">
       <toolbarbutton id="PanelUI-fxa-menu-sendtab-connect-phone-button" class="subviewbutton panel-subview-footer-button"
                      data-l10n-id="fxa-menu-send-to-mobile-connect-device"
@@ -807,7 +831,8 @@
   </panelview>
 
   <!-- This panelview holds the list of "inactive" tabs for devices -->
-  <panelview id="PanelUI-fxa-menu-inactive-tabs" class="PanelUI-subView PanelUI-remotetabs-clientcontainer">
+  <panelview id="PanelUI-fxa-menu-inactive-tabs" class="PanelUI-subView PanelUI-remotetabs-clientcontainer"
+            data-bashkitten-unavailable="true" hidden="true">
     <label itemtype="client">
     </label>
     <vbox class="panel-subview-body">
@@ -871,9 +896,10 @@
   </panelview>
 
   <panelview id="PanelUI-ipprotection"
+             data-bashkitten-unavailable="true"
              class="PanelUI-subView"
              mainview-with-header="true"
-             has-custom-header="true">
+             has-custom-header="true" hidden="true">
     <hbox id="PanelUI-ipprotection-header"
          class="panel-header panel-header-with-info-button">
         <html:h1>
@@ -899,9 +925,10 @@
   </panelview>
 
   <panelview id="PanelUI-ipprotection-locations"
+             data-bashkitten-unavailable="true"
              class="PanelUI-subView"
              data-l10n-id="ipprotection-locations-subview"
-             data-l10n-attrs="title">
+             data-l10n-attrs="title" hidden="true">
     <hbox id="PanelUI-ipprotection-locations-header"
          class="panel-header">
       <html:h1>
@@ -912,7 +939,8 @@
     <vbox id="PanelUI-ipprotection-locations-content" class="panel-subview-body"/>
   </panelview>
 
-  <panelview id="ai-window-toggle-view" class="PanelUI-subView">
+  <panelview id="ai-window-toggle-view"
+             data-bashkitten-unavailable="true" class="PanelUI-subView" hidden="true">
     <vbox class="panel-subview-body">
       <toolbarbutton id="ai-window-switch-classic"
                     class="subviewbutton"

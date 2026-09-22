@@ -21,7 +21,7 @@ places-open-in-window =
   .label = Open in New Window
   .accesskey = N
 places-open-in-private-window =
-  .label = Open in New Private Window
+  .label = Open in New Private Tab
   .accesskey = P
 
 places-empty-bookmarks-folder =

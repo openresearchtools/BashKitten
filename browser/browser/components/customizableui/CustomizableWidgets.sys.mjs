@@ -597,7 +597,10 @@ if (
   });
 }
 
-if (Services.prefs.getBoolPref("identity.fxaccounts.enabled")) {
+if (
+  AppConstants.MOZ_APP_NAME != "bashkitten" &&
+  Services.prefs.getBoolPref("identity.fxaccounts.enabled")
+) {
   CustomizableWidgets.push({
     id: "sync-button",
     l10nId: "toolbar-button-synced-tabs",
@@ -782,7 +785,10 @@ if (AppConstants.platform == "macosx") {
 }
 CustomizableWidgets.push(preferencesButton);
 
-if (Services.prefs.getBoolPref("privacy.panicButton.enabled")) {
+if (
+  AppConstants.MOZ_APP_NAME != "bashkitten" &&
+  Services.prefs.getBoolPref("privacy.panicButton.enabled")
+) {
   CustomizableWidgets.push({
     id: "panic-button",
     type: "view",
@@ -859,11 +865,17 @@ if (Services.prefs.getBoolPref("privacy.panicButton.enabled")) {
 if (PrivateBrowsingUtils.enabled) {
   CustomizableWidgets.push({
     id: "privatebrowsing-button",
-    l10nId: "toolbar-button-new-private-window",
-    shortcutId: "key_privatebrowsing",
+    l10nId:
+      AppConstants.MOZ_APP_NAME == "bashkitten"
+        ? "new-private-tab"
+        : "toolbar-button-new-private-window",
     onCommand(e) {
       let win = e.target.documentGlobal;
-      win.OpenBrowserWindow({ private: true });
+      if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+        win.openTrustedLinkIn("about:blank", "tab", { private: true });
+      } else {
+        win.OpenBrowserWindow({ private: true });
+      }
     },
   });
 }

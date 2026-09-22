@@ -10,6 +10,34 @@ var { XPCOMUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"
 );
 
+// Keep the upstream controller anchors, but never offer controls for services
+// or additional windows/profiles that this product does not provide. Menus and
+// panel views are also created lazily, so apply this after their own setup.
+function updateBashKittenMenus() {
+  if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+    return;
+  }
+  for (const node of document.querySelectorAll(
+    '[data-bashkitten-unavailable], [is="moz-support-link"]'
+  )) {
+    node.hidden = true;
+    node.setAttribute("disabled", "true");
+    node.style.setProperty("display", "none", "important");
+    if (node.parentElement?.localName == "toolbarpaletteitem") {
+      node.parentElement.hidden = true;
+    }
+  }
+}
+
+if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+  document.addEventListener("DOMContentLoaded", updateBashKittenMenus, {
+    once: true,
+  });
+  document.addEventListener("popupshowing", updateBashKittenMenus);
+  document.addEventListener("ViewShowing", updateBashKittenMenus);
+  document.addEventListener("customizationready", updateBashKittenMenus);
+}
+
 ChromeUtils.defineESModuleGetters(this, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
   AIWindow:
@@ -356,6 +384,14 @@ function isBidiEnabled() {
 }
 
 function openAboutDialog() {
+  const browserWindow = BrowserWindowTracker.getTopWindow();
+  if (
+    AppConstants.MOZ_APP_NAME == "bashkitten" &&
+    browserWindow?.BashKittenAgent
+  ) {
+    browserWindow.BashKittenAgent.about();
+    return;
+  }
   for (let win of Services.wm.getEnumerator("Browser:About")) {
     // Only open one about window (Bug 599573)
     if (win.closed) {
@@ -492,6 +528,14 @@ function openSwitchingDevicesPage() {
 }
 
 function buildHelpMenu() {
+  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    updateBashKittenMenus();
+    document.getElementById("helpSafeMode").disabled =
+      !Services.policies.isAllowed("safeMode");
+    document.getElementById("troubleShooting").disabled =
+      !Services.policies.isAllowed("aboutSupport");
+    return;
+  }
   document.getElementById("feedbackPage").disabled =
     !Services.policies.isAllowed("feedbackCommands");
 
@@ -549,6 +593,9 @@ function makeURLAbsolute(aBase, aUrl) {
 }
 
 function getHelpLinkURL(aHelpTopic) {
+  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    return "https://github.com/openresearchtools/bashkitten#readme";
+  }
   var url = Services.urlFormatter.formatURLPref("app.support.baseURL");
   return url + aHelpTopic;
 }
