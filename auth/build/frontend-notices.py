@@ -43,6 +43,15 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-web-source-') as temporary:
             continue
         files = [p for p in directory.iterdir() if p.is_file() and p.name.lower().startswith(('license', 'licence', 'notice', 'copying', 'copyright', 'authors'))]
         license_files = [p for p in files if p.name.lower().startswith(('license', 'licence', 'copying'))]
+        # Some npm authors (including agent-base 6) publish their complete MIT
+        # grant and copyright in README, without a separate LICENSE file.
+        if not license_files:
+            for path in directory.glob('*'):
+                if path.is_file() and path.name.lower().startswith('readme'):
+                    text = path.read_text(errors='replace')
+                    if 'permission is hereby granted, free of charge' in text.lower() and 'the software is provided' in text.lower() and 'copyright' in text.lower():
+                        files.append(path)
+                        license_files.append(path)
         if not license_files:
             raise SystemExit(f'Missing production frontend license text for {name}')
         (notices / destination).mkdir(parents=True, exist_ok=True)

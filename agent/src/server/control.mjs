@@ -47,7 +47,13 @@ function spawnManager(detached) {
   return child;
 }
 export async function ensureManager() {
-  try { await socketRequest(controlSocket, '/status', undefined, 3000); return; } catch {}
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try {
+      const existing = await socketRequest(controlSocket, '/status', undefined, 3000);
+      if (!existing.manager?.exiting) return;
+      await sleep(100);
+    } catch { break; }
+  }
   if (process.env.BASHKITTEN_NO_AUTOSTART === '1') throw Error('The Termux controller is starting; retry after setup');
   await privateDir(path.dirname(controlSocket));
   const child = spawnManager(true); child.unref();
@@ -147,7 +153,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 2, platform, manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
+    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
       packages: { ...await updateStatus(), job: await jobs.status() },
       web: { status: stopping ? 'stopping' : starting ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
         desired: state.web, url: stack.ready ? stack.origin : undefined, error: lastError, ...await stack.status() },
@@ -162,6 +168,7 @@ async function serve() {
   }
   async function action(command, value = {}) {
     if (command === 'status') return status();
+    if (exiting) throw Error('Agent controller is completing shutdown; retry Turn on');
     if (command === 'get_remote_access') return remote.status();
     if (command === 'set_remote_access') return remote.setEnabled(value.enabled);
     if (command === 'create_remote_connection') return remote.create(value);

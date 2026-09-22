@@ -245,7 +245,7 @@ async function terminate(child) {
 }
 export function verifiedHttps(origin, ca) {
   return new Promise(resolve => {
-    const req = https.get(origin + '/licenses.json', { ca, rejectUnauthorized: true }, res => { res.resume(); resolve(res.statusCode === 200); });
+    const req = https.get(origin + '/.well-known/bashkitten-ca', { ca, rejectUnauthorized: true }, res => { res.resume(); resolve(res.statusCode === 200); });
     req.setTimeout(2000, () => req.destroy()); req.on('error', () => resolve(false));
   });
 }

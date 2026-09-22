@@ -40,6 +40,7 @@ else
   "$root/auth/build/authelia-go.sh" "$work/source" "$output/bin/authelia"
   cc -std=c11 -Wall -Wextra -Werror -O2 "$root/agent/src/server/access/runtime-guard.c" -o "$output/bin/runtime-guard"
   python3 "$root/auth/build/go-notices.py" "$work/source" "$output" authelia
+  install -Dm644 "$work/source/LICENSE" "$output/share/licenses/authelia/LICENSE"
   cp -a "$work/source/.bashkitten-frontend/share" "$output/"
   "$output/bin/authelia" --version
   (

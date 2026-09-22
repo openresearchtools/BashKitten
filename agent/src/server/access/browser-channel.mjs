@@ -36,13 +36,13 @@ function deliver(channel) {
 function targetFor(sessionId) {
   const selected = bindings.get(sessionId);
   if (selected) {
-    const channel = [...channels.values()].find(item => item.clientId === selected.clientId && item.key === selected.key);
+    const channel = [...channels.values()].find(item => item.clientId === selected.clientId && item.owner === selected.owner);
     if (!channel) throw failure('Reconnect and allow this browser again');
     return channel;
   }
   if (channels.size !== 1) throw failure(channels.size ? 'Choose the browser for this chat' : 'Open BashKitten and allow browser control');
   const channel = channels.values().next().value;
-  bindings.set(sessionId, { clientId: channel.clientId, key: channel.key });
+  bindings.set(sessionId, { clientId: channel.clientId, owner: channel.owner });
   return channel;
 }
 function dispatch(sessionId, command) {
@@ -91,7 +91,7 @@ export async function handleBrowserChannel(req, res, record, route) {
     if (!['linux', 'android'].includes(input.platform) || typeof input.clientId !== 'string' || input.clientId.length > 128) throw Error('Invalid browser identity');
     for (const old of channels.values()) if (old.clientId === input.clientId && old.key === record.key) close(old);
     if (channels.size >= 16) throw Error('Too many browser connections');
-    const channel = { id: randomUUID(), clientId: input.clientId, key: record.key, platform: input.platform,
+    const channel = { id: randomUUID(), clientId: input.clientId, key: record.key, owner: record.username, platform: input.platform,
       name: String(input.name || 'Browser').slice(0, 100), capabilities: input.capabilities || {}, queue: [], pending: new Map() };
     channel.unwatch = watch(record, () => close(channel, 'Browser authentication expired'));
     channels.set(channel.id, channel); touch(channel); json(res, { channelId: channel.id }); return true;
@@ -102,7 +102,7 @@ export async function handleBrowserChannel(req, res, record, route) {
   if (operation === 'close') { close(channel); json(res, { ok: true }); }
   else if (operation === 'bind') {
     if (!sessionPattern.test(input.sessionId)) throw Error('Invalid Pi session');
-    bindings.set(input.sessionId, { clientId: channel.clientId, key: channel.key }); json(res, { ok: true });
+    bindings.set(input.sessionId, { clientId: channel.clientId, owner: channel.owner }); json(res, { ok: true });
   } else if (operation === 'result') {
     const pending = channel.pending.get(input.id);
     if (!pending) throw Error('Browser command is no longer pending');

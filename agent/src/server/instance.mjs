@@ -54,7 +54,7 @@ export async function probeBackend(info) {
   } catch { return null; }
   return new Promise(resolve => {
     // Verify the saved CA and hostname before sending any credentials.
-    const req = https.get(info.url + '/licenses.json', { ca: info.identity.caPem, rejectUnauthorized: true }, res => {
+    const req = https.get(info.url + '/.well-known/bashkitten-ca', { ca: info.identity.caPem, rejectUnauthorized: true }, res => {
       res.resume();
       res.on('end', () => resolve(res.statusCode === 200 ? info : null));
       res.on('error', () => resolve(null));

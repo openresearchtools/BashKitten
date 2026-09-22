@@ -11,10 +11,35 @@ permissions:
   contents: read
 
 concurrency:
-  group: auth-native-${{ github.ref }}-${{ github.event_name }}
+  group: auth-native-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
+  guard:
+    name: Runtime guard · ${{ matrix.architecture }}
+    strategy:
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: agent/src/server/access
+      - name: Build lifecycle guard independently of the web assets
+        run: |
+          mkdir -p "$RUNNER_TEMP/guard/bin"
+          cc -std=c11 -Wall -Wextra -Werror -O2 agent/src/server/access/runtime-guard.c -o "$RUNNER_TEMP/guard/bin/runtime-guard"
+          tar -C "$RUNNER_TEMP/guard" -czf "$RUNNER_TEMP/runtime-guard.tar.gz" bin
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-guard-linux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/runtime-guard.tar.gz
+          if-no-files-found: error
+          retention-days: 14
   component:
     name: ${{ matrix.component }} · ${{ matrix.target }}
     strategy:
@@ -64,12 +89,27 @@ jobs:
             ~/.local/share/pnpm/store
             ~/.cache/bashkitten-termux
           key: auth-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles('auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'auth/authelia/web/pnpm-lock.yaml') }}
+      - uses: actions/cache@v4
+        id: payload
+        with:
+          path: ${{ runner.temp }}/payload
+          key: auth-payload-${{ matrix.runner }}-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles(format('auth/{0}/**', matrix.component), 'auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml') }}
       - name: Build tracked source for the target ABI
+        if: steps.payload.outputs.cache-hit != 'true'
         env:
           COMPONENT: ${{ matrix.component }}
           TARGET: ${{ matrix.target }}
+          BASHKITTEN_BUILD_LOG_DIR: ${{ runner.temp }}/build-logs
         run: |
           auth/build/"$COMPONENT".sh "$TARGET" "$RUNNER_TEMP/payload"
+      - name: Retain failed native configure logs
+        if: failure() && matrix.target == 'termux-aarch64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-build-logs-${{ matrix.component }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/build-logs
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Check native ELF compatibility
         env:
           COMPONENT: ${{ matrix.component }}

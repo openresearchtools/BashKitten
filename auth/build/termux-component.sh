@@ -23,8 +23,17 @@ PY
 work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/bashkitten-termux-$component.XXXXXX")
 container="bashkitten-$component-${GITHUB_RUN_ID:-build}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 cleanup() {
+  local status=$?
+  if (( status != 0 )); then
+    local diagnostics="${BASHKITTEN_BUILD_LOG_DIR:-${RUNNER_TEMP:-/tmp}/bashkitten-build-logs}/$component-termux"
+    mkdir -p "$diagnostics"
+    # Configure diagnostics belong to failed-build artifacts, never the payload.
+    docker exec "$container" bash -c 'find /home/builder/.termux-build -maxdepth 5 -type f -name config.log -print0 | tar --null -T - -czf -' \
+      > "$diagnostics/config-logs.tar.gz" || true
+  fi
   docker rm -f "$container" >/dev/null 2>&1 || true
   rm -rf "$work"
+  return "$status"
 }
 trap cleanup EXIT
 git -C "$work" init -q
@@ -36,6 +45,21 @@ package="bashkitten-$component-native"
 mkdir -p "$work/packages/$package" "$work/bashkitten-sources/$component"
 cp -a "$recipe/." "$work/packages/$package/"
 cp -a "$source_dir/." "$work/bashkitten-sources/$component/"
+# buildorder.py reads dependency declarations statically; it does not follow
+# shell source commands. Flatten the pinned recipe before our overrides so the
+# upstream dependency resolver sees every native build/runtime dependency.
+if [[ -f "$recipe/upstream-build.sh" ]]; then
+  python3 - "$recipe" "$work/packages/$package/build.sh" <<'PY'
+from pathlib import Path
+import sys
+recipe, output = map(Path, sys.argv[1:])
+overrides = (recipe / 'build.sh').read_text()
+include = 'source "$TERMUX_PKG_BUILDER_DIR/upstream-build.sh"\n'
+if overrides.count(include) != 1:
+    raise SystemExit('Expected exactly one upstream recipe include')
+output.write_text((recipe / 'upstream-build.sh').read_text() + '\n' + overrides.replace(include, ''))
+PY
+fi
 # The upstream builder still applies its patches/toolchain/ELF checks. Only its
 # network source download is replaced with this release's checked-in source.
 cat >> "$work/packages/$package/build.sh" <<EOF
@@ -55,7 +79,7 @@ export TERMUX_DOCKER_EXEC_EXTRA_ARGS='--env BASHKITTEN_SOURCE_ROOT=/bashkitten -
 )
 # Upstream records the versions actually extracted into its target sysroot in
 # .built-packages; it does not install that sysroot using the host dpkg database.
-docker exec -i "$container" python3 - <<'PY'
+docker exec -i "$container" python3 - > "$work/bashkitten-dependencies.json" <<'PY'
 import hashlib, json, pathlib, subprocess
 records = []
 markers = pathlib.Path('/data/data/.built-packages')
@@ -66,7 +90,7 @@ archives = []
 for path in sorted(pathlib.Path('/home/builder/.termux-build').glob('_cache-*/*.deb')):
     values = subprocess.check_output(['dpkg-deb', '-f', str(path), 'Package', 'Version', 'Architecture'], text=True)
     archives.append({'file': path.name, 'fields': values.strip(), 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
-pathlib.Path('/home/builder/termux-packages/bashkitten-dependencies.json').write_text(json.dumps({'sysrootPackages': records, 'dependencyArchives': archives}, indent=2) + '\n')
+print(json.dumps({'sysrootPackages': records, 'dependencyArchives': archives}, indent=2))
 PY
 mapfile -t packages < <(find "$work/output" -maxdepth 1 -name "${package}_*_aarch64.deb" -type f)
 [[ ${#packages[@]} == 1 ]] || { echo 'Expected exactly one native component package.' >&2; exit 1; }
@@ -77,9 +101,10 @@ prefix="$work/unpacked/data/data/com.termux/files/usr"
 test -x "$prefix/lib/bashkitten/auth/bin/$component"
 cp -a "$prefix/lib/bashkitten/auth/." "$output/"
 cp "$work/bashkitten-dependencies.json" "$output/share/metadata/$component-termux-build-dependencies.json"
-if [[ -d "$prefix/share/$package" ]]; then
-  cp -a "$prefix/share/$package/." "$output/share/licenses/$component/"
+if [[ -d "$prefix/share/doc/$package" ]]; then
+  cp -a "$prefix/share/doc/$package/." "$output/share/licenses/$component/"
 fi
+install -Dm644 "$source_dir/LICENSE" "$output/share/licenses/$component/LICENSE"
 dpkg-deb -f "$deb" Depends > "$output/share/metadata/$component.dependencies"
 python3 - "$deb" "$output/share/metadata/$component-termux.json" "$component" "${pin[0]}" "${pin[1]}" <<'PY'
 import json, subprocess, sys

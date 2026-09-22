@@ -38,10 +38,6 @@ jobs:
             target: linux
             architecture: arm64
             component: linux-arm64
-          - runner: ubuntu-24.04
-            target: termux
-            architecture: aarch64
-            component: termux-aarch64
     runs-on: ${{ matrix.runner }}
     env:
       PI_TELEMETRY: '0'
@@ -65,22 +61,55 @@ jobs:
           name: search-runtime-${{ matrix.component }}
           path: inputs/search
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        if: matrix.target == 'linux'
         with:
           name: browser-linux-${{ matrix.architecture }}
           path: inputs/browser
       - name: Assemble complete native package
         run: |
-          arguments=()
-          if [ '${{ matrix.target }}' = linux ]; then arguments+=(--browser-dir inputs/browser); fi
           python3 agent/packaging/build.py '${{ matrix.target }}' \
             --architecture '${{ matrix.architecture }}' --output dist \
             --auth-archive 'inputs/auth/auth-${{ matrix.component }}.tar.gz' \
             --search-archive 'inputs/search/search-runtime-${{ matrix.component }}.tar.zst' \
-            "${arguments[@]}"
+            --browser-dir inputs/browser
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: bashkitten-${{ matrix.component }}-candidate
+          path: dist/
+          if-no-files-found: error
+          compression-level: 0
+  termux:
+    needs: [auth, search]
+    runs-on: ubuntu-24.04
+    env:
+      PI_TELEMETRY: '0'
+      PI_OFFLINE: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+      - name: Install assembly tools
+        run: sudo apt-get update && sudo apt-get install -y zstd python3
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: auth-termux-aarch64
+          path: inputs/auth
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: search-runtime-termux-aarch64
+          path: inputs/search
+      - name: Assemble native Termux package
+        run: |
+          python3 agent/packaging/build.py termux \
+            --architecture aarch64 --output dist \
+            --auth-archive inputs/auth/auth-termux-aarch64.tar.gz \
+            --search-archive inputs/search/search-runtime-termux-aarch64.tar.zst
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: bashkitten-termux-aarch64-candidate
           path: dist/
           if-no-files-found: error
           compression-level: 0
@@ -109,7 +138,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
   complete:
-    needs: [auth, search, browser, android, packages, sources]
+    needs: [auth, search, browser, android, packages, termux, sources]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

@@ -42,6 +42,8 @@ def fetch(record: dict, cache: Path) -> Path:
 
 def notices(path: Path) -> list[tuple[str, bytes]]:
     found = []
+    if path.suffix == ".txt":
+        return [(path.name, path.read_bytes())]
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as archive:
             for entry in archive.infolist():
@@ -97,8 +99,10 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
     shutil.copytree(ROOT / "build", source / "build")
     for name in ("src", "third_party"):
         shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "pyproject.toml", "bashkitten-search"):
+    for name in ("LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "pyproject.toml", "bashkitten-search"):
         shutil.copy(ROOT / name, source / name)
+    for path in ROOT.glob("requirements-*.txt"):
+        shutil.copy(path, source / path.name)
     termux = target == "termux-aarch64"
     if termux:
         if not termux_native:
@@ -107,7 +111,10 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
         if not library.is_file():
             raise RuntimeError(f"native primp library missing: {library}")
         shutil.copy(library, site / library.name)
-        shutil.copytree(ROOT.parent / "packaging/termux/search", source / "termux-recipes")
+        recipes = ROOT.parent / "packaging/termux/search"
+        if not recipes.is_dir():
+            recipes = ROOT / "termux-recipes"
+        shutil.copytree(recipes, source / "termux-recipes")
     entries, texts = [], []
 
     def add_licenses(name: str, version: str, paths: list[Path], scope: str = "bundled") -> None:
@@ -167,7 +174,12 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
         files = list(pool.map(lambda item: fetch(item, cache), crates))
     for crate, path in zip(crates, files):
         shutil.copy(path, source_archives / path.name)
-        add_licenses(f"rust-{crate['name']}", crate["version"], [path], "primp-build-source")
+        license_paths = [path]
+        for record in lock.get("cargoLicenseSources", {}).get(f"{crate['name']}@{crate['version']}", []):
+            license_path = fetch(record, cache)
+            shutil.copy(license_path, source_archives / license_path.name)
+            license_paths.append(license_path)
+        add_licenses(f"rust-{crate['name']}", crate["version"], license_paths, "primp-build-source")
     (source / "cargo-sources.json").write_text(json.dumps(crates, indent=2) + "\n")
     if not termux:
         for extra in lock["extraSources"]:
@@ -180,13 +192,19 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
     if termux:
         distributions.extend([{"name": "lxml", "version": "6.1.3", "scope": "system", "package": "python-lxml"},
                               {"name": "pymupdf", "version": "1.28.0", "scope": "system", "package": "python-pymupdf"}])
+    recorded = ROOT / "manifest.json"
+    if recorded.is_file():
+        # Published source bundles are deliberately independent of a Git clone.
+        source_commit = json.loads(recorded.read_text())["sourceCommit"]
+    else:
+        source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     manifest = {"format": 1, "target": target, "platform": target, "python": lock["python"][target],
                 "pythonVersions": lock["pythonVersions"][target],
                 "version": "1.0.0", "ddgs": "9.16.0", "depends": dependencies, "aptDependencies": dependencies,
                 "packages": [{"name": item["name"], "version": item["version"]} for item in distributions],
                 "dependencies": {item["name"]: item["version"] for item in distributions},
                 "distributions": distributions, "lockSha256": digest(LOCK), "licenses": "licenses.json",
-                "sourceCommit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()}
+                "sourceCommit": source_commit}
     (runtime / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (runtime / "licenses.json").write_text(json.dumps({"format": 1, "components": entries}, indent=2) + "\n")
     (runtime / "LICENSES.txt").write_bytes(b"\n".join(texts))
