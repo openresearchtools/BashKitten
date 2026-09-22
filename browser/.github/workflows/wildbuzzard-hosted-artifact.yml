@@ -1,0 +1,640 @@
+name: WildBuzzard Ubuntu 24.04 artifact
+
+on:
+  workflow_dispatch:
+    inputs:
+      warm_gkrust:
+        description: Warm gkrust before starting the browser build
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  tor:
+    name: Build or reuse pinned Tor
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout WildBuzzard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source/wildbuzzard
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set Tor paths
+        id: paths
+        run: |
+          set -Eeuo pipefail
+          root="${RUNNER_TEMP}/wildbuzzard-component-cache/tor"
+          mkdir -p -- "${root}"
+          echo "root=${root}" >>"${GITHUB_OUTPUT}"
+
+      - name: Compute Tor build input digest
+        id: inputs
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          digest="$(
+            git -C "${source_root}" ls-files --stage -- \
+              third_party/tor \
+              wildbuzzard/third_party/tor.toml \
+              wildbuzzard/third_party/tor-notices \
+              wildbuzzard/scripts/build-tor-runtime.sh \
+              wildbuzzard/scripts/tor-runtime-provenance.py |
+              sha256sum | awk '{print $1}'
+          )"
+          test "${#digest}" -eq 64
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Restore pinned Tor artifact
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.paths.outputs.root }}/stage
+          key: wildbuzzard-tor-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.inputs.outputs.digest }}
+
+      - name: Install pinned Tor build dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config \
+            libssl-dev=3.0.13-0ubuntu3.15 libevent-dev=2.1.12-stable-9ubuntu2 \
+            zlib1g-dev=1:1.3.dfsg-3.1ubuntu2.2
+
+      - name: Build pinned Tor artifact
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          root="${{ steps.paths.outputs.root }}"
+          pin="${source_root}/wildbuzzard/third_party/tor.toml"
+          commit="$(awk -F' = ' '$1 == "commit" { gsub(/^"|"$/, "", $2); print $2 }' "${pin}")"
+          git -C "${source_root}" fetch --no-tags https://gitlab.torproject.org/tpo/core/tor.git "${commit}"
+          "${source_root}/wildbuzzard/scripts/build-tor-runtime.sh" \
+            --build-root "${root}/build"
+          mapfile -d '' -t runs < <(
+            find "${root}/build/runs" -mindepth 1 -maxdepth 1 -type d -print0
+          )
+          if ((${#runs[@]} != 1)); then
+            echo "Expected one Tor build run, found ${#runs[@]}" >&2
+            exit 1
+          fi
+          manifest="${runs[0]}/build-manifest.txt"
+          value() { sed -n "s/^$1=//p" "${manifest}"; }
+          mkdir -p -- "${root}/stage"
+          install -m 0755 -- "$(value artifact)" "${root}/stage/tor"
+          install -m 0644 -- "$(value config)" "${root}/stage/tor.toml"
+          install -m 0644 -- "$(value provenance)" "${root}/stage/tor-provenance.zip"
+          install -m 0644 -- "$(value source)" "${root}/stage/"
+          install -m 0644 -- "${manifest}" "${root}/stage/tor-build-manifest.txt"
+
+      - name: Upload pinned Tor artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-tor-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/stage/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload Tor failure evidence
+        if: failure() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-tor-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.paths.outputs.root }}/build/runs/**/build-manifest.txt
+            ${{ steps.paths.outputs.root }}/build/runs/**/*.log
+            ${{ steps.paths.outputs.root }}/build/runs/**/artifacts/**
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+  torrent:
+    name: Build or reuse native qBittorrent runtime
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout WildBuzzard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source/wildbuzzard
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set qBittorrent paths
+        id: paths
+        run: |
+          set -Eeuo pipefail
+          root="${RUNNER_TEMP}/wildbuzzard-component-cache/qbittorrent"
+          mkdir -p -- "${root}"
+          echo "root=${root}" >>"${GITHUB_OUTPUT}"
+
+      - name: Compute qBittorrent build input digest
+        id: inputs
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          digest="$(
+            git -C "${source_root}" ls-files --stage -- \
+              COPYING \
+              wildbuzzard/browser/components/torrent \
+              wildbuzzard/ci/build-qbittorrent-artifact.sh \
+              wildbuzzard/scripts/build-qbittorrent-runtime.sh \
+              wildbuzzard/scripts/generate-qbittorrent-runtime-provenance.py \
+              wildbuzzard/scripts/generate-torrent-document-sources.py \
+              wildbuzzard/third_party/bsd3/libtorrent \
+              wildbuzzard/third_party/gpl2/qbittorrent \
+              wildbuzzard/third_party/lgpl3/qt/source.lock.json \
+              wildbuzzard/upstreams.toml |
+              sha256sum | awk '{print $1}'
+          )"
+          test "${#digest}" -eq 64
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Restore native qBittorrent artifact
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.paths.outputs.root }}/stage
+          key: wildbuzzard-qbittorrent-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.inputs.outputs.digest }}
+
+      - name: Prepare qBittorrent toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bzip2 cmake dpkg-dev g++ libicu-dev libssl-dev ninja-build \
+            python3-venv xz-utils zip zlib1g-dev
+          root="${{ steps.paths.outputs.root }}"
+          python3 -m venv "${root}/aqt"
+          "${root}/aqt/bin/pip" install --no-cache-dir aqtinstall==3.3.0
+          "${root}/aqt/bin/aqt" install-qt \
+            linux desktop 6.10.2 linux_gcc_64 -O "${root}/Qt"
+          curl -fL --retry 5 \
+            -o "${root}/boost_1_88_0.tar.bz2" \
+            https://archives.boost.io/release/1.88.0/source/boost_1_88_0.tar.bz2
+          echo '46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b  '"${root}/boost_1_88_0.tar.bz2" | sha256sum --check --strict
+          curl -fL --retry 5 \
+            -o "${root}/qtbase-everywhere-src-6.10.2.tar.xz" \
+            https://download.qt.io/official_releases/qt/6.10/6.10.2/submodules/qtbase-everywhere-src-6.10.2.tar.xz
+          echo 'aeb78d29291a2b5fd53cb55950f8f5065b4978c25fb1d77f627d695ab9adf21e  '"${root}/qtbase-everywhere-src-6.10.2.tar.xz" | sha256sum --check --strict
+
+      - name: Build native qBittorrent artifact
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          root="${{ steps.paths.outputs.root }}"
+          lrelease="$(find "${root}/Qt/6.10.2" -type f -path '*/bin/lrelease' -print -quit)"
+          "${source_root}/wildbuzzard/ci/build-qbittorrent-artifact.sh" \
+            --wildbuzzard "${source_root}" \
+            --commit "${GITHUB_SHA}" \
+            --work-dir "${root}/work" \
+            --artifact-dir "${root}/stage" \
+            --boost-archive "${root}/boost_1_88_0.tar.bz2" \
+            --qt-source-archive "${root}/qtbase-everywhere-src-6.10.2.tar.xz" \
+            --lrelease "${lrelease}"
+
+      - name: Upload native qBittorrent artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-qbittorrent-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/stage/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload qBittorrent failure evidence
+        if: failure() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-qbittorrent-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.paths.outputs.root }}/work/qbittorrent/runs/**/build-manifest.txt
+            ${{ steps.paths.outputs.root }}/work/qbittorrent/runs/**/*.log
+            ${{ steps.paths.outputs.root }}/work/qbittorrent/runs/**/artifacts/**
+            ${{ steps.paths.outputs.root }}/work/qbittorrent/runs/**/qbittorrent-provenance.json
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+  sources:
+    name: Build corresponding-source bundles
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout WildBuzzard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source/wildbuzzard
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set source bundle paths
+        id: paths
+        run: |
+          set -Eeuo pipefail
+          root="${RUNNER_TEMP}/wildbuzzard-component-cache/sources"
+          mkdir -p -- "${root}"
+          echo "root=${root}" >>"${GITHUB_OUTPUT}"
+
+      - name: Compute source-bundle input digest
+        id: inputs
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          digest="$(
+            git -C "${source_root}" ls-files --stage -- \
+              browser/components/blocker/assets/SOURCES.lock.json \
+              browser/components/blocker/assets/resources \
+              browser/components/blocker/scripts \
+              wildbuzzard/BLOCKER-ASSET-SOURCE-NOTICE \
+              wildbuzzard/scripts/blocker_asset_provenance.py |
+              sha256sum | awk '{print $1}'
+          )"
+          test "${#digest}" -eq 64
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Restore corresponding-source bundles
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.paths.outputs.root }}/stage
+          key: wildbuzzard-sources-v2-${{ runner.os }}-${{ steps.inputs.outputs.digest }}
+
+      - name: Build corresponding-source bundles
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          root="${{ steps.paths.outputs.root }}"
+          mkdir -p -- "${root}/stage"
+          python3 -I -B \
+            "${source_root}/wildbuzzard/scripts/blocker_asset_provenance.py" \
+            build \
+            --repository "${source_root}" \
+            --cache-dir "${root}/cache/blocker-assets" \
+            --output "${root}/stage/wildbuzzard-blocker-assets-source.tar.xz" \
+            --skip-reproduction-check
+
+      - name: Upload corresponding-source bundles
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-sources-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/stage/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  gkrust:
+    name: Warm the Firefox Rust compiler cache
+    if: inputs.warm_gkrust
+    runs-on: ubuntu-24.04
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+    steps:
+      - name: Checkout WildBuzzard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source/wildbuzzard
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set gkrust paths
+        id: paths
+        run: |
+          set -Eeuo pipefail
+          root="${RUNNER_TEMP}/wildbuzzard-gkrust-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p -- "${root}"
+          echo "root=${root}" >>"${GITHUB_OUTPUT}"
+
+      - name: Free runner disk space
+        run: |
+          set -Eeuo pipefail
+          for path in \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/go \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby \
+            /usr/local/share/boost; do
+            if [[ -e "${path}" ]]; then
+              sudo rm -rf --one-file-system -- "${path}"
+            fi
+          done
+          sudo apt-get clean
+          sudo find /var/lib/apt/lists -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          sudo fallocate --length 8G /mnt/wildbuzzard-gkrust.swap
+          sudo chmod 0600 /mnt/wildbuzzard-gkrust.swap
+          sudo mkswap /mnt/wildbuzzard-gkrust.swap
+          sudo swapon /mnt/wildbuzzard-gkrust.swap
+          df -h /
+          free -h
+
+      - name: Enable shared compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Prepare browser toolchain
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          export MOZBUILD_STATE_PATH="${GITHUB_WORKSPACE}/.wildbuzzard-build/browser/state"
+          cd -- "${source_root}"
+          ./mach --no-interactive bootstrap --application-choice browser \
+            2>&1 | tee "${{ steps.paths.outputs.root }}/bootstrap.log"
+
+      - name: Compile gkrust into the shared cache
+        run: |
+          set -Eeuo pipefail
+          export CI=1
+          export MOZBUILD_STATE_PATH="${GITHUB_WORKSPACE}/.wildbuzzard-build/browser/state"
+          export WILDBUZZARD_BUILD_RUN_ID=hosted
+          "${GITHUB_WORKSPACE}/source/wildbuzzard/wildbuzzard/scripts/build-linux-external.sh" \
+            --action gkrust \
+            --build-root "${GITHUB_WORKSPACE}/.wildbuzzard-build/browser" \
+            --jobs 2 \
+            --ref HEAD \
+            2>&1 | tee "${{ steps.paths.outputs.root }}/gkrust-build.log"
+
+      - name: Upload gkrust build logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-gkrust-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.paths.outputs.root }}/*.log
+            ${{ github.workspace }}/.wildbuzzard-build/browser/runs/hosted/logs/**
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+  browser:
+    name: Build or restore complete WildBuzzard browser package
+    needs: gkrust
+    if: ${{ always() && (needs.gkrust.result == 'success' || needs.gkrust.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      WILDBUZZARD_BUILD_JOBS: "2"
+    steps:
+      - name: Checkout WildBuzzard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source/wildbuzzard
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set browser paths
+        id: paths
+        run: |
+          set -Eeuo pipefail
+          root="${RUNNER_TEMP}/wildbuzzard-component-cache/browser"
+          mkdir -p -- "${root}"
+          echo "root=${root}" >>"${GITHUB_OUTPUT}"
+
+      - name: Compute browser build input digest
+        id: inputs
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          digest="$(
+            { git -C "${source_root}" ls-files --stage -- \
+              . \
+              ':(exclude).github/**' \
+              ':(exclude)third_party/tor/**' \
+              ':(exclude)wildbuzzard/BUILDING-LINUX.md' \
+              ':(exclude)wildbuzzard/TOR.md' \
+              ':(exclude)wildbuzzard/ci/**' \
+              ':(exclude)wildbuzzard/scripts/tor-runtime-provenance.py' \
+              ':(exclude)wildbuzzard/scripts/build-tor-runtime.sh' \
+              ':(exclude)wildbuzzard/scripts/build-qbittorrent-runtime.sh' \
+              ':(exclude)wildbuzzard/scripts/generate-qbittorrent-runtime-provenance.py' \
+              ':(exclude)wildbuzzard/scripts/generate-torrent-document-sources.py' \
+              ':(exclude)wildbuzzard/scripts/package-deb.sh' \
+              ':(exclude)wildbuzzard/scripts/verify-qbittorrent-runtime.py' \
+              ':(exclude)wildbuzzard/third_party/tor.toml' \
+              ':(exclude)wildbuzzard/third_party/bsd3/libtorrent/**' \
+              ':(exclude)wildbuzzard/third_party/gpl2/qbittorrent/**' \
+              ':(exclude)wildbuzzard/third_party/lgpl3/qt/source.lock.json' \
+              ':(exclude)wildbuzzard/upstreams.toml';
+              git -C "${source_root}" ls-files --stage -- \
+                wildbuzzard/ci/build-browser-artifact.sh;
+              printf 'wildbuzzard-cli-rust=1.96.0\n';
+            } |
+              sha256sum | awk '{print $1}'
+          )"
+          test "${#digest}" -eq 64
+          echo "digest=${digest}" >>"${GITHUB_OUTPUT}"
+
+      - name: Restore complete browser package artifact
+        id: cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.paths.outputs.root }}/stage
+          key: wildbuzzard-browser-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.inputs.outputs.digest }}
+
+      - name: Free runner disk space
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          for path in \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache/CodeQL \
+            /opt/hostedtoolcache/go \
+            /opt/hostedtoolcache/PyPy \
+            /opt/hostedtoolcache/Ruby \
+            /usr/local/share/boost; do
+            if [[ -e "${path}" ]]; then
+              sudo rm -rf --one-file-system -- "${path}"
+            fi
+          done
+          sudo apt-get clean
+          sudo find /var/lib/apt/lists -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          sudo fallocate --length 8G /mnt/wildbuzzard-build.swap
+          sudo chmod 0600 /mnt/wildbuzzard-build.swap
+          sudo mkswap /mnt/wildbuzzard-build.swap
+          sudo swapon /mnt/wildbuzzard-build.swap
+          df -h /
+          free -h
+
+      - name: Enable resumable compiler cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.17.0
+
+      - name: Prepare browser toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          browser_work="${GITHUB_WORKSPACE}/.wildbuzzard-build"
+          export MOZBUILD_STATE_PATH="${browser_work}/browser/state"
+          cd -- "${source_root}"
+          ./mach --no-interactive bootstrap --application-choice browser \
+            2>&1 | tee "${{ steps.paths.outputs.root }}/bootstrap.log"
+
+      - name: Build complete browser package using warmed compiler cache
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -Eeuo pipefail
+          export CI=1
+          export MOZBUILD_STATE_PATH="${GITHUB_WORKSPACE}/.wildbuzzard-build/browser/state"
+          export WILDBUZZARD_BUILD_RUN_ID=hosted
+          root="${{ steps.paths.outputs.root }}"
+          "${GITHUB_WORKSPACE}/source/wildbuzzard/wildbuzzard/ci/build-browser-artifact.sh" \
+            --wildbuzzard "${GITHUB_WORKSPACE}/source/wildbuzzard" \
+            --commit "${GITHUB_SHA}" \
+            --input-digest "${{ steps.inputs.outputs.digest }}" \
+            --work-dir "${GITHUB_WORKSPACE}/.wildbuzzard-build" \
+            --artifact-dir "${root}/stage" \
+            2>&1 | tee "${root}/browser-build.log"
+
+      - name: Upload browser package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-browser-package-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/stage/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload browser build logs
+        if: failure() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-browser-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.paths.outputs.root }}/*.log
+            ${{ github.workspace }}/.wildbuzzard-build/browser/runs/hosted/logs/**
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7
+
+  assemble:
+    name: Assemble self-contained amd64 Debian artifact
+    needs: [tor, torrent, sources, browser]
+    if: ${{ always() && needs.tor.result == 'success' && needs.torrent.result == 'success' && needs.sources.result == 'success' && needs.browser.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout WildBuzzard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: source/wildbuzzard
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prepare assembly directories
+        id: paths
+        run: |
+          set -Eeuo pipefail
+          root="${RUNNER_TEMP}/wildbuzzard-assembly-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p -- "${root}/browser" "${root}/tor" "${root}/torrent" "${root}/sources" "${root}/output"
+          echo "root=${root}" >>"${GITHUB_OUTPUT}"
+
+      - name: Download browser package artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wildbuzzard-browser-package-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/browser
+
+      - name: Download pinned Tor artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wildbuzzard-tor-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/tor
+
+      - name: Download native qBittorrent artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wildbuzzard-qbittorrent-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/torrent
+
+      - name: Download corresponding-source bundles
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: wildbuzzard-sources-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/sources
+
+      - name: Assemble one self-contained Debian package
+        run: |
+          set -Eeuo pipefail
+          source_root="${GITHUB_WORKSPACE}/source/wildbuzzard"
+          root="${{ steps.paths.outputs.root }}"
+          chmod 0755 "${root}/tor/tor"
+          cd -- "${source_root}"
+          ./wildbuzzard/scripts/package-deb.sh \
+            --dist-dir "${root}/browser" \
+            --output-dir "${root}/output" \
+            --tor-dir "${root}/tor" \
+            --qbittorrent-runtime "${root}/torrent/runtime"
+          manifest_file() {
+            local stage="$1"
+            local manifest="$2"
+            local key="$3"
+            local value
+            local path
+            value="$(sed -n "s/^${key}=//p" "${manifest}")"
+            if [[ -z "${value}" || "${value}" == *$'\n'* ]]; then
+              echo "Missing or duplicate ${key} in ${manifest}" >&2
+              return 1
+            fi
+            path="${stage}/$(basename -- "${value}")"
+            if [[ ! -f "${path}" || -L "${path}" ]]; then
+              echo "Missing assembly input: ${path}" >&2
+              return 1
+            fi
+            printf '%s\n' "${path}"
+          }
+          tor_manifest="${root}/tor/tor-build-manifest.txt"
+          torrent_manifest="${root}/torrent/qbittorrent-build-manifest.txt"
+          install -m 0644 -- \
+            "${root}/browser/browser-build-manifest.txt" \
+            "${root}/browser/browser-artifact-manifest.txt" \
+            "${tor_manifest}" \
+            "${torrent_manifest}" \
+            "$(manifest_file "${root}/tor" "${tor_manifest}" source)" \
+            "$(manifest_file "${root}/torrent" "${torrent_manifest}" core_source)" \
+            "$(manifest_file "${root}/torrent" "${torrent_manifest}" boost_source)" \
+            "$(manifest_file "${root}/torrent" "${torrent_manifest}" qt_source)" \
+            "$(manifest_file "${root}/torrent" "${torrent_manifest}" system_source)" \
+            "${root}/sources/wildbuzzard-blocker-assets-source.tar.xz" \
+            "${root}/output/"
+          (
+            cd -- "${root}/output"
+            find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%f\0' |
+              LC_ALL=C sort -z |
+              xargs -0 sha256sum >SHA256SUMS
+          )
+
+      - name: Upload WildBuzzard Debian artifact and evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-amd64-deb-${{ github.sha }}
+          path: ${{ steps.paths.outputs.root }}/output/**
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Upload partial assembly evidence
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: wildbuzzard-assembly-failure-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.paths.outputs.root }}/output/**
+          if-no-files-found: warn
+          compression-level: 6
+          retention-days: 7

@@ -1,0 +1,38 @@
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+   - License, v. 2.0. If a copy of the MPL was not distributed with this
+   - file, You can obtain one at http://mozilla.org/MPL/2.0/. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 72" width="340" height="72">
+  <style>
+    .wf-d { display: none; }
+    @media (prefers-color-scheme: dark) {
+      .wf-l { display: none; }
+      .wf-d { display: inline; }
+    }
+  </style>
+  <g class="wf-l">
+    <rect x="1" y="1" width="338" height="70" rx="10" fill="#f1f1f1" stroke="#dedede" stroke-width="1"/>
+    <path d="M9 71 L9 33 Q9 29 13 29 L103 29 Q107 29 107 33 L107 71 Z" fill="#ffffff"/>
+    <rect x="10.5" y="29" width="95" height="2" rx="1" fill="#c8c8c8"/>
+    <rect x="204.5" y="45" width="1" height="18" fill="#cccccc"/>
+    <rect x="20" y="43.5" width="13" height="13" rx="4" fill="#727272"/>
+    <rect x="40" y="47.5" width="45.1" height="5" rx="2.5" fill="#808080"/>
+    <rect x="118" y="47.5" width="13" height="13" rx="4" fill="#bbbbbb"/>
+    <rect x="138" y="51.5" width="33.0" height="5" rx="2.5" fill="#bbbbbb"/>
+    <rect x="216" y="47.5" width="13" height="13" rx="4" fill="#bbbbbb"/>
+    <rect x="236" y="51.5" width="25.3" height="5" rx="2.5" fill="#bbbbbb"/>
+    <path d="M306 49 h10 M311 44 v10" stroke="#8d8d8d" stroke-width="2" stroke-linecap="round" fill="none"/>
+  </g>
+  <g class="wf-d">
+    <rect x="1" y="1" width="338" height="70" rx="10" fill="#1e1e1e" stroke="#383838" stroke-width="1"/>
+    <path d="M9 71 L9 33 Q9 29 13 29 L103 29 Q107 29 107 33 L107 71 Z" fill="#2d2d2d"/>
+    <rect x="10.5" y="29" width="95" height="2" rx="1" fill="#c8c8c8"/>
+    <rect x="204.5" y="45" width="1" height="18" fill="#3d3d3d"/>
+    <rect x="20" y="43.5" width="13" height="13" rx="4" fill="#bcbcbc"/>
+    <rect x="40" y="47.5" width="45.1" height="5" rx="2.5" fill="#d2d2d2"/>
+    <rect x="118" y="47.5" width="13" height="13" rx="4" fill="#6f6f6f"/>
+    <rect x="138" y="51.5" width="33.0" height="5" rx="2.5" fill="#6f6f6f"/>
+    <rect x="216" y="47.5" width="13" height="13" rx="4" fill="#6f6f6f"/>
+    <rect x="236" y="51.5" width="25.3" height="5" rx="2.5" fill="#6f6f6f"/>
+    <path d="M306 49 h10 M311 44 v10" stroke="#909090" stroke-width="2" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>

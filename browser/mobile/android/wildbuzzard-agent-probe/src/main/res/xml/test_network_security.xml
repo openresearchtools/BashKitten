@@ -1,0 +1,6 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>127.0.0.1</domain>
+    </domain-config>
+</network-security-config>

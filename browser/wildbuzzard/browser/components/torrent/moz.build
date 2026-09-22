@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+XPCOM_MANIFESTS += ["components.conf"]
+
+EXTRA_JS_MODULES += [
+    "AboutTorrents.sys.mjs",
+    "MagnetProtocolHandler.sys.mjs",
+    "QBittorrentProtocolHandler.sys.mjs",
+    "QBittorrentRuntime.sys.mjs",
+    "QBittorrentUDSTransport.sys.mjs",
+    "QBittorrentWebBridge.sys.mjs",
+    "QBittorrentWebUIChild.sys.mjs",
+    "QBittorrentWebUIParent.sys.mjs",
+    "TorrentContentHandler.sys.mjs",
+    "TorrentDocumentPolicy.sys.mjs",
+    "TorrentDocumentSources.sys.mjs",
+    "TorrentIngress.sys.mjs",
+    "TorrentManager.sys.mjs",
+    "TorrentSecurityPolicy.sys.mjs",
+]
+
+FINAL_TARGET_FILES.modules += [
+    "content/torrent-bootstrap.html",
+    "content/torrent-bootstrap.js",
+    "content/torrent-content-bridge.js",
+    "content/torrent-dialog-bootstrap.js",
+    "content/torrent-document-guard.js",
+    "content/torrent-script-executor.js",
+]
+
+BROWSER_CHROME_MANIFESTS += ["test/browser/browser.toml"]
+XPCSHELL_TESTS_MANIFESTS += ["test/unit/xpcshell.toml"]
+
+FINAL_LIBRARY = "xul"

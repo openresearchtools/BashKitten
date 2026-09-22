@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+schema = 1
+
+[firefox]
+remote = "https://github.com/mozilla-firefox/firefox.git"
+ref = "FIREFOX_153_2_0esr_RELEASE"
+commit = "feec67e62a5148b41fd017ccbbc463e8a6f9e83d"
+version = "153.2.0esr"
+tracking_branch = "mozilla/esr153"
+initial_release_ref = "FIREFOX_153_0esr_RELEASE"
+initial_release_commit = "c754d4f2d60ffacfa3aaab1134fed75ed4c9d3ef"
+immutable_branch = "base/firefox-153.0esr"
+immutable_tag = "upstream/firefox-153.0esr"
+
+[waterfox]
+remote = "https://github.com/BrowserWorks/waterfox.git"
+ref = "current"
+commit = "8ae6e039a06bcff8173cb4a4c0262beb21f81286"
+mozilla_base_commit = "75427e175edea62d70dd576f57e030fd48ca1621"
+branch = "waterfox"
+tag = "donor/waterfox-current-20260730"
+role = "donor-only"
+
+[adblock_engine]
+package = "adblock"
+version = "0.12.1"
+upstream = "https://github.com/brave/adblock-rust/"
+license = "MPL-2.0"
+path = "third_party/rust/adblock"
+git_tree = "631bb7e5bdd677ffb1457e1d07ae32695607be6c"
+provided_by = "1c7282e73f12cb9bc63ae9920e9c77d935804cc8"
+waterfox_tree_is_identical = true
+
+[qbittorrent]
+remote = "https://github.com/qbittorrent/qBittorrent.git"
+ref = "release-5.2.3"
+tag_object = "70e16de46cd559a7db3e6d7faace5e40b86f63dc"
+commit = "0b63c3d17373f6132ea211c9dcd4241284ccdfaf"
+git_tree = "cc5c624002edb2d817c826de57b3accf2e607439"
+version = "5.2.3"
+source_sha256 = "e3656e156f08645db67f4f9c2eaab6a7a094791d91e7559d983228edac10ab55"
+license = "GPL-2.0-or-later"
+binary_license = "GPL-3.0-or-later"
+path = "wildbuzzard/third_party/gpl2/qbittorrent"
+role = "source-built-headless-torrent-client"
+
+[libtorrent]
+remote = "https://github.com/arvidn/libtorrent.git"
+ref = "v2.0.14"
+commit = "aab2a10e2f60d9eac78e885a696736d043527794"
+git_tree = "12e2e374948c6000909d627f453688e83ba42b60"
+version = "2.0.14"
+source_sha256 = "6aa999446ea679818e816c15c1e0d72f9ebe3e2cdd70aa2c8615388a3a04fccd"
+license = "BSD-3-Clause"
+path = "wildbuzzard/third_party/bsd3/libtorrent"
+role = "statically-linked-qbittorrent-protocol-engine"
+
+[libtorrent_boost]
+remote = "https://archives.boost.io/release/1.88.0/source/boost_1_88_0.tar.bz2"
+ref = "boost-1.88.0"
+commit = "199ef13d6034c85232431130142159af3adfce22"
+version = "1.88.0"
+source_sha256 = "46d9d2c06637b219270877c9e16155cbd015b6dc84349af064c088e9b5b12f7b"
+license = "BSL-1.0"
+role = "locked-build-time-libtorrent-headers"
+
+[qbittorrent_qt]
+remote = "https://download.qt.io/official_releases/qt/6.10/6.10.2/submodules/qtbase-everywhere-src-6.10.2.tar.xz"
+ref = "qt-6.10.2"
+version = "6.10.2"
+source_sha256 = "aeb78d29291a2b5fd53cb55950f8f5065b4978c25fb1d77f627d695ab9adf21e"
+license = "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only"
+role = "bundled-qbittorrent-runtime-libraries-and-plugins"

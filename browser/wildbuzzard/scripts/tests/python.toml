@@ -1,0 +1,24 @@
+[DEFAULT]
+subsuite = "wildbuzzard"
+
+["test_builtin_search_extensions.py"]
+
+["test_blocker_asset_provenance.py"]
+
+["test_tor_runtime_packaging.py"]
+
+["test_feature_ownership.py"]
+
+["test_firefox_release.py"]
+
+["test_legal_payload.py"]
+
+["test_product_namespace_isolation.py"]
+
+["test_native_command_line.py"]
+
+["test_installable_extension_xpis.py"]
+
+["test_release_manifest.py"]
+
+["test_qbittorrent_lifecycle.py"]

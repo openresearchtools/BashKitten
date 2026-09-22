@@ -1,0 +1,34 @@
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+WildBuzzard corresponding source is published at:
+
+https://github.com/openresearchtools/wildbuzzard
+
+For a browser-only artifact build, use the exact WildBuzzard commit recorded in
+browser-artifact-manifest.txt. A full release-set release-manifest.json also
+records the exact commits for the separately distributed search extensions and
+command-line packages. Complete source and build inputs for bundled third-party
+code are carried in the repository or in the source and provenance artifacts
+published beside the browser package.
+
+The browser executable implements its shell command transport in
+browser/app/WildBuzzardCommandLine.cpp, using the in-tree JsonCpp library.
+Browser commands and workflows execute in Gecko. Their complete source and
+the JsonCpp license are included in the browser source tree.
+
+The independently installed buzzard-search and buzzard-minijtt releases publish
+their own license, provenance, and corresponding-source artifacts. Their
+sources are not browser payload. The browser package carries the native
+qBittorrent/libtorrent runtime as a distinct GPL-2.0-only program together with
+its component licenses and source-offer metadata; its corresponding-source
+archives are published beside the browser package.
+
+Tor's exact pinned source is distributed as
+wildbuzzard-tor-0.4.9.11-source.tar. The installed Tor provenance binds that
+archive, the native binary, and notices/tor-notices/THIRD-PARTY.json, which
+identifies its statically linked OpenSSL, libevent, and zlib dependencies and
+includes their exact copyright and license texts. The source archive is an
+external release artifact and is not installed in the browser package.
+The exact Brave adblock-resources and uBlock Origin corresponding source used
+to generate the bundled blocker assets is distributed as
+wildbuzzard-blocker-assets-source.tar.xz in that release set.

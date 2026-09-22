@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+[DEFAULT]
+support-files = ["file_gecko_render.sjs"]
+
+["browser_gecko_render.js"]
+
+["browser_logpoint_reload.js"]
+
+["browser_native_network.js"]
+
+["browser_native_tab_groups.js"]
+run-if = ["os == 'linux'"]
+
+["browser_ordinary_agent_tabs.js"]
+run-if = ["os == 'linux'"]
+
+["browser_window_create.js"]

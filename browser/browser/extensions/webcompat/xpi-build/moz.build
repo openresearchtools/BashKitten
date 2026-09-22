@@ -1,0 +1,118 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+with Files("**"):
+    BUG_COMPONENT = ("Web Compatibility", "Tooling & Investigations")
+
+XPI_NAME = "webcompat"
+XPI_PKGNAME = "webcompat@mozilla.org"
+
+DIST_SUBDIR = ""
+
+# NOTE: Please keep the files listed in here in sync with the ones listed in
+# ../jar.mn, as this ensures that the XPI generated at build time
+# shares the same structure as the built-in instance. (bug 1955994)
+
+FINAL_TARGET_FILES += [
+    "../manifest.json",
+]
+
+include("../preprocessed_intervention_files.mozbuild")
+
+GenerateWebCompatAddonFiles(preprocessed_intervention_files, "../")
+
+FINAL_TARGET_FILES += ["!run.js"]
+for file in preprocessed_intervention_files:
+    FINAL_TARGET_FILES.injections.generated += ["!injections/generated/%s" % file]
+
+FINAL_TARGET_FILES["about-compat"] += [
+    "../about-compat/**",
+]
+
+FINAL_TARGET_FILES.data += [
+    "../data/**",
+]
+
+FINAL_TARGET_FILES["experiment-apis"] += [
+    "../experiment-apis/**",
+]
+
+FINAL_TARGET_FILES.injections += [
+    "../injections/**",
+]
+
+FINAL_TARGET_FILES.lib += [
+    "../lib/**",
+]
+
+FINAL_TARGET_FILES.shims += [
+    "../shims/addthis-angular.js",
+    "../shims/adform.js",
+    "../shims/adnexus-ast.js",
+    "../shims/adnexus-prebid.js",
+    "../shims/adsafeprotected-ima.js",
+    "../shims/aliexpress-language.js",
+    "../shims/apstag.js",
+    "../shims/artstationLogin.js",
+    "../shims/bmauth.js",
+    "../shims/botd.mjs",
+    "../shims/branch.js",
+    "../shims/cambridgeDictionaryLogin.js",
+    "../shims/chartbeat.js",
+    "../shims/crave-ca.js",
+    "../shims/criteo.js",
+    "../shims/cxense.js",
+    "../shims/disqus-embed.js",
+    "../shims/disqus.svg",
+    "../shims/doubleverify.js",
+    "../shims/eluminate.js",
+    "../shims/empty-script.js",
+    "../shims/empty-shim.txt",
+    "../shims/everest.js",
+    "../shims/facebook-sdk.js",
+    "../shims/facebook.svg",
+    "../shims/fastclick.js",
+    "../shims/figshare.js",
+    "../shims/google-ads.js",
+    "../shims/google-analytics-and-tag-manager.js",
+    "../shims/google-analytics-ecommerce-plugin.js",
+    "../shims/google-analytics-legacy.js",
+    "../shims/google-ima.js",
+    "../shims/google-page-ad.js",
+    "../shims/google-publisher-tags.js",
+    "../shims/history.js",
+    "../shims/iam.js",
+    "../shims/iaspet.js",
+    "../shims/instagram-embed.js",
+    "../shims/instagram.js",
+    "../shims/instagram.svg",
+    "../shims/jira-zendesk-support.js",
+    "../shims/kinja.js",
+    "../shims/maxmind-geoip.js",
+    "../shims/messengerLogin.js",
+    "../shims/microsoftAccountIcon.js",
+    "../shims/microsoftLogin.js",
+    "../shims/microsoftOfficeAuth.js",
+    "../shims/microsoftVirtualAssistant.js",
+    "../shims/moat.js",
+    "../shims/nielsen.js",
+    "../shims/optimizely.js",
+    "../shims/play.svg",
+    "../shims/rambler-authenticator.js",
+    "../shims/rich-relevance.js",
+    "../shims/salesforce.js",
+    "../shims/spotify-embed.js",
+    "../shims/stackoverflow-login.js",
+    "../shims/tiktok-embed.js",
+    "../shims/tiktok.svg",
+    "../shims/tracking-pixel.png",
+    "../shims/tsn-ca.js",
+    "../shims/twitter-embed.js",
+    "../shims/vast2.xml",
+    "../shims/vast3.xml",
+    "../shims/vmad.xml",
+    "../shims/webtrends.js",
+    "../shims/x-logo.svg",
+    "../shims/zendesk-asana-support.js",
+]
