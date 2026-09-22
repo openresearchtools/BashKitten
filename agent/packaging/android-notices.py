@@ -20,7 +20,9 @@ for archive in (args.auth_archive, args.search_archive):
 version = (ROOT.parent / 'browser/bashkitten/config/version.txt').read_text().strip()
 with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
     stage = Path(temporary)
-    for name in ('LICENSE', 'PI_UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'package.json', 'package-lock.json'):
+    for name in ('LICENSE', 'PI_UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'package.json', 'package-lock.json',
+                 'src/server/access/NOTICE', 'src/server/access/TORKITTEN-LICENSE'):
+        (stage / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, stage / name)
     for name in ('licenses', 'pi', 'search'):
         shutil.copytree(ROOT / name, stage / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'runtime'))
