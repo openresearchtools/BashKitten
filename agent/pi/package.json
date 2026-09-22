@@ -1,0 +1,14 @@
+{
+  "name": "@bashkitten/pi",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "BashKitten browser controls and native search skills for stock Pi",
+  "keywords": ["pi-package"],
+  "peerDependencies": { "typebox": "*" },
+  "pi": {
+    "extensions": ["./extension.mjs"],
+    "skills": ["./skills/browser-android", "./skills/browser-linux", "./skills/web-search"]
+  }
+}

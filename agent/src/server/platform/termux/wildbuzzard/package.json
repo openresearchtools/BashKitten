@@ -1,7 +1,0 @@
-{
-  "name": "@bashkitten/wildbuzzard-termux",
-  "version": "0.1.0",
-  "private": true,
-  "license": "GPL-3.0-only",
-  "pi": { "extensions": ["./upstream/extension.mjs"], "skills": ["./skills"] }
-}

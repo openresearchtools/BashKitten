@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import fs from 'node:fs/promises';
 
 import { selectedRuntime, loadPi } from './runtime.mjs';
+import { browserSocketPath } from '../access/browser-channel.mjs';
 
 // Read native history without opening a second writable session manager.
 export async function savedSession(meta) {
@@ -55,7 +56,7 @@ export class PiRpc extends EventEmitter {
       if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
       if (meta.thinking) args.push('--thinking', meta.thinking);
     }
-    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0' }, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0', BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {
       if (value.type === 'response') {

@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import semver from 'semver';
 import { dataDir, readJson, writeJson, privateDir, digest, allMeta, socketRequest, socketPath } from '../common.mjs';
 import { selectedRuntime, bundledRoot, runtimeFile, maintenanceFile } from '../rpc/runtime.mjs';
+import { ensureIntegration, searchRuntime } from '../rpc/integration.mjs';
 
 const exec = promisify(execFile);
 const stateFile = path.join(dataDir, 'updates/sources.json');
@@ -31,14 +32,10 @@ export async function checkPi() {
 }
 export async function updateStatus() {
   const runtime = selectedRuntime();
-  return { sources: await readJson(stateFile, {}), runtime: { version: runtime.version, previous: runtime.previous?.version }, maintenance: await readJson(maintenanceFile, null) };
+  return { sources: await readJson(stateFile, {}), runtime: { version: runtime.version, previous: runtime.previous?.version }, search: await searchRuntime(), maintenance: await readJson(maintenanceFile, null) };
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
-export async function atIdle(job, fn, { desktop = false } = {}) {
-  if (desktop && process.platform === 'android') {
-    const { desktopRunning } = await import('../platform/termux/desktop.mjs');
-    while (await desktopRunning()) { await job.phase('Waiting for desktop stop', 'waiting'); await delay(2000); }
-  }
+export async function atIdle(job, fn) {
   await writeJson(maintenanceFile, { pid: process.pid, job: job.job.id });
   try {
     while (true) {
@@ -64,7 +61,7 @@ export async function activateRuntime(job, next) {
     }
     try {
       await writeJson(runtimeFile, { root: next.root, version: next.version, previous: { root: current.root, version: current.version } });
-      selectedRuntime(); await reload();
+      selectedRuntime(); await ensureIntegration(); await reload();
     } catch (error) {
       if (previousSelection) await writeJson(runtimeFile, previousSelection); else await fs.rm(runtimeFile, { force: true });
       await reload().catch(() => {}); throw error;

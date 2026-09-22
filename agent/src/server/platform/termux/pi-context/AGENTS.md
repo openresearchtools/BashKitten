@@ -13,3 +13,10 @@
   task applies, then any needed references; do not preload every skill body.
 - Package help: https://wiki.termux.com/wiki/Package_Management
   Available package recipes: https://github.com/termux/termux-packages
+- For a desktop program, choose an unused display and start your own
+  `Xvfb :N -screen 0 1280x800x24 -nolisten tcp`, then use `DISPLAY=:N`.
+  Track its PID and stop that display when finished. `xdotool` can control
+  programs on it. No Termux:X11 APK, root, proot or desktop session is required.
+- Browser/search controls are normal Pi package skills: `browser-android` and
+  `web-search`. Read them on demand. Browser control uses the installed
+  BashKitten browser's native Android permission; never start a TCP key service.

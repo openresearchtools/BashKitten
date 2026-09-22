@@ -5,7 +5,6 @@ export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1 GH_NO_UPDATE_NO
 export DEBIAN_FRONTEND=noninteractive
 case "${1:-}" in *[!0-9a-f]*|'') echo 'Invalid keyring checksum'; exit 1;; esac
 [ "${#1}" -eq 64 ] || exit 1
-case "${2:-suite}" in suite|external) ;; *) echo 'Invalid Termux source'; exit 1;; esac
 bootstrap="$HOME/.local/share/bashkitten-pi/bootstrap"
 mkdir -p "$bootstrap"
 exec 9>"$bootstrap/lock"
@@ -17,24 +16,27 @@ state() {
 }
 trap 'state failed "Setup interrupted. Retry resumes completed steps."' EXIT
 apt_options=(-o DPkg::Lock::Timeout=300 -o Dpkg::Use-Pty=0 -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
-if [ ! -f "$bootstrap/core.done" ]; then
+if [ ! -f "$bootstrap/browser-core.done" ]; then
   available=$(df -Pk "$PREFIX" | awk 'NR==2 {print $4}')
   [ "$available" -ge 2097152 ] || { state failed 'Free at least 2 GB on internal storage before setup'; trap - EXIT; exit 1; }
   state running 'Refreshing upstream packages'
   apt-get "${apt_options[@]}" update
   state running 'Installing Node, Python, Git and GitHub CLI'
-  apt-get "${apt_options[@]}" install -y nodejs-lts python git gh ripgrep fd termux-api ca-certificates curl unzip zip tar
+  apt-get "${apt_options[@]}" install -y nodejs-lts python git gh ripgrep fd ca-certificates curl unzip zip tar x11-repo
+  state running 'Installing native headless desktop packages'
+  apt-get "${apt_options[@]}" update
+  apt-get "${apt_options[@]}" install -y --no-install-recommends xorg-server-xvfb xdotool xfce4 gtk3 dbus libreoffice ttf-dejavu
   node -e 'const [a,b]=process.versions.node.split(".").map(Number);if(a<22||(a===22&&b<19))process.exit(1)'
-  touch "$bootstrap/core.done"
+  touch "$bootstrap/browser-core.done"
 fi
 if [ ! -f "$bootstrap/keyring-$1.done" ]; then
   state running 'Registering the BashKitten package repository'
-  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 -o "$bootstrap/keyring.deb" https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-termux-keyring.deb
+  curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 -o "$bootstrap/keyring.deb" https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-termux-keyring_2026.09.19_aarch64.deb
   printf '%s  %s\n' "$1" "$bootstrap/keyring.deb" | sha256sum -c -
   dpkg -i "$bootstrap/keyring.deb"
   touch "$bootstrap/keyring-$1.done"
 fi
-if [ ! -f "$bootstrap/server.done" ] || ! command -v bashkittenctl >/dev/null; then
+if [ ! -f "$bootstrap/server.done" ] || [ ! -f "$PREFIX/lib/bashkitten/pi/package.json" ] || ! command -v bashkittenctl >/dev/null; then
   state running 'Installing BashKitten'
   apt-get "${apt_options[@]}" update
   apt-get "${apt_options[@]}" install -y bashkitten
@@ -46,8 +48,7 @@ cat >"$PREFIX/etc/profile.d/bashkitten-privacy.sh" <<'PROFILE'
 export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1
 export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1
 PROFILE
-printf '{"source":"%s"}\n' "${2:-suite}" >"$bootstrap/../termux.json"
 state complete 'Termux environment is ready'
 trap - EXIT
 flock -u 9
-exec bashkitten-suite-manager
+exec bashkitten-manager

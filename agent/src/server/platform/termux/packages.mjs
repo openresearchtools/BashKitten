@@ -2,12 +2,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sourceResult, checkPi, installPi, atIdle } from '../../updates/runtime.mjs';
 import { checkNpm, updateNpm } from '../../updates/npm.mjs';
-import path from 'node:path';
-import { dataDir, readJson, writeJson } from '../../common.mjs';
 import { selectedRuntime } from '../../rpc/runtime.mjs';
+import { ensureIntegration, integrationStatus, searchRuntime } from '../../rpc/integration.mjs';
 import { platform } from '../index.mjs';
-
-import { wildbuzzardStatus, checkWildbuzzard, updateWildbuzzard } from './wildbuzzard.mjs';
 
 const exec = promisify(execFile);
 const options = ['-o', 'DPkg::Lock::Timeout=300', '-o', 'Dpkg::Use-Pty=0', '-o', 'APT::Status-Fd=3', '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold'];
@@ -21,7 +18,6 @@ export async function packageState(names) {
 }
 // Explicit local inventory: no registry or repository requests.
 export async function packageInventory() {
-  requireTermux();
   const { stdout } = await exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${db:Status-Status}\n'], { timeout: 15000, maxBuffer: 4 * 1024 * 1024 });
   const apt = stdout.trim().split('\n').map(line => line.split('\t')).filter(([, , state]) => state === 'installed').map(([name, version]) => ({ name, version }));
   let npm = [], npmError;
@@ -33,14 +29,7 @@ export async function packageInventory() {
     npm = Object.entries(value.dependencies || {}).map(([name, item]) => ({ name, version: item.version || 'Unknown' }));
     npmError = value.error?.summary;
   } catch (error) { npmError = error.message; }
-  return { apt, npm, npmError, pi: selectedRuntime().version, wildbuzzard: await wildbuzzardStatus() };
-}
-const sourceFile = path.join(dataDir, 'termux.json');
-export async function termuxSource() { return (await readJson(sourceFile, {})).source || 'suite'; }
-export async function configureTermux({ source }) {
-  requireTermux();
-  if (!['suite', 'external'].includes(source)) throw Error('Unknown Termux source');
-  await writeJson(sourceFile, { source });
+  return { apt, npm, npmError, pi: selectedRuntime().version, search: await searchRuntime(), browser: await integrationStatus() };
 }
 export async function refreshApt(job) {
   return sourceResult('apt', async () => {
@@ -55,7 +44,6 @@ export async function checkPackages(job) {
   if (platform === 'termux') results.push(await refreshApt(job));
   await job.phase('Checking installed npm packages'); results.push(await checkNpm());
   await job.phase('Checking Pi on npm'); results.push(await checkPi());
-  if (platform === 'termux') results.push(await checkWildbuzzard());
   const errors = results.filter(result => result.error);
   if (errors.length) throw Error(errors.map(result => result.error).join('; '));
 }
@@ -66,13 +54,12 @@ export async function updatePackages(job) {
   });
   await job.step('apt-upgrade', 'Updating Termux packages', () => atIdle(job, async () => {
     const simulation = await apt(job, ['-s', 'full-upgrade']);
-    if (/^Remv (bashkitten|nodejs-lts|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(simulation)) throw Error('APT would remove a required suite package; inspect the transaction before proceeding');
-    if (/^(Inst|Remv) bashkitten-termux-x11(?: |:)/m.test(simulation)) throw Error('X11 companion changes must be installed together with the matching viewer update');
+    if (/^Remv (bashkitten|nodejs-lts|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(simulation)) throw Error('APT would remove a required BashKitten package; inspect the transaction before proceeding');
     await apt(job, ['--download-only', '-y', 'full-upgrade']);
     await apt(job, ['-y', 'full-upgrade']);
-  }, { desktop: true }));
+  }));
   const errors = [];
-  for (const operation of [updateNpm, installPi, updateWildbuzzard]) { try { await operation(job); } catch (error) { if (error.code === 'CANCELLED') throw error; errors.push(error.message); } }
+  for (const operation of [updateNpm, installPi, ensureIntegration]) { try { await operation(job); } catch (error) { if (error.code === 'CANCELLED') throw error; errors.push(error.message); } }
   if (errors.length) throw Error('APT completed. npm: ' + errors.join('; '));
   await refreshApt(job);
 }
@@ -83,33 +70,4 @@ export async function recoverPackages(job) {
     await job.exec('dpkg', ['--force-confdef', '--force-confold', '--configure', '-a'], { env: environment });
     await apt(job, ['-f', 'install', '-y']);
   });
-}
-export async function desktopPackages(job, { companionVersion } = {}) {
-  requireTermux();
-  const external = await termuxSource() === 'external';
-  if (!external && (typeof companionVersion !== 'string' || !/^[0-9][a-zA-Z0-9.+:~\-]{0,100}$/.test(companionVersion))) throw Error('Choose an X11 release with a matching companion package');
-  await job.step('x11-repo', 'Enabling the Termux X11 repository', () => apt(job, ['install', '-y', 'x11-repo']));
-  await job.step('desktop-lists', 'Refreshing desktop packages', () => apt(job, ['update']));
-  await job.step('desktop-packages', 'Installing XFCE and LibreOffice', async () => {
-    await apt(job, ['install', '-y', '--no-install-recommends', '--allow-change-held-packages', 'xfce4', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu', 'mesa', 'mesa-demos', 'vulkan-tools', external ? 'termux-x11-nightly' : `bashkitten-termux-x11=${companionVersion}`]);
-    if (!external) await job.exec('apt-mark', ['hold', 'bashkitten-termux-x11']);
-  });
-}
-export async function pairX11(job, companionVersion) {
-  requireTermux();
-  if (await termuxSource() === 'external') throw Error('Install X11 and its companion from the same source as your Termux');
-  if (!/^[0-9][a-zA-Z0-9.+:~\-]{0,100}$/.test(companionVersion || '')) throw Error('The viewer update is missing its exact X11 companion version');
-  const versions = await packageState(['bashkitten-termux-x11']);
-  // Installing the viewer alone does not opt a user into the desktop bundle.
-  if (!versions['bashkitten-termux-x11']) return;
-  if (versions['bashkitten-termux-x11'] !== companionVersion) {
-    await job.phase('Refreshing the paired X11 companion'); await apt(job, ['update']);
-    const args = ['install', '-y', '--allow-change-held-packages', '--allow-downgrades', `bashkitten-termux-x11=${companionVersion}`];
-    const plan = await apt(job, ['-s', ...args]);
-    if (/^Remv /m.test(plan)) throw Error('The paired companion would remove installed packages; inspect the package output');
-    await job.phase('Downloading the paired X11 companion'); await apt(job, ['--download-only', ...args]);
-    await job.phase('Installing the paired X11 companion'); await apt(job, args);
-  }
-  await job.exec('apt-mark', ['hold', 'bashkitten-termux-x11']);
-  if ((await packageState(['bashkitten-termux-x11']))['bashkitten-termux-x11'] !== companionVersion) throw Error('The X11 companion did not reach the viewer’s required version');
 }

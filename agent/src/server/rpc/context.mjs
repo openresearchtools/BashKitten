@@ -4,11 +4,13 @@ import path from 'node:path';
 import { loadPi } from './runtime.mjs';
 import { digest, privateDir, randomToken } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
+import { ensureIntegration } from './integration.mjs';
 
 const begin = '<!-- bashkitten:environment -->', end = '<!-- /bashkitten:environment -->';
 async function read(file) { try { return await fs.readFile(file, 'utf8'); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
 
 export async function syncContext({ agentDir, target = platform, home = os.homedir(), prefix = process.env.PREFIX || '/data/data/com.termux/files/usr' } = {}) {
+  await ensureIntegration();
   const { pi: { getAgentDir, SettingsManager } } = await loadPi();
   agentDir ||= getAgentDir();
   if (!['linux', 'termux'].includes(target)) throw Error('Unknown environment');

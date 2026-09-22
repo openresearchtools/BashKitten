@@ -1,0 +1,13 @@
+BashKitten Pi browser integration
+
+Adapted from Wild Buzzard's Android Pi integration, AGPL-3.0-or-later:
+https://github.com/openresearchtools/wildbuzzard-android
+Source revision b970e591350863113c7ea1f110f12f296a1170bd
+Files: wildbuzzard/android/pi/extension.mjs and client.mjs.
+
+BashKitten changes replace browser-session ownership with explicit ordinary-tab
+IDs, share the native Android/Linux/authorized-remote dispatcher, and register
+the integration through stock Pi's package and skill interfaces.
+
+Search skill attribution is recorded with the bundled search sources under
+agent/search. Browser source and retained upstream notices are under browser/.

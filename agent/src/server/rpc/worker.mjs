@@ -2,11 +2,11 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { PiRpc, translateEvent, activeBranch, usageView, displayMessage, queueItem, savedSession } from './rpc.mjs';
-import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody } from '../common.mjs';
+import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody, dataDir, socketRequest } from '../common.mjs';
 import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
-import { notifyTurn, deliverNotifications } from '../platform/termux/notifications.mjs';
+import { notifyTurn } from './notifications.mjs';
 import { claimInstance } from '../instance.mjs';
 
 process.umask(0o077);
@@ -151,14 +151,37 @@ async function applyPending() {
   }
   if (pendingModel) {
     const selection = pendingModel; pendingModel = null;
+    await prepareManagedModel(selection.model);
     const at = selection.model.indexOf('/');
     await rpc.command('set_model', { provider: selection.model.slice(0, at), modelId: selection.model.slice(at + 1) });
     if (selection.thinking) await rpc.command('set_thinking_level', { level: selection.thinking });
     await refresh(); emit({ type: 'model_change', model: meta.model, thinking: meta.thinking }, false);
   }
 }
+async function prepareManagedModel(model = meta.model) {
+  if (!model?.startsWith('bashkitten-llama/')) return;
+  emit({ type: 'notice', message: 'Checking local llama.cpp readiness' }, false);
+  const ready = await socketRequest(path.join(dataDir, 'run/control.sock'), '/llama-wait', {}, 16 * 60 * 1000);
+  if (stopping) throw Error('Pi instance is stopping');
+  if (ready.state !== 'ready' || !ready.url || ready.config?.alias !== model.slice('bashkitten-llama/'.length)) throw Error('The selected local llama.cpp model is not ready');
+  const { models } = await rpc.command('get_available_models');
+  const current = models.find(item => item.provider === 'bashkitten-llama' && item.id === ready.config.alias);
+  if (current?.baseUrl === ready.url + '/v1') return;
+  const state = await rpc.command('get_state');
+  if (state.isStreaming || state.isCompacting || state.pendingMessageCount) throw Error('Local llama.cpp changed while Pi was active. Retry after the current turn ends.');
+  // Stock RPC has no model-registry reload command. Reopen its own saved
+  // session at this idle boundary, exactly as for a native runtime update.
+  changing = true;
+  await rpc.close();
+  try { await launch(); } finally { changing = false; }
+  const updated = await rpc.command('get_available_models');
+  if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === ready.config.alias && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
+  await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.config.alias });
+  await refresh();
+}
 async function send(item) {
   allowRuntimeWork();
+  await prepareManagedModel();
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
   await rpc.command('prompt', { message: item.wire, images: item.images || [], streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
@@ -282,6 +305,7 @@ async function handle(req, res) {
       if (req.url === '/rename') { await rpc.command('set_session_name', { name: value.title }); meta.title = value.title; await writeMeta(meta); return { ok: true }; }
       if (req.url === '/compact') {
         if (busy) throw Error('Wait for the current turn to finish before compacting');
+        await prepareManagedModel();
         // Do not occupy the control queue while a potentially long compaction runs.
         busy = compacting = true;
         rpc.command('compact', { customInstructions: value.instructions || undefined }, 30 * 60 * 1000).then(async () => {
@@ -314,7 +338,6 @@ if (!ownership) process.exit(0);
 try { await launch(); await listen(); }
 catch (error) { console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
 process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });
-setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();
 // Release idle Pi processes on memory-constrained phones. Active turns, queues,
 // extension dialogs and subscribed browsers always retain their worker.
 setInterval(async () => {
