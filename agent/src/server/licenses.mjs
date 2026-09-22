@@ -19,7 +19,14 @@ async function texts(folder) {
 export async function bundledLicenses(root = appRoot) {
   const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
   const lock = JSON.parse(await fs.readFile(path.join(root, 'package-lock.json')));
-  const records = [{ name: 'BashKitten', version: pkg.version, license: 'GPL-3.0-only',
+  let version;
+  try { version = JSON.parse(await fs.readFile(path.join(root, 'build-platform.json'))).version; }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (!version) {
+    try { version = (await fs.readFile(path.join(root, '../browser/bashkitten/config/version.txt'), 'utf8')).trim(); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
+  const records = [{ name: 'BashKitten', version: version || pkg.version, license: 'GPL-3.0-only',
     source: 'https://github.com/openresearchtools/bashkitten', text: await fs.readFile(path.join(root, 'LICENSE'), 'utf8') }];
   const seen = new Set();
   for (const [location, item] of Object.entries(lock.packages)) {

@@ -1,0 +1,128 @@
+name: Linux browser component
+on:
+  workflow_dispatch:
+    inputs:
+      warm_gkrust:
+        description: Warm the Rust compiler cache before Gecko
+        default: false
+        type: boolean
+  workflow_call:
+    inputs:
+      warm_gkrust:
+        default: false
+        type: boolean
+permissions:
+  actions: read
+  contents: read
+jobs:
+  gkrust:
+    if: inputs.warm_gkrust
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      MOZBUILD_STATE_PATH: ${{ github.workspace }}/.bashkitten-build/browser/state
+      BASHKITTEN_BUILD_RUN_ID: hosted
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: source/bashkitten
+          persist-credentials: false
+      - name: Prepare runner
+        run: source/bashkitten/agent/packaging/linux/prepare-runner.sh
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.17.0
+      - name: Bootstrap pinned Mozilla toolchain
+        working-directory: source/bashkitten/browser
+        run: ./mach --no-interactive bootstrap --application-choice browser
+      - name: Warm the Rust compiler cache
+        run: |
+          source/bashkitten/browser/bashkitten/scripts/build-linux-external.sh \
+            --action gkrust --build-root "$GITHUB_WORKSPACE/.bashkitten-build/browser" \
+            --jobs 2 --ref HEAD
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: failure()
+        with:
+          name: browser-gkrust-logs-${{ matrix.architecture }}
+          path: .bashkitten-build/browser/runs/hosted/logs/
+  browser:
+    needs: gkrust
+    if: ${{ always() && (needs.gkrust.result == 'success' || needs.gkrust.result == 'skipped') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            architecture: amd64
+          - runner: ubuntu-24.04-arm
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 360
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      BASHKITTEN_BUILD_JOBS: '2'
+      BASHKITTEN_BUILD_RUN_ID: hosted
+      MOZBUILD_STATE_PATH: ${{ github.workspace }}/.bashkitten-build/browser/state
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          path: source/bashkitten
+          persist-credentials: false
+      - id: inputs
+        name: Fingerprint the complete Gecko component
+        working-directory: source/bashkitten
+        run: |
+          digest=$(git ls-files --stage -- browser .github/workflows/browser-linux.yml agent/packaging/linux/prepare-runner.sh | sha256sum | cut -d' ' -f1)
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          mkdir -p "$RUNNER_TEMP/browser/stage"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        id: cache
+        with:
+          path: ${{ runner.temp }}/browser/stage
+          key: bashkitten-browser-v1-${{ runner.os }}-${{ matrix.architecture }}-${{ steps.inputs.outputs.digest }}
+      - name: Prepare runner
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: source/bashkitten/agent/packaging/linux/prepare-runner.sh
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          version: v0.17.0
+      - name: Bootstrap pinned Mozilla toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        working-directory: source/bashkitten/browser
+        run: ./mach --no-interactive bootstrap --application-choice browser
+      - name: Build the complete browser archive
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          source/bashkitten/browser/bashkitten/ci/build-browser-artifact.sh \
+            --bashkitten "$GITHUB_WORKSPACE/source/bashkitten/browser" \
+            --commit "$GITHUB_SHA" --architecture '${{ matrix.architecture }}' \
+            --input-digest '${{ steps.inputs.outputs.digest }}' \
+            --work-dir "$GITHUB_WORKSPACE/.bashkitten-build" \
+            --artifact-dir "$RUNNER_TEMP/browser/stage"
+      - name: Verify cached component integrity
+        working-directory: ${{ runner.temp }}/browser/stage
+        run: |
+          sha256sum --check --strict SHA256SUMS
+          grep -Fx 'architecture=${{ matrix.architecture }}' browser-artifact-manifest.txt
+          grep -Fx 'browser_input_sha256=${{ steps.inputs.outputs.digest }}' browser-artifact-manifest.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: browser-linux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/browser/stage/
+          compression-level: 0
+          if-no-files-found: error
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: failure()
+        with:
+          name: browser-linux-logs-${{ matrix.architecture }}
+          path: .bashkitten-build/browser/runs/hosted/logs/

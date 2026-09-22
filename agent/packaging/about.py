@@ -7,14 +7,18 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('shell', choices=['android', 'linux'])
+parser.add_argument('shell', choices=['android', 'linux', 'termux'])
 parser.add_argument('licenses', type=Path)
 parser.add_argument('output', type=Path)
+parser.add_argument('--version', default=None)
 args = parser.parse_args()
-notice = ('The app connects to the separate BashKitten server, which includes unmodified Pi and its npm dependencies under their own licenses. Termux and Node.js are installed separately and retain their own licenses. These notices cover this APK and its companion server release.' if args.shell == 'android' else
-          'The BashKitten server includes unmodified Pi and its npm dependencies under their own licenses. GTK, WebKitGTK, PyGObject, Python and Node.js are installed by your system package manager. They are not bundled in this app and retain their own licenses.')
-data = {'version': json.loads((ROOT / 'package.json').read_text())['version'],
-        'notice': notice, 'licenses': json.loads(args.licenses.read_text())}
+notice = ('This APK contains the BashKitten browser and its bundled browser dependencies. The companion Termux package supplies the BashKitten server, unmodified Pi and npm dependencies, DDGS search, Caddy, Authelia and Tor under their respective licenses. Termux, Node.js, Python and declared system libraries are installed separately and retain their own licenses.' if args.shell == 'android' else
+          'This package contains the BashKitten browser and server, unmodified Pi and npm dependencies, DDGS search, Caddy, Authelia and Tor under their respective licenses. Node.js, Python, GTK and other declared operating-system libraries are installed separately and retain their own licenses.')
+if args.shell == 'termux':
+    notice = 'This Termux package contains the BashKitten server, unmodified Pi and npm dependencies, DDGS search, Caddy, Authelia and Tor under their respective licenses. The Android browser is a separate APK. Termux, Node.js, Python and declared system libraries are installed separately and retain their own licenses.'
+version_file = ROOT.parent / 'browser/bashkitten/config/version.txt'
+version = args.version or (version_file.read_text().strip() if version_file.exists() else json.loads((ROOT / 'package.json').read_text())['version'])
+data = {'version': version, 'license': 'GPL-3.0-only' if args.shell == 'termux' else 'AGPL-3.0-or-later', 'notice': notice, 'licenses': json.loads(args.licenses.read_text())}
 css = re.search(r'<style>(.*?)</style>', (ROOT / 'src/web/web_ui.html').read_text(), re.S)[1]
 script = (ROOT / 'src/web/about.js').read_text()
 args.output.write_text('''<!doctype html><html lang="en"><head><meta charset="utf-8">

@@ -24,3 +24,9 @@ __pycache__/
 
 /licenses.json
 /about.html
+
+# Shared Agent build outputs
+/agent/node_modules/
+/agent/licenses.json
+/agent/about.html
+/agent/dist/

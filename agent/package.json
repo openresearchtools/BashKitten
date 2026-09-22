@@ -1,6 +1,6 @@
 {
   "name": "bashkitten",
-  "version": "0.2.8",
+  "version": "153.3.0",
   "private": true,
   "type": "module",
   "license": "GPL-3.0-only",
@@ -19,6 +19,7 @@
     "@earendil-works/pi-ai": "0.86.1",
     "@earendil-works/pi-coding-agent": "0.86.1",
     "hash-wasm": "4.12.0",
+    "qrcode": "1.5.4",
     "semver": "7.8.5",
     "yazl": "3.3.1"
   }

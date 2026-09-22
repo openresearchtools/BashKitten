@@ -1,37 +1,31 @@
-# Candidate and release packages
+# Product packaging
 
-Build with `python3 packaging/build.py linux` or
-`python3 packaging/build.py termux`. The Termux target requires npm 10+ and
-selects upstream Android/Bionic dependencies explicitly. Native Linux ARM64 and
-AMD64 Actions jobs build their own packages; do not relabel binaries.
-After npm installation, the package builder and Pi updater omit optional packages
-whose published OS/CPU constraints exclude the target. npm otherwise retains
-foreign binaries below Pi's nested shrinkwrap. The lock and all selected package
-contents stay unchanged; Pi itself is not patched. Old active runtimes remain
-intact until normal replacement and garbage collection.
+All compilation runs in GitHub Actions. Dispatch `Complete BashKitten candidates`
+on the implementation branch to build the Android APK and complete Linux amd64,
+Linux arm64 and Termux aarch64 packages. The workflow builds independent native
+authentication, search and browser components, then verifies their hashes and
+assembles matching payloads. It does not publish a release or update APT.
 
-After the device and host checks pass, collect one signed Android candidate
-(including its `manifest.txt` and `sha256sums`), the four Linux packages from one
-successful matrix run, and the tested Termux package into a clean directory.
-Keep verification tools and fixtures outside the repository and release sources.
-Do not include unsigned APKs or earlier candidate builds.
+The Linux browser workflow retains the external build directories, Mozilla
+bootstrap toolchains, compiler cache and optional gkrust warm-up from WildBuzzard.
+Browser archives are cached by their actual input digest; Agent-only changes
+reassemble the package without rebuilding unchanged Gecko. Cached archives retain
+their original source commit. Native arm64 builds use an arm64 runner.
 
-```sh
-python3 packaging/release.py dist/release-inputs dist/release-output \
-  --tag candidate-YYYYMMDD --android-run ANDROID_RUN --linux-run LINUX_RUN \
-  --java /path/to/java --apksigner-jar /path/to/apksigner.jar
-```
+`build.py` accepts `linux|termux`, `--architecture`, `--auth-archive`,
+`--search-archive` and `--output`; Linux also requires `--browser-dir`.
+Each component requires its `SHA256SUMS` and target metadata. The Firefox-aligned
+product version comes from `browser/bashkitten/config/version.txt`; internal npm
+metadata uses its three-component SemVer equivalent. Native architecture and
+Termux 16 KB ELF alignment are checked before creating the package.
 
-This assembles local artifacts only. It checks successful `main` builds,
-unchanged build inputs, package identities/source stamps, APK certificate and
-hashes, and collects exact application/Pi/npm source and notices. It writes
-`release.json` and `SHA256SUMS`. The source collector verifies its cached
-upstream archives against the exact integrity locks.
+`release.py` collects exactly one signed `com.bashkitten` APK and three complete
+native packages plus corresponding sources. A release must match the exact
+successful candidate run. Runtime/device validation happens outside the repository
+before publishing or APT promotion. Logs, probes and test profiles are not shipped.
 
-Publish complete binary/source assets as a GitHub prerelease for actual store
-installation checks. Prereleases are excluded by the existing APT publisher.
-Promote tested immutable assets only after the implementation plan's release
-gates pass; then select their hash-pinned manifests in the Termux suite catalog
-and dispatch the existing APT publisher. Source, keys and candidate test results
-have separate ownership: signing backups and personal runtime data stay outside
-Git and release assets.
+The Android workflow accepts native-auth and native-search run IDs when dispatched
+alone. Its full Gecko build starts immediately; final Gradle assembly waits for
+the actual Termux component notices. Temporary server payloads supply license
+texts only and never enter the APK. Droid credentials stay in GitHub secrets and
+an external temporary file removed after signing.
