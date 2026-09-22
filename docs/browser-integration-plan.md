@@ -278,19 +278,27 @@ channels must close on logout/revocation and reauthenticate after expiration;
 authenticating their initial upgrade alone is not indefinite authorization.
 See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/caddy/).
 
-**Local address:** use a stable per-installation name such as
-`<instance>.local.bashkitten.com`, with an unprivileged HTTPS port. BashKitten's
-browser maps that exact registered name to loopback internally, including
-offline, and never sends it to a public resolver. Authelia requires a suitable
-cookie domain; bare `localhost`/IP URLs are not its normal supported setup.
-The web application remains usable in other browsers when that hostname is
-resolved and its CA trusted. Optional wildcard loopback DNS under the owned
-domain can simplify that, but is not a requirement for our browser and needs
-separate DNS configuration. Do not keep an unauthenticated localhost bypass.
-[Authelia cookie-domain requirements](https://www.authelia.com/configuration/session/introduction/#domain).
+**Local address:** use `https://127.0.0.1:<port>` directly, with the actual
+unprivileged port obtained from verified service discovery. There is no public
+domain, DNS lookup, domain registration, hosts-file edit or dependency on
+`bashkitten.com`; that domain remains the user's website. The earlier claim
+that the pinned Authelia version needs a registered hostname was incorrect:
+Authelia v4.39.20 explicitly accepts IP cookie scopes, including `127.0.0.1`, in
+its [validator](https://github.com/authelia/authelia/blob/v4.39.20/internal/configuration/validator/session.go#L124-L142)
+and [upstream validation cases](https://github.com/authelia/authelia/blob/v4.39.20/internal/configuration/validator/session_test.go#L839-L868).
+Configure its cookie scope as `127.0.0.1` and portal as
+`https://127.0.0.1:<port>/login`. Keep a distinct cookie name and the protected
+Agent cookie context for this instance: cookies themselves are not port-scoped.
+Check the complete HTTPS login/TOTP/cookie flow on both target browsers in the
+first implementation gate; configuration acceptance alone is not that check.
+Other browsers can use the same loopback URL with their normal certificate
+trust flow. No unauthenticated localhost endpoint is retained.
 
 Use Caddy's internal CA and HTTPS certificates. The local bridge supplies the
 public CA/identity to the browser over the existing trusted local channel.
+Include the loopback IP in the certificate's subject alternative names. Trust
+is bound to the enrolled instance and exact HTTPS endpoint: another process
+occupying the old port cannot replace the saved identity with its own key.
 Remote enrollment supplies the corresponding identity. Trust only that enrolled
 server/origin in its Agent/remote context; never globally trust arbitrary
 self-signed certificates or disable certificate verification. Keep hostname,
