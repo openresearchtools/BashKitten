@@ -33,6 +33,9 @@ UNIFIED_SOURCES += [
 ]
 
 FINAL_LIBRARY = "xul"
+
+DEFINES["MOZ_APP_NAME"] = '"%s"' % CONFIG["MOZ_APP_NAME"]
+
 # For nsJSUtils
 LOCAL_INCLUDES += [
     "/docshell/base",
