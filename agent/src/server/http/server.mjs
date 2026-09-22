@@ -24,6 +24,8 @@ import { visibleSession } from '../rpc/notifications.mjs';
 import { claimInstance, processStart, probeBackend } from '../instance.mjs';
 import { paths } from '../access/paths.mjs';
 import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
+import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads } from '../models/downloads.mjs';
+import { saveModelSettings } from '../models/settings.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -197,8 +199,40 @@ async function handler(req, res) {
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings', 'llama-options', 'llama-configure', 'llama-start', 'llama-stop', 'llama-probe', 'get_remote_access', 'set_remote_access', 'create_remote_connection', 'revoke_remote_connection'].includes(value.command)) throw Error('Unknown control action');
+      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings', 'llama-options', 'llama-configure', 'llama-start', 'llama-stop', 'llama-probe', 'llama-refresh', 'get_remote_access', 'set_remote_access', 'create_remote_connection', 'revoke_remote_connection'].includes(value.command)) throw Error('Unknown control action');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
+    }
+    if (route === '/api/hosting') {
+      requireMethod(req, ['GET']);
+      return json(res, await controlRequest('get_hosted_services', { refresh: url.searchParams.get('refresh') === '1' }));
+    }
+    if (route === '/api/hosting/services') {
+      requireMethod(req, ['POST']);
+      return json(res, await controlRequest('save_hosted_service', await jsonBody(req)));
+    }
+    const hostedServiceRoute = route.match(/^\/api\/hosting\/services\/([^/]+)$/);
+    if (hostedServiceRoute) {
+      requireMethod(req, ['DELETE']);
+      return json(res, await controlRequest('delete_hosted_service', { name: decodeURIComponent(hostedServiceRoute[1]) }));
+    }
+    if (route === '/api/models/downloads') {
+      requireMethod(req, ['GET', 'POST']);
+      return json(res, mutation ? await startDownload(await jsonBody(req)) : await downloadsStatus(), mutation ? 202 : 200);
+    }
+    if (route === '/api/models/settings') {
+      requireMethod(req, ['POST']);
+      const input = await jsonBody(req), saved = await saveModelSettings(input);
+      if (Object.hasOwn(input, 'directory') && platform === 'linux') await controlRequest('llama-refresh', { onlyIfRunning: true });
+      return json(res, saved);
+    }
+    if (route === '/api/models/search' || route === '/api/models/repository') {
+      requireMethod(req, ['POST']);
+      return json(res, await (route.endsWith('/search') ? searchModels : modelRepository)(await jsonBody(req)));
+    }
+    const modelDownloadRoute = route.match(/^\/api\/models\/downloads\/([a-f0-9-]{36})\/(pause|resume|cancel)$/);
+    if (modelDownloadRoute) {
+      requireMethod(req, ['POST']);
+      return json(res, await controlDownload(modelDownloadRoute[1], modelDownloadRoute[2]));
     }
     if (route === '/api/settings') {
       requireMethod(req, ['GET', 'POST']);
@@ -371,4 +405,4 @@ for (const meta of await allMeta()) if (await running(meta.id)) {
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
 console.log('BashKitten private Pi RPC backend ready');
-process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs()]).finally(() => process.exit(0)); });
+process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs(), shutdownDownloads()]).finally(() => process.exit(0)); });

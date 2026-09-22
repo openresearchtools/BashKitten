@@ -165,8 +165,15 @@
     .dialog-actions .delete-confirm { background:var(--danger); color:#fff; border:0; }
     .session b { display: block; overflow: hidden; font-size: 13px; font-weight: 430; text-overflow: ellipsis; white-space: nowrap; }
     .running-dot { position: absolute; top: 12px; right: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
-    #workspace { position: relative; display: grid; min-width: 0; min-height: 0; height: 100%; overflow: hidden; grid-template-rows: 58px minmax(0, 1fr) auto; }
-    .topbar { display: flex; min-width: 0; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--line-soft); }
+    #workspace { position: relative; display: grid; min-width: 0; min-height: 0; height: 100%; overflow: hidden; grid-template-rows: auto minmax(0, 1fr) auto; }
+    .workspace-heading { min-width: 0; }
+    .topbar { display: flex; min-height: 58px; min-width: 0; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--line-soft); }
+    .hosted-bookmarks { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
+    .hosted-bookmarks > span { color: var(--muted); font-size: 11px; }
+    #hostedLinks { display: flex; flex: 1; gap: 4px; min-width: 0; overflow-x: auto; }
+    #hostedLinks a { display: block; max-width: 180px; flex-shrink: 0; padding: 4px 7px; border-radius: 5px; color: var(--text); font-size: 12px; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #hostedLinks a:hover { background: var(--surface-2); }
+    .hosted-bookmarks .icon-button { width: 26px; height: 26px; flex-shrink: 0; }
     .chat-heading { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; }
     #title { max-width: min(48vw, 540px); overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
     #folderBtn {
@@ -221,6 +228,27 @@
     .settings-section > summary { font-weight: 500; }
     .settings-page label { display: block; margin: 11px 0; color: var(--muted); font-size: 12px; }
     .settings-page input, .settings-page select, .settings-page textarea { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .settings-page .check-label { display: flex; align-items: center; gap: 7px; }
+    .settings-page .check-label input { width: auto; margin: 0; }
+    .hosted-service, .model-download { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+    .hosted-service strong, .model-download strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+    .hosted-service p, .model-download p { margin: 5px 0; overflow-wrap: anywhere; }
+    .hosted-service a { color: var(--text); }
+    .model-search-row { display: flex; gap: 7px; align-items: center; }
+    .model-search-row input { min-width: 0; flex: 1; margin: 0; }
+    .model-search-row button { flex-shrink: 0; }
+    #modelSearchResults { margin-top: 12px; }
+    .settings-page .model-result { display: block; width: 100%; text-align: left; margin: 4px 0; background: transparent !important; }
+    .model-result strong, .model-result span { display: block; overflow-wrap: anywhere; }
+    .model-result span { color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .model-file { display: flex !important; gap: 9px; align-items: center; margin: 0 !important; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+    .model-file input { width: auto; margin: 0; flex-shrink: 0; }
+    .model-file > span { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
+    .model-file small { display: block; margin-top: 4px; color: var(--muted); }
+    .model-download progress { display: block; width: 100%; height: 6px; margin: 8px 0; accent-color: var(--muted); }
+    .model-download details { margin: 8px 0; color: var(--muted); font-size: 11px; }
+    .model-download details p { margin: 4px 0; }
+    #modelRepositoryTitle { overflow-wrap: anywhere; }
     .chat-inner { width: min(790px, calc(100% - 44px)); min-height: 100%; margin: 0 auto; padding: 24px 0 28px; }
     .welcome { display: grid; min-height: calc(100dvh - 260px); place-content: center; color: var(--muted); text-align: center; }
     .welcome .cat { margin-bottom: 8px; font-size: 30px; filter: grayscale(.15); }
@@ -530,6 +558,8 @@
       #folderLabel { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       #model { width:145px; }
       .settings-grid { grid-template-columns:1fr; }
+      .model-search-row { flex-wrap: wrap; }
+      .model-search-row input { flex-basis: 100%; }
       #composerWrap { padding-bottom:max(8px,env(safe-area-inset-bottom)); }
       .chat-inner { width:calc(100% - 24px); }
     }
@@ -559,6 +589,7 @@
     </aside>
 
     <main id="workspace">
+      <div class="workspace-heading">
       <header class="topbar">
         <button id="sidebarToggle" class="icon-button" type="button" aria-label="Projects and chats" aria-expanded="false">☰</button>
         <div class="chat-heading">
@@ -567,6 +598,8 @@
         </div>
         <span id="usage"></span><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
+      <nav id="hostedBookmarks" class="hosted-bookmarks hidden" aria-label="Hosted services"><span>Services</span><div id="hostedLinks"></div><button id="hostedRefresh" class="icon-button" type="button" title="Check hosted services" aria-label="Check hosted services">↻</button></nav>
+      </div>
       <div id="chat"><div id="chatInner" class="chat-inner"></div></div>
       <section id="diffView" class="hidden" aria-labelledby="diffTitle"><header class="diff-heading"><div><strong id="diffTitle"></strong><p id="diffNotice" class="meta" role="status"></p></div><button id="closeDiff" type="button" title="Close diff"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>Close diff</span></button></header><div id="fileDiff" tabindex="0" aria-label="File changes"></div></section>
       <section id="settingsView" class="hidden">
@@ -575,6 +608,7 @@
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
+            <button id="tabDownloads" type="button" role="tab" aria-selected="false" aria-controls="settingsDownloads" tabindex="-1" data-settings-tab="downloads">Download models</button>
             <button id="tabRemote" type="button" role="tab" aria-selected="false" aria-controls="settingsRemote" tabindex="-1" data-settings-tab="remote">Remote access</button>
             <button id="tabAbout" type="button" role="tab" aria-selected="false" aria-controls="settingsAbout" tabindex="-1" data-settings-tab="about">About</button>
           </nav>
@@ -610,14 +644,14 @@
               <p id="llamaStatus" class="meta" role="status"></p>
               <div class="settings-grid">
                 <label>Runtime<select id="llamaBackend"><option value="auto">Automatic</option><option value="cuda">CUDA</option><option value="vulkan">Vulkan</option><option value="cpu">CPU</option></select></label>
-                <label>Model name<input id="llamaAlias" value="bashkitten-local" autocomplete="off"></label>
-                <label class="wide">GGUF model file on this server<input id="llamaModel" placeholder="/home/user/models/model.gguf" autocomplete="off"></label>
+                <label>Model<select id="llamaModel"><option value="">First available model</option></select></label>
                 <label>Context size<input id="llamaContext" type="number" min="512" step="1" value="8192"></label>
                 <label>GPU layers<input id="llamaGpuLayers" value="auto" placeholder="auto, all, or a number"></label>
                 <label>CPU threads<input id="llamaThreads" type="number" min="0" step="1" value="0"></label>
               </div>
-              <p class="meta">Uses the selected Linux package and a local GGUF model. Zero threads chooses automatically. Existing external providers keep their own lifecycle.</p>
-              <div class="subscription-actions"><button id="llamaInstall" type="button">Install runtime</button><button id="llamaStart" type="button">Save and start</button><button id="llamaStop" type="button">Stop</button></div>
+              <p id="llamaModelsDirectory" class="meta"></p>
+              <p class="meta">Models come from the directory in Download models. Zero threads chooses automatically. Existing external providers keep their own lifecycle.</p>
+              <div class="subscription-actions"><button id="llamaInstall" type="button">Install runtime</button><button id="llamaStart" type="button">Save and start</button><button id="llamaStop" type="button">Stop</button><button id="llamaRefresh" type="button">Refresh models</button><button id="llamaDownloads" type="button">Download models</button></div>
               <p id="llamaNotice" class="meta" role="status"></p>
             </details>
             <h3>Pi providers</h3>
@@ -629,12 +663,52 @@
             <div class="subscription-actions"><button id="importPiSessions" type="button">Open an existing Pi session</button></div>
             <div id="piSessions"></div>
           </section>
+          <section id="settingsDownloads" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabDownloads">
+            <h3>Download models</h3>
+            <p class="meta">Find models on Hugging Face and download their files to this server. Downloads continue when you close this page.</p>
+            <label>Models directory<span class="folder-field"><input id="modelsDirectory" autocomplete="off" spellcheck="false"><button id="modelsDirectoryBrowse" type="button">Browse…</button><button id="modelsDirectorySave" type="button">Save</button></span></label>
+            <p class="meta">Local llama.cpp uses this same directory.</p>
+            <details class="settings-section"><summary>Hugging Face token</summary>
+              <p id="modelTokenStatus" class="meta" role="status"></p>
+              <label>Access token<input id="modelToken" type="password" placeholder="hf_…" autocomplete="new-password" spellcheck="false"></label>
+              <p class="meta">Saved privately on this server for downloads, including when no browser is open. Gated models also require access to be granted on Hugging Face.</p>
+              <div class="subscription-actions"><button id="modelTokenSave" type="button">Save token</button><button id="modelTokenRemove" type="button">Remove token</button></div>
+            </details>
+            <div class="settings-section">
+              <label for="modelSearch">Search Hugging Face or enter an owner/repository</label>
+              <div class="model-search-row"><input id="modelSearch" placeholder="Search models" autocomplete="off"><button id="modelSearchButton" type="button">Search</button><button id="modelRepositoryOpen" type="button">Open repository</button></div>
+              <div id="modelSearchResults" class="model-list" aria-label="Model search results"></div>
+              <section id="modelRepository" class="hidden settings-section" aria-labelledby="modelRepositoryTitle">
+                <h3 id="modelRepositoryTitle"></h3><p id="modelRepositoryInfo" class="meta"></p>
+                <label class="check-label"><input id="modelGgufOnly" type="checkbox" checked> GGUF files only</label>
+                <div class="subscription-actions"><button id="modelFilesAll" type="button">Select shown</button><button id="modelFilesNone" type="button">Clear selection</button></div>
+                <div id="modelRepositoryFiles" class="model-list"></div>
+                <p id="modelSelection" class="meta"></p><button id="modelDownload" type="button" disabled>Download selected files</button>
+              </section>
+              <p id="modelSearchNotice" class="meta" role="status"></p>
+            </div>
+            <div class="settings-section"><div class="settings-heading"><h3>Downloads</h3><button id="modelDownloadsRefresh" type="button">Refresh</button></div><div id="modelDownloads"></div></div>
+            <p id="modelDownloadsNotice" class="meta" role="status"></p>
+          </section>
           <section id="settingsRemote" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabRemote">
             <h3>Remote access</h3>
             <p class="meta">Connect to this Agent through Tor. Your account and second factor are required.</p>
             <p id="remoteStatus" class="meta" role="status"></p>
             <div class="subscription-actions"><button id="remoteToggle" type="button">Enable remote access</button><button id="remoteRefresh" type="button">Refresh</button><button id="remoteImport" type="button">Import a connection</button></div>
             <label>Address<input id="remoteAddress" readonly autocomplete="off"></label>
+            <section class="settings-section" aria-labelledby="hostedTitle">
+              <div class="settings-heading"><h3 id="hostedTitle">Hosted web services</h3><button id="hostingRefresh" type="button">Check services</button></div>
+              <p class="meta">Publish a local web service under this Agent’s onion address. Visitors use the same account and second factor.</p>
+              <p id="hostingStatus" class="meta" role="status"></p>
+              <div id="hostedServices"></div>
+              <h4 id="hostingEditorTitle">Add a service</h4>
+              <label>Name<input id="hostingName" maxlength="63" placeholder="notes" autocomplete="off" spellcheck="false"></label>
+              <label>Local web address<input id="hostingTarget" inputmode="url" placeholder="http://127.0.0.1:3000" autocomplete="off" spellcheck="false"></label>
+              <p id="hostingPreview" class="meta"></p>
+              <label class="check-label"><input id="hostingEnabled" type="checkbox" checked> Publish this service</label>
+              <div class="subscription-actions"><button id="hostingSave" type="button">Add service</button><button id="hostingCancel" class="hidden" type="button">Cancel edit</button></div>
+              <p id="hostingNotice" class="meta" role="status"></p>
+            </section>
             <div id="remotePublishing" class="hidden settings-section">
               <h3>Add a device</h3>
               <label>Device name<input id="remoteDeviceName" maxlength="80" placeholder="My laptop" autocomplete="off"></label>
@@ -839,6 +913,9 @@
       authRequired = true;
       csrf = '';
       clearRemoteExport();
+      clearTimeout(modelDownloadTimer);
+      $('#modelToken').value = '';
+      $('#hostedBookmarks').classList.add('hidden');
       source?.close(); source = null;
       $('#app').inert = true;
       $('#app').classList.add('hidden');
@@ -1605,6 +1682,7 @@
         await refreshRemote();
         $('#remoteNotice').textContent = '';
       }
+      if (modelDownloadsVisible()) await refreshModelDownloads();
     }
     async function loadNotifications() {
       $('#termuxNotifications').classList.toggle('hidden', nativeHost?.platform !== 'android');
@@ -1708,11 +1786,19 @@
     }
     function renderLlama(value) {
       $('#llamaStatus').textContent = [value.state, value.backend, value.model, value.url, value.error].filter(Boolean).join(' · ');
+      $('#llamaModelsDirectory').textContent = value.modelsDirectory ? `Models directory: ${displayFolder(value.modelsDirectory)}` : '';
+      const selected = llamaLoaded ? $('#llamaModel').value : value.config?.model || '';
+      const choices = [{id:'', state:''}, ...(value.models || [])];
+      if (selected && !choices.some(model => model.id === selected)) choices.push({id:selected,state:''});
+      const signature = JSON.stringify(choices.map(model => [model.id, model.state]));
+      if ($('#llamaModel').dataset.models !== signature) {
+        $('#llamaModel').replaceChildren(...choices.map(model => new Option(model.id ? model.id + (model.state ? ` · ${model.state}` : '') : 'First available model', model.id)));
+        $('#llamaModel').value = selected; $('#llamaModel').dataset.models = signature;
+      }
       if (!llamaLoaded && value.config) {
         const config = value.config;
         $('#llamaBackend').value = config.backend;
         $('#llamaModel').value = config.model;
-        $('#llamaAlias').value = config.alias;
         $('#llamaContext').value = config.contextSize;
         $('#llamaGpuLayers').value = config.gpuLayers;
         $('#llamaThreads').value = config.threads;
@@ -1725,23 +1811,254 @@
     async function llamaAction(operation) {
       if (llamaBusy) return;
       llamaBusy = true;
-      for (const id of ['#llamaStart','#llamaStop','#llamaInstall']) $(id).disabled = true;
+      for (const id of ['#llamaStart','#llamaStop','#llamaInstall','#llamaRefresh']) $(id).disabled = true;
       $('#llamaNotice').textContent = '';
       try { await operation(); await refreshPackages(); }
       catch (error) { $('#llamaNotice').textContent = error.message; }
-      finally { llamaBusy = false; for (const id of ['#llamaStart','#llamaStop','#llamaInstall']) $(id).disabled = false; }
+      finally { llamaBusy = false; for (const id of ['#llamaStart','#llamaStop','#llamaInstall','#llamaRefresh']) $(id).disabled = false; }
     }
     $('#llamaStart').onclick = () => llamaAction(async () => {
       const gpuLayers = $('#llamaGpuLayers').value.trim();
-      await control('llama-configure', {config:{enabled:true,backend:$('#llamaBackend').value,model:$('#llamaModel').value.trim(),alias:$('#llamaAlias').value.trim(),contextSize:Number($('#llamaContext').value),gpuLayers:['auto','all'].includes(gpuLayers)?gpuLayers:Number(gpuLayers),threads:Number($('#llamaThreads').value)}});
+      await control('llama-configure', {config:{enabled:true,backend:$('#llamaBackend').value,model:$('#llamaModel').value,contextSize:Number($('#llamaContext').value),gpuLayers:['auto','all'].includes(gpuLayers)?gpuLayers:Number(gpuLayers),threads:Number($('#llamaThreads').value)}});
       await control('llama-start');
     });
     $('#llamaStop').onclick = () => llamaAction(() => control('llama-stop'));
+    $('#llamaRefresh').onclick = () => llamaAction(async () => { renderLlama(await control('llama-refresh')); await loadModels(); });
+    $('#llamaDownloads').onclick = () => selectSettingsTab('downloads');
     $('#llamaInstall').onclick = () => llamaAction(async () => {
       await control('package-job',{kind:'llama-runtime',input:{backend:$('#llamaBackend').value}});
       selectSettingsTab('app');
       $('#packageOutput').closest('details').open = true;
     });
+
+    let hostingState = null, hostingRequest = null, hostingBusy = false, hostingPreviousName = '';
+    function hostedUrl(service) {
+      try {
+        const url = new URL(service.url), onion = String(hostingState?.onion || '').replace(/\.onion$/, '');
+        return url.protocol === 'https:' && url.hostname === `${service.name}.${onion}.onion` && !url.username && !url.password && !url.port ? url.href : '';
+      } catch { return ''; }
+    }
+    function hostingPreview() {
+      const onion = String(hostingState?.onion || '').replace(/\.onion$/, '');
+      const name = $('#hostingName').value.trim().toLowerCase();
+      $('#hostingPreview').textContent = name && onion ? `https://${name}.${onion}.onion` : 'Use one name, such as notes. The web address must be on this server’s loopback interface.';
+    }
+    function clearHostingEditor() {
+      hostingPreviousName = ''; $('#hostingName').value = ''; $('#hostingTarget').value = ''; $('#hostingEnabled').checked = true;
+      $('#hostingEditorTitle').textContent = 'Add a service'; $('#hostingSave').textContent = 'Add service'; $('#hostingCancel').classList.add('hidden'); hostingPreview();
+    }
+    function renderHosting() {
+      const value = hostingState, links = $('#hostedLinks'), list = $('#hostedServices');
+      links.replaceChildren(); list.replaceChildren();
+      for (const service of value.services || []) {
+        const url = hostedUrl(service);
+        if (value.enabled && service.enabled && service.status === 'online' && url) {
+          const link = document.createElement('a'); link.textContent = service.name; link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.title = `${service.name} · ${url}`; link.dataset.hostedService = 'true'; links.append(link);
+        }
+        const row = document.createElement('div'); row.className = 'hosted-service';
+        const name = document.createElement('strong'); name.textContent = service.name;
+        const target = document.createElement('p'); target.className = 'meta'; target.textContent = service.target;
+        const state = document.createElement('p'); state.className = 'meta';
+        state.textContent = [!service.enabled ? 'Disabled' : !value.enabled ? 'Remote access is off' : service.status === 'online' ? 'Online' : service.status || 'Not checked', service.error, service.checkedAt ? `Checked ${new Date(service.checkedAt).toLocaleTimeString()}` : ''].filter(Boolean).join(' · ');
+        row.append(name, target, state);
+        if (url && value.enabled && service.enabled) { const link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.className = 'meta'; link.textContent = url; link.dataset.hostedService = 'true'; row.append(link); }
+        const actions = document.createElement('div'); actions.className = 'subscription-actions';
+        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Edit'; edit.disabled = hostingBusy;
+        edit.onclick = () => { hostingPreviousName = service.name; $('#hostingName').value = service.name; $('#hostingTarget').value = service.target; $('#hostingEnabled').checked = service.enabled; $('#hostingEditorTitle').textContent = 'Edit service'; $('#hostingSave').textContent = 'Save service'; $('#hostingCancel').classList.remove('hidden'); hostingPreview(); $('#hostingName').focus(); };
+        const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.disabled = hostingBusy;
+        remove.onclick = () => hostingAction(async () => { await api(`/api/hosting/services/${encodeURIComponent(service.name)}`, {method:'DELETE'}); if (hostingPreviousName === service.name) clearHostingEditor(); });
+        actions.append(edit, remove); row.append(actions); list.append(row);
+      }
+      if (!value.services?.length) list.textContent = 'No web services added.';
+      $('#hostedBookmarks').classList.toggle('hidden', !links.children.length);
+      $('#hostingStatus').textContent = value.enabled ? 'Live services also appear above your chat.' : 'Enable remote access to publish these services.';
+      hostingPreview();
+    }
+    async function refreshHosting() {
+      if (!csrf || document.hidden) return;
+      if (hostingRequest) return hostingRequest.catch(() => {});
+      hostingRequest = (async () => { hostingState = await api('/api/hosting?refresh=1'); renderHosting(); })();
+      try { await hostingRequest; }
+      catch (error) { $('#hostingNotice').textContent = error.message; $('#hostedBookmarks').classList.add('hidden'); }
+      finally { hostingRequest = null; }
+    }
+    async function hostingAction(operation) {
+      if (hostingBusy) return;
+      hostingBusy = true; $('#hostingSave').disabled = true; $('#hostingNotice').textContent = '';
+      for (const button of $('#hostedServices').querySelectorAll('button')) button.disabled = true;
+      try { await operation(); await hostingRequest?.catch(() => {}); await refreshHosting(); }
+      catch (error) { $('#hostingNotice').textContent = error.message; }
+      finally { hostingBusy = false; $('#hostingSave').disabled = false; for (const button of $('#hostedServices').querySelectorAll('button')) button.disabled = false; }
+    }
+    $('#hostingName').oninput = hostingPreview;
+    $('#hostingCancel').onclick = clearHostingEditor;
+    $('#hostingSave').onclick = () => hostingAction(async () => {
+      const name = $('#hostingName').value.trim().toLowerCase(), target = $('#hostingTarget').value.trim();
+      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) throw Error('Use a single name with letters, numbers or hyphens, starting and ending with a letter or number.');
+      if (!target) throw Error('Enter the local web address.');
+      await api('/api/hosting/services', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({name,target,enabled:$('#hostingEnabled').checked,...(hostingPreviousName ? {previousName:hostingPreviousName} : {})})}); clearHostingEditor();
+    });
+    for (const id of ['#hostingRefresh','#hostedRefresh']) $(id).onclick = async () => { $(id).disabled = true; $('#hostingNotice').textContent = ''; try { await refreshHosting(); } finally { $(id).disabled = false; } };
+    for (const id of ['#hostingName','#hostingTarget']) $(id).onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#hostingSave').click(); } };
+    function openHostedLink(event) {
+      const link = event.target.closest('a[data-hosted-service]');
+      if (!link || !event.isTrusted || !['linux','android'].includes(nativeHost?.platform)) return;
+      if (event.type === 'auxclick' && event.button !== 1) return;
+      event.preventDefault();
+      nativeHost.call('open-hosted', {url:link.href}).catch(error => { $('#hostingNotice').textContent = error.message; $('#composerHint').textContent = error.message; link.title = error.message; });
+    }
+    document.addEventListener('click', openHostedLink);
+    document.addEventListener('auxclick', openHostedLink);
+
+    let modelDownloadsState = null, modelDownloadsRequest = null, modelDownloadTimer = null, modelsDirectoryDirty = false, modelsDirectoryRevision = 0, modelSettingsBusy = false;
+    let modelRepository = null, modelSelectedFiles = new Set(), modelCatalogGeneration = 0, modelDownloadStarting = false;
+    const modelJobActions = new Set(), modelJobRows = new Map();
+    function modelBytes(value) {
+      if (!Number.isFinite(value) || value < 0) return 'Size unknown';
+      const units = ['B','KiB','MiB','GiB','TiB']; let index = 0;
+      while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
+      return `${value.toLocaleString(undefined, {maximumFractionDigits:index ? 1 : 0})} ${units[index]}`;
+    }
+    function modelDownloadsVisible() { return Boolean(csrf) && !document.hidden && !$('#app').classList.contains('hidden') && !$('#settingsView').classList.contains('hidden') && activeSettingsTab === 'downloads'; }
+    function scheduleModelDownloads() {
+      clearTimeout(modelDownloadTimer);
+      if (modelDownloadsVisible() && modelDownloadsState?.jobs?.some(job => ['queued','downloading'].includes(job.status))) modelDownloadTimer = setTimeout(() => refreshModelDownloads(), 2000);
+    }
+    function renderModelDownloads(value) {
+      modelDownloadsState = value;
+      if (!modelsDirectoryDirty && document.activeElement !== $('#modelsDirectory')) $('#modelsDirectory').value = value.directory || '';
+      $('#modelTokenStatus').textContent = value.hasToken ? 'A token is saved on this server.' : 'No token saved. Public models can be downloaded without one.';
+      $('#modelTokenRemove').disabled = modelSettingsBusy || !value.hasToken;
+      const root = $('#modelDownloads'), jobs = value.jobs || [], ids = new Set(jobs.map(job => job.id));
+      for (const [id,row] of modelJobRows) if (!ids.has(id)) { row.remove(); modelJobRows.delete(id); }
+      root.querySelector('.model-download-empty')?.remove();
+      if (!jobs.length) { const empty = document.createElement('p'); empty.className = 'meta model-download-empty'; empty.textContent = 'No downloads yet.'; root.append(empty); }
+      for (const job of jobs) {
+        let row = modelJobRows.get(job.id);
+        if (!row) {
+          row = document.createElement('article'); row.className = 'model-download';
+          row.innerHTML = '<strong></strong><p class="meta model-download-state"></p><progress></progress><p class="meta model-download-path"></p><details><summary>Files</summary><div></div></details><div class="subscription-actions"></div>';
+          for (const [action,label] of [['pause','Pause'],['resume','Resume'],['cancel','Cancel']]) {
+            const button = document.createElement('button'); button.type = 'button'; button.dataset.action = action; button.textContent = label; button.onclick = () => modelJobAction(job.id, action); row.querySelector('.subscription-actions').append(button);
+          }
+          modelJobRows.set(job.id, row); root.append(row);
+        }
+        row.querySelector('strong').textContent = job.repository;
+        const status = job.status === 'interrupted' ? 'Interrupted · Resume to continue' : job.status;
+        row.querySelector('.model-download-state').textContent = `${status} · ${modelBytes(job.downloaded || 0)}${job.total > 0 ? ' / ' + modelBytes(job.total) : ''}${job.error ? ' · ' + job.error : ''}`;
+        row.querySelector('.model-download-path').textContent = job.directory;
+        const progress = row.querySelector('progress'); progress.setAttribute('aria-label', `${job.repository} download progress`);
+        if (job.total > 0) { progress.max = job.total; progress.value = Math.min(job.downloaded || 0, job.total); } else progress.removeAttribute('value');
+        progress.classList.toggle('hidden', !job.total && !['queued','downloading'].includes(job.status));
+        const files = row.querySelector('details > div'); files.replaceChildren();
+        for (const file of job.files || []) { const item = document.createElement('p'); item.textContent = `${file.outputPath || file.path} · ${file.status} · ${modelBytes(file.downloaded || 0)}${file.size > 0 ? ' / ' + modelBytes(file.size) : ''}`; files.append(item); }
+        for (const button of row.querySelectorAll('[data-action]')) {
+          const action = button.dataset.action;
+          button.classList.toggle('hidden', action === 'pause' ? !['queued','downloading'].includes(job.status) : action === 'resume' ? !['paused','error','interrupted'].includes(job.status) : ['complete','cancelled'].includes(job.status));
+          button.disabled = modelJobActions.has(job.id);
+        }
+      }
+    }
+    async function refreshModelDownloads() {
+      clearTimeout(modelDownloadTimer);
+      if (!csrf || document.hidden) return;
+      if (modelDownloadsRequest) return modelDownloadsRequest.catch(() => {});
+      modelDownloadsRequest = (async () => { const value = await api('/api/models/downloads'); renderModelDownloads(value); })();
+      let refreshed = false;
+      try { await modelDownloadsRequest; refreshed = true; }
+      catch (error) { $('#modelDownloadsNotice').textContent = error.message; }
+      finally { modelDownloadsRequest = null; if (refreshed) scheduleModelDownloads(); }
+    }
+    async function modelJobAction(id, action) {
+      if (modelJobActions.has(id)) return;
+      modelJobActions.add(id); $('#modelDownloadsNotice').textContent = '';
+      for (const button of modelJobRows.get(id)?.querySelectorAll('button') || []) button.disabled = true;
+      try { await api(`/api/models/downloads/${encodeURIComponent(id)}/${action}`, {method:'POST'}); await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); }
+      catch (error) { $('#modelDownloadsNotice').textContent = error.message; }
+      finally { modelJobActions.delete(id); for (const button of modelJobRows.get(id)?.querySelectorAll('button') || []) button.disabled = false; }
+    }
+    async function saveModelSettings(settings, button) {
+      if (modelSettingsBusy) return;
+      const directoryRevision = modelsDirectoryRevision;
+      modelSettingsBusy = true;
+      for (const id of ['#modelsDirectorySave','#modelTokenSave','#modelTokenRemove']) $(id).disabled = true;
+      $('#modelDownloadsNotice').textContent = '';
+      try { await api('/api/models/settings', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(settings)}); if ('directory' in settings && directoryRevision === modelsDirectoryRevision) modelsDirectoryDirty = false; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); $('#modelDownloadsNotice').textContent = 'token' in settings ? (settings.token ? 'Token saved.' : 'Token removed.') : 'Models directory saved.'; }
+      catch (error) { $('#modelDownloadsNotice').textContent = error.message; }
+      finally { modelSettingsBusy = false; for (const id of ['#modelsDirectorySave','#modelTokenSave']) $(id).disabled = false; $('#modelTokenRemove').disabled = !modelDownloadsState?.hasToken; }
+    }
+    $('#modelsDirectory').oninput = () => { modelsDirectoryDirty = true; modelsDirectoryRevision++; };
+    $('#modelsDirectoryBrowse').onclick = () => openFolderPicker('Models directory', $('#modelsDirectory').value, path => { $('#modelsDirectory').value = path; modelsDirectoryDirty = true; modelsDirectoryRevision++; });
+    $('#modelsDirectorySave').onclick = () => saveModelSettings({directory:$('#modelsDirectory').value.trim()}, $('#modelsDirectorySave'));
+    $('#modelsDirectory').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#modelsDirectorySave').click(); } };
+    $('#modelTokenSave').onclick = () => { const token = $('#modelToken').value.trim(); $('#modelToken').value = ''; if (!token) { $('#modelDownloadsNotice').textContent = 'Enter a token to save, or use Remove token.'; return; } saveModelSettings({token}, $('#modelTokenSave')); };
+    $('#modelTokenRemove').onclick = () => { $('#modelToken').value = ''; saveModelSettings({token:''}, $('#modelTokenRemove')); };
+    $('#modelToken').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#modelTokenSave').click(); } };
+    $('#modelDownloadsRefresh').onclick = async () => { $('#modelDownloadsNotice').textContent = ''; $('#modelDownloadsRefresh').disabled = true; try { await refreshModelDownloads(); } finally { $('#modelDownloadsRefresh').disabled = false; } };
+    function shownModelFiles() { return (modelRepository?.files || []).filter(file => !$('#modelGgufOnly').checked || file.gguf); }
+    function updateModelSelection() {
+      const selected = (modelRepository?.files || []).filter(file => modelSelectedFiles.has(file.path));
+      const total = selected.reduce((sum,file) => sum + (file.size || 0), 0);
+      $('#modelSelection').textContent = `${selected.length} file${selected.length === 1 ? '' : 's'} selected${selected.length ? ' · ' + modelBytes(total) + (selected.some(file => file.size == null) ? ' + unknown sizes' : '') : ''}`;
+      $('#modelDownload').disabled = !selected.length || modelDownloadStarting;
+    }
+    function renderModelFiles() {
+      const root = $('#modelRepositoryFiles'); root.replaceChildren();
+      for (const file of shownModelFiles()) {
+        const label = document.createElement('label'); label.className = 'model-file';
+        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = modelSelectedFiles.has(file.path); checkbox.onchange = () => { checkbox.checked ? modelSelectedFiles.add(file.path) : modelSelectedFiles.delete(file.path); updateModelSelection(); };
+        const name = document.createElement('span'); name.textContent = file.path;
+        const size = document.createElement('small'); size.textContent = `${file.gguf ? 'GGUF · ' : ''}${modelBytes(file.size)}`; name.append(size); label.append(checkbox, name); root.append(label);
+      }
+      if (!root.children.length) root.textContent = $('#modelGgufOnly').checked ? 'No GGUF files in this repository. Turn off the filter to browse all files.' : 'No downloadable files in this repository.';
+      updateModelSelection();
+    }
+    async function browseModelRepository(id) {
+      id = id.trim(); if (!id) { $('#modelSearchNotice').textContent = 'Enter an owner/repository or choose a search result.'; return; }
+      const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = 'Loading repository…';
+      $('#modelRepository').classList.add('hidden'); modelRepository = null; modelSelectedFiles.clear();
+      try {
+        const value = await api('/api/models/repository', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id})});
+        if (generation !== modelCatalogGeneration) return;
+        modelRepository = value; $('#modelRepositoryTitle').textContent = value.id;
+        $('#modelRepositoryInfo').textContent = [value.gated ? 'Gated model · A saved token and Hugging Face access are required.' : '', `${value.files.length} files`, value.revision ? `Revision ${value.revision.slice(0,12)}` : ''].filter(Boolean).join(' · ');
+        $('#modelRepository').classList.remove('hidden'); renderModelFiles(); $('#modelSearchNotice').textContent = '';
+      } catch (error) { if (generation === modelCatalogGeneration) $('#modelSearchNotice').textContent = error.message; }
+    }
+    async function searchDownloadModels() {
+      const query = $('#modelSearch').value.trim(); if (!query) { $('#modelSearchNotice').textContent = 'Enter a model name or an owner/repository.'; return; }
+      const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = 'Searching Hugging Face…'; $('#modelSearchResults').replaceChildren();
+      $('#modelRepository').classList.add('hidden'); modelRepository = null; modelSelectedFiles.clear();
+      try {
+        const value = await api('/api/models/search', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({query})});
+        if (generation !== modelCatalogGeneration) return;
+        const root = $('#modelSearchResults');
+        for (const model of value.models || []) {
+          const button = document.createElement('button'); button.type = 'button'; button.className = 'model-result';
+          const name = document.createElement('strong'); name.textContent = model.id;
+          const detail = document.createElement('span'); detail.textContent = `${Number(model.downloads || 0).toLocaleString()} downloads · ${Number(model.likes || 0).toLocaleString()} likes`;
+          button.append(name, detail); button.onclick = () => browseModelRepository(model.id); root.append(button);
+        }
+        $('#modelSearchNotice').textContent = root.children.length ? '' : 'No models found.';
+      } catch (error) { if (generation === modelCatalogGeneration) $('#modelSearchNotice').textContent = error.message; }
+    }
+    $('#modelSearchButton').onclick = searchDownloadModels;
+    $('#modelRepositoryOpen').onclick = () => browseModelRepository($('#modelSearch').value);
+    $('#modelSearch').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); searchDownloadModels(); } };
+    $('#modelGgufOnly').onchange = renderModelFiles;
+    $('#modelFilesAll').onclick = () => { for (const file of shownModelFiles()) modelSelectedFiles.add(file.path); renderModelFiles(); };
+    $('#modelFilesNone').onclick = () => { modelSelectedFiles.clear(); renderModelFiles(); };
+    $('#modelDownload').onclick = async () => {
+      if (modelDownloadStarting || !modelRepository || !modelSelectedFiles.size) return;
+      if (modelSettingsBusy) { $('#modelSearchNotice').textContent = 'Wait for model settings to finish saving.'; return; }
+      if (modelsDirectoryDirty) { $('#modelSearchNotice').textContent = 'Save the models directory before starting a download.'; return; }
+      modelDownloadStarting = true; updateModelSelection(); $('#modelSearchNotice').textContent = '';
+      try { await api('/api/models/downloads', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id:modelRepository.id,revision:modelRepository.revision,files:[...modelSelectedFiles]})}); $('#modelSearchNotice').textContent = 'Download added.'; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); }
+      catch (error) { $('#modelSearchNotice').textContent = error.message; }
+      finally { modelDownloadStarting = false; updateModelSelection(); }
+    };
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; } else if (csrf) { refreshHosting(); if (modelDownloadsVisible()) refreshModelDownloads(); } });
+    window.addEventListener('focus', () => { if (csrf && !document.hidden) { refreshHosting(); if (modelDownloadsVisible()) refreshModelDownloads(); } });
 
     let remoteState = null, remoteExport = null, remoteBusy = false;
     function clearRemoteExport() {
@@ -1774,6 +2091,7 @@
         row.append(label, button); root.append(row);
       }
       if (!value.devices?.length) root.textContent = 'No authorized devices.';
+      await hostingRequest?.catch(() => {}); await refreshHosting();
     }
     async function remoteAction(operation) {
       if (remoteBusy) return;
@@ -2228,6 +2546,8 @@
     function showChatView() {
       if(diffPath)closeFileDiff();
       clearRemoteExport();
+      clearTimeout(modelDownloadTimer);
+      $('#modelToken').value = '';
       $('#settingsView').classList.add('hidden');
       $('#chat').classList.remove('hidden');
       $('#composerWrap').classList.remove('hidden');
@@ -2542,6 +2862,7 @@
         $('#auth').classList.add('hidden');
         $('#app').classList.remove('hidden');
         await loadSettings();
+        refreshHosting();
         await loadModels();
         const sessions = await loadSessions();
         if (initialized) {
@@ -2629,7 +2950,7 @@
       $('#newFolderName').value = '';
       $('#folderList').textContent = 'Loading folders…';
       $('#folderTitle').textContent = title;
-      $('#folderHint').textContent = title === 'Working folder' ? 'Pi saves this folder with the new chat and restores it when you reopen it.' : 'Choose a folder, then save the settings to apply it.';
+      $('#folderHint').textContent = title === 'Working folder' ? 'Pi saves this folder with the new chat and restores it when you reopen it.' : title === 'Models directory' ? 'Choose a folder, then use Save beside Models directory.' : 'Choose a folder, then save the settings to apply it.';
       $('#folderDialog').showModal();
       try { await loadFolder(path || pendingCwd, true); }
       catch (error) { $('#folderPath').value = path || ''; $('#folderList').textContent = error.message; }
@@ -2875,6 +3196,7 @@
     };
     function selectSettingsTab(name, focus = false) {
       if (activeSettingsTab === 'remote' && name !== 'remote') clearRemoteExport();
+      if (name !== 'downloads') { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; }
       activeSettingsTab = name;
       $('#settingsView').scrollTop = 0;
       for (const tab of document.querySelectorAll('[data-settings-tab]')) {
@@ -2887,7 +3209,8 @@
       $('#settingsSaveRow').classList.toggle('hidden', name !== 'app');
       $('#settingsNotice').textContent = '';
       if (name === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
-      if (name === 'remote') refreshRemote().catch(error => { $('#remoteNotice').textContent = error.message; });
+      if (name === 'remote') { refreshRemote().catch(error => { $('#remoteNotice').textContent = error.message; }); refreshHosting(); }
+      if (name === 'downloads') refreshModelDownloads();
     }
     const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
     for (const tab of settingsTabs) {
