@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bashkitten-search"
+version = "1.0.0"
+description = "BashKitten DDGS search and complete Markdown reader for stock Pi"
+requires-python = ">=3.12"
+license = "AGPL-3.0-only"
+readme = "README.md"
+dependencies = ["ddgs==9.16.0", "pymupdf4llm==0.3.4", "youtube-transcript-api==1.2.4"]
+
+[project.scripts]
+bashkitten-search = "bashkitten_search.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bashkitten_search"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "build", "third_party", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "bashkitten-search", "runtime-lock*", "requirements*.txt"]

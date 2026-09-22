@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Package-relative launcher. Dependencies are shipped, never pip-installed here."""
+
+import os
+import sys
+
+if not sys.flags.isolated:
+    os.execv(sys.executable, [sys.executable, "-I", __file__, *sys.argv[1:]])
+
+import json
+from pathlib import Path
+
+root = Path(__file__).resolve().parent
+manifest = root / "runtime/manifest.json"
+try:
+    runtime = json.loads(manifest.read_text(encoding="utf-8"))
+    supported = runtime.get("pythonVersions", [runtime["python"]])
+    if list(sys.version_info[:2]) not in supported:
+        versions = ", ".join(".".join(map(str, version)) for version in supported)
+        raise RuntimeError(f"This search runtime needs Python {versions}; update BashKitten and its platform Python together")
+    # Product paths precede Python site directories, so a user's pip package
+    # cannot silently replace the versions in our release inventory.
+    abi = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    sys.path[:0] = [str(root / "src"), str(root / "runtime" / abi / "site-packages"), str(root / "runtime/site-packages")]
+    from bashkitten_search.cli import main
+except Exception as error:
+    print(json.dumps({"ok": False, "content": "", "error": {"code": "runtime_unavailable", "message": str(error)}}, separators=(",", ":")))
+    raise SystemExit(1)
+
+raise SystemExit(main())

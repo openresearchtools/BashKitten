@@ -1,0 +1,23 @@
+{
+  "repository": "https://github.com/openresearchtools/buzzard-search",
+  "commit": "05721962dd11c7506286ecc9aa5b35f6fc4828d0",
+  "license": "AGPL-3.0-only",
+  "originalFiles": {
+    "src/buzzard_search/artifacts.py": "ab939acddf39d638fcf1f7b7a2f65d733d3d0e7108d4c3c504fec7e580c8ad5f",
+    "src/buzzard_search/network_compat.py": "b1eea24dec3a98e31dbe65b4459c9e0fb9526c11514858d181fe3b10e1c27082",
+    "src/buzzard_search/github_repository.py": "c746ab8bf2fcf68df24afa8f92313e2a212efc746f3974e7fb2f99d082506243",
+    "src/buzzard_search/youtube_transcript.py": "e6bc15bc0adf5c90fd441cae2c681b791726fee4c3a42811e3d0f1a19ca935d4",
+    "src/buzzard_search/_upstream/__init__.py": "fe9dbbb6011b2e725132a30c561aaee713ba155352b16391fe6e5d255117eed0",
+    "src/buzzard_search/_upstream/search_runtime.py": "af62a20a3ed9ff5ffc35a868035c20c123524348b63c5b4976263417c1abc3fa",
+    "src/buzzard_search/_upstream/web_access_policy.py": "b91df14c479aae1366cd63a83a3a02f2af92f10a100c00887dcd3592625ef419",
+    "src/buzzard_search/_upstream/_html_to_md.py": "2f3061cb58b041e13542dad49a1d59b7f2fce4b2ec9826855176540a9781c134",
+    "src/buzzard_search/_upstream/_rag/__init__.py": "fe9dbbb6011b2e725132a30c561aaee713ba155352b16391fe6e5d255117eed0",
+    "src/buzzard_search/_upstream/_rag/parsers.py": "41b56c648b3db7330eec0aaf8a5742dfdf9e709471723023c3f50e8a7dc6c27c"
+  },
+  "adaptations": [
+    "Single JSON query-or-url CLI; DDGS only",
+    "Persistent private artifacts, unique transcript saves and Termux-native paths",
+    "Keep complete extracted Markdown before bounded preview; explicit read errors and download/page-limit notices",
+    "Selected PDF extraction functions only; no unrelated RAG ingestion or image tools"
+  ]
+}

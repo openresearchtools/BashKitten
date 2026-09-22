@@ -1,0 +1,144 @@
+name: Native search runtime
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [main, codex/browser-integration, codex/native-components]
+    paths:
+      - agent/search/**
+      - agent/packaging/termux/search/**
+      - .github/workflows/search-native.yml
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {target: linux-amd64, runner: ubuntu-24.04}
+          - {target: linux-arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            agent/search
+            agent/packaging/termux/search
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y zstd
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/search/downloads
+          key: search-sources-${{ hashFiles('agent/search/runtime-lock.json') }}
+      - name: Assemble locked native runtime and source
+        run: python3 agent/search/build/runtime.py '${{ matrix.target }}' --output "$RUNNER_TEMP/search"
+      - name: Exercise packaged search and document conversion
+        env:
+          SEARCH_STAGE: ${{ runner.temp }}/search/stage-${{ matrix.target }}/search
+        run: |
+          cp -a agent/search/src agent/search/bashkitten-search "$SEARCH_STAGE/"
+          python3 - <<'PY'
+          import json, os, pathlib, subprocess, tempfile
+          root = pathlib.Path(os.environ['SEARCH_STAGE'])
+          with tempfile.TemporaryDirectory(prefix='bashkitten-search-') as data:
+              env = dict(os.environ, BASHKITTEN_DATA_DIR=data)
+              for request in ({'query': 'Python documentation pathlib'},
+                              {'url': 'https://example.com/'},
+                              {'url': 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf'}):
+                  result = subprocess.run([str(root / 'bashkitten-search')], input=json.dumps(request),
+                                          text=True, capture_output=True, timeout=180, env=env)
+                  print(result.stderr)
+                  response = json.loads(result.stdout)
+                  assert result.returncode == 0 and response['ok'], response
+                  if 'url' in request:
+                      saved = pathlib.Path(response['fullMarkdownPath'])
+                      assert saved.is_file() and saved.stat().st_size > 0, response
+                  else:
+                      assert response['results'], response
+          PY
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Check the Python ABI used by current Linux installations
+        env:
+          SEARCH_STAGE: ${{ runner.temp }}/search/stage-${{ matrix.target }}/search
+        run: |
+          python3 -I - "$SEARCH_STAGE" <<'PY'
+          import pathlib, sys
+          runtime = pathlib.Path(sys.argv[1]) / 'runtime'
+          sys.path[:0] = [str(runtime / 'python3.14/site-packages'), str(runtime / 'site-packages')]
+          import ddgs, primp, lxml.etree, pymupdf, pymupdf4llm, youtube_transcript_api
+          document = pymupdf.open()
+          page = document.new_page()
+          page.insert_text((72, 72), 'BashKitten native Python 3.14 document conversion')
+          markdown = pymupdf4llm.to_markdown(document)
+          assert 'BashKitten native Python 3.14' in markdown
+          print('Python 3.14 native imports and PDF conversion passed')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: search-runtime-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/search/search-*.tar.zst
+            ${{ runner.temp }}/search/SHA256SUMS
+          if-no-files-found: error
+
+  termux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            agent/search
+            agent/packaging/termux/search
+      - uses: actions/checkout@v4
+        with:
+          repository: termux/termux-packages
+          ref: 748983f1e4376b17babf23143baebd244e589b52
+          path: termux-packages
+      - run: sudo apt-get update && sudo apt-get install -y zstd
+      - uses: actions/cache@v4
+        id: primp
+        with:
+          path: termux-packages/output/python-primp_1.3.1_aarch64.deb
+          key: search-primp-termux-aarch64-${{ hashFiles('agent/search/runtime-lock.json', 'agent/packaging/termux/search/**') }}
+      - name: Build Android/Bionic primp using the upstream Termux build system
+        if: steps.primp.outputs.cache-hit != 'true'
+        env:
+          TERMUX_BUILDER_IMAGE_NAME: ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6
+        run: |
+          cp -a agent/packaging/termux/search/python-primp termux-packages/packages/
+          cd termux-packages
+          scripts/run-docker.sh ./build-package.sh -I -a aarch64 python-primp
+      - name: Stage and check native ELF alignment
+        run: |
+          mkdir -p "$RUNNER_TEMP/native"
+          dpkg-deb -x termux-packages/output/python-primp_1.3.1_aarch64.deb "$RUNNER_TEMP/native"
+          readelf -h "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/bashkitten/search/runtime/site-packages/primp.abi3.so"
+          readelf -lW "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/bashkitten/search/runtime/site-packages/primp.abi3.so" |
+            awk '$1=="LOAD" { if ($NF!="0x4000" && $NF!="0x10000") exit 1; found=1 } END { if (!found) exit 1 }'
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/search/downloads
+          key: search-sources-${{ hashFiles('agent/search/runtime-lock.json') }}
+      - name: Assemble Termux payload with private native binding
+        run: |
+          python3 agent/search/build/runtime.py termux-aarch64 --output "$RUNNER_TEMP/search" \
+            --termux-native "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/bashkitten/search/runtime/site-packages"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: search-runtime-termux-aarch64
+          path: |
+            ${{ runner.temp }}/search/search-*.tar.zst
+            ${{ runner.temp }}/search/SHA256SUMS
+          if-no-files-found: error

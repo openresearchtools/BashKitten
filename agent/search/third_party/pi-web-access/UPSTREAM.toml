@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MIT
+
+schema = 1
+name = "pi-web-access"
+version = "0.19.0"
+repository = "https://github.com/nicobailon/pi-web-access.git"
+commit = "692483ae782e41978fb2eba0eec70fd4056608c8"
+license = "MIT"
+copyright = "Copyright (c) 2025 Nico Bailon"
+license_file = "LICENSE"
+license_sha256 = "871b3c6c64e030c0647ca33543716bdae9511ae2d6a85d6f4ce63783bab52c8f"
+treatment = "repository extraction design reimplemented by WildBuzzard under AGPL-3.0"
