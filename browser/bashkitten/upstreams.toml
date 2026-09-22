@@ -6,20 +6,33 @@ schema = 1
 remote = "https://github.com/mozilla-firefox/firefox.git"
 ref = "FIREFOX_153_3_0esr_RELEASE"
 commit = "861fdeb0d32fe1bd101fea886687e680f612d735"
+source_commit = "8e1b5f434c8bf668c05939ee5ad7e06b1b523572"
+source_tree = "eabc51dfebcb0400ae405a58c990a809115706c2"
 version = "153.3.0esr"
 initial_release_ref = "FIREFOX_153_0esr_RELEASE"
 initial_release_commit = "c754d4f2d60ffacfa3aaab1134fed75ed4c9d3ef"
+initial_source_commit = "a0b5e11f860df84897adbdb51138c67bc39d4059"
+initial_source_tree = "1ad8f3a397f619a75da104e26f3bf8c0773ee788"
+donor_release_ref = "FIREFOX_153_2_0esr_RELEASE"
+donor_release_commit = "feec67e62a5148b41fd017ccbbc463e8a6f9e83d"
+donor_source_commit = "b9f7ab983622b425a7e4e6183fbafe25303ba051"
+donor_source_tree = "95c21ff92ac3326c83db89a923bccfc588b0578c"
+history = "153.0 baseline and subsequent ESR/product commits; earlier Mozilla and unrelated imported parent histories omitted"
 
 [wildbuzzard_android]
 remote = "https://github.com/openresearchtools/wildbuzzard-android.git"
 ref = "main"
 commit = "b970e591350863113c7ea1f110f12f296a1170bd"
-role = "history-preserved-browser-donor"
+compact_commit = "9518c6ab37866f28183e4405775fb204181df377"
+source_tree = "cf9cdc05dc87a9eaba74fd45612f0436aaf7af56"
+role = "browser-donor-with-post-153-history-preserved"
 
 [wildbuzzard_desktop]
 remote = "https://github.com/openresearchtools/WildBuzzard.git"
 ref = "refactor/browser-agent-independent"
 commit = "0bd2d7da099a365d2243b320e1e6b38e8ad76cf4"
+compact_commit = "fb87c1351e12b65cd4bb83480c30dd219e16a21d"
+source_tree = "2f5074818685b1b3a896b367f9735f03a8df48eb"
 role = "ancestor-of-android-donor"
 
 [waterfox]

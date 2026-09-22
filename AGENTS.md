@@ -40,8 +40,15 @@ aarch64; do not require a separate DDGS install. Supply distinct mobile/Termux
 and desktop Linux browser skills and install the one matching each target.
 The first migrated browser release must include the latest verified Firefox
 153.x ESR update and retain WildBuzzard's Firefox-aligned product versioning.
-Use exact upstream ESR release tags for updates; do not retain a separate Mozilla
-tracking branch. Remove temporary history-upload/build branches when complete.
+Keep the user-authorized compact history: the complete Firefox 153.0 source
+baseline and subsequent ESR/product work, with original upstream SHAs recorded
+in `browser/bashkitten/upstreams.toml`. Preserve source trees and licenses.
+Use compact `bashkitten/firefox/` source tags and the bounded ESR updater; never
+fetch native Mozilla ancestry into this repository or retain old official tags
+that make it reachable. Future exact official releases are shallow-fetched in
+an isolated temporary repository, then their source tree is merged against the
+previous compact upstream base. No Mozilla tracking branch is needed. Remove
+temporary history-upload/build branches when complete.
 Keep one DDGS-only query-or-url helper interface, using Unsloth-style concise
 skill guidance while saving full Markdown before truncating the inline preview
 and returning its path. Remove obsolete provider selection and call variants.

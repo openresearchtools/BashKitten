@@ -132,20 +132,29 @@ Recheck both product heads at implementation time. Preserve ongoing Android
 work, including the currently modified README and UI audit; do not absorb
 uncommitted donor files into the migration.
 
-Keep `main` and the user-requested implementation branch, with exact Mozilla
-ESR release tags as the upstream baseline. No permanent Mozilla tracking branch
-is needed. Fetch only those exact tags, not every Mozilla, Waterfox or recovery
-branch. A temporary ref used to upload the initial history is removed after the
-product branch and exact release tags are pushed. Preserve the initial ESR
-baseline, retained donor commit records and license provenance. The current Waterfox donor is
+Keep `main` and the user-requested implementation branch. As subsequently
+authorized by the user for a compact GitLab mirror, retain the complete Firefox
+153.0 baseline and subsequent ESR/product commits, cutting the earlier Mozilla
+and unrelated imported Arti/WebTorrent parent histories. Preserve every retained
+commit's source tree, authorship, message and licenses; changed ancestry changes
+its commit ID. Keep the original BashKitten history, `main` and existing product
+release tags unchanged. Record exact official release/donor SHAs and their
+compact source commits/trees in `upstreams.toml`. Use internal
+`bashkitten/firefox/<official-release-tag>` tags; do not retain native official
+tags or backup refs that make the omitted history reachable in a mirror.
+Keep an independent recovery backup outside the product repository before the
+cut. No permanent Mozilla tracking branch is needed. The current Waterfox donor is
 `8ae6e039a06bcff8173cb4a4c0262beb21f81286`; keep applicable `ports.toml` records.
 
-Import the browser with a history-preserving Git subtree at prefix `browser/`.
-Keep native upstream commit IDs/ancestry; do not rewrite every Mozilla commit to
-add the prefix. Reuse `firefox_release.py` for version checks and pins, adapting
-its root-level `git merge` to a subtree-aware merge at `browser/`: detect a new
-153.x ESR release, fetch its exact tag, merge into that prefix, update the pin,
-resolve actual conflicts and build both platforms. Verify the merge cannot
+Keep the complete browser source at prefix `browser/` and its compact pristine
+upstream base for three-way updates. Reuse `firefox_release.py` for version checks
+and pins: shallow-fetch an exact new 153.x ESR tag only in an isolated temporary
+repository, verify its original upstream SHA/tree, and transfer only its source
+trees/blobs into the product repository. Create a compact upstream source commit
+parented to the previous compact source base, then perform a real subtree-aware
+three-way merge at `browser/`. Record the original SHA and compact source pin,
+resolve actual conflicts and build both platforms. This preserves product edits
+without fetching the discarded history again. Verify the merge cannot
 write Mozilla files into `/agent`, `/auth` or the repository root. First reconcile
 the donors, then update the unified tree to
 [153.3.0esr](https://github.com/mozilla-firefox/firefox/releases/tag/FIREFOX_153_3_0esr_RELEASE)
@@ -180,10 +189,11 @@ CI checks the exact ESR tag/commit, Gecko version files and product release line
 then verifies the versions inside the assembled APK/debs against the release
 metadata. All platforms use the same engine pin; fail publication on a mismatch.
 
-Removing branches and unused features reduces maintenance and build inputs.
-It does not erase objects already in retained Git history. Use shallow/partial
-clones for ordinary builds and a checkout with sufficient ancestry for upstream
-merges; do not rewrite Mozilla ancestry just to make the repository look small.
+The compact history changes Git storage, not the full source checkout. Verify
+the clean mirror's reachable refs, retained tree equality and packed size; old
+official tags would undo the saving. Use shallow/partial clones for ordinary
+builds and the retained compact ancestry for upstream merges. Keep recovery
+objects outside the product repository and do not ship them in source archives.
 
 ### Reuse the working desktop build workflow
 
@@ -960,7 +970,7 @@ release notes stay short; implementation detail belongs here and in AGENTS.md.
 | Step | Work | Evidence required |
 | --- | --- | --- |
 | 1 | Native access stack and coupled lifecycle | Build tracked `/auth` sources for Linux and Termux; real Authelia/TOTP/Caddy flow; no direct login bypass; whole-group shutdown and recovery including owner SIGKILL; native Termux patches stay isolated |
-| 2 | One repository and stripped browser sources | Both targets build under `/browser` after the required latest 153.x ESR update, with WildBuzzard's matching product-version rule and adapted artifact/cache workflow; cache-miss/cached builds and Agent-only reassembly work; an ESR subtree update changes only its prefix; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
+| 2 | One repository and stripped browser sources | Both targets build under `/browser` after the required latest 153.x ESR update, with WildBuzzard's matching product-version rule and adapted artifact/cache workflow; cache-miss/cached builds and Agent-only reassembly work; an ESR subtree update changes only its prefix and preserves product edits without restoring pre-153 history; compact mirror refs and retained source trees verified; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
 | 3 | Rename and add protected Agent view | Existing BashKitten APK upgrades; one profile/window; new-window requests become tabs; protected view survives close-all, restore and crashes and rejects all automation/extension access |
 | 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; correct distinct mobile/desktop browser skill and actual platform tools; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
 | 5 | Power, wake locks, recovery and layout | Fresh launch On; actual browser and Termux CPU locks remain one each with 50 agents; Turn off stops all owned services/Pi and releases locks while leaving browser/Termux/unrelated tasks; Turn on discovers the actual dynamic port; core crash shows Off; owner/browser/Termux deaths recover without duplicates or prompt replay; rotate/fold preserves state |

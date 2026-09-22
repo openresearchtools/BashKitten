@@ -6,12 +6,15 @@ import json
 import pathlib
 import re
 import subprocess
+import tempfile
 
 import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PRODUCT_VERSION = "bashkitten/config/version.txt"
 PIN_FILE = "bashkitten/upstreams.toml"
+OFFICIAL_REMOTE = "https://github.com/mozilla-firefox/firefox.git"
+SOURCE_TAG_PREFIX = "refs/tags/bashkitten/firefox/"
 
 
 class ReleaseError(Exception):
@@ -93,8 +96,13 @@ def validate_versions(repository):
     version = firefox["version"]
     if version != esr_version(version) or firefox["ref"] != release_tag(version):
         raise ReleaseError("Firefox version and exact release tag do not match")
-    if not re.fullmatch(r"[0-9a-f]{40}", firefox["commit"]):
-        raise ReleaseError("Firefox must be pinned to an exact commit")
+    for key in ("commit", "source_commit", "source_tree"):
+        if not re.fullmatch(r"[0-9a-f]{40}", firefox[key]):
+            raise ReleaseError(f"Firefox must have an exact {key} pin")
+    if firefox["remote"] != OFFICIAL_REMOTE:
+        raise ReleaseError("Firefox source must come from the official Mozilla repository")
+    if firefox["source_commit"] == firefox["commit"]:
+        raise ReleaseError("Use the compact source commit, not native Mozilla ancestry")
     validate_engine_versions(repository, version)
     product = (repository / PRODUCT_VERSION).read_text(encoding="utf-8").strip()
     if product_parts(product)[:2] != esr_parts(version)[:2]:
@@ -106,6 +114,8 @@ def validate_versions(repository):
         "firefox": version,
         "ref": firefox["ref"],
         "commit": firefox["commit"],
+        "source_commit": firefox["source_commit"],
+        "source_tree": firefox["source_tree"],
     }
 
 
@@ -113,14 +123,73 @@ def validate_history(repository):
     firefox = pins(repository)
     if git(repository, "rev-parse", "--is-shallow-repository") == "true":
         raise ReleaseError(
-            "Fetch full history before checking or updating the Firefox base"
+            "Use the complete compact product history for Firefox updates"
         )
     if (
-        git(repository, "rev-parse", f"refs/tags/{firefox['ref']}^{{commit}}")
-        != firefox["commit"]
+        git(repository, "rev-parse", f"{SOURCE_TAG_PREFIX}{firefox['ref']}^{{commit}}")
+        != firefox["source_commit"]
     ):
-        raise ReleaseError("Firefox release tag does not match its pinned commit")
-    git(repository, "merge-base", "--is-ancestor", firefox["commit"], "HEAD")
+        raise ReleaseError("Compact Firefox source tag does not match its pinned commit")
+    if (
+        git(repository, "rev-parse", f"{firefox['source_commit']}^{{tree}}")
+        != firefox["source_tree"]
+    ):
+        raise ReleaseError("Compact Firefox source tree does not match its pin")
+    git(repository, "merge-base", "--is-ancestor", firefox["source_commit"], "HEAD")
+
+
+def official_release(repository, version):
+    tag = release_tag(version)
+    refs = dict(
+        line.split()[::-1]
+        for line in git(repository, "ls-remote", "--tags", OFFICIAL_REMOTE,
+                        f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}").splitlines()
+    )
+    commit = refs.get(f"refs/tags/{tag}^{{}}", refs.get(f"refs/tags/{tag}"))
+    if not commit or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ReleaseError(f"Official Firefox release not found: {tag}")
+    return tag, commit
+
+
+def snapshot_tree(repository, tag, commit):
+    """Copy only pristine trees/blobs; native commits never enter product history."""
+    common = pathlib.Path(
+        git(repository, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    )
+    objects = str(common / "objects")
+    previous_tree = pins(repository)["source_tree"]
+    with tempfile.TemporaryDirectory(prefix="firefox-source-", dir=common) as temporary:
+        source = pathlib.Path(temporary)
+        git(source, "init", "--bare", "--quiet")
+        (source / "objects/info/alternates").write_text(objects + "\n", encoding="utf-8")
+        # This isolated depth-one fetch is discarded, including its native commit
+        # and shallow metadata. Never fetch Mozilla refs into the product repo.
+        git(source, "fetch", "--depth=1", "--no-tags", "--no-recurse-submodules",
+            "--no-auto-maintenance", OFFICIAL_REMOTE, f"refs/tags/{tag}")
+        if git(source, "rev-parse", "FETCH_HEAD^{commit}") != commit:
+            raise ReleaseError("Official Firefox tag changed while downloading its snapshot")
+        tree = git(source, "rev-parse", "FETCH_HEAD^{tree}")
+        # Seed with trees, never commits: modes, symlinks and all file bytes stay
+        # exact, with no archive extraction or attribute/filter transformations.
+        with (source / "snapshot.pack").open("w+b") as pack:
+            result = subprocess.run(
+                ["git", "-C", str(source), "pack-objects",
+                 "--stdout", "--revs", "--quiet"],
+                input=f"{tree}\n^{previous_tree}\n".encode(),
+                stdout=pack, stderr=subprocess.PIPE, check=False,
+            )
+            if result.returncode:
+                raise ReleaseError(result.stderr.decode(errors="replace"))
+            pack.seek(0)
+            result = subprocess.run(
+                ["git", f"--git-dir={common}", "index-pack", "--stdin", "--strict"],
+                stdin=pack, capture_output=True, text=True, check=False,
+            )
+            if result.returncode:
+                raise ReleaseError(result.stderr.strip())
+        if git(repository, "rev-parse", f"{tree}^{{tree}}") != tree:
+            raise ReleaseError("Imported Firefox tree does not match the official snapshot")
+        return tree
 
 
 def latest_release(repository):
@@ -176,31 +245,42 @@ def validate_merge_scope(repository):
 
 
 def checked_release(repository, version):
-    tag = release_tag(version)
-    commit = git(repository, "rev-parse", f"refs/tags/{tag}^{{commit}}")
+    tag, commit = official_release(repository, version)
+    source_commit = git(repository, "rev-parse", f"{SOURCE_TAG_PREFIX}{tag}^{{commit}}")
+    tree = git(repository, "rev-parse", f"{source_commit}^{{tree}}")
+    if (
+        git(repository, "show", "-s", "--format=%P", source_commit)
+        != pins(repository)["source_commit"]
+    ):
+        raise ReleaseError("Firefox snapshot must descend only from the previous compact source")
+    message = git(repository, "show", "-s", "--format=%B", source_commit).splitlines()
+    for line in (
+        f"Upstream-Tag: {tag}", f"Upstream-Commit: {commit}", f"Upstream-Tree: {tree}"
+    ):
+        if line not in message:
+            raise ReleaseError("Firefox snapshot provenance does not match its official release")
     for name, expected in (
         ("version.txt", esr_version(version).removesuffix("esr")),
         ("version_display.txt", esr_version(version)),
     ):
-        if git(repository, "show", f"{commit}:browser/config/{name}") != expected:
+        if git(repository, "show", f"{source_commit}:browser/config/{name}") != expected:
             raise ReleaseError(
                 f"{tag} does not contain the expected Firefox version files"
             )
-    return tag, commit
+    return {
+        "ref": tag, "commit": commit, "source_commit": source_commit,
+        "source_tree": tree, "version": esr_version(version),
+    }
 
 
-def write_pin(repository, version, tag, commit):
+def write_pin(repository, release):
     path = repository / PIN_FILE
     source = path.read_text(encoding="utf-8")
     match = re.search(r"(?ms)^\[firefox\]\n.*?(?=^\[|\Z)", source)
     if not match:
         raise ReleaseError("Missing Firefox upstream section")
     section = match[0]
-    for key, value in {
-        "ref": tag,
-        "commit": commit,
-        "version": esr_version(version),
-    }.items():
+    for key, value in release.items():
         section, count = re.subn(
             rf'(?m)^{key} = "[^"]*"$', f'{key} = "{value}"', section
         )
@@ -212,7 +292,7 @@ def write_pin(repository, version, tag, commit):
 
 
 def finish_update(repository, version):
-    tag, commit = checked_release(repository, version)
+    release = checked_release(repository, version)
     if git(repository, "diff", "--name-only", "--diff-filter=U"):
         raise ReleaseError(
             "Resolve and stage all merge conflicts before finishing the update"
@@ -220,7 +300,7 @@ def finish_update(repository, version):
     merge_head = pathlib.Path(git(repository, "rev-parse", "--git-path", "MERGE_HEAD"))
     if not merge_head.is_absolute():
         merge_head = repository / merge_head
-    if not merge_head.exists() or merge_head.read_text().strip() != commit:
+    if not merge_head.exists() or merge_head.read_text().strip() != release["source_commit"]:
         raise ReleaseError("The pending merge is not the requested Firefox release")
     validate_merge_scope(repository)
     old = pins(repository)
@@ -231,11 +311,12 @@ def finish_update(repository, version):
     product_path = repository / PRODUCT_VERSION
     product = next_product_version(product_path.read_text().strip(), version)
     validate_engine_versions(repository, esr_version(version))
-    write_pin(repository, version, tag, commit)
+    write_pin(repository, release)
     product_path.write_text(product + "\n", encoding="utf-8")
     validate_versions(repository)
     git(repository, "add", PIN_FILE, PRODUCT_VERSION)
-    print(f"Prepared BashKitten {product} on {tag} ({commit}).")
+    print(f"Prepared BashKitten {product} on {release['ref']} ({release['commit']}).")
+    print(f"Compact source: {release['source_commit']} (tree {release['source_tree']}).")
     print("Review the staged merge, validate the browser, then commit it.")
 
 
@@ -249,21 +330,22 @@ def update(repository, version):
         raise ReleaseError(
             "The requested Firefox release must be newer than the current pin"
         )
-    tag = release_tag(version)
-    git(
-        repository,
-        "fetch",
-        "--no-tags",
-        f"--negotiation-tip={firefox['commit']}",
-        firefox["remote"],
-        f"refs/tags/{tag}:refs/tags/{tag}",
-    )
-    _, commit = checked_release(repository, version)
-    git(repository, "merge-base", "--is-ancestor", firefox["commit"], commit)
+    tag, commit = official_release(repository, version)
+    source_ref = SOURCE_TAG_PREFIX + tag
+    if not git(repository, "tag", "--list", source_ref.removeprefix("refs/tags/")):
+        tree = snapshot_tree(repository, tag, commit)
+        source_commit = git(
+            repository, "commit-tree", tree, "-p", firefox["source_commit"], "-m",
+            f"Firefox {esr_version(version)} source snapshot\n\n"
+            f"Upstream: {OFFICIAL_REMOTE}\nUpstream-Tag: {tag}\n"
+            f"Upstream-Commit: {commit}\nUpstream-Tree: {tree}\n",
+        )
+        git(repository, "update-ref", source_ref, source_commit, "0" * 40)
+    release = checked_release(repository, version)
     try:
         git(
             repository, "merge", "--no-commit", "--no-ff", "--strategy=ort",
-            f"-Xsubtree={prefix}", commit,
+            f"-Xsubtree={prefix}", release["source_commit"],
         )
     except ReleaseError as error:
         raise ReleaseError(
@@ -306,6 +388,9 @@ def main():
             if not arguments.versions_only:
                 validate_history(repository)
             if arguments.latest:
+                _, commit = official_release(repository, result["firefox"])
+                if commit != result["commit"]:
+                    raise ReleaseError("Pinned Firefox provenance differs from its official release tag")
                 result["latestFirefox"] = latest_release(repository)
             print(json.dumps(result, indent=2))
             if arguments.latest and esr_parts(result["latestFirefox"]) > esr_parts(
