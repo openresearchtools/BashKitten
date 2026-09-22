@@ -1,4 +1,5 @@
-Authelia/Caddy configuration and local enrollment follow Torkitten's implementation:
+Authelia/Caddy configuration, named hosted onion routes and local enrollment
+follow Torkitten's implementation (internal/caddy/caddy.go and internal/model):
 https://github.com/openresearchtools/torkitten
 Source reference: 783c0899029aad22cec9562142c067f6b55408a7
 Copyright 2026 The Torkitten Authors. Licensed under Apache License 2.0.

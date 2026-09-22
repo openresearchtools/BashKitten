@@ -35,7 +35,13 @@ export async function renderAuthelia(origins, instanceId) {
     const password = await argon2id({ password: randomToken(), salt: randomBytes(16), parallelism: 1, iterations: 3, memorySize: 19456, hashLength: 32, outputType: 'encoded' });
     await fs.writeFile(paths.users, JSON.stringify({ users: { __bashkitten_setup: { disabled: true, displayname: 'Setup pending', password, groups: [] } } }), { mode: 0o600, flag: 'wx' });
   }
-  const domains = origins.map(origin => new URL(origin).hostname);
+  // One parent cookie provider supplies SSO to registered hosted routes. Caddy
+  // only serves exact enabled hostnames, while this policy stays stable as the
+  // owner edits mappings so their Authelia memory sessions survive those edits.
+  const domains = origins.flatMap(origin => {
+    const host = new URL(origin).hostname;
+    return /^[a-z2-7]{56}\.onion$/.test(host) ? [host, '*.' + host] : [host];
+  });
   const config = {
     theme: 'auto',
     server: { address: `unix://${paths.auth}?umask=0077&path=login`, disable_healthcheck: true,

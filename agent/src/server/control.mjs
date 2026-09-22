@@ -21,7 +21,7 @@ import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake } from './access/wake.mjs';
 import { enrollAccount, completeAccount } from './access/accounts.mjs';
-import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, readManagedLlamaConnection, waitForManagedLlamaReady } from './platform/linux/llama.mjs';
+import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, readManagedLlamaConnection, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
 import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -174,6 +174,10 @@ async function serve() {
     if (command === 'set_remote_access') return remote.setEnabled(value.enabled);
     if (command === 'create_remote_connection') return remote.create(value);
     if (command === 'revoke_remote_connection') return remote.revoke(value.id);
+    if (command === 'get_hosted_services') return stack.hosting.status({ refresh: value.refresh === true });
+    if (command === 'save_hosted_service') return stack.hosting.save(value);
+    if (command === 'delete_hosted_service') return stack.hosting.remove(value);
+    if (command === 'hosting-client') return remote.hostingClient();
     if (command === 'package-inventory') return packageInventory();
     if (command === 'notifications') return { notifications: await pendingNotifications() };
     if (command === 'notification-settings') return notificationSettings(value.settings);
@@ -204,6 +208,10 @@ async function serve() {
       if (platform !== 'linux') throw Error('Managed llama.cpp is available on Linux');
       if (command === 'llama-options') return llamaRuntimeOptions();
       if (command === 'llama-probe') return probeLlamaEndpoint(value);
+      if (command === 'llama-refresh') {
+        if (!value.onlyIfRunning || managedLlamaStatus().desired) await refreshManagedLlama();
+        return status();
+      }
       if (command === 'llama-configure') await configureManagedLlama(value.config || value);
       else if (command === 'llama-start' || command === 'llama-stop') await configureManagedLlama({ enabled: command === 'llama-start' });
       else throw Error('Unknown llama.cpp control');
@@ -230,10 +238,10 @@ async function serve() {
       const value = await jsonBody(req);
       if (req.url === '/llama-wait') {
         if (platform !== 'linux' || !state.web || stopping) throw Error('Local llama.cpp is unavailable while Agent is off');
-        await waitForManagedLlamaReady({ timeout: 15 * 60 * 1000 });
+        const connection = await waitForManagedLlamaReady({ model: value.model, timeout: 15 * 60 * 1000 });
         const current = managedLlamaStatus();
         await syncManagedLlamaProvider(current);
-        return json(res, current);
+        return json(res, { ...current, state: 'ready', model: connection.model, url: connection.url });
       }
       const operation = serial.then(() => action(req.url.slice(1), value)); serial = operation.catch(() => {});
       json(res, await operation);

@@ -12,6 +12,7 @@ import { processStart, backendAlive, serverFile } from '../instance.mjs';
 import { accessDir, runDir, paths, binary } from './paths.mjs';
 import { authEnvironment, renderAuthelia, accountStatus, authCall } from './accounts.mjs';
 import { unixRequest, command } from './io.mjs';
+import { HostedServices } from './hosting.mjs';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const backendScript = fileURLToPath(new URL('../http/server.mjs', import.meta.url));
@@ -21,7 +22,7 @@ const untrusted = ['Remote-User', 'Remote-Groups', 'Remote-Email', 'Remote-Name'
 function proxyHeaders() { return 'header_up X-Forwarded-For 127.0.0.1\nheader_up X-Forwarded-Host {http.request.hostport}\nheader_up X-Forwarded-Proto https'; }
 
 export class AccessStack {
-  constructor({ fatal, llamaProxy = () => null } = {}) { this.fatal = fatal; this.llamaProxy = llamaProxy; this.children = []; this.info = null; this.stopping = false; this.ready = false; }
+  constructor({ fatal, llamaProxy = () => null } = {}) { this.fatal = fatal; this.llamaProxy = llamaProxy; this.children = []; this.info = null; this.stopping = false; this.ready = false; this.hosting = new HostedServices(this); }
   async start() {
     if (this.ready) return this.info;
     this.stopping = false;
@@ -155,6 +156,7 @@ ${backend}
 }
 }
 `;
+    config += await this.hosting.routes({ port: new URL(this.origin).port, authSocket: paths.auth, strip, proxyHeaders: proxyHeaders() });
     const proxy = await this.llamaProxy();
     if (proxy?.host && /^[a-z2-7]{56}\.onion$/.test(proxy.host) && /^127\.0\.0\.1:\d+$/.test(proxy.upstream)) {
       config += `\nhttps://${proxy.host}:${new URL(this.origin).port} {\nbind 127.0.0.1\ntls internal\nroute {\n${strip}\nrequest_header -Cookie\n@identity {\npath /.well-known/bashkitten-ca\nmethod GET\n}\nhandle @identity {\n${backend}\n}\nhandle {\nreverse_proxy ${proxy.upstream} {\nflush_interval -1\n}\n}\n}\n}\n`;

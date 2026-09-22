@@ -7,6 +7,7 @@ import { accessDir, binary } from './paths.mjs';
 
 const root = path.join(accessDir, 'tor');
 const stateFile = path.join(accessDir, 'remote.json');
+const hostingClientFile = path.join(accessDir, 'hosting-client.json');
 const onion = /^[a-z2-7]{56}\.onion$/;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 function base32(bytes) {
@@ -24,6 +25,21 @@ export class RemoteAccess {
   constructor({ llama = () => null } = {}) { this.llama = llama; this.stack = null; this.operations = Promise.resolve(); }
   transaction(fn) { const work = this.operations.then(fn); this.operations = work.catch(() => {}); return work; }
   async state() { return readJson(stateFile, { enabled: false, devices: [] }); }
+  async hostingKey() {
+    let key = await readJson(hostingClientFile, null);
+    if (!key) { key = deviceKey(); await writeJson(hostingClientFile, key); }
+    if (!/^[A-Z2-7]{52}$/.test(key.publicKey || '') || !/^[A-Z2-7]{52}$/.test(key.privateKey || '')) throw Error('Invalid local hosting client identity');
+    return key;
+  }
+  // Trusted native bridge only: never expose this record through the web API.
+  async hostingClient() {
+    if (!this.stack?.ready || !(await this.state()).enabled) throw Error('Turn on Agent and enable remote access first');
+    const host = await this.hostname('agent'), identity = this.stack.identity;
+    if (!host || !identity?.caPem || !identity?.caSha256) throw Error('The remote endpoint is not ready');
+    const key = await this.hostingKey();
+    return { version: 1, name: 'Local hosted websites', kind: 'agent', url: 'https://' + host,
+      clientAuthorization: key.privateKey, caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
+  }
   async hostname(kind) {
     const value = (await fs.readFile(path.join(root, kind, 'hostname'), 'utf8').catch(() => '')).trim();
     return onion.test(value) ? value : null;
@@ -40,6 +56,7 @@ export class RemoteAccess {
       await privateDir(service); await privateDir(authorized);
       for (const file of await fs.readdir(authorized)) if (file.endsWith('.auth')) await fs.rm(path.join(authorized, file));
       const devices = state.devices.filter(device => device.kind === kind);
+      if (kind === 'agent') devices.push({ id: 'local-hosting', publicKey: (await this.hostingKey()).publicKey });
       // An empty authorization directory means public access in Tor. A discarded
       // private key keeps the service private before its first enrollment/after revoke.
       const keys = devices.length ? devices : [{ id: 'closed', publicKey: deviceKey().publicKey }];
