@@ -132,10 +132,12 @@ Recheck both product heads at implementation time. Preserve ongoing Android
 work, including the currently modified README and UI audit; do not absorb
 uncommitted donor files into the migration.
 
-Keep one product `main`, one pristine Mozilla ESR 153 tracking ref and exact
-upstream release tags. Fetch only the chosen ESR branch/tags, not every Mozilla,
-Waterfox or recovery branch. Preserve the initial ESR baseline, retained donor
-commit records and license provenance. The current Waterfox donor is
+Keep `main` and the user-requested implementation branch, with exact Mozilla
+ESR release tags as the upstream baseline. No permanent Mozilla tracking branch
+is needed. Fetch only those exact tags, not every Mozilla, Waterfox or recovery
+branch. A temporary ref used to upload the initial history is removed after the
+product branch and exact release tags are pushed. Preserve the initial ESR
+baseline, retained donor commit records and license provenance. The current Waterfox donor is
 `8ae6e039a06bcff8173cb4a4c0262beb21f81286`; keep applicable `ports.toml` records.
 
 Import the browser with a history-preserving Git subtree at prefix `browser/`.

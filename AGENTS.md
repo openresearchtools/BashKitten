@@ -40,6 +40,8 @@ aarch64; do not require a separate DDGS install. Supply distinct mobile/Termux
 and desktop Linux browser skills and install the one matching each target.
 The first migrated browser release must include the latest verified Firefox
 153.x ESR update and retain WildBuzzard's Firefox-aligned product versioning.
+Use exact upstream ESR release tags for updates; do not retain a separate Mozilla
+tracking branch. Remove temporary history-upload/build branches when complete.
 Keep one DDGS-only query-or-url helper interface, using Unsloth-style concise
 skill guidance while saving full Markdown before truncating the inline preview
 and returning its path. Remove obsolete provider selection and call variants.
