@@ -15,6 +15,7 @@
 #include "mozilla/Tokenizer.h"
 #include "mozilla/dom/ToJSValue.h"
 #include "nsAppDirectoryServiceDefs.h"
+#include "nsContentUtils.h"
 #include "nsCRT.h"
 #include "nsILineInputStream.h"
 #ifdef ENABLE_WEBDRIVER
@@ -33,6 +34,7 @@
 #include "nsNetUtil.h"
 #include "nsStreamUtils.h"
 #include "nsThreadUtils.h"
+#include "nsXULAppAPI.h"
 
 using namespace mozilla;
 using namespace mozilla::psm;
@@ -799,13 +801,58 @@ static bool IsV3OnionIdentity(const nsACString& host) {
   return true;
 }
 
+static bool IsProtectedAgentContext(const OriginAttributes& attrs) {
+  return (attrs.mUserContextId >= 0xB4500000 &&
+          attrs.mUserContextId <= 0xB450FFFF) ||
+         StringBeginsWith(attrs.mGeckoViewSessionContextId,
+                          u"gvctx626173686b697474656e2d6167656e742d"_ns);
+}
+
 static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) {
-  const bool protectedContext =
-      (attrs.mUserContextId >= 0xB4500000 && attrs.mUserContextId <= 0xB450FFFF) ||
-      StringBeginsWith(attrs.mGeckoViewSessionContextId,
-                       u"gvctx626173686b697474656e2d6167656e742d"_ns);
-  return protectedContext &&
+  return IsProtectedAgentContext(attrs) &&
       (host.EqualsLiteral("127.0.0.1") || IsV3OnionIdentity(host));
+}
+
+static bool IsAgentHostedScope(const nsACString& parentHost,
+                              const nsACString& host,
+                              const OriginAttributes& attrs) {
+  if (!IsV3OnionIdentity(parentHost) ||
+      host.Length() < parentHost.Length() + 2 ||
+      host.Length() > parentHost.Length() + 64 ||
+      !StringEndsWith(host, parentHost) || IsProtectedAgentContext(attrs)) {
+    return false;
+  }
+  const size_t labelLength = host.Length() - parentHost.Length() - 1;
+  if (host[labelLength] != '.' || host[0] == '-' ||
+      host[labelLength - 1] == '-') {
+    return false;
+  }
+  for (size_t i = 0; i < labelLength; ++i) {
+    const char c = host[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-')) {
+      return false;
+    }
+  }
+
+  const auto& sessionContext = attrs.mGeckoViewSessionContextId;
+  if (sessionContext.IsEmpty()) {
+    return attrs.mUserContextId > 0 && attrs.mUserContextId < 0x80000000;
+  }
+  // Ordinary GeckoView contexts are encoded by StorageController as gvctx
+  // followed by lowercase hex. Reject its empty-context sentinel and mixed
+  // desktop/GeckoView contexts as well as the protected prefix checked above.
+  if (attrs.mUserContextId != 0 || sessionContext.Length() <= 5 ||
+      sessionContext.Length() > 256 ||
+      !StringBeginsWith(sessionContext, u"gvctx"_ns)) {
+    return false;
+  }
+  for (size_t i = 5; i < sessionContext.Length(); ++i) {
+    const char16_t c = sessionContext[i];
+    if (!((c >= u'0' && c <= u'9') || (c >= u'a' && c <= u'f'))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static void ClearAgentTLSConnections() {
@@ -840,6 +887,49 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentCA(
   OriginAttributes attrs;
   if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
       !IsAgentScope(host, attrs)) return NS_ERROR_INVALID_ARG;
+  SetAgentRoot(host, attrs, nsTArray<uint8_t>());
+  ClearAgentTLSConnections();
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsCertOverrideService::SetAgentHostedCA(
+    const nsACString& parentHost, const nsACString& host,
+    JS::Handle<JS::Value> originAttributes, nsIX509Cert* ca, JSContext* cx) {
+  if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
+  if (!XRE_IsParentProcess() || !cx || !nsContentUtils::IsSystemCaller(cx)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+  OriginAttributes attrs;
+  if (!ca || !originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
+      !IsAgentHostedScope(parentHost, host, attrs)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+  UniqueCERTCertificate cert(ca->GetCert());
+  if (!cert || !CERT_IsCACert(cert.get(), nullptr)) return NS_ERROR_INVALID_ARG;
+  nsTArray<uint8_t> root;
+  nsresult rv = ca->GetRawDER(root);
+  if (NS_FAILED(rv) || root.IsEmpty() || root.Length() > 65536) {
+    return NS_ERROR_INVALID_ARG;
+  }
+  auto previous = GetAgentRoot(host, attrs);
+  if (previous && previous.ref() == root) return NS_OK;
+  SetAgentRoot(host, attrs, root);
+  ClearAgentTLSConnections();
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsCertOverrideService::ClearAgentHostedCA(
+    const nsACString& parentHost, const nsACString& host,
+    JS::Handle<JS::Value> originAttributes, JSContext* cx) {
+  if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
+  if (!XRE_IsParentProcess() || !cx || !nsContentUtils::IsSystemCaller(cx)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+  OriginAttributes attrs;
+  if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
+      !IsAgentHostedScope(parentHost, host, attrs)) {
+    return NS_ERROR_INVALID_ARG;
+  }
   SetAgentRoot(host, attrs, nsTArray<uint8_t>());
   ClearAgentTLSConnections();
   return NS_OK;

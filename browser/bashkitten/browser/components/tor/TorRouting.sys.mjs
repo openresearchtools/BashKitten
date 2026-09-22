@@ -69,6 +69,7 @@ export const TorRouting = {
   _busyCount: 0,
   _lastError: "",
   _agentContexts: new Map(),
+  _hostedSites: new Map(),
   container: null,
   persistentContainer: null,
 
@@ -157,6 +158,11 @@ export const TorRouting = {
   },
 
   contextIdForURI(uri) {
+    // Registered Agent sites always use the existing ordinary private Tor
+    // container, even if the parent onion has a persistent-tab preference.
+    const host = this.isOnionURI(uri) ? uri.host : "";
+    if (this._hostedSites.has(host) || [...this._hostedSites.values()]
+      .some(site => host == site.address + ".onion")) return this.userContextId;
     const address = this.serviceAddress(uri);
     if (address && !OnionAuthStore.usesPrivateMode(address)) {
       this.persistentContainer ??= this._ensureContainer(
@@ -744,6 +750,36 @@ export const TorRouting = {
     for (const { address, key } of this._agentContexts.values()) {
       await this._control.send(`ONION_CLIENT_AUTH_ADD ${address} x25519:${key}`);
     }
+    for (const { address, key } of this._hostedSites.values()) {
+      await this._control.send(`ONION_CLIENT_AUTH_ADD ${address} x25519:${key}`);
+    }
+  },
+
+  async registerHostedSite(host, parentHost, key) {
+    this.init();
+    const address = onionAddress(parentHost);
+    if (!new RegExp(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.${address}\\.onion$`).test(host)) {
+      throw new Error("Invalid hosted onion site");
+    }
+    const entry = { address, key: onionPrivateKey(key) };
+    await this._queueAuthorization(async () => {
+      this._hostedSites.set(host, entry);
+      await this.ensureProxy();
+      await this._control.send(`ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${entry.key}`);
+    });
+  },
+
+  async unregisterHostedSite(host) {
+    await this._queueAuthorization(async () => {
+      const entry = this._hostedSites.get(host);
+      this._hostedSites.delete(host);
+      if (!entry || [...this._hostedSites.values(), ...this._agentContexts.values()]
+        .some(item => item.address == entry.address)) return;
+      const ordinary = (await OnionAuthStore.load()).get(entry.address);
+      if (this._control) await this._control.send(ordinary?.key
+        ? `ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${ordinary.key}`
+        : `ONION_CLIENT_AUTH_REMOVE ${entry.address}`);
+    });
   },
 
   async registerAgentContext(id, host, key) {
@@ -752,23 +788,23 @@ export const TorRouting = {
       throw new Error("Invalid protected Agent context");
     }
     const entry = { address: onionAddress(host), key: onionPrivateKey(key) };
-    this._agentContexts.set(id, entry);
-    await this.ensureProxy();
-    await this._queueAuthorization(() => this._control.send(
-      `ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${entry.key}`
-    ));
+    await this._queueAuthorization(async () => {
+      this._agentContexts.set(id, entry);
+      await this.ensureProxy();
+      await this._control.send(`ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${entry.key}`);
+    });
   },
 
   async unregisterAgentContext(id) {
-    const entry = this._agentContexts.get(id);
-    this._agentContexts.delete(id);
-    if (!entry || [...this._agentContexts.values()].some(item => item.address == entry.address)) return;
-    const ordinary = (await OnionAuthStore.load()).get(entry.address);
-    if (this._control) {
-      await this._queueAuthorization(() => this._control.send(ordinary?.key
+    await this._queueAuthorization(async () => {
+      const entry = this._agentContexts.get(id);
+      this._agentContexts.delete(id);
+      if (!entry || [...this._agentContexts.values(), ...this._hostedSites.values()].some(item => item.address == entry.address)) return;
+      const ordinary = (await OnionAuthStore.load()).get(entry.address);
+      if (this._control) await this._control.send(ordinary?.key
         ? `ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${ordinary.key}`
-        : `ONION_CLIENT_AUTH_REMOVE ${entry.address}`));
-    }
+        : `ONION_CLIENT_AUTH_REMOVE ${entry.address}`);
+    });
   },
 
   _queueAuthorization(operation) {

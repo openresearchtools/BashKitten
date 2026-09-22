@@ -35,9 +35,10 @@ export class BashKittenAgentChild extends JSWindowActorChild {
   }
 
   async call(command, data, entry) {
-    if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Open files from a user action in the local Agent view.");
+    if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view.");
     if (command === "sign-in") return this.sendQuery("SignIn");
     if (command === "import-remote") return this.sendQuery("ImportRemote");
+    if (command === "open-hosted" && typeof data.url === "string") return this.sendQuery("OpenHosted", { url: data.url });
     if (!entry.local) throw new Error("Files on a remote Agent use browser downloads.");
     if (command === "open-folder" || command === "open-file" && typeof data.folder === "string") {
       return this.sendQuery("OpenFolder", { path: data.path || data.folder });

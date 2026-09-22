@@ -71,9 +71,8 @@ void SetAgentRoot(const nsACString& host, const OriginAttributes& attributes,
 
 Maybe<nsTArray<uint8_t>> GetAgentRoot(const nsACString& host,
                                     const OriginAttributes& attributes) {
-  if ((attributes.mUserContextId < 0xB4500000 || attributes.mUserContextId > 0xB450FFFF) &&
-      !StringBeginsWith(attributes.mGeckoViewSessionContextId,
-                       u"gvctx626173686b697474656e2d6167656e742d"_ns)) return Nothing();
+  // Privileged enrollment validates protected Agent and ordinary hosted-site
+  // scopes. Both use an exact host and complete origin-attributes lookup.
   StaticMutexAutoLock lock(sAgentRootMutex);
   if (sAgentRoots) {
     for (const auto& entry : *sAgentRoots) {
@@ -643,7 +642,7 @@ Result CertVerifier::VerifyCert(
     }
   }
 
-  // Use the enrolled CA as the only anchor for this protected endpoint. A
+  // Use the enrolled CA as the only anchor for this scoped endpoint. A
   // publicly trusted replacement on the same port is still not our server.
   nsTArray<Input> agentRootInputs;
   if (agentRoot) {

@@ -3,6 +3,7 @@
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
+import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const HTML = "http://www.w3.org/1999/xhtml";
@@ -37,7 +38,7 @@ async function readPipe(pipe) {
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "account-create", "account-enroll", "account-totp"].includes(command)) {
+  if (!["start", "status", "stop", "account-create", "account-enroll", "account-totp", "hosting-client"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   const process = await Subprocess.call({
@@ -102,6 +103,7 @@ class AgentView {
     this.layout = "full";
     this.browseWithAgent = Services.prefs.getBoolPref("bashkitten.agent.splitBrowsing", true);
     this.enrollmentPrompted = false;
+    this.pendingHosted = null;
   }
 
   async init() {
@@ -219,6 +221,58 @@ class AgentView {
     return true;
   }
 
+  async openHosted(browser, url, { tab = null, forceSignIn = false } = {}) {
+    const entry = ownedViews.get(browser);
+    if (!entry || entry.authFor || this.off || this.activeBrowser !== browser) throw new Error("Select the Agent that hosts this site.");
+    let prepared = await AgentRemotes.prepareHosted(entry.connection, url);
+    if (prepared.needsLocalEnrollment) {
+      const record = await control("hosting-client");
+      prepared = await AgentRemotes.prepareHosted(entry.connection, url, { localRecord: record });
+    }
+    if (this.off || this.activeBrowser !== browser) throw new Error("The selected Agent changed.");
+    if (!prepared.ready || forceSignIn) {
+      this.pendingHosted = { browser, url, tab };
+      const connection = prepared.authentication;
+      const origin = new URL(connection.url).origin;
+      await this.connect({ ...connection, url: origin + "/login?rd=" + encodeURIComponent(origin + "/") }, entry.local, { authFor: browser });
+      this.show();
+      return;
+    }
+    const uri = Services.io.newURI(prepared.site.url);
+    if (!tab || tab.closing || !tab.isConnected || tab.userContextId != TorRouting.userContextId) {
+      tab = await TorRouting.createTab(this.win, { uri });
+    }
+    this.win.gBrowser.selectedTab = tab;
+    tab.linkedBrowser.loadURI(uri, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    this.browse();
+  }
+
+  routeHostedLink(browser, value) {
+    const entry = ownedViews.get(browser);
+    let target;
+    try { target = new URL(value); } catch { return false; }
+    if (!entry || this.off || this.activeBrowser !== browser || target.protocol != "https:" ||
+        !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z2-7]{56}\.onion$/.test(target.hostname)) return false;
+    // Native context-menu and middle-click tab opening take this same path as
+    // the web bookmark bridge; no protected opener or cookie context escapes.
+    (async () => {
+      const response = await AgentRemotes.request(entry.connection, "/api/hosting");
+      if (response.status == 200 && response.data?.services?.some(site => site.enabled && site.url == target.href)) {
+        await this.openHosted(browser, target.href);
+      } else {
+        this.win.openTrustedLinkIn(target.href, "tab");
+      }
+    })().catch(error => Services.prompt.alert(this.win, "Could not open hosted website", error.message || String(error)));
+    return true;
+  }
+
+  async hostedSignIn(ownerId, url, tab) {
+    if (this.pendingHosted) return;
+    const selected = ownedViews.get(this.activeBrowser)?.connection.id;
+    if (selected != ownerId) await this.choose(ownerId == "local" ? "" : ownerId);
+    await this.openHosted(this.activeBrowser, url, { tab, forceSignIn: true });
+  }
+
   async refreshRemotes() {
     const selected = this.remote?.id || "";
     this.choice.replaceChildren(html(this.doc, "option", { value: "" }, "Local"));
@@ -231,6 +285,7 @@ class AgentView {
   }
 
   async choose(id) {
+    this.pendingHosted = null;
     this.selection = id;
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("remote switch");
@@ -276,6 +331,7 @@ class AgentView {
   }
 
   async stop() {
+    this.pendingHosted = null;
     clearTimeout(this.timer);
     this.off = true;
     await lazy.BrowserControlChannel.close("Agent turned off");
@@ -374,7 +430,7 @@ class AgentView {
           try { uri = new URL(location.spec); } catch { return; }
           if (uri.origin !== new URL(expected.url).origin) {
             browser.stop();
-            if (["https:", "http:"].includes(uri.protocol)) host.win.openTrustedLinkIn(uri.href, "tab");
+            if (["https:", "http:"].includes(uri.protocol) && !host.routeHostedLink(browser, uri.href)) host.win.openTrustedLinkIn(uri.href, "tab");
             browser.loadURI(Services.io.newURI(expected.url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
           } else if (uri.pathname.startsWith("/login")) {
             lazy.BrowserControlChannel.close("authentication required");
@@ -729,6 +785,9 @@ class AgentView {
       ownedViews.delete(authBrowser);
       original.browsingContext.currentWindowGlobal.getActor("BashKittenAgent").sendAsyncMessage("Authenticated");
       if (originalEntry) this.contentReady(originalEntry, null);
+      const pending = this.pendingHosted;
+      this.pendingHosted = null;
+      if (pending?.browser == original) await this.openHosted(original, pending.url, { tab: pending.tab });
       return;
     }
     if (draftReady && actor && this.drafts.has(entry.key)) {

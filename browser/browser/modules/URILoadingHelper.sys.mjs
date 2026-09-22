@@ -505,6 +505,9 @@ export const URILoadingHelper = {
         return;
       }
       if (agentBrowser && where != "save") {
+        if (window.BashKittenAgent.routeHostedLink(agentBrowser, url)) {
+          return;
+        }
         const target = Services.io.newURI(url);
         const enrolled = Services.io.newURI(
           agentBrowser.getAttribute("data-agent-url")

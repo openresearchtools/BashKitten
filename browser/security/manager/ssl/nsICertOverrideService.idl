@@ -58,6 +58,21 @@ interface nsICertOverrideService : nsISupports {
   void setAgentCA(in ACString host, in jsval originAttributes, in nsIX509Cert ca);
   [implicit_jscontext]
   void clearAgentCA(in ACString host, in jsval originAttributes);
+  /** Privileged parent-process enrollment for an authenticated hosted site.
+   * The caller must verify the enrolled parent's CA and hosted-site catalog.
+   * parentHost is a v3 onion root; host is one exact DNS label below it.
+   * originAttributes must identify an ordinary desktop container or GeckoView
+   * session, never the default context or a protected Agent context. Trust is
+   * in-memory and applies only to this exact host and complete OA tuple. Normal
+   * chain, hostname, validity and key checks remain enabled; no wildcard trust
+   * or certificate exception is created.
+   */
+  [implicit_jscontext]
+  void setAgentHostedCA(in ACString parentHost, in ACString host,
+                       in jsval originAttributes, in nsIX509Cert ca);
+  [implicit_jscontext]
+  void clearAgentHostedCA(in ACString parentHost, in ACString host,
+                         in jsval originAttributes);
   /** Credentialless CA pickup through an already authenticated exact onion.
    * Only a transient protected enrollment context may use this policy. */
   [implicit_jscontext]
