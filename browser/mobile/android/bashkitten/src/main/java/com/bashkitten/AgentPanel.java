@@ -116,6 +116,17 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 try {
                     URI target = URI.create(request.uri), own = URI.create(runtime.url);
                     if (Objects.equals(target.getScheme(), own.getScheme()) && Objects.equals(target.getHost(), own.getHost()) && target.getPort() == own.getPort() ) {
+                        String path = target.getRawPath();
+                        if ("/api/files/content".equals(path) || (path != null && path.matches("/api/sessions/[a-f0-9-]{36}/attachments/[^/]+/[^/]+"))) {
+                            Uri file = Uri.parse(request.uri);
+                            if (!"true".equals(file.getQueryParameter("download"))) {
+                                Uri.Builder download = file.buildUpon().clearQuery();
+                                for (String name : file.getQueryParameterNames()) if (!name.equals("download"))
+                                    for (String value : file.getQueryParameters(name)) download.appendQueryParameter(name, value);
+                                s.loadUri(download.appendQueryParameter("download", "true").build().toString());
+                                return GeckoResult.fromValue(AllowOrDeny.DENY);
+                            }
+                        }
                         if (target.getPath().startsWith("/login")) app.remoteControl.disconnect();
                         if (request.target == TARGET_WINDOW_NEW) { s.loadUri(request.uri); return GeckoResult.fromValue(AllowOrDeny.DENY); }
                         return GeckoResult.fromValue(AllowOrDeny.ALLOW);
