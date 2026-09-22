@@ -2225,55 +2225,59 @@
     async function openSession(session, reconnect = false) {
       if (!session) return;
       const view = ++sessionView;
-      if (editingQueueId && !reconnect) await cancelQueueEdit();
-      if (sessionView !== view) return;
-      closeImageViewer();
-      current = {...session};
-      history.replaceState(null, '', '#session=' + session.id);
-      sendVisibility();
-      oldestSegment = 0;
-      setCompacting(false);
-      loadingHistory = false;
-      liveToolCalls.clear();
-      if (!reconnect) showChatView();
-      source?.close();
-      source = null;
-      if (!reconnect) {
-        pendingFiles = [];
-        pendingRetainedAttachments = [];
-        goalDraft=false;renderGoalChip();
-        editingQueueSnapshot = null;
-      }
-      renderAttachments();
-      $('#title').textContent = session.title;
-      $('#folderLabel').textContent = displayFolder(session.cwd) || 'Working folder';
-      $('#folderBtn').disabled = true;
-      $('#folderBtn').title = `Saved working folder: ${displayFolder(session.cwd)}. Start a new chat to choose another.`;
-      setRunButton(Boolean(session.running));
-      fillSelect($('#model'), models, session.model);
-      $('#thinking').value = session.thinking || '';
-      renderedTurn = null;
-      renderedEntries = new Set();
-      resetUsage();
-      $('#chatInner').innerHTML = '';
-      const resumed = await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
-      if (sessionView !== view) return;
-      updateInstanceControl(resumed.stopped);
-      if (resumed.stopped) {
-        renderEvent({type:'snapshot', data:resumed.snapshot});
-        $('#composerHint').textContent = 'Pi is stopped. Press Start Pi to continue.';
-      } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
-      if (sessionView !== view) return;
-      setSidebar(false);
-      if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
-      document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
-      $('#chat').scrollTop = $('#chat').scrollHeight;
+      $('#composer').inert = true;
+      try {
+        if (editingQueueId && !reconnect) await cancelQueueEdit();
+        if (sessionView !== view) return;
+        closeImageViewer();
+        current = {...session};
+        history.replaceState(null, '', '#session=' + session.id);
+        sendVisibility();
+        oldestSegment = 0;
+        setCompacting(false);
+        loadingHistory = false;
+        liveToolCalls.clear();
+        if (!reconnect) showChatView();
+        source?.close();
+        source = null;
+        if (!reconnect) {
+          pendingFiles = [];
+          pendingRetainedAttachments = [];
+          goalDraft=false;renderGoalChip();
+          editingQueueSnapshot = null;
+        }
+        renderAttachments();
+        $('#title').textContent = session.title;
+        $('#folderLabel').textContent = displayFolder(session.cwd) || 'Working folder';
+        $('#folderBtn').disabled = true;
+        $('#folderBtn').title = `Saved working folder: ${displayFolder(session.cwd)}. Start a new chat to choose another.`;
+        setRunButton(Boolean(session.running));
+        fillSelect($('#model'), models, session.model);
+        $('#thinking').value = session.thinking || '';
+        renderedTurn = null;
+        renderedEntries = new Set();
+        resetUsage();
+        $('#chatInner').innerHTML = '';
+        const resumed = await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
+        if (sessionView !== view) return;
+        updateInstanceControl(resumed.stopped);
+        if (resumed.stopped) {
+          renderEvent({type:'snapshot', data:resumed.snapshot});
+          $('#composerHint').textContent = 'Pi is stopped. Press Start Pi to continue.';
+        } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
+        if (sessionView !== view) return;
+        setSidebar(false);
+        if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
+        document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
+        $('#chat').scrollTop = $('#chat').scrollHeight;
+      } finally { if (sessionView === view) $('#composer').inert = false; }
     }
 
     async function beginNewSession() {
       const view = ++sessionView;
       if (editingQueueId) await cancelQueueEdit();
       if (sessionView !== view) return;
+      $('#composer').inert = false;
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
@@ -2325,7 +2329,7 @@
       try {
         if (button.dataset.stopped === 'true') await api(`/api/sessions/${current.id}/resume`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({start:true})});
         else await api('/api/control', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({command:'pi-stop', id:current.id})});
-        await openSession(current);
+        await openSession(current, true);
       } catch (error) { $('#composerHint').textContent = error.message; }
       finally { button.disabled = false; }
     };
