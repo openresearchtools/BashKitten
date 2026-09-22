@@ -6,11 +6,15 @@ on:
         description: Warm the desktop Rust compiler cache
         default: false
         type: boolean
+      native_only:
+        description: Build native components and the Termux package without Gecko
+        default: false
+        type: boolean
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: complete-candidates-${{ github.ref }}
+  group: complete-candidates-${{ github.ref }}-${{ inputs.native_only }}
   cancel-in-progress: false
 jobs:
   auth:
@@ -18,10 +22,12 @@ jobs:
   search:
     uses: ./.github/workflows/search-native.yml
   browser:
+    if: ${{ !inputs.native_only }}
     uses: ./.github/workflows/browser-linux.yml
     with:
       warm_gkrust: ${{ inputs.warm_gkrust }}
   android:
+    if: ${{ !inputs.native_only }}
     uses: ./.github/workflows/android.yml
     secrets: inherit
   packages:
