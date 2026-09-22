@@ -1,0 +1,55 @@
+Hugging Face repository and download adaptation
+
+BashKitten's JavaScript model-download implementation adapts the repository
+listing, private settings, job controls and resumable download design from:
+
+  BashKitten Rust
+  https://github.com/openresearchtools/bashkitten-rust
+  Commit: ae98be510992103ec2e9535d46d31117c4a65307
+  Reference files: src/huggingface.rs, src/download.rs,
+                   src/web/download_api.rs, THIRD_PARTY_NOTICES.md
+  License: Apache-2.0; full text in BASHKITTEN-RUST-LICENSE.
+
+The implementation is changed: it is a dependency-free JavaScript adaptation
+for the existing Node server, rather than the donor's Rust implementation.
+BashKitten's original JavaScript code and modifications are GPL-3.0-only;
+the original source licenses and attributions remain applicable.
+
+The Rust donor records SimpleHF as the source of its repository listing and
+download architecture:
+
+  SimpleHF
+  https://github.com/openresearchtools/simplehf
+  Current reference: ef5e66a5fa1586892d338c4659b3fd754e75d4e2
+  Donor's original reference: a7dccac659e4ee71d0652807f198eda20d0e7cdc
+  Reference files: gui/main.rs, engine/main.rs, THIRD_PARTY_NOTICES.md
+  Copyright (c) 2026 openresearchtools
+  License: MIT; full text in SIMPLEHF-LICENSE.
+
+Both SimpleHF revisions were inspected. The engine/main.rs source and both
+MIT license texts are identical at these revisions. The current reference
+does not change the download engine relative to the donor's original pin.
+
+SimpleHF's Rust download engine adapts the authenticated HTTP and adaptive
+ranged-chunk architecture of rust-hf-downloader:
+
+  rust-hf-downloader
+  https://github.com/JohannesBertens/rust-hf-downloader
+  Copyright (c) Johannes Bertens
+  License: MIT; full text in RUST-HF-DOWNLOADER-LICENSE, preserved from
+  SimpleHF's licenses/rust-hf-downloader-MIT.txt at the reference above.
+  SimpleHF does not record a separate rust-hf-downloader source commit.
+
+The Rust donor's Hugging Face client also credits Pi's
+extensions/llama/huggingface.ts:
+
+  Pi
+  https://github.com/earendil-works/pi
+  Donor's reference: 9841914c71a74d81abe07f751aefd271fd924e63
+  Copyright (c) 2025 Mario Zechner
+  License: MIT; full text in PI-LICENSE, preserved from the Rust donor's
+  THIRD_PARTY_NOTICES.md. This is the historical client reference, separate
+  from the native Pi runtime version shipped with BashKitten.
+
+No SimpleHF or BashKitten Rust executable, GUI, Rust runtime dependencies or
+third-party model weights are included by this adaptation.

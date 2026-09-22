@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
                  'src/server/access/NOTICE', 'src/server/access/TORKITTEN-LICENSE'):
         (stage / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / name, stage / name)
-    for name in ('licenses', 'pi', 'search'):
+    for name in ('licenses', 'pi', 'search', 'src/server/models/third_party'):
         shutil.copytree(ROOT / name, stage / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'runtime'))
     subprocess.run(['npm', 'ci', '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=arm64'], check=True)
     subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', 'arm64'], check=True)

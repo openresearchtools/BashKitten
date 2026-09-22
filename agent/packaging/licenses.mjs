@@ -46,7 +46,7 @@ async function npmInventory(root, target, architecture) {
     const installed = await json(path.join(root, location, 'package.json'));
     if (!installed.name || !installed.version) throw Error('Invalid installed dependency: ' + location);
   }
-  return (await bundledLicenses(root)).map(value => record(value, 'Agent / npm'));
+  return (await bundledLicenses(root)).map(value => record(value, value.component || 'Agent / npm'));
 }
 async function sourceNotices(root, component, specifications) {
   const records = [];

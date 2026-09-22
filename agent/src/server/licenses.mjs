@@ -28,6 +28,18 @@ export async function bundledLicenses(root = appRoot) {
   }
   const records = [{ name: 'BashKitten', version: version || pkg.version, license: 'GPL-3.0-only',
     source: 'https://github.com/openresearchtools/bashkitten', text: await fs.readFile(path.join(root, 'LICENSE'), 'utf8') }];
+  const modelNotices = path.join(root, 'src/server/models/third_party');
+  const modelProvenance = await fs.readFile(path.join(modelNotices, 'NOTICE'), 'utf8');
+  for (const [name, license, file] of [
+    ['BashKitten Rust model downloader', 'Apache-2.0', 'BASHKITTEN-RUST-LICENSE'],
+    ['SimpleHF', 'MIT', 'SIMPLEHF-LICENSE'],
+    ['rust-hf-downloader', 'MIT', 'RUST-HF-DOWNLOADER-LICENSE'],
+    ['Pi Hugging Face client reference', 'MIT', 'PI-LICENSE'],
+  ]) {
+    const text = await fs.readFile(path.join(modelNotices, file), 'utf8');
+    if (!text.trim()) throw Error('Missing model downloader license: ' + name);
+    records.push({ name, license, component: 'Model downloads', text: modelProvenance + '\n\n' + text });
+  }
   const seen = new Set();
   for (const [location, item] of Object.entries(lock.packages)) {
     if (!location || item.dev) continue;

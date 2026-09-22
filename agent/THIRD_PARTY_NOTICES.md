@@ -8,6 +8,9 @@ The server package bundles unmodified Pi and its npm dependencies, Caddy,
 Authelia, Tor and the DDGS search runtime. Search preserves Buzzard Search and
 Unsloth AGPL attribution. Access configuration preserves Torkitten's Apache-2.0
 notice. Releases provide corresponding source and build material.
+Model downloads adapt BashKitten Rust and SimpleHF behavior, retaining their
+Apache-2.0/MIT notices and the credited rust-hf-downloader and Pi client notices.
+Full texts and source pins are in `src/server/models/third_party/` and About.
 
 Termux, Node.js, Python, Git, GitHub CLI and declared system libraries are
 installed separately under their package licenses. The Android APK and Termux
