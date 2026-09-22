@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 import http from 'node:http';
-import https from 'node:https';
 import fs from 'node:fs/promises';
 import { openSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { randomUUID, randomBytes } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
@@ -19,11 +18,25 @@ import { folderLocations, pickerDirectory, listFolders } from '../files/folders.
 import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
-import { visibleSession } from '../platform/termux/notifications.mjs';
-import { claimInstance, processStart, probeBackend, serverFile } from '../instance.mjs';
+import { visibleSession } from '../rpc/notifications.mjs';
+import { claimInstance, processStart, probeBackend } from '../instance.mjs';
+import { paths } from '../access/paths.mjs';
+import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket } from '../access/browser-channel.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
+if (!process.env.BASHKITTEN_BACKEND_SOCKET) {
+  const port = process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || process.env.PORT;
+  if (port) {
+    if (!Number.isInteger(Number(port)) || Number(port) < 1024 || Number(port) > 65535) throw Error('Invalid HTTPS port');
+    const file = path.join(dataDir, 'settings.json');
+    await writeJson(file, { ...await readJson(file, {}), web_port: Number(port) });
+  }
+  await ensureManager();
+  const status = await controlRequest('start', {});
+  console.log('BashKitten · ' + status.web.url);
+  process.exit(0);
+}
 const ownership = await claimInstance('web');
 if (!ownership) {
   for (const deadline = Date.now() + 15000; Date.now() < deadline;) {
@@ -33,14 +46,12 @@ if (!ownership) {
   }
   throw Error('The existing BashKitten backend is not responding. Use Restart backend.');
 }
-const instanceToken = randomBytes(32).toString('hex');
+const instanceToken = process.env.BASHKITTEN_INSTANCE_TOKEN;
+if (!/^[a-f0-9]{64}$/.test(instanceToken || '')) throw Error('Private controller token required');
 const started = await processStart(process.pid);
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
-const certFile = process.env.BASHKITTEN_TLS_CERT, keyFile = process.env.BASHKITTEN_TLS_KEY;
-if (Boolean(certFile) !== Boolean(keyFile)) throw Error('Configure both BASHKITTEN_TLS_CERT and BASHKITTEN_TLS_KEY');
-const tls = certFile ? { cert: await fs.readFile(certFile), key: await fs.readFile(keyFile) } : null;
-const scheme = tls ? 'https' : 'http';
+const scheme = 'https';
 const services = new Services(), starts = new Map();
 const configFile = path.join(dataDir, 'settings.json');
 let config = await readJson(configFile, { web_port: 3939, theme: 'system', default_cwd: os.homedir(), default_model: '', default_thinking: '' });
@@ -50,6 +61,7 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function running(id) { try { return await workerRequest(id, '/status'); } catch { return null; } }
 async function ensureWorker(id, explicit = false) {
   allowRuntimeWork();
+  const browserSocket = await ensureBrowserSocket(id);
   const lifecycle = path.join(sessionDir(id), 'lifecycle.json');
   if ((await readJson(lifecycle, {})).stopped) {
     if (!explicit) throw Error('Pi instance is stopped. Press Start Pi to resume.');
@@ -60,7 +72,7 @@ async function ensureWorker(id, explicit = false) {
     if (await running(id)) return;
     await readMeta(id);
     const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
-    const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: process.env });
+    const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket } });
     closeSync(log); child.unref();
     let failure; child.on('error', error => { failure = error; });
     for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
@@ -138,12 +150,13 @@ function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw 
 const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
+const aboutHtml = await fs.readFile(path.join(here, '../../web/about.html'));
 const aboutScript = await fs.readFile(path.join(here, '../../web/about.js'));
 let activeServer;
 async function handler(req, res) {
   try {
     const requestHost = req.headers.host || '';
-    if (!/^(127\.0\.0\.1|localhost):\d+$/.test(requestHost)) throw Object.assign(Error('Invalid localhost host'), { status: 403 });
+    if (!/^(?:127\.0\.0\.1:\d+|[a-z2-7]{56}\.onion(?::\d+)?)$/.test(requestHost)) throw Object.assign(Error('Invalid Agent host'), { status: 403 });
     const url = new URL(req.url, `${scheme}://${requestHost}`), route = url.pathname;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -152,6 +165,9 @@ async function handler(req, res) {
       if (req.method !== 'GET' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       return json(res, { pid: process.pid, instance: instanceToken });
     }
+    auth.origin(req);
+    if (route === '/.well-known/bashkitten-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
+    if (route === '/about' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(aboutHtml); }
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
     if (route === '/about.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(aboutScript); }
@@ -161,24 +177,24 @@ async function handler(req, res) {
     if (mutation) auth.checkOrigin(req);
     const record = await auth.login(req);
     if (route === '/api/bootstrap') { requireMethod(req, ['GET']); return json(res, await auth.bootstrap(record)); }
-    if (route === '/api/signup' || route === '/api/login') {
-      requireMethod(req, ['POST']);
-      try { return json(res, await auth.authenticate(await jsonBody(req), route.endsWith('signup'), res)); }
-      catch (error) { await pause(300); throw error; }
-    }
     if (!record) throw Object.assign(Error('Sign in to BashKitten'), { status: 401 });
     if (mutation) auth.checkCsrf(req, record);
-    if (route === '/api/logout') { requireMethod(req, ['POST']); await auth.logout(record, res); return json(res, { ok: true }); }
+    if (route === '/api/logout') { requireMethod(req, ['POST']); await auth.logout(record, res); closeBrowserChannels(record.key); return json(res, { ok: true, loginUrl: '/login' }); }
+    if (route === '/api/browser-channel/poll') {
+      const stopWatching = auth.watch(record, () => { closeBrowserChannels(record.key); res.end(); });
+      res.once('close', stopWatching);
+    }
+    if (await handleBrowserChannel(req, res, record, route)) return;
     if (route === '/api/visibility') {
       requireMethod(req, ['POST']);
       const value = await jsonBody(req);
-      if (platform === 'termux') await visibleSession(value.client, value.id, Boolean(value.visible));
+      await visibleSession(value.client, value.id, Boolean(value.visible));
       return json(res, { ok: true });
     }
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'desktop-settings', 'desktop-start', 'desktop-stop'].includes(value.command)) throw Error('Unknown control action');
+      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings', 'llama-options', 'llama-configure', 'llama-start', 'llama-stop', 'llama-probe', 'get_remote_access', 'set_remote_access', 'create_remote_connection', 'revoke_remote_connection'].includes(value.command)) throw Error('Unknown control action');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
     }
     if (route === '/api/settings') {
@@ -187,18 +203,11 @@ async function handler(req, res) {
       const input = await jsonBody(req);
       const next = { web_port: Number(input.web_port), theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : 'system',
         default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || '') };
-      if (platform === 'termux') next.notifications = { enabled: Boolean(input.notifications?.enabled), onlyWhenHidden: input.notifications?.onlyWhenHidden !== false, preview: input.notifications?.preview !== false };
+      if (input.notifications !== undefined) next.notifications = { enabled: Boolean(input.notifications?.enabled), onlyWhenHidden: input.notifications?.onlyWhenHidden !== false, preview: input.notifications?.preview !== false };
       if (!Number.isInteger(next.web_port) || next.web_port < 1024 || next.web_port > 65535) throw Error('Port must be between 1024 and 65535');
-      let restartUrl;
-      if (next.web_port !== config.web_port) {
-        const old = activeServer; activeServer = await listenAvailable(next.web_port);
-        requestedPort = next.web_port;
-        next.web_port = activeServer.address().port;
-        restartUrl = `${scheme}://${url.hostname}:${next.web_port}`;
-        await announce(next.web_port);
-        setTimeout(() => { old.close(); old.closeAllConnections(); }, 500);
-      }
-      config = next; await writeJson(configFile, config); return json(res, { config, restartUrl });
+      const restartRequired = next.web_port !== config.web_port;
+      config = next; await writeJson(configFile, config);
+      return json(res, { config, restartRequired });
     }
     if (route === '/api/models') {
       requireMethod(req, ['GET']);
@@ -273,7 +282,8 @@ async function handler(req, res) {
         res.writeHead(stream.statusCode, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' }); stream.pipe(res);
       });
       upstream.on('error', () => { if (!res.headersSent) res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end('event: offline\ndata: {}\n\n'); });
-      res.on('close', () => upstream.destroy()); return;
+      const stopWatching = auth.watch(record, () => { upstream.destroy(); res.end(); });
+      res.on('close', () => { stopWatching(); upstream.destroy(); }); return;
     }
     if (action.startsWith('attachments/')) {
       requireMethod(req, ['GET']); const parts = action.split('/').slice(1).map(decodeURIComponent);
@@ -320,19 +330,14 @@ async function handler(req, res) {
     json(res, { error: error.message }, error.status || (error.code === 'ENOENT' ? 404 : 400));
   }
 }
-function listen(port) { return new Promise((resolve, reject) => { const server = tls ? https.createServer(tls, handler) : http.createServer(handler); server.once('error', reject); server.listen(port, '127.0.0.1', () => resolve(server)); }); }
-async function listenAvailable(port) {
-  try { return await listen(port); }
-  catch (error) { if (error.code !== 'EADDRINUSE') throw error; return listen(0); }
+activeServer = http.createServer(handler);
+await fs.rm(process.env.BASHKITTEN_BACKEND_SOCKET, { force: true });
+await new Promise((resolve, reject) => { activeServer.once('error', reject); activeServer.listen(process.env.BASHKITTEN_BACKEND_SOCKET, resolve); });
+await fs.chmod(process.env.BASHKITTEN_BACKEND_SOCKET, 0o600);
+await writeJson(paths.backendInfo, { pid: process.pid, started });
+for (const meta of await allMeta()) if (await running(meta.id)) {
+  await ensureBrowserSocket(meta.id);
+  await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
-let requestedPort = config.web_port;
-const announce = port => writeJson(serverFile, { pid: process.pid, started, token: instanceToken, script: fileURLToPath(import.meta.url), url: `${scheme}://127.0.0.1:${port}`, requestedPort });
-const previous = await readJson(serverFile, null);
-const remembered = previous?.requestedPort === requestedPort && /^https?:\/\/127\.0\.0\.1:\d+$/.test(previous.url || '') ? Number(new URL(previous.url).port) : requestedPort;
-activeServer = await listenAvailable(remembered);
-config.web_port = activeServer.address().port;
-await writeJson(configFile, config);
-await announce(activeServer.address().port);
-for (const meta of await allMeta()) if (await running(meta.id)) await workerRequest(meta.id, '/context', {}).catch(() => {});
-console.log(`BashKitten · Pi RPC · ${scheme}://127.0.0.1:${config.web_port}`);
-process.on('SIGTERM', () => { activeServer.close(); activeServer.closeAllConnections(); services.cancel().finally(() => process.exit(0)); });
+console.log('BashKitten private Pi RPC backend ready');
+process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); services.cancel().finally(() => process.exit(0)); });

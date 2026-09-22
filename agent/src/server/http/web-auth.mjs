@@ -1,60 +1,56 @@
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import { timingSafeEqual, randomBytes } from 'node:crypto';
-import { argon2id, argon2Verify } from 'hash-wasm';
-import { dataDir, readJson, writeJson, digest, randomToken } from '../common.mjs';
+import { timingSafeEqual, createHmac, createHash } from 'node:crypto';
+import { unixRequest } from '../access/io.mjs';
 
-const authFile = path.join(dataDir, 'web-auth.json');
-const loginFile = path.join(dataDir, 'web-logins.json');
-const cookieName = 'bashkitten_session';
+const proxyToken = process.env.BASHKITTEN_PROXY_TOKEN;
+const authSocket = process.env.BASHKITTEN_AUTH_SOCKET;
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
-let writes = Promise.resolve();
-function locked(fn) { const work = writes.then(fn); writes = work.catch(() => {}); return work; }
-export const hasUser = async () => Boolean(await readJson(authFile, null));
+export function origin(req) {
+  if (!proxyToken || !equal(req.headers['x-bashkitten-proxy'], proxyToken) || req.headers['x-forwarded-proto'] !== 'https') throw Object.assign(Error('Trusted HTTPS proxy required'), { status: 403 });
+  return 'https://' + req.headers.host;
+}
 export async function login(req) {
-  const token = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith(cookieName + '='))?.slice(cookieName.length + 1);
-  if (!token) return null;
-  const key = digest(token), records = await readJson(loginFile, {}), record = records[key];
-  return record && record.expires > Date.now() ? { ...record, key } : null;
+  origin(req);
+  const username = req.headers['remote-user'], cookie = req.headers.cookie;
+  return typeof username === 'string' && username && cookie ? { username, cookie, key: createHash('sha256').update(cookie).digest('hex'), origin: origin(req) } : null;
 }
 export function checkOrigin(req) {
-  if (req.headers.origin !== `${req.socket.encrypted ? 'https' : 'http'}://${req.headers.host}`) throw Object.assign(Error('Invalid request origin'), { status: 403 });
+  if (req.headers.origin !== origin(req)) throw Object.assign(Error('Invalid request origin'), { status: 403 });
 }
+const csrf = record => createHmac('sha256', proxyToken).update(record.username + '\0' + record.cookie).digest('hex');
 export function checkCsrf(req, record) {
-  if (!equal(digest(String(req.headers['x-bashkitten-csrf'] || '')), record.csrfHash)) throw Object.assign(Error('Invalid CSRF token'), { status: 403 });
+  if (!equal(req.headers['x-bashkitten-csrf'], csrf(record))) throw Object.assign(Error('Invalid CSRF token'), { status: 403 });
 }
-export async function bootstrap(record) {
-  if (!record) return { hasUser: await hasUser(), authenticated: false };
-  return locked(async () => {
-    const records = await readJson(loginFile, {}), csrf = randomToken();
-    if (!records[record.key]) return { hasUser: true, authenticated: false };
-    records[record.key].csrfHash = digest(csrf); await writeJson(loginFile, records);
-    return { hasUser: true, authenticated: true, csrf };
-  });
+export async function bootstrap(record) { return { hasUser: true, authenticated: Boolean(record), ...(record ? { csrf: csrf(record) } : { loginUrl: '/login' }) }; }
+export async function valid(record) {
+  if (!record) return false;
+  try {
+    const result = await unixRequest(authSocket, '/login/api/authz/forward-auth', { headers: {
+      host: new URL(record.origin).host, cookie: record.cookie,
+      'x-forwarded-host': new URL(record.origin).host, 'x-forwarded-proto': 'https',
+      'x-forwarded-uri': '/', 'x-forwarded-method': 'GET', 'x-forwarded-for': '127.0.0.1',
+    }, timeout: 5000 });
+    return result.status >= 200 && result.status < 300 && result.headers['remote-user'] === record.username;
+  } catch { return false; }
 }
-export async function authenticate(value, signup, res) {
-  return locked(async () => {
-    const { username, password } = value;
-    if (typeof username !== 'string' || typeof password !== 'string' || username.length > 128 || password.length > 1024 || password.length < 8 || !username.trim()) throw Error('Enter a username and a password of at least 8 characters');
-    let auth = await readJson(authFile, null);
-    if (signup) {
-      if (auth) throw Error('The local account already exists');
-      const passwordHash = await argon2id({ password, salt: randomBytes(16), parallelism: 1, iterations: 3, memorySize: 19456, hashLength: 32, outputType: 'encoded' });
-      auth = { username, passwordHash };
-      // wx prevents concurrent signup across separate server processes too.
-      await fs.writeFile(authFile, JSON.stringify(auth), { flag: 'wx', mode: 0o600 });
-    } else {
-      if (!auth || !await argon2Verify({ password, hash: auth.passwordHash }) || !equal(auth.username, username)) throw Error('Invalid username or password');
-    }
-    const records = await readJson(loginFile, {}), token = randomToken(), csrf = randomToken();
-    for (const [key, record] of Object.entries(records)) if (record.expires <= Date.now()) delete records[key];
-    records[digest(token)] = { csrfHash: digest(csrf), expires: Date.now() + 30 * 86400000 };
-    await writeJson(loginFile, records);
-    res.setHeader('Set-Cookie', `${cookieName}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000${res.socket.encrypted ? '; Secure' : ''}`);
-    return { csrf };
-  });
+const streams = new Map();
+export function watch(record, close) {
+  const key = record.cookie;
+  if (!streams.has(key)) streams.set(key, new Set());
+  streams.get(key).add(close);
+  let checking = false;
+  const timer = setInterval(async () => {
+    if (checking) return; checking = true;
+    try { if (!await valid(record)) close(); } finally { checking = false; }
+  }, 15000);
+  timer.unref();
+  return () => { clearInterval(timer); streams.get(key)?.delete(close); if (!streams.get(key)?.size) streams.delete(key); };
 }
 export async function logout(record, res) {
-  await locked(async () => { const records = await readJson(loginFile, {}); delete records[record.key]; await writeJson(loginFile, records); });
-  res.setHeader('Set-Cookie', `${cookieName}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+  const result = await unixRequest(authSocket, '/login/api/logout', { method: 'POST', headers: {
+    host: new URL(record.origin).host, cookie: record.cookie, 'content-type': 'application/json',
+    'x-forwarded-host': new URL(record.origin).host, 'x-forwarded-proto': 'https', 'x-forwarded-for': '127.0.0.1',
+  }, body: '{}' });
+  if (result.status < 200 || result.status > 299) throw Error('Authelia could not sign out');
+  if (result.headers['set-cookie']) res.setHeader('Set-Cookie', result.headers['set-cookie']);
+  for (const close of streams.get(record.cookie) || []) close();
 }

@@ -1,0 +1,6 @@
+Authelia/Caddy configuration and local enrollment follow Torkitten's implementation:
+https://github.com/openresearchtools/torkitten
+Source reference: 783c0899029aad22cec9562142c067f6b55408a7
+Copyright 2026 The Torkitten Authors. Licensed under Apache License 2.0.
+The original license is included in TORKITTEN-LICENSE.
+BashKitten implementation and adaptations remain GPL-3.0-only.

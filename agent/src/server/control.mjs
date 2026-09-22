@@ -1,235 +1,206 @@
 #!/usr/bin/env node
-// One small local supervisor shared by the native hosts. Pi workers stay detached.
+// One private controller owns the complete Agent lifecycle; closing UI is independent.
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import { openSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, workerRequest, socketPath, allMeta } from './common.mjs';
+import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, socketPath, allMeta, body } from './common.mjs';
 import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
-import { desktopStatus, saveDesktop, startDesktop, stopDesktop, selectProfile } from './platform/termux/desktop.mjs';
-import { wildbuzzardStatus, setupWildbuzzard, authorizeWildbuzzard } from './platform/termux/wildbuzzard.mjs';
 import { Jobs } from './updates/jobs.mjs';
 import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
-import { bundledRoot, appUpdateFile } from './rpc/runtime.mjs';
-import { checkPackages, updatePackages, recoverPackages, refreshApt, desktopPackages, apt, pairX11, packageInventory, configureTermux } from './platform/termux/packages.mjs';
-import { deliverNotifications } from './platform/termux/notifications.mjs';
-import { claimInstance, processStart, probeBackend, backendAlive, serverFile } from './instance.mjs';
+import { bundledRoot } from './rpc/runtime.mjs';
+import { checkPackages, updatePackages, recoverPackages, refreshApt, apt, packageInventory } from './platform/termux/packages.mjs';
+import { pendingNotifications, acknowledgeNotifications, notificationSettings } from './rpc/notifications.mjs';
+import { claimInstance, processStart } from './instance.mjs';
+import { ensureIntegration } from './rpc/integration.mjs';
+import { AccessStack } from './access/stack.mjs';
+import { RemoteAccess } from './access/remote.mjs';
+import { paths, binary } from './access/paths.mjs';
+import { acquireWake, releaseWake } from './access/wake.mjs';
+import { enrollAccount, completeAccount } from './access/accounts.mjs';
+import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, readManagedLlamaConnection, waitForManagedLlamaReady } from './platform/linux/llama.mjs';
+import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
 const stateFile = path.join(dataDir, 'control.json');
 const script = fileURLToPath(import.meta.url);
-const serverScript = fileURLToPath(new URL('./http/server.mjs', import.meta.url));
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function controlRequest(command, value) {
   for (let attempt = 0; ; attempt++) {
-    try { return await socketRequest(controlSocket, '/' + command, value, 30000); }
+    try { return await socketRequest(controlSocket, '/' + command, value, command === 'start' || command === 'restart' ? 120000 : 30000); }
     catch (error) {
-      // A manager replacement can close an in-flight status connection. Never replay actions.
       if (command !== 'status' || attempt >= 10 || !['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(error.code)) throw error;
       await sleep(100);
     }
   }
 }
-
-async function owned(pid, marker) {
-  if (!await processStart(pid)) return false;
-  try {
-    const command = (await fs.readFile(`/proc/${pid}/cmdline`, 'utf8')).split('\0');
-    return command.includes(marker);
-  } catch { return false; }
+function spawnManager(detached) {
+  const log = detached ? openSync(path.join(dataDir, 'control.log'), 'a', 0o600) : null;
+  const child = spawn(binary('runtime-guard'), [process.execPath, script, 'serve'], {
+    detached, stdio: detached ? ['ignore', log, log] : 'inherit',
+    env: { ...process.env, BASHKITTEN_TERMUX: platform === 'termux' ? '1' : '0' },
+  });
+  if (log !== null) closeSync(log);
+  return child;
 }
-
 export async function ensureManager() {
   try { await socketRequest(controlSocket, '/status', undefined, 3000); return; } catch {}
-  if (process.env.BASHKITTEN_NO_AUTOSTART === '1') throw Error('The Termux service is starting; reopen Apps if it does not become ready');
+  if (process.env.BASHKITTEN_NO_AUTOSTART === '1') throw Error('The Termux controller is starting; retry after setup');
   await privateDir(path.dirname(controlSocket));
-  const log = openSync(path.join(dataDir, 'control.log'), 'a', 0o600);
-  const child = spawn(process.execPath, [script, 'serve'], { detached: true, stdio: ['ignore', log, log], env: process.env });
-  closeSync(log); child.unref();
+  const child = spawnManager(true); child.unref();
   let error; child.on('error', value => { error = value; });
-  const deadline = Date.now() + 30000;
-  while (Date.now() < deadline) {
+  for (const deadline = Date.now() + 30000; Date.now() < deadline;) {
     if (error) throw error;
     try { await socketRequest(controlSocket, '/status', undefined, 3000); return; } catch {}
     await sleep(100);
   }
-  throw Error('Could not start local control service; see control.log');
+  throw Error('Could not start Agent controller; see control.log');
 }
-
+async function ownedWorker(id) {
+  const pid = Number(await fs.readFile(socketPath(id) + '.lock', 'utf8').catch(() => '0'));
+  const started = await processStart(pid);
+  if (!started) return null;
+  const worker = fileURLToPath(new URL('./rpc/worker.mjs', import.meta.url));
+  const args = (await fs.readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '')).split('\0');
+  return args.includes(worker) && args.includes(id) ? { pid, started } : null;
+}
+async function stopPi(id, force = false, markStopped = true) {
+  if (!(await allMeta()).some(meta => meta.id === id)) throw Error('Session not found');
+  if (markStopped) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
+  const owned = await ownedWorker(id);
+  try { await socketRequest(socketPath(id), '/shutdown', {}, force ? 1000 : 10000); }
+  catch (error) { if (!force && !['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
+  if (!owned) return;
+  for (let i = 0; i < 40 && await processStart(owned.pid) === owned.started; i++) await sleep(50);
+  if (await processStart(owned.pid) === owned.started) process.kill(-owned.pid, 'SIGKILL');
+}
 async function serve() {
   process.umask(0o077);
   await privateDir(path.dirname(controlSocket));
-  const lock = controlSocket + '.lock';
-  const previous = await socketRequest(controlSocket, '/status', undefined, 3000).catch(() => null);
-  if (previous?.manager && await processStart(previous.manager.pid)) {
-    if (process.env.BASHKITTEN_ATTACHED_MANAGER !== '1' || previous.manager.attached) return;
-    // Transfer a detached manager to Termux's foreground task without stopping Pi.
-    if (['running', 'waiting'].includes(previous.packages?.job?.status)) { await sleep(2000); return serve(); }
-    await controlRequest('shutdown', {});
-    await sleep(200);
-    return serve();
-  }
   const ownership = await claimInstance('control');
-  if (!ownership) {
-    if (process.env.BASHKITTEN_ATTACHED_MANAGER === '1') { await sleep(200); return serve(); }
-    return;
-  }
-  await fs.writeFile(lock, String(process.pid), { mode: 0o600 });
+  if (!ownership) return;
   await fs.rm(controlSocket, { force: true });
-  let state = await readJson(stateFile, { web: true }), serial = Promise.resolve(), starting = false, lastError = null;
-  let retryAt = 0, failures = 0;
+  const lock = controlSocket + '.lock';
+  await fs.writeFile(lock, String(process.pid), { mode: 0o600 });
+  let state = await readJson(stateFile, { web: false }), serial = Promise.resolve();
+  let starting = false, stopping = false, lastError = state.error || null, restartPending = false, exiting = false;
   const manifestFile = path.join(bundledRoot, 'build-platform.json');
   const packageFile = (await readJson(manifestFile, null))?.installationStamp || manifestFile;
   const revision = (await readJson(packageFile, null))?.revision;
-  const nodeStamp = async () => { const stat = await fs.stat(process.execPath); return `${stat.dev}:${stat.ino}:${stat.mtimeMs}`; };
-  const initialNode = await nodeStamp();
-  let restarting = false;
-  const jobs = new Jobs({ ...(platform === 'termux' ? { 'wildbuzzard-setup': setupWildbuzzard, 'wildbuzzard-authorize': authorizeWildbuzzard } : {}), 'finish-app-update': finishAppUpdate, 'prepare-app-update': prepareAppUpdate, 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages, 'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); }, 'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages, 'install-desktop': desktopPackages, 'graphics-profile': selectProfile });
+  const initialNode = (await fs.stat(process.execPath)).ino;
+  const remote = new RemoteAccess({ llama: async () => {
+    if (platform !== 'linux' || managedLlamaStatus().state !== 'ready') return null;
+    const value = await readManagedLlamaConnection();
+    return { upstream: new URL(value.url).host, bearerToken: value.apiKey };
+  } });
+  const stack = new AccessStack({
+    fatal: error => { lastError = error.message; serial = serial.then(() => turnOff(error.message)).catch(error => { lastError = error.message; }); },
+    llamaProxy: () => remote.llamaProxy(),
+  });
+  stack.remote = remote; remote.stack = stack;
+  const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
+    'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
+    'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages,
+    ...(platform === 'linux' ? { 'llama-runtime': installLlamaRuntime } : {}),
+  });
   await jobs.init();
-  async function web() {
-    return probeBackend();
-  }
+  await ensureIntegration();
+  if (platform === 'linux') subscribeManagedLlama(current => {
+    serial = serial.then(async () => { await syncManagedLlamaProvider(current); await stack.reload(); }).catch(error => { lastError = error.message; });
+  });
+  async function persist() { await writeJson(stateFile, { ...state, error: lastError }); }
   async function startWeb() {
-    if (starting || await readJson(appUpdateFile, null) || await web()) return;
-    starting = true;
+    if (starting || stopping || stack.ready) return;
+    starting = true; lastError = null;
     try {
-      // Upgrade a pre-discovery backend before publishing a new endpoint.
-      const previous = await readJson(serverFile, null);
-      if (previous && !previous.token && await backendAlive(previous)) await stopWeb();
-      const log = openSync(path.join(dataDir, 'server.log'), 'a', 0o600);
-      const child = spawn(process.execPath, [serverScript], { stdio: ['ignore', log, log], env: process.env });
-      closeSync(log);
-      child.on('error', error => { lastError = error.message; });
-      for (let i = 0; i < 100; i++) {
-        if (await web()) { failures = 0; lastError = null; return; }
-        if (child.exitCode !== null) break;
-        await sleep(100);
-      }
-      throw Error('Backend did not become ready; see server.log');
+      await acquireWake();
+      await stack.start();
+      if (platform === 'linux') await startManagedLlama();
     } catch (error) {
-      lastError = error.message; retryAt = Date.now() + Math.min(60000, 1000 * 2 ** Math.min(++failures, 6));
-      throw error;
+      lastError = error.message; state.web = false;
+      await stopGroup().catch(failure => { lastError += '; ' + failure.message; });
+      await persist(); throw error;
     } finally { starting = false; }
   }
-  async function stopWeb() {
-    const info = await readJson(serverFile, null); if (!await backendAlive(info)) return;
-    process.kill(info.pid, 'SIGTERM');
-    for (let i = 0; i < 100 && await backendAlive(info); i++) await sleep(50);
-    if (await backendAlive(info)) process.kill(info.pid, 'SIGKILL');
-    for (let i = 0; i < 100 && await backendAlive(info); i++) await sleep(50);
-    if (await backendAlive(info)) throw Error('Backend has not stopped yet');
+  async function stopGroup() {
+    await stack.stopIngress();
+    for (const meta of await allMeta()) await stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false));
+    if (platform === 'linux') await stopManagedLlama();
+    await stack.stop();
+    await releaseWake();
+  }
+  async function turnOff(error = null) {
+    state.web = false; stopping = true;
+    if (error) lastError = error;
+    await persist();
+    await stack.stopIngress();
+    // No new prompts can enter while an existing package transaction finishes.
+    if (jobs.busy) { await jobs.cancel(); return; }
+    try { await stopGroup(); stopping = false; await persist(); }
+    catch (failure) { lastError = failure.message; await persist(); throw failure; }
   }
   async function status() {
-    const info = await web();
     const sessions = await Promise.all((await allMeta()).map(async meta => {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 1, platform, wildbuzzard: platform === 'termux' ? await wildbuzzardStatus() : undefined, appUpdate: await readJson(appUpdateFile, null), manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' }, desktop: platform === 'termux' ? await desktopStatus() : undefined, packages: { ...await updateStatus(), job: await jobs.status() }, web: { status: info ? 'running' : starting ? 'starting' : lastError ? 'error' : 'stopped', desired: state.web, url: info?.url, error: lastError }, sessions };
-  }
-  async function prepareAppUpdate(job, input) {
-    await atIdle(job, async () => {
-      await job.phase('Pausing services for Android installation');
-      await stopWeb();
-      for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/shutdown', { restart: true }, 10000).catch(error => {
-        if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
-      });
-      await writeJson(appUpdateFile, { packageId: input.packageId, ready: true, createdAt: Date.now() });
-      if (job.job.cancelRequested) { await fs.rm(appUpdateFile, { force: true }); job.checkCancellation(); }
-    }, { desktop: true });
-  }
-  async function finishAppUpdate(job, input) {
-    if (input.packageId === 'com.termux.x11' && input.installed) await pairX11(job, input.companionVersion);
-    await fs.rm(appUpdateFile, { force: true });
+    return { version: 2, platform, manager: { pid: process.pid, revision, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
+      packages: { ...await updateStatus(), job: await jobs.status() },
+      web: { status: stopping ? 'stopping' : starting ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
+        desired: state.web, url: stack.ready ? stack.origin : undefined, error: lastError, ...await stack.status() },
+      ...(platform === 'linux' ? { llama: managedLlamaStatus() } : {}), sessions };
   }
   async function reloadServices(job) {
-    if (platform === 'termux') await apt(job, ['check']); // Respect an external APT transaction too.
+    if (platform === 'termux') await apt(job, ['check']);
     await atIdle(job, async () => {
       await job.phase('Reloading updated BashKitten / Node');
-      await stopWeb();
-      for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/shutdown', { restart: true }, 10000).catch(error => {
-        if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error;
-      });
-      // Preserve native sessions and intentional stops; new workers load updated code.
-      restarting = true;
-    }, { desktop: true });
+      await stopGroup(); restartPending = true;
+    });
   }
-  async function reconcilePackage() {
-    if (jobs.busy || await readJson(appUpdateFile, null)) return;
-    if (restarting) {
-      clearInterval(monitor);
-      await new Promise(resolve => server.close(resolve));
-      await fs.rm(lock, { force: true });
-      if (process.env.BASHKITTEN_ATTACHED_MANAGER === '1') process.exit(75);
-      const log = openSync(path.join(dataDir, 'control.log'), 'a', 0o600);
-      const child = spawn(process.execPath, [script, 'serve'], { detached: true, stdio: ['ignore', log, log], env: process.env });
-      closeSync(log); child.unref();
-      child.once('error', error => { console.error(error); process.exit(1); });
-      child.once('spawn', () => process.exit(0));
-      return;
-    }
-    const next = (await readJson(packageFile, null))?.revision;
-    if ((next && next !== revision) || initialNode !== await nodeStamp()) await jobs.start('reload-services');
-  }
-  async function stopPi(id, force) {
-    const meta = (await allMeta()).find(item => item.id === id);
-    if (!meta) throw Error('Session not found');
-    await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
-    // Ask the owner to checkpoint drafts and shut down its native Pi child.
-    try { await socketRequest(socketPath(id), '/shutdown', {}, force ? 1000 : 10000); return; }
-    catch (error) { if (!force && !['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
-    if (force) {
-      const pid = Number(await fs.readFile(socketPath(id) + '.lock', 'utf8').catch(() => '0'));
-      const workerScript = fileURLToPath(new URL('./rpc/worker.mjs', import.meta.url));
-      if (await owned(pid, workerScript) && await owned(pid, meta.workerOwner || id)) process.kill(-pid, 'SIGKILL');
-    }
-  }
-  async function action(command, value) {
+  async function action(command, value = {}) {
     if (command === 'status') return status();
+    if (command === 'get_remote_access') return remote.status();
+    if (command === 'set_remote_access') return remote.setEnabled(value.enabled);
+    if (command === 'create_remote_connection') return remote.create(value);
+    if (command === 'revoke_remote_connection') return remote.revoke(value.id);
     if (command === 'package-inventory') return packageInventory();
-    if (command === 'termux-source') { await configureTermux(value); return status(); }
-    if (command === 'app-update-finish') {
-      const held = await readJson(appUpdateFile, null);
-      if (held && held.packageId !== value.packageId) throw Error('Another Android installation owns the service pause');
-      if (jobs.busy && jobs.job.kind === 'prepare-app-update') { await jobs.cancel(); return status(); }
-      if (held && value.packageId === 'com.termux.x11' && value.installed) {
-        await jobs.start('finish-app-update', value, jobs.job?.kind === 'finish-app-update' && ['failed', 'interrupted', 'cancelled'].includes(jobs.job.status));
-      } else await fs.rm(appUpdateFile, { force: true });
-      return status();
+    if (command === 'notifications') return { notifications: await pendingNotifications() };
+    if (command === 'notification-settings') return notificationSettings(value.settings);
+    if (command === 'notifications-ack') { await acknowledgeNotifications(value.keys); return { ok: true }; }
+    if (command === 'account-totp') return completeAccount(value);
+    if (['account-create', 'account-enroll', 'account-reset-totp'].includes(command)) {
+      if (!stack.ready) throw Error('Turn on Agent before account setup');
+      return enrollAccount(stack.origin, value, { create: command === 'account-create', reset: command === 'account-reset-totp' });
     }
-    if (command === 'app-update-prepare') {
-      if (!/^com\.termux(?:\.(api|x11|boot|widget|styling|window|tasker))?$/.test(value.packageId)) throw Error('Unsupported Android package');
-      const held = await readJson(appUpdateFile, null);
-      if (held) {
-        if (held.packageId !== value.packageId) throw Error('Another Android installation owns the service pause');
-      } else await jobs.start('prepare-app-update', { packageId: value.packageId });
-      return status();
-    }
-    if (command === 'package-job' && value.retry && jobs.job?.kind === 'finish-app-update') { await jobs.start(jobs.job.kind, jobs.job.input, true); return status(); }
-    if (await readJson(appUpdateFile, null) && !['stop', 'pi-abort', 'pi-stop', 'pi-kill', 'desktop-stop', 'shutdown'].includes(command)) throw Error('Finish or cancel the Android installation before starting work');
-    if (jobs.busy && jobs.job.kind === 'prepare-app-update' && ['start', 'restart', 'desktop-start'].includes(command)) throw Error('Waiting for Android installation');
     if (command === 'package-cancel') { await jobs.cancel(); return status(); }
     if (command === 'package-job') {
+      if (stopping) throw Error('Agent is stopping');
       const current = await jobs.status();
       await jobs.start(value.retry ? current?.kind : value.kind, value.retry ? current?.input : value.input || {}, Boolean(value.retry));
-      return status();
-    }
-    if (command === 'desktop-settings') { await saveDesktop(value); }
-    else if (command === 'desktop-start') { if (jobs.busy) throw Error('Wait for package preparation to finish'); await startDesktop(); }
-    else if (command === 'desktop-stop') { await stopDesktop(); }
-    else if (['start', 'stop', 'restart'].includes(command)) {
-      state.web = command !== 'stop'; await writeJson(stateFile, state);
-      if (command !== 'start') await stopWeb();
-      if (state.web) await startWeb();
+    } else if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
+      if (command === 'stop' || command === 'shutdown') { await turnOff(); if (!stopping) scheduleExit(); }
+      else {
+        if (stopping || jobs.busy && command === 'restart') throw Error('Wait for package maintenance to finish');
+        if (command === 'restart') await stopGroup();
+        state.web = true; lastError = null; await persist(); await startWeb();
+      }
     } else if (command === 'pi-abort') {
       if (!(await allMeta()).some(meta => meta.id === value.id)) throw Error('Session not found');
       await socketRequest(socketPath(value.id), '/stop', {}, 10000);
     } else if (command === 'pi-stop' || command === 'pi-kill') {
-      const ids = value?.id ? [value.id] : (await allMeta()).map(meta => meta.id);
-      for (const id of ids) await stopPi(id, command === 'pi-kill');
+      for (const id of value.id ? [value.id] : (await allMeta()).map(meta => meta.id)) await stopPi(id, command === 'pi-kill');
+    } else if (command.startsWith('llama-')) {
+      if (platform !== 'linux') throw Error('Managed llama.cpp is available on Linux');
+      if (command === 'llama-options') return llamaRuntimeOptions();
+      if (command === 'llama-probe') return probeLlamaEndpoint(value);
+      if (command === 'llama-configure') await configureManagedLlama(value.config || value);
+      else if (command === 'llama-start' || command === 'llama-stop') await configureManagedLlama({ enabled: command === 'llama-start' });
+      else throw Error('Unknown llama.cpp control');
+      if (command === 'llama-stop') await stopManagedLlama();
+      else if (stack.ready) await startManagedLlama();
     } else if (command === 'native-file') {
       if (platform !== 'linux') throw Error('Native file opening is only available on Linux');
       return nativeFile(value);
@@ -241,9 +212,6 @@ async function serve() {
       const file = path.join(dataDir, 'project-roots.json'), roots = await readJson(file, []);
       if (!roots.includes(root)) await writeJson(file, [...roots, root]);
       return { path: root };
-    } else if (command === 'shutdown') {
-      if (jobs.busy) throw Error('Wait for package maintenance to finish before stopping the manager');
-      jsonShutdown(); return { ok: true };
     } else throw Error('Unknown control command');
     return status();
   }
@@ -252,33 +220,67 @@ async function serve() {
       if (req.url === '/status') return json(res, await status());
       if (req.method !== 'POST') throw Error('Use POST for control actions');
       const value = await jsonBody(req);
-      const operation = serial.then(() => action(req.url.slice(1), value));
-      serial = operation.catch(() => {});
+      if (req.url === '/llama-wait') {
+        if (platform !== 'linux' || !state.web || stopping) throw Error('Local llama.cpp is unavailable while Agent is off');
+        await waitForManagedLlamaReady({ timeout: 15 * 60 * 1000 });
+        const current = managedLlamaStatus();
+        await syncManagedLlamaProvider(current);
+        return json(res, current);
+      }
+      const operation = serial.then(() => action(req.url.slice(1), value)); serial = operation.catch(() => {});
       json(res, await operation);
     } catch (error) { json(res, { error: error.message }, 400); }
   });
-  function jsonShutdown() { if (jobs.busy) return; setTimeout(async () => { clearInterval(monitor); await fs.rm(lock, { force: true }); server.close(() => process.exit(0)); }, 50); }
+  function scheduleExit() {
+    if (exiting) return; exiting = true;
+    setTimeout(async () => {
+      clearInterval(monitor);
+      await fs.rm(lock, { force: true });
+      server.close(() => { ownership.close(); process.exit(0); });
+    }, 100).unref();
+  }
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
+  let failedHealth = 0;
   const monitor = setInterval(() => {
-    const operation = serial.then(async () => {
-      await reconcilePackage();
-      if (!restarting && !(jobs.busy && ['reload-services', 'prepare-app-update'].includes(jobs.job.kind)) && state.web && Date.now() > retryAt) await startWeb();
-    });
-    serial = operation.catch(() => {});
-  }, 2000);
-  setInterval(() => deliverNotifications().catch(() => {}), 30000).unref();
-  process.on('SIGTERM', jsonShutdown);
+    serial = serial.then(async () => {
+      if (stopping && !jobs.busy) { await turnOff(); if (!stopping) scheduleExit(); return; }
+      if (!stopping && stack.ready) {
+        failedHealth = await stack.healthy() ? 0 : failedHealth + 1;
+        if (failedHealth >= 2) { await turnOff('Agent service health check failed'); return; }
+      }
+      if (jobs.busy || stopping) return;
+      if (restartPending) {
+        if (state.web) await startWeb();
+        restartPending = false;
+      }
+      const next = (await readJson(packageFile, null))?.revision;
+      if ((next && next !== revision) || initialNode !== (await fs.stat(process.execPath)).ino) {
+        // The next explicit launch loads the updated controller too; reload children now.
+        if (!jobs.job || jobs.job.kind !== 'reload-services' || jobs.job.status !== 'complete') await jobs.start('reload-services');
+      }
+    }).catch(error => { lastError = error.message; });
+  }, 3000);
+  process.on('SIGTERM', () => { serial = serial.then(async () => { await turnOff(); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; }); });
+  process.on('SIGINT', () => process.emit('SIGTERM'));
   if (state.web) await startWeb().catch(() => {});
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   const command = process.argv[2] || 'status';
-  if (command === 'serve') await serve();
-  else {
+  if (command === 'serve') {
+    if (process.env.BASHKITTEN_GUARDED === '1' && Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) await serve();
+    else {
+      await privateDir(dataDir);
+      const child = spawnManager(false);
+      child.once('error', error => { console.error(error.message); process.exitCode = 1; });
+      child.once('exit', (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });
+    }
+  } else {
     try {
       await ensureManager();
-      const value = process.argv[3] ? JSON.parse(process.argv[3]) : {};
+      const input = process.argv[3];
+      const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin, 65536)).toString() || '{}') : input ? JSON.parse(input) : {};
       console.log(JSON.stringify(await controlRequest(command, command === 'status' ? undefined : value)));
     } catch (error) { console.error(JSON.stringify({ error: error.message })); process.exitCode = 1; }
   }
