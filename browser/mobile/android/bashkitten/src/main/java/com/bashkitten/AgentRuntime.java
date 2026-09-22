@@ -35,6 +35,10 @@ public final class AgentRuntime {
     AgentRuntime(BrowserApp app) {
         this.app = app; termux = new TermuxConnection(app); identities = new SecretStore(app, "agent-identities");
         selected = app.policies.getString("agent.selected", "local");
+        boolean previousIdentity;
+        try { previousIdentity = identities.read().has("local"); }
+        catch (Exception error) { previousIdentity = true; }
+        localControlRequested = app.policies.getBoolean("agent.localControlRequested", previousIdentity);
     }
     public void attach(GeckoRuntime engine, Listener listener) {
         this.engine = engine; listeners.add(listener);
@@ -57,7 +61,11 @@ public final class AgentRuntime {
         }, message -> { if (generation == operation) fail(message); });
     }
     public boolean isOnRequested() { return desired; }
-    public void bootstrapStarted() { localControlRequested = true; }
+    private void recordLocalControl(boolean requested) {
+        localControlRequested = requested;
+        app.policies.edit().putBoolean("agent.localControlRequested", requested).apply();
+    }
+    public void bootstrapStarted() { recordLocalControl(true); }
     public void freshLaunch() { if (!desired && !busy) turnOn(); }
     public void turnOn() {
         if (busy) return;
@@ -71,7 +79,7 @@ public final class AgentRuntime {
         termux.probe(value -> {
             if (generation != operation || !desired) return;
             if (!value.optBoolean("packages")) { setup("Install the Agent packages in Termux."); return; }
-            localControlRequested = true;
+            recordLocalControl(true);
             command("start", new JSONObject(), result -> {
                 if (generation != operation || !desired) return;
                 busy = false; acceptStatus(result); poll();
@@ -80,7 +88,7 @@ public final class AgentRuntime {
     }
     public void turnOff() {
         if (state.equals("stopping")) return;
-        boolean setupWithoutService = state.equals("setup") && !localControlRequested;
+        boolean setupWithoutService = state.equals("setup") && (!termux.installed() || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
         releaseRemoteAuthorization();
         if (session != null) suspendSession(session);
@@ -99,7 +107,7 @@ public final class AgentRuntime {
         if (web == null) { stopFailed(generation, "The service returned no shutdown status."); return; }
         String webState = web.optString("status");
         if (webState.equals("stopped") || webState.equals("error")) {
-            localControlRequested = false;
+            recordLocalControl(false);
             stopped();
             return;
         }
