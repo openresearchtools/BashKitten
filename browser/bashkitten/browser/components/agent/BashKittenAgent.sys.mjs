@@ -99,6 +99,8 @@ class AgentView {
     this.selection = "";
     this.timer = null;
     this.currentIdentity = null;
+    this.layout = "full";
+    this.browseWithAgent = Services.prefs.getBoolPref("bashkitten.agent.splitBrowsing", true);
   }
 
   async init() {
@@ -116,30 +118,44 @@ class AgentView {
     const menu = html(doc, "button", { type: "button", "aria-label": "Agent menu" }, "☰");
     menu.addEventListener("click", () => this.menu());
     bar.append(menu);
-    const hide = html(doc, "button", { type: "button", "aria-label": "Hide Agent" }, "‹");
-    hide.addEventListener("click", () => this.hide());
-    bar.append(hide);
     this.state = html(doc, "section", { id: "bashkitten-agent-state" });
     this.viewBox = xul(doc, "vbox", { id: "bashkitten-agent-views", flex: "1" });
     this.pane.append(bar, this.state, this.viewBox);
     const tabbox = doc.getElementById("tabbrowser-tabbox");
     tabbox.before(this.pane);
-    this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "Agent", class: "toolbarbutton-1", tooltiptext: "Show or hide Agent" });
-    this.button.addEventListener("command", () => this.pane.hidden ? this.show() : this.hide());
-    doc.getElementById("urlbar-container").before(this.button);
+    this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "Agent", class: "toolbarbutton-1", role: "tab", removable: "false", skipintoolbarset: "true", tooltiptext: "Agent" });
+    this.button.addEventListener("command", () => this.show());
+    doc.getElementById("tabbrowser-tabs").before(this.button);
+    this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", tooltiptext: "Show or hide the Agent pane" });
+    this.paneToggle.addEventListener("command", () => {
+      this.browseWithAgent = !this.browseWithAgent;
+      Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", this.browseWithAgent);
+      this.browse();
+    });
+    doc.getElementById("urlbar-container").before(this.paneToggle);
     const appMenu = this.win.PanelUI.mainView.querySelector("#appMenu-settings-button");
     const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-agent", label: "Agent · Appearance · About", class: "subviewbutton" });
     nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.menu(); });
     appMenu.before(nativeMenu);
     for (const item of doc.querySelectorAll('[command="cmd_newNavigator"], [command="Tools:PrivateBrowsing"], [command^="Profiles:"], #key_newNavigator, #key_privatebrowsing')) item.remove();
-    this.resize = () => doc.documentElement.setAttribute("bashkitten-agent-narrow", this.win.innerWidth < 1000);
-    this.win.addEventListener("resize", this.resize);
-    this.resize();
     this.observer = { observe: () => this.refreshRemotes().catch(console.error) };
     Services.obs.addObserver(this.observer, "bashkitten-agent-remote-changed");
     this.win.addEventListener("unload", () => this.destroy(), { once: true });
-    this.win.gBrowser.tabContainer.addEventListener("TabOpen", () => { if (this.win.innerWidth < 1000) this.hide(); });
-    this.win.gBrowser.tabContainer.addEventListener("TabClose", () => { if (this.win.gBrowser.tabs.length <= 1) this.show(); });
+    // Listen to explicit tab choices, not TabSelect: restoration and the
+    // replacement tab after closing the last tab must not select away from Agent.
+    this.win.gBrowser.tabContainer.addEventListener("click", event => {
+      if (event.button === 0 && event.target.closest(".tabbrowser-tab") &&
+          !event.target.closest(".tab-close-button")) this.browse();
+    });
+    this.win.gBrowser.tabContainer.addEventListener("TabClose", event => {
+      if (event.target._endRemoveArgs?.[1]) this.show();
+    });
+    this.tabKey = event => {
+      const accel = event.ctrlKey || event.metaKey;
+      if ((accel && ["Tab", "PageUp", "PageDown"].includes(event.key)) ||
+          ((event.altKey || accel) && /^[1-9]$/.test(event.key))) this.browse();
+    };
+    this.win.addEventListener("keydown", this.tabKey, true);
     this.show();
     await this.refreshRemotes();
     const selected = Services.prefs.getStringPref("bashkitten.agent.selectedRemote", "");
@@ -156,16 +172,23 @@ class AgentView {
   }
 
   show() {
+    this.layout = "full";
     this.pane.hidden = false;
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", "true");
+    this.doc.documentElement.setAttribute("bashkitten-agent-layout", "full");
     this.button.setAttribute("checked", "true");
+    this.button.setAttribute("aria-selected", "true");
     this.activeBrowser?.focus();
   }
-  hide() {
-    this.pane.hidden = true;
-    this.doc.documentElement.removeAttribute("bashkitten-agent-visible");
+  browse() {
+    const split = this.browseWithAgent;
+    this.layout = split ? "split" : "browser";
+    this.pane.hidden = !split;
+    this.doc.documentElement.setAttribute("bashkitten-agent-visible", split);
+    this.doc.documentElement.setAttribute("bashkitten-agent-layout", this.layout);
+    this.paneToggle.setAttribute("label", split ? "Hide Agent" : "Show Agent");
     this.button.removeAttribute("checked");
-    this.win.gBrowser.selectedBrowser.focus();
+    this.button.setAttribute("aria-selected", "false");
   }
 
   async refreshRemotes() {
@@ -424,6 +447,7 @@ class AgentView {
       });
     }
     add("About · Licenses", () => this.about());
+    add("Quit BashKitten", () => this.win.goQuitApplication());
   }
 
   async localIdentity() {
@@ -681,7 +705,7 @@ class AgentView {
   destroy() {
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("browser closed");
-    this.win.removeEventListener("resize", this.resize);
+    this.win.removeEventListener("keydown", this.tabKey, true);
     Services.obs.removeObserver(this.observer, "bashkitten-agent-remote-changed");
     // Closing the browser does not stop the independent Agent service group.
     for (const browser of this.views.values()) ownedViews.delete(browser);

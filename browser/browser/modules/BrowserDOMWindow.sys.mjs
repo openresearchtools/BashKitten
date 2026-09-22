@@ -203,6 +203,10 @@ export class BrowserDOMWindow {
 
     let browser = win.gBrowser.getBrowserForTab(tab);
 
+    if (!loadInBackground && win.BashKittenAgent?.layout === "full") {
+      win.BashKittenAgent.browse();
+    }
+
     if (needToFocusWin || (!loadInBackground && aIsExternal)) {
       win.focus();
     }

@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-#bashkitten-agent-pane { min-width: 320px; width: 42vw; max-width: 70vw; background: var(--toolbar-bgcolor); color: var(--toolbar-color); border-inline-end: 1px solid var(--chrome-content-separator-color); }
+#bashkitten-agent-pane { min-width: 320px; background: var(--toolbar-bgcolor); color: var(--toolbar-color); }
+:root[bashkitten-agent-layout="split"] #bashkitten-agent-pane { width: 42vw; max-width: 70vw; border-inline-end: 1px solid var(--chrome-content-separator-color); }
 #bashkitten-agent-bar { min-height: 38px; align-items: center; gap: 6px; padding: 4px 8px; }
 #bashkitten-agent-pane button, #bashkitten-agent-pane select, .bashkitten-agent-dialog button, .bashkitten-agent-dialog input, .bashkitten-agent-dialog select { font: menu; color: inherit; background: var(--button-background-color, ButtonFace); border: 1px solid var(--border-color, ThreeDShadow); border-radius: 6px; padding: 6px 10px; }
 #bashkitten-agent-pane button { cursor: pointer; }
@@ -11,7 +12,9 @@
 #bashkitten-agent-state p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 #bashkitten-agent-views { min-height: 0; }
 #bashkitten-agent-views > browser { min-width: 0; min-height: 0; }
-#bashkitten-agent-button { font-weight: 600; padding-inline: 14px; }
+#bashkitten-agent-button { font-weight: 600; min-width: 110px; margin: 4px 2px; padding-inline: 18px; border-radius: 8px; }
+#bashkitten-agent-button[checked] { background: var(--tab-selected-bgcolor, var(--toolbar-bgcolor)); box-shadow: 0 1px 4px #0003; }
+:root[bashkitten-agent-layout="full"] .tabbrowser-tab .tab-background { background: transparent !important; box-shadow: none !important; }
 .bashkitten-agent-dialog { width: min(650px, 85vw); max-height: 85vh; overflow: auto; padding: 24px; background: var(--toolbar-bgcolor, Canvas); color: var(--toolbar-color, CanvasText); border: 1px solid var(--border-color, ThreeDShadow); border-radius: 12px; box-shadow: 0 12px 55px #0005; font: menu; }
 .bashkitten-agent-dialog::backdrop { background: #0006; }
 .bashkitten-agent-dialog h2 { margin-top: 0; }
@@ -21,6 +24,6 @@
 .bashkitten-agent-dialog pre, .bashkitten-agent-dialog textarea { white-space: pre-wrap; overflow-wrap: anywhere; width: 100%; box-sizing: border-box; }
 .bashkitten-agent-dialog a { color: LinkText; }
 .bashkitten-agent-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
-:root[bashkitten-agent-narrow="true"] #browser { position: relative; }
-:root[bashkitten-agent-narrow="true"][bashkitten-agent-visible="true"] #bashkitten-agent-pane { position: absolute; inset: 0; z-index: 5; width: 100%; max-width: none; border: 0; }
-:root[bashkitten-agent-narrow="true"][bashkitten-agent-visible="true"] :is(#sidebar-container, #sidebar-box, #sidebar-splitter, #sidebar-launcher-splitter, #ai-window-box, #ai-window-splitter, #nav-bar, #TabsToolbar) { visibility: collapse !important; }
+#browser { position: relative; }
+:root[bashkitten-agent-layout="full"] #bashkitten-agent-pane { position: absolute; inset: 0; z-index: 5; width: 100%; max-width: none; border: 0; }
+:root[bashkitten-agent-layout="full"] :is(#sidebar-container, #sidebar-box, #sidebar-splitter, #sidebar-launcher-splitter, #ai-window-box, #ai-window-splitter, #nav-bar, #PersonalToolbar, #status-bar) { visibility: collapse !important; }

@@ -2409,7 +2409,7 @@ class BrowserControlService {
           });
       if (privateRequested) lazy.PrivateTab._markPrivateTab(tab);
       if (!(args.background ?? true)) {
-        if (window.innerWidth < 1000) window.BashKittenAgent?.hide();
+        if (window.BashKittenAgent?.layout === "full") window.BashKittenAgent.browse();
         window.gBrowser.selectedTab = tab;
         window.focus();
       }
@@ -2485,7 +2485,7 @@ class BrowserControlService {
     }
     const entry = this.pageForId(page);
     if (action === "activate") {
-      if (entry.window.innerWidth < 1000) entry.window.BashKittenAgent?.hide();
+      if (entry.window.BashKittenAgent?.layout === "full") entry.window.BashKittenAgent.browse();
       for (let attempt = 0; attempt < 20; attempt++) {
         entry.window.focus();
         entry.window.gBrowser.selectedTab = entry.tab;

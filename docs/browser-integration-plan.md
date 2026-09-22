@@ -294,17 +294,23 @@ Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/power/menu b
 Use one small power control showing On, Starting, Stopping or Off. Its On action
 is **Turn off**; its Off action is **Turn on**. Do not add a separate wake-lock
 toolbar or crowd the mobile bar with service switches.
-On every screen size, startup shows Agent across the full content area, with
-its own compact toolbar and no ordinary address bar. Keep a visible way to open
-ordinary tabs. On desktop, tablets and unfolded phones, offer an explicit split
-view with Agent beside an ordinary tab; never force a half-width Agent on startup.
-The permanent Agent button returns to the full Agent view. Hiding the optional
-pane gives ordinary web content the full area without destroying the Agent
-document. Narrow layouts switch between Agent and browsing. There is never a
-second application window. Preserve chat drafts and scroll position when
-toggling, rotating or folding. Profile creation and switching must be unavailable
-through menus, internal pages and launch flags; internal Gecko data storage does
-not provide a user-facing multiple-profile feature.
+On every screen size, startup and selecting Agent show it across the full content
+area, with its compact controls replacing the ordinary address bar. Desktop
+keeps a permanent, unclosable Agent tab visible in the tab strip. This native
+Agent tab affordance is outside the ordinary tab registry; hiding an Agent pane
+never removes it. Keep ordinary new-tab controls available.
+
+On desktop, tablets and unfolded phones, opening or selecting an ordinary website
+tab defaults to a split view with Agent beside that website. One control hides
+the Agent pane for ordinary browsing without destroying its document; selecting
+Agent always returns to the full Agent view. Android keeps its always-available
+Agent access button from every ordinary tab, including on phones, which switch
+between full Agent and full website views. Do not replace the permanent desktop
+Agent tab with only an address-bar button. There is never a second application
+window. Preserve chat drafts and scroll position when toggling, rotating or
+folding. Profile creation and switching must be unavailable through menus,
+internal pages and launch flags; internal Gecko data storage does not provide a
+user-facing multiple-profile feature.
 
 Enforce the protected-view boundary in native tab lookup and tool dispatch,
 not just button visibility. Agent automation and normal extension tab APIs

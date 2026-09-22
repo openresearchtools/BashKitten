@@ -744,6 +744,10 @@ export const URILoadingHelper = {
     // right after a result is picked and the bounce event tracking is started.
     // We instead check for potential URL bar initiated bounce events directly
     // in gURLBar.controller.engagementEvent.startTrackingBounceEvent().
+    if (!loadInBackground && targetBrowser == w.gBrowser.selectedBrowser &&
+        w.BashKittenAgent?.layout === "full") {
+      w.BashKittenAgent.browse();
+    }
     if (!params.initiatedByURLBar && targetBrowser) {
       w.gURLBar.controller.engagementEvent.handleBounceEventTrigger(
         targetBrowser

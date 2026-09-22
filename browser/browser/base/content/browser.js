@@ -1336,6 +1336,7 @@ function loadOneOrMoreURIs(
 
 function openLocation(event) {
   if (window.location.href == AppConstants.BROWSER_CHROME_URL) {
+    if (window.BashKittenAgent?.layout === "full") window.BashKittenAgent.browse();
     let focusTarget = UrlbarUtils.getURLBarForFocus(window);
     focusTarget.select();
     focusTarget.view.autoOpen({ event });
