@@ -852,16 +852,6 @@ SettingGroupManager.registerGroups({
     iconSrc: "chrome://branding/content/about-logo.svg",
     items: [
       {
-        id: "browserLanguagePreferred",
-        l10nId: "browser-language-preferred-label",
-        control: "moz-select",
-      },
-      {
-        id: "browserLanguageFallback",
-        l10nId: "browser-language-fallback-label",
-        control: "moz-select",
-      },
-      {
         id: "useSystemLocale",
         l10nId: "use-system-locale",
         get l10nArgs() {
@@ -877,10 +867,6 @@ SettingGroupManager.registerGroups({
           );
           return { localeName: displayName || systemLocale };
         },
-      },
-      {
-        id: "browserLanguageMessage",
-        control: "browser-language-restart-message",
       },
     ],
   },
@@ -931,26 +917,7 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  translations: {
-    inProgress: true,
-    subcategory: "translations",
-    l10nId: "settings-translations-header",
-    iconSrc: "chrome://browser/skin/translations.svg",
-    supportPage: "website-translation",
-    headingLevel: 2,
-    items: [
-      {
-        id: "offerTranslations",
-        l10nId: "settings-translations-offer-to-translate-label",
-      },
-      {
-        id: "translationsManageButton",
-        loadPane: "translations",
-        l10nId: "settings-translations-more-settings-button",
-        control: "moz-box-button",
-      },
-    ],
-  },
+  translations: { hidden: true, items: [] },
   spellCheck: {
     l10nId: "settings-spellcheck-header",
     iconSrc: "chrome://global/skin/icons/check.svg",
@@ -960,27 +927,6 @@ SettingGroupManager.registerGroups({
         id: "checkSpelling",
         l10nId: "check-user-spelling",
         supportPage: "how-do-i-use-firefox-spell-checker",
-      },
-      {
-        id: "downloadDictionaries",
-        l10nId: "spellcheck-download-dictionaries",
-        control: "moz-box-link",
-        controlAttrs: {
-          href: Services.urlFormatter.formatURLPref(
-            "browser.dictionaries.download.url"
-          ),
-        },
-      },
-      {
-        id: "spellCheckPromo",
-        l10nId: "spellcheck-promo",
-        control: "moz-promo",
-        controlAttrs: {
-          imagesrc:
-            "chrome://browser/content/preferences/spell-check-promo.svg",
-          imagewidth: "large",
-          imagedisplay: "cover",
-        },
       },
     ],
   },

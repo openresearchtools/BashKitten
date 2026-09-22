@@ -617,10 +617,6 @@ SettingGroupManager.registerGroups({
         headingLevel: 3,
         items: [
           {
-            id: "linkTargeting",
-            l10nId: "open-new-link-as-tabs",
-          },
-          {
             id: "switchToNewTabs",
             l10nId: "switch-to-new-tabs-2",
           },
@@ -647,10 +643,6 @@ SettingGroupManager.registerGroups({
           {
             id: "tabPreviewShowThumbnails",
             l10nId: "settings-tabs-show-image-in-preview",
-          },
-          {
-            id: "tabGroupSuggestions",
-            l10nId: "settings-tabs-show-group-and-tab-suggestions",
           },
           {
             id: "tabGroupDragToCreate",
@@ -706,21 +698,6 @@ SettingGroupManager.registerGroups({
     items: [
       { id: "useCursorNavigation", l10nId: "browsing-use-cursor-navigation" },
       { id: "searchStartTyping", l10nId: "browsing-search-on-start-typing" },
-      {
-        id: "linkPreviewEnabled",
-        l10nId: "link-preview-settings-enable",
-        subcategory: "link-preview",
-        items: [
-          {
-            id: "linkPreviewKeyPoints",
-            l10nId: "link-preview-settings-key-points",
-          },
-          {
-            id: "linkPreviewLongPress",
-            l10nId: "link-preview-settings-long-press",
-          },
-        ],
-      },
     ],
   },
   media: {
@@ -763,25 +740,7 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  recommendations: {
-    l10nId: "recommendations-group",
-    headingLevel: 2,
-    iconSrc: "chrome://browser/skin/trending.svg",
-    items: [
-      {
-        id: "cfrRecommendations",
-        l10nId: "browsing-cfr-recommendations",
-        supportPage: "extensionrecommendations",
-        subcategory: "cfraddons",
-      },
-      {
-        id: "cfrRecommendations-features",
-        l10nId: "browsing-cfr-features",
-        supportPage: "extensionrecommendations",
-        subcategory: "cfrfeatures",
-      },
-    ],
-  },
+  recommendations: { hidden: true, items: [] },
   // Bug 2028609: the following sections are needed to ensure settings keep
   // working in legacy views, and can be removed when the pref is flipped
   drm: {
@@ -810,33 +769,6 @@ SettingGroupManager.registerGroups({
           {
             id: "pictureInPictureEnableWhenSwitchingTabs",
             l10nId: "browsing-picture-in-picture-enable-when-switching-tabs",
-          },
-        ],
-      },
-      {
-        id: "cfrRecommendations",
-        l10nId: "browsing-cfr-recommendations",
-        supportPage: "extensionrecommendations",
-        subcategory: "cfraddons",
-      },
-      {
-        id: "cfrRecommendations-features",
-        l10nId: "browsing-cfr-features",
-        supportPage: "extensionrecommendations",
-        subcategory: "cfrfeatures",
-      },
-      {
-        id: "linkPreviewEnabled",
-        l10nId: "link-preview-settings-enable",
-        subcategory: "link-preview",
-        items: [
-          {
-            id: "linkPreviewKeyPoints",
-            l10nId: "link-preview-settings-key-points",
-          },
-          {
-            id: "linkPreviewLongPress",
-            l10nId: "link-preview-settings-long-press",
           },
         ],
       },

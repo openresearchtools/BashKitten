@@ -447,6 +447,20 @@ const CONFIG_PANES = Object.freeze({
   },
 });
 
+// These Firefox services are not part of BashKitten. Do not register their
+// panes: a hidden navigation button alone leaves them reachable from search.
+const BASHKITTEN_REMOVED_PANES = new Set([
+  "sync",
+  "moreFromMozilla",
+  "experimental",
+  "ai",
+  "personalizeSmartWindow",
+  "manageMemories",
+  "profiles",
+  "translations",
+  "dnsOverHttps",
+]);
+
 var gLastCategory = { category: undefined, subcategory: undefined };
 const gXULDOMParser = new DOMParser();
 var gCategoryModules = new Map();
@@ -512,7 +526,7 @@ function init_all() {
   // immediately when recipes are expected to be available, before
   // firefoxLabs.mjs loads on first navigation. The module itself updates
   // this cache when features are (un)available.
-  if (ExperimentAPI.labsEnabled) {
+  if (AppConstants.MOZ_APP_NAME != "bashkitten" && ExperimentAPI.labsEnabled) {
     document.getElementById("category-experimental").hidden =
       Services.prefs.getBoolPref(
         "browser.preferences.experimental.hidden",
@@ -527,7 +541,9 @@ function init_all() {
     "identity.fxaccounts.enabled"
   );
   let categorySync = document.getElementById("category-sync");
-  if (redesignEnabled) {
+  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    categorySync.hidden = true;
+  } else if (redesignEnabled) {
     categorySync.setAttribute("data-l10n-id", "pane-account-sync-title2");
     categorySync.iconSrc = "chrome://browser/skin/fxa/avatar-empty.svg";
     categorySync.hidden = false;
@@ -536,7 +552,22 @@ function init_all() {
     register_module("paneSync", gSyncPane);
   }
   register_module("paneSearchResults", gSearchResultsPane);
+  if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+    for (const id of BASHKITTEN_REMOVED_PANES) {
+      document
+        .querySelector(
+          `#categories [view="${friendlyPrefCategoryNameToInternalName(id)}"]`
+        )
+        ?.remove();
+    }
+  }
   for (let [id, config] of Object.entries(CONFIG_PANES)) {
+    if (
+      AppConstants.MOZ_APP_NAME == "bashkitten" &&
+      BASHKITTEN_REMOVED_PANES.has(id)
+    ) {
+      continue;
+    }
     if (!redesignEnabled && config.replaces) {
       continue;
     }
@@ -558,7 +589,7 @@ function init_all() {
       groupIds: ["customHomepage"],
       module: "chrome://browser/content/preferences/config/home-startup.mjs",
     });
-  } else {
+  } else if (AppConstants.MOZ_APP_NAME != "bashkitten") {
     NimbusFeatures.moreFromMozilla.recordExposureEvent({ once: true });
     if (NimbusFeatures.moreFromMozilla.getVariable("enabled")) {
       document.getElementById("category-more-from-mozilla").hidden = false;
@@ -640,10 +671,13 @@ async function gotoPref(
 ) {
   let redesignEnabled = srdSectionPrefs.all;
   let categories = document.getElementById("categories");
-  const kDefaultCategoryInternalName = redesignEnabled
-    ? "paneSync"
-    : "paneGeneral";
-  const kDefaultCategory = redesignEnabled ? "sync" : "general";
+  const kDefaultCategory = redesignEnabled
+    ? AppConstants.MOZ_APP_NAME == "bashkitten"
+      ? "home"
+      : "sync"
+    : "general";
+  const kDefaultCategoryInternalName =
+    friendlyPrefCategoryNameToInternalName(kDefaultCategory);
   let hash = document.location.hash;
   let category = aCategory || hash.substring(1) || kDefaultCategoryInternalName;
 
@@ -663,6 +697,12 @@ async function gotoPref(
     let resolved = resolveLegacyCategory(category, subcategory);
     category = resolved.category;
     subcategory = resolved.subcategory;
+    if (
+      AppConstants.MOZ_APP_NAME == "bashkitten" &&
+      BASHKITTEN_REMOVED_PANES.has(category)
+    ) {
+      category = "home";
+    }
   }
 
   category = friendlyPrefCategoryNameToInternalName(category);

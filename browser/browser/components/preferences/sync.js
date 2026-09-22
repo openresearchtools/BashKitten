@@ -4,10 +4,13 @@
 
 /* import-globals-from preferences.js */
 
-const { SyncHelpers } = ChromeUtils.importESModule(
-  "chrome://browser/content/preferences/config/account-sync.mjs",
-  { global: "current" }
-);
+const SyncHelpers =
+  AppConstants.MOZ_APP_NAME == "bashkitten"
+    ? null
+    : ChromeUtils.importESModule(
+        "chrome://browser/content/preferences/config/account-sync.mjs",
+        { global: "current" }
+      ).SyncHelpers;
 
 const FXA_PAGE_LOGGED_OUT = 0;
 const FXA_PAGE_LOGGED_IN = 1;

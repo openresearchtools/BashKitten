@@ -24,4 +24,10 @@ bashkitten-home-prefs-content-header2 = Home Content
 bashkitten-home-prefs-content-description = Choose what content you want on your Home screen.
 
 bashkitten-home-disabled-notice =
-    .message = To use these features, set new tabs or new windows to Home.
+    .message = To use these features, set the homepage or new tabs to Home.
+
+bashkitten-home-homepage =
+    .label = Homepage
+
+bashkitten-home-logo =
+    .label = Show the BashKitten logo

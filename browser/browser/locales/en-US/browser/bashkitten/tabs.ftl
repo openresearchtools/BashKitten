@@ -85,7 +85,7 @@ tab-bar-top-above =
 tab-bar-top-below =
     .label = Top below address bar
 
-tabbrowser-confirm-session-restore-checkbox = Open previous windows and tabs
+tabbrowser-confirm-session-restore-checkbox = Open previous tabs
 
 bashkitten-tabs-group =
     .label = BashKitten tabs

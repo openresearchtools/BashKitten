@@ -15,7 +15,7 @@ if (Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)) {
   );
 
   const aboutPane = SettingPaneManager.get("about");
-  aboutPane.groupIds = ["bashkittenAbout", "updates", "bashkittenAboutLinks"];
+  aboutPane.groupIds = ["bashkittenAbout", "bashkittenPackageUpdates", "bashkittenAboutLinks"];
   ChromeUtils.importESModule(
     "chrome://browser/content/bashkitten/settings/bashkittenAbout.mjs",
     { global: "current" }
@@ -25,12 +25,16 @@ if (Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)) {
   tabsPane.groupIds = [
     "bashkittenTabs",
     "bashkittenSpelling",
-    ...tabsPane.groupIds,
+    ...tabsPane.groupIds.filter(id => id != "recommendations"),
   ];
   ChromeUtils.importESModule(
     "chrome://browser/content/bashkitten/settings/bashkittenTabs.mjs",
     { global: "current" }
   );
+
+  // The local import group is registered by main.js, independently of Sync.
+  const homePane = SettingPaneManager.get("home");
+  homePane.groupIds.push("importBrowserData");
 
   // The Home pane's groups are registered by AboutPreferences.observe(); the
   // custom new tab URL control attaches to them at runtime, so this module only
@@ -59,7 +63,7 @@ if (Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)) {
   const permissionsPane = SettingPaneManager.get("permissionsData");
   permissionsPane.groupIds = [
     "bashkittenDataCollection",
-    ...permissionsPane.groupIds,
+    ...permissionsPane.groupIds.filter(id => id != "dataCollection"),
   ];
   ChromeUtils.importESModule(
     "chrome://browser/content/bashkitten/settings/bashkittenDataCollection.mjs",

@@ -781,11 +781,6 @@ SettingGroupManager.registerGroups({
               },
             ],
           },
-          {
-            id: "breachAlerts",
-            l10nId: "forms-breach-alerts",
-            supportPage: "lockwise-alerts",
-          },
         ],
       },
     ],

@@ -666,17 +666,6 @@ Preferences.addSetting({
   },
 });
 
-// Import section
-
-Preferences.addSetting({
-  id: "data-migration",
-  visible: () =>
-    !Services.policies || Services.policies.isAllowed("profileImport"),
-  onUserClick() {
-    window.gMainPane.showMigrationWizardDialog();
-  },
-});
-
 // Profiles section
 
 Preferences.addSetting({
@@ -1033,18 +1022,6 @@ SettingGroupManager.registerGroups({
             ],
           },
         ],
-      },
-    ],
-  },
-  importBrowserData: {
-    l10nId: "preferences-data-migration-group",
-    headingLevel: 2,
-    iconSrc: "chrome://browser/skin/import.svg",
-    items: [
-      {
-        id: "data-migration",
-        l10nId: "preferences-data-migration-button",
-        control: "moz-box-button",
       },
     ],
   },

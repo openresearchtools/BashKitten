@@ -605,38 +605,7 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  browsingProtection: {
-    l10nId: "browsing-protection-group2",
-    headingLevel: 2,
-    items: [
-      {
-        id: "enableSafeBrowsing",
-        l10nId: "security-enable-safe-browsing",
-        supportPage: "phishing-malware",
-        control: "moz-checkbox",
-        items: [
-          {
-            id: "blockDownloads",
-            l10nId: "security-block-downloads",
-          },
-          {
-            id: "blockUncommonUnwanted",
-            l10nId: "security-block-uncommon-software",
-          },
-        ],
-      },
-      {
-        id: "safeBrowsingWarningMessageBox",
-        l10nId: "security-safe-browsing-warning",
-        control: "moz-message-bar",
-        controlAttrs: {
-          type: "warning",
-          dismissable: true,
-          role: "status",
-        },
-      },
-    ],
-  },
+  browsingProtection: { hidden: true, items: [] },
   nonTechnicalPrivacy: {
     l10nId: "non-technical-privacy-group",
     headingLevel: 2,
@@ -670,11 +639,6 @@ SettingGroupManager.registerGroups({
         controlAttrs: {
           "search-l10n-ids": "global-privacy-control-search",
         },
-      },
-      {
-        id: "relayIntegration",
-        l10nId: "preferences-privacy-relay-available",
-        supportPage: "firefox-relay-integration",
       },
       {
         id: "dntRemoval",
@@ -1048,93 +1012,8 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  dnsOverHttps: {
-    subcategory: "dnsOverHttps",
-    l10nId: "dns-over-https-group2",
-    supportPage: "dns-over-https",
-    headingLevel: 1,
-    inProgress: true,
-    items: [
-      {
-        id: "dohBox",
-        control: "moz-box-group",
-        controlAttrs: { searchkeywords: "doh trr" },
-        items: [
-          {
-            id: "dohModeBoxItem",
-            control: "moz-box-item",
-          },
-          {
-            id: "dohAdvancedButton",
-            loadPane: "dnsOverHttps",
-            l10nId: "preferences-doh-advanced-button",
-            control: "moz-box-button",
-          },
-        ],
-      },
-    ],
-  },
-  dnsOverHttpsAdvanced: {
-    inProgress: true,
-    l10nId: "preferences-doh-advanced-section",
-    supportPage: "dns-over-https",
-    headingLevel: 2,
-    items: [
-      {
-        id: "dohStatusBox",
-        control: "moz-message-bar",
-        controlAttrs: {
-          role: "status",
-        },
-      },
-      {
-        id: "dohRadioGroup",
-        control: "moz-radio-group",
-        options: [
-          {
-            id: "dohRadioDefault",
-            value: "default",
-            l10nId: "preferences-doh-radio-default",
-          },
-          {
-            id: "dohRadioCustom",
-            value: "custom",
-            l10nId: "preferences-doh-radio-custom",
-            items: [
-              {
-                id: "dohFallbackIfCustom",
-                l10nId: "preferences-doh-fallback-label",
-              },
-              {
-                id: "dohProviderSelect",
-                l10nId: "preferences-doh-select-resolver-label",
-                control: "moz-select",
-              },
-              {
-                id: "dohCustomProvider",
-                control: "moz-input-text",
-                l10nId: "preferences-doh-custom-provider-label",
-              },
-            ],
-          },
-          {
-            id: "dohRadioOff",
-            value: "off",
-            l10nId: "preferences-doh-radio-off",
-          },
-        ],
-      },
-      {
-        id: "dohExceptionsButton",
-        l10nId: "preferences-doh-manage-exceptions2",
-        control: "moz-box-button",
-        controlAttrs: {
-          "search-l10n-ids":
-            "permissions-doh-entry-field,permissions-doh-add-exception.label,permissions-doh-remove.label,permissions-doh-remove-all.label,permissions-exceptions-doh-window.title,permissions-exceptions-manage-doh-desc,",
-        },
-      },
-    ],
-  },
+  dnsOverHttps: { hidden: true, items: [] },
+  dnsOverHttpsAdvanced: { hidden: true, items: [] },
   etpStatus: {
     inProgress: true,
     subcategory: "etpStatus",
@@ -1440,90 +1319,8 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  ipprotection: {
-    subcategory: "vpn",
-    l10nId: "ip-protection-description-1",
-    headingLevel: 2,
-    supportPage: "built-in-vpn",
-    items: [
-      {
-        id: "ipProtectionNotOptedInSection",
-        l10nId: "ip-protection-not-opted-in-4",
-        control: "moz-promo",
-        controlAttrs: {
-          imagesrc:
-            "chrome://browser/content/ipprotection/assets/vpn-settings-get-started.svg",
-          imagealignment: "end",
-        },
-        items: [
-          {
-            id: "getStartedButton",
-            l10nId: "ip-protection-not-opted-in-button",
-            control: "moz-button",
-            slot: "actions",
-            controlAttrs: {
-              type: "primary",
-            },
-          },
-        ],
-      },
-      {
-        id: "ipProtectionExceptions",
-        control: "moz-fieldset",
-        controlAttrs: {
-          ".headingLevel": 3,
-        },
-        items: [
-          {
-            id: "ipProtectionExceptionAllListButton",
-            control: "moz-box-button",
-          },
-        ],
-      },
-      {
-        id: "ipProtectionAutoStart",
-        l10nId: "ip-protection-autostart",
-        control: "moz-fieldset",
-        items: [
-          {
-            id: "ipProtectionAutoStartCheckbox",
-            l10nId: "ip-protection-autostart-checkbox",
-            control: "moz-checkbox",
-          },
-          {
-            id: "ipProtectionAutoStartPrivateCheckbox",
-            l10nId: "ip-protection-autostart-private-checkbox",
-            control: "moz-checkbox",
-          },
-        ],
-      },
-      {
-        id: "ipProtectionBandwidthSection",
-        control: "moz-box-item",
-        items: [{ id: "ipProtectionBandwidth", control: "bandwidth-usage" }],
-      },
-      {
-        id: "ipProtectionLinks",
-        control: "moz-box-link",
-        l10nId: "ip-protection-vpn-upgrade-link",
-        controlAttrs: {
-          href: "https://www.mozilla.org/products/vpn/?utm_medium=fx-desktop&utm_campaign=fx-vpn&utm_source=settings",
-        },
-      },
-    ],
-  },
-  privacyPanel: {
-    iconSrc: "chrome://devtools/skin/images/globe.svg",
-    l10nId: "privacy-panel-settings-header",
-    headingLevel: 2,
-    supportPage: "breach-alerts-privacy-panel",
-    items: [
-      {
-        id: "trustPanelBreachAlertsMain",
-        l10nId: "privacy-panel-breach-alerts",
-      },
-    ],
-  },
+  ipprotection: { hidden: true, items: [] },
+  privacyPanel: { hidden: true, items: [] },
 });
 
 Preferences.addSetting({

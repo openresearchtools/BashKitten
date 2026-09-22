@@ -21,3 +21,6 @@ bashkitten-search-click-selects-all-toggle =
 
 bashkitten-search-double-click-selects-all-toggle =
     .label = Select all text when double-clicking the address bar or search bar
+
+bashkitten-search-private-tab-suggestions =
+    .label = Show search suggestions in private tabs

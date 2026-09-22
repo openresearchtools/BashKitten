@@ -116,7 +116,12 @@ export const SettingPaneManager = {
   },
 
   get shouldShowRedesignPromo() {
-    return lazy.srdEnabled && !lazy.srdPromoDismissed;
+    return (
+      !Services.prefs
+        .getStringPref("app.support.baseURL", "")
+        .startsWith("about:blank") &&
+      lazy.srdEnabled && !lazy.srdPromoDismissed
+    );
   },
 };
 

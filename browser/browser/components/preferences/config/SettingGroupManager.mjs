@@ -34,7 +34,10 @@ export const SettingGroupManager = {
       const trimHelpLinks = item => {
         if (
           (item.supportPage && item.control === "moz-box-link") ||
-          item.controlAttrs?.href?.startsWith("about:blank")
+          item.controlAttrs?.is === "moz-support-link" ||
+          /^(?:about:blank|https?:\/\/(?:[^/]+\.)?(?:mozilla\.(?:org|com)|firefox\.com)(?:[/:]|$))/i.test(
+            item.controlAttrs?.href || ""
+          )
         ) {
           return false;
         }

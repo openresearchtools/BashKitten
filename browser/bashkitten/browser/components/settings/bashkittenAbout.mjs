@@ -15,7 +15,7 @@ Preferences.addSetting({
 });
 
 const links = [
-  ["bashkittenAboutLicenses", "bashkitten-about-licenses", "about:license"],
+  ["bashkittenEngineLicenses", "bashkitten-engine-licenses", "about:license"],
   [
     "bashkittenAboutSource",
     "bashkitten-about-source",
@@ -31,6 +31,16 @@ const links = [
 for (const [id] of links) {
   Preferences.addSetting({ id });
 }
+
+Preferences.addSetting({
+  id: "bashkittenAboutLicenses",
+  onUserClick(event) {
+    event.preventDefault();
+    window.browsingContext.topChromeWindow.BashKittenAgent.about();
+  },
+});
+Preferences.addSetting({ id: "bashkittenPackageUpdatesDescription" });
+Preferences.addSetting({ id: "bashkittenReleases" });
 
 Preferences.addSetting({
   id: "bashkittenCheckSpelling",
@@ -50,15 +60,41 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
+  bashkittenPackageUpdates: {
+    headingLevel: 2,
+    l10nId: "bashkitten-updates-heading",
+    items: [
+      {
+        id: "bashkittenPackageUpdatesDescription",
+        l10nId: "bashkitten-updates-description",
+        control: "moz-box-item",
+      },
+      {
+        id: "bashkittenReleases",
+        l10nId: "bashkitten-updates-releases",
+        control: "moz-box-link",
+        controlAttrs: {
+          href: "https://github.com/openresearchtools/bashkitten/releases",
+        },
+      },
+    ],
+  },
   bashkittenAboutLinks: {
     headingLevel: 2,
     l10nId: "bashkitten-about-project-heading",
-    items: links.map(([id, l10nId, href]) => ({
-      id,
-      l10nId,
-      control: "moz-box-link",
-      controlAttrs: { href },
-    })),
+    items: [
+      {
+        id: "bashkittenAboutLicenses",
+        l10nId: "bashkitten-about-licenses",
+        control: "moz-box-button",
+      },
+      ...links.map(([id, l10nId, href]) => ({
+        id,
+        l10nId,
+        control: "moz-box-link",
+        controlAttrs: { href },
+      })),
+    ],
   },
   bashkittenSpelling: {
     headingLevel: 2,

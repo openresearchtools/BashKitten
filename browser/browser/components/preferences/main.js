@@ -421,6 +421,7 @@ const DefaultBrowserHelper = {
       if (
         (location.hash == "" ||
           location.hash == "#general" ||
+          location.hash == "#home" ||
           location.hash == "#sync") &&
         document.visibilityState == "visible"
       ) {
@@ -659,7 +660,9 @@ function createStartupConfig(hidden = false) {
     items: [
       {
         id: "browserRestoreSession",
-        l10nId: "startup-restore-windows-and-tabs",
+        l10nId: AppConstants.MOZ_APP_NAME == "bashkitten"
+          ? "bashkitten-restore-tabs"
+          : "startup-restore-windows-and-tabs",
         items: [
           {
             id: "sessionRestoreNewTab",
@@ -711,7 +714,29 @@ function createStartupConfig(hidden = false) {
   };
 }
 
+// Local data import does not depend on Firefox Accounts or Sync.
+Preferences.addSetting({
+  id: "data-migration",
+  visible: () =>
+    !Services.policies || Services.policies.isAllowed("profileImport"),
+  onUserClick() {
+    window.gMainPane.showMigrationWizardDialog();
+  },
+});
+
 SettingGroupManager.registerGroups({
+  importBrowserData: {
+    l10nId: "preferences-data-migration-group",
+    headingLevel: 2,
+    iconSrc: "chrome://browser/skin/import.svg",
+    items: [
+      {
+        id: "data-migration",
+        l10nId: "preferences-data-migration-button",
+        control: "moz-box-button",
+      },
+    ],
+  },
   defaultBrowser: createDefaultBrowserConfig(),
   startup: createStartupConfig(
     Services.prefs.getBoolPref("browser-settings-redesign.enabled", false)

@@ -199,22 +199,21 @@ function injectCustomNewTabItem(config) {
   );
 }
 
-// BashKitten ships no sponsored content, so drop the "Support Firefox" sponsored
-// group from the Home pane without editing AboutPreferences.sys.mjs.
-function removeSupportFirefoxItem(items) {
-  if (!Array.isArray(items)) {
-    return false;
-  }
-  for (let i = 0; i < items.length; i++) {
-    if (items[i]?.id === "supportFirefox") {
-      items.splice(i, 1);
-      return true;
+// These feeds/services are not shipped. Retain the local widgets, shortcuts,
+// search field, recent activity and wallpaper controls.
+const UNAVAILABLE_HOME_ITEMS = new Set([
+  "supportFirefox", "weather", "sportsWidget", "stories",
+]);
+function removeUnavailableHomeItems(items) {
+  return items.filter(item => {
+    if (UNAVAILABLE_HOME_ITEMS.has(item.id)) {
+      return false;
     }
-    if (removeSupportFirefoxItem(items[i]?.items)) {
-      return true;
+    if (Array.isArray(item.items)) {
+      item.items = removeUnavailableHomeItems(item.items);
     }
-  }
-  return false;
+    return true;
+  });
 }
 
 // Mozilla labels the Home defaults, content header, and disabled notice with the
@@ -223,6 +222,8 @@ const HOME_LABEL_OVERRIDES = {
   "home-mode-choice-default-fx-srd": "bashkitten-home-mode-choice-default",
   "home-prefs-content-header": "bashkitten-home-prefs-content-header",
   "home-prefs-firefox-home-disabled-notice": "bashkitten-home-disabled-notice",
+  "home-homepage-new-windows": "bashkitten-home-homepage",
+  "home-prefs-firefox-logo-header": "bashkitten-home-logo",
 };
 
 function rewriteHomeLabels(node) {
@@ -255,7 +256,7 @@ SettingGroupManager.registerGroups = groups => {
     injectCustomNewTabItem(groups.homepage);
   }
   if (groups?.home) {
-    removeSupportFirefoxItem(groups.home.items);
+    groups.home.items = removeUnavailableHomeItems(groups.home.items);
   }
   for (const id of ["homepage", "customHomepage", "home"]) {
     if (groups?.[id]) {
