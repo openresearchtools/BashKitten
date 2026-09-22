@@ -24,6 +24,11 @@ import {
 export let searchParams = new URLSearchParams(
   document.documentURI.split("?")[1]
 );
+// Products without a support service retain local error details and recovery
+// controls without links to the upstream vendor's help pages.
+export const SHOW_SUPPORT_LINKS = !RPMGetFormatURLPref(
+  "app.support.baseURL"
+).startsWith("about:blank");
 export const MDN_DOCS_HEADERS =
   "https://developer.mozilla.org/docs/Web/HTTP/Reference/Headers/";
 export const COOP_MDN_DOCS = MDN_DOCS_HEADERS + "Cross-Origin-Opener-Policy";

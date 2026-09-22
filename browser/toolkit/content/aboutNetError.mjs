@@ -21,6 +21,7 @@ import {
   retryThis,
   handleNSSFailure,
   detectClockSkew,
+  SHOW_SUPPORT_LINKS,
 } from "chrome://global/content/aboutNetErrorHelpers.mjs";
 import { initializeRegistry } from "chrome://global/content/errors/error-registry.mjs";
 import {
@@ -351,7 +352,7 @@ function initTitleAndBodyIds(baseURL, isTRROnlyFailure) {
       longDesc = null;
 
       // Add a learn more link
-      learnMore.hidden = false;
+      learnMore.hidden = !SHOW_SUPPORT_LINKS;
       learnMoreLink.setAttribute("href", baseURL + "xframe-neterror-page");
       break;
     }
@@ -378,7 +379,7 @@ function initTitleAndBodyIds(baseURL, isTRROnlyFailure) {
     // TLS errors and non-overridable certificate errors (e.g. pinning
     // failures) are of type nssFailure2.
     case "nssFailure2": {
-      learnMore.hidden = false;
+      learnMore.hidden = !SHOW_SUPPORT_LINKS;
       const result = handleNSSFailure(showPrefChangeContainer);
       if (result.versionError) {
         const tlsNotice = document.getElementById("tlsVersionNotice");
@@ -389,7 +390,7 @@ function initTitleAndBodyIds(baseURL, isTRROnlyFailure) {
     }
 
     case "sslv3Used":
-      learnMore.hidden = false;
+      learnMore.hidden = !SHOW_SUPPORT_LINKS;
       document.body.className = "certerror";
       break;
   }
@@ -398,6 +399,9 @@ function initTitleAndBodyIds(baseURL, isTRROnlyFailure) {
 }
 
 function initPage() {
+  if (!SHOW_SUPPORT_LINKS) {
+    document.getElementById("trrOnlylearnMoreLink").hidden = true;
+  }
   // We show an offline support page in case of a system-wide error,
   // when a user cannot connect to the internet and access the SUMO website.
   // For example, clock error, which causes certerrors across the web or
@@ -705,7 +709,9 @@ function getNetErrorDescParts(noConnectivity) {
   const config = getResolvedErrorConfig(configId, context);
 
   // Convert config descriptionParts to legacy tuple format
-  const parts = config.descriptionParts || [];
+  const parts = (config.descriptionParts || []).filter(
+    part => SHOW_SUPPORT_LINKS || part.tag !== "a"
+  );
   return parts.map(part => {
     if (part.tag === "a") {
       return [part.tag, part.dataL10nId, part.href];
@@ -875,7 +881,7 @@ function setCertErrorDetails() {
   document.body.setAttribute("code", failedCertInfo.errorCodeString);
 
   const learnMore = document.getElementById("learnMoreContainer");
-  learnMore.hidden = false;
+  learnMore.hidden = !SHOW_SUPPORT_LINKS;
   const learnMoreLink = document.getElementById("learnMoreLink");
   const baseURL = RPMGetFormatURLPref("app.support.baseURL");
   learnMoreLink.href = baseURL + "connection-not-secure";

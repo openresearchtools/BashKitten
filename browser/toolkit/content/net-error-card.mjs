@@ -21,6 +21,7 @@ import {
   retryThis,
   VPN_ACTIVE,
   detectClockSkew,
+  SHOW_SUPPORT_LINKS,
 } from "chrome://global/content/aboutNetErrorHelpers.mjs";
 import { initializeRegistry } from "chrome://global/content/errors/error-registry.mjs";
 import {
@@ -585,7 +586,7 @@ export class NetErrorCard extends MozLitElement {
             ></a>
           </p>`
         : null}
-      ${learnMoreL10nId
+      ${SHOW_SUPPORT_LINKS && learnMoreL10nId
         ? html`<p>
             <a
               is="moz-support-link"
@@ -796,7 +797,7 @@ export class NetErrorCard extends MozLitElement {
             ></p>
           </div>`
         : null}
-      ${learnMoreL10nId
+      ${SHOW_SUPPORT_LINKS && learnMoreL10nId
         ? html`<p>
             <a
               href=${learnMoreHref}
