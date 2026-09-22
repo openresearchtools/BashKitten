@@ -9,7 +9,6 @@ from pathlib import Path
 import subprocess
 
 p = argparse.ArgumentParser()
-p.add_argument('--app-build', type=Path, required=True)
 p.add_argument('--native-notices', type=Path, required=True)
 p.add_argument('--output', type=Path, required=True)
 p.add_argument('--version', required=True)
@@ -19,9 +18,10 @@ companion = Path(os.environ['BASHKITTEN_COMPANION_LICENSES'])
 records = json.loads(companion.read_text())
 if not isinstance(records, list) or not records:
     raise SystemExit('The companion package license inventory is empty')
-metadata = sorted(a.app_build.glob('generated/third_party_licenses/**/third_party_license_metadata'))
+apk_licenses = Path(os.environ['BASHKITTEN_APK_LICENSES'])
+metadata = sorted(apk_licenses.rglob('third_party_license_metadata'))
 if not metadata:
-    raise SystemExit('The resolved Android dependency license inventory is missing')
+    raise SystemExit(f'The resolved Android dependency license inventory is missing: {apk_licenses}')
 seen = set()
 for table in metadata:
     blob = (table.parent / 'third_party_licenses').read_bytes()

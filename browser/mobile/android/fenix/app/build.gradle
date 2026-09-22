@@ -841,11 +841,17 @@ tasks.register("detekt", Exec) {
 android.sourceSets.main.assets.srcDir("$buildDir/generated/bashkitten-about")
 def productAbout = tasks.register('stageBashKittenAbout', Exec) {
     dependsOn ':bashkitten:stageNotices'
-    dependsOn tasks.matching { it.name == 'releaseOssLicensesTask' || it.name == 'generateLicenses' }
     commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/about-assets.py",
-        '--app-build', "$buildDir", '--native-notices', "${project(':bashkitten').buildDir}/generated/notices",
+        '--native-notices', "${project(':bashkitten').buildDir}/generated/notices",
         '--output', "$buildDir/generated/bashkitten-about", '--version', bashKittenVersion
     outputs.upToDateWhen { false }
+}
+androidComponents.onVariants(androidComponents.selector().withBuildType('release')) { variant ->
+    def licenses = tasks.named("${variant.name}OssLicensesTask")
+    productAbout.configure {
+        dependsOn licenses
+        environment 'BASHKITTEN_APK_LICENSES', licenses.get().generatedDirectory.get().asFile.absolutePath
+    }
 }
 tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach { dependsOn productAbout }
 
