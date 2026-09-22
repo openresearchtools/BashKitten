@@ -482,8 +482,36 @@ manager's durable jobs and locks. No package-network checks on every chat open.
 Replace suite APK cards with the relevant Termux setup/status and BashKitten
 update controls; there is no remaining suite app store to maintain.
 
-Browser upload/download/paste uses Gecko and the Android picker. Backend folder
-choices remain writable Termux home paths. Completion notifications move from
+Browser upload/download/paste uses Gecko and the Android picker. Working-folder
+choices remain writable Termux home paths. The file sidebar has a path bar and
+can browse readable files throughout Termux's own app data directory,
+`/data/data/com.termux`, including its equivalent canonical Android path. This
+does not require shared storage or access to another app's private directory.
+Keep this browsing scope separate from the working-folder picker.
+
+The Termux sidebar has Files and Changes views. Files retains ordinary upload,
+open/download and whole-repository ZIP download, and adds Select mode with
+checkboxes, Select all/None, selected-file ZIP download, Copy to a chosen Termux
+directory, and Delete with confirmation showing the selected items. Long copies,
+deletions and ZIP creation run in on-demand child processes with bounded progress
+and cancellation, rather than blocking the HTTP server or building archives in
+the browser. Validate paths and symlinks on the backend, avoid overwriting existing
+copy destinations, and clean up workers and temporary downloads. Closing the
+sidebar does not cancel an operation; stopping Agent stops its owned workers.
+
+Changes is a read-only Git view: show files changed since the last commit,
+including staged, unstaged and untracked files, green/red added/deleted line
+counts, and an escaped unified diff when a file is opened. Handle new repositories,
+renames, deletions and binary files accurately. Run bounded asynchronous Git
+commands, refresh only on visible/focus/manual or actual work changes, and do
+not install filesystem watchers or poll hidden sidebars. If Git is not initialized,
+show that state until a later refresh detects it. BashKitten does not initialize,
+stage, commit or otherwise manage Git; the user or stock Pi does that. The local
+Linux desktop shell shows Changes instead of a full file manager, with native
+folder opening still available. Remote connections retain file browsing because
+their paths are on the remote server.
+
+Completion notifications move from
 Termux:API to the browser's Android notification integration, with user-controlled
 notification permission and deduplicated turn IDs. Receive them over the live
 authenticated service connection, using a user-enabled foreground service for

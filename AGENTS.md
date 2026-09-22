@@ -91,6 +91,12 @@ upstream components and licenses.
   substitute a custom Android picker or require Android storage permissions.
 - Browse repositories on the backend. Open/download files through normal browser
   behavior; build complete repository ZIPs on the backend.
+- The Termux file sidebar may browse its own complete app data directory, separate
+  from the working-folder picker. Run bulk copy/delete/ZIP work in short-lived
+  child processes; validate paths and links and confirm deletion in the UI.
+  The Changes sidebar reads Git status, line counts and diffs without modifying
+  Git. Refresh on demand while visible, with no hidden polling or filesystem
+  watchers. The local Linux shell shows Changes and uses native folder opening.
 - Retain native queue order, attachments and per-tab edit ownership. Never replay
   consumed messages after queue edits or browser reconnects.
 
