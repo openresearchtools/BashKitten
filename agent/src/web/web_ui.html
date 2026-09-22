@@ -107,17 +107,7 @@
     }
     #auth h1 { margin: 0 0 8px; font-size: 24px; }
     #auth p { color: var(--muted); }
-    #auth input {
-      display: block;
-      width: 100%;
-      margin: 10px 0;
-      padding: 11px 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--bg);
-      outline: none;
-    }
-    #auth input:focus { border-color: var(--accent); }
+    #auth a { display: inline-block; margin: 10px 0; color: var(--text); }
     #auth button { width: 100%; margin-top: 5px; padding: 11px; border-radius: 10px; }
 
     #app { display: grid; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; min-height: 0; overflow: hidden; }
@@ -478,13 +468,11 @@
 <body>
   <section id="auth" class="hidden">
     <h1>🐈 BashKitten</h1>
-    <p id="authHint"></p>
-    <form id="authForm">
-      <input id="username" autocomplete="username" placeholder="Username" required>
-      <input id="password" type="password" autocomplete="current-password" placeholder="Password (8+ characters)" required minlength="8">
-      <button class="primary" type="submit">Continue</button>
-      <p id="authError" class="meta"></p>
-    </form>
+    <p id="authHint">Connecting to your agent…</p>
+    <a id="authLogin" href="/login" target="_blank" rel="noopener" class="hidden">Sign in</a>
+    <p><a href="/about" target="_blank" rel="noopener">About and licenses</a></p>
+    <button id="authRetry" type="button">Reconnect</button>
+    <p id="authError" class="meta" role="status"></p>
   </section>
 
   <section id="app" class="hidden">
@@ -516,37 +504,53 @@
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
+            <button id="tabRemote" type="button" role="tab" aria-selected="false" aria-controls="settingsRemote" tabindex="-1" data-settings-tab="remote">Remote access</button>
             <button id="tabAbout" type="button" role="tab" aria-selected="false" aria-controls="settingsAbout" tabindex="-1" data-settings-tab="about">About</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
-            <label>Web port<input id="webPort" type="number" min="1024" max="65535"></label>
             <label class="wide">Default working folder<span class="folder-field"><input id="defaultCwd"><button id="defaultCwdBrowse" type="button">Browse…</button></span></label>
             <label>Default model<select id="defaultModel"></select></label>
             <label>Default thinking<select id="defaultThinking"></select></label>
 
           </div>
-          <p class="meta">Changing the port restarts only the Web UI. Agent sessions keep running.</p>
           <div class="settings-section" id="packageUpdates">
-            <h3>Pi runtime</h3>
+            <h3>Packages</h3>
             <p id="packageSummary" class="meta"></p>
             <div class="subscription-actions"><button type="button" data-package-job="check-packages">Check updates</button><button type="button" data-package-job="update-pi">Update Pi</button><button type="button" data-package-job="rollback-pi" id="rollbackPi">Roll back Pi</button></div>
             <div class="subscription-actions hidden" id="termuxPackageActions"><button type="button" data-package-job="update-packages">Update packages</button><button type="button" data-package-job="refresh-lists">Refresh lists</button><button type="button" data-package-job="recover-packages">Repair interrupted update</button></div>
             <p id="packagePhase" role="status" class="meta"></p><button type="button" id="retryPackageJob" class="hidden">Retry</button><button type="button" id="cancelPackageJob" class="hidden">Cancel</button>
             <progress id="packageProgress" class="hidden" max="100" style="width:100%" aria-label="Package operation progress"></progress><p id="packageActivity" class="meta"></p>
             <details><summary>Package output</summary><pre id="packageOutput" style="max-height:16rem;overflow:auto;white-space:pre-wrap"></pre></details>
+            <details id="installedPackages"><summary>Installed packages</summary><p id="packageInventoryStatus" class="meta"></p><div id="packageInventory" style="max-height:20rem;overflow:auto"></div></details>
           </div>
+          <details class="settings-section"><summary>Pi processes</summary><p class="meta">Stopping Pi keeps its saved sessions and project files.</p><div id="piProcesses"></div></details>
           <div id="termuxNotifications" class="hidden settings-section">
             <h3>Turn notifications</h3>
             <label><input id="notifyEnabled" type="checkbox"> Notify when Pi finishes a turn</label>
             <label><input id="notifyHidden" type="checkbox" checked> Only when this chat is not visible</label>
             <label><input id="notifyPreview" type="checkbox" checked> Show a short message preview</label>
-            <p class="meta">Uses Termux:API. Android notification settings control lock-screen visibility.</p>
+            <p class="meta">BashKitten sends notifications while its background connection is enabled. Android notification settings control lock-screen visibility.</p>
           </div>
           </section>
           <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
+            <details id="managedLlama" class="settings-section hidden">
+              <summary>Local llama.cpp</summary>
+              <p id="llamaStatus" class="meta" role="status"></p>
+              <div class="settings-grid">
+                <label>Runtime<select id="llamaBackend"><option value="auto">Automatic</option><option value="cuda">CUDA</option><option value="vulkan">Vulkan</option><option value="cpu">CPU</option></select></label>
+                <label>Model name<input id="llamaAlias" value="bashkitten-local" autocomplete="off"></label>
+                <label class="wide">GGUF model file on this server<input id="llamaModel" placeholder="/home/user/models/model.gguf" autocomplete="off"></label>
+                <label>Context size<input id="llamaContext" type="number" min="512" step="1" value="8192"></label>
+                <label>GPU layers<input id="llamaGpuLayers" value="auto" placeholder="auto, all, or a number"></label>
+                <label>CPU threads<input id="llamaThreads" type="number" min="0" step="1" value="0"></label>
+              </div>
+              <p class="meta">Uses the selected Linux package and a local GGUF model. Zero threads chooses automatically. Existing external providers keep their own lifecycle.</p>
+              <div class="subscription-actions"><button id="llamaInstall" type="button">Install runtime</button><button id="llamaStart" type="button">Save and start</button><button id="llamaStop" type="button">Stop</button></div>
+              <p id="llamaNotice" class="meta" role="status"></p>
+            </details>
             <h3>Pi providers</h3>
-            <p class="meta">Connect using Pi’s own browser login or API key setup. Credentials are shared with Pi in Termux.</p>
+            <p class="meta">Connect using Pi’s own browser login or API key setup. Credentials are shared with Pi on this server.</p>
             <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a provider" aria-label="Find a provider"><button id="refreshServices" type="button">Refresh</button></div>
             <div id="serviceLogin" class="hidden settings-section" role="status"></div>
             <div id="servicesList"></div>
@@ -554,8 +558,31 @@
             <div class="subscription-actions"><button id="importPiSessions" type="button">Open an existing Pi session</button></div>
             <div id="piSessions"></div>
           </section>
+          <section id="settingsRemote" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabRemote">
+            <h3>Remote access</h3>
+            <p class="meta">Connect to this Agent through Tor. Your account and second factor are required.</p>
+            <p id="remoteStatus" class="meta" role="status"></p>
+            <div class="subscription-actions"><button id="remoteToggle" type="button">Enable remote access</button><button id="remoteRefresh" type="button">Refresh</button><button id="remoteImport" type="button">Import a connection</button></div>
+            <label>Address<input id="remoteAddress" readonly autocomplete="off"></label>
+            <div id="remotePublishing" class="hidden settings-section">
+              <h3>Add a device</h3>
+              <label>Device name<input id="remoteDeviceName" maxlength="80" placeholder="My laptop" autocomplete="off"></label>
+              <label id="remoteKindLabel" class="hidden">Connection<select id="remoteKind"><option value="agent">Agent</option><option value="llama">llama.cpp API</option></select></label>
+              <button id="remoteCreate" type="button">Create connection</button>
+              <div id="remoteExport" class="hidden settings-section">
+                <p class="meta">Save this private connection for the device. Revoke it below to remove access.</p>
+                <textarea id="remoteConnection" readonly autocomplete="off" rows="4" spellcheck="false" aria-label="Private connection record"></textarea>
+                <div class="subscription-actions"><button id="remoteReveal" type="button">Reveal</button><button id="remoteCopy" type="button">Copy</button><button id="remoteSave" type="button">Save file</button><button id="remoteQrToggle" type="button">Show QR</button><button id="remoteClear" type="button">Hide connection</button></div>
+                <img id="remoteQr" class="hidden" alt="Private connection QR code" style="width:min(100%,280px);height:auto;margin-top:12px;background:white;padding:12px">
+              </div>
+              <h4>Authorized devices</h4>
+              <div id="remoteDevices"></div>
+            </div>
+            <p id="remoteNotice" class="meta" role="status"></p>
+          </section>
           <section id="settingsAbout" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabAbout">
           </section>
+          <div class="settings-section"><button id="signOut" type="button">Sign out</button></div>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
           <p id="settingsNotice" class="meta" role="status"></p>
         </form>
@@ -656,7 +683,7 @@
 
   <script>
     let csrf = '';
-    let hasUser = false;
+    let initialized = false, authRequired = false;
     let models = [];
     let current = null;
     let source = null;
@@ -687,8 +714,8 @@
     let nextSessionOffset = null;
     let loadingSessions = null;
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
-    const nativeHost = window.bashkittenHost || null;
-    const nativeLinux = nativeHost?.platform === 'linux';
+    let nativeHost = window.bashkittenHost || null;
+    let nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
     const visibilityClient = crypto.randomUUID();
     let serverPlatform = '';
     function sendVisibility() {
@@ -698,11 +725,18 @@
     document.addEventListener('visibilitychange', sendVisibility);
     window.addEventListener('focus', sendVisibility);
     window.addEventListener('blur', sendVisibility);
-    if (nativeLinux) {
-      $('#filesToggle').textContent = '↗';
-      $('#filesToggle').title = 'Open project folder';
-      $('#filesToggle').setAttribute('aria-label', 'Open project folder');
-      document.addEventListener('click', event => {
+    function configureNativeHost() {
+      nativeHost = window.bashkittenHost || null;
+      nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
+      $('#filesToggle').textContent = nativeLinux ? '↗' : '▤';
+      $('#filesToggle').title = nativeLinux ? 'Open project folder' : 'Files';
+      $('#filesToggle').setAttribute('aria-label', nativeLinux ? 'Open project folder' : 'Browse working folder files');
+      if (initialized) loadNotifications();
+    }
+    window.addEventListener('bashkitten-host-ready', configureNativeHost);
+    configureNativeHost();
+    document.addEventListener('click', event => {
+        if (!nativeLinux) return;
         const link = event.target.closest('a');
         if (!link) return;
         const url = new URL(link.href, location.href);
@@ -710,25 +744,50 @@
           event.preventDefault();
           nativeHost.call('open-file', {url:link.href}).catch(error => { $('#composerHint').textContent = error.message; });
         }
-      }, true);
-    }
+    }, true);
 
+    function loginUrl() {
+      return '/login?rd=' + encodeURIComponent(location.origin + '/' + location.hash);
+    }
+    function requireLogin() {
+      authRequired = true;
+      csrf = '';
+      clearRemoteExport();
+      source?.close(); source = null;
+      $('#app').inert = true;
+      $('#app').classList.add('hidden');
+      $('#auth').classList.remove('hidden');
+      $('#authHint').textContent = initialized ? 'Sign in again to reconnect. Your draft and attachments are kept here.' : 'Sign in with your account and second factor.';
+      $('#authLogin').href = loginUrl();
+      $('#authLogin').classList.remove('hidden');
+      if (!initialized) location.replace(loginUrl());
+    }
+    async function responseValue(response) {
+      const json = (response.headers.get('content-type') || '').includes('application/json');
+      const login = response.redirected && new URL(response.url).pathname.startsWith('/login');
+      if (response.status === 401 || login) {
+        requireLogin();
+        throw Error('Sign in again to reconnect.');
+      }
+      if (!json) throw Error('The server did not return an API response.');
+      return response.json();
+    }
     async function api(url, options = {}) {
       options.headers = options.headers || {};
       const mutation = options.method && options.method !== 'GET';
       if (mutation) options.headers['x-bashkitten-csrf'] = csrf;
       let response = await fetch(url, options);
-      let value = await response.json().catch(() => ({}));
+      let value = await responseValue(response);
       // Another tab can refresh this login's CSRF token. Retry only the explicit
       // CSRF rejection: the server rejected it before performing any action.
       if (mutation && response.status === 403 && value.error === 'Invalid CSRF token') {
         const bootstrap = await fetch('/api/bootstrap');
-        const login = await bootstrap.json();
+        const login = await responseValue(bootstrap);
         if (bootstrap.ok && login.authenticated && login.csrf) {
           csrf = login.csrf;
           options.headers['x-bashkitten-csrf'] = csrf;
           response = await fetch(url, options);
-          value = await response.json().catch(() => ({}));
+          value = await responseValue(response);
         }
       }
       if (!response.ok) throw new Error(value.error || response.statusText);
@@ -1449,15 +1508,26 @@
       config = value.config;
       serverPlatform = value.platform;
       $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
-      $('#termuxNotifications').classList.toggle('hidden', serverPlatform !== 'termux');
-      $('#notifyEnabled').checked = Boolean(config.notifications?.enabled);
-      $('#notifyHidden').checked = config.notifications?.onlyWhenHidden !== false;
-      $('#notifyPreview').checked = config.notifications?.preview !== false;
+      $('#managedLlama').classList.toggle('hidden', serverPlatform !== 'linux');
+      await loadNotifications();
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
-      $('#webPort').value = config.web_port;
       $('#defaultCwd').value = displayFolder(config.default_cwd);
       if (activeSettingsTab === 'services') await refreshServices();
+    }
+    async function loadNotifications() {
+      $('#termuxNotifications').classList.toggle('hidden', nativeHost?.platform !== 'android');
+      if (nativeHost?.platform === 'android') {
+        try {
+          const notifications = await nativeHost.call('notification-settings', {});
+          $('#notifyEnabled').checked = Boolean(notifications.enabled);
+          $('#notifyHidden').checked = notifications.onlyWhenHidden !== false;
+          $('#notifyPreview').checked = notifications.preview !== false;
+        } catch (error) {
+          $('#termuxNotifications').classList.add('hidden');
+          $('#settingsNotice').textContent = error.message;
+        }
+      }
     }
 
     let packagePollBusy = false;
@@ -1466,8 +1536,10 @@
       packagePollBusy = true;
       try {
         const status = await api('/api/control'), packages = status.packages;
-        const pi = packages.sources.pi, apt = packages.sources.apt, job = packages.job;
-        $('#packageSummary').textContent = ['Installed Pi ' + packages.runtime.version, pi?.error ? 'npm: ' + pi.error : pi ? 'Latest upstream ' + pi.latest + ' · Compatible ' + pi.compatible + (pi.reason ? ' · ' + pi.reason : '') : 'Updates have not been checked', apt?.error ? 'APT: ' + apt.error : apt ? apt.available + ' APT updates' : ''].filter(Boolean).join(' · ');
+        const pi = packages.sources.pi, apt = packages.sources.apt, npm = packages.sources.npm, job = packages.job;
+        $('#packageSummary').textContent = ['Pi ' + packages.runtime.version, packages.search ? 'Packaged DDGS ' + packages.search.ddgs : 'Search runtime not installed', pi?.error ? 'Pi: ' + pi.error : pi ? 'Latest Pi ' + pi.latest + (pi.reason ? ' · ' + pi.reason : '') : 'Updates have not been checked', apt?.error ? 'APT: ' + apt.error : apt ? apt.available + ' APT updates' : '', npm?.error ? 'npm: ' + npm.error : npm ? npm.available + ' npm updates' : ''].filter(Boolean).join(' · ');
+        if (status.llama) renderLlama(status.llama);
+        renderPiProcesses(status.sessions || []);
         const active = job && ['running', 'waiting'].includes(job.status);
         document.querySelectorAll('[data-package-job]').forEach(button => { button.disabled = Boolean(active); });
         $('#rollbackPi').classList.toggle('hidden', !packages.runtime.previous);
@@ -1476,7 +1548,9 @@
         if (active && job.progress) $('#packageProgress').value = job.progress.percent;
         else $('#packageProgress').removeAttribute('value');
         $('#packageActivity').textContent = active && job.progress ? job.progress.message + ' · ' + Math.round(job.progress.percent) + '%' : '';
-        $('#packageOutput').textContent = job?.log || '';
+        const output = $('#packageOutput'), follow = output.scrollHeight - output.scrollTop - output.clientHeight < 40;
+        output.textContent = job?.log || '';
+        if (follow) output.scrollTop = output.scrollHeight;
         $('#cancelPackageJob').classList.toggle('hidden', !active); $('#cancelPackageJob').disabled = Boolean(job?.cancelRequested);
         $('#cancelPackageJob').textContent = job?.cancelRequested ? 'Finishing current package step…' : 'Cancel';
         $('#retryPackageJob').classList.toggle('hidden', !job || !['failed','interrupted','cancelled'].includes(job.status));
@@ -1487,10 +1561,191 @@
       try { await api('/api/control', {method:'POST',body:JSON.stringify({command:'package-job',kind,retry})}); await refreshPackages(); }
       catch (error) { $('#packagePhase').textContent = error.message; }
     }
+    let inventoryBusy = false;
+    $('#installedPackages').ontoggle = async () => {
+      if (!$('#installedPackages').open || inventoryBusy) return;
+      inventoryBusy = true;
+      $('#packageInventoryStatus').textContent = 'Reading installed packages…';
+      try {
+        const value = await api('/api/control', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command:'package-inventory'})});
+        const root = $('#packageInventory'); root.replaceChildren();
+        const groups = [['Pi', [{name:'Pi coding agent',version:value.pi}]], ['APT', value.apt], ['npm',value.npm], ['Search',value.search?.packages]];
+        for (const [label, entries] of groups) {
+          if (!entries?.length) continue;
+          const heading = document.createElement('h4'); heading.textContent = label; root.append(heading);
+          for (const item of entries) {
+            const row = document.createElement('div'); row.className = 'meta'; row.textContent = `${item.name} · ${item.version}`; root.append(row);
+          }
+        }
+        $('#packageInventoryStatus').textContent = value.npmError || 'Search and browser skills update with the BashKitten package.';
+      } catch (error) { $('#packageInventoryStatus').textContent = error.message; }
+      finally { inventoryBusy = false; }
+    };
     document.querySelectorAll('[data-package-job]').forEach(button => { button.onclick = () => packageJob(button.dataset.packageJob); });
     $('#retryPackageJob').onclick = () => packageJob(null, true);
     $('#cancelPackageJob').onclick = async () => { try { await api('/api/control', {method:'POST', body:JSON.stringify({command:'package-cancel'})}); await refreshPackages(); } catch (error) { $('#packagePhase').textContent = error.message; } };
     setInterval(refreshPackages, 3000);
+
+    let llamaLoaded = false, llamaBusy = false, lastLlamaState = '';
+    async function control(command, value = {}) {
+      return api('/api/control', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...value,command})});
+    }
+    let piProcessSignature = '';
+    function renderPiProcesses(sessions) {
+      const running = sessions.filter(session => session.running);
+      const signature = JSON.stringify(running.map(session => [session.id,session.title,session.busy]));
+      if (signature === piProcessSignature) return;
+      piProcessSignature = signature;
+      const root = $('#piProcesses'); root.replaceChildren();
+      for (const session of running) {
+        const row = document.createElement('div'); row.className = 'service-row';
+        const label = document.createElement('div'); label.textContent = session.title + (session.busy ? ' · Working' : ' · Idle'); row.append(label);
+        const actions = document.createElement('div'); actions.className = 'subscription-actions';
+        for (const [command,text] of [['pi-stop','Stop'],['pi-kill','Force stop']]) {
+          const button = document.createElement('button'); button.type = 'button'; button.textContent = text;
+          button.onclick = async () => {
+            button.disabled = true;
+            try { await control(command,{id:session.id}); await refreshPackages(); if (current?.id === session.id) await openSession(current,true); }
+            catch (error) { $('#settingsNotice').textContent = error.message; }
+            finally { button.disabled = false; }
+          };
+          actions.append(button);
+        }
+        row.append(actions); root.append(row);
+      }
+      if (!running.length) root.textContent = 'No running Pi processes.';
+    }
+    function renderLlama(value) {
+      $('#llamaStatus').textContent = [value.state, value.backend, value.model, value.url, value.error].filter(Boolean).join(' · ');
+      if (!llamaLoaded && value.config) {
+        const config = value.config;
+        $('#llamaBackend').value = config.backend;
+        $('#llamaModel').value = config.model;
+        $('#llamaAlias').value = config.alias;
+        $('#llamaContext').value = config.contextSize;
+        $('#llamaGpuLayers').value = config.gpuLayers;
+        $('#llamaThreads').value = config.threads;
+        llamaLoaded = true;
+      }
+      $('#llamaStop').disabled = llamaBusy || !value.desired;
+      if (value.state === 'ready' && lastLlamaState !== 'ready') loadModels().catch(() => {});
+      lastLlamaState = value.state;
+    }
+    async function llamaAction(operation) {
+      if (llamaBusy) return;
+      llamaBusy = true;
+      for (const id of ['#llamaStart','#llamaStop','#llamaInstall']) $(id).disabled = true;
+      $('#llamaNotice').textContent = '';
+      try { await operation(); await refreshPackages(); }
+      catch (error) { $('#llamaNotice').textContent = error.message; }
+      finally { llamaBusy = false; for (const id of ['#llamaStart','#llamaStop','#llamaInstall']) $(id).disabled = false; }
+    }
+    $('#llamaStart').onclick = () => llamaAction(async () => {
+      const gpuLayers = $('#llamaGpuLayers').value.trim();
+      await control('llama-configure', {config:{enabled:true,backend:$('#llamaBackend').value,model:$('#llamaModel').value.trim(),alias:$('#llamaAlias').value.trim(),contextSize:Number($('#llamaContext').value),gpuLayers:['auto','all'].includes(gpuLayers)?gpuLayers:Number(gpuLayers),threads:Number($('#llamaThreads').value)}});
+      await control('llama-start');
+    });
+    $('#llamaStop').onclick = () => llamaAction(() => control('llama-stop'));
+    $('#llamaInstall').onclick = () => llamaAction(async () => {
+      await control('package-job',{kind:'llama-runtime',input:{backend:$('#llamaBackend').value}});
+      selectSettingsTab('app');
+      $('#packageOutput').closest('details').open = true;
+    });
+
+    let remoteState = null, remoteExport = null, remoteBusy = false;
+    function clearRemoteExport() {
+      remoteExport = null;
+      $('#remoteConnection').value = '';
+      $('#remoteQr').removeAttribute('src');
+      $('#remoteQr').classList.add('hidden');
+      $('#remoteExport').classList.add('hidden');
+      $('#remoteReveal').textContent = 'Reveal';
+      $('#remoteQrToggle').textContent = 'Show QR';
+    }
+    async function refreshRemote() {
+      const value = await control('get_remote_access'); remoteState = value;
+      $('#remoteStatus').textContent = value.enabled ? (value.address ? 'Remote access is on' : 'Starting Tor…') : 'Remote access is off';
+      $('#remoteAddress').value = value.address || '';
+      $('#remoteToggle').textContent = value.enabled ? 'Turn off remote access' : 'Enable remote access';
+      $('#remotePublishing').classList.toggle('hidden', !value.enabled);
+      $('#remoteKindLabel').classList.toggle('hidden', serverPlatform !== 'linux');
+      if (serverPlatform !== 'linux') $('#remoteKind').value = 'agent';
+      const root = $('#remoteDevices'); root.replaceChildren();
+      for (const device of value.devices || []) {
+        const row = document.createElement('div'); row.className = 'service-row';
+        const label = document.createElement('span'); label.textContent = device.name + (device.kind === 'llama' ? ' · llama.cpp' : '');
+        const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Revoke';
+        button.onclick = () => remoteAction(async () => {
+          button.disabled = true;
+          try { await control('revoke_remote_connection', {id:device.id}); clearRemoteExport(); }
+          finally { button.disabled = false; }
+        });
+        row.append(label, button); root.append(row);
+      }
+      if (!value.devices?.length) root.textContent = 'No authorized devices.';
+    }
+    async function remoteAction(operation) {
+      if (remoteBusy) return;
+      remoteBusy = true;
+      for (const id of ['#remoteToggle','#remoteCreate','#remoteRefresh']) $(id).disabled = true;
+      $('#remoteNotice').textContent = '';
+      try { await operation(); await refreshRemote(); }
+      catch (error) { $('#remoteNotice').textContent = error.message; }
+      finally { remoteBusy = false; for (const id of ['#remoteToggle','#remoteCreate','#remoteRefresh']) $(id).disabled = false; }
+    }
+    $('#remoteToggle').onclick = () => remoteAction(async () => {
+      await control('set_remote_access', {enabled:!remoteState?.enabled}); clearRemoteExport();
+    });
+    $('#remoteRefresh').onclick = () => remoteAction(async () => {});
+    $('#remoteCreate').onclick = () => remoteAction(async () => {
+      const name = $('#remoteDeviceName').value.trim();
+      if (!name) throw Error('Enter a device name.');
+      const value = await control('create_remote_connection', {name,kind:$('#remoteKind').value});
+      clearRemoteExport();
+      remoteExport = value;
+      $('#remoteConnection').value = '••••••••  Private connection';
+      $('#remoteExport').classList.remove('hidden');
+      $('#remoteDeviceName').value = '';
+    });
+    $('#remoteReveal').onclick = () => {
+      if (!remoteExport) return;
+      const reveal = $('#remoteReveal').textContent === 'Reveal';
+      $('#remoteConnection').value = reveal ? JSON.stringify(remoteExport.connection, null, 2) : '••••••••  Private connection';
+      $('#remoteReveal').textContent = reveal ? 'Hide' : 'Reveal';
+    };
+    $('#remoteCopy').onclick = async () => {
+      if (!remoteExport) return;
+      try { await navigator.clipboard.writeText(JSON.stringify(remoteExport.connection)); $('#remoteNotice').textContent = 'Private connection copied.'; }
+      catch { $('#remoteNotice').textContent = 'Clipboard access was denied. Reveal the connection to copy it or save the file.'; }
+    };
+    $('#remoteSave').onclick = () => {
+      if (!remoteExport) return;
+      const url = URL.createObjectURL(new Blob([JSON.stringify(remoteExport.connection, null, 2)], {type:'application/json'}));
+      const link = document.createElement('a'); link.href = url; link.download = 'bashkitten-connection.json'; link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    $('#remoteQrToggle').onclick = () => {
+      if (!remoteExport) return;
+      const qr = $('#remoteQr'), reveal = qr.classList.contains('hidden');
+      if (reveal) {
+        if (!/^data:image\/(?:png|svg\+xml);base64,/.test(remoteExport.qrDataUrl || '')) { $('#remoteNotice').textContent = 'No QR code was returned. Save or copy the connection instead.'; return; }
+        qr.src = remoteExport.qrDataUrl;
+      } else qr.removeAttribute('src');
+      qr.classList.toggle('hidden', !reveal); $('#remoteQrToggle').textContent = reveal ? 'Hide QR' : 'Show QR';
+    };
+    $('#remoteClear').onclick = clearRemoteExport;
+    $('#remoteImport').onclick = async () => {
+      if (!nativeHost) { $('#remoteNotice').textContent = 'Import the connection from Remotes in the BashKitten browser.'; return; }
+      try { await nativeHost.call('import-remote', {}); }
+      catch (error) { $('#remoteNotice').textContent = error.message; }
+    };
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        $('#remoteConnection').value = remoteExport ? '••••••••  Private connection' : '';
+        $('#remoteReveal').textContent = 'Reveal';
+        $('#remoteQr').removeAttribute('src'); $('#remoteQr').classList.add('hidden'); $('#remoteQrToggle').textContent = 'Show QR';
+      }
+    });
 
     let displayedGoal = null;
     function renderGoal(goal){displayedGoal=goal;const row=$('#goalStatus');row.classList.toggle('hidden',!goal);row.textContent=goal?'Goal '+goal.status+': '+goal.objective+(goal.summary?' · '+goal.summary:''):'';}
@@ -1880,6 +2135,7 @@
     }
 
     function showChatView() {
+      clearRemoteExport();
       $('#settingsView').classList.add('hidden');
       $('#chat').classList.remove('hidden');
       $('#composerWrap').classList.remove('hidden');
@@ -1933,7 +2189,7 @@
                 // before replaying memory, including turns settled while offline.
                 stream.close();
                 if (source === stream) source = null;
-                if (current?.id === id) openSession(current).catch(error => { $('#composerHint').textContent = error.message; });
+                if (current?.id === id) openSession(current, true).catch(error => { $('#composerHint').textContent = error.message; });
                 return;
               }
               subscribed = true;
@@ -1962,10 +2218,10 @@
       });
     }
 
-    async function openSession(session) {
+    async function openSession(session, reconnect = false) {
       if (!session) return;
       const view = ++sessionView;
-      if (editingQueueId) await cancelQueueEdit();
+      if (editingQueueId && !reconnect) await cancelQueueEdit();
       if (sessionView !== view) return;
       closeImageViewer();
       current = {...session};
@@ -1975,13 +2231,15 @@
       setCompacting(false);
       loadingHistory = false;
       liveToolCalls.clear();
-      showChatView();
+      if (!reconnect) showChatView();
       source?.close();
       source = null;
-      pendingFiles = [];
-      pendingRetainedAttachments = [];
-      goalDraft=false;renderGoalChip();
-      editingQueueSnapshot = null;
+      if (!reconnect) {
+        pendingFiles = [];
+        pendingRetainedAttachments = [];
+        goalDraft=false;renderGoalChip();
+        editingQueueSnapshot = null;
+      }
       renderAttachments();
       $('#title').textContent = session.title;
       $('#folderLabel').textContent = displayFolder(session.cwd) || 'Working folder';
@@ -2155,13 +2413,6 @@
       loadSessions().catch(() => {});
     }
 
-    function authScreen(signup) {
-      hasUser = !signup;
-      $('#app').classList.add('hidden');
-      $('#auth').classList.remove('hidden');
-      $('#authHint').textContent = signup ? 'Create the one local Web UI account.' : 'Sign in to the local Web UI.';
-    }
-
     async function linkedSession(sessions) {
       const id = /^#session=([a-f0-9-]{36})$/.exec(location.hash)?.[1];
       if (!id) return null;
@@ -2184,27 +2435,36 @@
       $('#app').inert = true;
       try {
         const value = await api('/api/bootstrap');
-        if (!value.hasUser || !value.authenticated) {
+        if (!value.authenticated) {
           bootPending = false;
-          return authScreen(!value.hasUser);
+          return requireLogin();
         }
         csrf = value.csrf;
+        authRequired = false;
         $('#auth').classList.add('hidden');
         $('#app').classList.remove('hidden');
         await loadSettings();
         await loadModels();
         const sessions = await loadSessions();
-        if (sessions.length) await openSession(await linkedSession(sessions) || sessions[0]);
-        else await beginNewSession();
+        if (initialized) {
+          if (current) await openSession(sessions.find(session => session.id === current.id) || current, true);
+        } else {
+          if (sessions.length) await openSession(await linkedSession(sessions) || sessions[0]);
+          else await beginNewSession();
+        }
+        initialized = true;
         bootPending = false;
         $('#app').inert = false;
         $('#authError').textContent = '';
+        window.dispatchEvent(new Event('BashKittenDraftReady'));
       } catch (error) {
+        if (!initialized) $('#auth').classList.remove('hidden');
         $('#authError').textContent = error.message;
         $('#composerHint').textContent = 'Connecting to server… ' + error.message;
       } finally { booting = false; }
     }
-    window.addEventListener('focus', () => { if (bootPending) boot(); });
+    window.addEventListener('focus', () => { if (bootPending || authRequired) boot(); });
+    window.addEventListener('BashKittenAuthenticated', boot);
 
     $('#sessions').addEventListener('scroll', () => {
       const panel = $('#sessions');
@@ -2214,16 +2474,15 @@
       if ($('#chat').scrollTop < 80) loadOlderHistory();
     });
 
-    $('#authForm').onsubmit = async event => {
+    $('#authRetry').onclick = boot;
+    $('#authLogin').onclick = event => {
+      if (!nativeHost) return;
       event.preventDefault();
-      try {
-        const value = await api(hasUser ? '/api/login' : '/api/signup', {
-          method: 'POST', headers: {'content-type': 'application/json'},
-          body: JSON.stringify({username: $('#username').value, password: $('#password').value})
-        });
-        csrf = value.csrf;
-        await boot();
-      } catch (error) { $('#authError').textContent = error.message; }
+      nativeHost.call('sign-in', {}).catch(error => { $('#authError').textContent = error.message; });
+    };
+    $('#signOut').onclick = async () => {
+      try { await api('/api/logout', {method:'POST'}); requireLogin(); }
+      catch (error) { $('#settingsNotice').textContent = error.message; }
     };
 
     window.addEventListener('focus',()=>{if(current)refreshQueue().catch(()=>{});});
@@ -2517,6 +2776,7 @@
       else showChatView();
     };
     function selectSettingsTab(name, focus = false) {
+      if (activeSettingsTab === 'remote' && name !== 'remote') clearRemoteExport();
       activeSettingsTab = name;
       $('#settingsView').scrollTop = 0;
       for (const tab of document.querySelectorAll('[data-settings-tab]')) {
@@ -2529,6 +2789,7 @@
       $('#settingsSaveRow').classList.toggle('hidden', name !== 'app');
       $('#settingsNotice').textContent = '';
       if (name === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
+      if (name === 'remote') refreshRemote().catch(error => { $('#remoteNotice').textContent = error.message; });
     }
     const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
     for (const tab of settingsTabs) {
@@ -2544,7 +2805,7 @@
       };
     }
     renderBashKittenAbout($('#settingsAbout'), {
-      notice: 'The Android app and Linux desktop host connect to the separate BashKitten server. The server package includes unmodified Pi and its npm dependencies under their own licenses. Termux, Node.js and system libraries are installed separately and retain their own licenses.',
+      notice: 'The BashKitten browser connects to this separate Agent server. Its package includes unmodified Pi, npm dependencies, the search helper, Caddy, Authelia and Tor under their own licenses. Termux, Node.js, Python and system libraries are installed separately and retain their own licenses.',
       loadLicenses: async () => {
         const response = await fetch('/licenses.json');
         if (!response.ok) throw Error('Could not load licenses');
@@ -2556,28 +2817,15 @@
       event.preventDefault();
       try {
       if (activeSettingsTab !== 'app') return;
-      config.web_port = Number($('#webPort').value);
       config.default_cwd = $('#defaultCwd').value;
       config.default_model = $('#defaultModel').value;
       config.default_thinking = $('#defaultThinking').value;
-      config.notifications = {enabled:$('#notifyEnabled').checked, onlyWhenHidden:$('#notifyHidden').checked, preview:$('#notifyPreview').checked};
-      const saved=await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(config)});
-      if(saved.restartUrl){
-        source?.close();source=null;
-        $('#settingsNotice').textContent='Restarting the Web UI. Reconnecting…';
-        const link=document.createElement('a');link.href=saved.restartUrl;link.textContent='Open Web UI';$('#settingsNotice').append(' ',link);
-        setTimeout(async()=>{
-          try {
-            const status = await api('/api/settings');
-            if (status.restartError) {
-              $('#settingsNotice').textContent = status.restartError;
-              $('#webPort').value = status.config.web_port;
-              return;
-            }
-          } catch {}
-          location.assign(saved.restartUrl);
-        },1200);return;
+      if (nativeHost?.platform === 'android') {
+        const notifications = await nativeHost.call('notification-settings', {enabled:$('#notifyEnabled').checked, onlyWhenHidden:$('#notifyHidden').checked, preview:$('#notifyPreview').checked});
+        config.notifications = notifications;
+        $('#notifyEnabled').checked = Boolean(notifications.enabled);
       }
+      const saved=await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(config)});
       await loadModels();
       if (!current) {
         pendingCwd = config.default_cwd;
@@ -2657,7 +2905,7 @@
     }
     async function openFiles(root) {
       if (nativeLinux) {
-        try { await nativeHost.call('open-file', {folder:root}); } catch (error) { $('#composerHint').textContent = error.message; }
+        try { await nativeHost.call('open-folder', {path:root}); } catch (error) { $('#composerHint').textContent = error.message; }
         return;
       }
       if(!root)return;
@@ -2764,6 +3012,37 @@
     $('#piDialogCancel').onclick=()=>answerPi(true);
     $('#piDialog').oncancel=event=>{event.preventDefault();answerPi(true);};
 
+    // The enrolled native browser keeps drafts in memory while changing the
+    // discovered origin. These hooks never send or queue a message.
+    window.bashkittenDraft = {
+      capture() {
+        return {sessionId:current?.id || null,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null};
+      },
+      async restore(value) {
+        if (!initialized || !value || typeof value.text !== 'string') return;
+        if (value.sessionId && /^[a-f0-9-]{36}$/.test(value.sessionId)) {
+          history.replaceState(null, '', '#session=' + value.sessionId);
+          const session = await linkedSession(await loadSessions());
+          if (!session) return;
+          if (current?.id !== session.id) await openSession(session);
+        } else if (current) await beginNewSession();
+        $('#prompt').value = value.text;
+        pendingFiles = (value.files || []).filter(file => file instanceof File);
+        pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
+        goalDraft = Boolean(value.goal);
+        if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
+        for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
+        if (value.edit && current?.id === value.sessionId) {
+          editingQueueId = value.edit.id; editingQueueToken = value.edit.token; editingQueueSnapshot = value.edit.snapshot;
+          renderQueueState(queueState);
+        }
+        renderAttachments(); renderGoalChip();
+        $('#prompt').dispatchEvent(new Event('input'));
+        if (Array.isArray(value.selection)) $('#prompt').setSelectionRange(...value.selection.slice(0,2));
+        $('#chat').scrollTop = Number(value.scroll) || 0;
+        $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
+      }
+    };
     boot();
     setInterval(() => {
       // Finish interrupted startup without reloading an initialized chat or its draft.

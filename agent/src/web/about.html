@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>About · BashKitten</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/about.js"></script>
+  <style>html,body{height:auto;min-height:100%;overflow:auto}.settings-page{max-width:680px}a{color:inherit}</style>
+</head>
+<body>
+  <main class="settings-page"><div id="about" class="settings-panel"></div><p><a href="/">Return to BashKitten</a></p></main>
+  <script>
+    renderBashKittenAbout(document.querySelector('#about'), {
+      notice: 'The BashKitten browser connects to a separate Agent server. Its package includes unmodified Pi, npm dependencies, the search helper, Caddy, Authelia and Tor under their own licenses. Termux, Node.js, Python and system libraries are installed separately and retain their own licenses.',
+      loadLicenses: async () => {
+        const response = await fetch('/licenses.json');
+        if (!response.ok) throw Error('Could not load licenses');
+        return response.json();
+      }
+    });
+  </script>
+</body>
+</html>

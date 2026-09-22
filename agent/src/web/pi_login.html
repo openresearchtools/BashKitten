@@ -17,33 +17,48 @@
 </head>
 <body>
   <main id="auth">
-    <h1>Pi service login</h1>
+    <h1>Pi provider login</h1>
     <p id="notice" role="status">Preparing Pi’s login…</p>
     <div id="steps"></div>
     <button id="cancel" type="button" hidden>Cancel login</button>
+    <a id="signIn" target="_blank" rel="noopener" hidden>Sign in to BashKitten</a>
     <a href="/">Return to BashKitten</a>
   </main>
   <script>
     const provider = new URLSearchParams(location.search).get('provider');
     const notice = document.querySelector('#notice'), steps = document.querySelector('#steps'), cancel = document.querySelector('#cancel');
-    let csrf, attemptId, signature = '', pending = true, polling = false;
+    let csrf, attemptId, signature = '', pending = true, polling = false, starting = false;
+    async function readResponse(response) {
+      if (response.status === 401 || (response.redirected && new URL(response.url).pathname.startsWith('/login'))) {
+        const link = document.querySelector('#signIn');
+        link.href = '/login?rd=' + encodeURIComponent(location.href); link.hidden = false;
+        throw Error('Sign in to BashKitten again, then return to this tab.');
+      }
+      if (!(response.headers.get('content-type') || '').includes('application/json')) throw Error('The server did not return an API response.');
+      const value = await response.json();
+      if (!response.ok) throw Error(value.error || 'Pi login failed');
+      return value;
+    }
     async function bootstrap() {
-      const value = await (await fetch('/api/bootstrap')).json();
-      if (!value.authenticated) throw Error('Sign in to BashKitten first, then open Services to connect a provider.');
+      const value = await readResponse(await fetch('/api/bootstrap'));
+      if (!value.authenticated) throw Error('Sign in to BashKitten first, then open Providers to connect a provider.');
       csrf = value.csrf;
+      document.querySelector('#signIn').hidden = true;
     }
     async function post(action, body) {
       for (let tries = 0; tries < 2; tries++) {
         const response = await fetch('/api/services/' + action, { method: 'POST', headers: { 'content-type': 'application/json', 'x-bashkitten-csrf': csrf }, body: JSON.stringify(body) });
-        const value = await response.json();
-        if (response.status === 403 && value.error === 'Invalid CSRF token' && !tries) { await bootstrap(); continue; }
-        if (!response.ok) throw Error(value.error || 'Pi login failed');
+        if (response.status === 403 && !tries) {
+          const value = await response.clone().json().catch(() => ({}));
+          if (value.error === 'Invalid CSRF token') { await bootstrap(); continue; }
+        }
+        const value = await readResponse(response);
         return value.login;
       }
     }
     function fail(error) { notice.textContent = error.message; }
     function render(login) {
-      if (!login || login.id !== attemptId) { pending = false; throw Error('This login is no longer active. Return to Services and try again.'); }
+      if (!login || login.id !== attemptId) { pending = false; throw Error('This login is no longer active. Return to Providers and try again.'); }
       pending = login.status === 'pending'; cancel.hidden = !pending;
       const next = JSON.stringify(login); if (next === signature) return; signature = next;
       steps.replaceChildren();
@@ -83,21 +98,33 @@
     }
     cancel.onclick = async () => { try { render(await post('cancel', { id: attemptId })); } catch (error) { fail(error); } };
     async function refresh() {
-      if (!pending || polling || !attemptId) return;
+      if (!pending || polling || !attemptId || document.hidden || !document.querySelector('#signIn').hidden) return;
       polling = true;
-      try { const response = await fetch('/api/services/login-status'); if (!response.ok) throw Error('Return to BashKitten to sign in again.'); render((await response.json()).login); }
+      try { const value = await readResponse(await fetch('/api/services/login-status')); render(value.login); }
       catch (error) { fail(error); }
       finally { polling = false; }
     }
-    (async () => {
+    async function startLogin() {
+      if (starting || attemptId) return;
+      starting = true;
       try {
         await bootstrap();
-        const settings = await (await fetch('/api/settings')).json(); document.documentElement.dataset.theme = settings.config.theme;
         const login = await post('login', { provider, type: 'oauth' }); attemptId = login.id; render(login);
       } catch (error) { pending = false; fail(error); }
-    })();
-    setInterval(refresh, 500);
+      finally { starting = false; }
+    }
+    startLogin();
+    setInterval(refresh, 1000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+    window.addEventListener('focus', async () => {
+      try {
+        if (!document.querySelector('#signIn').hidden) {
+          await bootstrap();
+          if (!attemptId) { await startLogin(); return; }
+        }
+        await refresh();
+      } catch (error) { fail(error); }
+    });
   </script>
 </body>
 </html>
