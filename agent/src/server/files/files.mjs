@@ -1,40 +1,76 @@
 import fs from 'node:fs/promises';
-import { createReadStream } from 'node:fs';
+import { createReadStream, constants } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
-import yazl from 'yazl';
-import { dataDir, privateDir, withinRoot, safeName } from '../common.mjs';
+import { dataDir, privateDir, safeName } from '../common.mjs';
+import { platform, projectLocations } from '../platform/index.mjs';
 
 const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json', '.html': 'text/html', '.js': 'text/plain', '.ts': 'text/plain', '.css': 'text/plain', '.csv': 'text/csv', '.zip': 'application/zip', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
 export const mimeType = filename => types[path.extname(filename).toLowerCase()] || 'application/octet-stream';
 export const disposition = (name, download) => `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(name).replace(/'/g, '%27')}`;
+export const containsPath = (root, target) => target === root || target.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+const canonicalPath = value => platform === 'termux' && containsPath('/data/user/0/com.termux', value) ? '/data/data/com.termux' + value.slice('/data/user/0/com.termux'.length) : value;
+// File browsing has a wider, read-only entry policy than the working-folder picker.
+// Resolve links and normalize Android's bind-mounted /data/user/0 alias first.
+export async function fileDirectory(input) {
+  const requested = input || os.homedir();
+  if (typeof requested !== 'string' || !path.isAbsolute(requested) || requested.includes('\0')) throw Error('Use an absolute folder path');
+  const scopes = platform === 'termux' ? [canonicalPath(await fs.realpath('/data/data/com.termux'))] : (await projectLocations()).map(item => item.path);
+  const directory = canonicalPath(await fs.realpath(requested));
+  const scopeRoot = scopes.filter(root => containsPath(root, directory)).sort((a, b) => a.length - b.length)[0];
+  if (!scopeRoot) throw Object.assign(Error('Path leaves the available files'), { status: 403 });
+  if (!(await fs.stat(directory)).isDirectory()) throw Error('Choose a folder');
+  await fs.access(directory, constants.R_OK | constants.X_OK);
+  return { path: directory, parent: directory === scopeRoot ? null : path.dirname(directory), scopeRoot };
+}
+export function relativePath(value, allowRoot = true) {
+  if (typeof value !== 'string' || path.isAbsolute(value) || value.includes('\0') || value.split(/[\\/]/).includes('..')) throw Error('Use a relative file path inside this folder');
+  const relative = path.normalize(value || '.');
+  if (!allowRoot && relative === '.') throw Error('The browsing root cannot be selected for this operation');
+  return relative === '.' ? '' : relative;
+}
+export async function filePath(root, relative = '') {
+  const directory = await fileDirectory(root);
+  const target = canonicalPath(await fs.realpath(path.join(directory.path, relativePath(relative))));
+  if (!containsPath(directory.scopeRoot, target)) throw Object.assign(Error('Path leaves the available files'), { status: 403 });
+  return target;
+}
 export async function listFiles(root, relative = '') {
-  const dir = await withinRoot(root, relative);
+  const location = await fileDirectory(root);
+  root = location.path;
+  const dir = await filePath(root, relative);
+  if (!(await fs.stat(dir)).isDirectory()) throw Error('Choose a folder');
+  // Following a directory link can change the canonical root; clients use the
+  // returned root/currentPath rather than manufacture parent-traversal paths.
+  if (!containsPath(root, dir)) root = dir;
   const entries = [];
   for (const file of await fs.readdir(dir, { withFileTypes: true })) {
-    // Symlinks are shown but only opened if their real target is within root.
+    // External/dangling links remain selectable for copying/deleting the link itself.
     const rel = path.relative(root, path.join(dir, file.name));
     try {
-      const real = await withinRoot(root, rel), stat = await fs.stat(real);
+      const real = canonicalPath(await fs.realpath(path.join(dir, file.name)));
+      if (!containsPath(location.scopeRoot, real)) throw Error('Outside available files');
+      const stat = await fs.stat(real);
       entries.push({ name: file.name, path: rel, directory: stat.isDirectory(), symlink: file.isSymbolicLink(), size: stat.size });
     } catch { entries.push({ name: file.name, path: rel, blocked: true, symlink: file.isSymbolicLink() }); }
   }
   entries.sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
-  return { root, path: path.relative(root, dir), entries };
+  return { root, path: path.relative(root, dir), currentPath: dir, parent: dir === location.scopeRoot ? null : path.dirname(dir), scopeRoot: location.scopeRoot, entries };
 }
-export async function sendFile(req, res, file, download = false) {
+export async function sendFile(req, res, file, download = false, name = path.basename(file)) {
   const stat = await fs.stat(file);
   if (!stat.isFile()) throw Error('Choose a regular file');
   const headers = { 'Content-Type': mimeType(file), 'Content-Length': stat.size,
-    'Content-Disposition': disposition(path.basename(file), download), 'X-Content-Type-Options': 'nosniff',
+    'Content-Disposition': disposition(name, download), 'X-Content-Type-Options': 'nosniff',
     // Opening a repository HTML/SVG file must not give it the app's origin privileges.
     'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", 'Cache-Control': 'no-store' };
   res.writeHead(200, headers);
   await pipeline(createReadStream(file), res);
 }
 export async function uploadFiles(root, relative, files) {
-  const dir = await withinRoot(root, relative), saved = [];
+  const dir = await filePath(root, relative), saved = [];
   if (!(await fs.stat(dir)).isDirectory()) throw Error('Upload destination is not a folder');
   for (const file of files) {
     const target = path.join(dir, safeName(file.name));
@@ -73,27 +109,4 @@ export async function promptWithAttachments(text, attachments) {
   }
   const references = attachments.map(a => `${a.name}: ${a.path}`).join('\n');
   return { text, attachments, images, wire: text + (references ? `\n\nAttached files:\n${references}` : '') };
-}
-export async function sendZip(res, root) {
-  const archive = new yazl.ZipFile();
-  let cancelled = false;
-  res.on('close', () => { cancelled = true; archive.outputStream.destroy(); });
-  res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Disposition': disposition((path.basename(root) || 'repository') + '.zip', true), 'Cache-Control': 'no-store' });
-  const output = pipeline(archive.outputStream, res);
-  // Enumerate on the server; include hidden files and .git, with no frontend ZIP.
-  async function walk(dir, relative = '') {
-    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
-      if (cancelled) return;
-      const full = path.join(dir, entry.name), rel = path.posix.join(relative, entry.name);
-      if (entry.isSymbolicLink()) {
-        const target = await fs.readlink(full);
-        // Preserve safe relative links without dereferencing external files.
-        const resolved = path.resolve(path.dirname(full), target);
-        if (!path.isAbsolute(target) && (resolved === root || resolved.startsWith(root + path.sep))) archive.addBuffer(Buffer.from(target), rel, { mode: 0o120777 });
-      } else if (entry.isDirectory()) { archive.addEmptyDirectory(rel); await walk(full, rel); }
-      else if (entry.isFile()) archive.addFile(full, rel);
-    }
-  }
-  try { await walk(root); archive.end(); await output; }
-  catch (error) { archive.outputStream.destroy(error); await output.catch(() => {}); throw error; }
 }

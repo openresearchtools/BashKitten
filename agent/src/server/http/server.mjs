@@ -14,8 +14,10 @@ import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
 import { licenses } from '../licenses.mjs';
 import { Services } from '../rpc/services.mjs';
+import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { listFiles, sendFile, sendZip, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
+import { fileDirectory, filePath, listFiles, sendFile, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
+import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs } from '../files/jobs.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
 import { visibleSession } from '../rpc/notifications.mjs';
@@ -233,15 +235,39 @@ async function handler(req, res) {
       if (mutation) { const input = await jsonBody(req); const parent = (await pickerDirectory(input.parent)).path; const folder = path.join(parent, safeName(input.name)); await fs.mkdir(folder, { mode: 0o700 }); return json(res, { path: folder }); }
       return json(res, await listFolders(url.searchParams.get('path') || config.default_cwd, url.searchParams.get('nearest') === 'true'));
     }
+    if (route === '/api/files/jobs') {
+      requireMethod(req, ['POST']); return json(res, await startFileJob(await jsonBody(req)), 202);
+    }
+    const fileJobRoute = route.match(/^\/api\/files\/jobs\/([a-f0-9-]{36})(?:\/(cancel|download))?$/);
+    if (fileJobRoute) {
+      const [, id, action] = fileJobRoute;
+      requireMethod(req, action === 'cancel' ? ['POST'] : ['GET']);
+      if (action === 'cancel') return json(res, cancelFileJob(id));
+      if (action === 'download') return await downloadFileJob(req, res, id);
+      return json(res, fileJob(id));
+    }
     if (route === '/api/files' || route === '/api/files/content' || route === '/api/files/archive') {
       requireMethod(req, route === '/api/files' ? ['GET', 'POST'] : ['GET']);
-      // The selected root is an explicit filesystem choice, same as the folder picker.
-      const root = (await pickerDirectory(url.searchParams.get('root'))).path;
+      const root = (await fileDirectory(url.searchParams.get('root'))).path;
       const relative = url.searchParams.get('path') || '';
-      if (route.endsWith('/content')) return await sendFile(req, res, await withinRoot(root, relative), url.searchParams.get('download') === 'true');
-      if (route.endsWith('/archive')) return await sendZip(res, root);
+      if (route.endsWith('/content')) return await sendFile(req, res, await filePath(root, relative), url.searchParams.get('download') === 'true');
+      if (route.endsWith('/archive')) return await sendZip(req, res, root);
       if (mutation) { const form = await formBody(req); return json(res, { saved: await uploadFiles(root, relative, form.getAll('file')) }); }
       return json(res, await listFiles(root, relative));
+    }
+    if (route === '/api/git/changes' || route === '/api/git/diff') {
+      requireMethod(req, ['GET']);
+      const controller = new AbortController();
+      const cancel = () => controller.abort();
+      res.once('close', cancel);
+      try {
+        const root = (await fileDirectory(url.searchParams.get('root') || config.default_cwd)).path;
+        const options = { signal: controller.signal, authorizeRoot: fileDirectory };
+        const result = route.endsWith('/diff')
+          ? await gitDiff(root, url.searchParams.get('path'), options)
+          : await gitChanges(root, options);
+        return json(res, result);
+      } finally { res.off('close', cancel); }
     }
     if (route === '/api/pi-sessions') {
       const { pi: { SessionManager } } = await loadPi();
@@ -341,4 +367,4 @@ for (const meta of await allMeta()) if (await running(meta.id)) {
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
 console.log('BashKitten private Pi RPC backend ready');
-process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); services.cancel().finally(() => process.exit(0)); });
+process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs()]).finally(() => process.exit(0)); });
