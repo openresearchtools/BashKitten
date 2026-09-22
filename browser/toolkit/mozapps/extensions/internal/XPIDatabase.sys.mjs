@@ -719,6 +719,15 @@ export class AddonInternal {
       ) {
         throw new Error(`Cannot disable system add-on ${this.id}`);
       }
+      if (
+        val &&
+        Services.policies &&
+        !Services.policies.isAllowed(`disable-extension:${this.id}`)
+      ) {
+        throw new Error(
+          `Cannot disable add-on ${this.id}: disallowed by enterprise policy`
+        );
+      }
       await XPIDatabase.updateAddonDisabledState(this, { userDisabled: val });
     } else {
       this.userDisabled = val;
