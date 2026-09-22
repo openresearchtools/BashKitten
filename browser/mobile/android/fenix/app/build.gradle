@@ -874,4 +874,6 @@ tasks.register('stageBashKittenDependencySources') {
         new File(destination, 'sources.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest))
     }
 }
-tasks.named('assembleRelease').configure { finalizedBy 'stageBashKittenDependencySources' }
+tasks.matching { it.name == 'assembleRelease' }.configureEach {
+    finalizedBy 'stageBashKittenDependencySources'
+}

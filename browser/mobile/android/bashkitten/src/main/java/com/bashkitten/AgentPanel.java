@@ -26,7 +26,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button power, location;
+    private final Button power, location, hideAgent;
     private final GeckoView view;
     private final ScrollView setup;
     private final TextView message, log;
@@ -52,6 +52,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         power = button("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
         Button menu = button("☰", () -> menu()); menu.setContentDescription("Agent menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
+        hideAgent = button("−", () -> { split = false; layoutPanels(); });
+        hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
         setup = new ScrollView(activity); setup.setFillViewport(true);
@@ -73,17 +75,19 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private Button button(String label, Runnable action) { Button b = new Button(activity); b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
     public void showAgent() { shown = true; split = false; layoutPanels(); }
-    public void showBrowser() { shown = false; split = false; layoutPanels(); }
+    public void showBrowser() { shown = false; split = true; layoutPanels(); }
     public boolean isShownAgent() { return shown; }
     public void toggle() { if (shown) showBrowser(); else showAgent(); }
     private void layoutPanels() {
-        boolean sideBySide = split && shown && getResources().getConfiguration().screenWidthDp >= 840;
-        agent.setVisibility(shown ? VISIBLE : GONE);
+        boolean sideBySide = split && !shown && getResources().getConfiguration().screenWidthDp >= 600;
+        boolean agentVisible = shown || sideBySide;
+        agent.setVisibility(agentVisible ? VISIBLE : GONE);
+        hideAgent.setVisibility(sideBySide ? VISIBLE : GONE);
         agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
         browser.setVisibility(sideBySide || !shown ? VISIBLE : GONE);
         browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
-        runtime.visible = shown;
-        if (runtime.session != null) runtime.session.setActive(shown);
+        runtime.visible = agentVisible;
+        if (runtime.session != null) runtime.session.setActive(agentVisible);
     }
     public void resume() { app.showPendingApproval(activity); if (runtime.state.equals("on")) runtime.refresh(); layoutPanels(); }
     public void destroy() { runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
@@ -221,9 +225,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     private void menu() {
         PopupMenu menu=new PopupMenu(activity,bar.getChildAt(3));
-        if (split) menu.getMenu().add("Agent full screen").setOnMenuItemClickListener(i -> { showAgent(); return true; });
-        else if (getResources().getConfiguration().screenWidthDp >= 840 && app.host.selected() != null)
-            menu.getMenu().add("Show beside browser").setOnMenuItemClickListener(i -> { split = true; shown = true; layoutPanels(); return true; });
         menu.getMenu().add("Packages").setOnMenuItemClickListener(i->{packages();return true;});
         menu.getMenu().add(app.remoteControl.active() ? "Disconnect browser control" : "Allow Agent browser control").setOnMenuItemClickListener(i -> {
             if (app.remoteControl.active()) app.remoteControl.disconnect();

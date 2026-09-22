@@ -288,6 +288,7 @@ class DefaultTabManagerController(
      * @param isPrivate [Boolean] indicating whether the new tab is private.
      */
     private fun openNewTab(isPrivate: Boolean) {
+        (context as? org.mozilla.fenix.HomeActivity)?.bashKittenAgentPanel?.showBrowser()
         val startTime = profiler?.getProfilerTime()
         browsingModeManager.mode = BrowsingMode.fromBoolean(isPrivate)
 
@@ -607,6 +608,7 @@ class DefaultTabManagerController(
         val selected = tabsTrayStore.state.mode.selectedTabs
         when {
             selected.isEmpty() && tabsTrayStore.state.mode.isSelect().not() -> {
+                (context as? org.mozilla.fenix.HomeActivity)?.bashKittenAgentPanel?.showBrowser()
                 TabsTray.openedExistingTab.record(TabsTray.OpenedExistingTabExtra(source ?: "unknown"))
                 tabsUseCases.selectTab(tab.id)
                 val mode = BrowsingMode.fromBoolean(tab.private)
