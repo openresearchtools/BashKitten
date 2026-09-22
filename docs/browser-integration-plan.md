@@ -34,6 +34,11 @@ Qt/Boost/build dependencies, custom search/torrent extensions and their special
 permissions. Remove the external WildBuzzard extensions repository dependency.
 Ordinary address-bar search, downloads and normal Firefox extension support are
 not the custom search implementation being removed.
+Audit every desktop menu, submenu, settings pane and built-in page. Remove
+Firefox/Mozilla product, support and promotional links and dead controls for
+removed services, including inherited Help actions. Preserve functioning
+DevTools and ordinary extension controls; mandatory upstream attribution stays
+in the offline license notices.
 Bring Buzzard Search's Python search/read pipeline into this repository as a
 built-in Pi skill, separate from the removed browser search extension. **DDGS
 only for now**, as clarified by the user: no SearXNG engine, endpoint setup or

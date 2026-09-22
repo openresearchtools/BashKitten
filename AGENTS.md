@@ -118,6 +118,10 @@ licenses. Do not commit runtime credentials, node_modules or personal sessions.
 
 Keep README and release notes short, factual and for users. Preserve developer
 details in docs/usage.md, packaging/README.md and the implementation status.
+Audit desktop menus, submenus, settings and built-in pages for inherited
+Firefox/Mozilla product, support and promotional links and controls for removed
+services. Remove those affordances while preserving working browser functions,
+DevTools, normal extension support and mandatory offline license attribution.
 The native apps are thin hosts, but the separate server is part of BashKitten:
 its .deb bundles Pi/npm dependencies; Node/Termux/system web engines are external.
 Keep About text accurate for both. Generate full offline license texts from
