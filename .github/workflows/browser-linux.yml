@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 360
     env:
       SCCACHE_GHA_ENABLED: 'true'
+      RUSTUP_TOOLCHAIN: '1.96.0'
       MOZBUILD_STATE_PATH: ${{ github.workspace }}/.bashkitten-build/browser/state
       BASHKITTEN_BUILD_RUN_ID: hosted
     steps:
@@ -41,6 +42,8 @@ jobs:
       - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
           version: v0.17.0
+      - name: Install the compatible Rust toolchain
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - name: Bootstrap pinned Mozilla toolchain
         working-directory: source/bashkitten/browser
         run: ./mach --no-interactive bootstrap --application-choice browser
@@ -69,6 +72,7 @@ jobs:
     timeout-minutes: 360
     env:
       SCCACHE_GHA_ENABLED: 'true'
+      RUSTUP_TOOLCHAIN: '1.96.0'
       BASHKITTEN_BUILD_JOBS: '2'
       BASHKITTEN_BUILD_RUN_ID: hosted
       MOZBUILD_STATE_PATH: ${{ github.workspace }}/.bashkitten-build/browser/state
@@ -96,6 +100,9 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           version: v0.17.0
+      - name: Install the compatible Rust toolchain
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - name: Bootstrap pinned Mozilla toolchain
         if: steps.cache.outputs.cache-hit != 'true'
         working-directory: source/bashkitten/browser
