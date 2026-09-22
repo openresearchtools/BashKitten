@@ -238,6 +238,10 @@ async function handler(req, res) {
     if (route === '/api/files/jobs') {
       requireMethod(req, ['POST']); return json(res, await startFileJob(await jsonBody(req)), 202);
     }
+    if (route === '/api/files/archive' && req.method === 'POST') {
+      const { root } = await jsonBody(req);
+      return json(res, await startFileJob({ operation: 'archive', root, paths: [''] }, { whole: true }), 202);
+    }
     const fileJobRoute = route.match(/^\/api\/files\/jobs\/([a-f0-9-]{36})(?:\/(cancel|download))?$/);
     if (fileJobRoute) {
       const [, id, action] = fileJobRoute;

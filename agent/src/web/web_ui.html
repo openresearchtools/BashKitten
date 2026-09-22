@@ -422,18 +422,88 @@
     #usage { flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #sidebarToggle { display:none; }
     #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
-    #filePanel { min-width:0; overflow:auto; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
-    .file-heading { display:flex; align-items:center; gap:5px; min-height:42px; }
+    #filePanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
+    .file-heading { display:flex; flex-shrink:0; align-items:center; gap:5px; min-height:42px; }
     .file-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .file-toolbar { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-    .file-toolbar button, .file-toolbar a { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:5px; color:var(--text); font-size:12px; text-decoration:none; }
-    #fileDestination, #fileNotice { overflow-wrap:anywhere; padding:5px 2px; }
+    .file-tabs, .file-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
+    .file-tabs { margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
+    .file-tabs button { padding:8px 10px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); }
+    .file-tabs button[aria-selected="true"] { border-color:var(--text); color:var(--text); }
+    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:5px; color:var(--text); font-size:12px; text-decoration:none; }
+    .file-toolbar [aria-pressed="true"] { background:var(--surface-2); border-color:var(--text); }
+    .file-toolbar button.danger { color:var(--danger); }
+    .file-icon { display:block; width:16px; height:16px; flex:0 0 16px; }
+    #fileActions { flex-wrap:nowrap; gap:2px; }
+    #fileActions button, .file-path button, .file-toolbar .file-icon-action { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:32px; padding:6px; border-color:transparent; background:transparent; white-space:nowrap; }
+    #fileActions button:hover, .file-path button:hover, .file-toolbar .file-icon-action:hover { background:var(--surface-2); }
+    #fileActions button[aria-pressed="true"] { background:var(--surface-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--line); }
+    #fileActions .file-icon-action, .file-path button, .file-toolbar .file-icon-action { width:30px; flex-shrink:0; }
+    #fileActions button:focus-visible, .file-path button:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
+    #fileSelection { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; padding:0 5px; color:var(--muted); }
+    #fileSelection label { display:inline-flex; align-items:center; gap:7px; font-size:12px; cursor:pointer; }
+    #fileSelection input { margin:0; accent-color:var(--ok); }
+    #fileNotice:empty { display:none; }
+    .file-pane { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; gap:8px; }
+    .file-path { display:flex; gap:4px; }
+    .file-path input { flex:1; width:0; min-width:0; padding:7px; border:1px solid var(--line); border-radius:5px; background:var(--bg); font-size:12px; }
+    #fileDestination, #fileNotice, #changesNotice, #changesRoot, #fileJobText { overflow-wrap:anywhere; margin:0; padding:3px 2px; }
+    #fileTree, #changesList { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
     #fileTree details { margin-left:10px; }
-    #fileTree summary { cursor:pointer; padding:7px 1px; overflow-wrap:anywhere; }
-    .file-row { display:flex; gap:7px; padding:7px 2px 7px 15px; border-bottom:1px solid var(--line-soft); align-items:center; }
-    .file-row a:first-child { flex:1; min-width:0; overflow-wrap:anywhere; }
+    #fileTree > details { margin-left:0; }
+    #fileTree summary { display:flex; align-items:center; gap:7px; cursor:pointer; padding:8px 4px; list-style:none; overflow-wrap:anywhere; font-size:12px; }
+    #fileTree summary::-webkit-details-marker { display:none; }
+    #fileTree .file-disclosure { width:11px; height:11px; flex-basis:11px; }
+    #fileTree details[open] > summary .file-disclosure { transform:rotate(90deg); }
+    #fileTree .file-icon { color:var(--muted); }
+    #fileTree summary:hover, .file-row:hover { background:var(--surface-2); border-radius:5px; }
+    #fileTree input[type="checkbox"] { margin:0; vertical-align:middle; accent-color:var(--ok); }
+    #fileTree:not(.selecting) input[type="checkbox"] { display:none; }
+    .file-row { display:flex; gap:7px; padding:8px 4px 8px 22px; align-items:center; font-size:12px; }
+    .file-row a.file-name { flex:1; min-width:0; overflow-wrap:anywhere; }
     .file-row a { color:var(--text); text-decoration:none; }
     .file-row a:hover { text-decoration:underline; }
+    .file-empty { padding:16px 4px; color:var(--muted); font-size:12px; }
+    #fileJob { flex-shrink:0; margin-top:8px; padding-top:8px; border-top:1px solid var(--line); }
+    #fileJob progress { width:100%; height:5px; }
+    #fileActionPaths { max-height:28dvh; overflow:auto; overflow-wrap:anywhere; padding-left:20px; font-size:12px; }
+    .change-row { display:flex; width:100%; align-items:center; gap:7px; padding:9px 4px; border:0; border-bottom:1px solid var(--line-soft); background:transparent; text-align:left; }
+    .change-row:hover, .change-row[aria-pressed="true"] { background:var(--surface-2); }
+    .change-path { flex:1; min-width:0; overflow-wrap:anywhere; font-size:12px; }
+    .change-status { color:var(--muted); font:11px ui-monospace,monospace; }
+    .change-count { white-space:nowrap; font:11px ui-monospace,monospace; }
+    .diff-added { color:var(--ok); }
+    .diff-deleted { color:var(--danger); }
+    .change-counts { display:flex; align-items:center; gap:8px; margin-top:4px; }
+    #diffView { grid-row:2 / 4; display:flex; flex-direction:column; min-height:0; min-width:0; background:var(--bg); }
+    .diff-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:16px 20px; border-bottom:1px solid var(--line-soft); }
+    .diff-heading > div { min-width:0; }
+    #diffTitle { display:block; overflow-wrap:anywhere; font-size:13px; font-weight:550; }
+    #diffNotice { margin:5px 0 0; line-height:1.5; }
+    #diffNotice:empty { display:none; }
+    #closeDiff { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:5px 7px; border:0; border-radius:5px; color:var(--muted); background:transparent; font-size:12px; }
+    #closeDiff:hover { background:var(--surface-2); color:var(--text); }
+    #fileDiff { flex:1; min-height:0; overflow:auto; padding:16px 20px 32px; font:12px/1.7 ui-monospace,monospace; tab-size:4; }
+    .diff-block { margin:0 0 18px; border:1px solid var(--line-soft); border-radius:6px; overflow:clip; }
+    .diff-range { padding:7px 10px; border-bottom:1px solid var(--line-soft); background:var(--surface-2); color:var(--muted); font:11px/1.6 ui-monospace,monospace; overflow-wrap:anywhere; }
+    .diff-table-scroll { overflow-x:auto; }
+    .diff-block table { width:100%; border-collapse:collapse; }
+    .diff-block td { padding:0; vertical-align:top; line-height:1.8; }
+    .diff-block .diff-number { width:4em; min-width:4em; padding:0 8px; color:var(--muted); text-align:right; user-select:none; font-size:11px; }
+    .diff-block .diff-sign { width:1.5em; min-width:1.5em; padding:0 5px; user-select:none; }
+    .diff-block .diff-code { padding-right:12px; white-space:pre; }
+    .diff-line-added { background:color-mix(in srgb,var(--ok) 13%,transparent); }
+    .diff-line-deleted { background:color-mix(in srgb,var(--danger) 13%,transparent); }
+    .diff-line-added .diff-sign { color:var(--ok); }
+    .diff-line-deleted .diff-sign { color:var(--danger); }
+    .diff-note td { padding:2px 12px; color:var(--muted); font-style:italic; font-size:11px; }
+    .diff-section-heading { margin:10px 0; color:var(--text); font:600 12px/1.5 ui-sans-serif,system-ui,sans-serif; }
+    .diff-empty { padding:24px 0; color:var(--muted); font:13px/1.6 ui-sans-serif,system-ui,sans-serif; }
+    @media (max-width:700px) {
+      .diff-heading { padding:12px; gap:8px; }
+      #closeDiff { font-size:11px; }
+      #fileDiff { padding:12px 8px; font-size:11px; }
+      .diff-block .diff-number { width:3em; min-width:3em; padding:0 5px; font-size:10px; }
+    }
     .session { display:flex; align-items:center; gap:4px; }
     .session b { flex:1; min-width:0; }
     .session .icon-button, .folder-heading .icon-button { width:26px; height:26px; flex-shrink:0; }
@@ -498,6 +568,7 @@
         <span id="usage"></span><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
       <div id="chat"><div id="chatInner" class="chat-inner"></div></div>
+      <section id="diffView" class="hidden" aria-labelledby="diffTitle"><header class="diff-heading"><div><strong id="diffTitle"></strong><p id="diffNotice" class="meta" role="status"></p></div><button id="closeDiff" type="button" title="Close diff"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>Close diff</span></button></header><div id="fileDiff" tabindex="0" aria-label="File changes"></div></section>
       <section id="settingsView" class="hidden">
         <form id="settingsForm" class="settings-page">
           <div class="settings-heading"><h2>Settings</h2><button id="settingsDone" type="button">Done</button></div>
@@ -628,13 +699,25 @@
         <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""></div></div>
       </section>
     </main>
-    <aside id="filePanel" class="hidden" aria-label="Repository files">
-      <div class="file-heading"><strong id="fileRootLabel">Files</strong><button id="closeFiles" type="button" class="icon-button" aria-label="Close files">×</button></div>
-      <div class="file-toolbar"><button id="uploadRepo" type="button">Upload files</button><button id="refreshFiles" type="button" aria-label="Refresh files">↻</button><a id="downloadRepo">Download ZIP</a><input id="repoUpload" type="file" multiple class="hidden"></div>
-      <div id="fileDestination" class="meta"></div><p id="fileNotice" class="meta" role="status"></p><div id="fileTree"></div>
+    <aside id="filePanel" class="hidden" aria-label="Project files and changes">
+      <div class="file-heading"><strong id="fileRootLabel">Project</strong><button id="closeFiles" type="button" class="icon-button" aria-label="Close project panel">×</button></div>
+      <nav class="file-tabs" role="tablist" aria-label="Project view"><button id="filesTab" type="button" role="tab" aria-selected="true" aria-controls="filesView">Files</button><button id="changesTab" type="button" role="tab" aria-selected="false" aria-controls="changesView" tabindex="-1">Changes</button></nav>
+      <section id="filesView" class="file-pane" role="tabpanel" aria-labelledby="filesTab">
+        <form id="filePathForm" class="file-path"><button id="fileUp" type="button" aria-label="Parent folder" title="Parent folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button><input id="filePath" aria-label="File browser path; press Enter to open" autocomplete="off" spellcheck="false"><button id="refreshFiles" type="button" aria-label="Refresh files" title="Refresh files"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.8-2L20 8M4 16l2.1 3A7 7 0 0 0 17.9 17"/></svg></button></form>
+        <div id="fileActions" class="file-toolbar"><button id="selectFiles" type="button" aria-pressed="false" title="Select files and folders"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 12 3 3 5-6M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/></svg><span>Select</span></button><button id="uploadRepo" type="button" title="Upload files to this folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V3m-5 5 5-5 5 5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Upload</span></button><button id="downloadFiles" type="button" title="Download this folder as ZIP"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13m-5-5 5 5 5-5M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg><span>Download</span></button><button id="copySelected" type="button" class="file-icon-action hidden" title="Copy selected items to another folder" aria-label="Copy selected items to another folder"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 8h12v13H8ZM16 8V3H3v13h5"/></svg></button><button id="deleteSelected" type="button" class="file-icon-action danger hidden" title="Delete selected items" aria-label="Delete selected items"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button><input id="repoUpload" type="file" multiple class="hidden"></div>
+        <div id="fileSelection" class="hidden"><label title="Select all files and folders. Selected folders include their contents."><input id="allFiles" type="checkbox">All items</label><span id="fileSelectionCount" class="meta" role="status" title="Selected folders include their contents"></span></div>
+        <div id="fileDestination" class="meta hidden"></div><p id="fileNotice" class="meta" role="status"></p><div id="fileTree"></div>
+      </section>
+      <section id="changesView" class="file-pane hidden" role="tabpanel" aria-labelledby="changesTab">
+        <div class="file-toolbar"><button id="refreshChanges" type="button">Refresh</button><button id="openProjectFolder" type="button" class="hidden">Open folder ↗</button><span id="changesCounts" class="change-count"></span></div>
+        <p id="changesRoot" class="meta"></p><p id="changesNotice" class="meta" role="status"></p><div id="changesList"></div>
+
+      </section>
+      <section id="fileJob" class="hidden" aria-label="File operation"><p id="fileJobText" class="meta" role="status"></p><progress id="fileJobProgress" aria-label="File operation progress"></progress><div class="file-toolbar"><button id="cancelFileJob" type="button">Cancel</button><button id="refreshFileJob" class="hidden" type="button">Refresh status</button><a id="downloadFileJob" class="hidden" download aria-hidden="true" tabindex="-1"></a><button id="dismissFileJob" class="hidden file-icon-action" type="button" title="Dismiss status" aria-label="Dismiss status"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button></div></section>
     </aside>
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
+  <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="piDialog"><form id="piDialogForm" class="dialog-body"><h2 id="piDialogTitle"></h2><p id="piDialogMessage"></p><div id="piDialogInput"></div><div class="dialog-actions"><button id="piDialogCancel" type="button">Cancel</button><button class="primary">Continue</button></div></form></dialog>
 
@@ -728,9 +811,12 @@
     function configureNativeHost() {
       nativeHost = window.bashkittenHost || null;
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
-      $('#filesToggle').textContent = nativeLinux ? '↗' : '▤';
-      $('#filesToggle').title = nativeLinux ? 'Open project folder' : 'Files';
-      $('#filesToggle').setAttribute('aria-label', nativeLinux ? 'Open project folder' : 'Browse working folder files');
+      $('#filesToggle').textContent = nativeLinux ? '±' : '▤';
+      $('#filesToggle').title = nativeLinux ? 'Changes' : 'Files and changes';
+      $('#filesToggle').setAttribute('aria-label', nativeLinux ? 'Show project changes' : 'Browse project files and changes');
+      $('#filesTab').classList.toggle('hidden', nativeLinux);
+      $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
+      if (initialized && !$('#filePanel').classList.contains('hidden')) setFileTab(nativeLinux ? 'changes' : fileTab);
       if (initialized) loadNotifications();
     }
     window.addEventListener('bashkitten-host-ready', configureNativeHost);
@@ -790,7 +876,7 @@
           value = await responseValue(response);
         }
       }
-      if (!response.ok) throw new Error(value.error || response.statusText);
+      if (!response.ok) throw Object.assign(new Error(value.error || response.statusText), {status:response.status});
       return value;
     }
 
@@ -1403,6 +1489,7 @@
         $('#composerHint').textContent = editingQueueId ? 'Editing queued message · Esc to cancel' : isCompacting ? 'Compacting context… Enter queues your message.' : 'Agent is working';
 
       } else if (event.type === 'agent_settled') {
+        refreshProjectPanel();
         finishRenderedTurn(Date.now());
         queueState.busy = false;
         clearLive();
@@ -1960,7 +2047,7 @@
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
-        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent='▤'; browse.title='Browse project files'; browse.setAttribute('aria-label','Browse files in '+folder); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
+        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent=nativeLinux?'±':'▤'; browse.title=nativeLinux?'Show project changes':'Browse project files'; browse.setAttribute('aria-label',(nativeLinux?'Show changes in ':'Browse files in ')+folder); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
 
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
@@ -2139,6 +2226,7 @@
     }
 
     function showChatView() {
+      if(diffPath)closeFileDiff();
       clearRemoteExport();
       $('#settingsView').classList.add('hidden');
       $('#chat').classList.remove('hidden');
@@ -2158,6 +2246,7 @@
       closeImageViewer();
       setSidebar(false);
       closeFiles();
+      closeFileDiff();
       $('#chat').classList.add('hidden');
       $('#composerWrap').classList.add('hidden');
       $('#settingsView').classList.remove('hidden');
@@ -2311,6 +2400,7 @@
       }
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
       showWelcome();
+      if (!$('#filePanel').classList.contains('hidden')) openFiles(pendingCwd);
       setSidebar(false);
       $('#prompt').focus();
     }
@@ -2879,64 +2969,325 @@
     function updateBackdrop() {
       $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('files-open')));
     }
-    function closeFiles() { $('#filePanel').classList.add('hidden'); $('#app').classList.remove('files-open'); $('#filesToggle').setAttribute('aria-expanded','false'); updateBackdrop(); }
+    function projectPanelVisible() { return !document.hidden && !$('#filePanel').classList.contains('hidden') && !$('#app').classList.contains('hidden'); }
+    function closeFiles() {
+      $('#filePanel').classList.add('hidden'); $('#app').classList.remove('files-open');
+      $('#filesToggle').setAttribute('aria-expanded','false'); clearTimeout(fileJobTimer); updateBackdrop();
+    }
     $('#sidebarToggle').onclick=()=>setSidebar(!$('#app').classList.contains('sidebar-open'));
     $('#drawerBackdrop').onclick=()=>{setSidebar(false);closeFiles();};
     $('#closeFiles').onclick=closeFiles;
     window.addEventListener('resize', updateBackdrop);
-    let fileRoot='', fileFolder='', fileGeneration=0;
-    const fileUrl=(suffix,relative='')=>'/api/files'+suffix+'?root='+encodeURIComponent(fileRoot)+'&path='+encodeURIComponent(relative);
-    function selectFileFolder(relative) { fileFolder=relative; $('#fileDestination').textContent='Upload to: '+displayFolder(fileRoot)+(relative?'/'+relative:''); }
+    let fileRoot='', fileFolder='', fileParent=null, fileScope='', fileGeneration=0, fileTab='files', projectRoot='';
+    let selectingFiles=false, selectedFiles=new Set(), fileJob=null, fileJobTimer=null, fileJobReading=false, fileJobStarting=false, pendingFileAction=null;
+    try { const saved=JSON.parse(sessionStorage.getItem('bashkitten.fileJob')); if(saved&&typeof saved.id==='string')fileJob=saved; } catch {}
+    let changesGeneration=0, changesRoot='', changesLoading=false, changesLoadedAt=0, changesDirty=true, diffPath=null, diffRequest=0, diffAbort=null, diffChatScroll=0;
+    const fileUrl=(suffix,relative='',root=fileRoot)=>'/api/files'+suffix+'?root='+encodeURIComponent(root)+'&path='+encodeURIComponent(relative);
+    const filePost=(url,value)=>api(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(value)});
+    const absoluteFilePath=(relative,root=fileRoot)=>root.replace(/\/$/,'')+(relative?'/'+relative:'');
+    function selectFileFolder(relative) {
+      fileFolder=relative;
+      $('#fileDestination').textContent=relative?'Upload to: '+relative:'';
+      $('#fileDestination').classList.toggle('hidden',!relative||selectingFiles);
+      $('#uploadRepo').title='Upload files to '+absoluteFilePath(relative);
+    }
+    function updateFileSelection() {
+      $('#fileTree').classList.toggle('selecting',selectingFiles);
+      $('#fileSelection').classList.toggle('hidden',!selectingFiles);
+      $('#selectFiles').setAttribute('aria-pressed',String(selectingFiles));
+      $('#uploadRepo').classList.toggle('hidden',selectingFiles);
+      $('#fileDestination').classList.toggle('hidden',!fileFolder||selectingFiles);
+      for(const id of ['copySelected','deleteSelected'])$('#'+id).classList.toggle('hidden',!selectingFiles);
+      $('#fileSelectionCount').textContent=selectedFiles.size+' selected';
+      for(const input of $('#fileTree').querySelectorAll('input[data-file-path]')) {
+        const inherited=[...selectedFiles].some(parent=>input.dataset.filePath.startsWith(parent+'/'));
+        input.checked=inherited||selectedFiles.has(input.dataset.filePath);input.disabled=inherited;input.title=inherited?'Included with its selected folder':'';
+      }
+      const roots=[...$('#fileTree').querySelectorAll('input[data-file-path]')].filter(input=>!input.dataset.filePath.includes('/'));
+      $('#allFiles').checked=Boolean(roots.length)&&roots.every(input=>selectedFiles.has(input.dataset.filePath));
+      $('#allFiles').indeterminate=Boolean(selectedFiles.size)&&!$('#allFiles').checked;$('#allFiles').disabled=!roots.length;
+      for(const id of ['copySelected','deleteSelected']) $('#'+id).disabled=!selectedFiles.size || fileJob?.status==='running' || fileJobStarting;
+      $('#downloadFiles').disabled=(selectingFiles&&!selectedFiles.size)||fileJob?.status==='running'||fileJobStarting;
+      $('#downloadFiles').title=selectingFiles?'Download selected items as ZIP':'Download this folder as ZIP';
+    }
+    function fileIcon(kind) {
+      const paths={"folder":"M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z","file":"M14 3H5v18h14V8l-5-5Zm0 0v5h5","chevron":"m9 5 7 7-7 7"};
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),line=document.createElementNS(svg.namespaceURI,'path');
+      svg.setAttribute('class','file-icon'+(kind==='chevron'?' file-disclosure':''));svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');line.setAttribute('d',paths[kind]);svg.append(line);return svg;
+    }
+    function fileCheckbox(entry) {
+      const input=document.createElement('input'); input.type='checkbox'; input.dataset.filePath=entry.path;
+      input.setAttribute('aria-label','Select '+entry.path); input.checked=selectedFiles.has(entry.path);
+      input.onclick=event=>event.stopPropagation();
+      input.onchange=()=>{
+        if(input.checked){for(const path of selectedFiles)if(path.startsWith(entry.path+'/'))selectedFiles.delete(path);selectedFiles.add(entry.path);}
+        else selectedFiles.delete(entry.path);updateFileSelection();
+      };
+      return input;
+    }
     async function renderFileBranch(target, relative, generation) {
       const result=await api(fileUrl('',relative));
       if(generation!==fileGeneration)return;
+      if(!relative) {
+        fileRoot=result.currentPath||fileRoot; fileParent=result.parent; fileScope=result.scopeRoot||fileRoot;
+        $('#filePath').value=fileRoot; $('#filePath').title='Browse within '+fileScope;
+        $('#fileUp').disabled=!fileParent; selectFileFolder('');
+      }
       target.replaceChildren();
+      if(relative&&result.root&&result.root!==fileRoot) {
+        const row=document.createElement('div'),button=document.createElement('button');row.className='file-toolbar';button.type='button';button.textContent='Open linked folder ↗';button.title=result.currentPath;button.onclick=()=>loadFileTree(result.currentPath);row.append(button);target.append(row);return;
+      }
       for(const entry of result.entries) {
-        if(entry.directory) {
-          const details=document.createElement('details'), summary=document.createElement('summary'), children=document.createElement('div');
-          summary.textContent=entry.name; details.append(summary,children);
+        if(entry.blocked) {
+          const row=document.createElement('div');row.className='file-row meta';if(entry.symlink)row.append(fileCheckbox(entry));const label=document.createElement('span');label.textContent=entry.name+' (unavailable'+(entry.symlink?' link':'')+')';row.append(label);target.append(row);
+        } else if(entry.directory) {
+          const details=document.createElement('details'),summary=document.createElement('summary'),children=document.createElement('div');
+          const label=document.createElement('span');label.textContent=entry.name;summary.append(fileIcon('chevron'),fileCheckbox(entry),fileIcon('folder'),label);details.append(summary,children);
           let loaded=false;
           summary.onclick=()=>selectFileFolder(entry.path);
-          details.ontoggle=async()=>{if(details.open&&!loaded){loaded=true;children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation);}catch(error){children.textContent=error.message;loaded=false;}}};
+          details.ontoggle=async()=>{
+            if(details.open&&!loaded){loaded=true;children.textContent='Loading…';try{await renderFileBranch(children,entry.path,generation);}catch(error){children.textContent=error.message;loaded=false;}}
+          };
           target.append(details);
         } else {
           const row=document.createElement('div');row.className='file-row';
-          if(entry.blocked) { row.textContent=entry.name+' (outside folder or unavailable)';row.classList.add('meta'); }
-          else {
-            const open=document.createElement('a');open.textContent=entry.name;open.href=fileUrl('/content',entry.path);open.target='_blank';open.rel='noopener';
-            const download=document.createElement('a');download.textContent='↓';download.href=fileUrl('/content',entry.path)+'&download=true';download.download=entry.name;download.setAttribute('aria-label','Download '+entry.name);row.append(open,download);
-          }
-          target.append(row);
+          const open=document.createElement('a');open.className='file-name';open.textContent=entry.name;open.href=fileUrl('/content',entry.path);open.target='_blank';open.rel='noopener';
+          row.append(fileCheckbox(entry),fileIcon('file'),open);target.append(row);
         }
       }
-      if(!result.entries.length)target.textContent='Empty folder';
+      if(!result.entries.length){const empty=document.createElement('p');empty.className='file-empty';empty.textContent='Empty folder';target.append(empty);}
+      updateFileSelection();
+    }
+    async function loadFileTree(root=fileRoot) {
+      if(!root)return;
+      fileRoot=root;fileFolder='';selectedFiles.clear();updateFileSelection();
+      const generation=++fileGeneration;
+      $('#fileNotice').textContent='';$('#fileTree').textContent='Loading…';$('#filePath').value=root;$('#fileUp').disabled=true;
+      try{await renderFileBranch($('#fileTree'),'',generation);}catch(error){if(generation===fileGeneration){$('#fileNotice').textContent=error.message;$('#fileTree').replaceChildren();}}
+    }
+    function setFileTab(tab) {
+      fileTab=nativeLinux?'changes':tab;
+      for(const name of ['files','changes']) {
+        const selected=name===fileTab,button=$('#'+name+'Tab');
+        button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;
+        $('#'+name+'View').classList.toggle('hidden',!selected);
+      }
+      if(fileTab==='changes') refreshChanges();
+      else if(!$('#fileTree').childNodes.length) loadFileTree();
+      if(fileJob)renderFileJob();
     }
     async function openFiles(root) {
-      if (nativeLinux) {
-        try { await nativeHost.call('open-folder', {path:root}); } catch (error) { $('#composerHint').textContent = error.message; }
-        return;
-      }
       if(!root)return;
-      fileRoot=root;const generation=++fileGeneration;
+      const changed=projectRoot!==root; projectRoot=root;
       $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');
       $('#fileRootLabel').textContent=folderDisplayName(root);$('#fileRootLabel').title=displayFolder(root);
-      $('#downloadRepo').href=fileUrl('/archive');$('#downloadRepo').download=folderDisplayName(root)+'.zip';
-      $('#fileNotice').textContent='';selectFileFolder('');updateBackdrop();
-      $('#fileTree').textContent='Loading…';
-      try{await renderFileBranch($('#fileTree'),'',generation);}catch(error){$('#fileNotice').textContent=error.message;}
+      if(changed){fileRoot=root;selectedFiles.clear();$('#fileTree').replaceChildren();++fileGeneration;++changesGeneration;changesLoading=false;changesLoadedAt=0;changesDirty=true;closeFileDiff();$('#changesList').replaceChildren();$('#changesCounts').replaceChildren();}
+      setFileTab(fileTab);updateBackdrop();
+      if(fileJob){renderFileJob();pollFileJob();}
+    }
+    function refreshProjectPanel() {
+      changesDirty=true;
+      if(projectPanelVisible()&&fileTab==='changes') refreshChanges();
     }
     $('#filesToggle').onclick=()=>$('#filePanel').classList.contains('hidden')?openFiles(current?.cwd||pendingCwd):closeFiles();
-    $('#refreshFiles').onclick=()=>openFiles(fileRoot);
-    $('#fileRootLabel').onclick=()=>selectFileFolder('');
+    $('#filesTab').onclick=()=>setFileTab('files');$('#changesTab').onclick=()=>setFileTab('changes');
+    $('.file-tabs').onkeydown=event=>{
+      if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
+      event.preventDefault();setFileTab(nativeLinux||event.key==='End'?'changes':event.key==='Home'?'files':fileTab==='files'?'changes':'files');$('#'+fileTab+'Tab').focus();
+    };
+    $('#filePathForm').onsubmit=event=>{event.preventDefault();const path=$('#filePath').value.trim();if(path)loadFileTree(path);};
+    $('#fileUp').onclick=()=>{if(fileParent)loadFileTree(fileParent);};
+    $('#refreshFiles').onclick=()=>loadFileTree();
+    $('#selectFiles').onclick=()=>{selectingFiles=!selectingFiles;if(!selectingFiles)selectedFiles.clear();updateFileSelection();};
+    $('#allFiles').onchange=()=>{selectedFiles.clear();if($('#allFiles').checked)for(const input of $('#fileTree').querySelectorAll('input[data-file-path]'))if(!input.dataset.filePath.includes('/'))selectedFiles.add(input.dataset.filePath);updateFileSelection();};
     $('#uploadRepo').onclick=()=>$('#repoUpload').click();
     $('#repoUpload').onchange=async event=>{
       const files=[...event.target.files];event.target.value='';if(!files.length)return;
-      const form=new FormData();for(const file of files)form.append('file',file);
-      $('#uploadRepo').disabled=true;
-      try{await api(fileUrl('',fileFolder),{method:'POST',body:form});await openFiles(fileRoot);$('#fileNotice').textContent='Files uploaded.';}
+      const root=fileRoot,relative=fileFolder,form=new FormData();for(const file of files)form.append('file',file);
+      $('#uploadRepo').disabled=true;$('#fileNotice').textContent='Uploading '+files.length+' '+(files.length===1?'file…':'files…');
+      try{await api(fileUrl('',relative,root),{method:'POST',body:form});if(root===fileRoot){await loadFileTree();$('#fileNotice').textContent='Files uploaded.';}refreshProjectPanel();}
       catch(error){$('#fileNotice').textContent=error.message;}
       finally{$('#uploadRepo').disabled=false;}
     };
+    function showFileAction(operation) {
+      if(!selectedFiles.size)return;
+      pendingFileAction={operation,root:fileRoot,paths:[...selectedFiles]};
+      const deleting=operation==='delete',count=pendingFileAction.paths.length;
+      $('#fileActionTitle').textContent=deleting?'Delete selected items?':'Copy selected items';
+      $('#fileActionDescription').textContent=deleting?`Permanently delete these ${count} selected ${count===1?'item':'items'} and all contents of selected folders. This cannot be undone.`:`Copy ${count} selected ${count===1?'item':'items'} into an existing folder. Existing files will not be overwritten.`;
+      const paths=$('#fileActionPaths');paths.replaceChildren();
+      for(const path of pendingFileAction.paths){const li=document.createElement('li');li.textContent=absoluteFilePath(path);paths.append(li);}
+      $('#copyDestinationLabel').classList.toggle('hidden',deleting);$('#copyDestination').required=!deleting;$('#copyDestination').value=fileRoot;
+      $('#fileActionError').textContent='';$('#confirmFileAction').textContent=deleting?'Delete':'Copy';$('#confirmFileAction').classList.toggle('delete-confirm',deleting);
+      $('#fileActionDialog').showModal();$('#fileActionDialog [data-close]').focus();
+    }
+    $('#copySelected').onclick=()=>showFileAction('copy');$('#deleteSelected').onclick=()=>showFileAction('delete');
+    $('#fileActionDialog').addEventListener('close',()=>{pendingFileAction=null;});
+    $('#fileActionForm').onsubmit=async event=>{
+      event.preventDefault();if(!pendingFileAction)return;
+      const value={...pendingFileAction};if(value.operation==='copy')value.destination=$('#copyDestination').value.trim();
+      $('#confirmFileAction').disabled=true;
+      try{await startFileJob(value);$('#fileActionDialog').close();}catch(error){$('#fileActionError').textContent=error.message;}
+      finally{$('#confirmFileAction').disabled=false;}
+    };
+    $('#downloadFiles').onclick=()=>startFileJob({operation:'archive',root:fileRoot,paths:[...selectedFiles]},!selectingFiles).catch(error=>$('#fileNotice').textContent=error.message);
+    async function startFileJob(value,whole=false) {
+      if(fileJob?.status==='running'||fileJobStarting)throw Error('Wait for the current file operation to finish.');
+      fileJobStarting=true;updateFileSelection();
+      try{fileJob=await filePost(whole?'/api/files/archive':'/api/files/jobs',whole?{root:value.root}:value);fileJob.root=value.root;fileJob.autoDownload=value.operation==='archive';renderFileJob();pollFileJob();}
+      finally{fileJobStarting=false;updateFileSelection();}
+    }
+    function renderFileJob() {
+      if(!fileJob)return;
+      try { sessionStorage.setItem('bashkitten.fileJob',JSON.stringify({id:fileJob.id,operation:fileJob.operation,status:fileJob.status,root:fileJob.root,autoDownload:fileJob.autoDownload})); } catch {}
+      const running=fileJob.status==='running',label={copy:'Copy',delete:'Delete',archive:'Archive'}[fileJob.operation]||'File operation';
+      $('#fileJob').classList.toggle('hidden',fileTab==='changes'&&!running);
+      $('#fileJobText').textContent=label+' · '+fileJob.status+(fileJob.completed!==undefined?' · '+fileJob.completed+' processed':'')+(fileJob.current?' · '+fileJob.current:'')+(fileJob.error?' · '+fileJob.error:'')+(['cancelled','failed'].includes(fileJob.status)&&fileJob.operation!=='archive'?' · Completed changes remain.':'');
+      if(fileJob.operation==='archive'&&fileJob.status==='done')$('#fileJobText').textContent='Download started.';
+      const progress=$('#fileJobProgress');progress.classList.toggle('hidden',!running);
+      if(fileJob.total>0){progress.max=fileJob.total;progress.value=fileJob.completed||0;}else progress.removeAttribute('value');
+      $('#cancelFileJob').classList.toggle('hidden',!running);$('#cancelFileJob').disabled=false;
+      $('#dismissFileJob').classList.toggle('hidden',running);$('#refreshFileJob').classList.add('hidden');
+      const download=$('#downloadFileJob');
+      // The job ID belongs to our authenticated backend; do not navigate an arbitrary response URL.
+      download.href='/api/files/jobs/'+encodeURIComponent(fileJob.id)+'/download';
+      updateFileSelection();
+    }
+    async function pollFileJob() {
+      clearTimeout(fileJobTimer);
+      if(!fileJob||fileJobReading||!projectPanelVisible())return;
+      const id=fileJob.id,root=fileJob.root,autoDownload=fileJob.autoDownload;fileJobReading=true;
+      try{
+        const value=await api('/api/files/jobs/'+encodeURIComponent(id));if(fileJob?.id!==id)return;
+        const wasRunning=fileJob.status==='running';fileJob={...value,root,autoDownload};renderFileJob();
+        if(fileJob.status==='done'&&fileJob.operation==='archive'&&fileJob.autoDownload){fileJob.autoDownload=false;renderFileJob();$('#downloadFileJob').click();}
+        if(wasRunning&&fileJob.status!=='running'){
+          selectedFiles.clear();updateFileSelection();refreshProjectPanel();
+          if(root===fileRoot&&!nativeLinux)loadFileTree();
+        }
+        if(fileJob.status==='running'&&projectPanelVisible())fileJobTimer=setTimeout(pollFileJob,1000);
+      }catch(error){
+        if(error.status===404){fileJob={...fileJob,status:'expired',current:'',error:'The server no longer has this operation. Check the files before repeating it.'};renderFileJob();}
+        else{$('#fileJobText').textContent=error.message;$('#refreshFileJob').classList.remove('hidden');}
+      }
+      finally{fileJobReading=false;}
+    }
+    $('#refreshFileJob').onclick=pollFileJob;
+    $('#cancelFileJob').onclick=async()=>{
+      if(!fileJob)return;$('#cancelFileJob').disabled=true;
+      try{await filePost('/api/files/jobs/'+encodeURIComponent(fileJob.id)+'/cancel',{});await pollFileJob();}
+      catch(error){$('#fileJobText').textContent=error.message;$('#cancelFileJob').disabled=false;}
+    };
+    $('#dismissFileJob').onclick=()=>{fileJob=null;try{sessionStorage.removeItem('bashkitten.fileJob');}catch{}$('#fileJob').classList.add('hidden');};
+    function changeCount(added,deleted) {
+      const span=document.createElement('span');span.className='change-count';
+      for(const [value,sign,kind] of [[added,'+','added'],[deleted,'−','deleted']]){const count=document.createElement('span');count.className='diff-'+kind;count.textContent=sign+value+' ';span.append(count);}
+      return span;
+    }
+    function closeFileDiff() {
+      const wasOpen=Boolean(diffPath);diffPath=null;++diffRequest;diffAbort?.abort();diffAbort=null;
+      $('#diffView').classList.add('hidden');$('#fileDiff').replaceChildren();
+      for(const button of $('#changesList').querySelectorAll('.change-row'))button.setAttribute('aria-pressed','false');
+      if(wasOpen&&$('#settingsView').classList.contains('hidden')){
+        $('#chat').classList.remove('hidden');$('#composerWrap').classList.remove('hidden');
+        $('#chat').scrollTop=diffChatScroll;
+      }
+    }
+    async function refreshChanges(force=false) {
+      if(!projectPanelVisible()||fileTab!=='changes'||!projectRoot||changesLoading)return;
+      if(!force&&!changesDirty&&Date.now()-changesLoadedAt<1500)return;
+      const generation=++changesGeneration,root=projectRoot;let refreshed=false;changesLoading=true;changesDirty=false;
+      $('#refreshChanges').disabled=true;$('#changesNotice').textContent='Checking changes…';
+      try{
+        const result=await api('/api/git/changes?root='+encodeURIComponent(root));if(generation!==changesGeneration)return;
+        changesLoadedAt=Date.now();refreshed=true;changesRoot=result.root||root;
+        $('#changesRoot').textContent=displayFolder(changesRoot);$('#changesCounts').replaceChildren();
+        const list=$('#changesList');list.replaceChildren();
+        if(!result.repository){closeFileDiff();$('#changesNotice').textContent='Git is not initialized in this folder.';return;}
+        const files=result.files||[];
+        $('#changesNotice').textContent=files.length?`${files.length} changed ${files.length===1?'file':'files'} since the last commit${result.truncated?' · Showing a limited list':''}`:'No uncommitted changes.';
+        let added=0,deleted=0;
+        for(const file of files){
+          added+=file.added||0;deleted+=file.deleted||0;
+          const button=document.createElement('button');button.type='button';button.className='change-row';button.setAttribute('aria-pressed',String(file.path===diffPath));
+          const status=document.createElement('span');status.className='change-status';status.textContent=file.status;
+          const path=document.createElement('span');path.className='change-path';path.textContent=file.oldPath?file.oldPath+' → '+file.path:file.path;
+          const counts=document.createElement('span');counts.className='change-counts';
+          if(file.added===null||file.deleted===null){const label=document.createElement('span');label.className='meta';label.textContent=file.binary?'Binary':'Large file';counts.append(label);}
+          else counts.append(changeCount(file.added||0,file.deleted||0));
+          if(file.netUnchanged){const detail=document.createElement('small');detail.className='meta';detail.textContent='Staged + unstaged';counts.append(detail);}
+          path.append(counts);button.append(status,path);button.dataset.diffPath=file.path;
+          button.onclick=()=>openFileDiff(file.path);list.append(button);
+        }
+        if(files.length)$('#changesCounts').append(changeCount(added,deleted));
+        if(diffPath){if(files.some(file=>file.path===diffPath))openFileDiff(diffPath);else closeFileDiff();}
+      }catch(error){if(generation===changesGeneration)$('#changesNotice').textContent=error.message;}
+      finally{if(generation===changesGeneration){changesLoading=false;$('#refreshChanges').disabled=false;if(refreshed&&changesDirty)refreshChanges();}}
+    }
+    function renderDiffBlocks(text) {
+      const fragment=document.createDocumentFragment(),notes=[];let body=null,oldLine=0,newLine=0,hunks=0,oldMode='',newMode='';
+      const range=(start,count)=>count===0?'No lines':count===1?'Line '+start:'Lines '+start+'–'+(start+count-1);
+      for(const line of text.split('\n').slice(0,4000)) {
+        const hunk=/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: ?(.*))?$/.exec(line);
+        if(hunk){
+          oldLine=Number(hunk[1]);newLine=Number(hunk[3]);hunks++;
+          const block=document.createElement('section'),header=document.createElement('div'),scroll=document.createElement('div'),table=document.createElement('table');
+          block.className='diff-block';header.className='diff-range';scroll.className='diff-table-scroll';
+          header.textContent=range(oldLine,Number(hunk[2]??1))+' → '+range(newLine,Number(hunk[4]??1))+(hunk[5]?' · '+hunk[5]:'');
+          table.setAttribute('aria-label','Changed lines');body=document.createElement('tbody');table.append(body);scroll.append(table);block.append(header,scroll);fragment.append(block);continue;
+        }
+        if(line.startsWith('diff --git ')){body=null;continue;}
+        if(line.startsWith('Staged changes (')||line.startsWith('Unstaged changes (')){body=null;const heading=document.createElement('h3');heading.className='diff-section-heading';heading.textContent=line;fragment.append(heading);continue;}
+        if(!body){
+          if(line.startsWith('old mode '))oldMode=line.slice(9);else if(line.startsWith('new mode '))newMode=line.slice(9);
+          else if(line.startsWith('rename from '))notes.push('Renamed from '+line.slice(12)+'.');
+          else if(line.startsWith('new file mode '))notes.push('New file.');else if(line.startsWith('deleted file mode '))notes.push('Deleted file.');
+          continue;
+        }
+        if(line.startsWith('\\')){const row=document.createElement('tr'),cell=document.createElement('td');row.className='diff-note';cell.colSpan=4;cell.textContent=line.slice(2);row.append(cell);body.append(row);continue;}
+        const kind=line[0];if(![' ','+','-'].includes(kind))continue;
+        const row=document.createElement('tr');if(kind==='+')row.className='diff-line-added';else if(kind==='-')row.className='diff-line-deleted';
+        for(const [className,value] of [['diff-number',kind==='+'?'':oldLine++],['diff-number',kind==='-'?'':newLine++],['diff-sign',kind===' '? '':kind],['diff-code',line.slice(1)]]){
+          const cell=document.createElement('td');cell.className=className;cell.textContent=String(value);row.append(cell);
+        }
+        body.append(row);
+      }
+      if(oldMode||newMode)notes.push('Permissions: '+oldMode+' → '+newMode+'.');
+      $('#fileDiff').replaceChildren(fragment);return {hunks,notes};
+    }
+    async function openFileDiff(path) {
+      const generation=changesGeneration,root=changesRoot,request=++diffRequest,same=diffPath===path,scroll=same?$('#fileDiff').scrollTop:0;
+      if(!diffPath)diffChatScroll=$('#chat').scrollTop;
+      diffPath=path;diffAbort?.abort();diffAbort=new AbortController();
+      $('#chat').classList.add('hidden');$('#composerWrap').classList.add('hidden');$('#diffView').classList.remove('hidden');
+      $('#diffTitle').textContent=path;$('#diffNotice').textContent='Loading changes…';$('#fileDiff').replaceChildren();
+      for(const button of $('#changesList').querySelectorAll('.change-row'))button.setAttribute('aria-pressed',String(button.dataset.diffPath===path));
+      const mobile=matchMedia('(max-width:700px)').matches;$('#closeDiff span').textContent=mobile?'Back to files':'Close diff';
+      if(mobile)closeFiles();
+      try{
+        const result=await api('/api/git/diff?root='+encodeURIComponent(root)+'&path='+encodeURIComponent(path),{signal:diffAbort.signal});
+        if(diffPath!==path||generation!==changesGeneration||request!==diffRequest)return;
+        const text=(result.diff||'').slice(0,262144),limited=result.truncated||(result.diff||'').length>text.length||text.split('\n').length>4000;
+        const rendered=renderDiffBlocks(text),notes=rendered.notes;
+        if(result.binary)notes.unshift('Binary file changed. A text comparison is not available.');
+        if(result.comparison==='staged-and-unstaged')notes.unshift('Staged and unstaged changes cancel in the working file.');
+        if(limited)notes.push('Large diff · showing a limited preview.');
+        $('#diffNotice').textContent=notes.join(' ');
+        if(!rendered.hunks&&!notes.length){const empty=document.createElement('p');empty.className='diff-empty';empty.textContent='No text changes to display.';$('#fileDiff').append(empty);}
+        $('#fileDiff').scrollTop=scroll;
+      }catch(error){if(diffPath===path&&generation===changesGeneration&&request===diffRequest)$('#diffNotice').textContent=error.message;}
+    }
+    $('#closeDiff').onclick=()=>{const mobile=matchMedia('(max-width:700px)').matches;closeFileDiff();if(mobile){openFiles(projectRoot);setFileTab('changes');}};
+    $('#refreshChanges').onclick=()=>refreshChanges(true);
+    matchMedia('(max-width:700px)').addEventListener('change',event=>{if(!diffPath)return;$('#closeDiff span').textContent=event.matches?'Back to files':'Close diff';if(event.matches)closeFiles();else openFiles(projectRoot);});
+    $('#openProjectFolder').onclick=()=>nativeHost?.call('open-folder',{path:projectRoot}).catch(error=>$('#changesNotice').textContent=error.message);
+    function refreshVisibleProject() {
+      if(!csrf||!projectPanelVisible())return;
+      if(fileTab==='changes')refreshChanges();
+      if(fileJob?.status==='running')pollFileJob();
+    }
+    window.addEventListener('focus',refreshVisibleProject);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(fileJobTimer);else refreshVisibleProject();});
 
     let serviceRows=[], loginRender='', loginPromptId=null, loginPending=false;
     const servicePost=(action,body={})=>api('/api/services/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
