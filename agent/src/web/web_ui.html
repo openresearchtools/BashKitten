@@ -1514,6 +1514,10 @@
       pendingCwd = config.default_cwd;
       $('#defaultCwd').value = displayFolder(config.default_cwd);
       if (activeSettingsTab === 'services') await refreshServices();
+      if (activeSettingsTab === 'remote') {
+        await refreshRemote();
+        $('#remoteNotice').textContent = '';
+      }
     }
     async function loadNotifications() {
       $('#termuxNotifications').classList.toggle('hidden', nativeHost?.platform !== 'android');
