@@ -4,6 +4,22 @@
 
 var gProfiles = {
   async init() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      // This belongs to browser startup, not the optional Agent connection.
+      for (const id of [
+        "profiles-menu",
+        "appMenu-empty-profiles-button",
+        "appMenu-profiles-button",
+        "PanelUI-fxa-menu-empty-profiles-button",
+        "PanelUI-fxa-menu-profiles-button",
+        "PanelUI-fxa-menu-profiles-separator",
+        "PanelUI-profiles",
+      ]) {
+        const item = PanelMultiView.getViewNode(document, id);
+        if (item) item.hidden = true;
+      }
+      return;
+    }
     this.copyProfile = this.copyProfile.bind(this);
     this.createNewProfile = this.createNewProfile.bind(this);
     this.handleCommand = this.handleCommand.bind(this);
@@ -71,11 +87,15 @@ var gProfiles = {
 
   toggleProfileMenus(isEnabled) {
     let profilesMenu = document.getElementById("profiles-menu");
-    profilesMenu.hidden = !isEnabled;
+    profilesMenu.hidden =
+      AppConstants.MOZ_APP_NAME == "bashkitten" || !isEnabled;
   },
 
   async _onPanelShowing(profilesButton, emptyProfilesButton) {
-    if (!SelectableProfileService?.isEnabled) {
+    if (
+      AppConstants.MOZ_APP_NAME == "bashkitten" ||
+      !SelectableProfileService?.isEnabled
+    ) {
       emptyProfilesButton.hidden = true;
       profilesButton.hidden = true;
       return;
@@ -111,6 +131,7 @@ var gProfiles = {
    * Draws the menubar panel contents.
    */
   async onPopupShowing() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     let menuPopup = document.getElementById("menu_ProfilesPopup");
     let profiles = await SelectableProfileService.getAllProfiles();
     let currentProfile = SelectableProfileService.currentProfile;
@@ -157,6 +178,7 @@ var gProfiles = {
   },
 
   manageProfiles() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     return SelectableProfileService.maybeSetupDataStore().then(() => {
       toOpenWindowByType(
         "about:profilemanager",
@@ -167,26 +189,31 @@ var gProfiles = {
   },
 
   copyProfile() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     SelectableProfileService.maybeSetupDataStore().then(() => {
       SelectableProfileService.currentProfile.copyProfile();
     });
   },
 
   createNewProfile(source) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     SelectableProfileService.createNewProfile(true, null, source);
   },
 
   updateView(target) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     this.populateSubView();
     PanelUI.showSubView("PanelUI-profiles", target);
   },
 
   updateFxAView(target) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     this.populateSubView();
     PanelUI.showSubView("PanelUI-profiles", target);
   },
 
   launchProfile(aEvent) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     SelectableProfileService.getProfile(
       aEvent.target.getAttribute("profileid")
     ).then(profile => {
@@ -195,6 +222,7 @@ var gProfiles = {
   },
 
   async openTabsInProfile(aEvent, tabsToOpen) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     let profile = await SelectableProfileService.getProfile(
       aEvent.target.getAttribute("profileid")
     );
@@ -205,6 +233,7 @@ var gProfiles = {
   },
 
   async handleCommand(aEvent) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     switch (aEvent.target.id) {
       /* App menu button events */
       case "appMenu-profiles-button":
@@ -279,6 +308,7 @@ var gProfiles = {
    * either in the app menu or the FxA toolbar button menu.
    */
   async populateSubView() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     let profiles = [];
     let currentProfile = null;
 
@@ -449,6 +479,7 @@ var gProfiles = {
   },
 
   async populateMoveTabMenu(menuPopup) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     if (!SelectableProfileService.initialized) {
       return;
     }

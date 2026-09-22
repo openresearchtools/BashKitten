@@ -199,6 +199,12 @@ AboutRedirector::NewChannel(nsIURI* aURI, nsILoadInfo* aLoadInfo,
 
   nsAutoCString path = GetAboutModuleName(aURI);
 
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
+      (path.EqualsLiteral("profilemanager") || path.EqualsLiteral("editprofile") ||
+       path.EqualsLiteral("deleteprofile") || path.EqualsLiteral("newprofile"))) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+
   if ((path.EqualsASCII("editprofile") || path.EqualsASCII("deleteprofile") ||
        path.EqualsASCII("newprofile")) &&
       !mozilla::Preferences::GetBool(PROFILES_ENABLED_PREF, false)) {
@@ -273,6 +279,11 @@ AboutRedirector::GetURIFlags(nsIURI* aURI, uint32_t* result) {
   for (auto& redir : kRedirMap) {
     if (name.Equals(redir.id)) {
       *result = redir.flags;
+      if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
+          (name.EqualsLiteral("profilemanager") || name.EqualsLiteral("editprofile") ||
+           name.EqualsLiteral("deleteprofile") || name.EqualsLiteral("newprofile"))) {
+        *result |= nsIAboutModule::HIDE_FROM_ABOUTABOUT;
+      }
       return NS_OK;
     }
   }

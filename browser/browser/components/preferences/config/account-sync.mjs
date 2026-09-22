@@ -26,6 +26,7 @@ const XPCOMUtils = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"
 ).XPCOMUtils;
 const lazy = XPCOMUtils.declareLazy({
+  AppConstants: "resource://gre/modules/AppConstants.sys.mjs",
   BackupService: "resource:///modules/backup/BackupService.sys.mjs",
   Weave: "resource://services-sync/main.sys.mjs",
   SelectableProfileService:
@@ -680,6 +681,7 @@ Preferences.addSetting({
 
 Preferences.addSetting({
   id: "profilesPane",
+  visible: () => lazy.AppConstants.MOZ_APP_NAME != "bashkitten",
   onUserClick(e) {
     e.preventDefault();
     window.gotoPref("paneProfiles");
@@ -697,6 +699,7 @@ Preferences.addSetting({
 });
 Preferences.addSetting({
   id: "manageProfiles",
+  visible: () => lazy.AppConstants.MOZ_APP_NAME != "bashkitten",
   onUserClick: e => {
     e.preventDefault();
     // Using the existing function for now, since privacy.js also calls it
@@ -1046,6 +1049,7 @@ SettingGroupManager.registerGroups({
     ],
   },
   profilePane: {
+    hidden: lazy.AppConstants.MOZ_APP_NAME == "bashkitten",
     headingLevel: 2,
     id: "browserProfilesGroupPane",
     l10nId: "preferences-profiles-subpane-description",
@@ -1089,6 +1093,7 @@ SettingGroupManager.registerGroups({
     ],
   },
   profiles: {
+    hidden: lazy.AppConstants.MOZ_APP_NAME == "bashkitten",
     id: "profilesGroup",
     l10nId: "preferences-profiles-section-header",
     headingLevel: 2,

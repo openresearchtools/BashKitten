@@ -1302,6 +1302,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * set as the default.
    */
   async setDefaultProfileForGroup(aProfile = this.currentProfile) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten uses one profile");
+    }
     if (!aProfile) {
       return;
     }
@@ -1329,6 +1332,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @param {boolean} shouldShow Whether or not we should show the profile selector
    */
   async setShowProfileSelectorWindow(shouldShow) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      return;
+    }
     this.groupToolkitProfile.showProfileSelector = shouldShow;
     await this.#attemptFlushProfileService();
   }
@@ -1540,6 +1546,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * initing the service for profiles.
    */
   async maybeSetupDataStore() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten uses one profile");
+    }
     if (this.#connection) {
       return;
     }
@@ -1649,6 +1658,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * Schedule deletion of the current SelectableProfile as a background task.
    */
   async deleteCurrentProfile() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten uses one profile");
+    }
     let profiles = await this.getAllProfiles();
 
     if (profiles.length <= 1) {

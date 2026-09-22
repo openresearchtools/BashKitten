@@ -21,6 +21,8 @@ XPCOM_MANIFESTS += [
 
 FINAL_LIBRARY = "browsercomps"
 
+DEFINES["MOZ_APP_NAME"] = '"%s"' % CONFIG["MOZ_APP_NAME"]
+
 LOCAL_INCLUDES += [
     "../build",
     "/dom/base",

@@ -50,6 +50,9 @@ export class ProfilesParent extends JSWindowActorParent {
   }
 
   async receiveMessage(message) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten does not expose profile management");
+    }
     let gBrowser = this.browsingContext.topChromeWindow?.gBrowser;
     let source = this.browsingContext.embedderElement?.currentURI.displaySpec;
     switch (message.name) {

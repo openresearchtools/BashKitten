@@ -409,6 +409,10 @@ function restart(safeMode) {
 window.addEventListener(
   "DOMContentLoaded",
   function () {
+    if (singleProfile) {
+      window.location.replace("about:blank");
+      return;
+    }
     let createButton = document.getElementById("create-button");
     createButton.hidden = singleProfile;
     createButton.addEventListener("click", createProfileWizard);

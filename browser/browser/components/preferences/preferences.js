@@ -344,6 +344,7 @@ const CONFIG_PANES = Object.freeze({
       "chrome://browser/content/preferences/config/passwords-autofill.mjs",
   },
   profiles: {
+    visible: () => AppConstants.MOZ_APP_NAME != "bashkitten",
     parent: srdSectionEnabled("sync") ? "sync" : "general",
     l10nId: "preferences-profiles-group-header",
     groupIds: ["profilePane"],

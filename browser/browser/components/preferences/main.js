@@ -825,8 +825,10 @@ var gMainPane = {
     initSettingGroup("startup");
     initSettingGroup("importBrowserData");
     initSettingGroup("tabs");
-    initSettingGroup("profiles");
-    initSettingGroup("profilePane");
+    if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+      initSettingGroup("profiles");
+      initSettingGroup("profilePane");
+    }
 
     setEventListener("manageBrowserLanguagesButton", "command", function () {
       gMainPane.showBrowserLanguagesSubDialog({ search: false });
@@ -1561,6 +1563,7 @@ var gMainPane = {
    *  Shows a window dialog containing the profile selector page.
    */
   manageProfiles() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") return;
     const win = window.browsingContext.topChromeWindow;
 
     win.toOpenWindowByType(
