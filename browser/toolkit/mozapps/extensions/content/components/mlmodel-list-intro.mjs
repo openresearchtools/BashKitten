@@ -17,14 +17,7 @@ export class MLModelListIntro extends MozLitElement {
         rel="stylesheet"
       />
       <header>
-        <p data-l10n-id="mlmodel-description">
-          <a
-            data-l10n-name="learn-more"
-            is="moz-support-link"
-            support-page="on-device-models"
-            target="_blank"
-          ></a>
-        </p>
+        <p data-l10n-id="mlmodel-description"></p>
       </header>
     `;
   }

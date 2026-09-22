@@ -10,6 +10,7 @@ import {
   checkForUpdates,
   getUpdateInstall,
   isAddonOptionsUIAllowed,
+  isDiscoverEnabled,
   isManualUpdate,
   isPending,
 } from "./aboutaddons-utils.mjs";
@@ -190,6 +191,9 @@ gViewController.defineView("updates", async param => {
 });
 
 gViewController.defineView("discover", async () => {
+  if (!isDiscoverEnabled()) {
+    return null;
+  }
   let discopane = document.createElement("discovery-pane");
   discopane.render();
   await document.l10n.translateFragment(discopane);

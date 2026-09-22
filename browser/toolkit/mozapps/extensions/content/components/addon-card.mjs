@@ -14,6 +14,7 @@ import {
   getScreenshotUrlForAddon,
   getUpdateInstall,
   hasPermission,
+  isAddonWebsiteLink,
   isAllowedInPrivateBrowsing,
   isInState,
   isPendingRestartInstall,
@@ -118,41 +119,12 @@ export class AddonCard extends AboutAddonsHTMLElement {
             <img class="card-heading-icon addon-icon" alt="" />
             <div class="card-contents">
               <div class="addon-name-container">
-                <a
-                  class="addon-badge addon-badge-recommended"
-                  is="moz-support-link"
-                  support-page="add-on-badges"
-                  utm-content="promoted-addon-badge"
-                  data-l10n-id="addon-badge-recommended4"
-                  hidden
-                >
-                </a>
-                <a
-                  class="addon-badge addon-badge-line"
-                  is="moz-support-link"
-                  support-page="add-on-badges"
-                  utm-content="promoted-addon-badge"
-                  data-l10n-id="addon-badge-line4"
-                  hidden
-                >
-                </a>
-                <a
-                  class="addon-badge addon-badge-verified"
-                  is="moz-support-link"
-                  support-page="add-on-badges"
-                  utm-content="promoted-addon-badge"
-                  data-l10n-id="addon-badge-verified4"
-                  hidden
-                >
-                </a>
-                <a
+                <span
                   class="addon-badge addon-badge-private-browsing-allowed"
-                  is="moz-support-link"
-                  support-page="extensions-pb"
                   data-l10n-id="addon-badge-private-browsing-allowed3"
                   hidden
                 >
-                </a>
+                </span>
                 <div class="spacer"></div>
                 <moz-button
                   class="theme-enable-button"
@@ -644,16 +616,6 @@ export class AddonCard extends AboutAddonsHTMLElement {
       });
     }
 
-    // Show the recommended badges if needed.
-    // Plugins don't have recommendationStates, so ensure a default.
-    let states = addon.recommendationStates || [];
-    for (let badgeName of states) {
-      let badge = card.querySelector(`.addon-badge-${badgeName}`);
-      if (badge) {
-        badge.hidden = false;
-      }
-    }
-
     // Update description.
     card.querySelector(".addon-description").textContent = addon.description;
 
@@ -691,7 +653,6 @@ export class AddonCard extends AboutAddonsHTMLElement {
       actionId,
       linkUrl,
       linkId,
-      linkSumoPage,
       messageId,
       messageArgs,
       type = "",
@@ -715,28 +676,13 @@ export class AddonCard extends AboutAddonsHTMLElement {
         actionButton.setAttribute("slot", "actions");
         messageBar.append(actionButton);
       }
-      if (linkUrl) {
+      if (isAddonWebsiteLink(linkUrl)) {
         const linkButton = document.createElement("button");
         document.l10n.setAttributes(linkButton, linkId);
         linkButton.setAttribute("action", "link");
         linkButton.setAttribute("url", linkUrl);
         linkButton.setAttribute("slot", "actions");
         messageBar.append(linkButton);
-      }
-
-      if (linkSumoPage) {
-        const sumoLinkEl = document.createElement("a", {
-          is: "moz-support-link",
-        });
-        sumoLinkEl.setAttribute("support-page", linkSumoPage);
-        sumoLinkEl.setAttribute("slot", "support-link");
-        // Set a custom fluent id for the learn more if there
-        // is one (otherwise moz-support-link custom element
-        // will use the default "Learn more" localized string).
-        if (linkId) {
-          document.l10n.setAttributes(sumoLinkEl, linkId);
-        }
-        messageBar.append(sumoLinkEl);
       }
 
       document.l10n.resumeObserving();

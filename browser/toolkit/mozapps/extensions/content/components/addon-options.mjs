@@ -115,17 +115,10 @@ export class AddonOptions extends AboutAddonsHTMLElement {
           // Likely the built-in themes, can't be removed, that's fine.
           el.hidden = true;
         } else {
-          // Likely sideloaded, mention that it can't be removed with a link.
+          // Likely sideloaded; retain its disabled state without a dead help link.
           el.hidden = false;
           el.disabled = true;
-          if (!el.querySelector('[slot="support-link"]')) {
-            let link = document.createElement("a", { is: "moz-support-link" });
-            link.setAttribute("data-l10n-name", "link");
-            link.setAttribute("support-page", "cant-remove-addon");
-            link.setAttribute("slot", "support-link");
-            el.appendChild(link);
-            document.l10n.setAttributes(el, "remove-addon-disabled-button");
-          }
+          document.l10n.setAttributes(el, "remove-addon-button");
         }
         break;
       case "report":

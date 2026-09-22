@@ -30,9 +30,7 @@ class GlobalWarnings extends MessageBarStackElement {
 
   refresh() {
     if (this.inSafeMode) {
-      this.setWarning("safe-mode", {
-        supportPage: "diagnose-firefox-issues-using-troubleshoot-mode",
-      });
+      this.setWarning("safe-mode", {});
     } else if (
       AddonManager.checkUpdateSecurityDefault &&
       !AddonManager.checkUpdateSecurity
@@ -47,7 +45,7 @@ class GlobalWarnings extends MessageBarStackElement {
     }
   }
 
-  setWarning(type, { action, supportPage }) {
+  setWarning(type, { action }) {
     if (
       this.globalWarning &&
       this.globalWarning.getAttribute("warning-type") !== type
@@ -60,12 +58,6 @@ class GlobalWarnings extends MessageBarStackElement {
       let { messageId, buttonId } = this.getGlobalWarningL10nIds(type);
       document.l10n.setAttributes(this.globalWarning, messageId);
       this.globalWarning.setAttribute("data-l10n-attrs", "message");
-      if (supportPage) {
-        let link = document.createElement("a", { is: "moz-support-link" });
-        link.setAttribute("slot", "support-link");
-        link.setAttribute("support-page", supportPage);
-        this.globalWarning.appendChild(link);
-      }
       if (action) {
         let button = document.createElement("button");
         document.l10n.setAttributes(button, buttonId);

@@ -9,6 +9,7 @@ import {
   getUpdateInstall,
   hasPermission,
   isAddonOptionsUIAllowed,
+  isAddonWebsiteLink,
   isAllowedInPrivateBrowsing,
   nl2br,
 } from "../aboutaddons-utils.mjs";
@@ -143,13 +144,7 @@ export class AddonDetails extends AboutAddonsHTMLElement {
               class="addon-detail-row addon-detail-help-row"
               data-l10n-id="addon-detail-private-browsing-help"
               hidden
-            >
-              <a
-                is="moz-support-link"
-                support-page="extensions-pb"
-                data-l10n-name="learn-more"
-              ></a>
-            </div>
+            ></div>
             <div
               class="addon-detail-row addon-detail-row-has-help addon-detail-row-private-browsing-disallowed"
               hidden
@@ -162,13 +157,7 @@ export class AddonDetails extends AboutAddonsHTMLElement {
               class="addon-detail-row addon-detail-help-row"
               data-l10n-id="detail-private-disallowed-description2"
               hidden
-            >
-              <a
-                is="moz-support-link"
-                data-l10n-name="learn-more"
-                support-page="extensions-pb"
-              ></a>
-            </div>
+            ></div>
             <div
               class="addon-detail-row addon-detail-row-has-help addon-detail-row-private-browsing-required"
               hidden
@@ -182,13 +171,7 @@ export class AddonDetails extends AboutAddonsHTMLElement {
               class="addon-detail-row addon-detail-help-row"
               data-l10n-id="detail-private-required-description2"
               hidden
-            >
-              <a
-                is="moz-support-link"
-                data-l10n-name="learn-more"
-                support-page="extensions-pb"
-              ></a>
-            </div>
+            ></div>
             <div
               class="addon-detail-row addon-detail-row-has-help addon-detail-row-quarantined-domains"
               role="group"
@@ -225,10 +208,6 @@ export class AddonDetails extends AboutAddonsHTMLElement {
               <span
                 data-l10n-id="addon-detail-quarantined-domains-help"
               ></span>
-              <a
-                is="moz-support-link"
-                support-page="quarantined-domains"
-              ></a>
             </div>
             <div class="addon-detail-row addon-detail-row-author">
               <label data-l10n-id="addon-detail-author-label"></label>
@@ -494,10 +473,17 @@ export class AddonDetails extends AboutAddonsHTMLElement {
     // Full description.
     this.renderDescription(addon);
     this.querySelector(".addon-detail-contribute").hidden =
-      !addon.contributionURL;
+      !isAddonWebsiteLink(addon.contributionURL);
     this.querySelector(".addon-detail-row-updates").hidden =
       !hasPermission(addon, "upgrade") ||
       addon.isApplyBackgroundUpdatesControlledByPolicies;
+    // The product disables background add-on updates. Manual update checks and
+    // installation from a file remain available in the page's options menu.
+    for (const label of this.querySelectorAll(
+      ".addon-detail-row-updates .radio-container-with-text"
+    )) {
+      label.hidden = Services.prefs.prefIsLocked("extensions.update.enabled");
+    }
 
     if (addon.type != "extension") {
       // Don't show any private browsing related section for non-extension
@@ -531,7 +517,7 @@ export class AddonDetails extends AboutAddonsHTMLElement {
     let creatorRow = this.querySelector(".addon-detail-row-author");
     if (addon.creator) {
       let link = creatorRow.querySelector("a");
-      link.hidden = !addon.creator.url;
+      link.hidden = !isAddonWebsiteLink(addon.creator.url);
       if (link.hidden) {
         creatorRow.appendChild(new Text(addon.creator.name));
       } else {
@@ -569,7 +555,7 @@ export class AddonDetails extends AboutAddonsHTMLElement {
 
     // Homepage.
     let homepageRow = this.querySelector(".addon-detail-row-homepage");
-    if (addon.homepageURL) {
+    if (isAddonWebsiteLink(addon.homepageURL)) {
       let homepageURL = homepageRow.querySelector("a");
       homepageURL.href = addon.homepageURL;
       homepageURL.textContent = addon.homepageURL;
@@ -579,7 +565,7 @@ export class AddonDetails extends AboutAddonsHTMLElement {
 
     // Rating.
     let ratingRow = this.querySelector(".addon-detail-row-rating");
-    if (addon.reviewURL) {
+    if (isAddonWebsiteLink(addon.reviewURL)) {
       ratingRow.querySelector("moz-five-star").rating = addon.averageRating;
       let reviews = ratingRow.querySelector("a");
       reviews.href = formatUTMParams(

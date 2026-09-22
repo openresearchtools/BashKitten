@@ -117,6 +117,12 @@ class AddonPageOptions extends AboutAddonsHTMLElement {
     );
     this.resetUpdatesEl = this.querySelector('[action="reset-update-states"]');
     this.onUpdateModeChanged();
+    const updatesLocked = Services.prefs.prefIsLocked(
+      "extensions.update.enabled"
+    );
+    this.toggleUpdatesEl.hidden = updatesLocked;
+    this.resetUpdatesEl.hidden = updatesLocked;
+    this.toggleUpdatesEl.previousElementSibling.hidden = updatesLocked;
   }
 
   async handleEvent(e) {

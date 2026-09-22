@@ -1144,10 +1144,6 @@ var gXPInstallObserver = {
       }
     };
 
-    options.learnMoreURL = Services.urlFormatter.formatURLPref(
-      "app.support.baseURL"
-    );
-
     let msgId;
     let notification = document.getElementById(
       "addon-install-confirmation-notification"
@@ -1156,18 +1152,15 @@ var gXPInstallObserver = {
       // None of the add-ons are verified
       msgId = "addon-confirm-install-unsigned-message";
       notification.setAttribute("warning", "true");
-      options.learnMoreURL += "unsigned-addons";
     } else if (!unsigned.length) {
       // All add-ons are verified or don't need to be verified
       msgId = "addon-confirm-install-message";
       notification.removeAttribute("warning");
-      options.learnMoreURL += "find-and-install-add-ons";
     } else {
       // Some of the add-ons are unverified, the list of names will indicate
       // which
       msgId = "addon-confirm-install-some-unsigned-message";
       notification.setAttribute("warning", "true");
-      options.learnMoreURL += "unsigned-addons";
     }
     const addonCount = installInfo.installs.length;
     const messageString = lazy.l10n.formatValueSync(msgId, { addonCount });
@@ -1421,7 +1414,6 @@ var gXPInstallObserver = {
 
         // displayURI becomes it's own label, so we unset it for this panel. It will become part of the
         // messageString above.
-        let displayURI = options.displayURI;
         options.displayURI = undefined;
 
         options.eventCallback = topic => {
@@ -1448,11 +1440,6 @@ var gXPInstallObserver = {
             message.appendChild(fragment);
           }
 
-          let article = isSitePermissionAddon
-            ? "site-permission-addons"
-            : "unlisted-extensions-risks";
-          let learnMore = doc.getElementById("addon-install-blocked-info");
-          learnMore.setAttribute("support-page", article);
         };
         Glean.securityUi.events.accumulateSingleSample(
           Ci.nsISecurityUITelemetry.WARNING_ADDON_ASKING_PREVENTED
@@ -1462,12 +1449,10 @@ var gXPInstallObserver = {
           installMsg,
           dontAllowMsg,
           neverAllowMsg,
-          neverAllowAndReportMsg,
         ] = await lazy.l10n.formatMessages([
           "xpinstall-prompt-install",
           "xpinstall-prompt-dont-allow",
           "xpinstall-prompt-never-allow",
-          "xpinstall-prompt-never-allow-and-report",
         ]);
 
         const action = buildNotificationAction(installMsg, () => {
@@ -1495,26 +1480,6 @@ var gXPInstallObserver = {
             disableSecurityDelay: true,
           }),
         ];
-
-        if (isSitePermissionAddon) {
-          // Restrict this to site permission add-ons for now pending a decision
-          // from product about how to approach this for extensions.
-          const permissionType =
-            installInfo.installs[0].addon.sitePermissions?.[0];
-          declineActions.push(
-            buildNotificationAction(
-              neverAllowAndReportMsg,
-              () => {
-                AMTelemetry.recordSuspiciousSiteEvent({
-                  displayURI,
-                  permissionType,
-                });
-                neverAllowCallback();
-              },
-              { disableSecurityDelay: true }
-            )
-          );
-        }
 
         let popup = PopupNotifications.show(
           browser,
@@ -1647,13 +1612,6 @@ var gXPInstallObserver = {
             messageString = lazy.l10n.formatValueSync(errorId, args);
           }
 
-          // Add Learn More link when refusing to install an unsigned add-on
-          if (install.error == AddonManager.ERROR_SIGNEDSTATE_REQUIRED) {
-            options.learnMoreURL =
-              Services.urlFormatter.formatURLPref("app.support.baseURL") +
-              "unsigned-addons";
-          }
-
           let notificationId = aTopic;
 
           const isBlocklistError = [
@@ -1661,31 +1619,8 @@ var gXPInstallObserver = {
             AddonManager.ERROR_SOFT_BLOCKED,
           ].includes(install.error);
 
-          // On blocklist-related install failures:
-          // - use "addon-install-failed-blocklist" as the notificationId
-          //   (which will use the popupnotification with id
-          //   "addon-install-failed-blocklist-notification" defined
-          //   in popup-notification.inc)
-          // - add an eventCallback that will take care of filling in the
-          //   blocklistURL into the href attribute of the link element
-          //   with id "addon-install-failed-blocklist-info"
           if (isBlocklistError) {
-            const blocklistURL = await install.addon?.getBlocklistURL();
             notificationId = `${aTopic}-blocklist`;
-            options.eventCallback = topic => {
-              if (topic !== "showing") {
-                return;
-              }
-              let doc = browser.ownerDocument;
-              let blocklistURLEl = doc.getElementById(
-                "addon-install-failed-blocklist-info"
-              );
-              if (blocklistURL) {
-                blocklistURLEl.setAttribute("href", blocklistURL);
-              } else {
-                blocklistURLEl.removeAttribute("href");
-              }
-            };
           }
 
           PopupNotifications.show(
@@ -2487,21 +2422,10 @@ var gUnifiedExtensions = {
           );
           document.l10n.setAttributes(
             emptyStateBox.querySelector("description"),
-            "unified-extensions-empty-content-explain-extensions-onboarding"
+            "unified-extensions-empty-content-explain-manage2"
           );
           emptyStateBox.hidden = false;
 
-          // Replace the "Manage Extensions" button with "Discover Extensions".
-          // We add the "Discover Extensions" button, and "Manage Extensions"
-          // button (#unified-extensions-manage-extensions) is hidden by CSS.
-          const discoverButton = this._createDiscoverButton(panelview);
-
-          const manageExtensionsButton = panelview.querySelector(
-            "#unified-extensions-manage-extensions"
-          );
-          // Insert before toolbarseparator, to make it easier to hide the
-          // toolbarseparator and manageExtensionsButton with CSS.
-          manageExtensionsButton.previousElementSibling.before(discoverButton);
         }
       });
     }
@@ -2513,7 +2437,6 @@ var gUnifiedExtensions = {
     if (Services.appinfo.inSafeMode) {
       this._messageBarSafemode ??= this._makeMessageBar({
         messageBarFluentId: "unified-extensions-notice-safe-mode",
-        supportPage: "diagnose-firefox-issues-using-troubleshoot-mode",
         type: "info",
       });
       container.prepend(this._messageBarSafemode);
@@ -2533,16 +2456,8 @@ var gUnifiedExtensions = {
         this._messageBarQuarantinedDomain = this._makeMessageBar({
           messageBarFluentId:
             "unified-extensions-mb-quarantined-domain-message-3",
-          supportPage: "quarantined-domains",
-          supportPageFluentId:
-            "unified-extensions-mb-quarantined-domain-learn-more",
           dismissible: false,
         });
-        this._messageBarQuarantinedDomain
-          .querySelector("a")
-          .addEventListener("click", () => {
-            this.togglePanel();
-          });
       }
 
       container.appendChild(this._messageBarQuarantinedDomain);
@@ -2564,9 +2479,6 @@ var gUnifiedExtensions = {
     while (list.lastChild) {
       list.lastChild.remove();
     }
-    panelview
-      .querySelector("#unified-extensions-discover-extensions")
-      ?.remove();
 
     // If temporary access was granted, (maybe) clear attention indicator.
     requestAnimationFrame(() => this.updateAttention());
@@ -3175,8 +3087,6 @@ var gUnifiedExtensions = {
     dismissible = false,
     messageBarFluentId,
     messageBarFluentArgs,
-    supportPage = null,
-    supportPageFluentId,
     linkToAboutAddons = false,
     type = "warning",
   }) {
@@ -3213,50 +3123,7 @@ var gUnifiedExtensions = {
       messageBarFluentArgs
     );
 
-    if (supportPage) {
-      const supportUrl = document.createElement("a", {
-        is: "moz-support-link",
-      });
-      supportUrl.setAttribute("support-page", supportPage);
-      if (supportPageFluentId) {
-        document.l10n.setAttributes(supportUrl, supportPageFluentId);
-      }
-      supportUrl.setAttribute("slot", "support-link");
-
-      messageBar.append(supportUrl);
-    }
-
     return messageBar;
-  },
-
-  _createDiscoverButton() {
-    const discoverButton = document.createElement("moz-button");
-    discoverButton.id = "unified-extensions-discover-extensions";
-    discoverButton.type = "primary";
-    discoverButton.className = "subviewbutton panel-subview-footer-button";
-    document.l10n.setAttributes(
-      discoverButton,
-      "unified-extensions-discover-extensions"
-    );
-
-    discoverButton.addEventListener("click", () => {
-      if (
-        // The "Discover Extensions" button is only shown if the user has not
-        // installed any extension. In that case, we direct to the discopane
-        // in about:addons. If the discopane is disabled, open the default
-        // view (Extensions list) instead. This view shows a link to AMO when
-        // the user does not have any extensions installed.
-        Services.prefs.getBoolPref("extensions.getAddons.showPane", true)
-      ) {
-        BrowserAddonUI.openAddonsMgr("addons://list/discover");
-      } else {
-        BrowserAddonUI.openAddonsMgr("addons://list/extension");
-      }
-      // The panel closes automatically when the `<moz-button>` is pressed since
-      // the `closepanel` attribute was not set to `none`.
-    });
-
-    return discoverButton;
   },
 
   _shouldShowQuarantinedNotification() {

@@ -82,16 +82,16 @@ detail-update-manual =
     .tooltiptext = Don’t automatically install updates
 
 # Used as a description for the option to allow or block an add-on in private windows.
-detail-private-browsing-label = Run in Private Windows
+detail-private-browsing-label = Run in Private Tabs
 
 # Some add-ons may elect to not run in private windows by setting incognito: not_allowed in the manifest.  This
 # cannot be overridden by the user.
-detail-private-disallowed-label = Not Allowed in Private Windows
-detail-private-disallowed-description2 = This extension does not run while private browsing. <a data-l10n-name="learn-more">Learn more</a>
+detail-private-disallowed-label = Not Allowed in Private Tabs
+detail-private-disallowed-description2 = This extension does not run while private browsing.
 
 # Some special add-ons are privileged, run in private windows automatically, and this permission can't be revoked
-detail-private-required-label = Requires Access to Private Windows
-detail-private-required-description2 = This extension has access to your online activities while private browsing. <a data-l10n-name="learn-more">Learn more</a>
+detail-private-required-label = Requires Access to Private Tabs
+detail-private-required-description2 = This extension has access to your online activities while private browsing.
 
 detail-private-browsing-on =
     .label = Allow
@@ -167,7 +167,7 @@ legacy-extensions-description =
 
 private-browsing-description2 =
     { -brand-short-name } is changing how extensions work in private browsing. Any new extensions you add to
-    { -brand-short-name } won’t run by default in Private Windows. Unless you allow it in settings, the
+    { -brand-short-name } won’t run by default in Private Tabs. Unless you allow it in settings, the
     extension won’t work while private browsing, and won’t have access to your online activities
     there. We’ve made this change to keep your private browsing private.
     <label data-l10n-name="private-browsing-learn-more">Learn how to manage extension settings</label>
@@ -484,8 +484,8 @@ addon-detail-group-label-updates =
 # This is the tooltip text for the private browsing badge in about:addons. The
 # badge is the private browsing icon included next to the extension's name.
 addon-badge-private-browsing-allowed3 =
-    .title = Allowed in private windows
-addon-detail-private-browsing-help = When allowed, the extension will have access to your online activities while private browsing. <a data-l10n-name="learn-more">Learn more</a>
+    .title = Allowed in private tabs
+addon-detail-private-browsing-help = When allowed, the extension will have access to your online activities while private browsing.
 addon-detail-private-browsing-allow = Allow
 addon-detail-private-browsing-disallow = Don’t Allow
 # aria-label associated to the private browsing row to help screen readers to announce the group
@@ -658,7 +658,7 @@ addon-category-mlmodel-title =
 
 mlmodel-heading = Manage On-Device AI Models
 mlmodel-description =
-  Some features and extensions in { -brand-short-name } are powered by AI models that work locally on your device. This approach protects your privacy and, in many cases, speeds up performance. <a data-l10n-name="learn-more">Learn more</a>
+  Some features and extensions in { -brand-short-name } are powered by AI models that work locally on your device. This approach protects your privacy and, in many cases, speeds up performance.
 
 # Label for button that when clicked removed local model
 mlmodel-remove-addon-button =

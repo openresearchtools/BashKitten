@@ -99,6 +99,20 @@ export function getBrowserElement() {
   return window.docShell.chromeEventHandler;
 }
 
+// Add-on metadata may retain links from the upstream catalog. Keep the author's
+// name and normal websites, without presenting removed vendor services as UI.
+export function isAddonWebsiteLink(url) {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return (
+      ["http:", "https:"].includes(protocol) &&
+      !/(^|\.)(mozilla\.(org|com)|firefox\.com)$/.test(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function promiseEvent(event, target, capture = false) {
   return new Promise(resolve => {
     target.addEventListener(event, resolve, { capture, once: true });

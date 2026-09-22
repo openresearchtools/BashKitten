@@ -23,8 +23,6 @@ function createPolicyPermissionsBanner() {
   banner.classList.add("addon-permissions-policy-banner");
   banner.setAttribute("type", "info");
   banner.messageL10nId = "addon-permissions-managed-by-policy";
-  banner.supportPage =
-    "managed-browser-firefox#w_why-some-features-may-be-disabled";
   return banner;
 }
 
@@ -50,7 +48,6 @@ class AddonPermissionsList extends AboutAddonsHTMLElement {
             <ul class="addon-permissions-list"></ul>
           </div>
           <div class="addon-permissions-empty" hidden></div>
-          <div class="addon-permissions-footer"></div>
         </div>
       </template>
     `;
@@ -245,12 +242,9 @@ class AddonPermissionsList extends AboutAddonsHTMLElement {
       headerL10n,
       subheaderL10n,
       emptyL10n,
-      supportPage,
-      supportL10n,
     }) => {
       let header = fragment.querySelector(".permission-header");
       let subheader = fragment.querySelector(".permission-subheader");
-      let footer = fragment.querySelector(".addon-permissions-footer");
       let requiredSection = fragment.querySelector(
         ".addon-permissions-required"
       );
@@ -261,13 +255,6 @@ class AddonPermissionsList extends AboutAddonsHTMLElement {
       let isPopulated = !(requiredSection.hidden && optionalSection.hidden);
 
       header.setAttribute("data-l10n-id", headerL10n);
-
-      let supportUrl = document.createElement("a", {
-        is: "moz-support-link",
-      });
-      supportUrl.setAttribute("support-page", supportPage);
-      supportUrl.setAttribute("data-l10n-id", supportL10n);
-      footer.append(supportUrl);
 
       if (subheaderL10n) {
         subheader.setAttribute("data-l10n-id", subheaderL10n);
@@ -287,8 +274,6 @@ class AddonPermissionsList extends AboutAddonsHTMLElement {
       fragment: permissionsFrag,
       headerL10n: "addon-permissions-heading",
       emptyL10n: "addon-permissions-empty2",
-      supportPage: "extension-permissions",
-      supportL10n: "addon-permissions-learnmore",
     });
 
     configureSection({
@@ -296,8 +281,6 @@ class AddonPermissionsList extends AboutAddonsHTMLElement {
       headerL10n: "addon-permissions-data-collection-heading",
       subheaderL10n: "addon-data-collection-provided",
       emptyL10n: "addon-permissions-data-collection-empty",
-      supportPage: "extension-data-collection",
-      supportL10n: "addon-data-collection-learnmore",
     });
 
     this.appendChild(permissionsFrag);
