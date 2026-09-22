@@ -619,7 +619,7 @@ download-always-ask-where2 =
     .label = Ask where to save files before downloading
     .accesskey = A
 download-private-browsing-delete2 =
-    .label = Delete private window downloads on close
+    .label = Delete downloads from private tabs when private browsing ends
     .accesskey = D
 
 applications-header = Applications
@@ -1073,11 +1073,11 @@ search-show-search-term-option-2 =
     .label = Show search terms in the address bar on results pages
 
 search-separate-default-engine-2 =
-    .label = Use a different default search engine in private windows
+    .label = Use a different default search engine in private tabs
     .accesskey = U
 
 search-separate-default-engine-dropdown =
-    .aria-label = Default search engine in private windows
+    .aria-label = Default search engine in private tabs
 
 search-suggestions-header-2 =
     .label = Search engine suggestions

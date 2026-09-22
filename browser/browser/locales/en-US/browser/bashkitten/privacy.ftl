@@ -17,10 +17,8 @@ identity-allow-site-data = Always store cookies/data for this site
 
 bashkitten-data-collection-group =
     .label = { -brand-short-name } Data Collection and Use
-    .description = { -brand-short-name } does not collect telemetry or usage data. Optional services, such as Sync, may be governed by their own privacy notices.
-    .searchkeywords = privacy telemetry data collection privacy notice
-
-bashkitten-data-collection-link = View Privacy Notice
+    .description = { -brand-short-name } does not collect telemetry or usage data.
+    .searchkeywords = privacy telemetry data collection
 
 enable-javascript =
     .label = Enable JavaScript

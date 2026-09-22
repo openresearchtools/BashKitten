@@ -5,10 +5,7 @@
 import { Preferences } from "chrome://global/content/preferences/Preferences.mjs";
 import { SettingGroupManager } from "chrome://browser/content/preferences/config/SettingGroupManager.mjs";
 
-const LOCAL_POLICY_URL = "about:license";
-
 Preferences.addSetting({ id: "bashkitten-data-collection" });
-Preferences.addSetting({ id: "bashkitten-data-collection-notice" });
 
 SettingGroupManager.registerGroups({
   bashkittenDataCollection: {
@@ -23,18 +20,6 @@ SettingGroupManager.registerGroups({
           badge: "bashkitten-exclusive",
           "data-l10n-attrs": "searchkeywords",
         },
-        items: [
-          {
-            id: "bashkitten-data-collection-notice",
-            control: "a",
-            l10nId: "bashkitten-data-collection-link",
-            slot: "support-link",
-            controlAttrs: {
-              id: "bashkittenDataCollectionPrivacyNotice",
-              href: LOCAL_POLICY_URL,
-            },
-          },
-        ],
       },
     ],
   },
