@@ -206,7 +206,23 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         String qr = value.optString("qrDataUrl");
         try { byte[] data = android.util.Base64.decode(qr.substring(qr.indexOf(',')+1), android.util.Base64.DEFAULT); ImageView image = new ImageView(activity); image.setImageBitmap(BitmapFactory.decodeByteArray(data,0,data.length)); actions.addView(image,new LayoutParams(-1,dp(240))); } catch(Exception ignored) {}
-        TextView guide = new TextView(activity); guide.setText("Scan this code with your authenticator, then enter its six-digit code."); actions.addView(guide);
+        TextView guide = new TextView(activity); guide.setText("Add BashKitten to your authenticator, then paste or enter its six-digit code."); actions.addView(guide);
+        String secret = value.optString("secret"), otpauth = value.optString("otpauthUrl");
+        if (!secret.isEmpty()) {
+            TextView key = new TextView(activity); key.setText(secret); key.setTypeface(android.graphics.Typeface.MONOSPACE); key.setTextIsSelectable(true); key.setPadding(0, dp(12), 0, dp(8)); actions.addView(key);
+            action("Copy setup key", () -> {
+                ClipData clip = ClipData.newPlainText("BashKitten authenticator setup key", secret);
+                PersistableBundle sensitive = new PersistableBundle(); sensitive.putBoolean("android.content.extra.IS_SENSITIVE", true); clip.getDescription().setExtras(sensitive);
+                ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(clip);
+                Toast.makeText(activity, "Setup key copied", Toast.LENGTH_SHORT).show();
+            });
+        }
+        Uri authenticator = Uri.parse(otpauth);
+        if ("otpauth".equals(authenticator.getScheme()) && "totp".equals(authenticator.getHost()))
+            action("Open authenticator", () -> {
+                try { activity.startActivity(new Intent(Intent.ACTION_VIEW, authenticator)); }
+                catch (ActivityNotFoundException error) { error("No authenticator app is installed. Add this account in an authenticator using the setup key or QR code."); }
+            });
         EditText code = field("Authenticator code", false); code.setInputType(InputType.TYPE_CLASS_NUMBER); actions.addView(code);
         action("Verify and continue", () -> { try { runtime.command("account-totp", new JSONObject().put("setupId",setupId).put("code",code.getText().toString()), result -> { activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE); runtime.refresh(); },this::error); } catch(JSONException ignored) {} });
     }

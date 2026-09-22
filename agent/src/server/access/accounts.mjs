@@ -99,13 +99,29 @@ export async function enrollAccount(origin, value, { create = false, reset = fal
     await fs.chmod(paths.qr, 0o600);
   }
   if (reset) { await fs.rm(paths.complete, { force: true }); await writeJson(paths.pending, { username: value.username }); }
+  // Reuse Authelia's stored key, including when an unfinished setup resumes.
+  // These secrets are returned only over the private local enrollment channel.
+  const exported = await command(binary('authelia'), ['storage', 'user', 'totp', 'export', 'uri', '--config', paths.config], { env: await authEnvironment() });
+  let otpauthUrl, secret;
+  for (const line of exported.split(/\r?\n/)) {
+    if (!line.startsWith('otpauth://totp/')) continue;
+    try {
+      const uri = new URL(line);
+      if (decodeURIComponent(uri.pathname.slice(1)) !== 'BashKitten:' + value.username || uri.searchParams.get('issuer') !== 'BashKitten') continue;
+      const key = uri.searchParams.get('secret');
+      if (!/^[A-Z2-7]{16,128}$/.test(key || '')) continue;
+      otpauthUrl = uri.href; secret = key;
+      break;
+    } catch { /* Do not expose malformed secret-bearing output in errors. */ }
+  }
+  if (!otpauthUrl) throw Error('Authelia did not return the account setup key');
   const setupId = randomToken();
   for (const [key, flow] of flows) if (flow.until < Date.now()) flows.delete(key);
   if (flows.size > 8) flows.clear();
   flows.set(setupId, { cookies: session.cookies, username: value.username, origin, until: Date.now() + 10 * 60000 });
   const qr = await fs.readFile(paths.qr);
   if (qr.length > 1024 * 1024) throw Error('Invalid enrollment QR');
-  return { setupId, qrDataUrl: 'data:image/png;base64,' + qr.toString('base64') };
+  return { setupId, qrDataUrl: 'data:image/png;base64,' + qr.toString('base64'), secret, otpauthUrl };
 }
 export async function completeAccount({ setupId, code }) {
   const flow = flows.get(setupId);

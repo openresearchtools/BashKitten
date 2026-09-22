@@ -101,6 +101,7 @@ class AgentView {
     this.currentIdentity = null;
     this.layout = "full";
     this.browseWithAgent = Services.prefs.getBoolPref("bashkitten.agent.splitBrowsing", true);
+    this.enrollmentPrompted = false;
   }
 
   async init() {
@@ -110,7 +111,13 @@ class AgentView {
     const bar = html(doc, "div", { id: "bashkitten-agent-bar", style: "display:flex" });
     bar.append(html(doc, "label", {}, "Agent"));
     this.choice = html(doc, "select", { id: "bashkitten-agent-choice", "aria-label": "Agent server" });
-    this.choice.addEventListener("change", () => this.run(() => this.choose(this.choice.value)));
+    this.choice.addEventListener("change", () => this.run(() => {
+      if (this.choice.value === "connect-remote") {
+        this.choice.value = this.remote?.id || "";
+        return this.remotes();
+      }
+      return this.choose(this.choice.value);
+    }));
     bar.append(this.choice);
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
@@ -198,6 +205,7 @@ class AgentView {
       if (remote.kind === "llama") continue;
       this.choice.append(html(this.doc, "option", { value: remote.id }, remote.name));
     }
+    this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"));
     this.choice.value = selected;
   }
 
@@ -307,6 +315,10 @@ class AgentView {
     if (web.auth?.enrollmentRequired || web.auth?.initialized === false) {
       this.message("Set up Agent", "Create your local account and verify a two-factor code to continue.", () => this.enroll());
       this.power.textContent = "Turn off";
+      if (!this.enrollmentPrompted) {
+        this.enrollmentPrompted = true;
+        await this.enroll();
+      }
       return;
     }
     if (ownedViews.get(this.activeBrowser)?.authFor) return;
@@ -436,7 +448,6 @@ class AgentView {
     };
     add("Remotes", () => this.remotes());
     if (!this.remote) {
-      add("Account setup", () => this.enroll());
       add("Local connection identity", () => this.localIdentity());
     }
     for (const [name, value] of [["System", 2], ["Light", 1], ["Dark", 0]]) {
@@ -482,7 +493,9 @@ class AgentView {
 
   async enroll() {
     if (this.remote) return;
+    if (this.enrollmentDialog?.open) return this.enrollmentDialog.focus();
     const { dialog, content } = this.dialog("Set up your local Agent");
+    this.enrollmentDialog = dialog;
     const form = html(this.doc, "form");
     const error = html(this.doc, "p", { role: "alert" });
     const field = (title, type, name) => {
@@ -496,30 +509,62 @@ class AgentView {
     const resume = html(this.doc, "button", { type: "button" }, "Continue existing setup");
     let setupId;
     let code;
+    let secret;
+    let authenticatorURI;
+    dialog.addEventListener("close", () => {
+      password.value = "";
+      if (code) code.value = "";
+      secret = authenticatorURI = null;
+      this.enrollmentDialog = null;
+    }, { once: true });
     const create = async command => {
       const result = await control(command, { username: username.value, password: password.value });
       password.value = "";
       setupId = result.setupId;
-      form.replaceChildren(html(this.doc, "p", {}, "Scan this code in your authenticator, then enter its current six-digit code."));
       if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(result.qrDataUrl || "")) throw new Error("The controller did not supply an enrollment QR code.");
+      form.replaceChildren(html(this.doc, "p", {}, "Scan this code in your authenticator, then enter its current six-digit code."));
       form.append(html(this.doc, "img", { src: result.qrDataUrl, alt: "Two-factor enrollment QR code" }));
+      if (/^[A-Z2-7]+=*$/i.test(result.secret || "")) {
+        secret = result.secret;
+        const copy = html(this.doc, "button", { type: "button" }, "Copy setup key");
+        copy.addEventListener("click", () => {
+          Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(secret);
+          copy.textContent = "Key copied";
+        });
+        form.append(copy);
+      }
+      if (result.otpauthUrl?.startsWith("otpauth://totp/")) {
+        authenticatorURI = Services.io.newURI(result.otpauthUrl);
+        const open = html(this.doc, "button", { type: "button" }, "Open authenticator app");
+        open.addEventListener("click", () => {
+          Cc["@mozilla.org/uriloader/external-protocol-service;1"].getService(Ci.nsIExternalProtocolService).loadURI(
+            authenticatorURI, Services.scriptSecurityManager.getSystemPrincipal(), null,
+            this.win.browsingContext, false, true
+          );
+        });
+        form.append(open);
+      }
       code = field("Authenticator code", "text", "code");
       code.inputMode = "numeric"; code.autocomplete = "one-time-code";
+      code.pattern = "[0-9]{6}"; code.maxLength = 6;
       submit.textContent = "Verify and continue";
       form.append(submit, error);
     };
     resume.addEventListener("click", async () => {
+      if (!form.reportValidity()) return;
+      submit.disabled = resume.disabled = true;
       try { await create("account-enroll"); } catch (e) { error.textContent = e.message; }
+      finally { submit.disabled = resume.disabled = false; }
     });
     form.addEventListener("submit", async event => {
-      event.preventDefault(); submit.disabled = true; error.textContent = "";
+      event.preventDefault(); submit.disabled = resume.disabled = true; error.textContent = "";
       try {
         if (setupId) {
           await control("account-totp", { setupId, code: code.value });
           code.value = ""; dialog.close(); await this.reconnect();
         } else await create("account-create");
       } catch (e) { error.textContent = e.message; }
-      finally { submit.disabled = false; }
+      finally { submit.disabled = resume.disabled = false; }
     });
     form.append(submit, resume, error); content.append(form);
   }
