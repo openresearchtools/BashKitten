@@ -16,6 +16,7 @@ EXTRA_COMPONENTS += [
 
 EXTRA_JS_MODULES["services-settings"] += [
     "Attachments.sys.mjs",
+    "BashKittenSettingsPolicy.sys.mjs",
     "Database.sys.mjs",
     "IDBHelpers.sys.mjs",
     "remote-settings.sys.mjs",
@@ -27,7 +28,6 @@ EXTRA_JS_MODULES["services-settings"] += [
     "SyncHistory.sys.mjs",
     "UptakeTelemetry.sys.mjs",
     "Utils.sys.mjs",
-    "BashKittenSettingsPolicy.sys.mjs",
 ]
 
 XPCOM_MANIFESTS += [
