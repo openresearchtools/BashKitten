@@ -35,20 +35,19 @@ jobs:
       RUSTUP_TOOLCHAIN: '1.96.0'
       MACH_SHOW_PIP_OUTPUT: '1'
       SCCACHE_GHA_ENABLED: 'true'
-      BASHKITTEN_PUBLISHER_KEYSTORE: ${{ runner.temp }}/droid.p12
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       GRADLE_OPTS: '-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g'
       MOZ_SOURCE_REPO: https://github.com/openresearchtools/bashkitten
       MOZ_SOURCE_CHANGESET: ${{ github.sha }}
-      BASHKITTEN_COMPANION_LICENSES: ${{ runner.temp }}/companion-licenses.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - name: Prepare hosted runner
         run: |
+          printf '%s\n' "BASHKITTEN_PUBLISHER_KEYSTORE=$RUNNER_TEMP/droid.p12" "BASHKITTEN_COMPANION_LICENSES=$RUNNER_TEMP/companion-licenses.json" >> "$GITHUB_ENV"
           mkdir -p artifacts "$MOZBUILD_STATE_PATH"
           cat > "$MOZBUILD_STATE_PATH/machrc" <<'MACHRC'
           [mach_telemetry]
