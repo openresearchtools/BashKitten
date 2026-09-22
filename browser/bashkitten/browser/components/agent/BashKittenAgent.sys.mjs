@@ -198,6 +198,27 @@ class AgentView {
     this.button.setAttribute("aria-selected", "false");
   }
 
+  saveFileFrom(browser, url, referrerInfo) {
+    const entry = ownedViews.get(browser);
+    if (!entry || this.off || this.activeBrowser !== browser) return false;
+    const target = new URL(url);
+    if (target.origin !== new URL(entry.connection.url).origin ||
+        !/^\/api\/(?:files\/(?:content|archive|jobs\/[a-f0-9-]{36}\/download)|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(target.pathname)) return false;
+    const principal = browser.browsingContext.currentWindowGlobal.documentPrincipal;
+    if (principal.originNoSuffix !== target.origin || principal.originAttributes.userContextId !== entry.connection.userContextId) {
+      throw new Error("The file's protected Agent context is no longer available.");
+    }
+    // Reuse Gecko's streaming download path and response filename/MIME handling.
+    // A normal tab must never inherit the Agent's authenticated storage context.
+    this.win.nsContextMenu.prototype.saveHelper.call(
+      { window: this.win, browser, principal }, target.href,
+      (target.searchParams.get("path") || target.pathname).split("/").at(-1),
+      null, true, null, referrerInfo, browser.cookieJarSettings,
+      browser.outerWindowID, null, browser.browsingContext.usePrivateBrowsing
+    );
+    return true;
+  }
+
   async refreshRemotes() {
     const selected = this.remote?.id || "";
     this.choice.replaceChildren(html(this.doc, "option", { value: "" }, "Local"));

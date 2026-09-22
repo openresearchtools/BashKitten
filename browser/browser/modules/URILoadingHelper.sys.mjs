@@ -501,6 +501,9 @@ export const URILoadingHelper = {
           Cr.NS_ERROR_ABORT
         );
       }
+      if (agentBrowser && window.BashKittenAgent.saveFileFrom(agentBrowser, url, params.referrerInfo)) {
+        return;
+      }
       if (agentBrowser && where != "save") {
         const target = Services.io.newURI(url);
         const enrolled = Services.io.newURI(
