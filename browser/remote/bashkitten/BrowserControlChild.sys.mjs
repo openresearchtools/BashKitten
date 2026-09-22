@@ -1178,7 +1178,8 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
   #rawObjects = new Map();
 
   isProtected() {
-    const attrs = this.contentWindow.document.nodePrincipal.originAttributes;
+    const attrs = this.contentWindow?.document?.nodePrincipal?.originAttributes;
+    if (!attrs) return true;
     const id = attrs.userContextId;
     return (id >= 0xB4500000 && id <= 0xB450FFFF) ||
       attrs.geckoViewSessionContextId?.startsWith("gvctx626173686b697474656e2d6167656e742d75692d");
@@ -1249,6 +1250,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
   }
 
   #onConsoleAPIMessage = (_eventName, data = {}) => {
+    if (this.isProtected()) return;
     const args = (data.arguments ?? []).map(consoleArgumentText);
     this.#appendConsoleMessage({
       type: "console",
@@ -1267,6 +1269,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
   };
 
   #onJavaScriptMessage = (_eventName, data = {}) => {
+    if (this.isProtected()) return;
     this.#appendConsoleMessage({
       type: "javascript",
       level: data.level ?? "error",
