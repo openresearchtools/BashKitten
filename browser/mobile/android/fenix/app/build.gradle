@@ -856,6 +856,7 @@ androidComponents.onVariants(androidComponents.selector().withBuildType('release
 tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach { dependsOn productAbout }
 
 tasks.register('stageBashKittenDependencySources') {
+    notCompatibleWithConfigurationCache('Resolves matching release dependency sources through the Gradle project model')
     doLast {
         def ids = configurations.releaseRuntimeClasspath.incoming.resolutionResult.allComponents
             .collect { it.id }.findAll { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
