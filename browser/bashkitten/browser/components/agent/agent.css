@@ -21,5 +21,6 @@
 .bashkitten-agent-dialog pre, .bashkitten-agent-dialog textarea { white-space: pre-wrap; overflow-wrap: anywhere; width: 100%; box-sizing: border-box; }
 .bashkitten-agent-dialog a { color: LinkText; }
 .bashkitten-agent-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
-:root[bashkitten-agent-narrow="true"][bashkitten-agent-visible="true"] #bashkitten-agent-pane { width: 100%; max-width: none; flex: 1; border: 0; }
-:root[bashkitten-agent-narrow="true"][bashkitten-agent-visible="true"] :is(#tabbrowser-tabbox, #sidebar-container, #sidebar-box, #sidebar-splitter, #sidebar-launcher-splitter, #ai-window-box, #ai-window-splitter, #nav-bar, #TabsToolbar) { visibility: collapse !important; }
+:root[bashkitten-agent-narrow="true"] #browser { position: relative; }
+:root[bashkitten-agent-narrow="true"][bashkitten-agent-visible="true"] #bashkitten-agent-pane { position: absolute; inset: 0; z-index: 5; width: 100%; max-width: none; border: 0; }
+:root[bashkitten-agent-narrow="true"][bashkitten-agent-visible="true"] :is(#sidebar-container, #sidebar-box, #sidebar-splitter, #sidebar-launcher-splitter, #ai-window-box, #ai-window-splitter, #nav-bar, #TabsToolbar) { visibility: collapse !important; }

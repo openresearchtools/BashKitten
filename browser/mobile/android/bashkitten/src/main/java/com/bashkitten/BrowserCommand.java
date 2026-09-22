@@ -119,6 +119,11 @@ public final class BrowserCommand {
             if (!response.has("error")) response = nativeRequest(browserUid, command);
         }
         result = response.optJSONObject("result");
+        if (!authorize && result != null && result.has("appGrant")) {
+            System.out.println(new JSONObject().put("error", "Browser permission changed before the command; review Agent access and retry")
+                .put("code", "authorization_revoked"));
+            return 1;
+        }
         if (result != null && result.has("launch") && !noLaunch) {
             launchNative("launch", result.getString("launch")); response = new JSONObject().put("result", true);
         }

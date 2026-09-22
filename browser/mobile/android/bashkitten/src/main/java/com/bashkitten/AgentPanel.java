@@ -222,19 +222,68 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             return true;
         });
         menu.getMenu().add("Agent access").setOnMenuItemClickListener(i->{activity.startActivity(new Intent(activity,AgentAccessActivity.class));return true;});
+        menu.getMenu().add("Check for browser update").setOnMenuItemClickListener(i -> { checkBrowserUpdate(); return true; });
         menu.getMenu().add("Notifications").setOnMenuItemClickListener(i->{notifications();return true;});
         menu.getMenu().add("Appearance").setOnMenuItemClickListener(i->{appearance();return true;});
         menu.getMenu().add("About and licenses").setOnMenuItemClickListener(i->{activity.startActivity(new Intent(activity,LicensesActivity.class));return true;});
         menu.getMenu().add("New tab").setOnMenuItemClickListener(i->{app.create(BrowserApp.USER,false,"about:blank",tab->{app.show(tab);showBrowser();},app::message);return true;});menu.show();
     }
     private void appearance(){String[] modes={"System","Light","Dark"};new AlertDialog.Builder(activity).setTitle("Appearance").setSingleChoiceItems(modes,app.policies.getInt("agent.theme",0),(d,i)->{app.policies.edit().putInt("agent.theme",i).apply();androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(i==1?androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO:i==2?androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES:androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);d.dismiss();}).show();}
-    private void notifications(){boolean[] enabled={app.policies.getBoolean("agent.notifications",false),app.policies.getBoolean("agent.notifications.hidden",true),app.policies.getBoolean("agent.notifications.preview",true)};new AlertDialog.Builder(activity).setTitle("Completed turns").setMultiChoiceItems(new String[]{"Notify when a turn completes","Only while Agent is hidden","Include message preview"},enabled,(d,i,checked)->enabled[i]=checked).setPositiveButton("Save",(d,w)->{app.policies.edit().putBoolean("agent.notifications",enabled[0]).putBoolean("agent.notifications.hidden",enabled[1]).putBoolean("agent.notifications.preview",enabled[2]).apply();if(enabled[0]&&Build.VERSION.SDK_INT>=33)activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},NOTIFICATION_PERMISSION);}).setNegativeButton("Cancel",null).show();}
+    private void notifications() {
+        boolean[] enabled = {app.policies.getBoolean("agent.notifications", false), app.policies.getBoolean("agent.notifications.hidden", true), app.policies.getBoolean("agent.notifications.preview", true)};
+        new AlertDialog.Builder(activity).setTitle("Completed turns")
+            .setMultiChoiceItems(new String[]{"Notify when a turn completes", "Only while Agent is hidden", "Include message preview"}, enabled, (d,i,checked) -> enabled[i] = checked)
+            .setPositiveButton("Save", (d,w) -> {
+                app.policies.edit().putBoolean("agent.notifications", enabled[0]).putBoolean("agent.notifications.hidden", enabled[1]).putBoolean("agent.notifications.preview", enabled[2]).apply();
+                if (runtime.selected.equals("local")) try { runtime.command("notification-settings", new JSONObject().put("settings", new JSONObject().put("enabled", enabled[0]).put("onlyWhenHidden", enabled[1]).put("preview", enabled[2])), ignored -> {}, this::error); } catch (JSONException ignored) {}
+                if (enabled[0] && Build.VERSION.SDK_INT >= 33) activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION);
+            }).setNegativeButton("Cancel", null).show();
+    }
+    private void checkBrowserUpdate() {
+        app.message("Checking for a BashKitten update…");
+        new Thread(() -> {
+            try {
+                java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL("https://api.github.com/repos/openresearchtools/bashkitten/releases/latest").openConnection();
+                connection.setConnectTimeout(15000); connection.setReadTimeout(15000); connection.setRequestProperty("Accept", "application/vnd.github+json");
+                JSONObject release;
+                try (InputStream input = connection.getInputStream()) { release = new JSONObject(new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)); }
+                finally { connection.disconnect(); }
+                String current = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionName;
+                String available = release.getString("tag_name").replaceFirst("^v", "");
+                String[] have = current.split("\\."), latest = available.split("\\.");
+                int comparison = 0;
+                for (int i=0; i<Math.max(have.length,latest.length) && comparison==0; i++) comparison = Integer.compare(i<latest.length ? Integer.parseInt(latest[i]) : 0, i<have.length ? Integer.parseInt(have[i]) : 0);
+                if (comparison <= 0) { app.main.post(() -> app.message("BashKitten is up to date.")); return; }
+                JSONArray assets = release.getJSONArray("assets"); String download = null;
+                for (int i=0; i<assets.length(); i++) { JSONObject asset=assets.getJSONObject(i); if (asset.getString("name").endsWith("arm64-v8a.apk")) { download=asset.getString("browser_download_url"); break; } }
+                if (download == null) throw new IOException("Release has no Android APK.");
+                String link = download;
+                app.main.post(() -> new AlertDialog.Builder(activity).setTitle("BashKitten " + available).setMessage("A browser update is available.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
+            } catch (Exception error) { app.main.post(() -> app.message("The update check failed. Try again when online.")); }
+        }, "bashkitten-update").start();
+    }
     public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new AlertDialog.Builder(activity).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
     private void packageCommand(String command, TextView output) {
         try {
-            if (command.equals("status")) { runtime.command("package-inventory", new JSONObject(), value -> output.setText(value.toString()), output::setText); return; }
+            if (command.equals("status")) { runtime.command("package-inventory", new JSONObject(), value -> output.setText(inventoryText(value)), output::setText); return; }
             runtime.command("package-job", new JSONObject().put("kind", command), value -> showPackageJob(value, output), output::setText);
         } catch (JSONException ignored) {}
+    }
+    private String inventoryText(JSONObject inventory) {
+        StringBuilder text = new StringBuilder("Installed packages\n\n");
+        for (String source : new String[]{"apt", "npm"}) {
+            text.append(source.equals("apt") ? "Termux / APT\n" : "\nnpm\n");
+            JSONArray items = inventory.optJSONArray(source);
+            if (items != null) for (int i=0; i<items.length(); i++) {
+                JSONObject item = items.optJSONObject(i);
+                if (item != null) text.append(item.optString("name")).append("  ").append(item.optString("version")).append('\n');
+            }
+        }
+        text.append("\nPi  ").append(inventory.optString("pi"));
+        JSONObject search = inventory.optJSONObject("search");
+        if (search != null) text.append("\nDDGS  ").append(search.optString("version", search.optString("ddgs", "Packaged")));
+        if (inventory.has("npmError")) text.append("\n\n").append(inventory.optString("npmError"));
+        return text.toString();
     }
     private void showPackageJob(JSONObject value, TextView output) {
         JSONObject packages = value.optJSONObject("packages");

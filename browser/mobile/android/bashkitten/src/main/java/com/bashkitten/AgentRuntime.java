@@ -349,7 +349,7 @@ public final class AgentRuntime {
                     .putBoolean("agent.notifications.preview", args.optBoolean("preview", true)).apply();
                 Activity current = activity.get();
                 if (args.optBoolean("enabled") && current != null && Build.VERSION.SDK_INT >= 33) current.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, AgentPanel.NOTIFICATION_PERMISSION);
-                if (selected.equals("local")) command("notification-settings", args, ignored -> {}, ignored -> {});
+                if (selected.equals("local")) command("notification-settings", new JSONObject().put("settings", args), ignored -> {}, ignored -> {});
             }
             boolean permitted = Build.VERSION.SDK_INT < 33 || app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
             JSONObject result = new JSONObject().put("enabled", permitted && app.policies.getBoolean("agent.notifications", false))

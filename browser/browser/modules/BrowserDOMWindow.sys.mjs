@@ -53,24 +53,35 @@ export class BrowserDOMWindow {
     this.win = win;
   }
 
-  #redirectProtectedPopup(uri, openWindowInfo, openerBrowser, principal, referrerInfo) {
+  #redirectProtectedPopup(
+    uri,
+    openWindowInfo,
+    openerBrowser,
+    principal,
+    referrerInfo
+  ) {
     const params = {
-      openerBrowser: openerBrowser || openWindowInfo?.parent?.top.embedderElement,
+      openerBrowser:
+        openerBrowser || openWindowInfo?.parent?.top.embedderElement,
       triggeringPrincipal: principal,
       userContextId: openWindowInfo?.originAttributes.userContextId,
       referrerInfo,
     };
-    if (!lazy.URILoadingHelper.agentOpener(this.win, params)) {
+    const opener = lazy.URILoadingHelper.agentOpener(this.win, params);
+    if (opener === false) {
       return;
     }
     // The pending remote window already carries the opener's immutable origin
     // attributes. Cancel it and create an independent ordinary tab instead.
     // Throwing abort also prevents Gecko falling back to a new native window.
     openWindowInfo?.cancel();
-    if (uri && uri.spec != "about:blank") {
+    if (opener && uri && uri.spec != "about:blank") {
       lazy.URILoadingHelper.openLinkIn(this.win, uri.spec, "tab", params);
     }
-    throw Components.Exception("Protected Agent popup redirected", Cr.NS_ERROR_ABORT);
+    throw Components.Exception(
+      "Protected Agent popup redirected",
+      Cr.NS_ERROR_ABORT
+    );
   }
 
   /**
@@ -120,7 +131,11 @@ export class BrowserDOMWindow {
   ) {
     let win, needToFocusWin;
     this.#redirectProtectedPopup(
-      aURI, aOpenWindowInfo, aOpenerBrowser, aTriggeringPrincipal, aReferrerInfo
+      aURI,
+      aOpenWindowInfo,
+      aOpenerBrowser,
+      aTriggeringPrincipal,
+      aReferrerInfo
     );
 
     // try the current window. if we're in a popup or a taskbar tab, fall
@@ -207,7 +222,13 @@ export class BrowserDOMWindow {
     aPolicyContainer
   ) {
     if (aWhere != Ci.nsIBrowserDOMWindow.OPEN_PRINT_BROWSER) {
-      this.#redirectProtectedPopup(aURI, aOpenWindowInfo, null, aTriggeringPrincipal, null);
+      this.#redirectProtectedPopup(
+        aURI,
+        aOpenWindowInfo,
+        null,
+        aTriggeringPrincipal,
+        null
+      );
     }
     return this.#getContentWindowOrOpenURI(
       null,
@@ -470,8 +491,11 @@ export class BrowserDOMWindow {
   createContentWindowInFrame(aURI, aParams, aWhere, aFlags, aName) {
     if (aWhere != Ci.nsIBrowserDOMWindow.OPEN_PRINT_BROWSER) {
       this.#redirectProtectedPopup(
-        aURI, aParams.openWindowInfo, aParams.openerBrowser,
-        aParams.triggeringPrincipal, aParams.referrerInfo
+        aURI,
+        aParams.openWindowInfo,
+        aParams.openerBrowser,
+        aParams.triggeringPrincipal,
+        aParams.referrerInfo
       );
     }
     // Passing a null-URI to only create the content window,
