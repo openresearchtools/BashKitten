@@ -716,6 +716,28 @@ context can persist its login independently; its cookies/keys never become the
 ordinary onion tab's session. Enrollment/remote-management tools are not exposed
 to the agent automation API.
 
+### Hosted local websites
+
+In the same **Settings → Remote access** panel, let the owner add, edit, disable
+and remove named loopback HTTP services. A single valid DNS label such as
+`randomwebui` and target `http://127.0.0.1:3030` publishes
+`https://randomwebui.<agent-address>.onion` through the existing Tor/Caddy stack.
+Reject invalid labels, non-loopback targets and embedded credentials. Keep all
+these websites behind the same Authelia two-factor policy; the existing separate
+llama.cpp bearer-auth route remains the sole API exception. Reuse Torkitten's
+route pattern and attribution without adding a second control UI.
+
+Show enabled, reachable services in a compact bookmark row above the connected
+Agent chat. Check health on visible/focus/manual refresh with bounded cached
+loopback requests, not continuous polling. Opening a bookmark creates an ordinary
+controllable private Tor tab, with the usual Agent split on desktop/tablet. The
+native browser verifies the registered service and inherits only that enrolled
+server's CA and Tor client authorization for its valid service hostnames. No
+global certificate bypass. Keep account/login pages protected from automation;
+hosted sites must not receive or overwrite Authelia credentials. Local and onion
+connections use the same account and factor, with stock Authelia cookie scopes;
+do not copy a loopback session into an onion cookie provider or bypass login.
+
 ## 7. Desktop llama.cpp and the browser's loopback relay
 
 There are two distinct functions: a Linux backend can run/publish llama.cpp;
@@ -775,6 +797,31 @@ in-flight inference is reported to stock Pi without silently replaying a prompt.
 `/health` alone is not proof of token validity: upstream deliberately exempts it
 from API-key checks. Also verify an authenticated model request and the selected
 model. [llama.cpp server interface](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
+
+### Model downloads and one models folder
+
+Add **Settings → Download models** to the shared web UI, usable locally and
+remotely on Linux and Termux. Adapt the useful SimpleHF/BashKitten Rust downloader
+behavior, retaining donor license texts and provenance. Search Hugging Face,
+browse repository files and sizes, choose downloads, and display real progress
+with Pause, Resume and Cancel. Pin each download to its selected immutable
+revision, stream to temporary files, validate resumed ranges, and retain progress
+across server restarts. Closing the UI does not stop a download; whole-Agent
+shutdown stops owned transfers safely. Do not add another resident daemon.
+
+Save an optional masked Hugging Face token in private server credential storage,
+never status responses, URLs, logs or browser localStorage. Preserve native
+password-store integration where the client owns a credential, without making
+headless or remote downloads depend on that client staying open.
+
+One working-folder-style picker selects the shared models directory. Downloads
+go there, and managed desktop llama.cpp receives that same directory through
+its native `--models-dir`. Store each GGUF model/quantization family in a direct
+child directory that native llama.cpp discovers, preserving filenames and split
+shards; do not invent a recursive model registry or shadow symlink tree. Retain
+original repository paths in download metadata. Refresh the native model list
+after downloads and load the selected native model ID before declaring Ready.
+Preserve existing external HTTP providers and existing single-model setups.
 
 ## 8. Built-in DDGS search and Markdown skill
 
@@ -1047,3 +1094,7 @@ Stage, commit and push each finished implementation slice, on the agreed product
 branch. Re-read this whole plan after compaction. Do not replace stock Pi,
 introduce a second browser-control framework, recreate Termux-suite, or rebuild
 the web UI while carrying out this migration.
+The current delivery also includes real authenticated hosted-site browsing and
+model search/download/resume/shared-folder checks on Linux and Termux, plus the
+native Android/Linux client integration. Do not resume unrelated browser or
+performance audits; finish these features and the complete working packages.
