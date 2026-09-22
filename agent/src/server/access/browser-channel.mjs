@@ -82,6 +82,13 @@ async function openBrowserSocket(id) {
   try { await opening; await fs.chmod(file, 0o600); return file; }
   catch (error) { sockets.delete(id); throw error; }
 }
+export async function closeBrowserSocket(id) {
+  await openingSockets.get(id)?.catch(() => {});
+  const server = sockets.get(id);
+  if (server) { sockets.delete(id); server.close(); server.closeAllConnections(); }
+  bindings.delete(id);
+  await fs.rm(browserSocketPath(id), { force: true });
+}
 export async function handleBrowserChannel(req, res, record, route) {
   if (!route.startsWith('/api/browser-channel/')) return false;
   if (req.method !== 'POST') throw Object.assign(Error('Use POST'), { status: 405 });

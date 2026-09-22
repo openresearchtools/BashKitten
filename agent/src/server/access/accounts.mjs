@@ -56,7 +56,7 @@ export async function renderAuthelia(origins, instanceId) {
   };
   await writeJson(paths.config, config);
 }
-export async function authCall(origin, route, input, cookies = '') {
+export async function authCall(origin, route, input, cookies = '', timeout = 15000) {
   const target = new URL(origin);
   const result = await unixRequest(paths.auth, '/login' + route, {
     method: input === undefined ? 'GET' : 'POST',
@@ -64,6 +64,7 @@ export async function authCall(origin, route, input, cookies = '') {
       'x-forwarded-host': target.host, 'x-forwarded-proto': 'https', 'x-forwarded-for': '127.0.0.1',
       'x-forwarded-uri': '/login' + route, 'x-forwarded-method': input === undefined ? 'GET' : 'POST' },
     body: input === undefined ? undefined : JSON.stringify(input),
+    timeout,
   });
   const value = JSON.parse(result.body);
   if (result.status < 200 || result.status > 299 || value.status === 'KO') throw Error('Authelia rejected the account or verification code');

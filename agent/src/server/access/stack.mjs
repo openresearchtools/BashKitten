@@ -45,7 +45,7 @@ export class AccessStack {
         this.authEnv = await authEnvironment();
         await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
         await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
-        await this.waitUntil(async () => { await authCall(this.origin, '/api/health'); return true; }, 'Authelia');
+        await this.waitUntil(async () => { await authCall(this.origin, '/api/health', undefined, '', 2000); return true; }, 'Authelia');
         await this.launch('backend', process.execPath, [backendScript], { ...process.env,
           BASHKITTEN_ACCESS_ORIGIN: this.origin, BASHKITTEN_PROXY_TOKEN: this.proxyToken,
           BASHKITTEN_INSTANCE_TOKEN: this.instanceToken, BASHKITTEN_BACKEND_SOCKET: paths.backend,
@@ -163,6 +163,7 @@ ${backend}
   }
   async reconfigureRemote() {
     if (!this.ready || this.stopping) throw Error('Turn on Agent before changing remote access');
+    this.reconfiguring = true;
     this.ready = false;
     const previous = JSON.stringify(this.remoteOrigins || []);
     const stopNamed = async name => {
@@ -178,7 +179,7 @@ ${backend}
         await renderAuthelia([this.origin, ...this.remoteOrigins], this.identity.instanceId);
         await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
         await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
-        await this.waitUntil(async () => { await authCall(this.origin, '/api/health'); return true; }, 'Authelia');
+        await this.waitUntil(async () => { await authCall(this.origin, '/api/health', undefined, '', 2000); return true; }, 'Authelia');
         await this.writeCaddy();
         await this.launch('caddy', binary('caddy'), ['run', '--config', paths.caddy, '--adapter', 'caddyfile'], { ...process.env, XDG_DATA_HOME: paths.storage });
         await this.waitUntil(() => verifiedHttps(this.origin, this.identity.caPem), 'HTTPS');
@@ -189,6 +190,7 @@ ${backend}
       this.info.children = this.identities(); await writeJson(serverFile, this.info);
       this.ready = true;
     } catch (error) { this.fatal?.(error); throw error; }
+    finally { this.reconfiguring = false; }
   }
   async reload() {
     if (!this.ready || this.stopping) return;
@@ -199,7 +201,7 @@ ${backend}
     if (!this.ready || !this.info) return false;
     for (const child of this.children) if (!await sameProcess(child)) return false;
     try {
-      await authCall(this.origin, '/api/health');
+      await authCall(this.origin, '/api/health', undefined, '', 2000);
       return await verifiedHttps(this.origin, this.identity.caPem);
     } catch { return false; }
   }

@@ -24,7 +24,15 @@
       "mupdf (>= 1.28.2-1)",
       "git"
     ],
-    "builderImage": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6"
+    "builderImage": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6",
+    "patches": [
+      {
+        "path": "agent/packaging/termux/search/python-primp/termux-system-dns.patch",
+        "sha256": "091250590902a242c04593f575087c2830211751e4849543772892385a55ce9c",
+        "component": "primp-1.3.1",
+        "reason": "Use Bionic getaddrinfo without a Java Activity for default DNS."
+      }
+    ]
   },
   "packages": [
     {

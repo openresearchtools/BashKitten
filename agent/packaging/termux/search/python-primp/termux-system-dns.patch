@@ -1,0 +1,14 @@
+--- a/crates/primp-reqwest/src/async_impl/client.rs
++++ b/crates/primp-reqwest/src/async_impl/client.rs
+@@ -406,7 +406,10 @@
+                 ))]
+                 interface: None,
+                 nodelay: true,
+-                hickory_dns: cfg!(feature = "hickory-dns"),
++                // Termux has no JVM/Activity for Hickory's Android DNS discovery.
++                // Use the existing Bionic getaddrinfo resolver; explicit resolver
++                // overrides and certificate verification remain unchanged.
++                hickory_dns: cfg!(all(feature = "hickory-dns", not(target_os = "android"))),
+                 #[cfg(feature = "cookies")]
+                 cookie_store: None,
+                 https_only: false,

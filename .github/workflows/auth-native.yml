@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   workflow_call:
   push:
-    branches: [codex/browser-integration, codex/native-components]
+    branches: [main, codex/native-components]
     paths: ['auth/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml']
 
 permissions:

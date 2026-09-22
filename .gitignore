@@ -30,3 +30,5 @@ __pycache__/
 /agent/licenses.json
 /agent/about.html
 /agent/dist/
+
+/agent/work/

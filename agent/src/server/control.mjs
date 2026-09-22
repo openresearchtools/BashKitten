@@ -6,7 +6,7 @@ import { openSync, closeSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { dataDir, sessionDir, privateDir, readJson, writeJson, json, jsonBody, socketRequest, socketPath, allMeta, body } from './common.mjs';
+import { dataDir, sessionDir, privateDir, readMeta, readJson, writeJson, json, jsonBody, socketRequest, socketPath, allMeta, body } from './common.mjs';
 import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
 import { Jobs } from './updates/jobs.mjs';
@@ -54,7 +54,6 @@ export async function ensureManager() {
       await sleep(100);
     } catch { break; }
   }
-  if (process.env.BASHKITTEN_NO_AUTOSTART === '1') throw Error('The Termux controller is starting; retry after setup');
   await privateDir(path.dirname(controlSocket));
   const child = spawnManager(true); child.unref();
   let error; child.on('error', value => { error = value; });
@@ -74,7 +73,7 @@ async function ownedWorker(id) {
   return args.includes(worker) && args.includes(id) ? { pid, started } : null;
 }
 async function stopPi(id, force = false, markStopped = true) {
-  if (!(await allMeta()).some(meta => meta.id === id)) throw Error('Session not found');
+  await readMeta(id);
   if (markStopped) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
   const owned = await ownedWorker(id);
   try { await socketRequest(socketPath(id), '/shutdown', {}, force ? 1000 : 10000); }
@@ -133,10 +132,12 @@ async function serve() {
   }
   async function stopGroup() {
     await stack.stopIngress();
-    for (const meta of await allMeta()) await stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false));
+    const workers = await Promise.allSettled((await allMeta()).map(meta => stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false))));
     if (platform === 'linux') await stopManagedLlama();
     await stack.stop();
     await releaseWake();
+    const failure = workers.find(result => result.status === 'rejected');
+    if (failure) throw failure.reason;
   }
   async function turnOff(error = null) {
     state.web = false; stopping = true;
@@ -155,8 +156,8 @@ async function serve() {
     }));
     return { version: 2, platform, manager: { pid: process.pid, revision, exiting, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
       packages: { ...await updateStatus(), job: await jobs.status() },
-      web: { status: stopping ? 'stopping' : starting ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
-        desired: state.web, url: stack.ready ? stack.origin : undefined, error: lastError, ...await stack.status() },
+      web: { status: stopping ? 'stopping' : starting || stack.reconfiguring ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
+        desired: state.web, url: stack.ready || stack.reconfiguring ? stack.origin : undefined, error: lastError, ...await stack.status() },
       ...(platform === 'linux' ? { llama: managedLlamaStatus() } : {}), sessions };
   }
   async function reloadServices(job) {

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   workflow_call:
   push:
-    branches: [main, codex/browser-integration, codex/native-components]
+    branches: [main, codex/native-components]
     paths:
       - agent/search/**
       - agent/packaging/termux/search/**
@@ -38,6 +38,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/search/downloads
           key: search-sources-${{ hashFiles('agent/search/runtime-lock.json') }}
+          restore-keys: search-sources-
       - name: Assemble locked native runtime and source
         run: python3 agent/search/build/runtime.py '${{ matrix.target }}' --output "$RUNNER_TEMP/search"
       - name: Exercise packaged search and document conversion
@@ -164,6 +165,7 @@ jobs:
         with:
           path: ${{ runner.temp }}/search/downloads
           key: search-sources-${{ hashFiles('agent/search/runtime-lock.json') }}
+          restore-keys: search-sources-
       - name: Assemble Termux payload with private native binding
         run: |
           python3 agent/search/build/runtime.py termux-aarch64 --output "$RUNNER_TEMP/search" \

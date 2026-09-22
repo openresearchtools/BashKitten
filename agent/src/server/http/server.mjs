@@ -21,7 +21,7 @@ import { platform } from '../platform/index.mjs';
 import { visibleSession } from '../rpc/notifications.mjs';
 import { claimInstance, processStart, probeBackend } from '../instance.mjs';
 import { paths } from '../access/paths.mjs';
-import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket } from '../access/browser-channel.mjs';
+import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -145,6 +145,7 @@ async function deleteSession(id) {
   for (const name of ['ui.json', 'drafts.json', 'lifecycle.json', 'worker.log']) await fs.rm(path.join(sessionDir(id), name), { force: true });
   await fs.rmdir(sessionDir(id)).catch(() => {});
   await fs.rm(socketPath(id), { force: true }); await fs.rm(socketPath(id) + '.lock', { force: true });
+  await closeBrowserSocket(id);
 }
 function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 }); }
 const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));

@@ -108,7 +108,7 @@ public final class TermuxConnection {
             return;
         }
         // Secrets remain on stdin: no password, factor or connection key enters argv or logs.
-        String script = "export BASHKITTEN_NO_AUTOSTART=1; if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
+        String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
                 + "exec '" + PREFIX + "/bin/bashkittenctl' \"$1\" --stdin; else "
                 + "printf '{\"error\":\"BashKitten packages are not installed yet.\"}' >&2; exit 1; fi";
         long timeout = command.equals("start") || command.equals("restart") || command.equals("status") ? 120000 : 60000;
