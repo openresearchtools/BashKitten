@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   workflow_call:
   push:
-    branches: [main, codex/native-components]
+    branches: [main]
     paths:
       - agent/search/**
       - agent/packaging/termux/search/**
