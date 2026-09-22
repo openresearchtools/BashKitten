@@ -24,9 +24,9 @@ const permissionExceptionsL10n = {
     window: "permissions-exceptions-etp-window2",
     description: "permissions-exceptions-manage-etp-desc",
   },
-  "wildbuzzard-blocker": {
-    window: "permissions-exceptions-wildbuzzard-blocker-window2",
-    description: "permissions-exceptions-manage-wildbuzzard-blocker-desc",
+  "bashkitten-blocker": {
+    window: "permissions-exceptions-bashkitten-blocker-window2",
+    description: "permissions-exceptions-manage-bashkitten-blocker-desc",
   },
   cookie: {
     window: "permissions-exceptions-cookie-window2",
@@ -448,12 +448,12 @@ var gPermissionManager = {
         });
       return;
     }
-    // In case of an ETP or WildBuzzard blocker exception we compute the
+    // In case of an ETP or BashKitten blocker exception we compute the
     // contentBlockingAllowList principal to align with the allow list behavior
     // triggered by the protections panel.
     if (
       this._type == "trackingprotection" ||
-      this._type == "wildbuzzard-blocker"
+      this._type == "bashkitten-blocker"
     ) {
       principals = principals.map(
         lazy.contentBlockingAllowList.computeContentBlockingAllowListPrincipal

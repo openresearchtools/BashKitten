@@ -80,7 +80,7 @@ DIRS += [
     "uitour",
     "urlbar",
     "webrtc",
-    "wildbuzzardcontrol",
+    "bashkittencontrol",
 ]
 
 DIRS += ["build"]

@@ -9,13 +9,13 @@ const RESOURCE_BUNDLE_PATH = [
   "resources",
   "resources.json",
 ];
-const ENGINE_CONTRACT_ID = "@wildbuzzard.invalid/wildbuzzard-blocker-engine;1";
+const ENGINE_CONTRACT_ID = "@bashkitten.invalid/bashkitten-blocker-engine;1";
 
 let gResourcesJson;
 
 function makeEngine(rule) {
   const engine = Cc[ENGINE_CONTRACT_ID].createInstance(
-    Ci.nsIWildBuzzardBlockerEngine
+    Ci.nsIBashKittenBlockerEngine
   );
   engine.initFromLists([rule]);
   engine.useResources(gResourcesJson);

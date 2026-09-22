@@ -406,4 +406,4 @@ skip-if = [
 
 ["test_x509.js"]
 
-["test_wildbuzzard_onion_trust.js"]
+["test_bashkitten_onion_trust.js"]

@@ -135,7 +135,8 @@ class NSSCertDBTrustDomain : public mozilla::pkix::TrustDomain {
       const UniquePtr<mozilla::ct::MultiLogCTVerifier>& ctVerifier,
       /*out*/ nsTArray<nsTArray<uint8_t>>& builtChain,
       /*optional*/ PinningTelemetryInfo* pinningTelemetryInfo = nullptr,
-      /*optional*/ const char* hostname = nullptr);
+      /*optional*/ const char* hostname = nullptr,
+      /*optional*/ bool onlyProvidedRoots = false);
 
   virtual Result FindIssuer(mozilla::pkix::Input encodedIssuerName,
                             IssuerChecker& checker,
@@ -292,6 +293,7 @@ class NSSCertDBTrustDomain : public mozilla::pkix::TrustDomain {
   bool mIsBuiltChainRootBuiltInRoot;
   PinningTelemetryInfo* mPinningTelemetryInfo;
   const char* mHostname;  // non-owning - only used for pinning checks
+  const bool mOnlyProvidedRoots;
   nsCOMPtr<nsICertStorage> mCertStorage;
   CertVerifier::OCSPStaplingStatus mOCSPStaplingStatus;
   // Certificate Transparency data extracted during certificate verification

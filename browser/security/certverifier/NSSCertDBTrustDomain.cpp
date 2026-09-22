@@ -72,7 +72,8 @@ NSSCertDBTrustDomain::NSSCertDBTrustDomain(
     const UniquePtr<mozilla::ct::MultiLogCTVerifier>& ctVerifier,
     /*out*/ nsTArray<nsTArray<uint8_t>>& builtChain,
     /*optional*/ PinningTelemetryInfo* pinningTelemetryInfo,
-    /*optional*/ const char* hostname)
+    /*optional*/ const char* hostname,
+    /*optional*/ bool onlyProvidedRoots)
     : mCertDBTrustType(certDBTrustType),
       mOCSPFetching(ocspFetching),
       mOCSPCache(ocspCache),
@@ -94,6 +95,7 @@ NSSCertDBTrustDomain::NSSCertDBTrustDomain(
       mIsBuiltChainRootBuiltInRoot(false),
       mPinningTelemetryInfo(pinningTelemetryInfo),
       mHostname(hostname),
+      mOnlyProvidedRoots(onlyProvidedRoots),
       mCertStorage(do_GetService(NS_CERT_STORAGE_CID)),
       mOCSPStaplingStatus(CertVerifier::OCSP_STAPLING_NEVER_CHECKED),
       mBuiltInRootsModule(SECMOD_FindModule(kRootModuleName.get())),
@@ -477,6 +479,11 @@ Result NSSCertDBTrustDomain::GetCertTrust(EndEntityOrCA endEntityOrCA,
   }
 
   // This may be a third-party intermediate.
+  if (mOnlyProvidedRoots) {
+    trustLevel = TrustLevel::InheritsTrust;
+    return Success;
+  }
+
   for (const auto& thirdPartyIntermediateInput :
        mThirdPartyIntermediateInputs) {
     if (InputsAreEqual(candidateCertDER, thirdPartyIntermediateInput)) {

@@ -419,6 +419,9 @@ class SelectableProfileServiceClass extends EventEmitter {
   }
 
   #getEnabledState() {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      return false;
+    }
     if (!Services.policies.isAllowed("profileManagement")) {
       return false;
     }
@@ -839,6 +842,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @param {Array<string>} aUrls An array of urls to open in launched profile
    */
   launchInstance(aProfile, aUrls) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten uses one profile");
+    }
     let args = [];
 
     if (aUrls?.length) {
@@ -1338,6 +1344,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @returns {string} The path for the given profile
    */
   async createProfileDirs(aProfileName) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten uses one profile");
+    }
     const salt = btoa(
       lazy.CryptoUtils.generateRandomBytesLegacy(
         PROFILES_CRYPTO_SALT_LENGTH_BYTES
@@ -1487,6 +1496,9 @@ class SelectableProfileServiceClass extends EventEmitter {
    * @returns {SelectableProfile} The newly created profile object.
    */
   async #createProfile(existingProfilePath, source) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      throw new Error("BashKitten uses one profile");
+    }
     let nextProfileNumber = Math.max(
       0,
       ...(await this.getAllProfiles()).map(p => p.id)

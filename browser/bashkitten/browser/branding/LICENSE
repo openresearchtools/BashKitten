@@ -1,0 +1,9 @@
+The BashKitten cat icon in assets/bashkitten.svg and its generated raster variants
+are original BashKitten material under GPL-3.0-only, reused unchanged from the
+Android VectorDrawable in BashKitten commit 571b446. The SVG is the preferred
+source; scripts/render-branding.py produces the native icon sizes during builds.
+
+Retained WildBuzzard branding and wordmark material is distributed under
+AGPL-3.0-or-later. Historical WildBuzzard artwork remains credited to the
+WildBuzzard project; rebuilding replaces its old raster logo with BashKitten's
+cat icon. Inherited Mozilla document artwork retains its own MPL-2.0 headers.

@@ -1091,6 +1091,11 @@ nsAppStartup::RestartInSafeMode(uint32_t aQuitMode) {
 NS_IMETHODIMP
 nsAppStartup::CreateInstanceWithProfile(nsIToolkitProfile* aProfile,
                                         const nsTArray<nsString>& aArgs) {
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+#endif
   if (NS_WARN_IF(!aProfile)) {
     return NS_ERROR_FAILURE;
   }

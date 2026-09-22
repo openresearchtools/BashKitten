@@ -53,6 +53,26 @@ export class BrowserDOMWindow {
     this.win = win;
   }
 
+  #redirectProtectedPopup(uri, openWindowInfo, openerBrowser, principal, referrerInfo) {
+    const params = {
+      openerBrowser: openerBrowser || openWindowInfo?.parent?.top.embedderElement,
+      triggeringPrincipal: principal,
+      userContextId: openWindowInfo?.originAttributes.userContextId,
+      referrerInfo,
+    };
+    if (!lazy.URILoadingHelper.agentOpener(this.win, params)) {
+      return;
+    }
+    // The pending remote window already carries the opener's immutable origin
+    // attributes. Cancel it and create an independent ordinary tab instead.
+    // Throwing abort also prevents Gecko falling back to a new native window.
+    openWindowInfo?.cancel();
+    if (uri && uri.spec != "about:blank") {
+      lazy.URILoadingHelper.openLinkIn(this.win, uri.spec, "tab", params);
+    }
+    throw Components.Exception("Protected Agent popup redirected", Cr.NS_ERROR_ABORT);
+  }
+
   /**
    * @param {Window} win
    */
@@ -99,6 +119,9 @@ export class BrowserDOMWindow {
     aWhere = undefined
   ) {
     let win, needToFocusWin;
+    this.#redirectProtectedPopup(
+      aURI, aOpenWindowInfo, aOpenerBrowser, aTriggeringPrincipal, aReferrerInfo
+    );
 
     // try the current window. if we're in a popup or a taskbar tab, fall
     // back on the most recent browser window
@@ -183,6 +206,9 @@ export class BrowserDOMWindow {
     aTriggeringPrincipal,
     aPolicyContainer
   ) {
+    if (aWhere != Ci.nsIBrowserDOMWindow.OPEN_PRINT_BROWSER) {
+      this.#redirectProtectedPopup(aURI, aOpenWindowInfo, null, aTriggeringPrincipal, null);
+    }
     return this.#getContentWindowOrOpenURI(
       null,
       aOpenWindowInfo,
@@ -280,6 +306,15 @@ export class BrowserDOMWindow {
       } else {
         aWhere = Services.prefs.getIntPref("browser.link.open_newwindow");
       }
+    }
+
+    if (
+      AppConstants.MOZ_APP_NAME == "bashkitten" &&
+      aWhere == Ci.nsIBrowserDOMWindow.OPEN_NEWWINDOW
+    ) {
+      // Preserve opener, principal, POST and popup policy through the native
+      // new-tab path; OAuth/content popups must not create another window.
+      aWhere = Ci.nsIBrowserDOMWindow.OPEN_NEWTAB;
     }
 
     let referrerInfo;
@@ -433,6 +468,12 @@ export class BrowserDOMWindow {
    * @type {nsIBrowserDOMWindow["createContentWindowInFrame"]}
    */
   createContentWindowInFrame(aURI, aParams, aWhere, aFlags, aName) {
+    if (aWhere != Ci.nsIBrowserDOMWindow.OPEN_PRINT_BROWSER) {
+      this.#redirectProtectedPopup(
+        aURI, aParams.openWindowInfo, aParams.openerBrowser,
+        aParams.triggeringPrincipal, aParams.referrerInfo
+      );
+    }
     // Passing a null-URI to only create the content window,
     // and pass true for aSkipLoad to prevent loading of
     // about:blank

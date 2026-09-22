@@ -30,7 +30,7 @@ import mozilla.components.browser.state.state.CustomTabSessionState
 import mozilla.components.browser.state.state.ExternalAppType
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.base.utils.BackInvokedHandler
-import mozilla.components.compose.browser.toolbar.BrowserToolbar
+import mozilla.components.compose.browser.toolbar.BrowserToolbar as NativeBrowserToolbar
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarAction.ToolbarGravityUpdated
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarStore
 import mozilla.components.compose.browser.toolbar.store.ToolbarGravity
@@ -154,7 +154,7 @@ class BrowserToolbarComposable(
                             .wrapContentHeight(),
                     ) {
                         tabStripContent()
-                        BrowserToolbar(
+                        AgentBrowserToolbar(
                             store = toolbarStore,
                             cfr = toolbarCFR,
                             useMinimalBottomToolbarWhenEnteringText =
@@ -174,7 +174,7 @@ class BrowserToolbarComposable(
                             if (customTabSession == null) {
                                 searchSuggestionsContent(Modifier.weight(1f))
                             }
-                            BrowserToolbar(
+                            AgentBrowserToolbar(
                                 store = toolbarStore,
                                 cfr = toolbarCFR,
                                 useMinimalBottomToolbarWhenEnteringText =
@@ -182,7 +182,7 @@ class BrowserToolbarComposable(
                             )
                             navigationBarContent?.invoke()
                         } else {
-                            BrowserToolbar(
+                            AgentBrowserToolbar(
                                 store = toolbarStore,
                                 cfr = toolbarCFR,
                                 useMinimalBottomToolbarWhenEnteringText =
@@ -322,6 +322,24 @@ class BrowserToolbarComposable(
                         false -> DependencyGravity.Top
                     },
                 )
+            }
+        }
+    }
+
+    @Composable
+    private fun AgentBrowserToolbar(
+        store: BrowserToolbarStore,
+        cfr: mozilla.components.compose.browser.toolbar.BrowserToolbarCFR?,
+        useMinimalBottomToolbarWhenEnteringText: Boolean,
+    ) {
+        androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            if (activity is org.mozilla.fenix.HomeActivity) {
+                androidx.compose.material3.TextButton(onClick = { activity.showBashKittenAgent() }) {
+                    androidx.compose.material3.Text("Agent")
+                }
+            }
+            androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
+                NativeBrowserToolbar(store, cfr, useMinimalBottomToolbarWhenEnteringText)
             }
         }
     }

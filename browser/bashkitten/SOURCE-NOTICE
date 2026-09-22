@@ -1,0 +1,16 @@
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+BashKitten corresponding source and build material is published with each release:
+https://github.com/openresearchtools/bashkitten
+
+The browser derives from Mozilla Firefox ESR, Waterfox and WildBuzzard. Their
+original licenses and attribution remain with the source. Exact retained donor
+revisions are recorded in browser/bashkitten/upstreams.toml and ports.toml;
+WildBuzzard's original source is https://github.com/openresearchtools/WildBuzzard.
+The release metadata identifies the exact BashKitten and Firefox revisions.
+
+The native command entry is browser/browser/app/BashKittenCommandLine.cpp;
+commands execute in Gecko using its in-tree JsonCpp library. Tor, blocker assets
+and other bundled components retain full licenses and corresponding build/source
+material. Agent, Pi, search and authentication components carry their own notices.
+Node, Python, Termux and system libraries remain separately installed packages.

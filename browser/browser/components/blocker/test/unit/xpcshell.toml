@@ -16,4 +16,4 @@ head = "head.js"
 
 ["test_replace_response_filter.js"]
 
-["test_wildbuzzard_unbreak.js"]
+["test_bashkitten_unbreak.js"]

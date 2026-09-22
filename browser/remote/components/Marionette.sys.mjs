@@ -125,16 +125,16 @@ class MarionetteParentProcess {
 
         {
           const enabledByCommandLine = subject.handleFlag("marionette", false);
-          const enabledForWildBuzzardControl = Services.prefs.getBoolPref(
-            "wildbuzzard.browserControl.webdriverTransport.enabled",
+          const enabledForBashKittenControl = Services.prefs.getBoolPref(
+            "bashkitten.browserControl.webdriverTransport.enabled",
             false
           );
-          if (enabledForWildBuzzardControl && !enabledByCommandLine) {
+          if (enabledForBashKittenControl && !enabledByCommandLine) {
             // Browser-control clients discover the selected loopback port
             // through MarionetteActivePort.
             lazy.MarionettePrefs.port = 0;
           }
-          this.enabled = enabledByCommandLine || enabledForWildBuzzardControl;
+          this.enabled = enabledByCommandLine || enabledForBashKittenControl;
         }
 
         if (this.enabled) {

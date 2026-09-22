@@ -502,10 +502,18 @@ class Script {
   }
 
   matchesWindowGlobal(windowGlobal, ignorePermissions) {
+    const attrs = windowGlobal.documentPrincipal?.originAttributes;
+    const id = attrs?.userContextId;
+    if ((id >= 0xB4500000 && id <= 0xB450FFFF) ||
+        attrs?.geckoViewSessionContextId?.startsWith("gvctx626173686b697474656e2d6167656e742d75692d")) return false;
     return this.matcher.matchesWindowGlobal(windowGlobal, ignorePermissions);
   }
 
   async injectInto(window, reportExceptions = true) {
+    const attrs = window.document.nodePrincipal.originAttributes;
+    const id = attrs.userContextId;
+    if ((id >= 0xB4500000 && id <= 0xB450FFFF) ||
+        attrs.geckoViewSessionContextId?.startsWith("gvctx626173686b697474656e2d6167656e742d75692d")) return;
     if (
       !lazy.isContentScriptProcess ||
       this.injectedInto.has(window.document)

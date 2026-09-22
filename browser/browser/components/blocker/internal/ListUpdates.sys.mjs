@@ -233,7 +233,7 @@ export class ListUpdatesState {
                 : String(err || "unknown error");
             nextEntry.lastError = message.slice(0, 500);
             console.warn(
-              `[WildBuzzardBlocker] Failed to update list: ${descriptor.url}`,
+              `[BashKittenBlocker] Failed to update list: ${descriptor.url}`,
               err
             );
           }

@@ -61,7 +61,7 @@ export let PlacesBrowserStartup = {
   },
 
   async removeStockFirefoxBookmarks() {
-    const pref = "browser.bookmarks.wildbuzzard.stockBookmarksRemoved";
+    const pref = "browser.bookmarks.bashkitten.stockBookmarksRemoved";
     if (Services.prefs.getBoolPref(pref, false)) {
       return;
     }

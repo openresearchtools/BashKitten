@@ -1925,7 +1925,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Мызкы ашьҭахь автоматла иаркуама?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard иҳаҩсыз амзазы узҭамлаз анҵамҭақәа аркра алшоит.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten иҳаҩсыз амзазы узҭамлаз анҵамҭақәа аркра алшоит.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">АВТОМАТИКА ААРКЫРА АУРТ</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

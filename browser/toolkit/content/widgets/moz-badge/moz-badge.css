@@ -38,7 +38,7 @@
   }
 }
 
-:host([type="wildbuzzard-exclusive"]) {
+:host([type="bashkitten-exclusive"]) {
   .moz-badge {
     color: var(--badge-text-color-filled);
     background-color: var(--color-accent-primary);

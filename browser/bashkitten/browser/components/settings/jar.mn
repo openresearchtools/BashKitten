@@ -1,0 +1,11 @@
+browser.jar:
+%   content browser %content/browser/ contentaccessible=yes
+    content/browser/bashkitten/settings/BashKittenSettingsPanes.mjs          (BashKittenSettingsPanes.mjs)
+    content/browser/bashkitten/settings/bashkittenAppearance.mjs             (bashkittenAppearance.mjs)
+    content/browser/bashkitten/settings/bashkittenAppearance.css             (bashkittenAppearance.css)
+    content/browser/bashkitten/settings/bashkittenDataCollection.mjs         (bashkittenDataCollection.mjs)
+    content/browser/bashkitten/settings/bashkittenHome.mjs                   (bashkittenHome.mjs)
+    content/browser/bashkitten/settings/bashkittenPrivacy.mjs                (bashkittenPrivacy.mjs)
+    content/browser/bashkitten/settings/bashkittenSearch.mjs                 (bashkittenSearch.mjs)
+    content/browser/bashkitten/settings/bashkittenTabs.mjs                   (bashkittenTabs.mjs)
+    content/browser/bashkitten/settings/bashkittenAbout.mjs                  (bashkittenAbout.mjs)

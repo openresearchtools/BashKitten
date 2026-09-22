@@ -124,7 +124,7 @@ class CookieBannerHandlingDetailsView(
                 appName,
             )
             CookieBannerUIMode.SITE_NOT_SUPPORTED -> context.getString(
-                R.string.wildbuzzard_cookie_banner_unsupported,
+                R.string.bashkitten_cookie_banner_unsupported,
             )
             else -> ""
         }

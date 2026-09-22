@@ -188,7 +188,7 @@ class AboutFragment(
             ""
         }
 
-        val content = getString(R.string.wildbuzzard_about_content)
+        val content = getString(R.string.bashkitten_about_content)
         val buildDate = BuildConfig.BUILD_DATE
 
         binding.aboutText.text = aboutText
@@ -201,7 +201,7 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     WHATS_NEW,
-                    "https://github.com/openresearchtools/wildbuzzard-android/commits/main/",
+                    "https://github.com/openresearchtools/bashkitten-android/commits/main/",
                 ),
                 // Note: Fenix only has release notes for 'Release' versions, NOT 'Beta' & 'Nightly'.
                 getString(R.string.about_whats_new, appName),
@@ -209,7 +209,7 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     SUPPORT,
-                    "https://github.com/openresearchtools/wildbuzzard-android/issues",
+                    "https://github.com/openresearchtools/bashkitten-android/issues",
                 ),
                 getString(R.string.about_support),
             ),
@@ -217,7 +217,7 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     PRIVACY_NOTICE,
-                    "https://github.com/openresearchtools/wildbuzzard-android/blob/main/wildbuzzard/android/README.md",
+                    "https://github.com/openresearchtools/bashkitten-android/blob/main/bashkitten/android/README.md",
                 ),
                 getString(R.string.about_privacy_notice),
             ),
@@ -228,7 +228,7 @@ class AboutFragment(
             ),
             AboutPageItem(
                 AboutItem.ProductLicenses,
-                getString(R.string.wildbuzzard_licenses_and_source),
+                getString(R.string.bashkitten_licenses_and_source),
             ),
         )
     }
@@ -263,7 +263,7 @@ class AboutFragment(
                 openLibrariesPage()
             }
             is AboutItem.ProductLicenses -> {
-                startActivity(Intent(requireContext(), org.openresearchtools.wildbuzzard.LicensesActivity::class.java))
+                startActivity(Intent(requireContext(), com.bashkitten.LicensesActivity::class.java))
             }
             is AboutItem.Crashes -> {
                 val navController = findNavController()

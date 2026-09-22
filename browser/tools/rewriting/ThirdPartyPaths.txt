@@ -209,8 +209,8 @@ toolkit/modules/third_party/
 tools/fuzzing/libfuzzer/
 tools/lint/eslint/eslint-plugin-sdl-vendored/vendor/
 tools/profiler/core/vtune/
-wildbuzzard/browser/themes/lepton/icons/
-wildbuzzard/browser/themes/lepton/leptonChrome.css
+bashkitten/browser/themes/lepton/icons/
+bashkitten/browser/themes/lepton/leptonChrome.css
 xpcom/build/mach_override.c
 xpcom/build/mach_override.h
 xpcom/io/crc32c.c

@@ -8,8 +8,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
   RemoteSettingsWorker:
     "resource://services-settings/RemoteSettingsWorker.sys.mjs",
   Utils: "resource://services-settings/Utils.sys.mjs",
-  WildBuzzardSettingsPolicy:
-    "resource://services-settings/WildBuzzardSettingsPolicy.sys.mjs",
+  BashKittenSettingsPolicy:
+    "resource://services-settings/BashKittenSettingsPolicy.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "console", () => lazy.Utils.log);
@@ -363,7 +363,7 @@ export class Downloader {
 
     if (
       !avoidDownload &&
-      !lazy.WildBuzzardSettingsPolicy.canDownloadAttachments(
+      !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
         this.bucketName,
         this.collectionName
       )

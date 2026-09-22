@@ -1281,7 +1281,7 @@ function HandleAppCommandEvent(evt) {
       break;
     case "Help":
       openTrustedLinkIn(
-        "https://github.com/openresearchtools/WildBuzzard/issues",
+        "https://github.com/openresearchtools/bashkitten/issues",
         "tab"
       );
       break;

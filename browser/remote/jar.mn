@@ -108,15 +108,9 @@ remote.jar:
   # imports from external folders
   content/external/EventUtils.js (../testing/mochitest/tests/SimpleTest/EventUtils.js)
 
-  # WildBuzzard native visible-browser control
+  # BashKitten native visible-browser control
 #ifndef ANDROID
-  content/wildbuzzard/BrowserControl.sys.mjs (wildbuzzard/BrowserControl.sys.mjs)
+  content/bashkitten/BrowserControl.sys.mjs (bashkitten/BrowserControl.sys.mjs)
 #endif
-  content/wildbuzzard/BrowserControlChild.sys.mjs (wildbuzzard/BrowserControlChild.sys.mjs)
-  content/wildbuzzard/BrowserControlParent.sys.mjs (wildbuzzard/BrowserControlParent.sys.mjs)
-#ifndef ANDROID
-  content/wildbuzzard/TorrentControlTools.sys.mjs (wildbuzzard/TorrentControlTools.sys.mjs)
-  content/wildbuzzard/WildBuzzardWorkflow.sys.mjs (wildbuzzard/WildBuzzardWorkflow.sys.mjs)
-  content/wildbuzzard/WildBuzzardWorkflowWorker.js (wildbuzzard/WildBuzzardWorkflowWorker.js)
-
-#endif
+  content/bashkitten/BrowserControlChild.sys.mjs (bashkitten/BrowserControlChild.sys.mjs)
+  content/bashkitten/BrowserControlParent.sys.mjs (bashkitten/BrowserControlParent.sys.mjs)

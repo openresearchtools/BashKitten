@@ -2,18 +2,18 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { CUSTOM_FILTERS_FILE_NAME } from "resource:///modules/WildBuzzardBlockerUtils.sys.mjs";
+import { CUSTOM_FILTERS_FILE_NAME } from "resource:///modules/BashKittenBlockerUtils.sys.mjs";
 
-export const CUSTOM_FILTERS_DESCRIPTOR_URL = "wildbuzzard://custom-filters";
+export const CUSTOM_FILTERS_DESCRIPTOR_URL = "bashkitten://custom-filters";
 export const LIST_DESCRIPTOR_ORIGIN_CATALOG = "catalog";
 export const LIST_DESCRIPTOR_ORIGIN_CUSTOM = "custom";
 export const LIST_DESCRIPTOR_ORIGIN_CUSTOM_FILTERS = "custom-filters";
 
 const LIST_CATALOG_URL =
-  "resource://wildbuzzard/blocker/assets/list_catalog.json";
-const BUNDLED_FILTERS_BASE = "resource://wildbuzzard/blocker/assets/filters/";
-const PREF_FILTER_LIST_URLS = "wildbuzzard.blocker.filterListUrls";
-const PREF_ENABLED_LISTS = "wildbuzzard.blocker.enabledLists";
+  "resource://bashkitten/blocker/assets/list_catalog.json";
+const BUNDLED_FILTERS_BASE = "resource://bashkitten/blocker/assets/filters/";
+const PREF_FILTER_LIST_URLS = "bashkitten.blocker.filterListUrls";
+const PREF_ENABLED_LISTS = "bashkitten.blocker.enabledLists";
 
 // Catalog data is immutable for the process, so a module cache is enough
 // and we don't need a state object on the service.
@@ -79,7 +79,7 @@ function getCustomFilterListUrls() {
       Services.prefs.setStringPref(PREF_FILTER_LIST_URLS, JSON.stringify(urls));
     } catch (err) {
       console.warn(
-        "[WildBuzzardBlocker] Failed migrating custom list URL pref:",
+        "[BashKittenBlocker] Failed migrating custom list URL pref:",
         err
       );
     }

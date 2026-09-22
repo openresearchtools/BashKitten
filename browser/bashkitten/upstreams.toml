@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+schema = 1
+
+[firefox]
+remote = "https://github.com/mozilla-firefox/firefox.git"
+ref = "FIREFOX_153_3_0esr_RELEASE"
+commit = "861fdeb0d32fe1bd101fea886687e680f612d735"
+version = "153.3.0esr"
+initial_release_ref = "FIREFOX_153_0esr_RELEASE"
+initial_release_commit = "c754d4f2d60ffacfa3aaab1134fed75ed4c9d3ef"
+
+[wildbuzzard_android]
+remote = "https://github.com/openresearchtools/wildbuzzard-android.git"
+ref = "main"
+commit = "b970e591350863113c7ea1f110f12f296a1170bd"
+role = "history-preserved-browser-donor"
+
+[wildbuzzard_desktop]
+remote = "https://github.com/openresearchtools/WildBuzzard.git"
+ref = "refactor/browser-agent-independent"
+commit = "0bd2d7da099a365d2243b320e1e6b38e8ad76cf4"
+role = "ancestor-of-android-donor"
+
+[waterfox]
+remote = "https://github.com/BrowserWorks/waterfox.git"
+ref = "current"
+commit = "8ae6e039a06bcff8173cb4a4c0262beb21f81286"
+mozilla_base_commit = "75427e175edea62d70dd576f57e030fd48ca1621"
+branch = "waterfox"
+tag = "donor/waterfox-current-20260730"
+role = "donor-only"
+
+[adblock_engine]
+package = "adblock"
+version = "0.12.1"
+upstream = "https://github.com/brave/adblock-rust/"
+license = "MPL-2.0"
+path = "third_party/rust/adblock"
+git_tree = "631bb7e5bdd677ffb1457e1d07ae32695607be6c"
+provided_by = "1c7282e73f12cb9bc63ae9920e9c77d935804cc8"
+waterfox_tree_is_identical = true

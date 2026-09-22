@@ -1,0 +1,814 @@
+{
+  "device_run": {
+    "source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+    "started": "2026-09-20T15:20:37.262000+00:00",
+    "device": {
+      "abi": "arm64-v8a",
+      "product": "aosp_cf_arm64_only_phone",
+      "android": "17",
+      "sdk": "37",
+      "page_size": "4096"
+    },
+    "apks": {
+      "bashkitten-arm64.apk": "778bd419acc01a319688f3fd86d326c54aab32175aaf5e95f881594eb5fd516f",
+      "bashkitten-agent-probe.apk": "a1b389297358876ef52a29ae0de68d4a22589cf4d8a49d237444abd9323effa4",
+      "bashkitten-agent-probe-test.apk": "28011f9229703b3c9723d85fd302d44c3e6fd788a32a63ca35a4dc031c4d1222"
+    },
+    "tests": {
+      "AgentBrowserTest": true,
+      "CommandBrowserTest": true,
+      "AppCommandBrowserTest": true,
+      "OnionBrowserTest": true
+    },
+    "probe_source": "5f393d0d6843c52f64e5bf20118f3091fad40513",
+    "finished": "2026-09-20T15:24:13.231484+00:00"
+  },
+  "probe_artifact_verification": {
+    "source": "5f393d0d6843c52f64e5bf20118f3091fad40513",
+    "hashes": {
+      "bashkitten-agent-probe.apk": "a1b389297358876ef52a29ae0de68d4a22589cf4d8a49d237444abd9323effa4",
+      "bashkitten-agent-probe-test.apk": "28011f9229703b3c9723d85fd302d44c3e6fd788a32a63ca35a4dc031c4d1222"
+    },
+    "signatures": {
+      "bashkitten-agent-probe.apk": "d3ffbfff1c32b1ed2ac5505f18ebbf495ba4f1330631d7eeeb8d55b264a0ccae",
+      "bashkitten-agent-probe-test.apk": "d3ffbfff1c32b1ed2ac5505f18ebbf495ba4f1330631d7eeeb8d55b264a0ccae"
+    },
+    "all_hashes_match": true,
+    "all_signatures_verified": true,
+    "distinct_from_browser_publisher": true
+  },
+  "artifact_verification": {
+    "source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+    "browser_sha256": "778bd419acc01a319688f3fd86d326c54aab32175aaf5e95f881594eb5fd516f",
+    "all_apk_hashes_match": true,
+    "all_apk_signatures_verified": true,
+    "publisher_certificate": "2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38",
+    "native_aarch64_libraries": 19,
+    "min_elf_load_alignment": 16384,
+    "native_libraries_extracted_for_loading": true,
+    "dependency_license_entries": 631,
+    "product_and_native_notices_present": true
+  },
+  "installed_pi_package_sha256": {
+    "extension.mjs": "e79741e17d62627d552526bc4b62f760625065ca92f08fd20b39085f6765faca",
+    "client.mjs": "2526f08c66d49fe19e30ec1ae161580b1e85284db4f85379328537ba80f25bd7",
+    "package.json": "219d2adfec124ecc5f44bd900e2f1b6efe4d8af2b3972d66185deca3e70d9b7f"
+  },
+  "manual_pi_browsing": {
+    "updated_utc": "2026-09-20T15:26:34.856306+00:00",
+    "method": "Actions chosen interactively by Codex from actual page trees and images; commands executed by the installed Pi extension inside real Termux on ARM64 Cuttlefish. No provider account or separate AI chat was used.",
+    "phases": [
+      {
+        "source": "4f3d674b93ab864e1a290101e2af785ea7a527b3",
+        "actions": [
+          1,
+          37
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Google Scholar query submitted; network CAPTCHA returned.",
+          "arXiv homepage search submitted; large result tree exceeded command budget.",
+          "Real arXiv PDF rendered and image returned; PDF controls initially rejected."
+        ]
+      },
+      {
+        "source": "8672001b5bf3e7128abe8f7cf596fa6e49a5c8a1",
+        "actions": [
+          38,
+          62
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Cold application update, initial image nonblank.",
+          "Python.org file downloaded, exported privately and read with actual Pi read.",
+          "Desktop user agent, per-tab blocking switches, scroll/back/forward, tab close exercised."
+        ]
+      },
+      {
+        "source": "8672001b5bf3e7128abe8f7cf596fa6e49a5c8a1",
+        "actions": [
+          63,
+          86
+        ],
+        "termux": "vendor",
+        "notes": [
+          "Earlier signer-bound permission survived reinstall with a new UID.",
+          "GNU.org AGPL RTF clicked, downloaded, privately exported and read using Pi.",
+          "Individual app revoke blocked next command; one approval restored commands.",
+          "Closing last session tab returned an empty list and preserved browser PID."
+        ]
+      },
+      {
+        "source": "8672001b5bf3e7128abe8f7cf596fa6e49a5c8a1",
+        "actions": [
+          87,
+          94
+        ],
+        "termux": "vendor",
+        "notes": [
+          "Normal UI revocation while browser stayed running blocked commands and closed the GNU.org tab. After one approval, tabs.list was empty; browser PID remained 4369.",
+          "After allowing normal tab closure to persist, a later browser restart still returned no session tabs."
+        ]
+      },
+      {
+        "source": "8672001b5bf3e7128abe8f7cf596fa6e49a5c8a1",
+        "actions": [
+          95,
+          101
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Actual Termux UID 10131 called Pi capabilities without invoking authorize and with no explicit grant for its package/signing identity. Browser reported publisher-signature. Publisher policy restored after earlier revoke-all test.",
+          "Created a real arXiv search tab and read result links through the automatically authorized Pi tools.",
+          "The first capture immediately after showing the background-loaded search page preceded its text painting; the subsequent capture and native screen had matching visible text.",
+          "Pi native read returned image content for this session screenshot.",
+          "A harmless console marker was observed twice in Android output on the pre-fix APK; only counts were retained. This is a baseline, not a claim that the installed pre-fix APK is quiet."
+        ]
+      },
+      {
+        "source": "120d5795885861a437afad776d7159e866ea7aad",
+        "actions": [
+          102,
+          130
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Publisher-signature authorization survived the APK update without a grant.",
+          "Dense arXiv snapshot returned 186 nodes/62751 JSON bytes, marked truncated; targeted result subtree returned 31 nodes/11093 bytes without truncation.",
+          "The first reference during restoration became stale and was correctly rejected; taking a new snapshot recovered.",
+          "A fresh PDF tab exposed its Download button. Pi clicked it, downloaded 1572455 bytes and fetched the PDF to private session storage.",
+          "Runtime console marker count was zero; developer/Marionette/remote agent/accessibility/WebDriver flags all false.",
+          "First PDF Download caused a development StrictMode penaltyDeath crash (confirmed native AndroidRuntime exception), so the subsequent browser restart restored the saved search page. Source 9a9def84f26e disables product StrictMode; installed fix still needs verification.",
+          "A subsequent cold background startup request timed out; recheck after disabling startup StrictMode."
+        ]
+      },
+      {
+        "source": "9a9def84f26e13a8824d4751bbbcbca848a6cf8e",
+        "actions": [
+          131,
+          166
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Cold browser startup from visible publisher Termux returned publisher-signature with no explicit grant or authorize call; Termux stayed foreground.",
+          "First native PDF Download before browser UI no longer crashed the process. Download accepted but stayed INITIATED: upstream download-start guard ignores the active browser foreground service. Source 0c2e36c7e6be corrects it; artifact still needs verification.",
+          "After showing the PDF, downloaded and privately exported the actual 2215244-byte Attention Is All You Need paper. Rendered screenshot and native Pi image read passed.",
+          "Force-stopping both visible-browser work and returning to launcher caused Android to block launch and freeze the new process; opening the browser resumed the pending call and restored the saved PDF URL. Source 302af1e2c024 bounds the app.prepare handshake; it still needs device verification.",
+          "A previous force-stop during the initial still-loading PDF restored about:blank; explicitly navigating recovered. A fully loaded saved PDF restored its URL.",
+          "Used actual arXiv menu, search field fill and Enter; 133 search results appeared. Bounded snapshot had 185 nodes/62494 JSON bytes with truncation; a referenced result subtree returned its full details.",
+          "Marker and public test site URL output were zero, StrictMode output zero, remote debugging/accessibility/WebDriver flags false. One AndroidRuntime informational line was a normal code-0 VM exit, not a crash."
+        ]
+      },
+      {
+        "source": "9a9def84f26e13a8824d4751bbbcbca848a6cf8e",
+        "actions": [
+          167,
+          181
+        ],
+        "termux": "vendor",
+        "notes": [
+          "Actual externally signed Termux UID 10132 was denied before grant. One visible approval then capabilities reported user-grant. Allow, Cancel and Revoke buttons were readable in dark mode.",
+          "Repeated Pi commands navigated GNU licenses, inspected a bounded subtree, clicked the AGPL RTF link, downloaded 76535 bytes, privately exported it and returned its content through native Pi read.",
+          "Rendered GNU screenshot returned a private PNG path and native image content. Engine diagnostics all false before native UI inspection.",
+          "Revocation blocked the next Pi command immediately. Browser PID stayed 16155."
+        ]
+      },
+      {
+        "source": "302af1e2c024d4f9db40c673c7d63a03022f1db9",
+        "actions": [
+          182,
+          202
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Fresh browser app data with no saved grants. Publisher Termux UID10133 called capabilities directly and received publisher-signature; Termux stayed foreground and browser foreground service started.",
+          "Before any browser UI was shown, Pi clicked the native arXiv PDF Download control, accepted the pending download, completed 2215244 bytes and privately exported the file. Browser PID19425 stayed unchanged; Termux remained the top activity.",
+          "Showed the PDF, waited for actual paper text, captured rendered image and reopened the private PNG through native Pi read.",
+          "Dense arXiv search snapshot185nodes62494serializedbytes was truncated; a referenced subtree returned complete result details. All remote debugging/accessibility/WebDriver flags false. Console marker injected.",
+          "When Android blocked a force-stopped browser restart from the launcher with Termux in background, the tool returned a useful error in17.929seconds. Bringing Termux forward restored automatic publisher access. Both saved tab URLs were preserved and the restored PDF exposed its Download control."
+        ]
+      },
+      {
+        "source": "302af1e2c024d4f9db40c673c7d63a03022f1db9",
+        "actions": [
+          203,
+          215
+        ],
+        "termux": "vendor",
+        "notes": [
+          "External Termux UID10134 was denied before one approval, then capabilities reported user-grant. Allow and Cancel were readable in dark mode.",
+          "Read actual GNU license links, navigated to the RTF URL found on that page, accepted and completed76535bytes while Termux stayed foreground, exported the file privately and read its actual RTF content with native Pi read.",
+          "Closing the only vendor-session tab returned an empty list and preserved browser PID20333."
+        ]
+      },
+      {
+        "source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+        "actions": [
+          216,
+          235
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Fresh browser data, no saved grants: capabilities automatically returned publisher-signature while Termux stayed foreground.",
+          "Before showing browser UI, Pi downloaded and privately exported the actual 2215244-byte arXiv paper. Browser PID31779 remained unchanged.",
+          "PDF rendered; screenshot returned native image content and private path, and Pi read reopened it as an image. Native screen had normal navigation and no default-browser promotion.",
+          "Dense arXiv tree was bounded; a referenced result subtree returned complete details. All remote-debugging/accessibility/WebDriver flags were false.",
+          "A deliberately blocked background restart returned a useful error in 17.839 seconds. Bringing Termux forward recovered automatic access and both saved tabs."
+        ]
+      },
+      {
+        "source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+        "actions": [
+          236,
+          248
+        ],
+        "termux": "vendor",
+        "notes": [
+          "External-vendor Termux was denied until one readable native approval, then reported user-grant. Subsequent commands did not prompt.",
+          "Read GNU license links, opened its actual RTF URL, completed the 76535-byte download while Termux stayed foreground, fetched it privately and read the RTF with native Pi read.",
+          "Closing the only vendor-session tab returned an empty list and preserved browser PID32687."
+        ]
+      },
+      {
+        "source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+        "actions": [
+          249,
+          254
+        ],
+        "termux": "publisher",
+        "notes": [
+          "Restored our signed Termux, then after device suites and clean browser data called capabilities again without authorize or a saved grant. It returned publisher-signature.",
+          "Removed both developer probe apps from the dedicated test device. Opened GNU licenses with Pi and left the browser running.",
+          "Actual diagnostics again reported all remote-debugging/accessibility/WebDriver flags false. A fresh console marker did not appear in the immediate sampled Android logs."
+        ]
+      }
+    ],
+    "limitations": [
+      "Google Scholar returned a network CAPTCHA; successful result browsing is not claimed.",
+      "Actual device kernel uses 4 KB pages. Native ELF load alignment is at least 16 KB, but a 16 KB kernel and physical foldable were not tested.",
+      "QR Close/Back and full auth-file import were tested; no physical camera scan was performed.",
+      "Android can block a force-stopped browser restart when the caller is also in the background. Visible Termux recovery was verified.",
+      "Android/native system diagnostics can still appear."
+    ],
+    "supplemental_intermediate_regressions": {
+      "CommandBrowserTest": {
+        "source": "8672001b5bf3e7128abe8f7cf596fa6e49a5c8a1",
+        "result": "PASS",
+        "seconds": 23.642,
+        "includes": [
+          "actual screenshot pixel content",
+          "specific tab thumbnail pixel content",
+          "legacy CLI authorization and revocation"
+        ]
+      },
+      "AppCommandBrowserTest": {
+        "source": "8672001b5bf3e7128abe8f7cf596fa6e49a5c8a1",
+        "result": "PASS",
+        "seconds": 37.098,
+        "includes": [
+          "one-time external-app grant",
+          "session isolation",
+          "private screenshot and download transfer",
+          "missing/wrong token, Origin and revoked-access rejection"
+        ]
+      }
+    },
+    "supplemental_optimized_regressions": {
+      "source": "120d5795885861a437afad776d7159e866ea7aad",
+      "started": "2026-09-20T12:45:28.865958+00:00",
+      "device": {
+        "abi": "arm64-v8a",
+        "product": "aosp_cf_arm64_only_phone",
+        "android": "17",
+        "sdk": "37",
+        "page_size": "4096"
+      },
+      "apks": {
+        "bashkitten-arm64.apk": "de66c3be0df79ab8c1d3088b72198912908b6a291c5bb2d5d8d6e8d09be90dc1",
+        "bashkitten-agent-probe.apk": "3116c689b5455e537df74aa6f49365550fbedcea997f34ae3f760799c1b019ee",
+        "bashkitten-agent-probe-test.apk": "abb73737acb9b468191642aefb79f9f6c43f7ba324f0b00d7d3ec367c413a4f9"
+      },
+      "tests": {
+        "AgentBrowserTest": true,
+        "CommandBrowserTest": true,
+        "AppCommandBrowserTest": true,
+        "OnionBrowserTest": true
+      },
+      "finished": "2026-09-20T12:48:09.920454+00:00"
+    },
+    "supplemental_302_regression": {
+      "source": "302af1e2c024d4f9db40c673c7d63a03022f1db9",
+      "passed": [
+        "AgentBrowserTest",
+        "CommandBrowserTest",
+        "AppCommandBrowserTest"
+      ],
+      "tor_security_assertions_passed": true,
+      "tor_ui_assertion": "Blocked by automatic default-browser role promotion. Source3035aa4ee383 removes the automatic startup call; final checks pending."
+    },
+    "final_probe_fix": {
+      "browser_source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+      "probe_source": "5f393d0d6843c52f64e5bf20118f3091fad40513",
+      "reason": "The previous test driver clicked a translating DocumentsUI drawer and stayed in Recent. The corrected probe waits for it and asserts the Downloads directory before file selection. All four suites then passed without picker assistance."
+    }
+  },
+  "final_manual_checks": {
+    "source": "3035aa4ee383ca5b9b07ea62cdc811c4366f5656",
+    "required_checks": {
+      "publisher_automatic_without_explicit_grant": true,
+      "cold_browser_start": true,
+      "first_pdf_download_before_browser_ui": true,
+      "download_no_process_crash": true,
+      "private_pdf_export": true,
+      "native_pi_screenshot_and_read": true,
+      "bounded_snapshot_and_subtree": true,
+      "remote_debugging_and_accessibility_disabled": true,
+      "vendor_one_time_approval": true,
+      "vendor_repeated_real_page_calls": true,
+      "vendor_private_file_transfer": true,
+      "approval_buttons_readable": true,
+      "publisher_restored_at_end": true,
+      "blocked_background_start_returns_bounded_error": true,
+      "no_automatic_default_browser_promotion": true
+    },
+    "evidence": {
+      "initial_publisher_state": {
+        "time": "2026-09-20T15:05:51.781434+00:00",
+        "pid": "",
+        "top_activity": "com.termux/.app.TermuxActivity",
+        "grants_file_present": false,
+        "explicit_termux_grant_present": false
+      },
+      "publisher_cold_download": {
+        "actions": [
+          216,
+          223
+        ],
+        "pid_before": "31779",
+        "pid_after": "31779",
+        "foreground_activity_before_and_after": "com.termux/.app.TermuxActivity",
+        "download_bytes": 2215244,
+        "publisher_app_explicit_grant_present": false,
+        "native_pi_image_actions": [
+          226,
+          227
+        ]
+      },
+      "bounded_tree": {
+        "actions": [
+          229,
+          230
+        ],
+        "nodes": 185,
+        "serialized_bytes": 61857,
+        "subtree_nodes": 31,
+        "subtree_serialized_bytes": 11093,
+        "subtree_truncated": false
+      },
+      "diagnostics": {
+        "action": 231,
+        "transport": "browser-native",
+        "devtoolsRemoteEnabled": false,
+        "marionetteEnabled": false,
+        "remoteAgentEnabled": false,
+        "engineAccessibilityEnabled": false,
+        "snapshotBackend": "dom",
+        "webdriver": false
+      },
+      "blocked_background_start": {
+        "action": 233,
+        "elapsed_seconds": 17.839,
+        "error": "BashKitten: Browser did not respond; open your terminal or BashKitten and retry",
+        "recovered_by_bringing_termux_forward": true,
+        "recovery_action": 234,
+        "restored_saved_tabs_action": 235
+      },
+      "vendor": {
+        "actions": [
+          236,
+          248
+        ],
+        "approval_actions": [
+          236,
+          237,
+          238
+        ],
+        "download_actions": [
+          239,
+          246
+        ],
+        "download_bytes": 76535,
+        "download_completed_with_termux_foreground": true,
+        "last_tab_close_actions": [
+          247,
+          248
+        ],
+        "pid_before_close": "32687",
+        "pid_after_close": "32687",
+        "approval_buttons_readable": [
+          "Allow",
+          "Cancel"
+        ]
+      },
+      "restored_publisher": {
+        "action": 250,
+        "time": "2026-09-20T15:25:12.905006+00:00",
+        "pid": "5674",
+        "top_activity": "com.termux/.app.TermuxActivity",
+        "grants_file_present": false,
+        "explicit_termux_grant_present": false,
+        "diagnostics_action": 253,
+        "diagnostics": {
+          "transport": "browser-native",
+          "devtoolsRemoteEnabled": false,
+          "marionetteEnabled": false,
+          "remoteAgentEnabled": false,
+          "engineAccessibilityEnabled": false,
+          "snapshotBackend": "dom",
+          "webdriver": false
+        },
+        "left_open_action": 254
+      }
+    }
+  },
+  "private_session_files": [
+    {
+      "action": 11,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 89159,
+      "mimeType": "image/png",
+      "session": "pi-25abf3269fcd785ba74b0da6e2876535aa8e014d61abcfb82f551a66bcacfbba",
+      "header_checked": true
+    },
+    {
+      "action": 31,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 296598,
+      "mimeType": "image/png",
+      "session": "pi-25abf3269fcd785ba74b0da6e2876535aa8e014d61abcfb82f551a66bcacfbba",
+      "header_checked": true
+    },
+    {
+      "action": 40,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 76542,
+      "mimeType": "image/png",
+      "session": "pi-25abf3269fcd785ba74b0da6e2876535aa8e014d61abcfb82f551a66bcacfbba",
+      "header_checked": true
+    },
+    {
+      "action": 44,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 833,
+      "mimeType": "application/octet-stream",
+      "session": "pi-25abf3269fcd785ba74b0da6e2876535aa8e014d61abcfb82f551a66bcacfbba",
+      "header_checked": false
+    },
+    {
+      "action": 50,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 76443,
+      "mimeType": "image/png",
+      "session": "pi-25abf3269fcd785ba74b0da6e2876535aa8e014d61abcfb82f551a66bcacfbba",
+      "header_checked": true
+    },
+    {
+      "action": 55,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 217247,
+      "mimeType": "image/png",
+      "session": "pi-25abf3269fcd785ba74b0da6e2876535aa8e014d61abcfb82f551a66bcacfbba",
+      "header_checked": true
+    },
+    {
+      "action": 68,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 179882,
+      "mimeType": "image/png",
+      "session": "pi-5c8a3a4fe48b0dbb51b0924dab153ba661942e8bad923ce6a9f00a3626a2eeda",
+      "header_checked": true
+    },
+    {
+      "action": 74,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 76535,
+      "mimeType": "application/rtf",
+      "session": "pi-5c8a3a4fe48b0dbb51b0924dab153ba661942e8bad923ce6a9f00a3626a2eeda",
+      "header_checked": false
+    },
+    {
+      "action": 84,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 180688,
+      "mimeType": "image/png",
+      "session": "pi-5c8a3a4fe48b0dbb51b0924dab153ba661942e8bad923ce6a9f00a3626a2eeda",
+      "header_checked": true
+    },
+    {
+      "action": 98,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 22427,
+      "mimeType": "image/png",
+      "session": "pi-5e231aa8b1ae1f4bde1c56c81288e7674c324af7b834c7986b7dd9384c45a337",
+      "header_checked": true
+    },
+    {
+      "action": 99,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 94713,
+      "mimeType": "image/png",
+      "session": "pi-5e231aa8b1ae1f4bde1c56c81288e7674c324af7b834c7986b7dd9384c45a337",
+      "header_checked": true
+    },
+    {
+      "action": 113,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 94816,
+      "mimeType": "image/png",
+      "session": "pi-5e231aa8b1ae1f4bde1c56c81288e7674c324af7b834c7986b7dd9384c45a337",
+      "header_checked": true
+    },
+    {
+      "action": 117,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 10131,
+      "mimeType": "image/png",
+      "session": "pi-5e231aa8b1ae1f4bde1c56c81288e7674c324af7b834c7986b7dd9384c45a337",
+      "header_checked": true
+    },
+    {
+      "action": 122,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 1572455,
+      "mimeType": "application/pdf",
+      "session": "pi-5e231aa8b1ae1f4bde1c56c81288e7674c324af7b834c7986b7dd9384c45a337",
+      "header_checked": true
+    },
+    {
+      "action": 144,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 10188,
+      "mimeType": "image/png",
+      "session": "pi-9ff58fe9da40697ecd0a199e7f8d34870c20d8fc4f9bfcc77afe5745a5149553",
+      "header_checked": true
+    },
+    {
+      "action": 150,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 2215244,
+      "mimeType": "application/pdf",
+      "session": "pi-9ff58fe9da40697ecd0a199e7f8d34870c20d8fc4f9bfcc77afe5745a5149553",
+      "header_checked": true
+    },
+    {
+      "action": 151,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 180747,
+      "mimeType": "image/png",
+      "session": "pi-9ff58fe9da40697ecd0a199e7f8d34870c20d8fc4f9bfcc77afe5745a5149553",
+      "header_checked": true
+    },
+    {
+      "action": 174,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 99602,
+      "mimeType": "image/png",
+      "session": "pi-08dd53b84250c08412b851013178255308de010b602fb941b45f4a79f0dcd10f",
+      "header_checked": true
+    },
+    {
+      "action": 179,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 76535,
+      "mimeType": "application/rtf",
+      "session": "pi-08dd53b84250c08412b851013178255308de010b602fb941b45f4a79f0dcd10f",
+      "header_checked": false
+    },
+    {
+      "action": 189,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 2215244,
+      "mimeType": "application/pdf",
+      "session": "pi-d50cf8890a3dab77da00032b95c4bfd2a84ee04ad4a37c63ae7d04b3b12fa76b",
+      "header_checked": true
+    },
+    {
+      "action": 192,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 229238,
+      "mimeType": "image/png",
+      "session": "pi-d50cf8890a3dab77da00032b95c4bfd2a84ee04ad4a37c63ae7d04b3b12fa76b",
+      "header_checked": true
+    },
+    {
+      "action": 212,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 76535,
+      "mimeType": "application/rtf",
+      "session": "pi-c83541b2126e7f45deaef29f60f96f0c4a88332e86633971e4a9af6f1b43e226",
+      "header_checked": false
+    },
+    {
+      "action": 223,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 2215244,
+      "mimeType": "application/pdf",
+      "session": "pi-a39a7bcdf573a9ceaf46902bc65ef657ab9d56025a7ec5f1a6950fc0e1fe5156",
+      "header_checked": true
+    },
+    {
+      "action": 226,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 228974,
+      "mimeType": "image/png",
+      "session": "pi-a39a7bcdf573a9ceaf46902bc65ef657ab9d56025a7ec5f1a6950fc0e1fe5156",
+      "header_checked": true
+    },
+    {
+      "action": 245,
+      "mode": "600",
+      "directory_mode": "700",
+      "bytes": 76535,
+      "mimeType": "application/rtf",
+      "session": "pi-298421ce2789cac14d9039979ff5be201bda4750813e85f8a5a406aab7d13328",
+      "header_checked": false
+    }
+  ],
+  "diagnostic_check": {
+    "uid": "10123",
+    "since": "1789917925.965",
+    "marker": "bashkitten-private-console-check-120d5795",
+    "console_marker_lines": 0,
+    "public_test_site_url_lines": 0,
+    "android_runtime_crash_lines": 0,
+    "native_fatal_signal_lines": 0,
+    "tag_counts": {
+      "libEGL": 1,
+      "ANGLE": 2,
+      "HWUI": 2,
+      "CompatChangeReporter": 1
+    },
+    "tor_tag_selinux_audit_lines": 0,
+    "raw_logs_retained": false
+  },
+  "tor_diagnostic_sample": {
+    "uid": "10123",
+    "since": "1789915690.927",
+    "marker": "bashkitten-private-console-check-120d5795",
+    "console_marker_lines": 0,
+    "public_test_site_url_lines": 0,
+    "android_runtime_crash_lines": 0,
+    "native_fatal_signal_lines": 0,
+    "tag_counts": {
+      "audit": 116,
+      "rust_binder": 1,
+      "DisplayManager": 3,
+      "ImeTracker": 106,
+      "InsetsController": 62,
+      "InputMethodManager": 1,
+      "CompatChangeReporter": 3,
+      "AutofillManager": 10,
+      "WindowOnBackDispatcher": 57,
+      "VRI[LicensesActivity]": 2,
+      "Surface": 85,
+      "VRI[HomeActivity]": 6,
+      "Choreographer": 2,
+      "HWUI": 10,
+      "ols.bashkitten": 12,
+      "InputEventReceiver": 1,
+      "ViewRootImpl": 9,
+      "VRI[CommandAccessActivity]": 2,
+      "Zygote": 17,
+      "le_art_image_14": 5,
+      "nativeloader": 54,
+      "ApplicationLoaders": 34,
+      "GraphicsEnvironment": 119,
+      "GeckoLibLoad": 80,
+      "le_art_image_23": 2,
+      "View": 3,
+      "le_art_image_26": 1,
+      "AndroidRuntime": 5,
+      "VRI[GrantActivity]": 4,
+      "le_art_image_22": 5,
+      "incfs": 3,
+      "AndroidUI": 3,
+      "libc": 3,
+      "incfs-mounts": 1,
+      "VRI[AgentAccessActivity]": 2,
+      "JobInfo": 4,
+      "ble_art_image_3": 2,
+      "le_art_image_17": 5,
+      "VRI[OnionActivity]": 6,
+      "CameraBase": 2,
+      "VRI[OnionCaptureActivity]": 4,
+      "tor": 178,
+      "Settings": 1,
+      "able_art_image_": 4,
+      "Gecko": 8,
+      "org.openresearchtools.bashkitten": 2,
+      "vulkan": 6,
+      "libEGL": 2,
+      "[minigbm": 4,
+      "ANGLE": 4,
+      "GeckoIdleService": 17,
+      "le_art_image_12": 2,
+      "DesktopExperienceFlags": 1,
+      "ble_art_image_8": 2,
+      "ble_art_image_1": 2,
+      "le_art_image_31": 3,
+      "ble_art_image_5": 3,
+      "le_art_image_38": 2
+    },
+    "tor_tag_selinux_audit_lines": 178,
+    "raw_logs_retained": false
+  },
+  "additional_ui_checks": {
+    "menu-controls": {
+      "source": "399d8e49943dd206d6a1b920151030e3eda360f5",
+      "checks": [
+        "Normal-menu desktop checkbox changes only the selected tab",
+        "Desktop checkbox returns the selected tab to mobile mode",
+        "Normal-menu adblock checkbox changes only the selected tab",
+        "Re-enabling blocking from the menu rejects the cached image"
+      ],
+      "ok": true
+    },
+    "adaptive-layout": {
+      "source": "399d8e49943dd206d6a1b920151030e3eda360f5",
+      "before": {
+        "pid": "13490",
+        "size": "Physical size: 720x1280\n",
+        "density": "Physical density: 320\n"
+      },
+      "checks": [
+        {
+          "layout": "phone",
+          "widthDp": 360,
+          "tabStrip": false,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        },
+        {
+          "layout": "unfolded",
+          "widthDp": 800,
+          "tabStrip": true,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        },
+        {
+          "layout": "tablet-landscape",
+          "widthDp": 960,
+          "tabStrip": true,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        },
+        {
+          "layout": "folded",
+          "widthDp": 360,
+          "tabStrip": false,
+          "pidPreserved": true,
+          "pagePreserved": true,
+          "tabIdsPreserved": true
+        }
+      ],
+      "ok": true
+    },
+    "tor-quick-access": {
+      "source": "399d8e49943dd206d6a1b920151030e3eda360f5",
+      "checks": [
+        "Normal, Private and Tor tabs are separate tray pages",
+        "Saved Tor quick access opens its authenticated private-CA HTTPS site",
+        "Rendered Tor tab has a page thumbnail",
+        "Tor shortcut and Tor tab are absent from the Normal tray"
+      ],
+      "ok": true
+    }
+  }
+}

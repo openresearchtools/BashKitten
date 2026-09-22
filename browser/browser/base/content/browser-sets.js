@@ -244,9 +244,6 @@ document.addEventListener(
           case "Tools:Downloads":
             BrowserCommands.downloadsUI();
             break;
-          case "Tools:Torrents":
-            gBrowser.selectedTab = gBrowser.addTrustedTab("about:torrents");
-            break;
           case "Tools:Addons":
             BrowserAddonUI.openAddonsMgr();
             if (event.sourceEvent?.target.id == "key_openAddons") {

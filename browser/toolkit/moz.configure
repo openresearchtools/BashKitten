@@ -2070,7 +2070,7 @@ set_config("MOZ_UNSIGNED_SYSTEM_SCOPE", unsigned_addon_scopes.system)
 # ==============================================================
 @depends(milestone, "MOZ_APP_VENDOR")
 def addon_sideload_default(milestone, app_vendor):
-    return milestone.is_esr and (not app_vendor or app_vendor[0] != "WildBuzzard")
+    return milestone.is_esr and (not app_vendor or app_vendor[0] != "BashKitten")
 
 
 option(
@@ -4114,8 +4114,8 @@ with only_when(compile_environment):
             return "Mozilla"
         elif target.os == "Android":
             return ".mozilla"
-        elif app_vendor and app_vendor[0] == "WildBuzzard":
-            return "wildbuzzard"
+        elif app_vendor and app_vendor[0] == "BashKitten":
+            return "bashkitten"
         return "mozilla"
 
     option(

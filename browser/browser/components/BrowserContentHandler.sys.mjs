@@ -710,6 +710,13 @@ nsBrowserContentHandler.prototype = {
       "  --new-window <url> Open <url> in a new window.\n" +
       "  --new-tab <url>    Open <url> in a new tab.\n" +
       "  --private-window [<url>] Open <url> in a new private window.\n";
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      info =
+        "  --browser          Open or focus BashKitten.\n" +
+        "  --new-window <url> Open <url> in a new tab.\n" +
+        "  --new-tab <url>    Open <url> in a new tab.\n" +
+        "  --private-window [<url>] Open <url> in a new private tab.\n";
+    }
     if (AppConstants.platform == "win") {
       info += "  --preferences      Open Options dialog.\n";
     } else {

@@ -21,20 +21,20 @@ import org.mozilla.fenix.ext.navigateToNotificationsSettings
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.ext.showToolbarWithIconButton
-import org.openresearchtools.wildbuzzard.AgentAccessActivity
-import org.openresearchtools.wildbuzzard.BrowserApp
-import org.openresearchtools.wildbuzzard.LicensesActivity
+import com.bashkitten.AgentAccessActivity
+import com.bashkitten.BrowserApp
+import com.bashkitten.LicensesActivity
 import mozilla.components.ui.icons.R as iconsR
 
-/** Settings for the capabilities shipped by Wild Buzzard. */
+/** Settings for the capabilities shipped by BashKitten. */
 class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment {
     private val args by navArgs<SettingsFragmentArgs>()
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
         val category = PreferenceCategory(requireContext()).apply {
-            title = "Wild Buzzard"
-            key = "wildbuzzard_settings"
+            title = "BashKitten"
+            key = "bashkitten_settings"
             isIconSpaceReserved = false
         }
         preferenceScreen.addPreference(category)

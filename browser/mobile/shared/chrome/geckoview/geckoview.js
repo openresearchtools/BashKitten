@@ -462,13 +462,13 @@ function startup() {
 
   ModuleManager.init([
     {
-      name: "GeckoViewWildBuzzard",
+      name: "GeckoViewBashKitten",
       onInit: {
-        resource: "resource://gre/modules/GeckoViewWildBuzzard.sys.mjs",
+        resource: "resource://gre/modules/GeckoViewBashKitten.sys.mjs",
         actors: {
-          WildBuzzardBrowserControl: {
-            parent: { esModuleURI: "chrome://remote/content/wildbuzzard/BrowserControlParent.sys.mjs" },
-            child: { esModuleURI: "chrome://remote/content/wildbuzzard/BrowserControlChild.sys.mjs" },
+          BashKittenBrowserControl: {
+            parent: { esModuleURI: "chrome://remote/content/bashkitten/BrowserControlParent.sys.mjs" },
+            child: { esModuleURI: "chrome://remote/content/bashkitten/BrowserControlChild.sys.mjs" },
             allFrames: true,
             messageManagerGroups: ["browsers"],
           },

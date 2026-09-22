@@ -76,8 +76,7 @@ var kVersion = 31;
  */
 var ObsoleteBuiltinButtons = {
   "feed-button": 15,
-  "wildbuzzard-agent-toolbar-button": 30,
-  "wildbuzzard-torrent-toolbar-button": 31,
+  "bashkitten-agent-toolbar-button": 30,
 };
 
 /**
@@ -364,8 +363,8 @@ var CustomizableUIInternal = {
         : "home-button",
       "spring",
       "vertical-spacer",
-      "wildbuzzard-tor-toolbar-button",
-      "wildbuzzard-blocker-toolbar-button",
+      "bashkitten-tor-toolbar-button",
+      "bashkitten-blocker-toolbar-button",
       "urlbar-container",
       "spring",
       "downloads-button",
@@ -383,8 +382,8 @@ var CustomizableUIInternal = {
         defaultPlacements: navbarPlacements,
         verticalTabsDefaultPlacements: [
           "firefox-view-button",
-          "wildbuzzard-tor-toolbar-button",
-          "wildbuzzard-blocker-toolbar-button",
+          "bashkitten-tor-toolbar-button",
+          "bashkitten-blocker-toolbar-button",
           "alltabs-button",
         ],
         defaultCollapsed: false,
@@ -860,14 +859,14 @@ var CustomizableUIInternal = {
     }
 
     if (currentVersion < 23) {
-      // WildBuzzard 140 betas registered the blocker button as an external
+      // BashKitten 140 betas registered the blocker button as an external
       // widget which queued it via gFuturePlacements; that path appended to
       // the navbar end. Remove any existing placement so it can be inserted
-      // at its default position via placeNewDefaultWidgetsInArea. WildBuzzard
+      // at its default position via placeNewDefaultWidgetsInArea. BashKitten
       // 140 release profiles are version 23 or later and keep their layout.
       for (let area of Object.keys(gSavedState.placements)) {
         let placements = gSavedState.placements[area];
-        let idx = placements.indexOf("wildbuzzard-blocker-toolbar-button");
+        let idx = placements.indexOf("bashkitten-blocker-toolbar-button");
         if (idx !== -1) {
           placements.splice(idx, 1);
         }
@@ -878,7 +877,7 @@ var CustomizableUIInternal = {
       const navbarPlacements =
         gSavedState.placements[CustomizableUI.AREA_NAVBAR];
       if (navbarPlacements) {
-        const blocker = "wildbuzzard-blocker-toolbar-button";
+        const blocker = "bashkitten-blocker-toolbar-button";
         const blockerIndex = navbarPlacements.indexOf(blocker);
         if (blockerIndex !== -1) {
           navbarPlacements.splice(blockerIndex, 1);
@@ -896,7 +895,7 @@ var CustomizableUIInternal = {
       for (const placements of Object.values(gSavedState.placements)) {
         let index;
         while (
-          (index = placements.indexOf("wildbuzzard-agent-toolbar-button")) !==
+          (index = placements.indexOf("bashkitten-agent-toolbar-button")) !==
           -1
         ) {
           placements.splice(index, 1);
@@ -904,17 +903,6 @@ var CustomizableUIInternal = {
       }
     }
 
-    if (currentVersion < 31) {
-      for (const placements of Object.values(gSavedState.placements)) {
-        let index;
-        while (
-          (index = placements.indexOf("wildbuzzard-torrent-toolbar-button")) !==
-          -1
-        ) {
-          placements.splice(index, 1);
-        }
-      }
-    }
   },
 
   /**

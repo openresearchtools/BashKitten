@@ -304,6 +304,9 @@ const oaFromDetails = (details, context, allowPattern) => {
       if (!userContextId) {
         throw new ExtensionError(`Invalid cookie store id: "${storeId}"`);
       }
+      if (userContextId >= 0xB4500000 && userContextId <= 0xB450FFFF) {
+        throw new ExtensionError("Browser-owned Agent cookies are protected");
+      }
       originAttributes.userContextId = userContextId;
     }
   }
@@ -432,6 +435,10 @@ const query = function* (detailsIn, props, context, allowPattern) {
 
   // Based on CookieService::GetCookieStringFromHttp
   function matches(cookie) {
+    const attrs = cookie.originAttributes;
+    const id = attrs.userContextId;
+    if ((id >= 0xB4500000 && id <= 0xB450FFFF) ||
+        attrs.geckoViewSessionContextId?.startsWith("gvctx626173686b697474656e2d6167656e742d75692d")) return false;
     function domainMatches(host) {
       return (
         cookie.rawHost == host ||
@@ -548,6 +555,10 @@ this.cookies = class extends ExtensionAPIPersistent {
       let observer = (subject, topic) => {
         let notify = (removed, cookie, cause) => {
           cookie.QueryInterface(Ci.nsICookie);
+          const attrs = cookie.originAttributes;
+          const id = attrs.userContextId;
+          if ((id >= 0xB4500000 && id <= 0xB450FFFF) ||
+              attrs.geckoViewSessionContextId?.startsWith("gvctx626173686b697474656e2d6167656e742d75692d")) return;
 
           if (this.extension.allowedOrigins.matchesCookie(cookie)) {
             fire.async({

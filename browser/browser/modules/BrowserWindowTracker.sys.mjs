@@ -23,6 +23,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/aiwindow/ui/modules/AIWindow.sys.mjs",
   HomePage: "resource:///modules/HomePage.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
+  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
+  URILoadingHelper: "resource:///modules/URILoadingHelper.sys.mjs",
 });
 
 XPCOMUtils.defineLazyPreferenceGetter(
@@ -181,6 +183,77 @@ var WindowHelper = {
 export const BrowserWindowTracker = {
   pendingWindows: new Map(),
 
+  // Use the same arguments as Firefox's browser window startup, but append
+  // ordinary tabs. Keep URI arrays distinct from the legacy pipe-separated
+  // homepage string and retain explicit load principals and POST data.
+  openTabsInWindow(win, args, isPrivate = false) {
+    const values =
+      args instanceof Ci.nsIArray
+        ? Array.from(args.enumerate())
+        : args
+          ? [args]
+          : [];
+    const value = index => {
+      const item = values[index];
+      if (
+        item instanceof Ci.nsISupportsString ||
+        item instanceof Ci.nsISupportsPRBool ||
+        item instanceof Ci.nsISupportsPRUint32
+      ) {
+        return item.data;
+      }
+      return item;
+    };
+    const first = value(0);
+    if (first && win.XULElement.isInstance(first)) {
+      // A drag/extension asking to detach a tab keeps it in this window.
+      const tab = first.tabs?.[0] ?? first;
+      if (win.gBrowser.tabs.includes(tab)) {
+        win.gBrowser.selectedTab = tab;
+      }
+      win.focus();
+      return;
+    }
+    let urls =
+      first instanceof Ci.nsIArray
+        ? Array.from(first.enumerate(Ci.nsISupportsString), item => item.data)
+        : first
+          ? values.length < 3
+            ? String(first).split("|")
+            : [first]
+          : [];
+    if (!urls.length) {
+      if (isPrivate) {
+        lazy.PrivateTab.init();
+        lazy.PrivateTab.openNewPrivateTab(win);
+      } else {
+        win.BrowserCommands.openTab();
+      }
+      return;
+    }
+    const extra = value(1);
+    for (const url of urls) {
+      lazy.URILoadingHelper.openLinkIn(win, url, "tab", {
+        private: isPrivate,
+        referrerInfo: value(2),
+        postData: value(3),
+        allowThirdPartyFixup: value(4),
+        userContextId: value(5),
+        originPrincipal: value(6),
+        originStoragePrincipal: value(7),
+        triggeringPrincipal:
+          value(8) || Services.scriptSecurityManager.getSystemPrincipal(),
+        allowInheritPrincipal: value(9) !== false,
+        policyContainer: value(10),
+        fromExternal: extra?.hasKey("fromExternal")
+          ? extra.getPropertyAsBool("fromExternal")
+          : false,
+        inBackground: false,
+      });
+    }
+    win.focus();
+  },
+
   /**
    * Get the most recent browser window.
    * Note that with the default options this may return null on Windows if
@@ -334,6 +407,35 @@ export const BrowserWindowTracker = {
    * @returns {Window}
    */
   openWindow(options = {}) {
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      const existing =
+        this.getTopWindow({ allowFromInactiveWorkspace: true }) ||
+        Array.from(this.pendingWindows.keys()).find(win => !win.closed);
+      if (existing) {
+        const openTabs = () =>
+          this.openTabsInWindow(existing, options.args, options.private);
+        if (existing.gBrowserInit?.delayedStartupFinished) {
+          openTabs();
+        } else {
+          const pending =
+            this.pendingWindows.get(existing)?.deferred.promise ||
+            existing.delayedStartupPromise;
+          pending.then(openTabs).catch(console.error);
+        }
+        return existing;
+      }
+      // Even an initial --private-window launch creates the one normal window;
+      // its requested content is loaded into the private tab container.
+      if (options.private) {
+        const { args } = options;
+        const win = this.openWindow({ ...options, private: false, args: null });
+        this.pendingWindows
+          .get(win)
+          .deferred.promise.then(() => this.openTabsInWindow(win, args, true))
+          .catch(console.error);
+        return win;
+      }
+    }
     let {
       openerWindow = undefined,
       private: isPrivate = false,
@@ -430,6 +532,9 @@ export const BrowserWindowTracker = {
    */
   async promiseOpenWindow(options) {
     let win = this.openWindow(options);
+    if (win.gBrowserInit?.delayedStartupFinished) {
+      return win;
+    }
     await topicObserved(
       "browser-delayed-startup-finished",
       subject => subject == win

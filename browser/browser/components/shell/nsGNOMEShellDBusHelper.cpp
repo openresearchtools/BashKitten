@@ -13,10 +13,10 @@
 #include "nsImportModule.h"
 #include "nsIOpenTabsProvider.h"
 
-#ifdef MOZ_WILDBUZZARD
-#  define DBUS_BUS_NAME_TEMPLATE "org.wildbuzzard.WildBuzzard.SearchProvider"
+#ifdef MOZ_BASHKITTEN
+#  define DBUS_BUS_NAME_TEMPLATE "org.bashkitten.BashKitten.SearchProvider"
 #  define DBUS_OBJECT_PATH_TEMPLATE \
-    "/org/wildbuzzard/WildBuzzard/SearchProvider"
+    "/org/bashkitten/BashKitten/SearchProvider"
 #else
 #  define DBUS_BUS_NAME_TEMPLATE "org.mozilla.%s.SearchProvider"
 #  define DBUS_OBJECT_PATH_TEMPLATE "/org/mozilla/%s/SearchProvider"
@@ -24,7 +24,7 @@
 
 const char* GetDBusBusName() {
   static const char* name = []() {
-#ifdef MOZ_WILDBUZZARD
+#ifdef MOZ_BASHKITTEN
     return ToNewCString(nsLiteralCString(DBUS_BUS_NAME_TEMPLATE));
 #else
     nsAutoCString appName;
@@ -38,7 +38,7 @@ const char* GetDBusBusName() {
 
 const char* GetDBusObjectPath() {
   static const char* path = []() {
-#ifdef MOZ_WILDBUZZARD
+#ifdef MOZ_BASHKITTEN
     return ToNewCString(nsLiteralCString(DBUS_OBJECT_PATH_TEMPLATE));
 #else
     nsAutoCString appName;

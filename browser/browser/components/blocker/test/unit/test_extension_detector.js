@@ -4,32 +4,32 @@
 const { Spotlight } = ChromeUtils.importESModule(
   "resource:///modules/asrouter/Spotlight.sys.mjs"
 );
-const { WildBuzzardBlockerExtensionDetector } = ChromeUtils.importESModule(
-  "resource:///modules/WildBuzzardBlockerExtensionDetector.sys.mjs"
+const { BashKittenBlockerExtensionDetector } = ChromeUtils.importESModule(
+  "resource:///modules/BashKittenBlockerExtensionDetector.sys.mjs"
 );
 
 const PREF_DISMISSED_INSTALL_WARNINGS =
-  "wildbuzzard.blocker.dismissedExtensionInstallWarnings";
+  "bashkitten.blocker.dismissedExtensionInstallWarnings";
 const PREF_DETECTION_DISMISSED =
-  "wildbuzzard.blocker.extensionDetectionDismissed";
+  "bashkitten.blocker.extensionDetectionDismissed";
 
 add_task(
   async function test_successful_string_preload_is_kept_for_sync_prompts() {
-    WildBuzzardBlockerExtensionDetector._localizedStringCache.clear();
-    WildBuzzardBlockerExtensionDetector._localizedStringLoadPromise = null;
+    BashKittenBlockerExtensionDetector._localizedStringCache.clear();
+    BashKittenBlockerExtensionDetector._localizedStringLoadPromise = null;
 
-    await WildBuzzardBlockerExtensionDetector._preloadLocalizedStrings();
+    await BashKittenBlockerExtensionDetector._preloadLocalizedStrings();
     const preloadPromise =
-      WildBuzzardBlockerExtensionDetector._localizedStringLoadPromise;
+      BashKittenBlockerExtensionDetector._localizedStringLoadPromise;
 
     Assert.ok(
       preloadPromise,
       "Successful string preload should keep the resolved promise"
     );
 
-    await WildBuzzardBlockerExtensionDetector._preloadLocalizedStrings();
+    await BashKittenBlockerExtensionDetector._preloadLocalizedStrings();
     Assert.equal(
-      WildBuzzardBlockerExtensionDetector._localizedStringLoadPromise,
+      BashKittenBlockerExtensionDetector._localizedStringLoadPromise,
       preloadPromise,
       "Later preload calls should reuse the successful preload promise"
     );
@@ -51,7 +51,7 @@ add_task(
     Services.prefs.clearUserPref(PREF_DISMISSED_INSTALL_WARNINGS);
 
     try {
-      const result = WildBuzzardBlockerExtensionDetector._showInstallWarning(
+      const result = BashKittenBlockerExtensionDetector._showInstallWarning(
         {
           gBrowser: {
             selectedBrowser: {
@@ -74,30 +74,30 @@ add_task(
 
       const [, , title, message, , installAnyway, keepBuiltIn] = promptCalls[0];
       Assert.ok(
-        !String(title).includes("wildbuzzard-blocker-prompt-title"),
+        !String(title).includes("bashkitten-blocker-prompt-title"),
         "Prompt title should be localized"
       );
       Assert.ok(
         !String(message).includes(
-          "wildbuzzard-blocker-extension-install-warning"
+          "bashkitten-blocker-extension-install-warning"
         ),
         "Prompt message should use the localized warning"
       );
       Assert.ok(
         !String(message).includes(
-          "wildbuzzard-blocker-extension-install-manage-settings"
+          "bashkitten-blocker-extension-install-manage-settings"
         ),
         "Prompt message should use the localized settings text"
       );
       Assert.ok(
         !String(installAnyway).includes(
-          "wildbuzzard-blocker-extension-install-anyway"
+          "bashkitten-blocker-extension-install-anyway"
         ),
         "Install button should be localized"
       );
       Assert.ok(
         !String(keepBuiltIn).includes(
-          "wildbuzzard-blocker-extension-install-keep-built-in"
+          "bashkitten-blocker-extension-install-keep-built-in"
         ),
         "Cancel button should be localized"
       );
@@ -110,17 +110,17 @@ add_task(
 
 add_task(async function test_upgrade_message_ids_are_monotonic() {
   const originalPrewarm =
-    WildBuzzardBlockerExtensionDetector._prewarmUpgradeMessage;
+    BashKittenBlockerExtensionDetector._prewarmUpgradeMessage;
   const originalShowSpotlightDialog = Spotlight.showSpotlightDialog;
   const originalDateNow = Date.now;
   const shownMessages = [];
 
-  WildBuzzardBlockerExtensionDetector._detectionActive = true;
-  WildBuzzardBlockerExtensionDetector._messageIdCounter = 0;
+  BashKittenBlockerExtensionDetector._detectionActive = true;
+  BashKittenBlockerExtensionDetector._messageIdCounter = 0;
   Services.prefs.clearUserPref(PREF_DETECTION_DISMISSED);
   Date.now = () => 1000;
 
-  WildBuzzardBlockerExtensionDetector._prewarmUpgradeMessage = async () => ({
+  BashKittenBlockerExtensionDetector._prewarmUpgradeMessage = async () => ({
     content: {
       screens: [
         {
@@ -144,7 +144,7 @@ add_task(async function test_upgrade_message_ids_are_monotonic() {
     const browser = {};
 
     Assert.equal(
-      await WildBuzzardBlockerExtensionDetector._showDetectionUpgradeModal(
+      await BashKittenBlockerExtensionDetector._showDetectionUpgradeModal(
         win,
         browser,
         "Example Blocker"
@@ -153,7 +153,7 @@ add_task(async function test_upgrade_message_ids_are_monotonic() {
       "First modal should be shown"
     );
     Assert.equal(
-      await WildBuzzardBlockerExtensionDetector._showDetectionUpgradeModal(
+      await BashKittenBlockerExtensionDetector._showDetectionUpgradeModal(
         win,
         browser,
         "Example Blocker"
@@ -174,9 +174,9 @@ add_task(async function test_upgrade_message_ids_are_monotonic() {
       "Screen IDs should be unique even when Date.now is stable"
     );
   } finally {
-    WildBuzzardBlockerExtensionDetector._prewarmUpgradeMessage =
+    BashKittenBlockerExtensionDetector._prewarmUpgradeMessage =
       originalPrewarm;
-    WildBuzzardBlockerExtensionDetector._detectionActive = false;
+    BashKittenBlockerExtensionDetector._detectionActive = false;
     Spotlight.showSpotlightDialog = originalShowSpotlightDialog;
     Date.now = originalDateNow;
     Services.prefs.clearUserPref(PREF_DETECTION_DISMISSED);

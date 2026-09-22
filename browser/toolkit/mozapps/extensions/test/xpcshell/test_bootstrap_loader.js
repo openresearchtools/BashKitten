@@ -3,7 +3,7 @@
 
 const APP_ID = "xpcshell@tests.mozilla.org";
 const BOOTSTRAP_ID = "bootstrap-loader@tests.mozilla.org";
-const CLASSIC_ID = "classic-rdf-loader@tests.wildbuzzard.invalid";
+const CLASSIC_ID = "classic-rdf-loader@tests.bashkitten.invalid";
 const DICTIONARY_ID = "dictionary-loader@tests.mozilla.org";
 const OTHER_LOADER_ID = "other-loader@tests.mozilla.org";
 const HYBRID_BOOTSTRAP_ID = "hybrid-bootstrap@tests.mozilla.org";
@@ -12,22 +12,22 @@ const RAW_PACKED_ID = "raw-packed-xul@tests.mozilla.org";
 const RAW_UNPACKED_ID = "raw-unpacked-xul@tests.mozilla.org";
 const LOCKED_SIDELOAD_ID = "locked-sideload-xul@tests.mozilla.org";
 const SIGNED_RDF_ID = "ordinary-signed-rdf@tests.mozilla.org";
-const GRANDFATHERED_HYBRID_ID = "grandfathered-hybrid@tests.wildbuzzard.invalid";
-const TEMP_RAW_FAILURE_ID = "temporary-raw-failure@tests.wildbuzzard.invalid";
-const TEMP_REPLACEMENT_ID = "temporary-replacement@tests.wildbuzzard.invalid";
-const CROSS_LOCATION_ID = "cross-location-classic@tests.wildbuzzard.invalid";
-const CROSS_LOCATION_CRASH_ID = "cross-location-crash@tests.wildbuzzard.invalid";
-const PERSISTENCE_CRASH_ID = "persistence-crash@tests.wildbuzzard.invalid";
-const ACTUAL_CLASSIC_UPDATE_ID = "actual-classic-update@tests.wildbuzzard.invalid";
-const RETAINED_SCOPE_ID = "retained-scope@tests.wildbuzzard.invalid";
-const APP_SHUTDOWN_ID = "app-shutdown-classic@tests.wildbuzzard.invalid";
+const GRANDFATHERED_HYBRID_ID = "grandfathered-hybrid@tests.bashkitten.invalid";
+const TEMP_RAW_FAILURE_ID = "temporary-raw-failure@tests.bashkitten.invalid";
+const TEMP_REPLACEMENT_ID = "temporary-replacement@tests.bashkitten.invalid";
+const CROSS_LOCATION_ID = "cross-location-classic@tests.bashkitten.invalid";
+const CROSS_LOCATION_CRASH_ID = "cross-location-crash@tests.bashkitten.invalid";
+const PERSISTENCE_CRASH_ID = "persistence-crash@tests.bashkitten.invalid";
+const ACTUAL_CLASSIC_UPDATE_ID = "actual-classic-update@tests.bashkitten.invalid";
+const RETAINED_SCOPE_ID = "retained-scope@tests.bashkitten.invalid";
+const APP_SHUTDOWN_ID = "app-shutdown-classic@tests.bashkitten.invalid";
 const SIGNING_MATRIX_IDS = {
-  unsigned: "legacy-unsigned@tests.wildbuzzard.invalid",
-  ordinary: "legacy-ordinary@tests.wildbuzzard.invalid",
-  privileged: "legacy-privileged@tests.wildbuzzard.invalid",
-  system: "legacy-system@tests.wildbuzzard.invalid",
-  temporary: "legacy-temporary@tests.wildbuzzard.invalid",
-  builtin: "legacy-builtin@tests.wildbuzzard.invalid",
+  unsigned: "legacy-unsigned@tests.bashkitten.invalid",
+  ordinary: "legacy-ordinary@tests.bashkitten.invalid",
+  privileged: "legacy-privileged@tests.bashkitten.invalid",
+  system: "legacy-system@tests.bashkitten.invalid",
+  temporary: "legacy-temporary@tests.bashkitten.invalid",
+  builtin: "legacy-builtin@tests.bashkitten.invalid",
 };
 const EVENTS_PREF = "test.bootstrap-loader.events";
 const P0_EVENTS_PREF = "test.bootstrap-loader.p0-events";
@@ -1394,9 +1394,9 @@ const NSGetFactory = XPCOMUtils.generateNSGetFactory([${className}]);
 
 add_task(async function test_component_live_instance_unload() {
   const cid = Components.ID("{e918374d-b157-43c9-803d-7f609d029bcc}");
-  const contractId = "@tests.wildbuzzard.invalid/live-legacy-component;1";
+  const contractId = "@tests.bashkitten.invalid/live-legacy-component;1";
   const retainedContractId =
-    "@tests.wildbuzzard.invalid/retained-live-legacy-component;1";
+    "@tests.bashkitten.invalid/retained-live-legacy-component;1";
   const replacementCID = Components.ID(
     "{5b6a6e91-3247-4a63-b12d-aa3033443ff5}"
   );
@@ -1429,7 +1429,7 @@ const NSGetFactory = XPCOMUtils.generateNSGetFactory([LiveLegacyComponent]);
   });
   const manifest = await new LegacyChromeManifest(
     {
-      id: "live-legacy-component@tests.wildbuzzard.invalid",
+      id: "live-legacy-component@tests.bashkitten.invalid",
       rootURI: Services.io.newFileURI(directory),
     },
     console
@@ -1863,7 +1863,7 @@ add_task(async function test_current_hybrid_grandfathering() {
   }
 });
 
-add_task(async function test_wildbuzzard_legacy_signing_state_matrix() {
+add_task(async function test_bashkitten_legacy_signing_state_matrix() {
   const previousRealCertChecks = gUseRealCertChecks;
   const previousPrivilegedSignatures = AddonTestUtils.usePrivilegedSignatures;
   const previousSigningRequired = Services.prefs.getBoolPref(

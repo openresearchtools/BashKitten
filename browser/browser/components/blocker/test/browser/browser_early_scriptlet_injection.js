@@ -1,15 +1,15 @@
 /* Any copyright is dedicated to the Public Domain.
  * http://creativecommons.org/publicdomain/zero/1.0/ */
 
-const { WildBuzzardBlockerService } = ChromeUtils.importESModule(
-  "resource:///modules/WildBuzzardBlockerService.sys.mjs"
+const { BashKittenBlockerService } = ChromeUtils.importESModule(
+  "resource:///modules/BashKittenBlockerService.sys.mjs"
 );
 
-const BLOCKER_ENABLED_PREF = "wildbuzzard.blocker.enabled";
+const BLOCKER_ENABLED_PREF = "bashkitten.blocker.enabled";
 const EARLY_SCRIPTLET_DIAGNOSTICS_PREF =
-  "wildbuzzard.blocker.earlyScriptletInjection.diagnostics";
+  "bashkitten.blocker.earlyScriptletInjection.diagnostics";
 const EARLY_SCRIPTLET_PARSER_BLOCK_TIMEOUT_PREF =
-  "wildbuzzard.blocker.earlyScriptletInjection.parserBlockTimeoutMs";
+  "bashkitten.blocker.earlyScriptletInjection.parserBlockTimeoutMs";
 const EARLY_SCRIPTLET_TEST_PARSER_BLOCK_TIMEOUT_MS = 10000;
 const TEST_URL =
   "https://example.com/browser/browser/components/blocker/test/browser/file_early_scriptlet_injection.html";
@@ -71,7 +71,7 @@ async function readProbeState(browser) {
     const proceduralTarget =
       content.document.getElementById("procedural-target");
     return {
-      diagnostics: win.__wildbuzzardBlockerEarlyScriptletDiagnostics || null,
+      diagnostics: win.__bashkittenBlockerEarlyScriptletDiagnostics || null,
       hiddenDisplay: content.getComputedStyle(hideTarget).display,
       probe: win.__wfProbe,
       proceduralDisplay: content.getComputedStyle(proceduralTarget).display,
@@ -109,13 +109,13 @@ function median(values) {
 }
 
 add_setup(function setup() {
-  originalGetCosmeticResources = WildBuzzardBlockerService.getCosmeticResources;
+  originalGetCosmeticResources = BashKittenBlockerService.getCosmeticResources;
   originalInitializeEngineWithRetry =
-    WildBuzzardBlockerService._initializeEngineWithRetry;
-  originalWhenEngineReady = WildBuzzardBlockerService.whenEngineReady;
+    BashKittenBlockerService._initializeEngineWithRetry;
+  originalWhenEngineReady = BashKittenBlockerService.whenEngineReady;
 
-  WildBuzzardBlockerService._initializeEngineWithRetry = async function () {};
-  WildBuzzardBlockerService.getCosmeticResources = function (url) {
+  BashKittenBlockerService._initializeEngineWithRetry = async function () {};
+  BashKittenBlockerService.getCosmeticResources = function (url) {
     const parsed = new URL(url);
     if (!parsed.pathname.endsWith("file_early_scriptlet_injection.html")) {
       return null;
@@ -123,7 +123,7 @@ add_setup(function setup() {
     return resourcesForCase(parsed.searchParams.get("case"));
   };
 
-  WildBuzzardBlockerService.whenEngineReady = async function () {
+  BashKittenBlockerService.whenEngineReady = async function () {
     if (!engineReadyDelayMs) {
       return;
     }
@@ -133,11 +133,11 @@ add_setup(function setup() {
   };
 
   registerCleanupFunction(() => {
-    WildBuzzardBlockerService.getCosmeticResources =
+    BashKittenBlockerService.getCosmeticResources =
       originalGetCosmeticResources;
-    WildBuzzardBlockerService._initializeEngineWithRetry =
+    BashKittenBlockerService._initializeEngineWithRetry =
       originalInitializeEngineWithRetry;
-    WildBuzzardBlockerService.whenEngineReady = originalWhenEngineReady;
+    BashKittenBlockerService.whenEngineReady = originalWhenEngineReady;
     engineReadyDelayMs = 0;
   });
 });
@@ -276,12 +276,12 @@ add_task(async function test_latency_diagnostics() {
     }
 
     info(
-      `WildBuzzardBlocker early parser block median no-scriptlet duration: ${median(
+      `BashKittenBlocker early parser block median no-scriptlet duration: ${median(
         noScriptletDurations
       )}ms`
     );
     info(
-      `WildBuzzardBlocker early parser block median scriptlet duration: ${median(
+      `BashKittenBlocker early parser block median scriptlet duration: ${median(
         scriptletDurations
       )}ms`
     );

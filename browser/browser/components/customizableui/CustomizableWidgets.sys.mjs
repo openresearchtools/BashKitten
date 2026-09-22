@@ -324,15 +324,15 @@ export const CustomizableWidgets = [
     },
   },
   {
-    id: "wildbuzzard-blocker-toolbar-button",
-    l10nId: "wildbuzzard-blocker-toolbar-button",
+    id: "bashkitten-blocker-toolbar-button",
+    l10nId: "bashkitten-blocker-toolbar-button",
     defaultArea: "nav-bar",
     introducedInVersion: 25,
     onCreated(aNode) {
       aNode.setAttribute("badged", "true");
-      // Match the default of the lazy getter in WildBuzzardBlockerPanel.
+      // Match the default of the lazy getter in BashKittenBlockerPanel.
       aNode.hidden = !Services.prefs.getBoolPref(
-        "wildbuzzard.blocker.ui.enabled",
+        "bashkitten.blocker.ui.enabled",
         false
       );
     },
@@ -341,15 +341,15 @@ export const CustomizableWidgets = [
       if (!win?.gBrowser) {
         return;
       }
-      const { WildBuzzardBlockerPanel } = ChromeUtils.importESModule(
-        "resource:///modules/WildBuzzardBlockerPanel.sys.mjs"
+      const { BashKittenBlockerPanel } = ChromeUtils.importESModule(
+        "resource:///modules/BashKittenBlockerPanel.sys.mjs"
       );
-      WildBuzzardBlockerPanel._openToolbarPanel(win, aEvent);
+      BashKittenBlockerPanel._openToolbarPanel(win, aEvent);
     },
   },
   {
-    id: "wildbuzzard-tor-toolbar-button",
-    l10nId: "wildbuzzard-tor-toolbar-button",
+    id: "bashkitten-tor-toolbar-button",
+    l10nId: "bashkitten-tor-toolbar-button",
     defaultArea: "nav-bar",
     introducedInVersion: 28,
     onCreated(aNode) {
@@ -363,20 +363,20 @@ export const CustomizableWidgets = [
         aNode.toggleAttribute("busy", status.busy);
         aNode.setAttribute("aria-pressed", String(status.active));
         aNode.setAttribute("aria-busy", String(status.busy));
-        let l10nId = "wildbuzzard-tor-toolbar-button";
+        let l10nId = "bashkitten-tor-toolbar-button";
         if (status.error) {
-          l10nId = "wildbuzzard-tor-toolbar-button-error";
+          l10nId = "bashkitten-tor-toolbar-button-error";
         } else if (status.busy) {
-          l10nId = "wildbuzzard-tor-toolbar-button-starting";
+          l10nId = "bashkitten-tor-toolbar-button-starting";
         } else if (status.active) {
-          l10nId = "wildbuzzard-tor-toolbar-button-on";
+          l10nId = "bashkitten-tor-toolbar-button-on";
         }
         aNode.ownerDocument.l10n.setAttributes(aNode, l10nId);
       };
       const widgetListener = {
         onWidgetInstanceRemoved(widgetId, document) {
           if (
-            widgetId != "wildbuzzard-tor-toolbar-button" ||
+            widgetId != "bashkitten-tor-toolbar-button" ||
             document != aNode.ownerDocument
           ) {
             return;

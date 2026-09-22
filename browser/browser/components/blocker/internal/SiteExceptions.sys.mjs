@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { toSafeDomain } from "resource:///modules/WildBuzzardBlockerUtils.sys.mjs";
+import { toSafeDomain } from "resource:///modules/BashKittenBlockerUtils.sys.mjs";
 
 function contentBlockingAllowList() {
   return Cc["@mozilla.org/content-blocking-allow-list;1"].getService(
@@ -10,8 +10,8 @@ function contentBlockingAllowList() {
   );
 }
 
-export const PERMISSION_TYPE = "wildbuzzard-blocker";
-export const PERMISSION_TYPE_PB = "wildbuzzard-blocker-pb";
+export const PERMISSION_TYPE = "bashkitten-blocker";
+export const PERMISSION_TYPE_PB = "bashkitten-blocker-pb";
 
 let pbContextObserverRegistered = false;
 const pbContextObserver = {
@@ -63,7 +63,7 @@ function isPrivateExceptionContext(options = {}) {
 }
 
 /**
- * Stores blocker site exceptions as wildbuzzard-blocker permissions. Permanent
+ * Stores blocker site exceptions as bashkitten-blocker permissions. Permanent
  * user exceptions use the normal type; private "load anyway" choices use a
  * private-session type that is cleared when the private session ends.
  */

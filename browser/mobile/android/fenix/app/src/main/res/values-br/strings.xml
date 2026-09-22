@@ -2298,7 +2298,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Serriñ emgefreek goude ur miz?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard a c’hall serriñ ivinelloù n’ho peus ket gwelet er miz diwezhañ.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten a c’hall serriñ ivinelloù n’ho peus ket gwelet er miz diwezhañ.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">GWEREDEKAAT AR SERRIÑ EMGEFREEK</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

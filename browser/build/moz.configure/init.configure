@@ -253,7 +253,12 @@ def vcs_checkout_type(build_env, automation, js_package, help):
         return "hg"
     elif os.path.exists(os.path.join(build_env.topsrcdir, ".jj")):
         return "jj"
-    elif os.path.exists(os.path.join(build_env.topsrcdir, ".git")):
+    elif os.path.exists(os.path.join(build_env.topsrcdir, ".git")) or (
+        os.path.isfile(
+            os.path.join(build_env.topsrcdir, "bashkitten", "config", "version.txt")
+        )
+        and os.path.exists(os.path.join(build_env.topsrcdir, "..", ".git"))
+    ):
         return "git"
     elif automation and not js_package and not help:
         raise FatalCheckError(
@@ -1025,7 +1030,7 @@ option(
     nargs=1,
     help="Specify a custom path to app version files instead of auto-detecting",
     default=depends(build_project)(
-        lambda project: "wildbuzzard/config" if project == "browser" else None
+        lambda project: "bashkitten/config" if project == "browser" else None
     ),
 )
 

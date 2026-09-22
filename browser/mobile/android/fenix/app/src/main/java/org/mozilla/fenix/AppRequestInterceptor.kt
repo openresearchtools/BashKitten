@@ -43,17 +43,17 @@ class AppRequestInterceptor(
         isDirectNavigation: Boolean,
         isSubframeRequest: Boolean,
     ): RequestInterceptor.InterceptionResponse? {
-        val agent = org.openresearchtools.wildbuzzard.BrowserApp.get(context)
-        val native = (engineSession as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.wildBuzzardSession()
+        val agent = com.bashkitten.BrowserApp.get(context)
+        val native = (engineSession as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.bashKittenSession()
         if (native != null && !isSubframeRequest && (uri.startsWith("http://") || uri.startsWith("https://"))) {
             val state = context.components.core.store.state.tabs.find { it.engineState.engineSession === engineSession }
             if (state != null) {
-                val tab = agent.forSession(native) ?: agent.track(org.openresearchtools.wildbuzzard.BrowserApp.Tab(
-                    state.id, org.openresearchtools.wildbuzzard.BrowserApp.USER, native,
+                val tab = agent.forSession(native) ?: agent.track(com.bashkitten.BrowserApp.Tab(
+                    state.id, com.bashkitten.BrowserApp.USER, native,
                 ), state.parentId)
                 tab.error = ""
                 if (agent.prepareNavigation(tab, uri)) return RequestInterceptor.InterceptionResponse.Deny
-            } else if (org.openresearchtools.wildbuzzard.BrowserApp.onion(uri)) {
+            } else if (com.bashkitten.BrowserApp.onion(uri)) {
                 return RequestInterceptor.InterceptionResponse.Deny
             }
         }
@@ -86,9 +86,9 @@ class AppRequestInterceptor(
         uri: String?,
     ): RequestInterceptor.ErrorResponse {
         val improvedErrorType = improveErrorType(errorType)
-        val native = (session as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.wildBuzzardSession()
+        val native = (session as? mozilla.components.browser.engine.gecko.GeckoEngineSession)?.bashKittenSession()
         if (native != null) {
-            org.openresearchtools.wildbuzzard.BrowserApp.get(context).forSession(native)?.error = improvedErrorType.name
+            com.bashkitten.BrowserApp.get(context).forSession(native)?.error = improvedErrorType.name
         }
         val riskLevel = getRiskLevel(improvedErrorType)
 

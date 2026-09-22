@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { CACHE_ROOT_DIR_NAME } from "resource:///modules/WildBuzzardBlockerUtils.sys.mjs";
+import { CACHE_ROOT_DIR_NAME } from "resource:///modules/BashKittenBlockerUtils.sys.mjs";
 
 const ENGINE_CACHE_NAME_RE = /^adblock-engine\..+\.cache$/;
 const CACHE_META_NAME_RE = /^cache-meta\..+\.json$/;
@@ -100,7 +100,7 @@ async function readJSON(path, fallbackValue) {
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch (err) {
     if (err?.result !== Cr.NS_ERROR_FILE_NOT_FOUND) {
-      console.warn(`[WildBuzzardBlocker] Failed reading JSON ${path}:`, err);
+      console.warn(`[BashKittenBlocker] Failed reading JSON ${path}:`, err);
     }
     return fallbackValue;
   }
@@ -117,7 +117,7 @@ export const EngineCache = {
       await IOUtils.remove(engineCachePath(), { ignoreAbsent: true });
     } catch (err) {
       console.warn(
-        "[WildBuzzardBlocker] Failed removing engine cache file:",
+        "[BashKittenBlocker] Failed removing engine cache file:",
         err
       );
     }
@@ -126,7 +126,7 @@ export const EngineCache = {
       await IOUtils.remove(cacheMetaPath(), { ignoreAbsent: true });
     } catch (err) {
       console.warn(
-        "[WildBuzzardBlocker] Failed removing cache metadata file:",
+        "[BashKittenBlocker] Failed removing cache metadata file:",
         err
       );
     }

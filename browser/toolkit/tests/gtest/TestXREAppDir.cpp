@@ -567,7 +567,7 @@ class CacheXREAppDir_NoEnv : public BaseXREAppDir {
 };
 
 #if defined(XP_UNIX) && !defined(XP_MACOSX)
-class WildBuzzardXDGIsolation : public BaseXREAppDir {
+class BashKittenXDGIsolation : public BaseXREAppDir {
  protected:
   void SetUp() override {
     BaseXREAppDir::SetUp();
@@ -580,8 +580,8 @@ class WildBuzzardXDGIsolation : public BaseXREAppDir {
     SetEnv("XDG_CACHE_HOME", mXdgCacheDir.get());
     SwitchFakeAppDataOn();
     mFakeAppData.profile = nullptr;
-    mFakeAppData.name = "WildBuzzard";
-    mFakeAppData.vendor = "WildBuzzard";
+    mFakeAppData.name = "BashKitten";
+    mFakeAppData.vendor = "BashKitten";
   }
 
   nsCString mBaitDir;
@@ -589,10 +589,10 @@ class WildBuzzardXDGIsolation : public BaseXREAppDir {
   nsCString mXdgCacheDir;
 };
 
-TEST_F(WildBuzzardXDGIsolation, ProductDirectoriesDoNotUseMozillaRoots) {
+TEST_F(BashKittenXDGIsolation, ProductDirectoriesDoNotUseMozillaRoots) {
   nsCString configRoot =
-      mXdgConfigDir + "/wildbuzzard/wildbuzzard"_ns;
-  nsCString cacheRoot = mXdgCacheDir + "/wildbuzzard/wildbuzzard"_ns;
+      mXdgConfigDir + "/bashkitten/bashkitten"_ns;
+  nsCString cacheRoot = mXdgCacheDir + "/bashkitten/bashkitten"_ns;
 
   ASSERT_EQ(configRoot, GetUserAppDataDirectory());
   ASSERT_EQ(configRoot, GetUserProfilesRootDir());
@@ -602,7 +602,7 @@ TEST_F(WildBuzzardXDGIsolation, ProductDirectoriesDoNotUseMozillaRoots) {
 
   nsCString systemManifests =
       GetFromXREDirProvider(XRE_SYS_NATIVE_MANIFESTS);
-  ASSERT_TRUE(systemManifests.EndsWith("/wildbuzzard"_ns));
+  ASSERT_TRUE(systemManifests.EndsWith("/bashkitten"_ns));
   ASSERT_FALSE(systemManifests.Contains("mozilla"_ns));
 }
 #endif

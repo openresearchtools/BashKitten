@@ -299,4 +299,4 @@ support-files = ["settings/v1-migrate-to-webextension.json"]
 
 ["test_webextensions_valid.js"]
 
-["test_wildbuzzard_engine_selection.js"]
+["test_bashkitten_engine_selection.js"]

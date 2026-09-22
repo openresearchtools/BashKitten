@@ -8,8 +8,8 @@ const { LIST_DESCRIPTOR_ORIGIN_CATALOG, LIST_DESCRIPTOR_ORIGIN_CUSTOM } =
 const { MAX_LIST_BYTES, readListResponseText } = ChromeUtils.importESModule(
   "resource:///modules/internal/ListUpdates.sys.mjs"
 );
-const { WildBuzzardBlockerService } = ChromeUtils.importESModule(
-  "resource:///modules/WildBuzzardBlockerService.sys.mjs"
+const { BashKittenBlockerService } = ChromeUtils.importESModule(
+  "resource:///modules/BashKittenBlockerService.sys.mjs"
 );
 
 function makeHeaders(headers = {}) {
@@ -104,13 +104,13 @@ function opaqueRedirectResponse() {
 }
 
 async function withMockedFetch(fetchImpl, task) {
-  const originalFetch = WildBuzzardBlockerService._fetch;
-  WildBuzzardBlockerService._fetch = fetchImpl;
+  const originalFetch = BashKittenBlockerService._fetch;
+  BashKittenBlockerService._fetch = fetchImpl;
 
   try {
     await task(fetchImpl);
   } finally {
-    WildBuzzardBlockerService._fetch = originalFetch;
+    BashKittenBlockerService._fetch = originalFetch;
   }
 }
 
@@ -120,15 +120,15 @@ async function withServicePaths(name, task) {
 
   await IOUtils.remove(listsDir, { ignoreAbsent: true, recursive: true });
 
-  const originalListPath = WildBuzzardBlockerService._listPath;
-  const originalListsDirPath = WildBuzzardBlockerService._listsDirPath;
+  const originalListPath = BashKittenBlockerService._listPath;
+  const originalListsDirPath = BashKittenBlockerService._listsDirPath;
   const originalListsMetadataPath =
-    WildBuzzardBlockerService._listsMetadataPath;
+    BashKittenBlockerService._listsMetadataPath;
 
-  WildBuzzardBlockerService._listPath = filename =>
+  BashKittenBlockerService._listPath = filename =>
     PathUtils.join(listsDir, filename);
-  WildBuzzardBlockerService._listsDirPath = () => listsDir;
-  WildBuzzardBlockerService._listsMetadataPath = () => metaPath;
+  BashKittenBlockerService._listsDirPath = () => listsDir;
+  BashKittenBlockerService._listsMetadataPath = () => metaPath;
 
   try {
     await task({
@@ -138,9 +138,9 @@ async function withServicePaths(name, task) {
       metaPath,
     });
   } finally {
-    WildBuzzardBlockerService._listPath = originalListPath;
-    WildBuzzardBlockerService._listsDirPath = originalListsDirPath;
-    WildBuzzardBlockerService._listsMetadataPath = originalListsMetadataPath;
+    BashKittenBlockerService._listPath = originalListPath;
+    BashKittenBlockerService._listsDirPath = originalListsDirPath;
+    BashKittenBlockerService._listsMetadataPath = originalListsMetadataPath;
     await IOUtils.remove(listsDir, { ignoreAbsent: true, recursive: true });
   }
 }
@@ -202,7 +202,7 @@ add_task(
           });
         },
         async () => {
-          const records = await WildBuzzardBlockerService._fetchAndPersistLists(
+          const records = await BashKittenBlockerService._fetchAndPersistLists(
             [
               {
                 filename: "oversized.txt",
@@ -250,7 +250,7 @@ add_task(async function test_curated_list_fetch_follows_redirects() {
         }).response;
       },
       async () => {
-        const records = await WildBuzzardBlockerService._fetchAndPersistLists([
+        const records = await BashKittenBlockerService._fetchAndPersistLists([
           descriptor,
         ]);
 
@@ -299,7 +299,7 @@ add_task(
           },
           async () => {
             await Assert.rejects(
-              WildBuzzardBlockerService._fetchListForBootstrap(descriptor),
+              BashKittenBlockerService._fetchListForBootstrap(descriptor),
               /custom list URL redirected; redirects are not followed/,
               "Custom list redirects should get a distinct error"
             );
@@ -311,7 +311,7 @@ add_task(
 
             fetchOptions = null;
             const records =
-              await WildBuzzardBlockerService._fetchAndPersistLists([
+              await BashKittenBlockerService._fetchAndPersistLists([
                 descriptor,
               ]);
 

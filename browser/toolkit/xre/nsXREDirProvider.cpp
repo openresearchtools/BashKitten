@@ -118,10 +118,10 @@ static const char* GetAppName() {
 
 #endif
 
-static bool IsWildBuzzardApp() {
+static bool IsBashKittenApp() {
   return gAppData && gAppData->vendor && gAppData->name &&
-         !strcmp(gAppData->vendor, "WildBuzzard") &&
-         !strcmp(gAppData->name, "WildBuzzard");
+         !strcmp(gAppData->vendor, "BashKitten") &&
+         !strcmp(gAppData->name, "BashKitten");
 }
 
 #ifdef XP_MACOSX
@@ -346,21 +346,21 @@ static nsresult GetSystemParentDirectory(nsIFile** aFile) {
   rv = GetOSXFolderType(kOnSystemDisk, kApplicationSupportFolderType,
                         getter_AddRefs(localDir));
   if (NS_SUCCEEDED(rv)) {
-    rv = localDir->AppendNative(IsWildBuzzardApp() ? "WildBuzzard"_ns
+    rv = localDir->AppendNative(IsBashKittenApp() ? "BashKitten"_ns
                                                    : "Mozilla"_ns);
   }
 #  else
 #    ifdef HAVE_USR_LIB64_DIR
-  constexpr auto wildBuzzardDir = "/usr/lib64/wildbuzzard"_ns;
+  constexpr auto bashKittenDir = "/usr/lib64/bashkitten"_ns;
   constexpr auto mozillaDir = "/usr/lib64/mozilla"_ns;
 #    elif defined(__OpenBSD__) || defined(__FreeBSD__)
-  constexpr auto wildBuzzardDir = "/usr/local/lib/wildbuzzard"_ns;
+  constexpr auto bashKittenDir = "/usr/local/lib/bashkitten"_ns;
   constexpr auto mozillaDir = "/usr/local/lib/mozilla"_ns;
 #    else
-  constexpr auto wildBuzzardDir = "/usr/lib/wildbuzzard"_ns;
+  constexpr auto bashKittenDir = "/usr/lib/bashkitten"_ns;
   constexpr auto mozillaDir = "/usr/lib/mozilla"_ns;
 #    endif
-  const auto dirname = IsWildBuzzardApp() ? wildBuzzardDir : mozillaDir;
+  const auto dirname = IsBashKittenApp() ? bashKittenDir : mozillaDir;
   rv = NS_NewNativeLocalFile(dirname, getter_AddRefs(localDir));
 #  endif
 
@@ -427,7 +427,7 @@ nsXREDirProvider::GetFile(const char* aProperty, bool* aPersistent,
   else if (!strcmp(aProperty, XRE_SYS_NATIVE_MANIFESTS)) {
     rv = ::GetSystemParentDirectory(getter_AddRefs(file));
   } else if (!strcmp(aProperty, XRE_USER_NATIVE_MANIFESTS)) {
-    if (IsWildBuzzardApp()) {
+    if (IsBashKittenApp()) {
       rv = GetUserAppDataDirectory(getter_AddRefs(file));
     } else {
       // Keep forcing the legacy path for compatibility
@@ -468,12 +468,12 @@ nsXREDirProvider::GetFile(const char* aProperty, bool* aPersistent,
   else if (!strcmp(aProperty, XRE_SYS_SHARE_EXTENSION_PARENT_DIR)) {
 #  ifdef ENABLE_SYSTEM_EXTENSION_DIRS
 #    if defined(__OpenBSD__) || defined(__FreeBSD__)
-    const char* const sysLExtDir = IsWildBuzzardApp()
-                                      ? "/usr/local/share/wildbuzzard/extensions"
+    const char* const sysLExtDir = IsBashKittenApp()
+                                      ? "/usr/local/share/bashkitten/extensions"
                                       : "/usr/local/share/mozilla/extensions";
 #    else
-    const char* const sysLExtDir = IsWildBuzzardApp()
-                                      ? "/usr/share/wildbuzzard/extensions"
+    const char* const sysLExtDir = IsBashKittenApp()
+                                      ? "/usr/share/bashkitten/extensions"
                                       : "/usr/share/mozilla/extensions";
 #    endif
     rv = NS_NewNativeLocalFile(nsDependentCString(sysLExtDir),
@@ -1206,7 +1206,7 @@ nsresult nsXREDirProvider::GetUserDataDirectoryHome(nsIFile** aFile,
 
 nsresult nsXREDirProvider::GetSysUserExtensionsDirectory(nsIFile** aFile) {
   nsCOMPtr<nsIFile> localDir;
-  if (IsWildBuzzardApp()) {
+  if (IsBashKittenApp()) {
     nsresult rv = GetUserAppDataDirectory(getter_AddRefs(localDir));
     NS_ENSURE_SUCCESS(rv, rv);
     rv = localDir->AppendNative("extensions"_ns);
@@ -1410,7 +1410,7 @@ bool nsXREDirProvider::LegacyHomeExists(nsIFile** aFile) {
   NS_ENSURE_SUCCESS(rv, false);
 
   // Give a chance to (3)
-  if (!exists && !IsWildBuzzardApp()) {
+  if (!exists && !IsBashKittenApp()) {
     nsCOMPtr<nsIFile> userDir;
     rv = parentDir->Clone(getter_AddRefs(userDir));
     NS_ENSURE_SUCCESS(rv, false);

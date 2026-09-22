@@ -598,7 +598,7 @@ class TabManagementFragment : Fragment() {
         return TabsTrayState(
             selectedPage = if (requestedPage == Page.NormalTabs &&
                 coreState.tabs.any { it.id == coreState.selectedTabId && !it.content.private &&
-                    it.contextId?.startsWith("wildbuzzard-tor-") == true }
+                    it.contextId?.startsWith("bashkitten-tor-") == true }
             ) Page.TorTabs else requestedPage,
             mode = if (args.enterMultiselect) TabsTrayState.Mode.Select(emptySet()) else TabsTrayState.Mode.Normal,
             inactiveTabs = TabsTrayState.InactiveTabsState(

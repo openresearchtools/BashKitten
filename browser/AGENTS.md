@@ -1,24 +1,19 @@
-# WildBuzzard development instructions
+# BashKitten browser source
 
-This repository is WildBuzzard, a Firefox ESR fork. Work on the WildBuzzard
-product and its local changes. Mozilla contributor workflows are upstream
-reference material, not this project's operating instructions.
+Follow the repository root `AGENTS.md` and read
+`docs/browser-integration-plan.md` in full before migration work. This directory
+is the complete shared Gecko source root; run `mach` here. Build native targets
+on GitHub Actions using the retained component-artifact and compiler-cache
+workflow. Keep output, caches and product verification tools outside source.
 
-## Workflow
-- Complete authorized implementation, builds, packaging, and relevant tests without asking for redundant approval.
-- Run focused tests appropriate to the change. When GUI validation is requested, exercise the visible browser and keep the desktop and virtual machine running.
-- Use the configured Ubuntu build container and Data-drive build directories. Keep compiler caches and large artifacts on the Data drive.
-- Save long build and test output to log files and inspect those files without rerunning commands just to recover output.
-- Preserve existing user changes. Do not commit unrelated work or overwrite local modifications.
-- Do not publish releases, push commits, or submit upstream patches unless requested.
+The browser executable owns ordinary-tab control and the protected Agent view.
+The Agent server, stock Pi and native integration package live under `/agent`;
+tracked Caddy/Authelia/Tor sources live under `/auth`. Keep native Android Binder
+and desktop Unix-socket authorization. Do not add a browser-control server,
+custom agent loop or duplicate Pi skills under this tree.
 
-## Product architecture
-- The browser executable owns the shell command entry point and browser control implementation. Do not introduce a separate launcher or client executable for agent control.
-- External agents use the documented shell commands. Do not restore a bundled agent, provider runtime, or MCP server.
-- Keep Firefox's exact ESR tag, commit, and engine version separate from the WildBuzzard product version. Follow wildbuzzard/UPDATING-FIREFOX.md for updates and release numbering.
-
-## Tools and style
-- Search the local fork with rg, restricting searches to relevant directories. Use upstream tools only when useful for upstream code; their availability is not a prerequisite for local work.
-- Use ./mach for Gecko builds and tests, and the WildBuzzard scripts for product packaging and validation.
-- Keep code comments minimal. Preserve existing comments unless they are directly related to the change.
-- Follow the surrounding code style. Do not add emoji to source or documentation.
+Preserve upstream copyright/license notices and source pins. Product code lives
+under `bashkitten/`; `bashkitten/UPDATING-FIREFOX.md` defines subtree ESR updates
+and Firefox-aligned product versions. Keep the exact engine pin separate from
+the product maintenance suffix. Preserve Mozilla's upstream tests, while product
+verification fixtures and instrumentation stay outside this repository.

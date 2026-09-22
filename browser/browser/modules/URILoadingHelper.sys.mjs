@@ -11,6 +11,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AboutNewTab: "resource:///modules/AboutNewTab.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "ReferrerInfo", () =>
@@ -351,6 +352,30 @@ function _createNullPrincipalFromTabUserContextId(tab = null) {
 }
 
 export const URILoadingHelper = {
+  // A real browser-owned view is required, not a URL or a page-supplied flag.
+  agentOpener(window, params = {}) {
+    if (AppConstants.MOZ_APP_NAME != "bashkitten") {
+      return null;
+    }
+    const contextId =
+      params.openerBrowser?.browsingContext?.originAttributes.userContextId ??
+      params.triggeringPrincipal?.originAttributes.userContextId ??
+      params.userContextId;
+    if (!(contextId >= 0xb4500000 && contextId <= 0xb450ffff)) {
+      return null;
+    }
+    for (const browser of window.BashKittenAgent?.views.values() || []) {
+      if (
+        browser.hasAttribute("bashkitten-protected") &&
+        browser.browsingContext?.originAttributes.userContextId == contextId &&
+        (!params.openerBrowser || params.openerBrowser == browser)
+      ) {
+        return browser;
+      }
+    }
+    return null;
+  },
+
   /**
    * openLinkIn opens a URL in a place specified by the parameter |where|.
    *
@@ -465,6 +490,60 @@ export const URILoadingHelper = {
   openLinkIn(window, url, where, params) {
     if (!where || !url) {
       return;
+    }
+
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      const agentBrowser = this.agentOpener(window, params);
+      if (agentBrowser && where != "save") {
+        const target = Services.io.newURI(url);
+        const enrolled = Services.io.newURI(
+          agentBrowser.getAttribute("data-agent-url")
+        );
+        if (
+          target.prePath == enrolled.prePath &&
+          /^\/login(?:[/?#]|$)/.test(target.pathQueryRef)
+        ) {
+          window.BashKittenAgent.signIn().catch(console.error);
+          return;
+        }
+        // An OAuth link leaves the protected storage context and cannot retain
+        // an opener to Agent or inherit its initial about:blank principal.
+        params = {
+          ...params,
+          userContextId: 0,
+          openerBrowser: null,
+          originPrincipal: null,
+          originStoragePrincipal: null,
+          allowInheritPrincipal: false,
+        };
+        if (params.triggeringPrincipal?.isContentPrincipal) {
+          params.triggeringPrincipal =
+            Services.scriptSecurityManager.principalWithOA(
+              params.triggeringPrincipal,
+              { ...params.triggeringPrincipal.originAttributes, userContextId: 0 }
+            );
+        }
+        where = "tab";
+      }
+      if (where == "window" || where == "chromeless") {
+        where = "tab";
+      }
+      if (params.private) {
+        lazy.PrivateTab.init();
+        if (!lazy.PrivateTab.userContextId) {
+          throw new Error("Private tab storage is unavailable");
+        }
+        params = {
+          ...params,
+          private: false,
+          userContextId: lazy.PrivateTab.userContextId,
+          referrerInfo: new lazy.ReferrerInfo(
+            Ci.nsIReferrerInfo.EMPTY,
+            false,
+            null
+          ),
+        };
+      }
     }
 
     let {

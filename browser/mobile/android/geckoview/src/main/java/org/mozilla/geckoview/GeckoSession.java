@@ -7801,7 +7801,7 @@ public class GeckoSession {
 
   // Give viewless agent tabs a layout viewport until GeckoView supplies real bounds.
   @UiThread
-  /* package */ void setWildBuzzardInitialViewport(final int width, final int height) {
+  /* package */ void setBashKittenInitialViewport(final int width, final int height) {
     ThreadUtils.assertOnUiThread();
     if (mDisplay != null || (mWidth > 0 && mHeight > 0)) {
       return;

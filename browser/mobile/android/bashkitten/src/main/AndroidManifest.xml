@@ -1,0 +1,42 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+    <!-- Agent access lets the user choose installed vendor apps and verifies their actual UID/signers. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <application 
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true" android:supportsRtl="true">
+        <activity android:name="com.bashkitten.AgentRemotesActivity" android:exported="false" />
+        <receiver android:name="com.bashkitten.TermuxResultReceiver" android:exported="false" />
+        <activity android:name="com.bashkitten.AgentAccessActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.TabOptionsActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.ActivateTabActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.LicensesActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.GrantActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.CommandAccessActivity" android:exported="true" />
+        <activity android:name="com.bashkitten.OnionActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.OnionCaptureActivity" android:exported="false" android:theme="@style/AppTheme" />
+        <receiver android:name="com.bashkitten.AppCommandReceiver" android:exported="true" />
+        <service android:name="com.bashkitten.BrowserControlService" android:exported="true">
+            <intent-filter><action android:name="com.bashkitten.BIND_AGENT" /></intent-filter>
+        </service>
+        <service android:name="com.bashkitten.BrowserKeepAliveService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-authorized browser automation and active onion browsing" />
+        </service>
+        <service android:name="org.torproject.jni.TorService" android:exported="false" />
+        <provider android:name="com.bashkitten.AgentFileProvider"
+            android:authorities="${applicationId}.files" android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files" />
+        </provider>
+    </application>
+</manifest>

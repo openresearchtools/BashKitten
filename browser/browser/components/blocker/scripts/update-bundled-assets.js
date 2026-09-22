@@ -72,7 +72,7 @@ const REDIRECT_RESOURCE_MIME_BY_NAME = Object.freeze({
   empty: "text/plain",
 });
 
-const AUTO_UBLOCK_DIR = path.join(os.tmpdir(), "wildbuzzard-blocker-ublock");
+const AUTO_UBLOCK_DIR = path.join(os.tmpdir(), "bashkitten-blocker-ublock");
 const RESOURCES_ONLY_ARG = "--resources-only";
 const UBLOCK_GIT_URL = "https://github.com/gorhill/uBlock.git";
 const DOWNLOAD_TIMEOUT_MS = 90_000;
@@ -81,7 +81,7 @@ const DOWNLOAD_RETRY_BASE_MS = 2_000;
 const FILTER_DOWNLOAD_CONCURRENCY = 6;
 
 /**
- * Wrap scriptlet functions to consume WildBuzzard placeholder args.
+ * Wrap scriptlet functions to consume BashKitten placeholder args.
  *
  * @param {string} fnString
  * @param {string} dependencyPrelude
@@ -515,7 +515,7 @@ async function ensureUblockCheckout(source) {
 }
 
 /**
- * Build WildBuzzard scriptlet resources from uBO built-in scriptlets.
+ * Build BashKitten scriptlet resources from uBO built-in scriptlets.
  *
  * uBO now publishes scriptlets as ESM modules with dependency graphs, while
  * adblock-rs's resource assembler is deprecated and does not handle that shape.

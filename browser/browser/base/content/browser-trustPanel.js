@@ -390,7 +390,7 @@ class TrustPanel {
 
   /** Asynchronous check for the current page's breached status, updating the address bar icon if the page was breached */
   async #checkForBreaches(uri) {
-    // WildBuzzard: skip the breach collection query entirely when the alerts
+    // BashKitten: skip the breach collection query entirely when the alerts
     // are off; the status check below only gates the display.
     if (!UrlbarPrefs.get("trustPanel.breachAlerts")) {
       this.#breachedStatus = "disabled";

@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+DIRS += ["browser", "third_party/tor-notices"]
+
+
+FINAL_TARGET_FILES.notices += [
+    "/COPYING",
+    "/LICENSE",
+    "BLOCKER-ASSET-SOURCE-NOTICE",
+    "components/bashkitten-cli/MOZILLA-MCP-LICENSE",
+    "components/bashkitten-cli/NOTICE",
+    "SOURCE-NOTICE",
+]
+
+FINAL_TARGET_FILES.notices["blocker"] += [
+    "/browser/components/blocker/assets/SOURCES.lock.json",
+]
+
+if CONFIG["BASHKITTEN_TOR"]:
+    tor_name = "tor" + CONFIG["BIN_SUFFIX"]
+    tor_config_name = "tor.toml"
+    tor_provenance_name = "bashkitten-tor-0.4.9.11-provenance.zip"
+    GENERATED_FILES += [tor_name, tor_config_name, tor_provenance_name]
+    tor_binary = GENERATED_FILES[tor_name]
+    tor_binary.script = "copy_executable.py"
+    tor_binary.flags = [CONFIG["BASHKITTEN_TOR"]]
+    tor_binary.extra_deps = [
+        "%" + CONFIG["BASHKITTEN_TOR"],
+        "%" + CONFIG["BASHKITTEN_TOR_CONFIG"],
+        "%" + CONFIG["BASHKITTEN_TOR_PROVENANCE"],
+        "scripts/tor-runtime-provenance.py",
+        "third_party/tor.toml",
+        "third_party/tor-notices/THIRD-PARTY.json",
+    ]
+    tor_config = GENERATED_FILES[tor_config_name]
+    tor_config.script = "copy_file.py"
+    tor_config.flags = [CONFIG["BASHKITTEN_TOR_CONFIG"]]
+    tor_config.extra_deps = [
+        "%" + CONFIG["BASHKITTEN_TOR_CONFIG"],
+    ]
+    tor_provenance = GENERATED_FILES[tor_provenance_name]
+    tor_provenance.script = "copy_file.py"
+    tor_provenance.flags = [CONFIG["BASHKITTEN_TOR_PROVENANCE"]]
+    tor_provenance.extra_deps = [
+        "%" + CONFIG["BASHKITTEN_TOR_PROVENANCE"],
+    ]
+
+    FINAL_TARGET_FILES.runtime["tor"] += [
+        "!" + tor_name,
+        "!" + tor_config_name,
+    ]
+    FINAL_TARGET_FILES.notices["source"] += [
+        "!" + tor_provenance_name,
+    ]

@@ -1,0 +1,7 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Existing BashKitten Android icon, translated unchanged from VectorDrawable. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path fill="#292929" d="M14,0H50Q64,0 64,14V50Q64,64 50,64H14Q0,64 0,50V14Q0,0 14,0Z"/>
+  <path fill="#eeeeee" d="M14,17L24,23Q32,19 40,23L50,17L48,37Q46,49 32,49Q18,49 16,37Z"/>
+  <path fill="#292929" d="M22,30H26V35H22ZM38,30H42V35H38ZM28,39H36L32,43Z"/>
+</svg>

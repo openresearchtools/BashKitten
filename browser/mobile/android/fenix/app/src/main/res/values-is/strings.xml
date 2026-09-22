@@ -3486,7 +3486,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Loka sjálfvirkt eftir einn mánuð?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard getur lokað flipum sem þú hefur ekki skoðað síðastliðinn mánuð.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten getur lokað flipum sem þú hefur ekki skoðað síðastliðinn mánuð.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">KVEIKJA Á SJÁLFVIRKRI LOKUN</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

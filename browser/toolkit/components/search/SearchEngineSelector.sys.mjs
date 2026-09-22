@@ -31,7 +31,7 @@ const lazy = XPCOMUtils.declareLazy({
     }),
 });
 
-function filterWildBuzzardEngines(configuration) {
+function filterBashKittenEngines(configuration) {
   return configuration.filter(
     record =>
       record.recordType !== "engine" ||
@@ -104,7 +104,7 @@ export class SearchEngineSelector {
       this.#getConfigurationOverrides(),
     ]);
     let remoteSettingsData = await this.#getConfigurationPromise;
-    this.#configuration = filterWildBuzzardEngines(remoteSettingsData[0]);
+    this.#configuration = filterBashKittenEngines(remoteSettingsData[0]);
     this.#getConfigurationPromise = null;
 
     if (!this.#configuration?.length) {
@@ -374,7 +374,7 @@ export class SearchEngineSelector {
    *   The new configuration object
    */
   _onConfigurationUpdated({ data: { current } }) {
-    this.#configuration = filterWildBuzzardEngines(current);
+    this.#configuration = filterBashKittenEngines(current);
 
     this.#selector.setSearchConfig(
       JSON.stringify({ data: this.#configuration })

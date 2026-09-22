@@ -3074,7 +3074,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Të vetëmbyllen pas një muaji?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard-i mund të mbyllë skedat që s’i keni parë gjatë muajit të kaluar.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten-i mund të mbyllë skedat që s’i keni parë gjatë muajit të kaluar.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">AKTIVIZONI VETËMBYLLJEN</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

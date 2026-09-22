@@ -483,7 +483,7 @@ export const ExperimentAPI = new (class {
 
   get labsEnabled() {
     return (
-      // WildBuzzard: labs recipes never arrive while the experiments
+      // BashKitten: labs recipes never arrive while the experiments
       // collection stays offline, so a pref can switch them off.
       Services.prefs.getBoolPref("nimbus.labs.enabled", true) &&
       Services.policies.isAllowed("FirefoxLabs")

@@ -713,7 +713,7 @@ abstract class BaseBrowserFragment :
                 DownloadService::class,
                 notificationsDelegate = context.components.notificationsDelegate,
             ),
-            shouldSkipConfirmation = { id -> org.openresearchtools.wildbuzzard.BrowserApp.get(context).agentTab(id) },
+            shouldSkipConfirmation = { id -> com.bashkitten.BrowserApp.get(context).agentTab(id) },
             shouldForwardToThirdParties = {
                 PreferenceManager.getDefaultSharedPreferences(context).getBoolean(
                     context.getPreferenceKey(R.string.pref_key_external_download_manager),

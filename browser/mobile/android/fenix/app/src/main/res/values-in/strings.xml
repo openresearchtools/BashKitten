@@ -3080,7 +3080,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Tutup otomatis setelah satu bulan?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard dapat menutup tab yang belum Anda lihat selama sebulan terakhir.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten dapat menutup tab yang belum Anda lihat selama sebulan terakhir.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">AKTIFKAN TUTUP OTOMATIS</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

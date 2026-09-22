@@ -5,6 +5,7 @@
 "use strict";
 
 ChromeUtils.defineESModuleGetters(this, {
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   HomePage: "resource:///modules/HomePage.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
 });
@@ -444,6 +445,16 @@ this.windows = class extends ExtensionAPIPersistent {
             features.push(
               "top=" + Math.round(createData.top * cssToDesktopScale)
             );
+          }
+
+          if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+            const window = await BrowserWindowTracker.promiseOpenWindow({
+              args,
+              private: createData.incognito,
+            });
+            // The existing product window remains browser-owned. In particular
+            // allowScriptsToClose cannot grant an extension its close control.
+            return windowManager.getWrapper(window).convert({ populate: true });
           }
 
           let window = Services.ww.openWindow(

@@ -41,11 +41,12 @@ if (!project.hasProperty('android-lint')) {
 apply from: 'benchmark.gradle'
 
 def isAppBundle = gradle.startParameter.taskNames.any { it.toLowerCase().contains("bundle") }
-def publisherKeystore = System.getenv('WILDBUZZARD_PUBLISHER_KEYSTORE')
+def publisherKeystore = System.getenv('BASHKITTEN_PUBLISHER_KEYSTORE')
 def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
+def bashKittenVersion = file("${rootProject.projectDir}/bashkitten/config/version.txt").text.trim()
 
 android {
-    def ciDebugKeystore = System.getenv('WILDBUZZARD_DEBUG_KEYSTORE')
+    def ciDebugKeystore = System.getenv('BASHKITTEN_DEBUG_KEYSTORE')
     if (ciDebugKeystore) {
         signingConfigs.debug {
             storeFile = file(ciDebugKeystore)
@@ -76,11 +77,11 @@ android {
             arg("room.schemaLocation", "$projectDir/schemas".toString())
         }
 
-        applicationId "org.openresearchtools.wildbuzzard"
-        minSdk 28
+        applicationId "com.bashkitten"
+        minSdk 31
         targetSdk config.targetSdkVersion
         versionCode 1
-        versionName Config.generateDebugVersionName()
+        versionName bashKittenVersion
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
@@ -96,7 +97,7 @@ android {
         // This should be the base URL used to call the AMO API.
         buildConfigField "String", "AMO_SERVER_URL", "\"https://services.addons.mozilla.org\""
 
-        def deepLinkSchemeValue = "wildbuzzard"
+        def deepLinkSchemeValue = "bashkitten"
         buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
 
         manifestPlaceholders = [
@@ -139,7 +140,7 @@ android {
             shrinkResources = false
             minifyEnabled = publisherSigning
             if (publisherSigning) {
-                proguardFiles = [getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'wildbuzzard-quiet.pro']
+                proguardFiles = [getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'bashkitten-quiet.pro']
             }
             applicationIdSuffix ""
             resValue "bool", "IS_DEBUG", publisherSigning ? "false" : "true"
@@ -148,7 +149,7 @@ android {
         nightly releaseTemplate >> {
             applicationIdSuffix ""
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
-            def deepLinkSchemeValue = "wildbuzzard-nightly"
+            def deepLinkSchemeValue = "bashkitten-nightly"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
                     "deepLinkScheme": deepLinkSchemeValue
@@ -157,7 +158,7 @@ android {
         beta releaseTemplate >> {
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
             applicationIdSuffix ""
-            def deepLinkSchemeValue = "wildbuzzard-beta"
+            def deepLinkSchemeValue = "bashkitten-beta"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
                     "deepLinkScheme": deepLinkSchemeValue,
@@ -166,7 +167,7 @@ android {
         release releaseTemplate >> {
             buildConfigField "boolean", "USE_RELEASE_VERSIONING", "true"
             applicationIdSuffix ""
-            def deepLinkSchemeValue = "wildbuzzard"
+            def deepLinkSchemeValue = "bashkitten"
             buildConfigField "String", "DEEP_LINK_SCHEME", "\"$deepLinkSchemeValue\""
             manifestPlaceholders.putAll([
                     "deepLinkScheme": deepLinkSchemeValue,
@@ -313,9 +314,9 @@ androidComponents {
                 }.unique().sort { a, b -> "${a.group}:${a.name}:${a.version}" <=> "${b.group}:${b.name}:${b.version}" }
             }
             tasks.named("${variant.name}OssDependencyTask").configure {
-                inputs.property('wildBuzzardRuntimeModules', resolvedModules)
+                inputs.property('bashKittenRuntimeModules', resolvedModules)
                 doLast { task ->
-                    def modules = task.inputs.properties['wildBuzzardRuntimeModules']
+                    def modules = task.inputs.properties['bashKittenRuntimeModules']
                     if (modules.isEmpty()) throw new GradleException('Android dependency notices require resolved runtime modules')
                     task.dependenciesJson.get().asFile.text = new groovy.json.JsonBuilder(modules).toPrettyString()
                 }
@@ -338,9 +339,7 @@ androidComponents {
             // The Google Play Store does not allow multiple APKs for the same app that all have the
             // same version code. Therefore we need to have different version codes for our ARM and x86
             // builds.
-            def versionName = buildType == 'nightly' ?
-                    "${Config.nightlyVersionName(project)}" :
-                    "${Config.releaseVersionName(project)}"
+            def versionName = bashKittenVersion
             project.logger.debug("versionName override: $versionName")
 
             variant.outputs.each { output ->
@@ -491,7 +490,7 @@ nimbus {
 }
 
 dependencies {
-    implementation project(':wildbuzzard')
+    implementation project(':bashkitten')
     implementation project('longfox')
     implementation project(':components:browser-engine-gecko')
     implementation project(':components:compose-awesomebar')
@@ -836,3 +835,43 @@ tasks.register("detekt", Exec) {
     workingDir file("${gradle.mozconfig.topsrcdir}")
     commandLine "./mach", "gradle", "-p", "mobile/android/fenix", ":detekt"
 }
+
+// Ship the same offline About renderer as the web UI, using this APK's resolved
+// dependencies plus the matching companion package inventory.
+android.sourceSets.main.assets.srcDir("$buildDir/generated/bashkitten-about")
+def productAbout = tasks.register('stageBashKittenAbout', Exec) {
+    dependsOn ':bashkitten:stageNotices'
+    dependsOn tasks.matching { it.name == 'releaseOssLicensesTask' || it.name == 'generateLicenses' }
+    commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/about-assets.py",
+        '--app-build', "$buildDir", '--native-notices', "${project(':bashkitten').buildDir}/generated/notices",
+        '--output', "$buildDir/generated/bashkitten-about", '--version', bashKittenVersion
+    outputs.upToDateWhen { false }
+}
+tasks.matching { it.name == 'mergeReleaseAssets' }.configureEach { dependsOn productAbout }
+
+tasks.register('stageBashKittenDependencySources') {
+    doLast {
+        def ids = configurations.releaseRuntimeClasspath.incoming.resolutionResult.allComponents
+            .collect { it.id }.findAll { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+        def result = dependencies.createArtifactResolutionQuery().forComponents(ids)
+            .withArtifacts(org.gradle.jvm.JvmLibrary, org.gradle.language.base.artifact.SourcesArtifact).execute()
+        def destination = file("$buildDir/generated/bashkitten-sources")
+        destination.mkdirs()
+        def manifest = []
+        def missing = []
+        result.resolvedComponents.each { component ->
+            def artifacts = component.getArtifacts(org.gradle.language.base.artifact.SourcesArtifact)
+            if (!artifacts.any { it instanceof org.gradle.api.artifacts.result.ResolvedArtifactResult }) missing << component.id.toString()
+            artifacts.each { artifact ->
+                if (artifact instanceof org.gradle.api.artifacts.result.ResolvedArtifactResult) {
+                    def name = component.id.toString().replace(':', '-') + '-sources.jar'
+                    copy { from artifact.file; into destination; rename { name } }
+                    manifest << [component: component.id.toString(), file: name]
+                }
+            }
+        }
+        new File(destination, 'missing.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(missing))
+        new File(destination, 'sources.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest))
+    }
+}
+tasks.named('assembleRelease').configure { finalizedBy 'stageBashKittenDependencySources' }

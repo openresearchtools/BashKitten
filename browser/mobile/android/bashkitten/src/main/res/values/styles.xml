@@ -1,0 +1,28 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<resources>
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">@color/bashkitten_surface</item>
+        <item name="android:colorBackground">@color/bashkitten_surface</item>
+        <item name="android:colorForeground">@color/bashkitten_text</item>
+        <item name="android:textColorPrimary">@color/bashkitten_text</item>
+        <item name="android:textColorSecondary">@color/bashkitten_secondary</item>
+        <item name="android:colorAccent">@color/bashkitten_secondary</item>
+        <item name="android:colorControlNormal">@color/bashkitten_secondary</item>
+        <item name="android:colorControlActivated">@color/bashkitten_secondary</item>
+        <item name="android:colorButtonNormal">@color/bashkitten_button</item>
+        <item name="colorAccent">@color/bashkitten_secondary</item>
+        <item name="colorControlNormal">@color/bashkitten_secondary</item>
+        <item name="colorControlActivated">@color/bashkitten_secondary</item>
+        <item name="colorButtonNormal">@color/bashkitten_button</item>
+        <item name="alertDialogTheme">@style/BashKittenDialogTheme</item>
+    </style>
+    <style name="BashKittenDialogTheme" parent="ThemeOverlay.AppCompat.Dialog.Alert">
+        <item name="buttonBarPositiveButtonStyle">@style/BashKittenDialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/BashKittenDialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/BashKittenDialogButton</item>
+    </style>
+    <style name="BashKittenDialogButton" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
+        <item name="android:textColor">@color/bashkitten_text</item>
+    </style>
+</resources>

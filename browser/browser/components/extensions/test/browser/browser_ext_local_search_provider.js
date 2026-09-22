@@ -141,8 +141,8 @@ add_task(async function local_search_provider_lifecycle_and_urlbar() {
 
 add_task(async function bundled_search_plugins_follow_enabled_state() {
   for (const [id, name] of [
-    ["web-search@extensions.wildbuzzard", "Buzzard Web Search"],
-    ["torrent-search@extensions.wildbuzzard", "Torrent Search"],
+    ["web-search@extensions.bashkitten", "Buzzard Web Search"],
+    ["torrent-search@extensions.bashkitten", "Torrent Search"],
   ]) {
     const addon = await AddonManager.getAddonByID(id);
     ok(addon?.isBuiltin, "The plugin comes from the browser's bundled source");

@@ -179,7 +179,7 @@ DIRS += [
     "python",
     "testing",
     "third_party/python",
-    "wildbuzzard",
+    "bashkitten",
 ]
 
 if CONFIG["MOZ_APPSERVICES_IN_TREE"]:

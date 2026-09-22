@@ -97,7 +97,7 @@ export class FirefoxProfileLoginCrypto {
   #tokenName;
 
   constructor(profilePath) {
-    this.#tokenName = `WildBuzzard Import ${Services.uuid
+    this.#tokenName = `BashKitten Import ${Services.uuid
       .generateUUID()
       .toString()
       .slice(1, 9)}`;
@@ -242,7 +242,7 @@ export class FirefoxProfileLoginCrypto {
     this.#initParams.minPWLen = 0;
     this.#initParams.manufactureID = null;
     this.#initParams.libraryDescription = this.#makeCString(
-      "WildBuzzard Import NSS"
+      "BashKitten Import NSS"
     );
     this.#initParams.cryptoTokenDescription = this.#makeCString(
       `${this.#tokenName} Crypto`

@@ -12,7 +12,7 @@
     <org.mozilla.fenix.settings.FenixSwitchPreference
         android:defaultValue="true"
         android:key="@string/pref_key_tracking_protection"
-        android:summary="@string/wildbuzzard_tracking_explanation"
+        android:summary="@string/bashkitten_tracking_explanation"
         android:title="@string/preference_enhanced_tracking_protection"
         app:iconSpaceReserved="false" />
     <org.mozilla.fenix.settings.RadioButtonInfoPreference
@@ -25,7 +25,7 @@
         android:defaultValue="false"
         android:dependency="@string/pref_key_tracking_protection"
         android:key="@string/pref_key_tracking_protection_strict_default"
-        android:summary="@string/wildbuzzard_tracking_strict_explanation"
+        android:summary="@string/bashkitten_tracking_strict_explanation"
         android:title="@string/preference_enhanced_tracking_protection_strict" />
     <androidx.preference.Preference
         android:key="@string/pref_key_tracking_protection_strict_allow_list_subheader"

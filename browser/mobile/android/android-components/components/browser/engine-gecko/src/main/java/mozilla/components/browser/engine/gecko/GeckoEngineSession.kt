@@ -121,7 +121,7 @@ class GeckoEngineSession(
     internal lateinit var geckoSession: GeckoSession
 
     /** Browser-owned Android control integration; does not install a remote debugger. */
-    fun wildBuzzardSession(): GeckoSession = geckoSession
+    fun bashKittenSession(): GeckoSession = geckoSession
     internal var currentUrl: String? = null
     internal var currentTitle: String? = null
     internal var lastLoadRequestUri: String? = null

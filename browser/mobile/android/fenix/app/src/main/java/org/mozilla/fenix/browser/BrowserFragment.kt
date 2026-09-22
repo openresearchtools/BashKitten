@@ -163,12 +163,12 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
         setupToolbarSwipeBehavior(settings, components)
 
         initBrowserToolbarComposableUpdates(view)
-        // Translation models and UI are not shipped by Wild Buzzard.
+        // Translation models and UI are not shipped by BashKitten.
         initIPProtectionOnboarding(context, view)
 
         thumbnailsFeature.set(
             feature = BrowserThumbnails(context, binding.engineView, components.core.store, capture = { callback ->
-                org.mozilla.fenix.wildbuzzard.captureDisplayedPage(
+                org.mozilla.fenix.bashkitten.captureDisplayedPage(
                     binding.engineView.asView(), binding.engineView::captureThumbnail, callback,
                 )
             }),

@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later; original Wild Buzzard artwork. -->
+<resources><item type="mipmap" name="ic_launcher">@drawable/bashkitten_logo</item><item type="mipmap" name="ic_launcher_round">@drawable/bashkitten_logo</item></resources>

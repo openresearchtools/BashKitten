@@ -11,8 +11,8 @@ const { ListStore } = ChromeUtils.importESModule(
 const { ListUpdatesState } = ChromeUtils.importESModule(
   "resource:///modules/internal/ListUpdates.sys.mjs"
 );
-const { WildBuzzardBlockerService } = ChromeUtils.importESModule(
-  "resource:///modules/WildBuzzardBlockerService.sys.mjs"
+const { BashKittenBlockerService } = ChromeUtils.importESModule(
+  "resource:///modules/BashKittenBlockerService.sys.mjs"
 );
 
 function deferred() {
@@ -44,13 +44,13 @@ function textResponse(text, etag) {
 }
 
 async function withMockedFetch(fetchImpl, task) {
-  const originalFetch = WildBuzzardBlockerService._fetch;
-  WildBuzzardBlockerService._fetch = fetchImpl;
+  const originalFetch = BashKittenBlockerService._fetch;
+  BashKittenBlockerService._fetch = fetchImpl;
 
   try {
     await task(fetchImpl);
   } finally {
-    WildBuzzardBlockerService._fetch = originalFetch;
+    BashKittenBlockerService._fetch = originalFetch;
   }
 }
 
@@ -61,17 +61,17 @@ async function withListPaths(name, task) {
 
   await IOUtils.remove(listsDir, { ignoreAbsent: true, recursive: true });
 
-  const originalServiceListPath = WildBuzzardBlockerService._listPath;
-  const originalServiceListsDirPath = WildBuzzardBlockerService._listsDirPath;
+  const originalServiceListPath = BashKittenBlockerService._listPath;
+  const originalServiceListsDirPath = BashKittenBlockerService._listsDirPath;
   const originalServiceListsMetadataPath =
-    WildBuzzardBlockerService._listsMetadataPath;
+    BashKittenBlockerService._listsMetadataPath;
   const originalStoreListPath = ListStore.listPath;
   const originalStoreListsDirPath = ListStore.listsDirPath;
   const originalStoreListsMetadataPath = ListStore.listsMetadataPath;
 
-  WildBuzzardBlockerService._listPath = listPath;
-  WildBuzzardBlockerService._listsDirPath = () => listsDir;
-  WildBuzzardBlockerService._listsMetadataPath = () => metaPath;
+  BashKittenBlockerService._listPath = listPath;
+  BashKittenBlockerService._listsDirPath = () => listsDir;
+  BashKittenBlockerService._listsMetadataPath = () => metaPath;
   ListStore.listPath = listPath;
   ListStore.listsDirPath = () => listsDir;
   ListStore.listsMetadataPath = () => metaPath;
@@ -79,9 +79,9 @@ async function withListPaths(name, task) {
   try {
     await task({ listPath, metaPath });
   } finally {
-    WildBuzzardBlockerService._listPath = originalServiceListPath;
-    WildBuzzardBlockerService._listsDirPath = originalServiceListsDirPath;
-    WildBuzzardBlockerService._listsMetadataPath =
+    BashKittenBlockerService._listPath = originalServiceListPath;
+    BashKittenBlockerService._listsDirPath = originalServiceListsDirPath;
+    BashKittenBlockerService._listsMetadataPath =
       originalServiceListsMetadataPath;
     ListStore.listPath = originalStoreListPath;
     ListStore.listsDirPath = originalStoreListsDirPath;
@@ -104,7 +104,7 @@ add_task(async function test_bootstrap_and_update_list_writes_are_serialized() {
       let fetchCount = 0;
 
       const originalGetListDescriptors = ListCatalog.getListDescriptors;
-      const originalWriteText = WildBuzzardBlockerService._writeText;
+      const originalWriteText = BashKittenBlockerService._writeText;
       const initListWritten = deferred();
       const resumeInit = deferred();
       let didPauseInit = false;
@@ -118,7 +118,7 @@ add_task(async function test_bootstrap_and_update_list_writes_are_serialized() {
       }
 
       ListCatalog.getListDescriptors = async () => [descriptor];
-      WildBuzzardBlockerService._writeText = async function pausedWriteText(
+      BashKittenBlockerService._writeText = async function pausedWriteText(
         path,
         text
       ) {
@@ -141,7 +141,7 @@ add_task(async function test_bootstrap_and_update_list_writes_are_serialized() {
         },
         async fetchImpl => {
           const updateState = new ListUpdatesState({ fetchImpl });
-          const initPromise = WildBuzzardBlockerService._fetchAndPersistLists([
+          const initPromise = BashKittenBlockerService._fetchAndPersistLists([
             descriptor,
           ]);
 
@@ -207,7 +207,7 @@ add_task(async function test_bootstrap_and_update_list_writes_are_serialized() {
           } finally {
             releaseInit();
             ListCatalog.getListDescriptors = originalGetListDescriptors;
-            WildBuzzardBlockerService._writeText = originalWriteText;
+            BashKittenBlockerService._writeText = originalWriteText;
           }
         }
       );

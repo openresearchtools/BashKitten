@@ -544,7 +544,7 @@ function init_all() {
   }
 
   ChromeUtils.importESModule(
-    "chrome://browser/content/wildbuzzard/settings/WildBuzzardSettingsPanes.mjs",
+    "chrome://browser/content/bashkitten/settings/BashKittenSettingsPanes.mjs",
     { global: "current" }
   );
 

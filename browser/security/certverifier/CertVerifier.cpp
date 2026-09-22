@@ -18,6 +18,9 @@
 #include "mozilla/Casting.h"
 #include "mozilla/IntegerPrintfMacros.h"
 #include "mozilla/Logging.h"
+#include "mozilla/ClearOnShutdown.h"
+#include "mozilla/StaticMutex.h"
+#include "mozilla/StaticPtr.h"
 #include "mozilla/StaticPrefs_security.h"
 #include "mozilla/SyncRunnable.h"
 #include "mozpkix/pkix.h"
@@ -28,6 +31,7 @@
 #include "nsNetCID.h"
 #include "nsPromiseFlatString.h"
 #include "nsServiceManagerUtils.h"
+#include "nsThreadUtils.h"
 #include "pk11pub.h"
 #include "secmod.h"
 
@@ -39,6 +43,74 @@ mozilla::LazyLogModule gCertVerifierLog("certverifier");
 
 namespace mozilla {
 namespace psm {
+
+struct AgentRoot {
+  nsCString host;
+  OriginAttributes attributes;
+  nsTArray<uint8_t> root;
+  bool enrolling = false;
+};
+static StaticMutex sAgentRootMutex;
+static StaticAutoPtr<nsTArray<AgentRoot>> sAgentRoots;
+
+void SetAgentRoot(const nsACString& host, const OriginAttributes& attributes,
+                  const nsTArray<uint8_t>& root) {
+  MOZ_ASSERT(NS_IsMainThread());
+  StaticMutexAutoLock lock(sAgentRootMutex);
+  if (!sAgentRoots) {
+    sAgentRoots = new nsTArray<AgentRoot>();
+    ClearOnShutdown(&sAgentRoots);
+  }
+  sAgentRoots->RemoveElementsBy([&](const AgentRoot& entry) {
+    return entry.host == host && entry.attributes == attributes;
+  });
+  if (!root.IsEmpty()) {
+    sAgentRoots->AppendElement(AgentRoot{nsCString(host), attributes, root.Clone()});
+  }
+}
+
+Maybe<nsTArray<uint8_t>> GetAgentRoot(const nsACString& host,
+                                    const OriginAttributes& attributes) {
+  if ((attributes.mUserContextId < 0xB4500000 || attributes.mUserContextId > 0xB450FFFF) &&
+      !StringBeginsWith(attributes.mGeckoViewSessionContextId,
+                       u"gvctx626173686b697474656e2d6167656e742d"_ns)) return Nothing();
+  StaticMutexAutoLock lock(sAgentRootMutex);
+  if (sAgentRoots) {
+    for (const auto& entry : *sAgentRoots) {
+      if (!entry.enrolling && entry.host == host && entry.attributes == attributes) {
+        return Some(entry.root.Clone());
+      }
+    }
+  }
+  return Nothing();
+}
+
+void SetAgentOnionEnrollment(const nsACString& host,
+                             const OriginAttributes& attributes, bool enabled) {
+  MOZ_ASSERT(NS_IsMainThread());
+  StaticMutexAutoLock lock(sAgentRootMutex);
+  if (!sAgentRoots) {
+    sAgentRoots = new nsTArray<AgentRoot>();
+    ClearOnShutdown(&sAgentRoots);
+  }
+  sAgentRoots->RemoveElementsBy([&](const AgentRoot& entry) {
+    return entry.enrolling && entry.host == host && entry.attributes == attributes;
+  });
+  if (enabled) {
+    sAgentRoots->AppendElement(AgentRoot{nsCString(host), attributes, {}, true});
+  }
+}
+
+bool IsAgentOnionEnrollment(const nsACString& host,
+                            const OriginAttributes& attributes) {
+  StaticMutexAutoLock lock(sAgentRootMutex);
+  if (sAgentRoots) {
+    for (const auto& entry : *sAgentRoots) {
+      if (entry.enrolling && entry.host == host && entry.attributes == attributes) return true;
+    }
+  }
+  return false;
+}
 
 const CertVerifier::Flags CertVerifier::FLAG_LOCAL_ONLY = 1;
 const CertVerifier::Flags CertVerifier::FLAG_MUST_BE_EV = 2;
@@ -540,11 +612,13 @@ Result CertVerifier::VerifyCert(
     return rv;
   }
 
+  auto agentRoot = usage == VerifyUsage::TLSServer && hostname
+      ? GetAgentRoot(nsDependentCString(hostname), originAttributes) : Nothing();
   // We configure the OCSP fetching modes separately for EV and non-EV
   // verifications.
   NSSCertDBTrustDomain::RevocationCheckMode defaultRevCheckMode =
       (mOCSPDownloadConfig == ocspOff) || (mOCSPDownloadConfig == ocspEVOnly) ||
-              (flags & FLAG_LOCAL_ONLY)
+              (flags & FLAG_LOCAL_ONLY) || agentRoot.isSome()
           ? NSSCertDBTrustDomain::RevocationCheckLocalOnly
       : !mOCSPStrict ? NSSCertDBTrustDomain::RevocationCheckMayFetch
                      : NSSCertDBTrustDomain::RevocationCheckRequired;
@@ -568,6 +642,25 @@ Result CertVerifier::VerifyCert(
       return Result::FATAL_ERROR_LIBRARY_FAILURE;
     }
   }
+
+  // Use the enrolled CA as the only anchor for this protected endpoint. A
+  // publicly trusted replacement on the same port is still not our server.
+  nsTArray<Input> agentRootInputs;
+  if (agentRoot) {
+    Input root;
+    rv = root.Init(agentRoot->Elements(), agentRoot->Length());
+    if (rv != Success) return rv;
+    BackCert rootCert(root, EndEntityOrCA::MustBeCA, nullptr);
+    rv = rootCert.Init();
+    if (rv != Success) return rv;
+    Time notBefore(Time::uninitialized), notAfter(Time::uninitialized);
+    rv = ParseValidity(rootCert.GetValidity(), &notBefore, &notAfter);
+    if (rv != Success) return rv;
+    rv = CheckValidity(time, notBefore, notAfter);
+    if (rv != Success) return rv;
+    agentRootInputs.AppendElement(root);
+  }
+  const auto& serverRootInputs = agentRoot ? agentRootInputs : mThirdPartyRootInputs;
 
   switch (usage) {
     case VerifyUsage::TLSClient: {
@@ -598,7 +691,7 @@ Result CertVerifier::VerifyCert(
 
       // Try to validate for EV first.
       NSSCertDBTrustDomain::RevocationCheckMode evRevCheckMode =
-          (mOCSPDownloadConfig == ocspOff) || (flags & FLAG_LOCAL_ONLY)
+          (mOCSPDownloadConfig == ocspOff) || (flags & FLAG_LOCAL_ONLY) || agentRoot.isSome()
               ? NSSCertDBTrustDomain::RevocationCheckLocalOnly
           : !mOCSPStrict ? NSSCertDBTrustDomain::RevocationCheckMayFetch
                          : NSSCertDBTrustDomain::RevocationCheckRequired;
@@ -611,9 +704,9 @@ Result CertVerifier::VerifyCert(
             trustSSL, evRevCheckMode, mOCSPCache, mSignatureCache.get(),
             mTrustCache.get(), pinArg, mOCSPTimeoutSoft, mOCSPTimeoutHard,
             mCertShortLifetimeInDays, MIN_RSA_BITS, mCRLiteMode,
-            originAttributes, mThirdPartyRootInputs,
+            originAttributes, serverRootInputs,
             mThirdPartyIntermediateInputs, extraCertificates, sctsFromTLSInput,
-            mCTVerifier, builtChain, pinningTelemetryInfo, hostname);
+            mCTVerifier, builtChain, pinningTelemetryInfo, hostname, agentRoot.isSome());
         rv = BuildCertChainForOneKeyUsage(
             trustDomain, certDER, time,
             KeyUsage::digitalSignature,  // (EC)DHE
@@ -673,9 +766,9 @@ Result CertVerifier::VerifyCert(
             trustSSL, defaultRevCheckMode, mOCSPCache, mSignatureCache.get(),
             mTrustCache.get(), pinArg, mOCSPTimeoutSoft, mOCSPTimeoutHard,
             mCertShortLifetimeInDays, keySizeOptions[i], mCRLiteMode,
-            originAttributes, mThirdPartyRootInputs,
+            originAttributes, serverRootInputs,
             mThirdPartyIntermediateInputs, extraCertificates, sctsFromTLSInput,
-            mCTVerifier, builtChain, pinningTelemetryInfo, hostname);
+            mCTVerifier, builtChain, pinningTelemetryInfo, hostname, agentRoot.isSome());
         rv = BuildCertChainForOneKeyUsage(
             trustDomain, certDER, time,
             KeyUsage::digitalSignature,  //(EC)DHE

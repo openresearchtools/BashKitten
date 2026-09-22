@@ -3505,7 +3505,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Бір айдан кейін автожабу керек пе?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard соңғы айда қаралмаған беттерді жаба алады.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten соңғы айда қаралмаған беттерді жаба алады.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">АВТОЖАБУДЫ ІСКЕ ҚОСУ</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

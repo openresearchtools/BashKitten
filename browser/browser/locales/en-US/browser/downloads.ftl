@@ -10,9 +10,6 @@ downloads-window =
 downloads-panel =
   .aria-label = Downloads
 
-downloads-torrents =
-  .label = Torrents
-  .tooltiptext = Open the built-in torrent client
 
 ##
 

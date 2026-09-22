@@ -71,15 +71,15 @@ ChromeUtils.defineESModuleGetters(lazy, {
   TelemetryReportingPolicy:
     "resource://gre/modules/TelemetryReportingPolicy.sys.mjs",
   TRRRacer: "resource:///modules/TRRPerformance.sys.mjs",
-  WildBuzzardUpgradeMessage:
-    "resource:///modules/WildBuzzardUpgradeMessage.sys.mjs",
+  BashKittenUpgradeMessage:
+    "resource:///modules/BashKittenUpgradeMessage.sys.mjs",
   WebChannel: "resource://gre/modules/WebChannel.sys.mjs",
   WebProtocolHandlerRegistrar:
     "resource:///modules/WebProtocolHandlerRegistrar.sys.mjs",
-  WildBuzzardBlockerStartup:
-    "resource:///modules/WildBuzzardBlockerStartup.sys.mjs",
-  WildBuzzardControlStartup:
-    "resource:///modules/WildBuzzardControlStartup.sys.mjs",
+  BashKittenBlockerStartup:
+    "resource:///modules/BashKittenBlockerStartup.sys.mjs",
+  BashKittenControlStartup:
+    "resource:///modules/BashKittenControlStartup.sys.mjs",
   WindowsRegistry: "resource://gre/modules/WindowsRegistry.sys.mjs",
   setTimeout: "resource://gre/modules/Timer.sys.mjs",
 });
@@ -386,15 +386,15 @@ BrowserGlue.prototype = {
     }
 
     lazy.ContentBlockingPrefs.uninit();
-    lazy.WildBuzzardControlStartup.uninit();
+    lazy.BashKittenControlStartup.uninit();
   },
 
   // runs on startup, before the first command line handler is invoked
   // (i.e. before the first window is opened)
   _beforeUIStartup: function BG__beforeUIStartup() {
     lazy.SessionStartup.init();
-    lazy.WildBuzzardBlockerStartup.init();
-    lazy.WildBuzzardControlStartup.init();
+    lazy.BashKittenBlockerStartup.init();
+    lazy.BashKittenControlStartup.init();
 
     // check if we're in safe mode
     if (Services.appinfo.inSafeMode) {
@@ -1561,7 +1561,7 @@ BrowserGlue.prototype = {
         "tabbrowser-confirm-session-restore-checkbox",
       ]);
 
-    // WildBuzzard: the quit prompt can flip session restore on the way out.
+    // BashKitten: the quit prompt can flip session restore on the way out.
     const startupPref = Services.prefs.getIntPref("browser.startup.page");
     let restoreSession = { value: startupPref == 3 };
 
@@ -1623,7 +1623,7 @@ BrowserGlue.prototype = {
       win.gBrowser.removeTab(win.gBrowser.selectedTab);
     }
 
-    // WildBuzzard: persist the session restore choice only when actually
+    // BashKitten: persist the session restore choice only when actually
     // quitting, and only when it changed.
     if (buttonPressed == 0 && restoreSession.value != (startupPref == 3)) {
       Services.prefs.setIntPref(
@@ -1656,7 +1656,7 @@ BrowserGlue.prototype = {
   },
 
   async _showUpgradeDialog() {
-    const data = await lazy.WildBuzzardUpgradeMessage.getUpgradeMessage();
+    const data = await lazy.BashKittenUpgradeMessage.getUpgradeMessage();
     const { gBrowser } = lazy.BrowserWindowTracker.getTopWindow({
       allowFromInactiveWorkspace: true,
     });
@@ -1732,7 +1732,7 @@ BrowserGlue.prototype = {
     // request and is limited in various ways, e.g., major upgrades.
     await lazy.TelemetryReportingPolicy.ensureUserIsNotified();
 
-    const dialogVersion = lazy.WildBuzzardUpgradeMessage.dialogVersion;
+    const dialogVersion = lazy.BashKittenUpgradeMessage.dialogVersion;
     const dialogVersionPref = "browser.startup.upgradeDialog.version";
     const dialogReason = await (async () => {
       if (!lazy.BrowserHandler.majorUpgrade) {
@@ -1755,7 +1755,7 @@ BrowserGlue.prototype = {
         return "disallow-postUpdate";
       }
 
-      const showUpgradeDialog = lazy.WildBuzzardUpgradeMessage.enabled;
+      const showUpgradeDialog = lazy.BashKittenUpgradeMessage.enabled;
 
       return showUpgradeDialog ? "" : "disabled";
     })();

@@ -116,7 +116,9 @@ def source_repo_header(output):
         sourcestamp_path = os.path.join(buildconfig.topsrcdir, SOURCESTAMP_FILENAME)
         if os.path.exists(os.path.join(buildconfig.topsrcdir, ".hg")):
             repo, changeset = get_hg_info(buildconfig.topsrcdir)
-        elif os.path.exists(os.path.join(buildconfig.topsrcdir, ".git")):
+        elif buildconfig.substs.get("VCS_CHECKOUT_TYPE") == "git" or os.path.exists(
+            os.path.join(buildconfig.topsrcdir, ".git")
+        ):
             repo, changeset = get_git_info(buildconfig.topsrcdir)
         elif os.path.exists(sourcestamp_path):
             repo, changeset = get_info_from_sourcestamp(sourcestamp_path)

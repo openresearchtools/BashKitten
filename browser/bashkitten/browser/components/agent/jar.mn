@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-only
+browser.jar:
+    content/browser/bashkitten/agent/agent.css (agent.css)
+    content/browser/bashkitten/agent/jsQR.js (third_party/jsqr/jsQR.js)

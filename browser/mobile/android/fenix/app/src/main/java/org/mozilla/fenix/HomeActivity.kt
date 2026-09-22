@@ -195,6 +195,10 @@ import mozilla.components.ui.icons.R as iconsR
  */
 @SuppressWarnings("TooManyFunctions", "LargeClass", "LongMethod")
 open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, CrashActionDispatcher {
+    var bashKittenAgentPanel: com.bashkitten.AgentPanel? = null
+        private set
+    fun showBashKittenAgent() { bashKittenAgentPanel?.showAgent() }
+
     @VisibleForTesting
     internal lateinit var binding: ActivityHomeBinding
     lateinit var themeManager: ThemeManager
@@ -380,6 +384,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         dispatcher = onBackPressedDispatcher,
     ) {
         override fun handleOnBackPressed() {
+            if (bashKittenAgentPanel?.isShownAgent == true) { bashKittenAgentPanel?.showBrowser(); return }
             if (shouldUsePredictiveBackLongPress()) {
                 backLongPressJob?.cancel()
             }
@@ -516,7 +521,13 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                 }
         }
 
-        setContentView(binding.root)
+        if (this !is ExternalAppBrowserActivity) {
+            bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime)
+            setContentView(bashKittenAgentPanel)
+            if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch()
+        } else {
+            setContentView(binding.root)
+        }
         ProfilerMarkers.addListenerForOnGlobalLayout(components.core.engine, this, binding.root)
 
         privateNotificationObserver = PrivateNotificationFeature(
@@ -702,6 +713,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         permissions: Array<out String>,
         grantResults: IntArray,
     ) {
+        bashKittenAgentPanel?.permissionResult(requestCode)
         when (requestCode) {
             REQUEST_CODE_CAMERA_PERMISSIONS -> {
                 if (grantResults.isNotEmpty() &&
@@ -720,6 +732,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     @CallSuper
     override fun onResume() {
         super.onResume()
+        bashKittenAgentPanel?.resume()
 
         // Diagnostic breadcrumb for "Display already aquired" crash:
         // https://github.com/mozilla-mobile/android-components/issues/7960
@@ -879,6 +892,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
 
     @CallSuper
     override fun onDestroy() {
+        bashKittenAgentPanel?.destroy()
         val startTimeProfiler = components.core.engine.profiler?.getProfilerTime()
 
         super.onDestroy()
@@ -954,6 +968,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     final override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleNewIntent(intent)
+        if (intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch()
+        if (intent.getBooleanExtra("bashkitten.openAgent", false) || intent.action == Intent.ACTION_MAIN) bashKittenAgentPanel?.showAgent()
+        else if (intent.action == Intent.ACTION_VIEW || intent.getBooleanExtra(OPEN_TO_BROWSER, false)) bashKittenAgentPanel?.showBrowser()
         startupPathProvider.onIntentReceived(intent)
     }
 
@@ -1065,6 +1082,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     @Deprecated("Deprecated in Java")
     // https://github.com/mozilla-mobile/fenix/issues/19919
     final override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (bashKittenAgentPanel?.activityResult(requestCode, resultCode, data) == true) return
         supportFragmentManager.primaryNavigationFragment?.childFragmentManager?.fragments?.forEach {
             if (it is ActivityResultHandler && it.onActivityResult(requestCode, data, resultCode)) {
                 return

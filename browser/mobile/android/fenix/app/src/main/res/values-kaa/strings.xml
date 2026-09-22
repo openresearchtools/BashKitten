@@ -1496,7 +1496,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Bir aydan soń avtomat tárizde jabılsın ba?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard ótken ayda kórilmegen betlerdi jabıwı múmkin.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten ótken ayda kórilmegen betlerdi jabıwı múmkin.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">AVTOMAT TÁRIZDE JABÍWDÍ QOSÍW</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

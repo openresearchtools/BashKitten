@@ -4,7 +4,7 @@
 # to the specific list of apps that use it so it doesn't get loaded in xpcshell.
 # Thus we restrict it to these apps:
 #
-#   WildBuzzard:    {648cc8ea-a8a6-59ec-b7e7-3ddc7e685961}
+#   BashKitten:    {648cc8ea-a8a6-59ec-b7e7-3ddc7e685961}
 #   mobile/android: {aa3c5121-dab2-40e2-81ca-7ea25febc110}
 
 category app-startup nsBrowserGlue @mozilla.org/browser/browserglue;1 application={648cc8ea-a8a6-59ec-b7e7-3ddc7e685961} application={aa3c5121-dab2-40e2-81ca-7ea25febc110}
@@ -21,7 +21,7 @@ category browser-before-ui-startup moz-src:///browser/components/privatebrowsing
 category browser-before-ui-startup resource:///modules/AboutHomeStartupCache.sys.mjs AboutHomeStartupCache.init
 category browser-before-ui-startup resource:///modules/AccountsGlue.sys.mjs AccountsGlue.init
 category browser-before-ui-startup moz-src:///browser/modules/ObserverForwarder.sys.mjs ObserverForwarder.init
-category browser-before-ui-startup resource:///modules/WildBuzzardGlue.sys.mjs WildBuzzardGlue.init
+category browser-before-ui-startup resource:///modules/BashKittenGlue.sys.mjs BashKittenGlue.init
 
 # Browser window lifecycle consumers
 category browser-window-before-initial-xul-layout-document-preparation chrome://browser/content/browser-customization.js AutoHideMenubar.init

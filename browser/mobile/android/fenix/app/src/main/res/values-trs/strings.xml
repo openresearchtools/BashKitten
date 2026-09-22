@@ -2522,7 +2522,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Ngà gachîn ‘ngō ahuii nī nārán mā’an riñanj anj.</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Nārán Wild Buzzard riña nej rakïj ñanj nu ni’hiājt gachîn ‘ngō ahuii.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Nārán BashKitten riña nej rakïj ñanj nu ni’hiājt gachîn ‘ngō ahuii.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">NĀCHRŪN DA’ NĀRÁN MĀN’AN MAN</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

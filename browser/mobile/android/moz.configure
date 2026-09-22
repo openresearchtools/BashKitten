@@ -85,7 +85,7 @@ set_config("MOZ_ANDROID_GECKOVIEW_LITE", True, when="--enable-geckoview-lite")
 option(
     "--enable-android-subproject",
     choices=(
-        "wildbuzzard",
+        "bashkitten",
         "fenix",
         "focus",
         "geckoview_example",

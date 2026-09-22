@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: GPL-3.0-only
+EXTRA_JS_MODULES += [
+    "BashKittenAgent.sys.mjs",
+    "BashKittenAgentChild.sys.mjs",
+    "BashKittenAgentParent.sys.mjs",
+]
+JAR_MANIFESTS += ["jar.mn"]

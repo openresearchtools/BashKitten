@@ -12,7 +12,7 @@ imply_option("MOZ_PROFILE_MIGRATOR", False)
 imply_option("--enable-updater", False)
 
 
-imply_option("MOZ_APP_VENDOR", "WildBuzzard")
+imply_option("MOZ_APP_VENDOR", "BashKitten")
 imply_option("MOZ_APP_ID", "{648cc8ea-a8a6-59ec-b7e7-3ddc7e685961}")
 # Include the DevTools client, not just the server (which is the default)
 imply_option("MOZ_DEVTOOLS", "all")
@@ -53,4 +53,4 @@ def requires_stub_installer(
 imply_option("MOZ_STUB_INSTALLER", True, when=requires_stub_installer)
 
 include("../toolkit/moz.configure")
-include("../wildbuzzard/moz.configure")
+include("../bashkitten/moz.configure")

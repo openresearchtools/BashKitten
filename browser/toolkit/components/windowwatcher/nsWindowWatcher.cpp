@@ -2596,6 +2596,14 @@ int32_t nsWindowWatcher::GetWindowOpenLocation(
     return nsIBrowserDOMWindow::OPEN_PRINT_BROWSER;
   }
 
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+    // Route remote window.open through the tab dispatcher as well, including
+    // explicit popup features and Shift-click. Native dialogs do not use this.
+    return nsIBrowserDOMWindow::OPEN_NEWTAB;
+  }
+#endif
+
   int32_t modifiedLocation = 0;
   if (IsWindowOpenLocationModified(aModifiers, &modifiedLocation)) {
     return modifiedLocation;

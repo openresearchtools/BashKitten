@@ -1396,6 +1396,12 @@ void nsToolkitProfileService::SetNormalDefault(nsToolkitProfile* aProfile) {
 NS_IMETHODIMP
 nsToolkitProfileService::SetDefaultProfile(nsIToolkitProfile* aProfile) {
   nsToolkitProfile* profile = static_cast<nsToolkitProfile*>(aProfile);
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") && mCurrent &&
+      profile != mCurrent) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+#endif
 
   if (mUseDedicatedProfile) {
     if (mDedicatedProfile != profile) {
@@ -1593,6 +1599,32 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
 
   nsresult rv;
   const char* arg;
+
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+    // Reuse the product profile even after moving/upgrading the installation.
+    // Do not allow XRE_PROFILE_PATH or selectable-profile restart state to
+    // create a second profile. No existing profile data is removed here.
+    mCurrent = GetDefaultProfile();
+    if (!mCurrent) {
+      mCurrent = mProfiles.getFirst();
+    }
+    if (!mCurrent) {
+      rv = CreateDefaultProfile("firstrun-created-default"_ns,
+                                getter_AddRefs(mCurrent));
+      NS_ENSURE_SUCCESS(rv, rv);
+      rv = Flush();
+      NS_ENSURE_SUCCESS(rv, rv);
+      *aDidCreate = true;
+    }
+    *aWasDefaultSelection = true;
+    mStartupReason = "default"_ns;
+    mCurrent->GetRootDir(aRootDir);
+    mCurrent->GetLocalDir(aLocalDir);
+    NS_ADDREF(*aProfile = mCurrent);
+    return NS_OK;
+  }
+#endif
 
   // Use the profile specified in the environment variables. This is set if we
   // are resetting a selectable profile
@@ -2074,6 +2106,11 @@ nsresult nsToolkitProfileService::SelectStartupProfile(
  */
 nsresult nsToolkitProfileService::CreateResetProfile(
     nsIToolkitProfile** aNewProfile) {
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+#endif
   nsAutoCString oldProfileName;
   mCurrent->GetName(oldProfileName);
 
@@ -2262,6 +2299,11 @@ nsToolkitProfileService::CreateUniqueProfile(nsIFile* aRootDir,
                                              const nsACString& aNamePrefix,
                                              const nsACString& aSource,
                                              nsIToolkitProfile** aResult) {
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+#endif
   MOZ_ASSERT(!aSource.IsEmpty());
   RefPtr<nsToolkitProfile> profile;
   nsresult rv = CreateUniqueProfile(aRootDir, aNamePrefix, aSource,
@@ -2297,6 +2339,11 @@ nsToolkitProfileService::CreateProfile(nsIFile* aRootDir,
                                        const nsACString& aName,
                                        const nsACString& aSource,
                                        nsIToolkitProfile** aResult) {
+#ifndef MOZ_WIDGET_ANDROID
+  if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
+    return NS_ERROR_NOT_AVAILABLE;
+  }
+#endif
   MOZ_ASSERT(!aSource.IsEmpty());
   RefPtr<nsToolkitProfile> profile;
   nsresult rv =

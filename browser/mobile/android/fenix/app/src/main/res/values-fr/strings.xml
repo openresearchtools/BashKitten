@@ -3507,7 +3507,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Fermeture automatique après un mois ?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard peut fermer les onglets que vous n’avez pas consultés au cours du mois dernier.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten peut fermer les onglets que vous n’avez pas consultés au cours du mois dernier.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">ACTIVER LA FERMETURE AUTOMATIQUE</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

@@ -60,21 +60,21 @@ firefox-ci:
             - 'taskcluster/requirements.txt'
             - 'tools/tryselect/selectors/auto.py'
 
-wildbuzzard:
-    description: WildBuzzard ownership and built-in extension policy tests
+bashkitten:
+    description: BashKitten ownership and built-in extension policy tests
     always-target: false
     treeherder:
         symbol: py3(wb)
     run:
         using: python-test
-        subsuite: wildbuzzard
+        subsuite: bashkitten
     when:
         files-changed:
-            - 'wildbuzzard/**'
+            - 'bashkitten/**'
             - 'browser/components/extensions/**/*Buzzard*'
             - 'browser/components/extensions/**/*buzzard*'
-            - 'toolkit/mozapps/extensions/internal/WildBuzzard*'
-            - 'toolkit/mozapps/extensions/test/xpcshell/test_wildbuzzard_xpi_trust.js'
+            - 'toolkit/mozapps/extensions/internal/BashKitten*'
+            - 'toolkit/mozapps/extensions/test/xpcshell/test_bashkitten_xpi_trust.js'
             - 'taskcluster/kinds/source-test/python.yml'
 
 fog:

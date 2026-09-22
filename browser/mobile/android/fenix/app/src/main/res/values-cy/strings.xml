@@ -3543,7 +3543,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Autogau ar ôl mis?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Gall Wild Buzzard gau tabiau nad ydych wedi edrych arnyn nhw dros y mis diwethaf.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Gall BashKitten gau tabiau nad ydych wedi edrych arnyn nhw dros y mis diwethaf.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">TROI AWTOGAU YMLAEN</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

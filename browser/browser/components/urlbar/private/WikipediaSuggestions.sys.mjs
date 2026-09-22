@@ -83,7 +83,7 @@ export class WikipediaSuggestions extends SuggestProvider {
       {
         name: "manage",
         l10n: {
-          id: "wildbuzzard-urlbar-result-menu-manage-suggestions",
+          id: "bashkitten-urlbar-result-menu-manage-suggestions",
         },
       },
     ];

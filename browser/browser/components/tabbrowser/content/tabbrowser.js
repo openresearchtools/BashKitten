@@ -223,7 +223,7 @@
             "browser/tabbrowser.ftl",
             "browser/taskbartabs.ftl",
             "branding/brand.ftl",
-            "browser/wildbuzzard/tabs.ftl",
+            "browser/bashkitten/tabs.ftl",
           ],
           true
         );
@@ -4797,7 +4797,7 @@
         ps.BUTTON_TITLE_CANCEL * ps.BUTTON_POS_1;
       let closingWindow = aCloseTabs == this.closingTabsEnum.ALL;
       let checkboxLabel = closingWindow ? checkbox : null;
-      // WildBuzzard: closing the window offers the session restore choice.
+      // BashKitten: closing the window offers the session restore choice.
       let startupPref = Services.prefs.getIntPref("browser.startup.page");
       let restoreSession = { value: startupPref == 3 };
       var buttonPressed = ps.confirmEx2(
@@ -6872,6 +6872,9 @@
      *   Key-value pairs that will be serialized into the features string.
      */
     replaceTabWithWindow(aTab, aOptions = {}) {
+      if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+        return null;
+      }
       if (this.tabs.length == 1) {
         return null;
       }
@@ -6904,6 +6907,9 @@
      * in the current window, in which case this will do nothing.
      */
     replaceTabsWithWindow(contextTab, aOptions = {}) {
+      if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+        return null;
+      }
       if (this.isTabGroupLabel(contextTab)) {
         // TODO bug 1967937: Pass contextTab.group instead.
         return this.replaceTabWithWindow(contextTab, aOptions);

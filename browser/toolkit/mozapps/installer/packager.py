@@ -226,7 +226,7 @@ def main():
 
     with errors.accumulate():
         preserve_executables = ()
-        if buildconfig.substs.get("MOZ_APP_BASENAME") == "WildBuzzard":
+        if buildconfig.substs.get("MOZ_APP_BASENAME") == "BashKitten":
             preserve_executables = ("bin/runtime/tor/arti",)
         finder_args = dict(
             minify=args.minify,

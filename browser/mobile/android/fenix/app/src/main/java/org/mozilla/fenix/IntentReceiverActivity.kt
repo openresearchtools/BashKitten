@@ -118,7 +118,7 @@ class IntentReceiverActivity : Activity() {
 
     @VisibleForTesting
     internal fun launch(intent: Intent, intentProcessorType: IntentProcessorType) {
-        intent.setClassName(applicationContext, intentProcessorType.activityClassName)
+        intent.setClass(applicationContext, HomeActivity::class.java)
 
         if (!intent.hasExtra(HomeActivity.OPEN_TO_BROWSER)) {
             intent.putExtra(
@@ -136,18 +136,15 @@ class IntentReceiverActivity : Activity() {
     private fun getIntentProcessors(private: Boolean): List<IntentProcessor> {
         val modeDependentProcessors = if (private) {
             listOf(
-                components.intentProcessors.privateCustomTabIntentProcessor,
                 components.intentProcessors.privateIntentProcessor,
             )
         } else {
             listOf(
-                components.intentProcessors.customTabIntentProcessor,
                 components.intentProcessors.intentProcessor,
             )
         }
 
-        return components.intentProcessors.externalAppIntentProcessors +
-            components.intentProcessors.fennecPageShortcutIntentProcessor +
+        return components.intentProcessors.fennecPageShortcutIntentProcessor +
             components.intentProcessors.externalDeepLinkIntentProcessor +
             components.intentProcessors.webNotificationsIntentProcessor +
             components.intentProcessors.passwordManagerIntentProcessor +

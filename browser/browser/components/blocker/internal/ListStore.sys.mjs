@@ -7,16 +7,16 @@ import {
   CUSTOM_FILTERS_FILE_NAME,
   LISTS_DIR_NAME,
   LISTS_META_FILE_NAME,
-} from "resource:///modules/WildBuzzardBlockerUtils.sys.mjs";
+} from "resource:///modules/BashKittenBlockerUtils.sys.mjs";
 
 export const MAX_CUSTOM_FILTERS_BYTES = 2 * 1024 * 1024;
 export const MAX_CUSTOM_FILTER_LINE_LENGTH = 16 * 1024;
 
-const WILDBUZZARD_UNBREAK_FILTERS_FILE_NAME = "wildbuzzard-unbreak.txt";
-const WILDBUZZARD_UNBREAK_FILTERS_URL =
-  "resource://wildbuzzard/blocker/assets/filters/wildbuzzard-unbreak.txt";
+const BASHKITTEN_UNBREAK_FILTERS_FILE_NAME = "bashkitten-unbreak.txt";
+const BASHKITTEN_UNBREAK_FILTERS_URL =
+  "resource://bashkitten/blocker/assets/filters/bashkitten-unbreak.txt";
 
-let gWildBuzzardUnbreakRecord = null;
+let gBashKittenUnbreakRecord = null;
 
 export function normalizeCustomFiltersText(text) {
   const normalized = String(text || "")
@@ -127,7 +127,7 @@ async function readJSON(path, fallbackValue) {
     return JSON.parse(text);
   } catch (err) {
     if (!isFileNotFoundError(err)) {
-      console.warn(`[WildBuzzardBlocker] Failed reading JSON ${path}:`, err);
+      console.warn(`[BashKittenBlocker] Failed reading JSON ${path}:`, err);
     }
     return fallbackValue;
   }
@@ -169,7 +169,7 @@ async function readCustomFiltersRecord(customDescriptor) {
       url: customDescriptor.url,
     };
   } catch (err) {
-    console.warn("[WildBuzzardBlocker] Failed reading custom filters:", err);
+    console.warn("[BashKittenBlocker] Failed reading custom filters:", err);
     return null;
   }
 }
@@ -190,12 +190,12 @@ async function withCustomFiltersRecord(listRecords, descriptors) {
   return [...listRecords, customFiltersRecord];
 }
 
-async function readWildBuzzardUnbreakRecord() {
-  if (gWildBuzzardUnbreakRecord) {
-    return gWildBuzzardUnbreakRecord;
+async function readBashKittenUnbreakRecord() {
+  if (gBashKittenUnbreakRecord) {
+    return gBashKittenUnbreakRecord;
   }
 
-  const response = await fetch(WILDBUZZARD_UNBREAK_FILTERS_URL, {
+  const response = await fetch(BASHKITTEN_UNBREAK_FILTERS_URL, {
     cache: "no-store",
   });
   if (!response.ok) {
@@ -204,19 +204,19 @@ async function readWildBuzzardUnbreakRecord() {
 
   const text = await response.text();
   if (!text.trim()) {
-    throw new Error("WildBuzzard unbreak filters were empty");
+    throw new Error("BashKitten unbreak filters were empty");
   }
 
-  gWildBuzzardUnbreakRecord = {
-    filename: WILDBUZZARD_UNBREAK_FILTERS_FILE_NAME,
+  gBashKittenUnbreakRecord = {
+    filename: BASHKITTEN_UNBREAK_FILTERS_FILE_NAME,
     text,
-    url: WILDBUZZARD_UNBREAK_FILTERS_URL,
+    url: BASHKITTEN_UNBREAK_FILTERS_URL,
   };
-  return gWildBuzzardUnbreakRecord;
+  return gBashKittenUnbreakRecord;
 }
 
-async function withWildBuzzardUnbreakRecord(listRecords) {
-  return [...listRecords, await readWildBuzzardUnbreakRecord()];
+async function withBashKittenUnbreakRecord(listRecords) {
+  return [...listRecords, await readBashKittenUnbreakRecord()];
 }
 
 export const ListStore = {
@@ -255,7 +255,7 @@ export const ListStore = {
   readCustomFiltersText,
   readCustomFiltersRecord,
   withCustomFiltersRecord,
-  withWildBuzzardUnbreakRecord,
+  withBashKittenUnbreakRecord,
 
   async readStoredLists(descriptors) {
     const out = [];
@@ -284,7 +284,7 @@ export const ListStore = {
         }
       } catch (err) {
         console.warn(
-          `[WildBuzzardBlocker] Failed reading stored list ${descriptor.filename}:`,
+          `[BashKittenBlocker] Failed reading stored list ${descriptor.filename}:`,
           err
         );
       }
@@ -319,7 +319,7 @@ export const ListStore = {
         });
       } catch (err) {
         console.warn(
-          `[WildBuzzardBlocker] Failed to read bundled list: ${descriptor.bundledUrl}`,
+          `[BashKittenBlocker] Failed to read bundled list: ${descriptor.bundledUrl}`,
           err
         );
       }

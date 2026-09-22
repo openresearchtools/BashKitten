@@ -40,7 +40,7 @@ internal fun WordmarkLogo(
     isSportsWidgetEnabled: Boolean,
 ) {
     Image(
-        painter = painterResource(R.drawable.wildbuzzard_logo),
+        painter = painterResource(R.drawable.bashkitten_logo),
         contentDescription = null,
         modifier = Modifier.height(40.dp).padding(end = 10.dp).semantics {
             testTagsAsResourceId = true

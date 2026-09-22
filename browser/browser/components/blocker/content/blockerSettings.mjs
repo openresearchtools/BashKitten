@@ -10,20 +10,20 @@ import { SettingGroupManager } from "chrome://browser/content/preferences/config
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
-  addonDisplayName: "resource:///modules/WildBuzzardBlockerUtils.sys.mjs",
-  isEnabledAdblockAddon: "resource:///modules/WildBuzzardBlockerUtils.sys.mjs",
+  addonDisplayName: "resource:///modules/BashKittenBlockerUtils.sys.mjs",
+  isEnabledAdblockAddon: "resource:///modules/BashKittenBlockerUtils.sys.mjs",
 });
 
-Preferences.addAll([{ id: "wildbuzzard.blocker.enabled", type: "bool" }]);
+Preferences.addAll([{ id: "bashkitten.blocker.enabled", type: "bool" }]);
 
 Preferences.addSetting({
-  id: "wildbuzzard-blocker-enabled",
-  pref: "wildbuzzard.blocker.enabled",
+  id: "bashkitten-blocker-enabled",
+  pref: "bashkitten.blocker.enabled",
 });
 
 Preferences.addSetting({
-  id: "wildbuzzard-blocker-extension-notice",
-  deps: ["wildbuzzard-blocker-enabled"],
+  id: "bashkitten-blocker-extension-notice",
+  deps: ["bashkitten-blocker-enabled"],
   _extensionName: "",
   setup(emitChange, deps) {
     const refresh = () => {
@@ -44,11 +44,11 @@ Preferences.addSetting({
       );
     };
     refresh();
-    deps["wildbuzzard-blocker-enabled"].on("change", refresh);
-    return () => deps["wildbuzzard-blocker-enabled"].off("change", refresh);
+    deps["bashkitten-blocker-enabled"].on("change", refresh);
+    return () => deps["bashkitten-blocker-enabled"].off("change", refresh);
   },
   visible(deps) {
-    return !deps["wildbuzzard-blocker-enabled"].value && !!this._extensionName;
+    return !deps["bashkitten-blocker-enabled"].value && !!this._extensionName;
   },
   getControlConfig(config) {
     return {
@@ -58,47 +58,47 @@ Preferences.addSetting({
   },
 });
 
-Preferences.addSetting({ id: "wildbuzzardBlockerListsBoxGroup" });
+Preferences.addSetting({ id: "bashkittenBlockerListsBoxGroup" });
 
 Preferences.addSetting({
-  id: "wildbuzzard-blocker-manage-lists",
+  id: "bashkitten-blocker-manage-lists",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
-      "chrome://browser/content/preferences/dialogs/wildbuzzardBlockerFilterLists.xhtml"
+      "chrome://browser/content/preferences/dialogs/bashkittenBlockerFilterLists.xhtml"
     );
   },
 });
 
 Preferences.addSetting({
-  id: "wildbuzzard-blocker-custom-lists",
+  id: "bashkitten-blocker-custom-lists",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
-      "chrome://browser/content/preferences/dialogs/wildbuzzardBlockerCustomFilterLists.xhtml"
+      "chrome://browser/content/preferences/dialogs/bashkittenBlockerCustomFilterLists.xhtml"
     );
   },
 });
 
 Preferences.addSetting({
-  id: "wildbuzzard-blocker-my-filters",
+  id: "bashkitten-blocker-my-filters",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
-      "chrome://browser/content/preferences/dialogs/wildbuzzardBlockerCustomFilters.xhtml"
+      "chrome://browser/content/preferences/dialogs/bashkittenBlockerCustomFilters.xhtml"
     );
   },
 });
 
 Preferences.addSetting({
-  id: "wildbuzzard-blocker-exceptions",
+  id: "bashkitten-blocker-exceptions",
   onUserClick(e) {
     e.preventDefault();
     gSubDialog.open(
       "chrome://browser/content/preferences/dialogs/permissions.xhtml",
       undefined,
       {
-        permissionType: "wildbuzzard-blocker",
+        permissionType: "bashkitten-blocker",
         disableETPVisible: true,
         prefilledHost: "",
         hideStatusColumn: true,
@@ -108,21 +108,21 @@ Preferences.addSetting({
 });
 
 SettingGroupManager.registerGroups({
-  wildbuzzardBlocker: {
-    l10nId: "wildbuzzard-blocker-group",
+  bashkittenBlocker: {
+    l10nId: "bashkitten-blocker-group",
     headingLevel: 2,
     items: [
       {
-        id: "wildbuzzard-blocker-enabled",
-        l10nId: "wildbuzzard-blocker-enabled-toggle",
+        id: "bashkitten-blocker-enabled",
+        l10nId: "bashkitten-blocker-enabled-toggle",
         control: "moz-toggle",
         controlAttrs: {
           searchkeywords: "adblock adblocker ublock filter",
         },
       },
       {
-        id: "wildbuzzard-blocker-extension-notice",
-        l10nId: "wildbuzzard-blocker-extension-notice",
+        id: "bashkitten-blocker-extension-notice",
+        l10nId: "bashkitten-blocker-extension-notice",
         control: "moz-message-bar",
         controlAttrs: {
           role: "status",
@@ -130,56 +130,56 @@ SettingGroupManager.registerGroups({
       },
     ],
   },
-  wildbuzzardBlockerLists: {
-    l10nId: "wildbuzzard-blocker-lists-group",
+  bashkittenBlockerLists: {
+    l10nId: "bashkitten-blocker-lists-group",
     headingLevel: 2,
     items: [
       {
-        id: "wildbuzzardBlockerListsBoxGroup",
+        id: "bashkittenBlockerListsBoxGroup",
         control: "moz-box-group",
         items: [
           {
-            id: "wildbuzzard-blocker-manage-lists",
-            l10nId: "wildbuzzard-blocker-manage-lists-button",
+            id: "bashkitten-blocker-manage-lists",
+            l10nId: "bashkitten-blocker-manage-lists-button",
             control: "moz-box-button",
             controlAttrs: {
               "search-l10n-ids":
-                "wildbuzzard-blocker-filter-lists-window.title,wildbuzzard-blocker-filter-lists-description.value",
+                "bashkitten-blocker-filter-lists-window.title,bashkitten-blocker-filter-lists-description.value",
             },
           },
           {
-            id: "wildbuzzard-blocker-custom-lists",
-            l10nId: "wildbuzzard-blocker-custom-lists-button",
+            id: "bashkitten-blocker-custom-lists",
+            l10nId: "bashkitten-blocker-custom-lists-button",
             control: "moz-box-button",
             controlAttrs: {
               "search-l10n-ids":
-                "wildbuzzard-blocker-custom-filter-lists-window.title,wildbuzzard-blocker-custom-filter-lists-description",
+                "bashkitten-blocker-custom-filter-lists-window.title,bashkitten-blocker-custom-filter-lists-description",
             },
           },
           {
-            id: "wildbuzzard-blocker-my-filters",
-            l10nId: "wildbuzzard-blocker-my-filters-button",
+            id: "bashkitten-blocker-my-filters",
+            l10nId: "bashkitten-blocker-my-filters-button",
             control: "moz-box-button",
             controlAttrs: {
               "search-l10n-ids":
-                "wildbuzzard-blocker-custom-filters-window.title,wildbuzzard-blocker-custom-filters-description",
+                "bashkitten-blocker-custom-filters-window.title,bashkitten-blocker-custom-filters-description",
             },
           },
         ],
       },
     ],
   },
-  wildbuzzardBlockerExceptions: {
-    l10nId: "wildbuzzard-blocker-exceptions-group",
+  bashkittenBlockerExceptions: {
+    l10nId: "bashkitten-blocker-exceptions-group",
     headingLevel: 2,
     items: [
       {
-        id: "wildbuzzard-blocker-exceptions",
-        l10nId: "wildbuzzard-blocker-exceptions-button",
+        id: "bashkitten-blocker-exceptions",
+        l10nId: "bashkitten-blocker-exceptions-button",
         control: "moz-box-button",
         controlAttrs: {
           "search-l10n-ids":
-            "permissions-exceptions-wildbuzzard-blocker-window2.title,permissions-exceptions-manage-wildbuzzard-blocker-desc",
+            "permissions-exceptions-bashkitten-blocker-window2.title,permissions-exceptions-manage-bashkitten-blocker-desc",
         },
       },
     ],

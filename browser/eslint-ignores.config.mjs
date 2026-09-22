@@ -50,12 +50,12 @@ export default [
   // browser/ exclusions
   "browser/app/",
   "browser/branding/**/firefox-branding.js",
-  "wildbuzzard/browser/branding/**/firefox-branding.js",
-  "wildbuzzard/browser/app/profile/",
-  "wildbuzzard/browser/branding/**/firefox-branding.js",
+  "bashkitten/browser/branding/**/firefox-branding.js",
+  "bashkitten/browser/app/profile/",
+  "bashkitten/browser/branding/**/firefox-branding.js",
   // Pre-processed default pref files
-  "wildbuzzard/browser/app/profile/",
-  "wildbuzzard/browser/themes/lepton/prefs-lepton.js",
+  "bashkitten/browser/app/profile/",
+  "bashkitten/browser/themes/lepton/prefs-lepton.js",
   // Gzipped test file.
   "browser/base/content/test/general/gZipOfflineChild.html",
   "browser/base/content/test/urlbar/file_blank_but_not_blank.html",

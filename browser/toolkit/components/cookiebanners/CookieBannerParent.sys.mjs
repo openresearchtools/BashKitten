@@ -255,7 +255,7 @@ export class CookieBannerParent extends JSWindowActorParent {
           rule.skipPresenceVisibilityCheck ||
           (mode == Ci.nsICookieBannerService.MODE_REJECT &&
             Boolean(rule.optOut) &&
-            Services.prefs.getBoolPref("wildbuzzard.cookiebanners.rejectHidden", false)),
+            Services.prefs.getBoolPref("bashkitten.cookiebanners.rejectHidden", false)),
         target,
       };
     });

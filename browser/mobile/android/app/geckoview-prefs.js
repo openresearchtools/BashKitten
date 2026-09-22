@@ -389,12 +389,12 @@ pref("browser.ipProtection.enabled", true);
 pref("browser.ipProtection.guardian.endpoint", "https://vpn.mozilla.org/");
 pref("toolkit.ipProtection.android.authProvider", "fxa");
 
-// WildBuzzard Android product defaults.
-pref("wildbuzzard.blocker.enabled", true);
+// BashKitten Android product defaults.
+pref("bashkitten.blocker.enabled", true);
 pref("cookiebanners.service.mode", 1);
 pref("cookiebanners.service.mode.privateBrowsing", 1);
 pref("cookiebanners.service.detectOnly", false);
-pref("wildbuzzard.cookiebanners.rejectHidden", true);
+pref("bashkitten.cookiebanners.rejectHidden", true);
 pref("privacy.globalprivacycontrol.enabled", true);
 pref("privacy.donottrackheader.enabled", true);
 pref("network.cookie.cookieBehavior", 5);
@@ -437,4 +437,4 @@ pref("browser.safebrowsing.provider.mozilla.updateURL", "");
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "");
 
 // Share the desktop product's audited no-vendor-service policy, including locks.
-#include ../../../wildbuzzard/browser/app/profile/99-wildbuzzard.js
+#include ../../../bashkitten/browser/app/profile/99-bashkitten.js

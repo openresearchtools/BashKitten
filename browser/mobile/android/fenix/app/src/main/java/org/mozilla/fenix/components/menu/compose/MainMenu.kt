@@ -287,7 +287,7 @@ fun MainMenu(
         )
 
         MenuGroup {
-            // Mozilla accounts and Sync are not product features in Wild Buzzard.
+            // Mozilla accounts and Sync are not product features in BashKitten.
 
             MenuItem(
                 label = stringResource(id = R.string.browser_menu_settings),
@@ -346,7 +346,7 @@ private fun ToolsAndActionsMenuGroup(
 ) {
     MenuGroup {
         val context = LocalContext.current
-        val browser = (context.applicationContext as? org.openresearchtools.wildbuzzard.BrowserApp.Provider)?.wildBuzzard()
+        val browser = (context.applicationContext as? com.bashkitten.BrowserApp.Provider)?.bashKitten()
         val tab = browser?.host?.selected()
         var adblock by androidx.compose.runtime.remember(tab?.id) {
             androidx.compose.runtime.mutableStateOf(tab?.adblock ?: true)

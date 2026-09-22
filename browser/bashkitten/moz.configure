@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# Keep Firefox in the user-agent for website compatibility while giving the
+# installed application, profile, and package their own BashKitten identity.
+imply_option("MOZ_APP_UA_NAME", "Firefox")
+imply_option("MOZ_APP_REMOTINGNAME", "org.bashkitten.BashKitten")
+imply_option("MOZ_TELEMETRY_REPORTING", False)
+imply_option("--with-app-basename", "BashKitten")
+imply_option("--with-distribution-id", "org.bashkitten")
+imply_option("--enable-system-extension-dirs", False)
+imply_option("--enable-crashreporter", False)
+set_define("MOZ_BASHKITTEN", True)
+
+option(
+    "--with-bashkitten-tor",
+    nargs=1,
+    help="Path to the Tor binary bundled with BashKitten",
+)
+
+
+@depends("--with-bashkitten-tor")
+@imports("os")
+def bashkitten_tor(value):
+    if not value:
+        return
+    path = os.path.abspath(value[0])
+    if not os.path.isfile(path):
+        die(f"Cannot find Tor at {path}")
+    return path
+
+
+set_config("BASHKITTEN_TOR", bashkitten_tor)
+
+option(
+    "--with-bashkitten-tor-config",
+    nargs=1,
+    help="Path to the metadata for the Tor binary bundled with BashKitten",
+)
+
+
+@depends("--with-bashkitten-tor-config", bashkitten_tor)
+@imports("os")
+def bashkitten_tor_config(value, binary):
+    if bool(value) != bool(binary):
+        die("The Tor binary and metadata must be configured together")
+    if not value:
+        return
+    path = os.path.abspath(value[0])
+    if not os.path.isfile(path):
+        die(f"Cannot find Tor metadata at {path}")
+    return path
+
+
+set_config("BASHKITTEN_TOR_CONFIG", bashkitten_tor_config)
+
+option(
+    "--with-bashkitten-tor-provenance",
+    nargs=1,
+    help="Path to the pinned Tor source binding and license provenance ZIP",
+)
+
+
+@depends(
+    "--with-bashkitten-tor-provenance",
+    bashkitten_tor,
+    bashkitten_tor_config,
+    build_environment.topsrcdir,
+)
+@imports("os")
+@imports("sys")
+def bashkitten_tor_provenance(value, binary, config, topsrcdir):
+    if bool(value) != bool(binary and config):
+        die("The Tor binary, metadata, and provenance must be configured together")
+    if not value:
+        return
+    path = os.path.abspath(value[0])
+    if not os.path.isfile(path):
+        die(f"Cannot find Tor provenance at {path}")
+    validator = os.path.join(
+        topsrcdir, "bashkitten", "scripts", "tor-runtime-provenance.py"
+    )
+    inventory = os.path.join(
+        topsrcdir,
+        "bashkitten",
+        "third_party",
+        "tor-notices",
+        "THIRD-PARTY.json",
+    )
+    pin = os.path.join(
+        topsrcdir,
+        "bashkitten",
+        "third_party",
+        "tor.toml",
+    )
+    check_cmd_output(
+        sys.executable,
+        "-I",
+        "-B",
+        validator,
+        "validate",
+        "--binary",
+        binary,
+        "--pin-config",
+        pin,
+        "--installed-config",
+        config,
+        "--provenance",
+        path,
+        "--inventory",
+        inventory,
+        onerror=lambda: die("Tor runtime provenance does not match the release pin"),
+    )
+    return path
+
+
+set_config("BASHKITTEN_TOR_PROVENANCE", bashkitten_tor_provenance)
+
+
+@depends(bashkitten_tor, bashkitten_tor_config, bashkitten_tor_provenance)
+def bashkitten_has_tor(binary, config, provenance):
+    return bool(binary and config and provenance)
+
+
+set_define("BASHKITTEN_TOR_RUNTIME", bashkitten_has_tor)

@@ -5,17 +5,17 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 XPIDL_SOURCES += [
-    "nsIWildBuzzardBlocker.idl",
+    "nsIBashKittenBlocker.idl",
 ]
 
-XPIDL_MODULE = "wildbuzzard_blocker"
+XPIDL_MODULE = "bashkitten_blocker"
 
 UNIFIED_SOURCES += [
-    "WildBuzzardBlockerXPCOM.cpp",
+    "BashKittenBlockerXPCOM.cpp",
 ]
 
 EXPORTS += [
-    "WildBuzzardBlockerXPCOM.h",
+    "BashKittenBlockerXPCOM.h",
 ]
 
 XPCOM_MANIFESTS += [
@@ -27,16 +27,16 @@ JAR_MANIFESTS += [
 ]
 
 EXTRA_JS_MODULES += [
-    "WildBuzzardBlockedPage.sys.mjs",
-    "WildBuzzardBlockedPageChild.sys.mjs",
-    "WildBuzzardBlockedPageParent.sys.mjs",
-    "WildBuzzardBlockerChild.sys.mjs",
-    "WildBuzzardBlockerExtensionDetector.sys.mjs",
-    "WildBuzzardBlockerPanel.sys.mjs",
-    "WildBuzzardBlockerParent.sys.mjs",
-    "WildBuzzardBlockerService.sys.mjs",
-    "WildBuzzardBlockerStartup.sys.mjs",
-    "WildBuzzardBlockerUtils.sys.mjs",
+    "BashKittenBlockedPage.sys.mjs",
+    "BashKittenBlockedPageChild.sys.mjs",
+    "BashKittenBlockedPageParent.sys.mjs",
+    "BashKittenBlockerChild.sys.mjs",
+    "BashKittenBlockerExtensionDetector.sys.mjs",
+    "BashKittenBlockerPanel.sys.mjs",
+    "BashKittenBlockerParent.sys.mjs",
+    "BashKittenBlockerService.sys.mjs",
+    "BashKittenBlockerStartup.sys.mjs",
+    "BashKittenBlockerUtils.sys.mjs",
 ]
 
 EXTRA_JS_MODULES.internal += [

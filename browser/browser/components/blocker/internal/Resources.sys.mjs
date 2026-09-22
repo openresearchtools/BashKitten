@@ -20,7 +20,7 @@ function useResources(engine, resourcesJsonOrObject) {
         : JSON.stringify(resourcesJsonOrObject ?? []);
     engine.useResources(payload);
   } catch (err) {
-    console.error("[WildBuzzardBlocker] useResources failed:", err);
+    console.error("[BashKittenBlocker] useResources failed:", err);
   }
 }
 

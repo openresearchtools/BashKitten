@@ -150,11 +150,11 @@ private const val BYTES_TO_MEGABYTES_CONVERSION = 1024.0 * 1024.0
  * Installs [CrashReporter], initializes [Glean] in fenix builds and setup [Megazord] in the main process.
  */
 @Suppress("Registered", "TooManyFunctions", "LargeClass")
-open class FenixApplication : Application(), Provider, ThemeProvider, org.openresearchtools.wildbuzzard.BrowserApp.Provider {
-    private val wildBuzzardServices by lazy {
-        org.openresearchtools.wildbuzzard.BrowserApp(this, org.mozilla.fenix.wildbuzzard.FenixAgentHost(this))
+open class FenixApplication : Application(), Provider, ThemeProvider, com.bashkitten.BrowserApp.Provider {
+    private val bashKittenServices by lazy {
+        com.bashkitten.BrowserApp(this, org.mozilla.fenix.bashkitten.FenixAgentHost(this))
     }
-    override fun wildBuzzard() = wildBuzzardServices
+    override fun bashKitten() = bashKittenServices
 
     init {
         // [TIMER] Record startup timestamp as early as reasonable with some degree of consistency.
@@ -310,7 +310,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
         // Kick off initialization of Glean backend off-thread. Glean will continue to queue
         // metric samples until the backend is ready. If we don't have data-upload consent then
         // this will be a no-op and initialization may be attempted after onboarding.
-        // WildBuzzard disables the upstream product service: maybeInitializeGlean()
+        // BashKitten disables the upstream product service: maybeInitializeGlean()
 
         // Initialize the [BrowserStore] so that [setStartupMetrics] can reference this.
         // Note: This is a historical artifact and should be revisited.
@@ -328,7 +328,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
 
         setDayNightTheme()
         // Prepare local policy stores before activity/service startup enables strict disk checks.
-        wildBuzzardServices
+        bashKittenServices
         components.strictMode.enableStrictMode(true)
 
         initializeWebExtensionSupport()
@@ -344,11 +344,11 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
 
         GlobalSyncedTabsCommandsProvider.initialize(lazy { components.backgroundServices.syncedTabsCommands })
 
-        // WildBuzzard disables the upstream product service: initializeRemoteSettingsSupport()
+        // BashKitten disables the upstream product service: initializeRemoteSettingsSupport()
 
         restoreBrowserState()
         restoreDownloads()
-        // WildBuzzard disables the upstream product service: restoreMessaging()
+        // BashKitten disables the upstream product service: restoreMessaging()
 
         // [IMPORTANT] Don't progress further until application-services is actually ready to go.
         // This makes it easier to reason about behaviour and avoids issues in the Rust code.
@@ -364,9 +364,9 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
     private fun setupPostMegazord() {
         setupLeakCanary()
 
-        // WildBuzzard disables the upstream product service: setupPush()
+        // BashKitten disables the upstream product service: setupPush()
 
-        // WildBuzzard disables the upstream product service: maybeSetupIPProtection()
+        // BashKitten disables the upstream product service: maybeSetupIPProtection()
 
         GlobalFxSuggestDependencyProvider.initialize(components.fxSuggest.storage)
 
@@ -387,7 +387,7 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
             VisibilityLifecycleObserver(),
         )
 
-        // No telemetry upload or usage recorder in WildBuzzard.
+        // No telemetry upload or usage recorder in BashKitten.
 
 
     }
@@ -417,20 +417,20 @@ open class FenixApplication : Application(), Provider, ThemeProvider, org.openre
         // We init these items in the visual completeness queue to avoid them initing in the critical
         // startup path, before the UI finishes drawing (i.e. visual completeness).
         queueInitStorageAndServices(queue)
-        // WildBuzzard disables the upstream product service: queueMetrics(queue)
+        // BashKitten disables the upstream product service: queueMetrics(queue)
         queueEngineWarmup(queue)
         queueIncrementNumberOfAppLaunches(queue)
         queueRestoreLocale(queue)
         queueStorageMaintenance(queue)
-        // WildBuzzard disables the upstream product service: queueIntegrityClientWarmUp(queue)
-        // WildBuzzard disables the upstream product service: queueNimbusFetchInForeground(queue)
-        // WildBuzzard disables the upstream product service: queueDownloadWallpapers(queue)
+        // BashKitten disables the upstream product service: queueIntegrityClientWarmUp(queue)
+        // BashKitten disables the upstream product service: queueNimbusFetchInForeground(queue)
+        // BashKitten disables the upstream product service: queueDownloadWallpapers(queue)
 
         if (components.settings.enableFxSuggest) {
             queueSuggestIngest(queue)
         }
 
-        // WildBuzzard disables the upstream product service: queueCollectProcessExitInfo(queue)
+        // BashKitten disables the upstream product service: queueCollectProcessExitInfo(queue)
     }
 
     private inline fun runOnVisualCompleteness(

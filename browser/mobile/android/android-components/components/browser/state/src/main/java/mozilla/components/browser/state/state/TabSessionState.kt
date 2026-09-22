@@ -135,7 +135,7 @@ fun createTab(
         parentId = parentId ?: parent?.id,
         extensionState = extensions,
         readerState = readerState,
-        contextId = contextId ?: parent?.contextId ?: "wildbuzzard-user",
+        contextId = contextId ?: parent?.contextId ?: "bashkitten-user",
         lastAccess = lastAccess,
         lastVisibleAt = lastVisibleAt,
         createdAt = createdAt,

@@ -1,0 +1,515 @@
+// Guardian Project tor-android 0.4.9.12, commit cb04167d313cc3b5e1c1246111591aa57c2147cb.
+// BSD-3-Clause; full copyright and terms: bashkitten/android/notices/tor-android-LICENSE.
+package org.torproject.jni;
+
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.net.LocalSocket;
+import android.net.LocalSocketAddress;
+import android.os.Binder;
+import android.os.IBinder;
+import android.os.Process;
+import android.os.SystemClock;
+
+import net.freehaven.tor.control.RawEventListener;
+import net.freehaven.tor.control.TorControlCommands;
+import net.freehaven.tor.control.TorControlConnection;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.net.ServerSocket;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.concurrent.locks.ReentrantLock;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+
+/**
+ * A {@link Service} that runs Tor.  To control Tor via the {@code ControlPort},
+ * first bind to this using {@link #bindService(Intent, android.content.ServiceConnection, int)},
+ * then use {@link #getTorControlConnection()} to get an instance of
+ * {@link TorControlConnection} from {@code jtorctl}.  If
+ * {@link TorControlCommands#EVENT_STATUS_CLIENT} is not included in
+ * {@link TorControlConnection#setEvents(java.util.List)}, then this service
+ * will not be able to function properly since it relies on those events to
+ * detect the state of Tor.
+ */
+public class TorService extends Service implements TorControlCommands {
+
+    public static final String TAG = "TorService";
+
+    /**
+     * Hide BuildConfig symbol from Javadoc
+     *
+     * @hidden
+     */
+    @SuppressWarnings("unused")
+    public static final String VERSION_NAME = BuildConfig.VERSION_NAME;
+
+    /**
+     * Request to transparently start Tor services.
+     */
+    @SuppressWarnings("unused")
+    public static final String ACTION_START = "org.torproject.android.intent.action.START";
+
+    /**
+     * Internal request to stop Tor services.
+     */
+    @SuppressWarnings("unused")
+    public static final String ACTION_STOP = "org.torproject.android.intent.action.STOP";
+
+    /**
+     * {@link Intent} sent by this app with {@code ON/OFF/STARTING/STOPPING} status
+     * included as an {@link #EXTRA_STATUS} {@code String}.  Your app should
+     * always receive {@code ACTION_STATUS Intent}s since any other app could
+     * start Orbot.  Also, user-triggered starts and stops will also cause
+     * {@code ACTION_STATUS Intent}s to be broadcast.
+     */
+    public static final String ACTION_STATUS = "org.torproject.android.intent.action.STATUS";
+
+    public static final String ACTION_ERROR = "org.torproject.android.intent.action.ERROR";
+
+    /**
+     * {@code String} that contains a status constant: {@link #STATUS_ON},
+     * {@link #STATUS_OFF}, {@link #STATUS_STARTING}, or
+     * {@link #STATUS_STOPPING}
+     */
+    public static final String EXTRA_STATUS = "org.torproject.android.intent.extra.STATUS";
+
+    /**
+     * The {@link String} {@code packageName} of the app to which this {@code TorService} belongs.
+     * This allows broadcast receivers to distinguish between broadcasts from different apps that
+     * use {@code TorService}.
+     */
+    public final static String EXTRA_SERVICE_PACKAGE_NAME = "org.torproject.android.intent.extra.SERVICE_PACKAGE_NAME";
+
+    /**
+     * All tor-related services and daemons are stopped
+     */
+    public static final String STATUS_OFF = "OFF";
+    /**
+     * All tor-related services and daemons have completed starting
+     */
+    public static final String STATUS_ON = "ON";
+    public static final String STATUS_STARTING = "STARTING";
+    public static final String STATUS_STOPPING = "STOPPING";
+
+    /**
+     * @return a {@link File} pointing to the location of the optional
+     * {@code torrc} file.
+     * @see <a href="https://www.torproject.org/docs/tor-manual.html#_the_configuration_file_format">Tor configuration file format</a>
+     */
+    public static File getTorrc(Context context) {
+        return new File(getAppTorServiceDir(context), "torrc");
+    }
+
+    /**
+     * @return a {@link File} pointing to the location of the optional
+     * {@code torrc-defaults} file.
+     * @see <a href="https://www.torproject.org/docs/tor-manual.html#_the_configuration_file_format">Tor configuration file format</a>
+     */
+    public static File getDefaultsTorrc(Context context) {
+        return new File(getAppTorServiceDir(context), "torrc-defaults");
+    }
+
+    public static String getBroadcastPackageName(Context context) {
+        if (broadcastPackageName.equals(UNINITIALIZED)) {
+            broadcastPackageName = context.getPackageName();
+        }
+        return broadcastPackageName;
+    }
+
+    private static File getControlSocket(Context context) {
+        if (controlSocket == null) {
+            controlSocket = new File(getAppTorServiceDataDir(context), CONTROL_SOCKET_NAME);
+        }
+        return controlSocket;
+    }
+
+    /**
+     * Get the directory that {@link TorService} uses for:
+     * <ul>
+     * <li>writing {@code ControlPort.txt} // TODO
+     * <li>reading {@code torrc} and {@code torrc-defaults}
+     * <li>{@code DataDirectory} and {@code CacheDirectory}
+     * </ul>
+     */
+    private static File getAppTorServiceDir(Context context) {
+        if (appTorServiceDir == null) {
+            appTorServiceDir = context.getDir(TorService.class.getSimpleName(), MODE_PRIVATE);
+        }
+        return appTorServiceDir;
+    }
+
+    /**
+     * Tor stores private, internal data in this directory.
+     */
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private static File getAppTorServiceDataDir(Context context) {
+        var dir = new File(getAppTorServiceDir(context), "data");
+        dir.mkdir();
+        if (!(dir.setReadable(true, true) && dir.setWritable(true, true) && dir.setExecutable(true, true))) {
+            throw new IllegalStateException("Cannot create " + dir);
+        }
+        return dir;
+    }
+
+    static {
+        System.loadLibrary("tor");
+    }
+
+    volatile static String currentStatus = STATUS_OFF;
+
+    private static File appTorServiceDir = null;
+    private static File controlSocket = null;
+    private static final String CONTROL_SOCKET_NAME = "ControlSocket";
+    private static final String UNINITIALIZED = "UNINITIALIZED";
+    private static String broadcastPackageName = UNINITIALIZED;
+
+    private static int socksPort = -1;
+    private static int httpTunnelPort = -1;
+
+    // Store the opaque reference as a long (pointer) for the native code
+    @SuppressWarnings({"FieldMayBeFinal", "unused"})
+    private long torConfiguration = -1;
+    @SuppressWarnings({"FieldMayBeFinal", " unused"})
+    private int torControlFd = -1;
+
+    private volatile TorControlConnection torControlConnection;
+    private volatile LocalSocket controlConnectionSocket;
+    private volatile boolean controlStopped;
+
+    /**
+     * This lock must be acquired before calling createTorConfiguration() and
+     * held until mainConfigurationFree() has been called.
+     */
+    private static final ReentrantLock runLock = new ReentrantLock();
+
+    @SuppressWarnings("UnusedReturnValue")
+    private native boolean createTorConfiguration();
+
+    private native void mainConfigurationFree();
+
+    @SuppressWarnings("BooleanMethodIsAlwaysInverted")
+    private native boolean mainConfigurationSetCommandLine(String[] args);
+
+    private native boolean mainConfigurationSetupControlSocket();
+
+    private native int runMain();
+
+
+    public class LocalBinder extends Binder {
+        @SuppressWarnings("unused")
+        public TorService getService() {
+            return TorService.this;
+        }
+    }
+
+    private final IBinder binder = new LocalBinder();
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return binder;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        broadcastStatus(this, STATUS_STARTING);
+        startTorServiceThread();
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        sendBroadcastStatusIntent(this);
+        return super.onStartCommand(intent, flags, startId);
+    }
+
+    public static final String STATUS_CLIENT_CIRCUIT_ESTABLISHED = "CIRCUIT_ESTABLISHED";
+
+    /**
+     * Announce Tor is available for connections once the first circuit is complete
+     */
+    private final RawEventListener startedEventListener = (keyword, data) -> {
+        if (STATUS_STARTING.equals(currentStatus)
+                && EVENT_STATUS_CLIENT.equals(keyword)
+                && data != null && !data.isEmpty()) {
+            var tokenArray = data.split(" ");
+            if (tokenArray.length > 1 && STATUS_CLIENT_CIRCUIT_ESTABLISHED.equals(tokenArray[1])) {
+                broadcastStatus(TorService.this, STATUS_ON);
+            }
+        }
+    };
+
+    // Creating a Unix socket path does not mean Tor has started listening yet.
+    private final Thread controlPortThread = new Thread(CONTROL_SOCKET_NAME) {
+        @Override
+        public void run() {
+            android.os.Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+            try {
+                var socket = connectControlSocket();
+                controlConnectionSocket = socket;
+                var readyConnection = new TorControlConnection(socket.getInputStream(), socket.getOutputStream());
+                readyConnection.launchThread(true);
+                readyConnection.authenticate(new byte[0]);
+                readyConnection.addRawEventListener(startedEventListener);
+                readyConnection.setEvents(Collections.singletonList(EVENT_STATUS_CLIENT));
+                if (controlStopped) throw new IOException("Tor stopped during startup");
+                torControlConnection = readyConnection;
+
+                socksPort = getPortFromGetInfo("net/listeners/socks");
+                httpTunnelPort = getPortFromGetInfo("net/listeners/httptunnel");
+
+            } catch (IOException | ArrayIndexOutOfBoundsException | InterruptedException e) {
+                closeControlSocket();
+                broadcastError(TorService.this, e);
+                broadcastStatus(TorService.this, STATUS_STOPPING);
+                stopSelf();
+            }
+        }
+    };
+
+    private LocalSocket connectControlSocket() throws IOException, InterruptedException {
+        long deadline = SystemClock.elapsedRealtime() + 30000;
+        while (!controlStopped && SystemClock.elapsedRealtime() < deadline) {
+            var socket = new LocalSocket();
+            try {
+                socket.connect(new LocalSocketAddress(getControlSocket(this).getAbsolutePath(),
+                        LocalSocketAddress.Namespace.FILESYSTEM));
+                return socket;
+            } catch (IOException error) {
+                socket.close();
+                Thread.sleep(100);
+            }
+        }
+        throw new IOException("Tor control connection is unavailable");
+    }
+
+    private void closeControlSocket() {
+        var socket = controlConnectionSocket;
+        controlConnectionSocket = null;
+        if (socket != null) {
+            try { socket.close(); } catch (IOException ignored) { }
+        }
+    }
+
+    private final Thread torThread = new Thread("tor") {
+        @Override
+        public void run() {
+            final var context = getApplicationContext();
+            try {
+                createTorConfiguration();
+                setDefaultProxyPorts();
+
+                var lines = new ArrayList<>(Arrays.asList("tor", "--verify-config", // must always be here
+                        "--quiet",
+                        "--RunAsDaemon", "0",
+                        "-f", getTorrc(context).getAbsolutePath(),
+                        "--defaults-torrc", getDefaultsTorrc(context).getAbsolutePath(),
+                        "--ignore-missing-torrc",
+                        "--SyslogIdentityTag", TAG,
+                        "--CacheDirectory", new File(getCacheDir(), TAG).getAbsolutePath(),
+                        "--DataDirectory", getAppTorServiceDataDir(context).getAbsolutePath(),
+                        "--ControlSocket", getControlSocket(context).getAbsolutePath(),
+                        "--CookieAuthentication", "0",
+                        // Bootstrap status is read through the private control socket.
+                        "--Log", "err file /dev/null"
+                ));
+                var verifyLines = lines.toArray(new String[0]);
+                if (!mainConfigurationSetCommandLine(verifyLines)) {
+                    throw new IllegalArgumentException("Setting command line failed: " + Arrays.toString(verifyLines));
+                }
+                var result = runMain(); // run verify
+                if (result != 0) {
+                    throw new IllegalArgumentException("Bad command flags: " + Arrays.toString(verifyLines));
+                }
+
+                controlPortThread.start();
+
+                var runLines = new String[lines.size() - 1];
+                runLines[0] = "tor";
+                for (var i = 2; i < lines.size(); i++) {
+                    runLines[i - 1] = lines.get(i);
+                }
+                if (!mainConfigurationSetCommandLine(runLines)) {
+                    throw new IllegalArgumentException("Setting command line failed: " + Arrays.toString(runLines));
+                }
+                if (!mainConfigurationSetupControlSocket()) {
+                    throw new IllegalStateException("Setting up ControlPort failed!");
+                }
+                if (runMain() != 0) {
+                    throw new IllegalStateException("Tor could not start!");
+                }
+
+            } catch (IllegalStateException | IllegalArgumentException e) {
+                broadcastError(context, e);
+            } finally {
+                broadcastStatus(context, STATUS_STOPPING);
+                mainConfigurationFree();
+                TorService.this.stopSelf();
+            }
+        }
+    };
+
+    private void setDefaultProxyPorts() {
+        var socksPort = "auto";
+        if (isPortAvailable(9050)) {
+            socksPort = Integer.toString(9050);
+        }
+        var httpTunnelPort = "auto";
+        if (isPortAvailable(8118)) {
+            httpTunnelPort = Integer.toString(8118);
+        }
+
+        var defaults = "SOCKSPort " + socksPort;
+        defaults += "\nHTTPTunnelPort " + httpTunnelPort + "\n";
+
+        try {
+            var pw = new PrintWriter(new FileWriter(getDefaultsTorrc(this), false));
+            pw.append(defaults);
+            pw.flush();
+            pw.close();
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not configure Tor", e);
+        }
+    }
+
+    private int getPortFromGetInfo(String key) {
+        var value = getInfo(key);
+        if (value.trim().isEmpty() || value.contains("unix:")) return 0; // port is disabled
+        return Integer.parseInt(value.substring(value.lastIndexOf(':') + 1, value.length() - 1));
+    }
+
+    /**
+     * Start Tor in a {@link Thread} with the minimum required config.  The
+     * rest of the config should happen via the Control Port.  First Tor
+     * runs with {@code --verify-config} to check the command line flags and
+     * any {@code torrc} config. The control thread retries its connection while
+     * Tor starts listening on the private filesystem socket.
+     * @see <a href="https://github.com/torproject/tor/blob/40be20d542a83359ea480bbaa28380b4137c88b2/src/app/config/config.c#L4730">options that must be on the command line</a>
+     */
+    private void startTorServiceThread() {
+        runLock.lock();
+        torThread.start();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        controlStopped = true;
+        controlPortThread.interrupt();
+        if (torControlConnection != null) {
+            torControlConnection.removeRawEventListener(startedEventListener);
+        }
+        if (runLock.isLocked()) {
+            runLock.unlock();
+        }
+        shutdownTor();
+        closeControlSocket();
+        broadcastStatus(TorService.this, STATUS_OFF);
+    }
+
+    @SuppressWarnings("unused")
+    public int getSocksPort() {
+        return socksPort;
+    }
+
+    @SuppressWarnings("unused")
+    public int getHttpTunnelPort() {
+        return httpTunnelPort;
+    }
+
+    /**
+     * @return the value or null on error
+     * @see <a href="https://gitweb.torproject.org/torspec.git/tree/control-spec.txt?id=bf318ccb042757cc47e47e19a63d1d825dcf222b#n527">control-spec GETINFO</a>
+     */
+    public String getInfo(String key) {
+        try {
+            return torControlConnection.getInfo(key);
+        } catch (IOException | NullPointerException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Send a signal to the Tor process to shut it down or halt it.
+     * Does not wait for a response, or report errors.
+     *
+     * @see TorControlConnection#shutdownTor(String)
+     */
+    private void shutdownTor() {
+        try {
+            if (torControlConnection != null) {
+                torControlConnection.shutdownTor(SIGNAL_SHUTDOWN);
+            }
+        } catch (IOException ignored) {
+            // Shutdown is best effort; do not write connection diagnostics.
+        }
+    }
+
+    /**
+     * Get an instance of {@link TorControlConnection} to control this instance
+     * of Tor, and configure it to set events.
+     *
+     * @see TorControlConnection#setEvents(java.util.List)
+     */
+    @SuppressWarnings("unused")
+    public TorControlConnection getTorControlConnection() {
+        return torControlConnection;
+    }
+
+    /**
+     * Broadcasts the current status to any apps following the status of TorService.
+     */
+    private static void sendBroadcastStatusIntent(Context context) {
+        context.sendBroadcast(getBroadcastIntent(context, currentStatus));
+    }
+
+    /**
+     * Sends the current status both internally and for any apps that need to
+     * follow the status of TorService.
+     */
+    private static void broadcastStatus(Context context, String currentStatus) {
+        TorService.currentStatus = currentStatus;
+        var intent = getBroadcastIntent(context, currentStatus);
+        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+        context.sendBroadcast(intent);
+    }
+
+    /**
+     * This might be better handled by {@link android.content.ServiceConnection}
+     * but there is no way to write tests for {@code ServiceConnection}.
+     */
+    private static void broadcastError(Context context, Throwable e) {
+        var intent = new Intent(ACTION_ERROR);
+        if (e != null) {
+            intent.putExtra(Intent.EXTRA_TEXT, e.getLocalizedMessage());
+        }
+        intent.setPackage(getBroadcastPackageName(context));
+        intent.putExtra(EXTRA_SERVICE_PACKAGE_NAME, context.getPackageName());
+        LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
+        context.sendBroadcast(intent);
+    }
+
+    private static Intent getBroadcastIntent(Context context, String currentStatus) {
+        var intent = new Intent(TorService.ACTION_STATUS);
+        intent.putExtra(EXTRA_SERVICE_PACKAGE_NAME, context.getPackageName());
+        intent.setPackage(getBroadcastPackageName(context));
+        intent.putExtra(EXTRA_STATUS, currentStatus);
+        return intent;
+    }
+
+    private static boolean isPortAvailable(int port) {
+        try {
+            (new ServerSocket(port)).close();
+            return true;
+        } catch (IOException e) {
+            // Could not connect.
+            return false;
+        }
+    }
+}

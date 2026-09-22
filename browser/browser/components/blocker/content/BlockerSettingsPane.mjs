@@ -6,15 +6,15 @@ import { SettingPaneManager } from "chrome://browser/content/preferences/config/
 
 SettingPaneManager.registerPanes({
   adBlocking: {
-    l10nId: "wildbuzzard-blocker-pane-header",
+    l10nId: "bashkitten-blocker-pane-header",
     iconSrc: "chrome://browser/content/blocker/blockerShield.svg",
     groupIds: [
-      "wildbuzzardBlocker",
-      "wildbuzzardBlockerLists",
-      "wildbuzzardBlockerExceptions",
+      "bashkittenBlocker",
+      "bashkittenBlockerLists",
+      "bashkittenBlockerExceptions",
     ],
     module: "chrome://browser/content/blocker/blockerSettings.mjs",
     visible: () =>
-      Services.prefs.getBoolPref("wildbuzzard.blocker.ui.enabled", true),
+      Services.prefs.getBoolPref("bashkitten.blocker.ui.enabled", true),
   },
 });

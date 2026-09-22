@@ -42,6 +42,7 @@
 #include "nsNetUtil.h"
 #include "nsProxyRelease.h"
 #include "nsPrintfCString.h"
+#include "nsReadableUtils.h"
 
 using namespace mozilla::dom;
 using namespace JS;
@@ -530,6 +531,13 @@ bool ChannelWrapper::CanModify() const {
   }
 
   if (nsCOMPtr<nsILoadInfo> loadInfo = GetLoadInfo()) {
+    const auto& attrs = loadInfo->GetOriginAttributes();
+    uint32_t context = attrs.mUserContextId;
+    if ((context >= 0xB4500000 && context <= 0xB450FFFF) ||
+        StringBeginsWith(attrs.mGeckoViewSessionContextId,
+                         u"gvctx626173686b697474656e2d6167656e742d75692d"_ns)) {
+      return false;
+    }
     if (nsIPrincipal* prin = loadInfo->GetLoadingPrincipal()) {
       if (prin->IsSystemPrincipal()) {
         return false;
@@ -644,6 +652,15 @@ bool ChannelWrapper::Matches(
   }
 
   nsCOMPtr<nsILoadInfo> loadInfo = GetLoadInfo();
+  if (loadInfo) {
+    const auto& attrs = loadInfo->GetOriginAttributes();
+    uint32_t context = attrs.mUserContextId;
+    if ((context >= 0xB4500000 && context <= 0xB450FFFF) ||
+        StringBeginsWith(attrs.mGeckoViewSessionContextId,
+                         u"gvctx626173686b697474656e2d6167656e742d75692d"_ns)) {
+      return false;
+    }
+  }
   bool isPrivate =
       loadInfo && loadInfo->GetOriginAttributes().IsPrivateBrowsing();
   if (!aFilter.mIncognito.IsNull() && aFilter.mIncognito.Value() != isPrivate) {

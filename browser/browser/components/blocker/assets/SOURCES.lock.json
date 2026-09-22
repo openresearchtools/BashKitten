@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "nodeVersion": "v22.23.2",
-  "artifact": "wildbuzzard-blocker-assets-source.tar.xz",
+  "artifact": "bashkitten-blocker-assets-source.tar.xz",
   "sources": {
     "braveAdblockResources": {
       "name": "Brave adblock-resources",

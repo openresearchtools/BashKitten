@@ -39,8 +39,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource://gre/modules/addons/ProductAddonChecker.sys.mjs",
   NetUtil: "resource://gre/modules/NetUtil.sys.mjs",
   UpdateUtils: "resource://gre/modules/UpdateUtils.sys.mjs",
-  isPinnedWildBuzzardXPI:
-    "resource://gre/modules/addons/WildBuzzardXPITrust.sys.mjs",
 });
 
 ChromeUtils.defineLazyGetter(lazy, "IconDetails", () => {
@@ -311,22 +309,7 @@ class Package {
       root = Ci.nsIX509CertDB.AddonsStageRoot;
     }
 
-    let verified = await this.verifySignedStateForRoot(addonId, root);
-    if (
-      verified.signedState === AddonManager.SIGNEDSTATE_MISSING &&
-      (await lazy.isPinnedWildBuzzardXPI({
-        addonId,
-        addonType,
-        installLocationName: addonLocation.name,
-        file: this.file,
-      }))
-    ) {
-      verified = {
-        ...verified,
-        signedState: AddonManager.SIGNEDSTATE_SIGNED,
-      };
-    }
-    return verified;
+    return this.verifySignedStateForRoot(addonId, root);
   }
 
   flushCache() {}

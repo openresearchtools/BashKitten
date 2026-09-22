@@ -301,7 +301,7 @@ class Core(
      * [Client] implementation to be used for code depending on `concept-fetch``
      */
     val client: Client by lazyMonitored {
-        org.mozilla.fenix.wildbuzzard.ProductClient(GeckoViewFetchClient(
+        org.mozilla.fenix.bashkitten.ProductClient(GeckoViewFetchClient(
             context,
             geckoRuntime,
         ))
@@ -375,7 +375,7 @@ class Core(
                         processInfoProvider = object : ProcessInfoProvider {
                             // Approved agents can download while their terminal stays visible.
                             override fun isForegroundImportance() =
-                                org.openresearchtools.wildbuzzard.BrowserKeepAliveService.isActive() ||
+                                com.bashkitten.BrowserKeepAliveService.isActive() ||
                                     DefaultProcessInfoProvider().isForegroundImportance()
                         },
                         powerManagerInfoProvider = DefaultPowerManagerInfoProvider(context),

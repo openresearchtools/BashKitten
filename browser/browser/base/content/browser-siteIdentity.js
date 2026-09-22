@@ -481,7 +481,7 @@ var gIdentityHandler = {
     event.stopPropagation();
   },
 
-  // WildBuzzard: the cookie exception toggle in the site data footer.
+  // BashKitten: the cookie exception toggle in the site data footer.
   refreshSiteData() {
     document
       .getElementById("identity-popup-allow-sitedata-toggle")

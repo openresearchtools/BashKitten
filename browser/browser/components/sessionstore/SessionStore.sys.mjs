@@ -4949,6 +4949,19 @@ var SessionStoreInternal = {
       }
     }
 
+    if (AppConstants.MOZ_APP_NAME == "bashkitten") {
+      const existing = this._getTopWindow();
+      if (existing) {
+        this.restoreWindows(existing, state, {
+          overwriteTabs: false,
+          trigger: "undo_close",
+        });
+        existing.focus();
+        this._notifyOfClosedObjectsChange();
+        return existing;
+      }
+    }
+
     let window = this._openWindowWithState(state);
     this.windowToFocus = window;
     WINDOW_SHOWING_PROMISES.get(window).promise.then(win =>
@@ -5251,6 +5264,7 @@ var SessionStoreInternal = {
     }
 
     let lastSessionState = LastSession.getState();
+    this._combineBashKittenWindows(lastSessionState);
 
     // This shouldn't ever be the case...
     if (!lastSessionState.windows.length) {
@@ -5270,7 +5284,10 @@ var SessionStoreInternal = {
     // We will do more processing via _prepWindowToRestoreInto if we need to use
     // the lastWindow.
     let lastWindow = this._getTopWindow();
-    let canUseLastWindow = lastWindow && !lastWindow.__SS_lastSessionWindowID;
+    let canUseLastWindow =
+      lastWindow &&
+      (AppConstants.MOZ_APP_NAME == "bashkitten" ||
+        !lastWindow.__SS_lastSessionWindowID);
 
     // global data must be restored before restoreWindow is called so that
     // it happens before observers are notified
@@ -5877,6 +5894,33 @@ var SessionStoreInternal = {
     return Promise.all(windowOpenedPromises);
   },
 
+  _combineBashKittenWindows(root) {
+    if (AppConstants.MOZ_APP_NAME != "bashkitten" || !root.windows?.length) {
+      return;
+    }
+    const oldCount = root.windows.length;
+    // As with the existing private-tab implementation, private history is not
+    // resurrected as ordinary tabs when restoring a persisted window.
+    const [first = { tabs: [] }, ...rest] = root.windows.filter(
+      win => !win.isPrivate
+    );
+    for (const win of rest) {
+      first.tabs = [...(first.tabs || []), ...(win.tabs || [])];
+      for (const key of ["groups", "splitViews", "_closedTabs"]) {
+        first[key] = [...(first[key] || []), ...(win[key] || [])];
+      }
+    }
+    first.isPrivate = false;
+    first.isAIWindow = false;
+    delete first.hidden;
+    delete first.chromeFlags;
+    root.windows = [first];
+    root.selectedWindow = 1;
+    if (this._restoreCount > 1) {
+      this._restoreCount = Math.max(1, this._restoreCount - oldCount + 1);
+    }
+  },
+
   /**
    * Reset closedId's from previous sessions to ensure these IDs are unique
    *
@@ -6349,6 +6393,8 @@ var SessionStoreInternal = {
       this._sendRestoreCompletedNotifications();
       return;
     }
+
+    this._combineBashKittenWindows(root);
 
     // Restore closed windows if any.
     if (root._closedWindows) {
@@ -7238,6 +7284,7 @@ var SessionStoreInternal = {
    *        Object containing session data
    */
   _openWindowWithState: function ssi_openWindowWithState(aState) {
+    this._combineBashKittenWindows(aState);
     // Build arguments string
     let argString;
     // Build feature string

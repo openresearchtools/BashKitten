@@ -2461,15 +2461,15 @@ pref("privacy.resistFingerprinting.skipEarlyBlankFirstPaint", true);
 
 pref("browser.contentblocking.database.enabled", true);
 
-// WildBuzzard's built-in content blocker.
-pref("wildbuzzard.blocker.enabled", true);
-pref("wildbuzzard.blocker.ui.enabled", true);
-pref("wildbuzzard.blocker.showBadge", true);
-pref("wildbuzzard.blocker.filterListUrls", "[]");
-pref("wildbuzzard.blocker.enabledLists", "{}");
-pref("wildbuzzard.blocker.extensionDetectionDismissed", false);
-pref("wildbuzzard.blocker.dismissedExtensionInstallWarnings", "[]");
-pref("wildbuzzard.blocker.coexist", false);
+// BashKitten's built-in content blocker.
+pref("bashkitten.blocker.enabled", true);
+pref("bashkitten.blocker.ui.enabled", true);
+pref("bashkitten.blocker.showBadge", true);
+pref("bashkitten.blocker.filterListUrls", "[]");
+pref("bashkitten.blocker.enabledLists", "{}");
+pref("bashkitten.blocker.extensionDetectionDismissed", false);
+pref("bashkitten.blocker.dismissedExtensionInstallWarnings", "[]");
+pref("bashkitten.blocker.coexist", false);
 
 // Enable Strip on Share by default on desktop
 pref("privacy.query_stripping.strip_on_share.enabled", true);

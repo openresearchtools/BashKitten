@@ -1,0 +1,7 @@
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<resources>
+    <color name="bashkitten_surface">#f5f5f5</color>
+    <color name="bashkitten_text">#252525</color>
+    <color name="bashkitten_secondary">#4a4a4a</color>
+    <color name="bashkitten_button">#e6e6e6</color>
+</resources>

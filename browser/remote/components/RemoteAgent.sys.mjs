@@ -434,16 +434,16 @@ class RemoteAgentParentProcess {
         {
           const enabledByCommandLine =
             this.#handleRemoteDebuggingPortFlag(subject);
-          const enabledForWildBuzzardControl = Services.prefs.getBoolPref(
-            "wildbuzzard.browserControl.webdriverTransport.enabled",
+          const enabledForBashKittenControl = Services.prefs.getBoolPref(
+            "bashkitten.browserControl.webdriverTransport.enabled",
             false
           );
-          if (enabledForWildBuzzardControl && !enabledByCommandLine) {
+          if (enabledForBashKittenControl && !enabledByCommandLine) {
             // Use an ephemeral loopback port. A WebDriver session created
             // through Marionette receives the resulting BiDi websocket URL.
             this.#port = 0;
           }
-          this.#enabled = enabledByCommandLine || enabledForWildBuzzardControl;
+          this.#enabled = enabledByCommandLine || enabledForBashKittenControl;
         }
 
         if (this.#enabled) {

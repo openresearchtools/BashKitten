@@ -4,7 +4,7 @@
 
 /*
  * The blocked URL and matched rule are read from this page's query string.
- * The "Load anyway" click is delegated to the WildBuzzardBlockedPage actor,
+ * The "Load anyway" click is delegated to the BashKittenBlockedPage actor,
  * which records a permission for the session in the parent before
  * navigating.
  */
@@ -33,7 +33,7 @@ function parseState() {
   }
 }
 
-const BLOCKED_PAGE_UNAVAILABLE_L10N_ID = "wildbuzzard-blocked-page-unavailable";
+const BLOCKED_PAGE_UNAVAILABLE_L10N_ID = "bashkitten-blocked-page-unavailable";
 
 function isValidBlockedUrl(url) {
   return (
@@ -98,7 +98,7 @@ function initPage() {
 
   goBackButton.addEventListener("click", goBack);
   loadAnywayButton.disabled = !validBlockedUrl;
-  // Navigation runs in WildBuzzardBlockedPageChild after the parent records a
+  // Navigation runs in BashKittenBlockedPageChild after the parent records a
   // permission for the session on the blocked host.
 }
 

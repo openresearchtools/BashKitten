@@ -3496,7 +3496,7 @@
   -->
   <string name="inactive_tabs_auto_close_message_header" tools:ignore="UnusedResources">Tự động đóng sau một tháng?</string>
   <!-- A description below the header to notify the user what the inactive tabs auto-close feature is. -->
-  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">Wild Buzzard có thể đóng các thẻ bạn không xem trong tháng qua.</string>
+  <string name="inactive_tabs_auto_close_message_description" tools:ignore="BrandUsage,UnusedResources">BashKitten có thể đóng các thẻ bạn không xem trong tháng qua.</string>
   <!-- A call to action below the description to allow the user to turn on the auto closing of inactive tabs. -->
   <string name="inactive_tabs_auto_close_message_action" tools:ignore="UnusedResources">BẬT TỰ ĐỘNG ĐÓNG</string>
   <!-- Text for the snackbar to confirm auto-close is enabled for inactive tabs -->

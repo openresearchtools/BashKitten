@@ -3,6 +3,9 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 EXTRA_JS_MODULES += [
+    "BashKittenHost.sys.mjs",
+    "BashKittenHostChild.sys.mjs",
+    "BashKittenHostParent.sys.mjs",
     "BrowserUsageTelemetry.sys.mjs",
     "ChildCrashHandler.sys.mjs",
     "DelayedInit.sys.mjs",
@@ -37,12 +40,12 @@ EXTRA_JS_MODULES += [
     "GeckoViewTranslations.sys.mjs",
     "GeckoViewUtils.sys.mjs",
     "GeckoViewWebExtension.sys.mjs",
-    "GeckoViewWildBuzzard.sys.mjs",
+    "GeckoViewBashKitten.sys.mjs",
     "LoadURIDelegate.sys.mjs",
     "MediaUtils.sys.mjs",
     "Messaging.sys.mjs",
     "NimbusGeckoViewQATelemetry.sys.mjs",
-    "WildBuzzardAndroid.sys.mjs",
+    "BashKittenAndroid.sys.mjs",
 ]
 
 XPCSHELL_TESTS_MANIFESTS += ["test/xpcshell/xpcshell.toml"]

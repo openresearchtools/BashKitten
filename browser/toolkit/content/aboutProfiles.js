@@ -4,6 +4,11 @@
 
 "use strict";
 
+const { AppConstants } = ChromeUtils.importESModule(
+  "resource://gre/modules/AppConstants.sys.mjs"
+);
+const singleProfile = AppConstants.MOZ_APP_NAME == "bashkitten";
+
 const { XPCOMUtils } = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"
 );
@@ -69,6 +74,9 @@ async function rebuildProfileList() {
 
   for (let profile of ProfileService.profiles) {
     let isCurrentProfile = profile == currentProfile;
+    if (singleProfile && !isCurrentProfile) {
+      continue;
+    }
     let isInUse = isCurrentProfile;
     let canDelete = await canDeleteProfile(profile);
     if (!isInUse) {
@@ -170,6 +178,10 @@ function display(profileData) {
 
   if (profileData.profile.localDir.path != profileData.profile.rootDir.path) {
     createItem("profiles-localdir", profileData.profile.localDir, true);
+  }
+
+  if (singleProfile) {
+    return;
   }
 
   let renameButton = document.createElement("button");
@@ -398,6 +410,7 @@ window.addEventListener(
   "DOMContentLoaded",
   function () {
     let createButton = document.getElementById("create-button");
+    createButton.hidden = singleProfile;
     createButton.addEventListener("click", createProfileWizard);
 
     let restartSafeModeButton = document.getElementById(

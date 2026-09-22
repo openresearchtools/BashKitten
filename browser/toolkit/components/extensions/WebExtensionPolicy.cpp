@@ -25,6 +25,7 @@
 #include "nsNetUtil.h"
 #include "nsPIDOMWindowInlines.h"
 #include "nsPrintfCString.h"
+#include "nsReadableUtils.h"
 
 namespace mozilla {
 namespace extensions {
@@ -883,7 +884,18 @@ bool MozDocumentMatcher::Matches(const DocInfo& aDoc,
     }
   }
 
-  // match browsing mode with policy
+  // Agent/auth documents use browser-owned cookie contexts on both platforms.
+  // Do not grant content scripts access, even to an extension with <all_urls>.
+  if (aDoc.Principal()) {
+    const auto& attrs = aDoc.Principal()->OriginAttributesRef();
+    uint32_t context = attrs.mUserContextId;
+    if ((context >= 0xB4500000 && context <= 0xB450FFFF) ||
+        StringBeginsWith(attrs.mGeckoViewSessionContextId,
+                         u"gvctx626173686b697474656e2d6167656e742d75692d"_ns)) {
+      return false;
+    }
+  }
+
   nsCOMPtr<nsILoadContext> loadContext = aDoc.GetLoadContext();
   if (loadContext && mExtension && !mExtension->CanAccessContext(loadContext)) {
     return false;

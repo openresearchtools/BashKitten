@@ -272,7 +272,7 @@ export class YelpSuggestions extends SuggestProvider {
       {
         name: RESULT_MENU_COMMAND.MANAGE,
         l10n: {
-          id: "wildbuzzard-urlbar-result-menu-manage-suggestions",
+          id: "bashkitten-urlbar-result-menu-manage-suggestions",
         },
       },
       {

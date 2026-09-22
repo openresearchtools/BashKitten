@@ -3107,7 +3107,7 @@ toolbar:not(#TabsToolbar) #firefox-view-button {
   display: none;
 }
 
-.tabbrowser-tab[wildbuzzard-automation-active] .tab-automation-indicator {
+.tabbrowser-tab[bashkitten-automation-active] .tab-automation-indicator {
   display: block;
   flex-shrink: 0;
   inline-size: 6px;
