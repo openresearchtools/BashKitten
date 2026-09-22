@@ -1,0 +1,145 @@
+name: Native authentication components
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches: [codex/browser-integration, codex/native-components]
+    paths: ['auth/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: auth-native-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  component:
+    name: ${{ matrix.component }} · ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [authelia, caddy, tor]
+        target: [linux-amd64, linux-arm64, termux-aarch64]
+        include:
+          - target: linux-amd64
+            runner: ubuntu-24.04
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+          - target: termux-aarch64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      GOTELEMETRY: 'off'
+      DO_NOT_TRACK: '1'
+      BASHKITTEN_BUILD_JOBS: '2'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            auth
+            agent/src/server/access
+      - uses: actions/setup-go@v6
+        if: matrix.component != 'tor'
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: auth/${{ matrix.component }}/go.sum
+      - uses: actions/setup-node@v4
+        if: matrix.component == 'authelia'
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        if: matrix.component == 'authelia'
+        with:
+          version: '12'
+      - name: Native build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config libevent-dev libssl-dev zlib1g-dev liblzma-dev libzstd-dev libseccomp-dev python3 binutils dpkg-dev
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/share/pnpm/store
+            ~/.cache/bashkitten-termux
+          key: auth-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles('auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'auth/authelia/web/pnpm-lock.yaml') }}
+      - name: Build tracked source for the target ABI
+        env:
+          COMPONENT: ${{ matrix.component }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          auth/build/"$COMPONENT".sh "$TARGET" "$RUNNER_TEMP/payload"
+      - name: Check native ELF compatibility
+        env:
+          COMPONENT: ${{ matrix.component }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          readelf -h "$RUNNER_TEMP/payload/bin/$COMPONENT"
+          readelf -lW "$RUNNER_TEMP/payload/bin/$COMPONENT"
+          if [[ "$TARGET" == termux-aarch64 ]]; then
+            python3 - "$RUNNER_TEMP/payload/bin" <<'PY'
+          from pathlib import Path
+          import subprocess, sys
+          for binary in Path(sys.argv[1]).iterdir():
+              output = subprocess.check_output(['readelf', '-lW', str(binary)], text=True)
+              loads = [line.split() for line in output.splitlines() if line.strip().startswith('LOAD ')]
+              assert loads and all(int(line[-1], 16) >= 16384 for line in loads), f'{binary}: ELF requires 16 KB compatible load segments'
+              assert '/system/bin/linker64' in output, f'{binary}: Termux executable must use the Android dynamic linker'
+          PY
+          fi
+      - name: Exercise SQLite, Argon2 and TOTP in the Linux executable
+        if: matrix.component == 'authelia' && matrix.target != 'termux-aarch64'
+        run: |
+          check_dir=$(mktemp -d "$RUNNER_TEMP/auth-runtime.XXXXXX")
+          trap 'rm -rf "$check_dir"' EXIT
+          exe="$RUNNER_TEMP/payload/bin/authelia"
+          "$exe" crypto hash generate argon2 --password 'build-only-password' > "$check_dir/hash"
+          grep -q 'argon2id' "$check_dir/hash"
+          storage_args=(--sqlite.path "$check_dir/store.sqlite3" --encryption-key 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef)
+          "$exe" storage migrate up "${storage_args[@]}"
+          "$exe" storage user totp generate build-check --path "$check_dir/totp.png" "${storage_args[@]}"
+          test -s "$check_dir/store.sqlite3"
+          test -s "$check_dir/totp.png"
+      - name: Archive component
+        run: tar -C "$RUNNER_TEMP/payload" -czf "$RUNNER_TEMP/component.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-component-${{ matrix.component }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/component.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  assemble:
+    needs: component
+    strategy:
+      matrix:
+        target: [linux-amd64, linux-arm64, termux-aarch64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            auth
+            agent/src/server/access
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: auth-component-*-${{ matrix.target }}
+          path: ${{ runner.temp }}/components
+      - name: Assemble private runtime, notices and source
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/payload"
+          for archive in "$RUNNER_TEMP"/components/*/component.tar.gz; do
+            tar -xzf "$archive" -C "$RUNNER_TEMP/payload"
+          done
+          python3 auth/build/assemble.py "$GITHUB_WORKSPACE" "$RUNNER_TEMP/payload" "$TARGET" "$RUNNER_TEMP/artifacts"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-${{ matrix.target }}
+          path: ${{ runner.temp }}/artifacts/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14

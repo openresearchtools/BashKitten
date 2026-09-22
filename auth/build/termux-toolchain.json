@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/termux/termux-packages",
+  "branch": "master",
+  "commit": "8646fe473c9501799fcad6e26138d49b32810561",
+  "builderImage": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6",
+  "architecture": "linux/amd64",
+  "goVersion": "1.27.1",
+  "goArchiveSha256": "63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
+}

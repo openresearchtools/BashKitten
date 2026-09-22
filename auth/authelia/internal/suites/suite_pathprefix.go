@@ -1,0 +1,75 @@
+// SPDX-FileCopyrightText: 2026 Authelia
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package suites
+
+import (
+	"os"
+	"time"
+)
+
+var pathPrefixSuiteName = "PathPrefix"
+
+func init() {
+	dockerEnvironment := NewDockerEnvironment([]string{
+		"internal/suites/compose.yml",
+		"internal/suites/PathPrefix/compose.yml",
+		"internal/suites/example/compose/authelia/compose.backend.{}.yml",
+		"internal/suites/example/compose/authelia/compose.frontend.{}.yml",
+		"internal/suites/example/compose/nginx/backend/compose.yml",
+		"internal/suites/example/compose/traefik/compose.yml",
+		"internal/suites/example/compose/traefik/compose.v3.yml",
+		"internal/suites/example/compose/smtp/compose.yml",
+		"internal/suites/example/compose/httpbin/compose.yml",
+	})
+
+	if os.Getenv("CI") == t {
+		dockerEnvironment = NewDockerEnvironment([]string{
+			"internal/suites/compose.yml",
+			"internal/suites/PathPrefix/compose.yml",
+			"internal/suites/example/compose/authelia/compose.backend.{}.yml",
+			"internal/suites/example/compose/nginx/backend/compose.yml",
+			"internal/suites/example/compose/traefik/compose.yml",
+			"internal/suites/example/compose/traefik/compose.v3.yml",
+			"internal/suites/example/compose/smtp/compose.yml",
+			"internal/suites/example/compose/httpbin/compose.yml",
+		})
+	}
+
+	setup := func(suitePath string) (err error) {
+		if err = dockerEnvironment.Up(); err != nil {
+			return err
+		}
+
+		if err = waitUntilAutheliaIsReady(dockerEnvironment, pathPrefixSuiteName); err != nil {
+			return err
+		}
+
+		if err = waitUntilProxyRoutesPortal(BaseDomain); err != nil {
+			return err
+		}
+
+		return updateDevEnvFileForDomain(BaseDomain, dockerEnvironment)
+	}
+
+	displayAutheliaLogs := func() error {
+		return dockerEnvironment.PrintLogs("authelia-backend", "authelia-frontend")
+	}
+
+	teardown := func(suitePath string) error {
+		err := dockerEnvironment.Down()
+		return err
+	}
+
+	GlobalRegistry.Register(pathPrefixSuiteName, Suite{
+		SetUp:           setup,
+		SetUpTimeout:    2 * time.Minute,
+		OnSetupTimeout:  displayAutheliaLogs,
+		OnError:         displayAutheliaLogs,
+		TestTimeout:     150 * time.Second,
+		TearDown:        teardown,
+		TearDownTimeout: 1 * time.Minute,
+		Description:     "This suite has been created to test Authelia served from a path prefix rather than the root of a domain.",
+	})
+}

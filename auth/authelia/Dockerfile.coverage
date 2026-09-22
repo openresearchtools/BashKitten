@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: 2026 Authelia
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# ========================================
+# ===== Build image for the frontend =====
+# ========================================
+FROM node:26-alpine@sha256:ef24c5053d50fdc3e4e56eb4e7ddb7861874ab0fdc797046ba897581deb8e868 AS builder-frontend
+
+WORKDIR /node/src/app
+
+ENV \
+    SHELL="/bin/sh" \
+    PNPM_HOME="/usr/local"
+
+COPY --link web ./
+
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+	wget -qO /tmp/pnpm-install.sh https://get.pnpm.io/install.sh && \
+    echo '44dfbba11a70a9751090894a07f8d64c9f7954cb782dfe39a1f2b2753e1d5eea /tmp/pnpm-install.sh' | sha256sum -c - && \
+    ENV="/root/.profile" sh /tmp/pnpm-install.sh && \
+    pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store && \
+    pnpm coverage
+
+# =======================================
+# ===== Build image for the backend =====
+# =======================================
+FROM golang:1.27.1-bookworm@sha256:648f440f42a0958804efb24df176f806f9d353b41f1c0627f666428e40310f6b AS builder-backend
+
+WORKDIR /go/src/app
+
+COPY --link go.mod go.sum ./
+
+RUN \
+	echo ">> Downloading go modules..." && \
+	go mod download
+
+COPY --link / ./
+
+# Prepare static files to be embedded in Go binary
+COPY --link --from=builder-frontend /node/src/internal/server/public_html internal/server/public_html
+
+ARG LDFLAGS_EXTRA
+
+RUN \
+	mv api internal/server/public_html/api && \
+	echo ">> Starting go build (coverage via -cover)..." && \
+	CGO_ENABLED=1 CGO_CPPFLAGS="-D_FORTIFY_SOURCE=2 -fstack-protector-strong" CGO_LDFLAGS="-Wl,-z,relro,-z,now" go build -tags dev -cover -covermode=atomic \
+	-ldflags "${LDFLAGS_EXTRA}" -o authelia ./cmd/authelia
+
+# ===================================
+# ===== Authelia official image =====
+# ===================================
+FROM authelia/base:latest@sha256:21fb137f9cc805698b7f249b01ecf8f95b43c68d7418d20f202b157f4414822f
+
+WORKDIR /app
+
+COPY --link --from=builder-backend /go/src/app/authelia /go/src/app/LICENSE /go/src/app/healthcheck.sh ./
+
+COPY --link	--from=builder-backend --chmod=666 /go/src/app/.healthcheck.env ./
+
+EXPOSE 9091
+
+ENV \
+	PATH="/app:${PATH}" \
+	GOCOVERDIR="/authelia/coverage/" \
+	X_AUTHELIA_CONFIG="/config/configuration.yml"
+
+CMD ["authelia"]
+HEALTHCHECK --interval=30s --timeout=3s CMD /app/healthcheck.sh

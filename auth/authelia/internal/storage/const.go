@@ -1,0 +1,140 @@
+// SPDX-FileCopyrightText: 2026 Authelia
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package storage
+
+import (
+	"regexp"
+)
+
+const (
+	tableAuthenticationLogs   = "authentication_logs"
+	tableBannedUser           = "banned_user"
+	tableBannedIP             = "banned_ip"
+	tableCachedData           = "cached_data"
+	tableDuoDevices           = "duo_devices"
+	tableIdentityVerification = "identity_verification"
+	tableOneTimeCode          = "one_time_code"
+	tableTOTPConfigurations   = "totp_configurations"
+	tableTOTPHistory          = "totp_history"
+	tableUserOpaqueIdentifier = "user_opaque_identifier"
+	tableUserPreferences      = "user_preferences"
+	tableWebAuthnCredentials  = "webauthn_credentials" //nolint:gosec // This is a table name, not a credential.
+	tableWebAuthnUsers        = "webauthn_users"
+
+	tableOAuth2BlacklistedJTI          = "oauth2_blacklisted_jti"
+	tableOAuth2ConsentSession          = "oauth2_consent_session"
+	tableOAuth2ConsentPreConfiguration = "oauth2_consent_preconfiguration"
+
+	tableOAuth2AccessTokenSession   = "oauth2_access_token_session" //nolint:gosec // This is not a hardcoded credential.
+	tableOAuth2AuthorizeCodeSession = "oauth2_authorization_code_session"
+	tableOAuth2DeviceCodeSession    = "oauth2_device_code_session"
+	tableOAuth2OpenIDConnectSession = "oauth2_openid_connect_session"
+	tableOAuth2PARContext           = "oauth2_par_context"
+	tableOAuth2PKCERequestSession   = "oauth2_pkce_request_session"
+	tableOAuth2RefreshTokenSession  = "oauth2_refresh_token_session" //nolint:gosec // This is not a hardcoded credential.
+
+	tableMigrations = "migrations"
+	tableEncryption = "encryption"
+)
+
+const (
+	tableAADPushedAuthorizationRequestSession = "oauth2_pushed_authorization_session"
+)
+
+const (
+	columnSessionData = "session_data"
+	columnValue       = "value"
+	columnCode        = "code"
+	columnSecret      = "secret"
+)
+
+const (
+	encryptionNameCheck = "check"
+)
+
+// WARNING: Do not change/remove these consts. They are used for Pre1 migrations.
+const (
+	tablePre1TOTPSecrets                = "totp_secrets"
+	tablePre1IdentityVerificationTokens = "identity_verification_tokens"
+	tablePre1U2FDevices                 = "u2f_devices"
+)
+
+var tablesPre1 = []string{
+	tablePre1TOTPSecrets,
+	tablePre1IdentityVerificationTokens,
+	tablePre1U2FDevices,
+
+	tableUserPreferences,
+	tableAuthenticationLogs,
+}
+
+const (
+	pathMigrations   = "migrations"
+	providerMySQL    = "mysql"
+	providerPostgres = "postgres"
+	providerSQLite   = "sqlite"
+)
+
+const (
+	keyTypeCryptographyEnc  = "enc"
+	keyTypeCryptographyHMAC = "hmac"
+
+	fmtNameKeyHMAC = "hmac_key_%s"
+	fmtNameKeyEnc  = "enc_key_%s"
+)
+
+const (
+	driverParameterFmtAppName = "authelia %s"
+)
+
+const (
+	dsnFmtSQLite = "%s?_txlock=immediate"
+)
+
+const (
+	codeMySQLLockWaitTimeout uint16 = 1205
+	codeMySQLLockDeadlock    uint16 = 1213
+
+	codePostgresSerializationFailure = "40001"
+	codePostgresDeadlockDetected     = "40P01"
+)
+
+const (
+	// SchemaLatest represents the value expected for a "migrate to latest" migration. It's the maximum 32bit signed integer.
+	SchemaLatest = 2147483647
+)
+
+type ctxKey int
+
+const (
+	ctxKeyTransaction ctxKey = iota
+	ctxKeyConnection
+)
+
+const (
+	hmacNameOneTimeCode     = "otc"
+	hmacNameOneTimePassword = "otp"
+)
+
+const (
+	hkdfKeyInfo = "authelia:kdf:storage:encryption_key:v1"
+
+	// schemaVersionEncryptionKeyDerivation is the schema version at which HKDF key derivation and GCM AAD were
+	// introduced. Databases below this version store encrypted values using the legacy SHA256 key without AAD.
+	schemaVersionEncryptionKeyDerivation = 25
+
+	// schemaVersionEncryptionAADRowScoped is the schema version at which encrypted values became bound to their
+	// individual row. Databases below this version bind values to their table and column only.
+	schemaVersionEncryptionAADRowScoped = 26
+)
+
+var (
+	reMigration                  = regexp.MustCompile(`^V(?P<Version>\d{4})\.(?P<Name>[^.]+)\.(?P<Direction>(up|down))\.sql$`)
+	rePostgreSQLUnixDomainSocket = regexp.MustCompile(`^\.s\.PGSQL\.(\d+)$`)
+)
+
+const (
+	na = "N/A"
+)

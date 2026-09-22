@@ -1,0 +1,29 @@
+{
+  "repository": "https://github.com/termux/termux-packages",
+  "branch": "master",
+  "commit": "8646fe473c9501799fcad6e26138d49b32810561",
+  "files": [
+    {
+      "path": "upstream-build.sh",
+      "upstreamPath": "packages/tor/build.sh",
+      "sha256": "e0db449e066bc8304cf09bc3f3d44608b8104537e419df469071a47e72898509"
+    },
+    {
+      "path": "remove-adbism.patch",
+      "upstreamPath": "packages/tor/remove-adbism.patch",
+      "sha256": "fe9d9a24a4d02982e585999008e78d2b8e04d9c482a8dc7609f246756add1cf5"
+    },
+    {
+      "path": "src-app-main-main.c.patch",
+      "upstreamPath": "packages/tor/src-app-main-main.c.patch",
+      "sha256": "c3a6190bfbc985b59675528aa3e52d694fd3335fa36d5c3261beedeeaea0b592"
+    },
+    {
+      "path": "src-feature-relay-dns.c.patch",
+      "upstreamPath": "packages/tor/src-feature-relay-dns.c.patch",
+      "sha256": "dcd0b8443d18214761094616a7bcf2401d2739db5811bf04e6de2ea5531233db"
+    }
+  ],
+  "license": "BSD-3-Clause",
+  "licensePolicy": "https://github.com/termux/termux-packages/blob/8646fe473c9501799fcad6e26138d49b32810561/LICENSE.md"
+}

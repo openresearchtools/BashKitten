@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/termux/termux-packages",
+  "branch": "master",
+  "commit": "8646fe473c9501799fcad6e26138d49b32810561",
+  "files": [
+    {
+      "path": "upstream-build.sh",
+      "upstreamPath": "packages/caddy/build.sh",
+      "sha256": "f11a40dd971f0df9ab8d29cf53c596fe461df677cdd464f5ad00c330a9f2f8a5"
+    }
+  ],
+  "license": "Apache-2.0",
+  "licensePolicy": "https://github.com/termux/termux-packages/blob/8646fe473c9501799fcad6e26138d49b32810561/LICENSE.md"
+}

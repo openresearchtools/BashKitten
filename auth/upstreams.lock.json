@@ -1,0 +1,47 @@
+{
+  "format": 1,
+  "authelia": {
+    "repository": "https://github.com/authelia/authelia.git",
+    "branch": "master",
+    "version": "4.39.28",
+    "tag": "v4.39.28",
+    "commit": "8da42b2348b0351c6284a2940a9c5eec3d4cd3fd",
+    "tree": "a0a6402701787e426092ccd5982f0b6cd3eefe5e",
+    "archive": "https://api.github.com/repos/authelia/authelia/tarball/8da42b2348b0351c6284a2940a9c5eec3d4cd3fd",
+    "sha256": "53adf297adc0f384101d2e438b941034ec507831eb3e3343bdcba52335fa60c9",
+    "license": "authelia/LICENSE"
+  },
+  "caddy": {
+    "repository": "https://github.com/caddyserver/caddy.git",
+    "branch": "master",
+    "version": "2.11.4",
+    "tag": "v2.11.4",
+    "commit": "e2eee6a7fce366321294c9c2a79f3146891dcbdf",
+    "archive": "https://codeload.github.com/caddyserver/caddy/tar.gz/e2eee6a7fce366321294c9c2a79f3146891dcbdf",
+    "sha256": "a593bd7077c76102ca76d19287a5e247d4e359dd67eddbc933f865afd3c131eb",
+    "license": "caddy/LICENSE"
+  },
+  "tor": {
+    "repository": "https://gitlab.torproject.org/tpo/core/tor.git",
+    "branch": "main",
+    "version": "0.4.9.12",
+    "tag": "tor-0.4.9.12",
+    "commit": "78923280eed3eff6a77910bba59ecc1fa2244e02",
+    "tagObject": "118cdb4323fd914162690644143dbc7f182584f5",
+    "archive": "https://gitlab.torproject.org/tpo/core/tor/-/archive/78923280eed3eff6a77910bba59ecc1fa2244e02/tor-78923280eed3eff6a77910bba59ecc1fa2244e02.tar.gz",
+    "sha256": "dd8179fc053be40655e20c47c4b2a6628d7d030d1cdcc6cb001da88f8c039994",
+    "license": "tor/LICENSE"
+  },
+  "termux": {
+    "repository": "https://github.com/termux/termux-packages.git",
+    "branch": "master",
+    "commit": "8646fe473c9501799fcad6e26138d49b32810561",
+    "image": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6"
+  },
+  "build": { "go": "1.27.1", "node": "24", "pnpm": "12" },
+  "reference": {
+    "repository": "https://github.com/openresearchtools/torkitten",
+    "commit": "783c0899029aad22cec9562142c067f6b55408a7",
+    "license": "Apache-2.0"
+  }
+}

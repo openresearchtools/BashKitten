@@ -1,0 +1,37 @@
+// SPDX-FileCopyrightText: 2026 Authelia
+//
+// SPDX-License-Identifier: Apache-2.0
+
+package suites
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+
+	"github.com/valyala/fasthttp"
+)
+
+func doHTTPGetQuery(url string) (body []byte, err error) {
+	client := NewHTTPClient()
+
+	req, err := http.NewRequest(fasthttp.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add(fasthttp.HeaderAccept, "application/json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("request to '%s' returned status code %d", url, resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
+}
