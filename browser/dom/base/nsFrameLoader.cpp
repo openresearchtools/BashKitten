@@ -3562,7 +3562,7 @@ nsresult nsFrameLoader::PopulateOriginContextIdsFromAttributes(
       mOwnerContent->GetAttr(nsGkAtoms::usercontextid, attributeValue) &&
       !attributeValue.IsEmpty()) {
     nsresult rv;
-    aAttr.mUserContextId = attributeValue.ToInteger(&rv);
+    aAttr.mUserContextId = attributeValue.ToUnsignedInteger(&rv);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
