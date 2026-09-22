@@ -116,8 +116,7 @@ public final class AgentRuntime {
         // One callback chain observes the durable controller transaction. Never terminate dpkg.
         app.main.postDelayed(() -> {
             if (generation != operation || desired || !state.equals("stopping")) return;
-            if (webState.equals("stopping")) command("status", new JSONObject(), next -> stopStatus(generation, next), message -> stopFailed(generation, message));
-            else requestStop(generation);
+            requestStop(generation);
         }, 2000);
     }
     private void stopFailed(int generation, String message) {

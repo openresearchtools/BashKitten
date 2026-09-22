@@ -239,7 +239,7 @@ class AgentView {
     let status = await control("stop");
     while (status.web?.status === "stopping" || status.web?.status === "running") {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      status = await control("status");
+      status = await control("stop");
     }
     if (status.web?.status !== "stopped" && status.web?.status !== "off") throw new Error(status.web?.error || "Agent shutdown has not been confirmed. Retry Turn off.");
     this.stopped();

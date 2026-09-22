@@ -44,7 +44,7 @@ export class Jobs {
   }
   checkCancellation() { if (this.job.cancelRequested) throw Object.assign(Error('Cancelled after the current package step finished safely.'), { code: 'CANCELLED' }); }
   async cancel() {
-    if (!this.busy) return;
+    if (!this.busy || this.job.cancelRequested) return;
     this.job.cancelRequested = true; await this.save();
     await this.log('Cancellation requested. The current package transaction will finish safely.\n');
   }
