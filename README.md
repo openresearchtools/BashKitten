@@ -2,22 +2,21 @@
 
 ![Testing releases: current releases are for automated testing only. Not ready for production. Coming soon.](docs/testing-releases.svg)
 
-A local interface for the [Pi coding agent](https://github.com/earendil-works/pi),
-with project chats, streaming tools, image attachments and file browsing.
-Use the Android or Linux app, or open the same UI in a browser on localhost.
+A Firefox-based browser with a built-in interface for the stock
+[Pi coding agent](https://github.com/earendil-works/pi): project chats, streaming
+tools, image attachments and file browsing. The same Agent interface also works
+in an ordinary browser. This branch contains the browser migration; integration
+builds and testing are in progress.
 
-Download the app from [Releases](https://github.com/openresearchtools/bashkitten/releases/latest).
-On Android, **Apps** installs the matching Termux environment and manages updates.
-Existing Termux installations can connect using the instructions shown there.
-On Linux, install `bashkitten-desktop` from the
-[Open Research Tools APT repository](https://github.com/openresearchtools/apt).
+Android uses an ordinary Termux installation for the Agent server. Linux packages
+include both the browser and server. Local and optional Tor access use the same
+account with two-factor authentication. Turning Agent off stops its services;
+closing its view leaves work running.
 
-Create your local account, connect a provider in **Settings → Providers**, and
-choose a working folder. Closing the window leaves the server and active turns
-running. **Settings → About → Licenses** lists the bundled software.
+[Releases](https://github.com/openresearchtools/bashkitten/releases) ·
+[Package repository](https://github.com/openresearchtools/apt) ·
+[Build packages](agent/packaging/README.md)
 
-BashKitten is [GPL-3.0-only](LICENSE). The separate server package includes
-unmodified Pi and its dependencies; Termux and Node.js are installed separately.
-They retain their own licenses. See [third-party notices](THIRD_PARTY_NOTICES.md).
-
-[Run from source](docs/usage.md) · [Build packages](packaging/README.md)
+About and full licenses are available offline in the app menu and in the web UI.
+The Agent code is [GPL-3.0-only](LICENSE); browser and dependency notices retain
+their original terms. See [third-party notices](agent/THIRD_PARTY_NOTICES.md).

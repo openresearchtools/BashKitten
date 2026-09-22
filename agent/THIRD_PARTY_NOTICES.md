@@ -1,25 +1,17 @@
 # Third-party notices
 
-BashKitten is GPL-3.0-only; see [LICENSE](LICENSE). The Android app and Linux
-desktop host connect to the separately installed server. The server package
-bundles unmodified Pi and its npm dependencies, each under its own license.
-Termux, Node.js, GTK, WebKitGTK, Python and other system packages are installed
-separately and retain their own licenses.
+The Agent code is GPL-3.0-only. The browser retains its Mozilla/Waterfox MPL,
+BrowserOS-derived AGPL and other original notices. Each dependency keeps its
+own license; the offline **About → Licenses** pages include full bundled texts.
 
-**About → Licenses** in the Android app covers its bundled AndroidX, Kotlin and
-other libraries and the original Termux icons. **Settings → About → Licenses** in the web UI shows the bundled server libraries.
-The Linux app’s **Menu → About → Licenses** also reads these installed notices
-directly, including when the backend is stopped. Both native menus use the same
-About page styling and expandable license list as the web UI.
-Full license, copyright and notice texts are included offline. Package copies
-are installed under `share/doc/bashkitten` and `share/doc/bashkitten-desktop`.
+The server package bundles unmodified Pi and its npm dependencies, Caddy,
+Authelia, Tor and the DDGS search runtime. Search preserves Buzzard Search and
+Unsloth AGPL attribution. Access configuration preserves Torkitten's Apache-2.0
+notice. Releases provide corresponding source and build material.
 
-The build collects notices from the exact resolved artifacts, with upstream
-supplements in [licenses](licenses) for texts omitted from published packages.
-Releases include application source, dependency sources and their notices.
-Development-only tools are excluded from production packages. No third-party
-chat frontend was copied.
-
-The Android Apps screen uses WildBuzzard’s original logo, with its attribution
-and license in About. Its optional Pi extension and npm dependencies install
-separately inside Termux and retain their package licenses.
+Termux, Node.js, Python, Git, GitHub CLI and declared system libraries are
+installed separately under their package licenses. The Android APK and Termux
+server are separate parts of BashKitten; both inventories are available in the
+Android app's offline About page. Linux includes its browser and server notices,
+including the distinction between bundled software and external GTK/system
+libraries. Optional llama.cpp, GPU drivers and model weights are separate.

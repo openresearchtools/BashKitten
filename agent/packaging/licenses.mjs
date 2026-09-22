@@ -92,6 +92,9 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   const records = await npmInventory(root, target, auth.architecture);
   if (version) records[0].version = version;
   records.push(...await arrayInventory(path.join(root, 'auth/licenses.json'), 'Access stack'));
+  records.push(...await sourceNotices(path.join(root, 'src/server/access'), 'Access integration', [
+    ['Torkitten configuration patterns', 'Apache-2.0', ['NOTICE', 'TORKITTEN-LICENSE']],
+  ]));
   records.push(...await searchInventory(root, auth.target));
   const integration = await json(path.join(root, 'pi/package.json'));
   records.push(...await sourceNotices(path.join(root, 'pi'), 'Pi integration', [
