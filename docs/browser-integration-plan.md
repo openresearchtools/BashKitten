@@ -491,17 +491,25 @@ Keep this browsing scope separate from the working-folder picker.
 
 The Termux sidebar has Files and Changes views. Files retains ordinary upload,
 open/download and whole-repository ZIP download, and adds Select mode with
-checkboxes, Select all/None, selected-file ZIP download, Copy to a chosen Termux
-directory, and Delete with confirmation showing the selected items. Long copies,
+checkboxes, an all/none selection control, Copy to a chosen Termux directory,
+and Delete with confirmation showing the selected items. Use one contextual
+Download action: the current folder normally, or selected items while selecting.
+Do not duplicate Folder ZIP/Download ZIP actions or stack redundant toolbars.
+The compact path field submits on Enter, with Up and Refresh controls. Long copies,
 deletions and ZIP creation run in on-demand child processes with bounded progress
 and cancellation, rather than blocking the HTTP server or building archives in
 the browser. Validate paths and symlinks on the backend, avoid overwriting existing
 copy destinations, and clean up workers and temporary downloads. Closing the
 sidebar does not cancel an operation; stopping Agent stops its owned workers.
 
-Changes is a read-only Git view: show files changed since the last commit,
-including staged, unstaged and untracked files, green/red added/deleted line
-counts, and an escaped unified diff when a file is opened. Handle new repositories,
+Changes is a read-only Git view: keep a sidebar list of files changed since the
+last commit, including staged, unstaged and untracked files. Each file shows
+green added and red deleted line counts beneath its filename. Clicking a file
+opens a wide central diff view with line numbers and red/green change blocks;
+the desktop sidebar remains a file list. Do not replace that list with a narrow
+raw Git patch. On mobile use a readable full-width diff with Back to files.
+Closing the diff restores the existing chat without losing its draft or scroll.
+Escape file content and omit raw Git metadata noise. Handle new repositories,
 renames, deletions and binary files accurately. Run bounded asynchronous Git
 commands, refresh only on visible/focus/manual or actual work changes, and do
 not install filesystem watchers or poll hidden sidebars. If Git is not initialized,
