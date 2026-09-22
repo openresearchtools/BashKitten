@@ -34,6 +34,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private GeckoSession attached;
     private String renderedState = "";
     private boolean shown = true;
+    private boolean split;
     private boolean startedBootstrap;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
@@ -71,16 +72,16 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private Button button(String label, Runnable action) { Button b = new Button(activity); b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
-    public void showAgent() { shown = true; layoutPanels(); }
-    public void showBrowser() { shown = false; layoutPanels(); }
+    public void showAgent() { shown = true; split = false; layoutPanels(); }
+    public void showBrowser() { shown = false; split = false; layoutPanels(); }
     public boolean isShownAgent() { return shown; }
-    public void toggle() { shown = !shown; layoutPanels(); }
+    public void toggle() { if (shown) showBrowser(); else showAgent(); }
     private void layoutPanels() {
-        boolean wide = getResources().getConfiguration().screenWidthDp >= 840;
+        boolean sideBySide = split && shown && getResources().getConfiguration().screenWidthDp >= 840;
         agent.setVisibility(shown ? VISIBLE : GONE);
-        agent.setLayoutParams(new LayoutParams(wide ? 0 : -1, -1, wide ? .46f : 0));
-        browser.setVisibility(wide || !shown ? VISIBLE : GONE);
-        browser.setLayoutParams(new LayoutParams(0, -1, wide && shown ? .54f : 1));
+        agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
+        browser.setVisibility(sideBySide || !shown ? VISIBLE : GONE);
+        browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
         runtime.visible = shown;
         if (runtime.session != null) runtime.session.setActive(shown);
     }
@@ -220,6 +221,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     private void menu() {
         PopupMenu menu=new PopupMenu(activity,bar.getChildAt(3));
+        if (split) menu.getMenu().add("Agent full screen").setOnMenuItemClickListener(i -> { showAgent(); return true; });
+        else if (getResources().getConfiguration().screenWidthDp >= 840 && app.host.selected() != null)
+            menu.getMenu().add("Show beside browser").setOnMenuItemClickListener(i -> { split = true; shown = true; layoutPanels(); return true; });
         menu.getMenu().add("Packages").setOnMenuItemClickListener(i->{packages();return true;});
         menu.getMenu().add(app.remoteControl.active() ? "Disconnect browser control" : "Allow Agent browser control").setOnMenuItemClickListener(i -> {
             if (app.remoteControl.active()) app.remoteControl.disconnect();
