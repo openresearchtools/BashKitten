@@ -48,7 +48,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         bar = new LinearLayout(activity); bar.setGravity(Gravity.CENTER_VERTICAL); agent.addView(bar, new LayoutParams(-1, dp(48)));
         Button toggle = button("Agent", this::toggle); bar.addView(toggle, new LayoutParams(dp(72), -1));
         location = button("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
-        power = button("Starting", () -> { if (runtime.state.equals("on") || runtime.state.equals("enroll")) runtime.turnOff(); else runtime.turnOn(); });
+        power = button("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
         Button menu = button("☰", () -> menu()); menu.setContentDescription("Agent menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
@@ -88,7 +88,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     public void destroy() { runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override public void changed() {
-        power.setText(runtime.state.equals("on") || runtime.state.equals("enroll") ? "Turn off" : runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : "Turn on");
+        power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
         power.setEnabled(!runtime.state.equals("starting") && !runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
         boolean online = runtime.state.equals("on"); view.setVisibility(online ? VISIBLE : GONE); setup.setVisibility(online ? GONE : VISIBLE);
@@ -97,6 +97,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             bindSession(attached); view.setSession(attached);
         }
         if (!renderedState.equals(runtime.state + runtime.error)) { renderedState = runtime.state + runtime.error; renderSetup(); }
+        if (runtime.state.equals("stopping")) {
+            JSONObject packages = runtime.status.optJSONObject("packages");
+            JSONObject job = packages == null ? null : packages.optJSONObject("job");
+            if (job != null) log.setText(job.optString("phase") + "\n" + job.optString("log"));
+        }
         layoutPanels();
     }
     private void bindSession(GeckoSession session) {
@@ -168,14 +173,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         action("App permissions", runtime.termux::openPermissionSettings);
         if (runtime.termux.permissionGranted()) {
             action("Connect", runtime::turnOn);
-            action("Install Agent packages", () -> runtime.termux.bootstrap(value -> { startedBootstrap = true; bootstrapProgress(); }, this::error));
+            action("Install Agent packages", () -> runtime.termux.bootstrap(value -> { runtime.bootstrapStarted(); startedBootstrap = true; bootstrapProgress(); }, this::error));
         }
     }
     private void bootstrapProgress() {
         if (!startedBootstrap || activity.isDestroyed()) return;
         runtime.termux.bootstrapStatus(value -> {
             log.setText(value.optString("log", value.toString()));
-            if (value.optBoolean("ready") || value.optString("status").equals("complete")) { startedBootstrap=false; runtime.turnOn(); }
+            if (value.optBoolean("ready") || value.optString("status").equals("complete")) { startedBootstrap=false; if (runtime.isOnRequested()) runtime.turnOn(); else runtime.turnOff(); }
             else app.main.postDelayed(this::bootstrapProgress, 2000);
         }, this::error);
     }

@@ -24,7 +24,7 @@ public final class AgentRuntime {
     public GeckoSession session;
     public String state = "off", error = "", url = "", selected = "local";
     public JSONObject status = new JSONObject();
-    private boolean launched, desired, busy, polling;
+    private boolean launched, desired, busy, polling, localControlRequested;
     private int operation;
     public boolean visible;
     java.lang.ref.WeakReference<Activity> activity = new java.lang.ref.WeakReference<>(null);
@@ -56,6 +56,8 @@ public final class AgentRuntime {
             acceptStatus(value);
         }, message -> { if (generation == operation) fail(message); });
     }
+    public boolean isOnRequested() { return desired; }
+    public void bootstrapStarted() { localControlRequested = true; }
     public void freshLaunch() { if (!desired && !busy) turnOn(); }
     public void turnOn() {
         if (busy) return;
@@ -69,6 +71,7 @@ public final class AgentRuntime {
         termux.probe(value -> {
             if (generation != operation || !desired) return;
             if (!value.optBoolean("packages")) { setup("Install the Agent packages in Termux."); return; }
+            localControlRequested = true;
             command("start", new JSONObject(), result -> {
                 if (generation != operation || !desired) return;
                 busy = false; acceptStatus(result); poll();
@@ -77,16 +80,41 @@ public final class AgentRuntime {
     }
     public void turnOff() {
         if (state.equals("stopping")) return;
+        boolean setupWithoutService = state.equals("setup") && !localControlRequested;
         desired = false; busy = true; operation++; state = "stopping"; error = "";
         releaseRemoteAuthorization();
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
-        if (!selected.equals("local")) { stopped(); return; }
-        command("stop", new JSONObject(), value -> {
-            if (value.optJSONObject("web") != null && value.optJSONObject("web").optString("status").equals("stopping")) { busy = false; state = "stopping"; error = "Packages are finishing. Retry when the transaction completes."; changed(); return; }
+        if (!selected.equals("local") || setupWithoutService) { stopped(); return; }
+        requestStop(operation);
+    }
+    private void requestStop(int generation) {
+        command("stop", new JSONObject(), value -> stopStatus(generation, value), message -> stopFailed(generation, message));
+    }
+    private void stopStatus(int generation, JSONObject value) {
+        if (generation != operation || desired || !state.equals("stopping")) return;
+        status = value;
+        JSONObject web = value.optJSONObject("web");
+        if (web == null) { stopFailed(generation, "The service returned no shutdown status."); return; }
+        String webState = web.optString("status");
+        if (webState.equals("stopped") || webState.equals("error")) {
+            localControlRequested = false;
             stopped();
-        }, message -> { busy = false; error = "Shutdown is not confirmed: " + message; state = "stop-failed"; changed(); });
+            return;
+        }
+        error = webState.equals("stopping") ? "Finishing the current package transaction before stopping…" : "Stopping Agent…";
+        changed();
+        // One callback chain observes the durable controller transaction. Never terminate dpkg.
+        app.main.postDelayed(() -> {
+            if (generation != operation || desired || !state.equals("stopping")) return;
+            if (webState.equals("stopping")) command("status", new JSONObject(), next -> stopStatus(generation, next), message -> stopFailed(generation, message));
+            else requestStop(generation);
+        }, 2000);
+    }
+    private void stopFailed(int generation, String message) {
+        if (generation != operation || desired) return;
+        busy = false; error = "Shutdown is not confirmed: " + message; state = "stop-failed"; changed();
     }
     private void stopped() {
         busy = false; state = "off"; error = ""; releaseWake(); changed();
