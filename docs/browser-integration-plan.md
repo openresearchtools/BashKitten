@@ -279,8 +279,9 @@ authenticating their initial upgrade alone is not indefinite authorization.
 See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/caddy/).
 
 **Local address:** use `https://127.0.0.1:<port>` directly, with the actual
-unprivileged port obtained from verified service discovery. There is no public
-domain, DNS lookup, domain registration, hosts-file edit or dependency on
+dynamic, unprivileged port obtained from the existing verified service discovery.
+`<port>` is not a new fixed port or a permanent part of the server's identity.
+There is no public domain, DNS lookup, domain registration, hosts-file edit or dependency on
 `bashkitten.com`; that domain remains the user's website. The earlier claim
 that the pinned Authelia version needs a registered hostname was incorrect:
 Authelia v4.39.20 explicitly accepts IP cookie scopes, including `127.0.0.1`, in
@@ -297,8 +298,12 @@ trust flow. No unauthenticated localhost endpoint is retained.
 Use Caddy's internal CA and HTTPS certificates. The local bridge supplies the
 public CA/identity to the browser over the existing trusted local channel.
 Include the loopback IP in the certificate's subject alternative names. Trust
-is bound to the enrolled instance and exact HTTPS endpoint: another process
-occupying the old port cannot replace the saved identity with its own key.
+is bound to the enrolled instance's persistent CA/key identity. TLS certificates
+identify the IP/hostname, not the TCP port. The controller supplies the current
+endpoint separately: after a verified port change the browser connects to that
+new port and verifies the same identity. It does not enroll a new CA merely
+because the port changed, and another process occupying the old port cannot
+replace the saved identity with its own key.
 Remote enrollment supplies the corresponding identity. Trust only that enrolled
 server/origin in its Agent/remote context; never globally trust arbitrary
 self-signed certificates or disable certificate verification. Keep hostname,
@@ -322,10 +327,23 @@ On recovery, reconcile recorded process identities and either attach to the
 complete healthy group or replace only its owned incomplete group. Do not claim
 an already-dead supervisor can immediately coordinate the surviving processes.
 
-Keep the existing single-instance locks and verified service discovery. Reserve
-a free public port, keep the successful choice when available and persist the
-actual address and instance identity only after readiness. Handle bind races
-by retrying; never attach to a port just because something responds there.
+Keep the existing single-instance locks and dynamic-port discovery in
+`src/server/instance.mjs` and `src/server/http/server.mjs`. The current server
+falls back to an OS-assigned port on `EADDRINUSE`, writes the actual URL to
+`server.json`, and the Android host reads the controller's `web.url`. Preserve
+that discovery contract when Caddy becomes the HTTPS entry point: publish
+Caddy's actual bound URL, not the private backend address. Reuse an available
+previous port or select a free one, retry bind races and publish only after
+readiness. Regenerate Authelia's portal/redirect URLs for that actual port before
+publishing readiness; its IP cookie scope and the server's CA stay unchanged.
+Never attach to a port just because something responds there.
+On connection failure/reopen, query the private controller again, obtain the
+current URL, verify its enrolled TLS identity, then reconnect the protected
+Agent view and streams. No port scanning, fixed-port assumption, public DNS or
+automatic trust of whatever certificate a new listener presents. Verify TLS
+before sending credentials or private instance tokens. Preserve drafts across
+an origin/port change through existing state handling or the protected browser
+host; never replay a consumed prompt as part of reconnecting.
 On Android resume, request status through Termux and recover unexpectedly dead
 components. Closing the browser does not stop the service. A deliberate Stop
 stays stopped until Play. Pi workers remain detached across web/auth restarts;
