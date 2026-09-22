@@ -144,10 +144,12 @@ class IntentReceiverActivity : Activity() {
             )
         }
 
-        return components.intentProcessors.fennecPageShortcutIntentProcessor +
-            components.intentProcessors.externalDeepLinkIntentProcessor +
-            components.intentProcessors.webNotificationsIntentProcessor +
-            components.intentProcessors.passwordManagerIntentProcessor +
+        return listOf(
+            components.intentProcessors.fennecPageShortcutIntentProcessor,
+            components.intentProcessors.externalDeepLinkIntentProcessor,
+            components.intentProcessors.webNotificationsIntentProcessor,
+            components.intentProcessors.passwordManagerIntentProcessor,
+        ) +
             modeDependentProcessors +
             NewTabShortcutIntentProcessor()
     }
