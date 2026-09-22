@@ -754,7 +754,11 @@ class AgentView {
     try {
       const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
       file.initWithPath(`${FILE_ROOT}/src/web/about.js`);
-      Services.scriptloader.loadSubScript(Services.io.newFileURI(file).spec, this.win);
+      Services.scriptloader.loadSubScriptWithOptions(Services.io.newFileURI(file).spec, {
+        target: this.win,
+        // This exact read-only package file is shared with the web About view.
+        allowUnsafeURL: true,
+      });
       const build = await IOUtils.readJSON(`${FILE_ROOT}/build-platform.json`);
       this.win.renderBashKittenAbout(content, {
         version: build.version || Services.appinfo.version,
@@ -764,7 +768,7 @@ class AgentView {
         loadLicenses: () => IOUtils.readJSON("/usr/lib/bashkitten/licenses.json"),
       });
     } catch (error) {
-      content.textContent = `BashKitten ${Services.appinfo.version}. AGPL-3.0-or-later. Offline license files could not be opened: ${error.message}`;
+      content.textContent = `BashKitten ${Services.appinfo.version}. AGPL-3.0-or-later. Offline license files could not be opened: ${error.message || error}`;
     }
   }
 
