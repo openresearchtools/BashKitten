@@ -126,12 +126,20 @@ export async function gitChanges(input, { signal, authorizeRoot } = {}) {
   const context = await repository(input, { signal, authorizeRoot });
   if (!context) return { repository: false };
   const { root, base, unborn } = context;
-  const [tracked, untracked] = await Promise.all([
+  const [tracked, status] = await Promise.all([
     git(root, ['diff', ...DIFF_OPTIONS, '--raw', '--numstat', '-z', base, '--'], { signal }),
-    git(root, ['ls-files', '--others', '--exclude-standard', '-z'], { signal }),
+    git(root, ['status', '--porcelain=v1', '--untracked-files=all', '-z'], { signal }),
   ]);
   const rows = parseChanges(checked(tracked));
-  for (const file of checked(untracked).split('\0')) if (file && !rows.has(file)) rows.set(file, { path: file, status: '?', added: 0, deleted: 0 });
+  const fields = checked(status).split('\0');
+  for (let i = 0; i < fields.length && fields[i];) {
+    const field = fields[i++], xy = field.slice(0, 2), file = field.slice(3);
+    const oldPath = /[RC]/.test(xy) ? fields[i++] : undefined;
+    const untracked = xy === '??', staged = !untracked && xy[0] !== ' ', unstaged = !untracked && xy[1] !== ' ';
+    if (!rows.has(file)) rows.set(file, { path: file, ...(oldPath ? { oldPath } : {}),
+      status: untracked ? '?' : xy.trim()[0], added: 0, deleted: 0, ...(!untracked ? { netUnchanged: true } : {}) });
+    Object.assign(rows.get(file), { staged, unstaged });
+  }
   const all = [...rows.values()].sort((a, b) => a.path.localeCompare(b.path)), files = all.slice(0, MAX_FILES);
   const budget = { remaining: 4 * 1024 * 1024 }, pending = files.filter(row => row.status === '?');
   // Four bounded asynchronous readers; never spawn one Git process per file.
@@ -154,9 +162,23 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
     if (file === relative) { tracked = true; if (renamed) oldPath = first; break; }
   }
   const options = { signal, limit: MAX_DIFF, partial: true };
-  let result;
+  let result, comparison;
   if (tracked) {
     result = await git(root, ['diff', ...DIFF_OPTIONS, '--unified=3', base, '--', ...(oldPath ? [oldPath] : []), relative], options);
+    // A staged edit can be undone only in the worktree. Its combined diff is
+    // empty, but committing would still change HEAD: show both native patches.
+    if (!result.output && result.code === 0) {
+      const heading = 'Staged changes (HEAD → index)\n', middle = '\nUnstaged changes (index → working tree)\n';
+      const staged = await git(root, ['diff', ...DIFF_OPTIONS, '--cached', '--unified=3', base, '--', ...(oldPath ? [oldPath] : []), relative], { ...options, limit: MAX_DIFF - Buffer.byteLength(heading) });
+      if (!staged.truncated && staged.code !== 0) checked(staged);
+      if (staged.output) {
+        const remaining = MAX_DIFF - Buffer.byteLength(heading + staged.output + middle);
+        const unstaged = remaining > 0 && !staged.truncated ? await git(root, ['diff', ...DIFF_OPTIONS, '--unified=3', '--', ...(oldPath ? [oldPath] : []), relative], { ...options, limit: remaining }) : null;
+        if (unstaged && !unstaged.truncated && unstaged.code !== 0) checked(unstaged);
+        result = { code: 0, output: heading + staged.output + (unstaged ? middle + unstaged.output : ''), truncated: staged.truncated || !unstaged || unstaged.truncated };
+        comparison = 'staged-and-unstaged';
+      }
+    }
   } else {
     const other = checked(await git(root, ['ls-files', '--others', '--exclude-standard', '-z', '--', relative], { signal }));
     if (!other.split('\0').includes(relative)) return { repository: true, root, path: relative, diff: '', binary: false, truncated: false };
@@ -166,5 +188,5 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
   }
   if (!result.truncated && result.code !== 0 && result.code !== 1) checked(result);
   return { repository: true, root, path: relative, ...(oldPath ? { oldPath } : {}),
-    diff: result.output, binary: /(?:^|\n)Binary files .+ differ(?:\n|$)/.test(result.output), truncated: result.truncated };
+    ...(comparison ? { comparison } : {}), diff: result.output, binary: /(?:^|\n)Binary files .+ differ(?:\n|$)/.test(result.output), truncated: result.truncated };
 }

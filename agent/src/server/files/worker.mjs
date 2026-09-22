@@ -186,7 +186,7 @@ async function run(job) {
       check(); const filename = path.join(job.root, relative), parent = await parentOf(filename, job.scopeRoot), name = path.basename(filename);
       try {
         if (!relative || filename === job.scopeRoot || filename === job.root) throw Error('The browsing root cannot be removed or copied');
-        if (contains(filename, job.scratch)) throw Error('Cannot change a folder containing active file operations');
+        if (job.operation === 'delete' && contains(filename, job.scratch)) throw Error('Cannot delete a folder containing active file operations');
         if (destination) {
           const target = path.join(fdPath(destination), name);
           // The source is copied to a newly reserved name only. Cleanup on a
