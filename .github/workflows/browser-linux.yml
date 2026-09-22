@@ -59,7 +59,7 @@ jobs:
           path: .bashkitten-build/browser/runs/hosted/logs/
   browser:
     needs: gkrust
-    if: ${{ always() && (needs.gkrust.result == 'success' || needs.gkrust.result == 'skipped') }}
+    if: ${{ !cancelled() && (needs.gkrust.result == 'success' || needs.gkrust.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
