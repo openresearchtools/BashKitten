@@ -30,7 +30,15 @@ browser approval, regardless of signer; already authorized calls run directly.
 Preserve dynamic-port discovery. One Agent power control owns both Android wake
 locks and whole-group start/stop, including owned Pi workers. Target full Linux
 amd64/arm64 .deb packages, a Termux aarch64 .deb with the Pi browser extension,
-and the Android APK. For existing-suite maintenance, also read
+and the Android APK. Reuse WildBuzzard's working component-artifact/GHA compiler
+cache workflow for desktop builds. Bring Buzzard Search into `/agent/search`
+as a native Python helper with a normally discovered Pi skill. DDGS only for
+now; SearXNG integration is deferred. Preserve full Markdown saving, native
+Termux dependency recipes and Unsloth/other retained license provenance.
+Package our own native search runtime for Linux amd64/arm64 as well as Termux
+aarch64; do not require a separate DDGS install. Supply distinct mobile/Termux
+and desktop Linux browser skills and install the one matching each target.
+For existing-suite maintenance, also read
 `docs/android-termux-suite-plan.md` in full. Keep shared code small and preserve
 upstream components and licenses.
 

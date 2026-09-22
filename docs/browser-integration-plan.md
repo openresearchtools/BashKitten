@@ -34,6 +34,10 @@ Qt/Boost/build dependencies, custom search/torrent extensions and their special
 permissions. Remove the external WildBuzzard extensions repository dependency.
 Ordinary address-bar search, downloads and normal Firefox extension support are
 not the custom search implementation being removed.
+Bring Buzzard Search's Python search/read pipeline into this repository as a
+built-in Pi skill, separate from the removed browser search extension. **DDGS
+only for now**, as clarified by the user: no SearXNG engine, endpoint setup or
+SearXNG source update in this migration slice.
 
 ## 2. One repository, source ownership and Firefox updates
 
@@ -53,7 +57,13 @@ openresearchtools/bashkitten/
       access/                               # access-stack config/lifecycle glue
       platform/{termux,linux}/
       updates/, control.mjs, instance.mjs
-    pi/                                     # one browser extension/skill package
+    pi/                                     # one native Pi integration package
+      skills/web-search/SKILL.md             # on-demand DDGS/read instructions
+      skills/browser-android/SKILL.md        # Termux/mobile browser controls
+      skills/browser-linux/SKILL.md          # desktop browser controls
+    search/                                 # adapted Buzzard Search Python CLI
+      src/, third_party/                    # selected sources and provenance
+      pyproject.toml, runtime lock files
     packaging/{termux,linux}/
     package.json, package-lock.json          # existing runtime/build metadata
   browser/                                  # full Gecko source root
@@ -78,9 +88,18 @@ openresearchtools/bashkitten/
 ```
 
 Move the current UI/server/build files together instead of rewriting them. The
-single Pi browser extension lives under `agent/pi/`, with Android Binder and
-Linux socket transports; install/update it through Pi's supported package
-mechanism from the same release. It runs beside Pi, not inside the APK. Extract
+Pi browser integration lives under `agent/pi/`, sharing common code where useful
+but providing distinct **Android/Termux and desktop Linux browser skills**.
+The Android skill describes the mobile browser's actual tools, Binder transport
+and native approval flow; the Linux skill describes its desktop tools and private
+Unix socket. Each local target registers its matching browser skill/entry point,
+alongside the common web-search skill. Keep both skill documents available in
+the integration package for remote browser control: choose the guide/capabilities
+for the authorized client browser, not the remote Pi server's OS. Do not present
+desktop-only commands to the mobile agent or assume the browser capabilities are
+identical. Install/update
+these through Pi's supported package mechanism from the same release. They run
+beside Pi, not inside the APK. Extract
 the useful native Termux/setup/update integration from the current wrappers into
 the browser, then remove the wrappers after their replacements work. Do not
 keep two implementations. The existing `openresearchtools/apt` remains only the
@@ -103,6 +122,7 @@ source come from this repository.
 | Current browser Firefox pin | `FIREFOX_153_2_0esr_RELEASE`, `feec67e62a5148b41fd017ccbbc463e8a6f9e83d` |
 | Newer official ESR tag already available | `FIREFOX_153_3_0esr_RELEASE`, `861fdeb0d32fe1bd101fea886687e680f612d735` |
 | Torkitten reference | `main`, `783c0899029aad22cec9562142c067f6b55408a7` |
+| Buzzard Search donor | `main`, `05721962dd11c7506286ecc9aa5b35f6fc4828d0` |
 
 The recorded desktop product commit is already an ancestor of the Android
 checkout. Start with that shared history and reconcile any subsequent donor
@@ -134,6 +154,49 @@ Removing branches and unused features reduces maintenance and build inputs.
 It does not erase objects already in retained Git history. Use shallow/partial
 clones for ordinary builds and a checkout with sufficient ancestry for upstream
 merges; do not rewrite Mozilla ancestry just to make the repository look small.
+
+### Reuse the working desktop build workflow
+
+Adapt WildBuzzard's existing
+[`wildbuzzard-hosted-artifact.yml`](https://github.com/openresearchtools/WildBuzzard/blob/0bd2d7da099a365d2243b320e1e6b38e8ad76cf4/.github/workflows/wildbuzzard-hosted-artifact.yml),
+`wildbuzzard/ci/build-browser-artifact.sh`,
+`wildbuzzard/scripts/build-linux-external.sh` and `package-deb.sh`; do not replace
+them with a new single-job Firefox rebuild. The successful amd64
+[run 33465518703](https://github.com/openresearchtools/WildBuzzard/actions/runs/33465518703)
+built commit `2b1e1617374916d85d6fef9b1cbf987c64dd50f9`, reused component caches,
+built the browser using the compiler cache and assembled the Debian artifact.
+That run predates the donor's current Tor changes: reuse its build approach,
+not its obsolete Arti/torrent payload or a claim that the current head was tested.
+
+Keep independently reusable browser archives, native component artifacts and
+source/license bundles, followed by final Debian assembly. An Agent/search/auth
+or packaging-only change must not recompile unchanged Gecko. Remove the torrent
+job and its assembly requirement. Add the Agent/search/auth payloads to final
+assembly using the existing manifest/checksum pattern, with matching source.
+
+Preserve Mozilla's pinned bootstrap toolchains, GHA-backed `sccache`, normalized
+source/object paths, external build directories and the optional `gkrust`
+warm-up job. Retain the proven amd64 runner resource settings (Ubuntu 24.04,
+two build jobs and 8 GiB swap) initially. The warm-up performs configure,
+pre-export/export and `toolkit/library/rust/force-cargo-library-build` before
+the full build; it does not replace compiling changed native Gecko code with
+Mozilla's artifact-only build mode.
+
+Adapt both outer repository and inner `/browser` paths in the clone/build
+scripts. Cache keys cover the component's actual source, patches, toolchain,
+target architecture/ABI, configuration and relevant build scripts. Reassemble
+when packaging changes; regenerate provenance rather than attributing an older
+cached binary to a new source commit. Reuse only matching trusted artifacts;
+cache misses must still build successfully. GitHub caches are
+[repository-scoped](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching),
+so the new workflow must establish its own caches rather than
+assume WildBuzzard's cache entries automatically transfer.
+
+Keep this same pipeline for Linux arm64 with native runner/build validation;
+replace hardcoded amd64 archive names/metadata and verify its toolchain rather
+than merely relabel the package. Demonstrate a cache-miss build, a cached repeat,
+an Agent-only reassembly and invalidation after a Gecko/toolchain change. Keep
+build logs and external verification evidence out of the shipped applications.
 
 ### Tracked authentication and Tor sources
 
@@ -620,15 +683,136 @@ in-flight inference is reported to stock Pi without silently replaying a prompt.
 from API-key checks. Also verify an authenticated model request and the selected
 model. [llama.cpp server interface](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
 
-## 8. Delivery, retained behavior and licenses
+## 8. Built-in DDGS search and Markdown skill
+
+Import and adapt the useful code from
+[`buzzard-search`](https://github.com/openresearchtools/buzzard-search/tree/05721962dd11c7506286ecc9aa5b35f6fc4828d0)
+under `agent/search/`. Keep one Python implementation for Linux amd64/arm64 and
+native Termux aarch64. Replace the donor's amd64-only Ubuntu/PyInstaller delivery
+with our existing packages and platform Python; no standalone search install,
+Python inside the APK, browser search extension, MCP service or resident search
+daemon. The helper runs when called and exits afterwards.
+
+**Both Linux `.deb` builds include our own packaged DDGS runtime**, its locked
+Python dependencies and the required native Python extensions built for Linux
+amd64 or arm64. The Termux `.deb` includes the equivalent Android/Bionic build.
+The common search skill calls the matching packaged helper on all three targets;
+it must not depend on a separately installed `buzzard-search`, a user's DDGS
+installation or a first-use `pip install`. The platform Python interpreter and
+declared ordinary OS libraries remain package dependencies. Package native
+bindings/product dependencies privately and record their ABI requirements.
+
+**Scope is DDGS only for now.** The donor's current `.deb` contains a SearXNG
+JSON client, not a bundled/preconfigured SearXNG engine. The user explicitly
+chose DDGS after this distinction was explained. Do not add either a local
+SearXNG server or an external endpoint requirement, and do not import its
+server/dependencies. Leave SearXNG work deferred rather than describing it as
+part of the delivered search. The donor repository remains untouched.
+
+Keep DDGS search options and the shared read pipeline: fetch selected HTML/text,
+PDFs, GitHub repository/tree/blob content and available YouTube transcripts into
+Markdown. These readers are useful independently of which engine found the
+URL; importing them does not require adding separate GitHub/YouTube search
+providers now. Preserve source URLs, titles, bounded inline output and the full
+saved `.md` artifact path. Failed/blocked downloads or missing transcripts must
+report their real error, not produce fabricated content or an empty success.
+JavaScript-only pages can use the existing separately authorized browser skill.
+
+### Stock Pi skill and portable files
+
+Declare `agent/pi/skills/web-search/` in the integration package's `pi.skills`.
+Its short `SKILL.md` tells stock Pi when/how to run the packaged
+`bashkitten-search` helper and read/save the resulting Markdown. Let Pi discover
+the description and read the full skill on demand, including native
+`/skill:web-search`; no custom skill loader, prompt injection on every turn,
+replacement tools or new Pi RPC commands. Normal Pi `bash`/`read` calls already
+stream through the current transcript UI. Register the package for the selected
+Pi runtime through its supported mechanism, preserving user skills/extensions.
+It must also work from ordinary terminal Pi without the BashKitten UI.
+Follow the pinned [native Pi skills interface](https://github.com/badlogic/pi-mono/blob/13cbf77df2396303013a41646bcfa77b4271ae56/packages/coding-agent/docs/skills.md).
+
+Use a package-relative launcher/installed command, not the donor skill's fixed
+`/usr/bin/buzzard-search`. Feed machine requests as bounded JSON on stdin and
+keep stdout structured, with diagnostic logs on stderr. Reuse the donor's
+search contract; add fetch/output-directory fields there only as needed for
+safe paths and saved results rather than inventing another protocol. Preserve
+timeouts, cancellation, redirect/DNS/content checks and document size bounds;
+these apply to this helper, not to Pi's unrestricted native tools.
+
+Replace hardcoded `/tmp` and `/usr` assumptions with the platform paths. Default
+full Markdown to a private writable BashKitten data directory, available across
+UI/server restarts; support an explicitly selected project output directory.
+Use unique filenames and return the actual path. Keep private directory/file
+permissions and safe creation, handle spaces/non-ASCII paths and concurrent
+agents without overwrites, and never require Android shared storage. Stock Pi
+can read/copy the saved document; the existing authenticated files UI can offer
+it for browser download. A remote Pi's saved path belongs to that remote server.
+
+### Updated sources and native dependencies
+
+Update the donor's DDGS 9.14.4 pin to the verified
+[9.16.0 release](https://github.com/deedy5/ddgs/releases/tag/v9.16.0), commit
+`70a5635510fb8d5b15d5ba6ceced6a67e212149b`, or a newer checked release at
+implementation time. Record exact source revisions, archive hashes, dependency
+locks and applicable patches. The checked 9.16.0 source archive has SHA-256
+`161ca8e78ea08d40cd3f83fb12279b49322ffb342d981368bfa39bed9847d874`.
+Track DDGS updates with the existing source-update/release flow; never resolve
+floating dependencies during a user's first search. Include installed search
+versions and updates in the existing package-update view, with real output;
+APT updates the managed Python payload, without `pip` overwriting system files.
+
+| Component | Native Termux implementation |
+| --- | --- |
+| DDGS / Click and other pure Python dependencies | Locked Python sources installed with the helper, using Termux Python |
+| `primp` | Build its Rust/PyO3 extension and native dependencies for Android/Bionic; neither the donor's 1.3.1 nor checked latest 2.0.1 supplies an Android wheel. Verify the chosen exact version against DDGS; no Termux recipe was found in the checked package tree |
+| `lxml` | Reuse Termux `python-lxml`, `libxml2` and `libxslt` packages/recipes |
+| PDF to Markdown | Reuse Termux `python-pymupdf`, `python-mupdf`, MuPDF and their patches; package a compatible locked PyMuPDF4LLM and its required dependencies |
+| HTML/text, repository and transcript readers | Retain the donor's selected Unsloth conversion/network code, Git integration and transcript dependencies; adapt only required platform paths/interfaces |
+
+The checked Termux-packages revision is
+`748983f1e4376b17babf23143baebd244e589b52`. It supplies
+[`python-lxml` 6.1.3](https://github.com/termux/termux-packages/blob/748983f1e4376b17babf23143baebd244e589b52/packages/python-lxml/build.sh),
+[`python-pymupdf` 1.28.0 revision 1](https://github.com/termux/termux-packages/blob/748983f1e4376b17babf23143baebd244e589b52/packages/python-pymupdf/build.sh)
+and MuPDF 1.28.2 revision 1; the PyMuPDF recipe includes its MuPDF API
+compatibility patch. Prefer those existing native packages when compatible.
+For missing/changed components, keep the necessary source recipes and minimal
+patches under `agent/packaging/termux/`, recording their provenance and building
+from staged source. Deliver resulting dependencies through the existing APT or
+private package payload as appropriate, not compilation on the user's phone.
+Do not substitute glibc/manylinux wheels for Termux binaries or require proot.
+
+Use the platform Python with isolated product dependencies, exposing declared
+system bindings where needed without modifying unrelated Python installs.
+Record Python ABI and native library requirements; verify updates cannot leave
+an importable Python module with incompatible shared libraries. PyMuPDF4LLM's
+newer releases add layout dependencies, so resolve and verify the actual
+dependency set instead of blindly upgrading every converter. Preserve real PDF
+text/tables/Markdown behavior; do not silently drop PDF support or relabel plain
+text as equivalent layout extraction. Native builds still need the 4/16 KB
+Android checks. This portability is planned, not yet proven.
+
+Preserve Buzzard Search/selected Unsloth Studio **AGPL-3.0-only** notices and the
+Unsloth source pin `bfcaea46574d63ec470ce9c7d7221471a38ea7e4`, manifests and
+per-file headers. DDGS itself is MIT; the Unsloth-derived integration/conversion
+code is separate and must not be relabeled MIT. Preserve retained MIT
+`pi-web-access` repository-reader attribution, transcript notices, MuPDF/
+PyMuPDF licenses and native/font/transitive notices for what is actually shipped.
+Regenerate the inventory for the new targets: the donor's amd64 PyInstaller
+license bundle is evidence, not an accurate inventory of our new packages.
+Include search licenses in offline browser About and web About, and publish
+matching source/build material. Do not import the donor's application test suite,
+fixtures or verification utilities into product source or release payloads;
+keep our checks in the external verification workspace.
+
+## 9. Delivery, retained behavior and licenses
 
 Build these **four primary binary artifacts from this one repository**:
 
 | Artifact | Complete product payload |
 | --- | --- |
-| `bashkitten_VERSION_amd64.deb` | Linux x86-64 browser, Agent web UI/server, native Pi and production npm dependencies, browser-control Pi extension/skill, Caddy/Authelia/Tor and lifecycle tools |
+| `bashkitten_VERSION_amd64.deb` | Linux x86-64 browser, Agent web UI/server, native Pi and production npm dependencies, browser-control Pi extension/skill, DDGS Python search/read helper and Pi skill, Caddy/Authelia/Tor and lifecycle tools |
 | `bashkitten_VERSION_arm64.deb` | The same complete Linux product built for ARM64 |
-| `bashkitten_VERSION_aarch64.deb` | Native Termux/Bionic Agent web UI/server, Pi and production npm dependencies, browser-control Pi extension/skill, native Caddy/Authelia/Tor, lifecycle/bootstrap/package tools; browser control executes in Termux beside Pi |
+| `bashkitten_VERSION_aarch64.deb` | Native Termux/Bionic Agent web UI/server, Pi and production npm dependencies, browser-control Pi extension/skill, native DDGS search/read helper and Pi skill, native Caddy/Authelia/Tor, lifecycle/bootstrap/package tools; browser control and search execute in Termux beside Pi |
 | `bashkitten_VERSION_arm64-v8a.apk` | Android browser, protected Agent/onboarding UI, native Binder/Termux integration, power/wake controls, browser Tor client and offline notices; the backend and Pi extension run from the Termux package |
 
 No separate WildBuzzard install, separately maintained browser repository or
@@ -641,13 +825,18 @@ Provide a proper APT upgrade/replacement from the old `bashkitten` server and
 `bashkitten-desktop` wrapper, preserving user data and resolving owned-file
 overlap through package metadata, not deleting arbitrary files.
 
-Bundle the product's own access-stack executables and Pi/npm/extension payloads.
+Bundle the product's own access-stack executables, Pi/npm/extension payloads and
+the search Python code/dependencies described above.
 Declare ordinary platform runtime libraries, Node and the existing Python/git/gh
 environment dependencies through APT/Termux bootstrap; do not vendor a second
 OS package manager, the Termux APK, GPU drivers or model weights into these files.
-Register the bundled extension using Pi's supported package mechanism for the
+Register the bundled integration using Pi's supported package mechanism for the
 selected runtime without overwriting an existing independent Pi installation.
-The same updater updates that bundled extension and its skill with the product.
+Linux packages include the desktop browser skill; the Termux package includes
+the Android browser skill. Both include the search skill and their own compiled/
+packaged search runtime, with platform-specific capabilities documented accurately.
+The same updater updates the bundled extension, skills and managed search
+payload with the product.
 
 Verify both 4 KB and 16 KB Android execution for the APK's native libraries and
 executable Termux packages. Keep the APK's current signing identity and the
@@ -697,18 +886,19 @@ after the corresponding artifacts are gone; historical provenance remains.
 Keep browser-facing source access for retained AGPL components. Readmes and
 release notes stay short; implementation detail belongs here and in AGENTS.md.
 
-## 9. Implementation order and completion evidence
+## 10. Implementation order and completion evidence
 
 | Step | Work | Evidence required |
 | --- | --- | --- |
 | 1 | Native access stack and coupled lifecycle | Build tracked `/auth` sources for Linux and Termux; real Authelia/TOTP/Caddy flow; no direct login bypass; whole-group shutdown and recovery including owner SIGKILL; native Termux patches stay isolated |
-| 2 | One repository and stripped browser sources | Both targets build under `/browser` from one ESR pin; an ESR subtree update changes only its prefix; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
+| 2 | One repository and stripped browser sources | Both targets build under `/browser` from one ESR pin using the adapted WildBuzzard artifact/cache workflow; cache-miss/cached builds and Agent-only reassembly work; an ESR subtree update changes only its prefix; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
 | 3 | Rename and add protected Agent view | Existing BashKitten APK upgrades; one profile/window; new-window requests become tabs; protected view survives close-all, restore and crashes and rejects all automation/extension access |
-| 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
+| 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; correct distinct mobile/desktop browser skill and actual platform tools; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
 | 5 | Power, wake locks, recovery and layout | Fresh launch On; actual browser and Termux CPU locks remain one each with 50 agents; Turn off stops all owned services/Pi and releases locks while leaving browser/Termux/unrelated tasks; Turn on discovers the actual dynamic port; core crash shows Off; owner/browser/Termux deaths recover without duplicates or prompt replay; rotate/fold preserves state |
 | 6 | Tor Agent remotes | QR/file/manual enrollment, 2FA, TLS renewal, rejected changed identity, revocation, offline/reconnect, ordinary private onion tabs and permission-controlled remote browser tools |
 | 7 | Desktop llama | arm64 and amd64 runtime selection; real ready model, crash/restart, wrong token, token-free health distinction; onion relay streams unchanged paths and never leaks credentials/falls back to direct access |
-| 8 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension and native auth stack, Android APK; actual installs/upgrades through APT/Android; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
+| 8 | Built-in DDGS and native Pi skill | Real searches using our packaged native runtime in stock terminal Pi and UI/RPC Pi on Linux amd64/arm64 and unrooted Termux, with no preinstalled DDGS or separate search package; skill discovery/on-demand loading; HTML/text, PDF, repository and available transcript reads save complete Markdown; paths survive reconnect/restart; concurrent saves, cancellation and real network failures; native imports and package upgrades work; no SearXNG requirement |
+| 9 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension, DDGS skill/runtime and native auth stack, Android APK; actual installs/upgrades through APT/Android; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
 
 Use the running Cuttlefish and local Linux ARM64 for actual app interaction,
 screenshots and process-failure checks, plus native AMD64 validation. Physical
