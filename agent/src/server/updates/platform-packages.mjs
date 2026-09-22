@@ -14,6 +14,23 @@ export async function selectPlatformPackages(root, os = process.platform, cpu = 
     await fs.rm(path.join(root, name), { recursive: true, force: true });
     removed++;
   }
+  // Pi's TUI tarball also contains native helpers for every desktop OS/CPU.
+  // Its stock loader selects native/<os>/prebuilds/<os>-<arch>; Android never
+  // loads these desktop helpers. Keep the selected bytes and all source/notices.
+  for (const location of Object.keys(lock.packages)) {
+    if (!location.endsWith('/@earendil-works/pi-tui')) continue;
+    if (!location.startsWith('node_modules/') || location.split('/').includes('..')) throw Error('Invalid Pi package path');
+    const native = path.join(root, location, 'native');
+    const platforms = await fs.readdir(native, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+    for (const platform of platforms) {
+      if (!platform.isDirectory()) continue;
+      const prebuilds = path.join(native, platform.name, 'prebuilds');
+      const targets = await fs.readdir(prebuilds).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+      for (const target of targets) {
+        if (platform.name !== os || target !== `${os}-${cpu}`) await fs.rm(path.join(prebuilds, target), { recursive: true, force: true });
+      }
+    }
+  }
   return removed;
 }
 
