@@ -115,9 +115,9 @@ static const RedirEntry kRedirMap[] = {
     {"crashes", "chrome://global/content/crashes.html",
      nsIAboutModule::IS_SECURE_CHROME_UI},
 #endif
-    {"credits", "https://www.mozilla.org/credits/",
+    {"credits", "chrome://global/content/license.html",
      nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
-         nsIAboutModule::URI_MUST_LOAD_IN_CHILD},
+         nsIAboutModule::IS_SECURE_CHROME_UI},
     {"fingerprintingprotection",
      "chrome://global/content/usercharacteristics/usercharacteristics.html",
      nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |

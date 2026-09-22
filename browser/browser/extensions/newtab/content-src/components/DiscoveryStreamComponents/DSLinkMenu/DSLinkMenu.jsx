@@ -28,7 +28,6 @@ export class _DSLinkMenu extends React.PureComponent {
       TOP_STORIES_CONTEXT_MENU_OPTIONS = [
         "CheckBookmark",
         "Separator",
-        "OpenInNewWindow",
         "OpenInPrivateWindow",
         "Separator",
         "BlockUrl",

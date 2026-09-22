@@ -242,30 +242,6 @@ function Weather({ dispatch, size, widgetEnabledMap }) {
     });
   }
 
-  function handleLearnMore() {
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.OPEN_LINK,
-          data: {
-            url: "https://support.mozilla.org/kb/firefox-new-tab-widgets",
-          },
-        })
-      );
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: {
-            widget_name: "weather",
-            widget_source: "context_menu",
-            user_action: USER_ACTION_TYPES.LEARN_MORE,
-            widget_size: size,
-          },
-        })
-      );
-    });
-  }
-
   function handleProviderLinkClick() {
     dispatch(
       ac.OnlyToMain({
@@ -402,10 +378,6 @@ function Weather({ dispatch, size, widgetEnabledMap }) {
           <panel-item
             data-l10n-id="newtab-widget-menu-hide"
             onClick={handleHideWeather}
-          />
-          <panel-item
-            data-l10n-id="newtab-weather-menu-learn-more"
-            onClick={handleLearnMore}
           />
         </panel-list>
       </div>

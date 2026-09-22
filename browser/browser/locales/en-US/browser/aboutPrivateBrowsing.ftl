@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-privatebrowsingpage-open-private-window-label = Open a Private Window
+privatebrowsingpage-open-private-window-label = Open a Private Tab
     .accesskey = P
 about-private-browsing-search-placeholder = Search the web
 about-private-browsing-search-btn =
@@ -17,7 +17,7 @@ about-private-browsing-handoff-no-engine =
 #  $engine (String): the name of the user's default search engine
 about-private-browsing-handoff-text = Search with { $engine } or enter address
 about-private-browsing-handoff-text-no-engine = Search or enter address
-about-private-browsing-not-private = You are currently not in a private window.
+about-private-browsing-not-private = This is a regular tab.
 
 about-private-browsing-hide-activity = Hide your activity and location, everywhere you browse
 about-private-browsing-get-privacy = Get privacy protections everywhere you browse
@@ -37,7 +37,7 @@ about-private-browsing-focus-promo-text-c = { -focus-brand-name } clears your hi
 # in a private window.
 # Variables:
 #   $engineName (String) - The engine name that will currently be used for the private window.
-about-private-browsing-search-banner-title = { $engineName } is your default search engine in Private Windows
+about-private-browsing-search-banner-title = { $engineName } is your default search engine in Private Tabs
 about-private-browsing-search-banner-description = {
   PLATFORM() ->
      [windows] To select a different search engine go to <a data-l10n-name="link-options">Options</a>
@@ -68,9 +68,11 @@ about-private-browsing-cookie-banners-promo-body = We now automatically refuse m
 ## Strings for the info section of about:privatebrowsing
 
 about-private-browsing-felt-privacy-v1-info-header = Leave no traces on this device
-about-private-browsing-felt-privacy-v1-info-body = { -brand-short-name} deletes your cookies, history, and site data when you close all your private windows.
+about-private-browsing-felt-privacy-v1-info-body = { -brand-short-name} deletes your cookies, history, and site data when you close all your private tabs.
 about-private-browsing-felt-privacy-v1-info-link = Who might be able to see my activity?
 
 ## Strings for the Nova redesign of about:privatebrowsing
 
-about-private-browsing-nova-info-body = Closing all your private windows deletes your cookies, history and site data.
+about-private-browsing-nova-info-body = Closing all your private tabs deletes your cookies, history and site data.
+
+about-private-browsing-limits = Private tabs do not hide your activity from websites, your employer, or your internet provider. Downloads and bookmarks are kept.

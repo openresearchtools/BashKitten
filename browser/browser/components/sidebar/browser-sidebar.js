@@ -13,9 +13,6 @@ const { DeferredTask } = ChromeUtils.importESModule(
 );
 
 const toolsNameMap = {
-  viewGenaiChatSidebar: "aichat",
-  viewGenaiPageAssistSidebar: "aipageassist",
-  viewTabsSidebar: "syncedtabs",
   viewHistorySidebar: "history",
   viewBookmarksSidebar: "bookmarks",
   viewOpenTabsSidebar: "opentabs",
@@ -142,25 +139,6 @@ var SidebarController = {
         }),
       ],
       [
-        "viewTabsSidebar",
-        this.makeSidebar({
-          name: "syncedtabs",
-          elementId: "sidebar-switcher-tabs",
-          url: this.sidebarRevampEnabled
-            ? "chrome://browser/content/sidebar/sidebar-syncedtabs.html"
-            : "chrome://browser/content/syncedtabs/sidebar.xhtml",
-          menuId: "menu_tabsSidebar",
-          classAttribute: "sync-ui-item",
-          menuL10nId: "menu-view-synced-tabs-sidebar",
-          revampL10nId: "sidebar-menu-synced-tabs-label",
-          iconUrl: "chrome://browser/skin/synced-tabs.svg",
-          contextMenuId: this.sidebarRevampEnabled
-            ? "sidebar-synced-tabs-context-menu"
-            : undefined,
-          gleanClickEvent: Glean.sidebar.syncedTabsIconClick,
-        }),
-      ],
-      [
         "viewBookmarksSidebar",
         this.makeSidebar({
           name: "bookmarks",
@@ -184,40 +162,6 @@ var SidebarController = {
         }),
       ],
     ]);
-
-    this.registerPrefSidebar(
-      "browser.ml.chat.enabled",
-      "viewGenaiChatSidebar",
-      {
-        name: "aichat",
-        elementId: "sidebar-switcher-genai-chat",
-        url: "chrome://browser/content/genai/chat.html",
-        keyId: "viewGenaiChatSidebarKb",
-        menuId: "menu_genaiChatSidebar",
-        menuL10nId: "menu-view-genai-chat",
-        // Bug 1900915 to expose as conditional tool
-        revampL10nId: "sidebar-menu-genai-chat-label",
-        iconUrl: "chrome://global/skin/icons/highlights.svg",
-        gleanClickEvent: Glean.sidebar.chatbotIconClick,
-        toolContextMenuId: "aichat",
-        permissions: true,
-        hideInAIWindow: true,
-      }
-    );
-
-    this.registerPrefSidebar(
-      "browser.ml.pageAssist.enabled",
-      "viewGenaiPageAssistSidebar",
-      {
-        name: "aipageassist",
-        elementId: "sidebar-switcher-genai-page-assist",
-        url: "chrome://browser/content/genai/pageAssist.html",
-        menuId: "menu_genaiPageAssistSidebar",
-        menuL10nId: "menu-view-genai-page-assist",
-        revampL10nId: "sidebar-menu-genai-page-assist-label",
-        iconUrl: "chrome://browser/skin/reader-mode.svg",
-      }
-    );
 
     this.registerPrefSidebar(
       "browser.contextual-password-manager.enabled",

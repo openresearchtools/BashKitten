@@ -7,21 +7,18 @@ export const TOP_SITES_CONTEXT_MENU_OPTIONS = [
   "CheckPinTopSite",
   "EditTopSite",
   "Separator",
-  "OpenInNewWindow",
   "OpenInPrivateWindow",
   "Separator",
   "BlockUrl",
   "DeleteUrl",
 ];
 export const TOP_SITES_SPOC_CONTEXT_MENU_OPTIONS = [
-  "OpenInNewWindow",
   "OpenInPrivateWindow",
   "Separator",
   "BlockUrl",
   "ShowPrivacyInfo",
 ];
 export const TOP_SITES_SPONSORED_POSITION_CONTEXT_MENU_OPTIONS = [
-  "OpenInNewWindow",
   "OpenInPrivateWindow",
   "Separator",
   "BlockUrl",

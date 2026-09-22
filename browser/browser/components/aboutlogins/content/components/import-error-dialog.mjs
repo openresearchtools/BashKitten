@@ -38,8 +38,8 @@ export default class ImportErrorDialog extends HTMLElement {
     this._titleElement = shadowRoot.querySelector(".error-title");
     this._descriptionElement = shadowRoot.querySelector(".error-description");
     this._genericDialog = this.shadowRoot.querySelector("generic-dialog");
-    this._focusedElement = this.shadowRoot.querySelector("a");
     const tryImportAgain = this.shadowRoot.querySelector(".try-import-again");
+    this._focusedElement = tryImportAgain;
     tryImportAgain.addEventListener("click", () => {
       this._genericDialog.hide();
       document.dispatchEvent(

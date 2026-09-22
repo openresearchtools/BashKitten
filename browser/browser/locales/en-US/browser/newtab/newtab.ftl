@@ -115,7 +115,7 @@ newtab-menu-content-tooltip =
 
 newtab-menu-edit-topsites = Edit
 newtab-menu-open-new-window = Open in a New Window
-newtab-menu-open-new-private-window = Open in a New Private Window
+newtab-menu-open-new-private-window = Open in a New Private Tab
 newtab-menu-dismiss = Dismiss
 newtab-menu-pin = Pin
 newtab-menu-unpin = Unpin

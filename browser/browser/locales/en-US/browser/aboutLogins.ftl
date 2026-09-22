@@ -86,6 +86,9 @@ about-logins-list-section-week = Last 7 days
 ## Introduction screen
 
 about-logins-login-intro-heading-message = Save your passwords to a safe spot
+about-logins-local-intro-description = Your saved passwords are encrypted and stored on this device.
+about-logins-local-intro-add = Select the plus button to add a password. Select a saved password to view, edit, copy or remove it.
+about-logins-local-intro-import = You can also <a data-l10n-name="import-file-link">import passwords from a CSV file</a>.
 login-intro-description2 = All passwords you save to { -brand-product-name } are encrypted. Plus, we watch out for breaches and alert you if you’re affected. <a data-l10n-name="breach-alert-link">Learn more</a>
 login-intro-instructions-fxa2 = Create or sign in to your account on the device where your logins are saved.
 login-intro-instructions-fxa-settings = Go to Settings > Sync > Turn on syncing… Select the Logins and passwords checkbox.

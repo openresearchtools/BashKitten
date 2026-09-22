@@ -143,7 +143,7 @@ restore-from-backup-profiles-disabled-message = This will replace all your curre
 # User is not authorized to restore a particular backup file, usually because
 # the backup file is encrypted and the user provided a recovery password that
 # was different than the password the user configured for their backup file
-backup-service-error-incorrect-password = Incorrect password. <a data-l10n-name="incorrect-password-support-link">Still having problems?</a>
+backup-service-error-incorrect-password = Incorrect password. Try again.
 
 # The backup file (or specific data files within the backup file) could not be
 # loaded and parsed correctly, most likely due to data corruption of the
@@ -290,7 +290,7 @@ backup-file-creation-metadata2 = <b>{ $profileName }</b> created on { DATETIME($
 #   $date (Number) - The epoch timestamp of the restore.
 backup-restored-profile-name = Restored from { $deviceName } on { DATETIME($date, year: "numeric", month: "numeric", day: "numeric") } at { DATETIME($date, hour: "2-digit", minute: "2-digit") }
 
-backup-file-restore-file-validation-error = This file isn’t working. Try picking a different file. <a data-l10n-name="restore-problems">Still having problems?</a>
+backup-file-restore-file-validation-error = This file isn’t working. Try picking a different file.
 
 restore-from-backup-filepicker-input =
     .placeholder = No file selected

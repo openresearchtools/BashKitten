@@ -45,10 +45,7 @@ const PREF_WIDGETS_SYSTEM_WEATHER_FORECAST_ENABLED =
 const PREF_WIDGETS_MAXIMIZED = "widgets.maximized";
 const PREF_WIDGETS_SYSTEM_MAXIMIZED = "widgets.system.maximized";
 const PREF_WIDGETS_ROW_EXPANDED = "widgets.row.expanded";
-const PREF_WIDGETS_FEEDBACK_ENABLED = "widgets.feedback.enabled";
 const PREF_WIDGETS_HIDE_ALL_TOAST_ENABLED = "widgets.hideAllToast.enabled";
-const WIDGETS_FEEDBACK_URL =
-  "https://support.mozilla.org/kb/firefox-new-tab-widgets";
 
 // resets timer to default values (exported for testing)
 // In practice, this logic runs inside a useEffect when
@@ -130,14 +127,9 @@ function Widgets() {
   const rowExpanded = !!prefs[PREF_WIDGETS_ROW_EXPANDED];
   const nimbusMaximizedTrainhopEnabled =
     prefs.trainhopConfig?.widgets?.maximized;
-  const feedbackEnabled =
-    prefs.trainhopConfig?.widgets?.feedbackEnabled ||
-    prefs[PREF_WIDGETS_FEEDBACK_ENABLED];
   const hideAllToastEnabled =
     prefs.trainhopConfig?.widgets?.hideAllToastEnabled ||
     prefs[PREF_WIDGETS_HIDE_ALL_TOAST_ENABLED];
-  const feedbackUrl =
-    prefs.trainhopConfig?.widgets?.feedbackUrl ?? WIDGETS_FEEDBACK_URL;
   const showWidgetsSizeToggle =
     nimbusMaximizedTrainhopEnabled || prefs[PREF_WIDGETS_SYSTEM_MAXIMIZED];
   const widgetsMayBeMaximized = showWidgetsSizeToggle;
@@ -414,30 +406,6 @@ function Widgets() {
     toggleRowExpanded();
   }
 
-  function handleFeedbackClick(e) {
-    e.preventDefault();
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.OPEN_LINK,
-          data: {
-            url: feedbackUrl,
-            ...(novaEnabled ? { where: "tab" } : {}),
-          },
-        })
-      );
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_CONTAINER_ACTION,
-          data: {
-            action_type: CONTAINER_ACTION_TYPES.FEEDBACK,
-            widget_size: widgetSize,
-          },
-        })
-      );
-    });
-  }
-
   function handleUserInteraction(widgetName) {
     const prefName = `widgets.${widgetName}.interaction`;
     const hasInteracted = prefs[prefName];
@@ -493,10 +461,6 @@ function Widgets() {
             <panel-item
               data-l10n-id="newtab-widget-section-menu-manage"
               onClick={handleManageWidgetsClick}
-            />
-            <panel-item
-              data-l10n-id="newtab-widget-section-menu-learn-more"
-              onClick={handleFeedbackClick}
             />
           </panel-list>
         </div>
@@ -782,14 +746,6 @@ function Widgets() {
               <WidgetsRowFeatureHighlight dispatch={dispatch} />
             </MessageWrapper>
           </div>
-        )}
-        {feedbackEnabled && !novaEnabled && (
-          <a
-            className="widgets-feedback-link"
-            href={feedbackUrl}
-            data-l10n-id="newtab-widget-section-feedback"
-            onClick={handleFeedbackClick}
-          />
         )}
       </div>
     </div>

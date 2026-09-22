@@ -84,7 +84,6 @@ export class SidebarBookmarks extends SidebarPage {
     const sortByName = q("#sidebar-bookmarks-context-sort-by-name");
     const sepSort = q("#sidebar-bookmarks-context-sep-sort");
     const openInTab = q("#sidebar-bookmarks-context-open-in-tab");
-    const openInWindow = q("#sidebar-bookmarks-context-open-in-window");
     const sepOpenOptions = q("#sidebar-bookmarks-context-sep-open-options");
     const sepEditCopy = q("#sidebar-bookmarks-context-sep-edit-copy");
     const copyLink = q("#sidebar-bookmarks-context-copy-link");
@@ -108,7 +107,6 @@ export class SidebarBookmarks extends SidebarPage {
       folderItems: [openAllBookmarks, sepOpenAll, sepSort, sortByName],
       bookmarkItems: [
         openInTab,
-        openInWindow,
         sepOpenOptions,
         sepEditCopy,
         copyLink,
@@ -119,7 +117,6 @@ export class SidebarBookmarks extends SidebarPage {
       sortByName,
       sepSort,
       openInTab,
-      openInWindow,
       sepOpenOptions,
       sepEditCopy,
       copyLink,
@@ -463,7 +460,6 @@ export class SidebarBookmarks extends SidebarPage {
       sortByName,
       sepSort,
       openInTab,
-      openInWindow,
       sepOpenOptions,
       sepEditCopy,
       copyLink,
@@ -492,7 +488,6 @@ export class SidebarBookmarks extends SidebarPage {
 
     openInTab.hidden = true;
     openInContainerTab.hidden = true;
-    openInWindow.hidden = true;
     openInPrivateWindow.hidden = true;
     sepOpenOptions.hidden = true;
     showInFolder.hidden = true;
@@ -529,7 +524,6 @@ export class SidebarBookmarks extends SidebarPage {
       sortByName,
       sepSort,
       openInTab,
-      openInWindow,
       sepOpenOptions,
       sepEditCopy,
       copyLink,
@@ -551,7 +545,6 @@ export class SidebarBookmarks extends SidebarPage {
 
     openInTab.hidden = true;
     openInContainerTab.hidden = true;
-    openInWindow.hidden = true;
     openInPrivateWindow.hidden = true;
     sepOpenOptions.hidden = true;
     showInFolder.hidden = true;
@@ -649,16 +642,8 @@ export class SidebarBookmarks extends SidebarPage {
         this.topWindow.openTrustedLinkIn(this.triggerNode.url, "tab");
         label = "open_in_new_tab";
         break;
-      case "sidebar-bookmarks-context-open-in-window":
-        this.topWindow.openTrustedLinkIn(this.triggerNode.url, "window", {
-          private: false,
-        });
-        label = "open_in_new_window";
-        break;
       case "sidebar-bookmarks-context-open-in-private-window":
-        this.topWindow.openTrustedLinkIn(this.triggerNode.url, "window", {
-          private: true,
-        });
+        this.openPrivateTab(this.triggerNode.url);
         label = "open_in_private_window";
         break;
       case "sidebar-bookmarks-context-edit-bookmark":

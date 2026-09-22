@@ -192,10 +192,6 @@ export class SidebarHistory extends SidebarPage {
         super.handleCommandEvent(e);
         label = "open_in_new_tab";
         break;
-      case "sidebar-history-context-open-in-window":
-        super.handleCommandEvent(e);
-        label = "open_in_new_window";
-        break;
       case "sidebar-history-context-open-in-private-window":
         super.handleCommandEvent(e);
         label = "open_in_private_window";

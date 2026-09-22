@@ -108,20 +108,12 @@ export class AboutLoginsParent extends JSWindowActorParent {
         this.#sortChanged(message.data);
         break;
       }
-      case "AboutLogins:SyncEnable": {
-        this.#syncEnable();
-        break;
-      }
       case "AboutLogins:ImportFromBrowser": {
         this.#importFromBrowser();
         break;
       }
       case "AboutLogins:ImportReportInit": {
         this.#importReportInit();
-        break;
-      }
-      case "AboutLogins:GetHelp": {
-        this.#getHelp();
         break;
       }
       case "AboutLogins:OpenPreferences": {
@@ -217,10 +209,6 @@ export class AboutLoginsParent extends JSWindowActorParent {
     Services.prefs.setCharPref("signon.management.page.sort", sort);
   }
 
-  #syncEnable() {
-    this.#documentGlobal.gSync.openFxAEmailFirstPage("password-manager");
-  }
-
   #importFromBrowser() {
     try {
       lazy.MigrationUtils.showMigrationWizard(this.#documentGlobal, {
@@ -234,15 +222,6 @@ export class AboutLoginsParent extends JSWindowActorParent {
   #importReportInit() {
     let reportData = lazy.LoginCSVImport.lastImportReport;
     this.sendAsyncMessage("AboutLogins:ImportReportData", reportData);
-  }
-
-  #getHelp() {
-    const SUPPORT_URL =
-      Services.urlFormatter.formatURLPref("app.support.baseURL") +
-      "password-manager-remember-delete-edit-logins";
-    this.#documentGlobal.openWebLinkIn(SUPPORT_URL, "tab", {
-      relatedToCurrent: true,
-    });
   }
 
   #openPreferences() {

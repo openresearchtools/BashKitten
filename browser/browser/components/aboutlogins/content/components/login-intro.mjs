@@ -12,11 +12,15 @@ export default class LoginIntro extends HTMLElement {
     let shadowRoot = this.attachShadow({ mode: "open" });
     document.l10n.connectRoot(shadowRoot);
     shadowRoot.appendChild(loginIntroTemplate.content.cloneNode(true));
+    shadowRoot
+      .querySelector(".intro-import-text")
+      .addEventListener("click", this);
   }
 
   focus() {
-    let helpLink = this.shadowRoot.querySelector(".intro-help-link");
-    helpLink.focus();
+    this.shadowRoot
+      .querySelector('[data-l10n-name="import-file-link"]')
+      .focus();
   }
 
   handleEvent(event) {
@@ -24,41 +28,13 @@ export default class LoginIntro extends HTMLElement {
       event.currentTarget.classList.contains("intro-import-text") &&
       event.target.localName == "a"
     ) {
-      let eventName =
-        event.target.dataset.l10nName == "import-file-link"
-          ? "AboutLoginsImportFromFile"
-          : "AboutLoginsImportFromBrowser";
       document.dispatchEvent(
-        new CustomEvent(eventName, {
+        new CustomEvent("AboutLoginsImportFromFile", {
           bubbles: true,
         })
       );
     }
     event.preventDefault();
-  }
-
-  updateState(syncState) {
-    let l10nId = "about-logins-login-intro-heading-message";
-    document.l10n.setAttributes(
-      this.shadowRoot.querySelector(".heading"),
-      l10nId
-    );
-
-    this.shadowRoot
-      .querySelector(".illustration")
-      .classList.toggle("logged-in", syncState.loggedIn);
-    let supportURL =
-      window.AboutLoginsUtils.supportBaseURL +
-      "password-manager-remember-delete-edit-logins";
-    this.shadowRoot
-      .querySelector(".intro-help-link")
-      .setAttribute("href", supportURL);
-
-    let importText = this.shadowRoot.querySelector(
-      ".intro-import-text.file-import"
-    );
-    importText.addEventListener("click", this);
-    importText.hidden = !window.AboutLoginsUtils.importVisible;
   }
 }
 customElements.define("login-intro", LoginIntro);

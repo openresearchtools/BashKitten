@@ -17,9 +17,7 @@ import "chrome://browser/content/sidebar/sidebar-pins-promo.mjs";
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
-  ASRouter: "resource:///modules/asrouter/ASRouter.sys.mjs",
   ShortcutUtils: "resource://gre/modules/ShortcutUtils.sys.mjs",
-  GenAI: "resource:///modules/GenAI.sys.mjs",
 });
 
 /**
@@ -51,10 +49,7 @@ export default class SidebarMain extends MozLitElement {
 
   get fluentStrings() {
     if (!this._fluentStrings) {
-      this._fluentStrings = new Localization(
-        ["browser/sidebar.ftl", "preview/genai.ftl"],
-        true
-      );
+      this._fluentStrings = new Localization(["browser/sidebar.ftl"], true);
     }
     return this._fluentStrings;
   }
@@ -66,10 +61,6 @@ export default class SidebarMain extends MozLitElement {
     this.open = window.SidebarController.isOpen;
     this.contextMenuTarget = null;
     this.expanded = false;
-    this.clickCounts = {
-      genai: 0,
-      totalToolsMinusGenai: 0,
-    };
     this.shouldShowOverflowButton = false;
     this.overflowMenuOpen = false;
   }
@@ -84,13 +75,6 @@ export default class SidebarMain extends MozLitElement {
       shortcutId: "viewBookmarksSidebarKb",
       openl10nId: "sidebar-menu-open-bookmarks-tooltip",
       close10nId: "sidebar-menu-close-bookmarks-tooltip",
-    },
-    viewGenaiChatSidebar: {
-      shortcutId: "viewGenaiChatSidebarKb",
-      openl10nId: "sidebar-menu-open-ai-chatbot-tooltip-generic",
-      close10nId: "sidebar-menu-close-ai-chatbot-tooltip-generic",
-      openProviderl10nId: "sidebar-menu-open-ai-chatbot-provider-tooltip",
-      closeProviderl10nId: "sidebar-menu-close-ai-chatbot-provider-tooltip",
     },
   };
 
@@ -107,9 +91,6 @@ export default class SidebarMain extends MozLitElement {
     );
     this._removeExtensionMenuItem = document.getElementById(
       "sidebar-context-menu-remove-extension"
-    );
-    this._reportExtensionMenuItem = document.getElementById(
-      "sidebar-context-menu-report-extension"
     );
     this._unpinExtensionMenuItem = document.getElementById(
       "sidebar-context-menu-unpin-extension"
@@ -327,91 +308,17 @@ export default class SidebarMain extends MozLitElement {
       return;
     }
 
-    if (this.contextMenuTarget?.hasAttribute("contextMenu")) {
-      this.hideExistingMenuItem();
-
-      const toolId = this.contextMenuTarget.getAttribute("contextMenu");
-      await this.buildToolContextMenuItems(event, toolId);
-
-      const items = this._contextMenu.querySelectorAll(
-        "[customized-tool='true']"
-      );
-
-      if (items?.length) {
-        // Since we are dynamically building/customizing the sidebar context menu for tools
-        // This ensures that the menu is fully updated before showing.
-        this._contextMenu.openPopupAtScreen(event.screenX, event.screenY, true);
-        return;
-      }
-    }
-
     event.preventDefault();
-  }
-
-  async buildToolContextMenuItems(event, toolId) {
-    const menu = this._contextMenu;
-    // Clear previously added custom menuitems
-    menu
-      .querySelectorAll("[customized-tool='true']")
-      .forEach(node => node.remove());
-
-    const menuBuilders = {
-      aichat: async () => {
-        if (Services.prefs.getBoolPref("browser.ml.chat.page")) {
-          await lazy.GenAI.buildAskChatMenu(this._contextMenu, {
-            browser: window.gBrowser.selectedBrowser,
-            selectionInfo: null,
-            source: "tool",
-          });
-        }
-      },
-    };
-
-    const builder = menuBuilders[toolId];
-    if (typeof builder === "function") {
-      const originalAppendChild = menu.appendChild.bind(menu);
-
-      menu.appendChild = child => {
-        child.setAttribute("customized-tool", true);
-        return originalAppendChild(child);
-      };
-
-      await builder(menu);
-      menu.appendChild = originalAppendChild;
-    }
-
-    return menu;
-  }
-
-  hideToolMenuItems() {
-    const customMenuItems = this._contextMenu.querySelectorAll(
-      "[customized-tool='true']"
-    );
-    customMenuItems.forEach(item => (item.hidden = true));
-  }
-
-  hideExistingMenuItem() {
-    this._customizeSidebarMenuItem.hidden = true;
-    this._enableVerticalTabsMenuItem.hidden = true;
-    this._hideSidebarMenuItem.hidden = true;
-    this._unpinExtensionMenuItem.hidden = true;
-    this._manageExtensionMenuItem.hidden = true;
-    this._removeExtensionMenuItem.hidden = true;
-    this._reportExtensionMenuItem.hidden = true;
-    // Prevent the menu separator visible in Window and Linux
-    this._menuseparator.hidden = true;
   }
 
   updateSidebarContextMenuItems() {
     this._menuseparator.hidden = true;
     this._manageExtensionMenuItem.hidden = true;
     this._removeExtensionMenuItem.hidden = true;
-    this._reportExtensionMenuItem.hidden = true;
     this._unpinExtensionMenuItem.hidden = true;
     this._customizeSidebarMenuItem.hidden = false;
     this._enableVerticalTabsMenuItem.hidden = false;
     this._hideSidebarMenuItem.hidden = false;
-    this.hideToolMenuItems();
   }
 
   async updateExtensionContextMenuItems() {
@@ -422,8 +329,6 @@ export default class SidebarMain extends MozLitElement {
     this._unpinExtensionMenuItem.hidden = false;
     this._manageExtensionMenuItem.hidden = false;
     this._removeExtensionMenuItem.hidden = false;
-    this._reportExtensionMenuItem.hidden = false;
-    this.hideToolMenuItems();
     const extensionId = this.contextMenuTarget.getAttribute("extensionId");
     if (!extensionId) {
       return;
@@ -434,13 +339,11 @@ export default class SidebarMain extends MozLitElement {
       // exist anymore from the AddonManager perspective.
       this._manageExtensionMenuItem.disabled = true;
       this._removeExtensionMenuItem.disabled = true;
-      this._reportExtensionMenuItem.disabled = true;
     } else {
       this._manageExtensionMenuItem.disabled = false;
       this._removeExtensionMenuItem.disabled = !(
         addon.permissions & AddonManager.PERM_CAN_UNINSTALL
       );
-      this._reportExtensionMenuItem.disabled = !window.gAddonAbuseReportEnabled;
     }
   }
 
@@ -453,13 +356,6 @@ export default class SidebarMain extends MozLitElement {
 
   async removeExtension() {
     await window.BrowserAddonUI.removeAddon(
-      this.contextMenuTarget.getAttribute("extensionId"),
-      "sidebar-context-menu"
-    );
-  }
-
-  async reportExtension() {
-    await window.BrowserAddonUI.reportAddon(
       this.contextMenuTarget.getAttribute("extensionId"),
       "sidebar-context-menu"
     );
@@ -513,9 +409,6 @@ export default class SidebarMain extends MozLitElement {
         switch (e.target.id) {
           case "sidebar-context-menu-manage-extension":
             await this.manageExtension();
-            break;
-          case "sidebar-context-menu-report-extension":
-            await this.reportExtension();
             break;
           case "sidebar-context-menu-remove-extension":
             await this.removeExtension();
@@ -596,36 +489,11 @@ export default class SidebarMain extends MozLitElement {
     }
   };
 
-  async checkShouldShowCalloutSurveys(view) {
-    if (view == "viewGenaiChatSidebar") {
-      this.clickCounts.genai++;
-    } else {
-      this.clickCounts.totalToolsMinusGenai++;
-    }
-
-    await lazy.ASRouter.waitForInitialized;
-    lazy.ASRouter.sendTriggerMessage({
-      browser: window.gBrowser.selectedBrowser,
-      id: "sidebarToolOpened",
-      context: {
-        view,
-        clickCounts: this.clickCounts,
-      },
-    });
-  }
-
   async showView(view) {
-    const { currentID, toolsAndExtensions } = window.SidebarController;
-    let isToolOpening =
-      (!currentID || (currentID && currentID !== view)) &&
-      toolsAndExtensions.has(view);
     window.SidebarController.recordIconClick(view, this.expanded);
     window.SidebarController.toggle(view);
     if (view === "viewCustomizeSidebar") {
       Glean.sidebarCustomize.iconClick.record();
-    }
-    if (isToolOpening) {
-      await this.checkShouldShowCalloutSurveys(view);
     }
   }
 
@@ -672,15 +540,6 @@ export default class SidebarMain extends MozLitElement {
   }
 
   getEntrypointValues(action) {
-    let providerInfo;
-    if (action.view === "viewGenaiChatSidebar") {
-      providerInfo = lazy.GenAI.currentChatProviderInfo;
-      action.iconUrl = providerInfo.iconUrl;
-      // Sets the tooltip text for the action based on the chatbot provider's name.
-      // This tooltip text is also used to set the action label
-      action.tooltiptext = providerInfo.name;
-    }
-
     if (action.disabled || action.hidden) {
       return null;
     }
@@ -698,19 +557,8 @@ export default class SidebarMain extends MozLitElement {
     const tooltipInfo = this.tooltips[action.view];
     if (tooltipInfo) {
       const { shortcutId, openl10nId, close10nId } = tooltipInfo;
-      let l10nId = isActiveView ? close10nId : openl10nId;
+      const l10nId = isActiveView ? close10nId : openl10nId;
       let tooltipData = {};
-
-      if (action.view === "viewGenaiChatSidebar") {
-        const provider = providerInfo?.name;
-
-        if (provider) {
-          tooltipData.provider = provider;
-          l10nId = isActiveView
-            ? tooltipInfo.closeProviderl10nId
-            : tooltipInfo.openProviderl10nId;
-        }
-      }
 
       if (shortcutId) {
         const shortcut = lazy.ShortcutUtils.prettifyShortcut(

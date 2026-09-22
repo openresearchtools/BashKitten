@@ -2,8 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
-
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
@@ -11,22 +9,10 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "moz-src:///browser/components/urlbar/ActionsProviderQuickActions.sys.mjs",
   BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
   DevToolsShim: "chrome://devtools-startup/content/DevToolsShim.sys.mjs",
-  ResetProfile: "resource://gre/modules/ResetProfile.sys.mjs",
+  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
   ScreenshotsUtils:
     "moz-src:///browser/components/screenshots/ScreenshotsUtils.sys.mjs",
-  TranslationsParent: "resource://gre/actors/TranslationsParent.sys.mjs",
 });
-
-import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
-
-if (AppConstants.MOZ_UPDATER) {
-  XPCOMUtils.defineLazyServiceGetter(
-    lazy,
-    "AUS",
-    "@mozilla.org/updates/update-service;1",
-    Ci.nsIApplicationUpdateService
-  );
-}
 
 let openUrlFun = url => (_queryContext, controller) =>
   openUrl(url, controller.browserWindow);
@@ -81,7 +67,7 @@ const DEFAULT_ACTIONS = {
     l10nCommands: ["quickactions-cmd-addons3"],
     icon: "chrome://mozapps/skin/extensions/category-extensions.svg",
     label: "quickactions-addons",
-    onPick: openAddonsUrl("addons://discover/"),
+    onPick: openAddonsUrl("addons://list/extension"),
   },
   bookmarks: {
     l10nCommands: ["quickactions-cmd-bookmarks", "quickactions-bookmarks2"],
@@ -122,17 +108,7 @@ const DEFAULT_ACTIONS = {
     l10nCommands: ["quickactions-cmd-help"],
     icon: "chrome://global/skin/icons/help.svg",
     label: "quickactions-help",
-    onPick: openUrlFun(
-      "https://support.mozilla.org/products/firefox?as=u&utm_source=inproduct"
-    ),
-  },
-  firefoxview: {
-    l10nCommands: ["quickactions-cmd-firefoxview"],
-    icon: "chrome://browser/skin/firefox-view.svg",
-    label: "quickactions-firefoxview",
-    onPick: (_queryContext, controller) => {
-      controller.browserWindow.FirefoxViewHandler.openTab();
-    },
+    onPick: openUrlFun("https://github.com/openresearchtools/bashkitten/issues"),
   },
   inspect: {
     l10nCommands: ["quickactions-cmd-inspector2"],
@@ -211,16 +187,7 @@ const DEFAULT_ACTIONS = {
     label: "quickactions-private2",
     icon: "chrome://global/skin/icons/indicator-private-browsing.svg",
     onPick: (_queryContext, controller) => {
-      controller.browserWindow.OpenBrowserWindow({ private: true });
-    },
-  },
-  refresh: {
-    l10nCommands: ["quickactions-cmd-refresh"],
-    icon: "chrome://branding/content/icon32.png",
-    label: "quickactions-refresh",
-    isVisible: () => lazy.ResetProfile.resetSupported(),
-    onPick: (_queryContext, controller) => {
-      lazy.ResetProfile.openConfirmationDialog(controller.browserWindow);
+      lazy.PrivateTab.openNewPrivateTab(controller.browserWindow);
     },
   },
   restart: {
@@ -273,42 +240,6 @@ const DEFAULT_ACTIONS = {
     label: "quickactions-settings2",
     onPick: openUrlFun("about:preferences"),
   },
-  translate: {
-    l10nCommands: ["quickactions-cmd-translate"],
-    icon: "chrome://browser/skin/translations.svg",
-    label: "quickactions-translate",
-    isVisible: () => {
-      return (
-        lazy.TranslationsParent.AIFeature.isEnabled &&
-        Services.prefs.getBoolPref(
-          "browser.translations.quickAction.enabled",
-          false
-        )
-      );
-    },
-    onPick: async (_queryContext, controller) => {
-      await lazy.TranslationsParent.openAboutTranslationsPage({
-        browserWindow: controller.browserWindow,
-        targetLanguage: "derive",
-      });
-
-      return { focusContent: true };
-    },
-  },
-  update: {
-    l10nCommands: ["quickactions-cmd-update"],
-    icon: "chrome://global/skin/icons/update-icon.svg",
-    label: "quickactions-update",
-    isVisible: () => {
-      if (!AppConstants.MOZ_UPDATER) {
-        return false;
-      }
-      return (
-        lazy.AUS.currentState == Ci.nsIApplicationUpdateService.STATE_PENDING
-      );
-    },
-    onPick: restartBrowser,
-  },
   viewsource: {
     l10nCommands: ["quickactions-cmd-viewsource2"],
     icon: "chrome://browser/skin/reader-mode.svg",
@@ -319,12 +250,6 @@ const DEFAULT_ACTIONS = {
         "view-source:" + controller.browserWindow.gBrowser.currentURI.spec,
         controller.browserWindow
       ),
-  },
-  labs: {
-    l10nCommands: ["quickactions-cmd-labs"],
-    icon: "chrome://global/skin/icons/experiments.svg",
-    label: "quickactions-labs",
-    onPick: openUrlFun("about:preferences#experimental"),
   },
 };
 

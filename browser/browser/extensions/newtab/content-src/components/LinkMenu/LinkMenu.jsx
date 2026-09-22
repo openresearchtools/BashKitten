@@ -12,7 +12,6 @@ const DEFAULT_SITE_MENU_OPTIONS = [
   "CheckPinTopSite",
   "EditTopSite",
   "Separator",
-  "OpenInNewWindow",
   "OpenInPrivateWindow",
   "Separator",
   "BlockUrl",

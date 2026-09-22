@@ -847,32 +847,6 @@ function SportsWidget({ dispatch, handleUserInteraction, widgetEnabledMap }) {
     handleInteraction();
   }
 
-  function handleLearnMore() {
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.OPEN_LINK,
-          data: {
-            url: "https://support.mozilla.org/kb/firefox-new-tab-widgets",
-          },
-        })
-      );
-      const telemetryData = {
-        widget_name: "sports",
-        widget_source: "context_menu",
-        user_action: USER_ACTION_TYPES.LEARN_MORE,
-        widget_size: widgetSize,
-      };
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: telemetryData,
-        })
-      );
-    });
-    handleInteraction();
-  }
-
   // Discard any team changes and go back to the intro state.
   const handleCancelSelection = useCallback(
     () =>
@@ -1150,10 +1124,6 @@ function SportsWidget({ dispatch, handleUserInteraction, widgetEnabledMap }) {
               <panel-item
                 data-l10n-id="newtab-widget-menu-hide"
                 onClick={handleSportsWidgetHide}
-              />
-              <panel-item
-                data-l10n-id="newtab-sports-widget-menu-learn-more"
-                onClick={handleLearnMore}
               />
             </panel-list>
           </div>

@@ -2,8 +2,6 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-import { ASRouter } from "resource:///modules/asrouter/ASRouter.sys.mjs";
-import { BrowserUtils } from "resource://gre/modules/BrowserUtils.sys.mjs";
 import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
 const SHOWN_PREF = "browser.search.separatePrivateDefault.ui.banner.shown";
@@ -24,8 +22,7 @@ XPCOMUtils.defineLazyPreferenceGetter(
 
 ChromeUtils.defineESModuleGetters(lazy, {
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
-  SpecialMessageActions:
-    "resource://messaging-system/lib/SpecialMessageActions.sys.mjs",
+  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
 });
 
 // We only show the private search banner once per browser session.
@@ -47,7 +44,7 @@ export class AboutPrivateBrowsingParent extends JSWindowActorParent {
 
     switch (aMessage.name) {
       case "OpenPrivateWindow": {
-        win.OpenBrowserWindow({ private: true });
+        lazy.PrivateTab.openNewPrivateTab(win);
         break;
       }
       case "OpenSearchPreferences": {
@@ -151,18 +148,6 @@ export class AboutPrivateBrowsingParent extends JSWindowActorParent {
           lazy.MAX_SEARCH_BANNER_SHOW_COUNT
         );
         break;
-      }
-      case "ShouldShowPromo": {
-        return BrowserUtils.shouldShowPromo(
-          BrowserUtils.PromoType[aMessage.data.type]
-        );
-      }
-      case "SpecialMessageActionDispatch": {
-        lazy.SpecialMessageActions.handleAction(aMessage.data, browser);
-        break;
-      }
-      case "IsPromoBlocked": {
-        return !ASRouter.isUnblockedMessage(aMessage.data);
       }
     }
 

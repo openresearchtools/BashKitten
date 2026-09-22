@@ -93,9 +93,9 @@ static const RedirEntry kRedirMap[] = {
     {"profiling",
      "chrome://devtools/content/performance-new/aboutprofiling/index.html",
      nsIAboutModule::ALLOW_SCRIPT | nsIAboutModule::IS_SECURE_CHROME_UI},
-    {"rights", "https://www.mozilla.org/about/legal/terms/firefox/",
+    {"rights", "chrome://global/content/license.html",
      nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
-         nsIAboutModule::URI_MUST_LOAD_IN_CHILD},
+         nsIAboutModule::IS_SECURE_CHROME_UI},
     {"robots", "chrome://browser/content/aboutRobots.xhtml",
      nsIAboutModule::URI_SAFE_FOR_UNTRUSTED_CONTENT |
          nsIAboutModule::ALLOW_SCRIPT},
@@ -201,7 +201,9 @@ AboutRedirector::NewChannel(nsIURI* aURI, nsILoadInfo* aLoadInfo,
 
   if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
       (path.EqualsLiteral("profilemanager") || path.EqualsLiteral("editprofile") ||
-       path.EqualsLiteral("deleteprofile") || path.EqualsLiteral("newprofile"))) {
+       path.EqualsLiteral("deleteprofile") || path.EqualsLiteral("newprofile") ||
+       path.EqualsLiteral("firefoxview") || path.EqualsLiteral("aichatcontent") ||
+       path.EqualsLiteral("asrouter") || path.EqualsLiteral("messagepreview"))) {
     return NS_ERROR_NOT_AVAILABLE;
   }
 
@@ -226,11 +228,15 @@ AboutRedirector::NewChannel(nsIURI* aURI, nsILoadInfo* aLoadInfo,
       nsAutoCString url;
 
       if (path.EqualsLiteral("welcome")) {
-        NimbusFeatures::RecordExposureEvent("aboutwelcome"_ns, true);
-        if (NimbusFeatures::GetBool("aboutwelcome"_ns, "enabled"_ns, true)) {
-          url.AssignASCII(ABOUT_WELCOME_CHROME_URL);
-        } else {
+        if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten")) {
           url.AssignASCII(ABOUT_HOME_URL);
+        } else {
+          NimbusFeatures::RecordExposureEvent("aboutwelcome"_ns, true);
+          if (NimbusFeatures::GetBool("aboutwelcome"_ns, "enabled"_ns, true)) {
+            url.AssignASCII(ABOUT_WELCOME_CHROME_URL);
+          } else {
+            url.AssignASCII(ABOUT_HOME_URL);
+          }
         }
       }
 
@@ -281,7 +287,9 @@ AboutRedirector::GetURIFlags(nsIURI* aURI, uint32_t* result) {
       *result = redir.flags;
       if (nsLiteralCString(MOZ_APP_NAME).EqualsLiteral("bashkitten") &&
           (name.EqualsLiteral("profilemanager") || name.EqualsLiteral("editprofile") ||
-           name.EqualsLiteral("deleteprofile") || name.EqualsLiteral("newprofile"))) {
+           name.EqualsLiteral("deleteprofile") || name.EqualsLiteral("newprofile") ||
+           name.EqualsLiteral("firefoxview") || name.EqualsLiteral("aichatcontent") ||
+           name.EqualsLiteral("asrouter") || name.EqualsLiteral("messagepreview"))) {
         *result |= nsIAboutModule::HIDE_FROM_ABOUTABOUT;
       }
       return NS_OK;

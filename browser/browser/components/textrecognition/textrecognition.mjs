@@ -33,14 +33,8 @@ class TextRecognitionModal {
     /** @type {NodeListOf<HTMLElement>} */
     this.headerEls = document.querySelectorAll(".textRecognitionHeader");
 
-    /** @type {HTMLAnchorElement} */
-    this.linkEl = document.querySelector(
-      "#text-recognition-header-no-results a"
-    );
-
     this.resizeVertically = resizeVertically;
     this.openLinkIn = openLinkIn;
-    this.setupLink();
     this.setupCloseHandler();
 
     this.showHeaderByID("text-recognition-header-loading");
@@ -114,21 +108,6 @@ class TextRecognitionModal {
       .addEventListener("click", () => {
         window.close();
       });
-  }
-
-  /**
-   * Apply the variables for the support.mozilla.org URL.
-   */
-  setupLink() {
-    this.linkEl.href = Services.urlFormatter.formatURL(this.linkEl.href);
-    this.linkEl.addEventListener("click", event => {
-      event.preventDefault();
-      this.openLinkIn(this.linkEl.href, "tab", {
-        forceForeground: true,
-        triggeringPrincipal:
-          Services.scriptSecurityManager.getSystemPrincipal(),
-      });
-    });
   }
 
   /**

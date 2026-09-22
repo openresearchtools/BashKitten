@@ -232,31 +232,6 @@ function Clocks({ dispatch, size, widgetEnabledMap }) {
     closeContextMenu();
   }, [dispatch, currentSize, closeContextMenu]);
 
-  const handleLearnMore = useCallback(() => {
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.OPEN_LINK,
-          data: {
-            url: "https://support.mozilla.org/kb/firefox-new-tab-widgets",
-          },
-        })
-      );
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: {
-            widget_name: "clocks",
-            widget_source: CLOCK_WIDGET_SOURCE.CONTEXT_MENU,
-            user_action: USER_ACTION_TYPES.LEARN_MORE,
-            widget_size: currentSize,
-          },
-        })
-      );
-    });
-    closeContextMenu();
-  }, [dispatch, currentSize, closeContextMenu]);
-
   const clockZones = useMemo(
     () => parseClockZonesPref(clocksZonesPref) || buildDefaultZones(),
     [clocksZonesPref]
@@ -525,10 +500,6 @@ function Clocks({ dispatch, size, widgetEnabledMap }) {
           <panel-item
             data-l10n-id="newtab-clock-widget-menu-hide"
             onClick={handleHide}
-          />
-          <panel-item
-            data-l10n-id="newtab-clock-widget-menu-learn-more"
-            onClick={handleLearnMore}
           />
         </panel-list>
       </div>

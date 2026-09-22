@@ -314,31 +314,6 @@ function WeatherForecast({ dispatch, isMaximized, widgetsMayBeMaximized }) {
     });
   }
 
-  function handleLearnMore() {
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.OPEN_LINK,
-          data: {
-            url: "https://support.mozilla.org/kb/firefox-new-tab-widgets",
-          },
-        })
-      );
-      const telemetryData = {
-        widget_name: "weather",
-        widget_source: "context_menu",
-        user_action: USER_ACTION_TYPES.LEARN_MORE,
-        widget_size: widgetSize,
-      };
-      dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: telemetryData,
-        })
-      );
-    });
-  }
-
   function handleProviderLinkClick() {
     const telemetryData = {
       widget_name: "weather",
@@ -434,10 +409,6 @@ function WeatherForecast({ dispatch, isMaximized, widgetsMayBeMaximized }) {
           <panel-item
             data-l10n-id="newtab-widget-menu-hide"
             onClick={handleHideWeather}
-          />
-          <panel-item
-            data-l10n-id="newtab-weather-menu-learn-more"
-            onClick={handleLearnMore}
           />
         </panel-list>
       </div>

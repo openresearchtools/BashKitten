@@ -750,18 +750,6 @@ export const FocusTimer = ({
     }
   };
 
-  function handleLearnMore() {
-    dispatch(
-      ac.OnlyToMain({
-        type: at.OPEN_LINK,
-        data: {
-          url: "https://support.mozilla.org/kb/firefox-new-tab-widgets",
-        },
-      })
-    );
-    handleTimerInteraction();
-  }
-
   function handlePrefUpdate(prefName, prefValue) {
     dispatch(
       ac.OnlyToMain({
@@ -1092,10 +1080,6 @@ export const FocusTimer = ({
               // @nova-cleanup(remove-conditional): Remove the `novaEnabled &&` check; always render the divider.
               novaEnabled && <hr />
             }
-            <panel-item
-              data-l10n-id="newtab-widget-timer-menu-learn-more"
-              onClick={handleLearnMore}
-            />
           </panel-list>
         </div>
       </div>

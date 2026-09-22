@@ -586,14 +586,6 @@ export default class LoginItem extends HTMLElement {
     });
   }
 
-  async handleAlertLearnMoreClick({ currentTarget }) {
-    if (currentTarget.closest(".vulnerable-alert")) {
-      this._recordTelemetryEvent({
-        name: "learnMoreVulnExistingLogin",
-      });
-    }
-  }
-
   async handleOriginInputClick() {
     this._handleOriginClick();
   }

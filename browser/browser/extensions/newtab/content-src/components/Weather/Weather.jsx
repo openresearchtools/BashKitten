@@ -446,34 +446,6 @@ export class _Weather extends React.PureComponent {
     });
   };
 
-  handleLearnMore = () => {
-    if (this.panelElement) {
-      this.panelElement.hide();
-    }
-    batch(() => {
-      this.props.dispatch(
-        ac.OnlyToMain({
-          type: at.OPEN_LINK,
-          data: {
-            url: "https://support.mozilla.org/kb/customize-items-on-firefox-new-tab-page",
-          },
-        })
-      );
-
-      this.props.dispatch(
-        ac.OnlyToMain({
-          type: at.WIDGETS_USER_EVENT,
-          data: {
-            widget_name: "weather",
-            widget_source: "context_menu",
-            user_action: USER_ACTION_TYPES.LEARN_MORE,
-            widget_size: "mini",
-          },
-        })
-      );
-    });
-  };
-
   onMenuButtonClick(e) {
     e.preventDefault();
     if (this.panelElement) {
@@ -737,11 +709,6 @@ export class _Weather extends React.PureComponent {
             id="weather-menu-hide"
             data-l10n-id="newtab-widget-menu-hide"
             onClick={this.handleHideWeather}
-          />
-          <panel-item
-            id="weather-menu-learn-more"
-            data-l10n-id="newtab-weather-menu-learn-more"
-            onClick={this.handleLearnMore}
           />
         </panel-list>
       </div>

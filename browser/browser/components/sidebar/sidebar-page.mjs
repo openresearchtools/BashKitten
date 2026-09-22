@@ -13,6 +13,7 @@ import "chrome://browser/content/sidebar/sidebar-panel-header.mjs";
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
+  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
   PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
 });
 
@@ -226,17 +227,9 @@ export class SidebarPage extends MozLitElement {
       case "sidebar-history-context-forget-site":
         this.forgetAboutThisSite().catch(console.error);
         break;
-      case "sidebar-history-context-open-in-window":
-      case "sidebar-synced-tabs-context-open-in-window":
-        this.topWindow.openTrustedLinkIn(this.triggerNode.url, "window", {
-          private: false,
-        });
-        break;
       case "sidebar-history-context-open-in-private-window":
       case "sidebar-synced-tabs-context-open-in-private-window":
-        this.topWindow.openTrustedLinkIn(this.triggerNode.url, "window", {
-          private: true,
-        });
+        this.openPrivateTab(this.triggerNode.url);
         break;
       case "sidebar-history-context-copy-link":
       case "sidebar-synced-tabs-context-copy-link":
@@ -254,6 +247,13 @@ export class SidebarPage extends MozLitElement {
         break;
     }
     return promise;
+  }
+
+  openPrivateTab(url) {
+    const userContextId = lazy.PrivateTab.userContextId;
+    if (userContextId && Services.policies.isAllowed("privatebrowsing")) {
+      this.topWindow.openTrustedLinkIn(url, "tab", { userContextId });
+    }
   }
 
   /**

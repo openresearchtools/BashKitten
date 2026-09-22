@@ -177,6 +177,26 @@ pref("dap.ohttp.relayURL", "", locked);
 pref("browser.newtabpage.activity-stream.fxaccounts.endpoint", "", locked);
 pref("browser.newtabpage.trainhopAddon.xpiBaseURL", "", locked);
 
+// Weather and sports rely on disabled Mozilla services. Do not advertise empty
+// widgets or expose their setup controls; local clocks, lists and timers remain.
+pref("browser.newtabpage.activity-stream.showWeather", false, locked);
+pref("browser.newtabpage.activity-stream.system.showWeather", false, locked);
+pref("browser.newtabpage.activity-stream.system.showWeatherOptIn", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.weather.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.weatherForecast.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.system.weather.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.system.weatherForecast.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.sportsWidget.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.system.sportsWidget.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.widgets.feedback.enabled", false, locked);
+pref("browser.newtabpage.activity-stream.weather.reportEndpoint", "", locked);
+pref("browser.newtabpage.activity-stream.weather.hourlyEndpoint", "", locked);
+pref("browser.newtabpage.activity-stream.sports.worldCup.teamsEndpoint", "", locked);
+pref("browser.newtabpage.activity-stream.sports.worldCup.matchesEndpoint", "", locked);
+pref("browser.newtabpage.activity-stream.sports.worldCup.liveEndpoint", "", locked);
+pref("browser.newtabpage.activity-stream.sports.worldCup.watchLiveEndpoint", "", locked);
+
+
 // Mozilla product promotions.
 pref("browser.preferences.moreFromMozilla", false, locked);
 pref("browser.vpn_promo.enabled", false, locked);

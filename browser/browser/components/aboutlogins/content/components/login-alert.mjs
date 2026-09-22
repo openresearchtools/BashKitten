@@ -75,14 +75,6 @@ export class VulnerablePasswordAlert extends MozLitElement {
             target="_blank"
           ></a>
         </div>
-        <a
-          slot="action"
-          class="alert-learn-more-link"
-          data-l10n-id="about-logins-vulnerable-alert-learn-more-link"
-          href="https://support.mozilla.org/1/firefox/114.0.1/Darwin/en-CA/lockwise-alerts"
-          rel="noreferrer"
-          target="_blank"
-        ></a>
       </login-alert>
     `;
   }

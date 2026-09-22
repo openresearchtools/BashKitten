@@ -660,19 +660,6 @@ function Lists({
     handleListInteraction();
   }
 
-  function handleLearnMore() {
-    dispatch(
-      ac.OnlyToMain({
-        type: at.OPEN_LINK,
-        data: {
-          url: "https://support.mozilla.org/kb/firefox-new-tab-widgets",
-          where: "tab",
-        },
-      })
-    );
-    handleListInteraction();
-  }
-
   const handleChangeSize = useCallback(
     size => {
       batch(() => {
@@ -924,11 +911,6 @@ function Lists({
           <panel-item
             data-l10n-id="newtab-widget-menu-hide"
             onClick={() => handleHideLists()}
-          ></panel-item>
-          <panel-item
-            className="learn-more"
-            data-l10n-id="newtab-widget-lists-menu-learn-more"
-            onClick={handleLearnMore}
           ></panel-item>
         </panel-list>
       </div>

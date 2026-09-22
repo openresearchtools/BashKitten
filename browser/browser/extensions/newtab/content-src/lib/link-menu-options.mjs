@@ -69,39 +69,6 @@ export const LinkMenuOptions = {
     }),
     userEvent: "BOOKMARK_ADD",
   }),
-  OpenInNewWindow: site => ({
-    id: "newtab-menu-open-new-window",
-    icon: "new-window",
-    action: ac.AlsoToMain({
-      type: at.OPEN_NEW_WINDOW,
-      data: {
-        card_type: site.card_type,
-        referrer: site.referrer,
-        typedBonus: site.typedBonus,
-        url: site.url,
-        is_sponsored: !!site.sponsored_tile_id,
-        event_source: "CONTEXT_MENU",
-        topic: site.topic,
-        tile_id: site.tile_id,
-        recommendation_id: site.recommendation_id,
-        scheduled_corpus_item_id: site.scheduled_corpus_item_id,
-        corpus_item_id: site.corpus_item_id,
-        received_rank: site.received_rank,
-        recommended_at: site.recommended_at,
-        format: site.format,
-        ...(site.flight_id ? { flight_id: site.flight_id } : {}),
-        is_pocket_card: site.type === "CardGrid",
-        ...(site.section
-          ? {
-              section: site.section,
-              section_position: site.section_position,
-              is_section_followed: site.is_section_followed,
-            }
-          : {}),
-      },
-    }),
-    userEvent: "OPEN_NEW_WINDOW",
-  }),
 
   // This blocks the url for regular stories,
   // but also sends a message to DiscoveryStream with flight_id.

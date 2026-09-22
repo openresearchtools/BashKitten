@@ -60,10 +60,6 @@ export class AboutLoginsChild extends JSWindowActorChild {
         this.#aboutLoginsExportPasswords();
         break;
       }
-      case "AboutLoginsGetHelp": {
-        this.#aboutLoginsGetHelp();
-        break;
-      }
       case "AboutLoginsImportFromBrowser": {
         this.#aboutLoginsImportFromBrowser();
         break;
@@ -86,10 +82,6 @@ export class AboutLoginsChild extends JSWindowActorChild {
       }
       case "AboutLoginsSortChanged": {
         this.#aboutLoginsSortChanged(event.detail);
-        break;
-      }
-      case "AboutLoginsSyncEnable": {
-        this.#aboutLoginsSyncEnable();
         break;
       }
       case "AboutLoginsUpdateLogin": {
@@ -177,10 +169,6 @@ export class AboutLoginsChild extends JSWindowActorChild {
     this.sendAsyncMessage("AboutLogins:ExportPasswords");
   }
 
-  #aboutLoginsGetHelp() {
-    this.sendAsyncMessage("AboutLogins:GetHelp");
-  }
-
   #aboutLoginsImportFromBrowser() {
     this.sendAsyncMessage("AboutLogins:ImportFromBrowser");
     recordTelemetryEvent({
@@ -230,10 +218,6 @@ export class AboutLoginsChild extends JSWindowActorChild {
 
   #aboutLoginsSortChanged(detail) {
     this.sendAsyncMessage("AboutLogins:SortChanged", detail);
-  }
-
-  #aboutLoginsSyncEnable() {
-    this.sendAsyncMessage("AboutLogins:SyncEnable");
   }
 
   #aboutLoginsUpdateLogin(login) {
@@ -297,9 +281,6 @@ export class AboutLoginsChild extends JSWindowActorChild {
     utils.primaryPasswordEnabled = data.primaryPasswordEnabled;
     utils.passwordRevealVisible = data.passwordRevealVisible;
     utils.importVisible = data.importVisible;
-    utils.supportBaseURL = Services.urlFormatter.formatURLPref(
-      "app.support.baseURL"
-    );
     this.sendToContent("Setup", data);
   }
 

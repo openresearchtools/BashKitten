@@ -6,7 +6,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; object-src 'none'; script-src resource: chrome:; img-src data: blob: https://firefoxusercontent.com https://profile.accounts.firefox.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; object-src 'none'; script-src resource: chrome:; img-src data: blob: chrome: resource:;">
     <meta name="color-scheme" content="light dark">
     <title data-l10n-id="about-logins-page-title-name"></title>
     <link rel="localization" href="branding/brand.ftl">
@@ -17,7 +17,6 @@
     <script type="module" src="chrome://browser/content/aboutlogins/components/import-summary-dialog.mjs"></script>
     <script type="module" src="chrome://browser/content/aboutlogins/components/import-error-dialog.mjs"></script>
     <script type="module" src="chrome://browser/content/aboutlogins/components/generic-dialog.mjs"></script>
-    <script type="module" src="chrome://browser/content/aboutlogins/components/fxaccounts-button.mjs"></script>
     <script type="module" src="chrome://browser/content/aboutlogins/components/login-filter.mjs"></script>
     <script type="module" src="chrome://browser/content/aboutlogins/components/login-intro.mjs"></script>
     <script type="module" src="chrome://browser/content/aboutlogins/components/login-item.mjs"></script>
@@ -34,7 +33,6 @@
   </head>
   <body>
     <header>
-      <fxaccounts-button hidden></fxaccounts-button>
       <menu-button></menu-button>
     </header>
     <login-list></login-list>
@@ -123,8 +121,6 @@
           <span class="error-title" data-l10n-id="about-logins-import-dialog-error-unable-to-read-title"></span>
           <span class="error-description" data-l10n-id="about-logins-import-dialog-error-unable-to-read-description"></span>
           <span class="no-logins" data-l10n-id="about-logins-import-dialog-error-no-logins-imported"></span>
-          <a class="error-learn-more-link" href="https://support.mozilla.org/kb/import-login-data-file"
-            data-l10n-id="about-logins-import-dialog-error-learn-more" target="_blank" rel="noreferrer"></a>
         </div>
         <moz-button-group slot="buttons" class="buttons">
           <button class="dismiss-button" data-l10n-id="about-logins-import-dialog-error-cancel"></button>
@@ -155,24 +151,6 @@
           <button class="confirm-button primary danger-button"></button>
           <button class="cancel-button" data-l10n-id="confirmation-dialog-cancel-button"></button>
         </moz-button-group>
-      </div>
-    </template>
-
-    <template id="fxaccounts-button-template">
-      <link rel="stylesheet" href="chrome://global/skin/in-content/common.css">
-      <link rel="stylesheet" href="chrome://browser/content/aboutlogins/common.css">
-      <link rel="stylesheet" href="chrome://browser/content/aboutlogins/components/fxaccounts-button.css">
-      <div class="logged-out-view">
-        <p class="fxaccounts-extra-text text-deemphasized" data-l10n-id="fxaccounts-sign-in-text"></p>
-        <button class="fxaccounts-enable-button" data-l10n-id="fxaccounts-sign-in-sync-button"></button>
-      </div>
-      <div class="logged-in-view">
-        <a class="fxaccount-manage-link" target="_blank" rel="noreferrer">
-          <button class="fxaccounts-avatar-button ghost-button" data-l10n-id="fxaccounts-avatar-button">
-            <span class="fxaccount-email"></span>
-            <span class="fxaccount-avatar"></span>
-          </button>
-        </a>
       </div>
     </template>
 
@@ -241,18 +219,9 @@
       <img class="illustration" src="chrome://branding/content/about-logo.svg" alt=""/>
       <h1 class="heading" data-l10n-id="about-logins-login-intro-heading-message"></h1>
       <section>
-        <p class="description" data-l10n-id="login-intro-description2">
-          <a data-l10n-name="breach-alert-link" href="https://support.mozilla.org/kb/firefox-password-manager-alerts-breached-websites" target="_blank" rel="noreferrer"></a>
-        </p>
-        <ul>
-          <li data-l10n-id="login-intro-instructions-fxa2"></li>
-          <li data-l10n-id="login-intro-instructions-fxa-settings"></li>
-          <li data-l10n-id="login-intro-instructions-fxa-passwords-help">
-            <a data-l10n-name="passwords-help-link" class="intro-help-link" target="_blank" rel="noreferrer"></a>
-          </li>
-        </ul>
-        <p class="description intro-import-text file-import" hidden data-l10n-id="about-logins-intro-import3">
-          <a data-l10n-name="import-browser-link" href="#"></a>
+        <p class="description" data-l10n-id="about-logins-local-intro-description"></p>
+        <p data-l10n-id="about-logins-local-intro-add"></p>
+        <p class="description intro-import-text file-import" data-l10n-id="about-logins-local-intro-import">
           <a data-l10n-name="import-file-link" href="#"></a>
         </p>
       </section>
@@ -369,7 +338,6 @@
         <button role="menuitem" class="menuitem-button menuitem-remove-all-logins ghost-button" data-event-name="AboutLoginsRemoveAllLoginsDialog" data-l10n-id="about-logins-menu-menuitem-remove-all-logins2"></button>
         <hr role="separator" class="menuitem-separator"></hr>
         <button role="menuitem" class="menuitem-button menuitem-preferences ghost-button" data-event-name="AboutLoginsOpenPreferences" data-l10n-id="menu-menuitem-preferences"></button>
-        <button role="menuitem" class="menuitem-button menuitem-help ghost-button" data-event-name="AboutLoginsGetHelp" data-l10n-id="about-logins-menu-menuitem-help"></button>
       </ul>
     </template>
 

@@ -89,7 +89,6 @@ export default class RestoreFromBackup extends MozLitElement {
       selectableProfilesAllowed: false,
       lastBackupDate: null,
       lastBackupFileName: "",
-      supportBaseLink: "https://support.mozilla.org/",
       backupInProgress: false,
       recoveryInProgress: false,
       recoveryErrorCode: ERRORS.NONE,
@@ -291,26 +290,6 @@ export default class RestoreFromBackup extends MozLitElement {
     }
   }
 
-  /**
-   * Constructs a support URL with UTM parameters for use
-   * when embedded in about:welcome
-   *
-   * @param {string} supportPage - The support page slug
-   * @returns {string} The full support URL including UTM params
-   */
-
-  getSupportURLWithUTM(supportPage) {
-    let supportURL = new URL(
-      supportPage,
-      this.backupServiceState.supportBaseLink
-    );
-    supportURL.searchParams.set("utm_medium", "firefox-desktop");
-    supportURL.searchParams.set("utm_source", "npo");
-    supportURL.searchParams.set("utm_campaign", "fx-backup-restore");
-    supportURL.searchParams.set("utm_content", "restore-error");
-    return supportURL.href;
-  }
-
   applyContentCustomizations() {
     if (this.aboutWelcomeEmbedded) {
       this.style.setProperty(
@@ -361,17 +340,6 @@ export default class RestoreFromBackup extends MozLitElement {
     }
     return html`
       <fieldset id="backup-restore-controls">
-        ${this.aboutWelcomeEmbedded
-          ? null
-          : html`<div>
-              <a
-                id="restore-from-backup-support-link"
-                slot="support-link"
-                is="moz-support-link"
-                support-page="firefox-backup"
-                data-l10n-id="restore-from-backup-support-link1"
-              ></a>
-            </div>`}
         <fieldset id="backup-filepicker-controls">
           <label
             id="backup-filepicker-label"
@@ -476,14 +444,6 @@ export default class RestoreFromBackup extends MozLitElement {
           class="field-error"
           data-l10n-id="backup-service-error-incorrect-password"
         >
-          <a
-            id="backup-incorrect-password-support-link"
-            target="_blank"
-            href=${this.getSupportURLWithUTM("firefox-backup")}
-            data-l10n-name="incorrect-password-support-link"
-            dir="auto"
-            rel="noopener noreferrer"
-          ></a>
         </span>
       `;
     } else if (isInvalid) {
@@ -493,14 +453,6 @@ export default class RestoreFromBackup extends MozLitElement {
           class="field-error"
           data-l10n-id="backup-service-error-incorrect-password"
         >
-          <a
-            id="backup-incorrect-password-support-link"
-            slot="support-link"
-            is="moz-support-link"
-            support-page="firefox-backup"
-            data-l10n-name="incorrect-password-support-link"
-            dir="auto"
-          ></a>
         </span>
       `;
     } else {
@@ -616,14 +568,6 @@ export default class RestoreFromBackup extends MozLitElement {
           class="field-error"
           data-l10n-id="backup-file-restore-file-validation-error"
         >
-          <a
-            id="backup-generic-error-link"
-            target="_blank"
-            href=${this.getSupportURLWithUTM("firefox-backup")}
-            data-l10n-name="restore-problems"
-            dir="auto"
-            rel="noopener noreferrer"
-          ></a>
         </span>
       `;
     }
@@ -634,14 +578,6 @@ export default class RestoreFromBackup extends MozLitElement {
         class="field-error"
         data-l10n-id="backup-file-restore-file-validation-error"
       >
-        <a
-          id="backup-generic-error-link"
-          slot="support-link"
-          is="moz-support-link"
-          support-page="firefox-backup"
-          data-l10n-name="restore-problems"
-          dir="auto"
-        ></a>
       </span>
     `;
   }

@@ -335,7 +335,7 @@ quickactions-savepdf = Save page as PDF
 quickactions-cmd-savepdf2 = pdf, save page
 
 # Opens a new private browsing window
-quickactions-private2 = Open private window
+quickactions-private2 = Open private tab
 quickactions-cmd-private = private browsing
 
 # Opens a SUMO article explaining how to refresh
