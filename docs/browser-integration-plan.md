@@ -145,10 +145,38 @@ its root-level `git merge` to a subtree-aware merge at `browser/`: detect a new
 153.x ESR release, fetch its exact tag, merge into that prefix, update the pin,
 resolve actual conflicts and build both platforms. Verify the merge cannot
 write Mozilla files into `/agent`, `/auth` or the repository root. First reconcile
-the donors, then update the unified tree to 153.3.0esr or the newer verified
-153.x release. Do not automatically change
-ESR major or rebase every product commit for each update. CI can propose the
+the donors, then update the unified tree to
+[153.3.0esr](https://github.com/mozilla-firefox/firefox/releases/tag/FIREFOX_153_3_0esr_RELEASE)
+or the newer verified 153.x release. This update is required for the first
+migrated Android/Linux release, not a follow-up left on the old 153.2 base.
+Recheck the latest official 153.x ESR release before that build. Do not
+automatically change ESR major or rebase every product commit for each update. CI can propose the
 update and build it; failed merges/builds cannot publish a release.
+
+### Firefox-aligned product versions
+
+Keep WildBuzzard's existing versioning rule and `firefox_release.py` checks:
+BashKitten's major/minor matches the pinned Firefox ESR major/minor. For
+Firefox **153.3.0esr**, the first product version is **153.3**, followed by
+**153.3.1**, **153.3.2**, etc. for BashKitten maintenance releases on that same
+Firefox line. Moving to Firefox 153.4.x starts BashKitten 153.4. Reuse the
+donor's `next_product_version` logic rather than continue independent 0.x
+browser numbering or invent another release scheme.
+
+The full engine version remains exact: an About/build record shows, for example,
+**BashKitten 153.3.1 · Firefox 153.3.0esr**, together with the pinned upstream
+commit. A BashKitten maintenance suffix does not claim a Firefox security update.
+An upstream ESR point update must actually be merged, pinned and built; merely
+bumping the product number cannot satisfy it.
+
+Use `browser/bashkitten/config/version.txt` as the product version source for
+release tags, browser About, APK `versionName`, all three `.deb` payloads and
+their update metadata. Retain a separately monotonically increasing Android
+`versionCode` and normal Debian packaging revisions when rebuilding the same
+product release. Keep dependency versions (Pi, DDGS, Tor, etc.) independent.
+CI checks the exact ESR tag/commit, Gecko version files and product release line,
+then verifies the versions inside the assembled APK/debs against the release
+metadata. All platforms use the same engine pin; fail publication on a mismatch.
 
 Removing branches and unused features reduces maintenance and build inputs.
 It does not erase objects already in retained Git history. Use shallow/partial
@@ -709,8 +737,9 @@ SearXNG server or an external endpoint requirement, and do not import its
 server/dependencies. Leave SearXNG work deferred rather than describing it as
 part of the delivered search. The donor repository remains untouched.
 
-Keep DDGS search options and the shared read pipeline: fetch selected HTML/text,
-PDFs, GitHub repository/tree/blob content and available YouTube transcripts into
+Keep DDGS underneath one simple call interface and retain the shared read
+pipeline: fetch selected HTML/text, PDFs, GitHub repository/tree/blob content
+and available YouTube transcripts into
 Markdown. These readers are useful independently of which engine found the
 URL; importing them does not require adding separate GitHub/YouTube search
 providers now. Preserve source URLs, titles, bounded inline output and the full
@@ -731,13 +760,51 @@ Pi runtime through its supported mechanism, preserving user skills/extensions.
 It must also work from ordinary terminal Pi without the BashKitten UI.
 Follow the pinned [native Pi skills interface](https://github.com/badlogic/pi-mono/blob/13cbf77df2396303013a41646bcfa77b4271ae56/packages/coding-agent/docs/skills.md).
 
-Use a package-relative launcher/installed command, not the donor skill's fixed
-`/usr/bin/buzzard-search`. Feed machine requests as bounded JSON on stdin and
-keep stdout structured, with diagnostic logs on stderr. Reuse the donor's
-search contract; add fetch/output-directory fields there only as needed for
-safe paths and saved results rather than inventing another protocol. Preserve
-timeouts, cancellation, redirect/DNS/content checks and document size bounds;
-these apply to this helper, not to Pi's unrestricted native tools.
+### One search/read call
+
+Use the same `bashkitten-search` command on every platform, accepting one JSON
+object on stdin. Model-facing examples need only one of these inputs:
+
+```json
+{"query":"Termux Python package documentation"}
+```
+
+```json
+{"url":"https://termux.dev/en/"}
+```
+
+Require exactly one non-empty `query` or `url`. A query searches DDGS and returns
+titles, URLs and snippets; a URL reads that resource through the shared Markdown
+pipeline. No `provider`, `searxngUrl`, `--extra`, provider routing, repeated
+operation name or different search/fetch command for the model to choose.
+Remove unused provider-specific schemas, switches, imports and dependencies
+from the adapted helper. DDGS handles its own search engines. Keep sensible
+defaults (five results) and existing operational limits; optional supported
+filters/output-directory settings need not clutter the basic skill examples.
+
+Adapt the short model guidance from Unsloth's
+[`WEB_SEARCH_TOOL` and `_web_search`](https://github.com/unslothai/unsloth/blob/bfcaea46574d63ec470ce9c7d7221471a38ea7e4/studio/backend/core/inference/tools.py#L8886):
+search for candidate sources, treat snippets as previews, then read relevant
+URLs before relying on their contents. Express this in the normal Pi skill,
+without importing Unsloth's agent/tool runner or adding a custom Pi search tool.
+Preserve the existing Unsloth attribution for adapted instructions/code.
+
+Reuse the donor's working Python search/read functions but replace its multiple
+CLI/output contracts with one compact JSON response envelope. Both modes return
+`ok` and bounded `content`; search adds `results`, while page reads include the
+source URL, `fullMarkdownPath`, `contentLength` and `truncated`. Keep one error
+shape, a nonzero exit on failure, and diagnostic logs on stderr. The helper is
+a local process, not a new HTTP search API. Its package-relative launcher removes
+the donor's fixed `/usr/bin/buzzard-search` path.
+
+**Save the complete extracted Markdown before truncating the inline preview.**
+Every successful page read returns its actual saved path, even for a short page.
+Keep the 16,000-character inline budget and let Pi read the saved file for the
+rest, instead of downloading again or mistaking the preview for the full page.
+Never write only that shortened preview to the purported full Markdown file.
+Retain download/page limits and disclose when those prevent complete extraction.
+Preserve timeouts, cancellation and redirect/DNS/content checks; these apply to
+this helper, not to Pi's unrestricted native tools.
 
 Replace hardcoded `/tmp` and `/usr` assumptions with the platform paths. Default
 full Markdown to a private writable BashKitten data directory, available across
@@ -891,14 +958,14 @@ release notes stay short; implementation detail belongs here and in AGENTS.md.
 | Step | Work | Evidence required |
 | --- | --- | --- |
 | 1 | Native access stack and coupled lifecycle | Build tracked `/auth` sources for Linux and Termux; real Authelia/TOTP/Caddy flow; no direct login bypass; whole-group shutdown and recovery including owner SIGKILL; native Termux patches stay isolated |
-| 2 | One repository and stripped browser sources | Both targets build under `/browser` from one ESR pin using the adapted WildBuzzard artifact/cache workflow; cache-miss/cached builds and Agent-only reassembly work; an ESR subtree update changes only its prefix; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
+| 2 | One repository and stripped browser sources | Both targets build under `/browser` after the required latest 153.x ESR update, with WildBuzzard's matching product-version rule and adapted artifact/cache workflow; cache-miss/cached builds and Agent-only reassembly work; an ESR subtree update changes only its prefix; `/agent` runs after relocation; retained Waterfox/Tor features work; removed dependencies are absent; source/licenses match |
 | 3 | Rename and add protected Agent view | Existing BashKitten APK upgrades; one profile/window; new-window requests become tabs; protected view survives close-all, restore and crashes and rejects all automation/extension access |
 | 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; correct distinct mobile/desktop browser skill and actual platform tools; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
 | 5 | Power, wake locks, recovery and layout | Fresh launch On; actual browser and Termux CPU locks remain one each with 50 agents; Turn off stops all owned services/Pi and releases locks while leaving browser/Termux/unrelated tasks; Turn on discovers the actual dynamic port; core crash shows Off; owner/browser/Termux deaths recover without duplicates or prompt replay; rotate/fold preserves state |
 | 6 | Tor Agent remotes | QR/file/manual enrollment, 2FA, TLS renewal, rejected changed identity, revocation, offline/reconnect, ordinary private onion tabs and permission-controlled remote browser tools |
 | 7 | Desktop llama | arm64 and amd64 runtime selection; real ready model, crash/restart, wrong token, token-free health distinction; onion relay streams unchanged paths and never leaks credentials/falls back to direct access |
-| 8 | Built-in DDGS and native Pi skill | Real searches using our packaged native runtime in stock terminal Pi and UI/RPC Pi on Linux amd64/arm64 and unrooted Termux, with no preinstalled DDGS or separate search package; skill discovery/on-demand loading; HTML/text, PDF, repository and available transcript reads save complete Markdown; paths survive reconnect/restart; concurrent saves, cancellation and real network failures; native imports and package upgrades work; no SearXNG requirement |
-| 9 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension, DDGS skill/runtime and native auth stack, Android APK; actual installs/upgrades through APT/Android; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
+| 8 | Built-in DDGS and native Pi skill | Real searches using our packaged native runtime in stock terminal Pi and UI/RPC Pi on Linux amd64/arm64 and unrooted Termux, with no preinstalled DDGS or separate search package; skill discovery/on-demand loading; one query-or-url call and response contract without provider switches; HTML/text, PDF, repository and available transcript reads save complete Markdown, including content beyond the inline limit; paths survive reconnect/restart; concurrent saves, cancellation and real network failures; native imports and package upgrades work; no SearXNG requirement |
+| 9 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension, DDGS skill/runtime and native auth stack, Android APK; actual installs/upgrades through APT/Android; Firefox-aligned product versions and metadata agree across artifacts; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
 
 Use the running Cuttlefish and local Linux ARM64 for actual app interaction,
 screenshots and process-failure checks, plus native AMD64 validation. Physical

@@ -38,6 +38,11 @@ Termux dependency recipes and Unsloth/other retained license provenance.
 Package our own native search runtime for Linux amd64/arm64 as well as Termux
 aarch64; do not require a separate DDGS install. Supply distinct mobile/Termux
 and desktop Linux browser skills and install the one matching each target.
+The first migrated browser release must include the latest verified Firefox
+153.x ESR update and retain WildBuzzard's Firefox-aligned product versioning.
+Keep one DDGS-only query-or-url helper interface, using Unsloth-style concise
+skill guidance while saving full Markdown before truncating the inline preview
+and returning its path. Remove obsolete provider selection and call variants.
 For existing-suite maintenance, also read
 `docs/android-termux-suite-plan.md` in full. Keep shared code small and preserve
 upstream components and licenses.
