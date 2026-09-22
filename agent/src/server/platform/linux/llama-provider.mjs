@@ -22,17 +22,19 @@ export function syncManagedLlamaProvider(status) {
     const existing = value.providers[managedLlamaProviderId];
     // Never overwrite a manually created or subsequently edited provider.
     if (existing && JSON.stringify(existing) !== JSON.stringify(previous?.provider)) throw Error('Pi provider bashkitten-llama was edited independently; keep that configuration or rename it before using managed llama.cpp');
-    if (status.state !== 'ready') {
+    const ready = status.state === 'ready' || (status.desired && status.pid && status.models?.some(model => ['loaded', 'sleeping'].includes(model.state)));
+    if (!ready) {
       if (!existing) return;
       delete value.providers[managedLlamaProviderId];
     } else {
       if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(status.url)) throw Error('Managed llama.cpp endpoint is not loopback');
       const context = status.config.contextSize;
+      const models = status.models?.length ? status.models.map(model => model.id) : [status.model || status.config.alias];
       value.providers[managedLlamaProviderId] = {
         baseUrl: status.url + '/v1', api: 'openai-completions', authHeader: true,
         apiKey: '!cat ' + quote(path.join(dataDir, 'llama/api-key')),
-        models: [{ id: status.config.alias, name: `${status.config.alias} (Local llama.cpp)`, contextWindow: context, maxTokens: context,
-          compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, supportsStrictMode: false, maxTokensField: 'max_tokens' } }],
+        models: models.map(id => ({ id, name: `${id} (Local llama.cpp)`, contextWindow: context, maxTokens: context,
+          compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, supportsStrictMode: false, maxTokensField: 'max_tokens' } })),
       };
     }
     if (JSON.stringify(existing) === JSON.stringify(value.providers[managedLlamaProviderId])) return;

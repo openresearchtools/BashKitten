@@ -161,11 +161,12 @@ async function applyPending() {
 async function prepareManagedModel(model = meta.model) {
   if (!model?.startsWith('bashkitten-llama/')) return;
   emit({ type: 'notice', message: 'Checking local llama.cpp readiness' }, false);
-  const ready = await socketRequest(path.join(dataDir, 'run/control.sock'), '/llama-wait', {}, 16 * 60 * 1000);
+  const modelId = model.slice('bashkitten-llama/'.length);
+  const ready = await socketRequest(path.join(dataDir, 'run/control.sock'), '/llama-wait', { model: modelId }, 16 * 60 * 1000);
   if (stopping) throw Error('Pi instance is stopping');
-  if (ready.state !== 'ready' || !ready.url || ready.config?.alias !== model.slice('bashkitten-llama/'.length)) throw Error('The selected local llama.cpp model is not ready');
+  if (ready.state !== 'ready' || !ready.url || ready.model !== modelId) throw Error('The selected local llama.cpp model is not ready');
   const { models } = await rpc.command('get_available_models');
-  const current = models.find(item => item.provider === 'bashkitten-llama' && item.id === ready.config.alias);
+  const current = models.find(item => item.provider === 'bashkitten-llama' && item.id === ready.model);
   if (current?.baseUrl === ready.url + '/v1') return;
   const state = await rpc.command('get_state');
   if (state.isStreaming || state.isCompacting || state.pendingMessageCount) throw Error('Local llama.cpp changed while Pi was active. Retry after the current turn ends.');
@@ -175,8 +176,8 @@ async function prepareManagedModel(model = meta.model) {
   await rpc.close();
   try { await launch(); } finally { changing = false; }
   const updated = await rpc.command('get_available_models');
-  if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === ready.config.alias && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
-  await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.config.alias });
+  if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === ready.model && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
+  await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.model });
   await refresh();
 }
 async function send(item) {
