@@ -21,7 +21,7 @@ export default function bashkitten(pi) {
   pi.registerTool({
     name: 'bashkitten_screenshot', label: 'Browser screenshot',
     description: 'Show and capture an ordinary tab by explicit tabId. Returns a PNG image and its saved private path beside the Pi session. Protected Agent/login views are excluded.',
-    parameters: Type.Object({ tabId: Type.String() }),
+    parameters: Type.Object({ tabId: Type.Union([Type.String(), Type.Number()]) }),
     execute(_id, { tabId }, signal, _update, ctx) { return captureScreenshot(ctx.sessionManager, tabId, signal); },
   });
   pi.registerTool({
