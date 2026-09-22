@@ -296,6 +296,14 @@ gradle.ext.configureMavenRepositories = { handler ->
     gradle.mozconfig.substs.GRADLE_MAVEN_REPOSITORIES.each { repository ->
         handler.maven {
             url = repository
+            // AndroidX is published by Google, not Mozilla. A transient error
+            // while probing Mozilla's repository must not disable resolution
+            // of AndroidX dependencies before Gradle reaches Google Maven.
+            if (URI.create(repository.toString()).host == 'maven.mozilla.org') {
+                content {
+                    excludeGroupByRegex('androidx(\\..*)?')
+                }
+            }
             if (gradle.mozconfig.substs.ALLOW_INSECURE_GRADLE_REPOSITORIES) {
                 allowInsecureProtocol = true
             }
