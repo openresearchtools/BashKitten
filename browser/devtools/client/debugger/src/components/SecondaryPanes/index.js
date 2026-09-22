@@ -10,7 +10,6 @@ import {
   input,
   label,
   button,
-  a,
 } from "devtools/client/shared/vendor/react-dom-factories";
 import PropTypes from "devtools/client/shared/vendor/react-prop-types";
 import { connect } from "devtools/client/shared/vendor/react-redux";
@@ -63,9 +62,6 @@ function debugBtn(onClick, type, className, tooltip) {
     })
   );
 }
-
-const mdnLink =
-  "https://firefox-source-docs.mozilla.org/devtools-user/debugger/using_the_debugger_map_scopes_feature/";
 
 class SecondaryPanes extends Component {
   constructor(props) {
@@ -221,18 +217,6 @@ class SecondaryPanes extends Component {
             onChange: () => this.props.toggleMapScopes(),
           }),
           L10N.getStr("scopes.showOriginalScopes")
-        ),
-        a(
-          {
-            className: "mdn",
-            target: "_blank",
-            href: mdnLink,
-            onClick: e => e.stopPropagation(),
-            title: L10N.getStr("scopes.showOriginalScopesHelpTooltip"),
-          },
-          React.createElement(DebuggerImage, {
-            name: "shortcuts",
-          })
         )
       ),
     ];

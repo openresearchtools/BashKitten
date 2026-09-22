@@ -12,7 +12,7 @@ const {
   SET_TERMINAL_INPUT,
   SET_TERMINAL_EAGER_RESULT,
   EDITOR_PRETTY_PRINT,
-  HELP_URL,
+  HELP_TEXT,
 } = require("resource://devtools/client/webconsole/constants.js");
 const {
   getAllPrefs,
@@ -241,7 +241,14 @@ function handleHelperResult(response) {
           break;
         }
         case "help":
-          hud.openLink(HELP_URL);
+          dispatch(
+            messagesActions.messagesAdd([
+              {
+                resourceType: ResourceCommand.TYPES.PLATFORM_MESSAGE,
+                message: HELP_TEXT,
+              },
+            ])
+          );
           break;
         case "copyValueToClipboard":
           clipboardHelper.copyString(helperResult.value);

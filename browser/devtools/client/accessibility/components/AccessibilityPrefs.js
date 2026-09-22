@@ -13,10 +13,6 @@ const {
   L10N,
 } = require("resource://devtools/client/accessibility/utils/l10n.js");
 
-const {
-  hr,
-} = require("resource://devtools/client/shared/vendor/react-dom-factories.js");
-
 loader.lazyGetter(this, "MenuButton", function () {
   return createFactory(
     require("resource://devtools/client/shared/components/menu/MenuButton.js")
@@ -32,11 +28,6 @@ loader.lazyGetter(this, "MenuList", function () {
     require("resource://devtools/client/shared/components/menu/MenuList.js")
   );
 });
-
-const {
-  A11Y_LEARN_MORE_LINK,
-} = require("resource://devtools/client/accessibility/constants.js");
-const { openDocLink } = require("resource://devtools/client/shared/link.js");
 
 const {
   updatePref,
@@ -66,10 +57,6 @@ class AccessibilityPrefs extends Component {
     this.togglePref(prefKey);
   }
 
-  onLearnMoreClick() {
-    openDocLink(A11Y_LEARN_MORE_LINK);
-  }
-
   render() {
     return MenuButton(
       {
@@ -86,15 +73,6 @@ class AccessibilityPrefs extends Component {
           label: L10N.getStr("accessibility.pref.scroll.into.view.label"),
           tooltip: L10N.getStr("accessibility.pref.scroll.into.view.title"),
           onClick: this.onPrefClick.bind(this, PREFS.SCROLL_INTO_VIEW),
-        }),
-        hr({ key: "hr" }),
-        MenuItem({
-          role: "link",
-          key: "accessibility-tree-filters-prefs-menu-help",
-          className: "help",
-          label: L10N.getStr("accessibility.documentation.label"),
-          tooltip: L10N.getStr("accessibility.learnMore"),
-          onClick: this.onLearnMoreClick,
         }),
       ])
     );

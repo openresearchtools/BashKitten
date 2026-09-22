@@ -150,14 +150,8 @@ class RecordingButton extends PureComponent {
             null,
             Localized(
               { id: "perftools-button-capture-recording" },
-              "Capture recording"
-            ),
-            img({
-              className: "perf-button-image",
-              alt: "",
-              /* This icon is actually the "open in new page" icon. */
-              src: "chrome://devtools/skin/images/dock-undock.svg",
-            })
+              "Save profile…"
+            )
           ),
           isPrimary: true,
           onClick: this._onCaptureButtonClick,

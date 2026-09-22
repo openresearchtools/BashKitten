@@ -20,9 +20,6 @@ const Message = createFactory(
 const {
   MESSAGE_LEVEL,
 } = require("resource://devtools/client/aboutdebugging/src/constants.js");
-const DOC_URL =
-  "https://firefox-source-docs.mozilla.org/devtools-user/about_colon_debugging/index.html#service-workers-not-compatible";
-
 class ServiceWorkersWarning extends PureComponent {
   render() {
     return Message(
@@ -33,10 +30,7 @@ class ServiceWorkersWarning extends PureComponent {
       Localized(
         {
           id: "about-debugging-runtime-service-workers-not-compatible",
-          a: dom.a({
-            href: DOC_URL,
-            target: "_blank",
-          }),
+          a: dom.span({ hidden: true }),
         },
         dom.p(
           {

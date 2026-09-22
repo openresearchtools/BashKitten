@@ -10,7 +10,7 @@ const {
 } = require("resource://devtools/client/shared/vendor/react.mjs");
 const PropTypes = require("resource://devtools/client/shared/vendor/react-prop-types.mjs");
 const dom = require("resource://devtools/client/shared/vendor/react-dom-factories.js");
-const { div, h1, h2, h3, p, a, button } = dom;
+const { div, h1, h2, h3, p, button } = dom;
 
 loader.lazyRequireGetter(
   this,
@@ -26,19 +26,9 @@ loader.lazyGetter(this, "L10N", function () {
   );
 });
 
-loader.lazyGetter(this, "FILE_BUG_BUTTON", function () {
-  return L10N.getStr("appErrorBoundary.fileBugButton");
-});
-
 loader.lazyGetter(this, "RELOAD_PAGE_INFO", function () {
   return L10N.getStr("appErrorBoundary.reloadPanelInfo");
 });
-
-// File a bug for the selected component specifically
-// Add format=__default__ to make sure users without EDITBUGS permission still
-// use the regular UI to create bugs, including the prefilled description.
-const bugLink =
-  "https://bugzilla.mozilla.org/enter_bug.cgi?format=__default__&blocked=devtools-toolbox-crash&product=DevTools&component=";
 
 /**
  * Error boundary that wraps around the a given component.
@@ -272,40 +262,6 @@ class AppErrorBoundary extends Component {
     this.#pingSubmitted = true;
   }
 
-  getBugLink() {
-    const { componentStack, clientPacket, serverPacket } = this.state.errorInfo;
-
-    let msg =
-      "## Steps to reproduce:\n\n" +
-      "If possible, please share specific steps to reproduce the error.\n" +
-      "Otherwise add any additional information useful to investigate the issue.\n\n";
-
-    msg += `## Error in ${this.props.panel}: \n${this.state.errorMsg}\n\n`;
-
-    if (componentStack) {
-      msg += `## React Component Stack:${componentStack}\n\n`;
-    }
-
-    if (clientPacket) {
-      msg += `## Client Packet:\n\`\`\`\n${JSON.stringify(clientPacket, null, 2)}\n\`\`\`\n\n`;
-    }
-
-    if (serverPacket) {
-      // Display the packet as JSON, while removing the artificial `stack`/`contentProcessStack` attributes from it
-      msg += `## Server Packet:\n\`\`\`\n${JSON.stringify({ ...serverPacket, stack: undefined, contentProcessStack: undefined }, null, 2)}\n\`\`\`\n\n`;
-      msg += `## Server Stack:\n\`\`\`\n${serverPacket.stack}\n\`\`\`\n\n`;
-      if (serverPacket.contentProcessStack) {
-        msg += `## Server Content Process Stack:\n\`\`\`\n${serverPacket.contentProcessStack}\n\`\`\`\n\n`;
-      }
-    }
-
-    msg += `## Stacktrace: \n\`\`\`\n${this.state.errorStack}\n\`\`\``;
-
-    return `${bugLink}${this.props.componentName}&comment=${encodeURIComponent(
-      msg
-    )}`;
-  }
-
   render() {
     if (this.state.errorInfo !== null) {
       // "The (componentDesc) has crashed"
@@ -314,24 +270,11 @@ class AppErrorBoundary extends Component {
         this.props.panel
       );
 
-      const href = this.getBugLink();
-
       return div(
         {
           className: `app-error-panel`,
         },
         h1({ className: "error-panel-header" }, errorDescription),
-        a(
-          {
-            className: "error-panel-file-button",
-            href,
-            target: "_blank",
-            onClick: this.props.openLink
-              ? e => this.props.openLink(href, e)
-              : null,
-          },
-          FILE_BUG_BUTTON
-        ),
         this.state.showToolboxCloseButton
           ? button({
               className: "devtools-tabbar-button error-panel-close",

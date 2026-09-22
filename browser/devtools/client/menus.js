@@ -46,12 +46,6 @@ loader.lazyRequireGetter(
 );
 loader.lazyRequireGetter(
   this,
-  "openDocLink",
-  "resource://devtools/client/shared/link.js",
-  true
-);
-loader.lazyRequireGetter(
-  this,
   "CommandsFactory",
   "resource://devtools/shared/commands/commands-factory.js",
   true
@@ -172,15 +166,5 @@ exports.menuitems = [
       }
     },
     checkbox: true,
-  },
-  {
-    id: "extensionsForDevelopers",
-    l10nKey: "extensionsForDevelopersCmd",
-    appMenuL10nId: "appmenu-developer-tools-extensions",
-    oncommand() {
-      openDocLink(
-        "https://addons.mozilla.org/firefox/collections/mozilla/webdeveloper/"
-      );
-    },
   },
 ];

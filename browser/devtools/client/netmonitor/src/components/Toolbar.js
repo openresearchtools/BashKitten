@@ -41,12 +41,6 @@ loader.lazyRequireGetter(
   "resource://devtools/client/shared/key-shortcuts.js"
 );
 
-// MDN
-const {
-  getFilterBoxURL,
-} = require("resource://devtools/client/netmonitor/src/utils/doc-utils.js");
-const LEARN_MORE_URL = getFilterBoxURL();
-
 // Components
 const NetworkThrottlingMenu = createFactory(
   require("resource://devtools/client/shared/components/throttling/NetworkThrottlingMenu.js")
@@ -75,10 +69,6 @@ const TOOLBAR_HTTP_CUSTOM_REQUEST = L10N.getStr(
 );
 const TOOLBAR_SEARCH = L10N.getStr("netmonitor.toolbar.search");
 const TOOLBAR_BLOCKING = L10N.getStr("netmonitor.toolbar.requestBlocking");
-const LEARN_MORE_TITLE = L10N.getStr(
-  "netmonitor.toolbar.filterFreetext.learnMore"
-);
-
 // Preferences
 const DEVTOOLS_DISABLE_CACHE_PREF = "devtools.cache.disabled";
 const DEVTOOLS_ENABLE_PERSISTENT_LOG_PREF = "devtools.netmonitor.persistlog";
@@ -491,8 +481,6 @@ class Toolbar extends Component {
       onFocusKeyboardShortcut: this.onSearchBoxFocusKeyboardShortcut,
       onFocus: this.onSearchBoxFocus,
       autocompleteProvider: this.autocompleteProvider,
-      learnMoreUrl: LEARN_MORE_URL,
-      learnMoreTitle: LEARN_MORE_TITLE,
     });
   }
 

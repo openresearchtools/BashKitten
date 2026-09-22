@@ -49,9 +49,6 @@ const Description = createFactory(
 const DevToolsPresetSelection = createFactory(
   require("resource://devtools/client/performance-new/components/panel/DevToolsPresetSelection.js")
 );
-const OnboardingMessage = createFactory(
-  require("resource://devtools/client/performance-new/components/panel/OnboardingMessage.js")
-);
 const ToolboxHighlightController = createFactory(
   require("resource://devtools/client/performance-new/components/panel/ToolboxHighlightController.js")
 );
@@ -80,7 +77,6 @@ class DevToolsPanel extends PureComponent {
     }
 
     return [
-      OnboardingMessage(),
       div(
         { className: `perf perf-devtools` },
         RecordingButton({ perfFront, onProfileReceived }),

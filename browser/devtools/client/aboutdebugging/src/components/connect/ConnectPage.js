@@ -54,11 +54,6 @@ const USB_ICON_SRC =
 const GLOBE_ICON_SRC =
   "chrome://devtools/skin/images/aboutdebugging-globe-icon.svg";
 
-const TROUBLESHOOT_USB_URL =
-  "https://firefox-source-docs.mozilla.org/devtools-user/about_colon_debugging/index.html#connecting-to-a-remote-device";
-const TROUBLESHOOT_NETWORK_URL =
-  "https://firefox-source-docs.mozilla.org/devtools-user/about_colon_debugging/index.html#connecting-over-the-network";
-
 class ConnectPage extends PureComponent {
   static get propTypes() {
     return {
@@ -146,6 +141,12 @@ class ConnectPage extends PureComponent {
   renderUsb() {
     const { adbAddonStatus } = this.props;
     const isAddonInstalled = adbAddonStatus === ADB_ADDON_STATES.INSTALLED;
+    if (
+      !isAddonInstalled &&
+      !Services.prefs.getStringPref("devtools.remote.adb.extensionURL", "")
+    ) {
+      return null;
+    }
     return ConnectSection(
       {
         icon: USB_ICON_SRC,
@@ -198,10 +199,9 @@ class ConnectPage extends PureComponent {
                 className: "qa-connect-usb-disabled-message",
               },
               "Enabling this will download and add the required Android USB debugging " +
-                "components to Firefox."
+                "components to BashKitten."
             )
-          ),
-      this.renderTroubleshootText(RUNTIMES.USB)
+          )
     );
   }
 
@@ -219,42 +219,9 @@ class ConnectPage extends PureComponent {
         extraContent: dom.div(
           {},
           NetworkLocationsList({ dispatch, networkLocations }),
-          NetworkLocationsForm({ dispatch, networkLocations }),
-          this.renderTroubleshootText(RUNTIMES.NETWORK)
+          NetworkLocationsForm({ dispatch, networkLocations })
         ),
       })
-    );
-  }
-
-  renderTroubleshootText(connectionType) {
-    const localizationId =
-      connectionType === RUNTIMES.USB
-        ? "about-debugging-setup-usb-troubleshoot"
-        : "about-debugging-setup-network-troubleshoot";
-
-    const className =
-      "connect-page__troubleshoot connect-page__troubleshoot--" +
-      `${connectionType === RUNTIMES.USB ? "usb" : "network"}`;
-
-    const url =
-      connectionType === RUNTIMES.USB
-        ? TROUBLESHOOT_USB_URL
-        : TROUBLESHOOT_NETWORK_URL;
-
-    return dom.aside(
-      {
-        className,
-      },
-      Localized(
-        {
-          id: localizationId,
-          a: dom.a({
-            href: url,
-            target: "_blank",
-          }),
-        },
-        dom.p({}, localizationId)
-      )
     );
   }
 

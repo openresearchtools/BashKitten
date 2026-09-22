@@ -8,8 +8,7 @@
 
 perftools-intro-title = Profiler Settings
 perftools-intro-description =
-  Recordings launch profiler.firefox.com in a new tab. All data is stored
-  locally, but you can choose to upload it for sharing.
+  Save recordings to a local JSON profile file for analysis.
 
 ## All of the headings for the various sections.
 
@@ -26,8 +25,7 @@ perftools-heading-local-build = Local build
 ##
 
 perftools-description-intro =
-  Recordings launch <a>profiler.firefox.com</a> in a new tab. All data is stored
-  locally, but you can choose to upload it for sharing.
+  Save recordings to a local JSON profile file for analysis.
 perftools-description-local-build =
   If you’re profiling a build that you have compiled yourself, on this
   machine, please add your build’s objdir to the list below so that
@@ -84,7 +82,7 @@ perftools-request-to-get-profile-and-stop-profiler = Capturing profile
 ##
 
 perftools-button-start-recording = Start recording
-perftools-button-capture-recording = Capture recording
+perftools-button-capture-recording = Save profile…
 perftools-button-cancel-recording = Cancel recording
 perftools-button-save-settings = Save settings and go back
 perftools-button-restart = Restart

@@ -12,6 +12,7 @@
 
 // The following are not lazily loaded as they are needed during initialization.
 
+import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 import { createLazyLoaders } from "resource://devtools/client/performance-new/shared/typescript-lazy-load.sys.mjs";
 
 /**
@@ -114,6 +115,10 @@ export async function captureProfile(pageContext) {
     .RecordingUtils()
     .getProfileDataAsGzippedArrayBufferThenStop();
   cleanupMozLogs();
+  if (AppConstants.MOZ_APP_NAME === "bashkitten") {
+    await lazy.BrowserModule().saveProfileToFile(profileCaptureResult);
+    return;
+  }
   const profilerViewMode = lazy
     .PrefsPresets()
     .getProfilerViewModeForCurrentPreset(pageContext);

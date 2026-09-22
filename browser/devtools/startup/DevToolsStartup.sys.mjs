@@ -726,7 +726,9 @@ export class DevToolsStartup {
     // Listen for messages from the front-end. This needs to happen even if the
     // button isn't enabled yet. This will allow the front-end to turn on the
     // popup for our users, regardless of if the feature is enabled by default.
-    this.initializeProfilerWebChannel();
+    if (AppConstants.MOZ_APP_NAME !== "bashkitten") {
+      this.initializeProfilerWebChannel();
+    }
 
     if (isPopupFeatureFlagEnabled) {
       // Initialize the CustomizableUI widget.

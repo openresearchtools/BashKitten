@@ -14,13 +14,6 @@ const PropTypes = require("resource://devtools/client/shared/vendor/react-prop-t
 const FluentReact = require("resource://devtools/client/shared/vendor/fluent-react.js");
 const Localized = createFactory(FluentReact.Localized);
 
-loader.lazyRequireGetter(
-  this,
-  "openDocLink",
-  "resource://devtools/client/shared/link.js",
-  true
-);
-
 const UnsupportedBrowserList = createFactory(
   require("resource://devtools/client/inspector/compatibility/components/UnsupportedBrowserList.js")
 );
@@ -39,11 +32,6 @@ loader.lazyRequireGetter(
   true
 );
 
-const { getMdnLinkParams } = ChromeUtils.importESModule(
-  "resource://devtools/shared/mdn.mjs"
-);
-const MDN_LINK_PARAMS = getMdnLinkParams("inspector-compatibility");
-
 class IssueItem extends PureComponent {
   static get propTypes() {
     return {
@@ -51,23 +39,6 @@ class IssueItem extends PureComponent {
       dispatch: PropTypes.func.isRequired,
       setSelectedNode: PropTypes.func.isRequired,
     };
-  }
-
-  constructor(props) {
-    super(props);
-    this._onLinkClicked = this._onLinkClicked.bind(this);
-  }
-
-  _onLinkClicked(e) {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const isMacOS = Services.appinfo.OS === "Darwin";
-
-    openDocLink(e.target.href, {
-      relatedToCurrent: true,
-      inBackground: isMacOS ? e.metaKey : e.ctrlKey,
-    });
   }
 
   _getTestDataAttributes() {
@@ -154,26 +125,9 @@ class IssueItem extends PureComponent {
   }
 
   _renderPropertyEl() {
-    const { property, url, specUrl } = this.props;
-    const baseCls = "compatibility-issue-item__property devtools-monospace";
-    if (!url && !specUrl) {
-      return dom.span({ className: baseCls }, property);
-    }
-
-    const href = url ? `${url}?${MDN_LINK_PARAMS}` : specUrl;
-
-    return dom.a(
-      {
-        className: `${baseCls} ${
-          url
-            ? "compatibility-issue-item__mdn-link"
-            : "compatibility-issue-item__spec-link"
-        }`,
-        href,
-        title: href,
-        onClick: e => this._onLinkClicked(e),
-      },
-      property
+    return dom.span(
+      { className: "compatibility-issue-item__property devtools-monospace" },
+      this.props.property
     );
   }
 

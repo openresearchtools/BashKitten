@@ -105,7 +105,6 @@ class Message extends Component {
 
   constructor(props) {
     super(props);
-    this.onLearnMoreClick = this.onLearnMoreClick.bind(this);
     this.toggleMessage = this.toggleMessage.bind(this);
     this.onContextMenu = this.onContextMenu.bind(this);
     this.renderIcon = this.renderIcon.bind(this);
@@ -133,12 +132,6 @@ class Message extends Component {
       "new-messages",
       new Set([{ node, messageId, timeStamp }])
     );
-  }
-
-  onLearnMoreClick(e) {
-    const { exceptionDocURL } = this.props;
-    this.props.serviceContainer.openLink(exceptionDocURL, e);
-    e.preventDefault();
   }
 
   toggleMessage(e) {
@@ -227,8 +220,6 @@ class Message extends Component {
   }
 
   renderErrorState() {
-    const newBugUrl =
-      "https://bugzilla.mozilla.org/enter_bug.cgi?product=DevTools&component=Console";
     const timestampEl = this.renderTimestamp();
 
     console.error(
@@ -253,9 +244,7 @@ class Message extends Component {
           timestampEl ? " " : null,
           dom.span(
             { className: "message-body devtools-monospace" },
-            l10n.getFormatStr("webconsole.message.componentDidCatch.label", [
-              newBugUrl,
-            ]),
+            l10n.getStr("webconsole.message.componentDidCatch.label"),
             dom.button(
               {
                 className: "devtools-button",
@@ -314,7 +303,6 @@ class Message extends Component {
       frame,
       stacktrace,
       serviceContainer,
-      exceptionDocURL,
       messageId,
       notes,
     } = this.props;
@@ -433,19 +421,6 @@ class Message extends Component {
         })
       : null;
 
-    let learnMore;
-    if (exceptionDocURL) {
-      learnMore = dom.a(
-        {
-          className: "learn-more-link webconsole-learn-more-link",
-          href: exceptionDocURL,
-          title: exceptionDocURL.split("?")[0],
-          onClick: this.onLearnMoreClick,
-        },
-        `[${l10n.getStr("webConsoleMoreInfoLabel")}]`
-      );
-    }
-
     const bodyElements = Array.isArray(messageBody)
       ? messageBody
       : [messageBody];
@@ -479,8 +454,7 @@ class Message extends Component {
           timestampEl ? " " : null,
           dom.span(
             { className: "message-body devtools-monospace" },
-            ...bodyElements,
-            learnMore
+            ...bodyElements
           ),
           repeat ? " " : null,
           repeat,

@@ -277,11 +277,6 @@ function addPopupEventHandlers(state, elements, view) {
     view.hidePopup();
   });
 
-  addHandler(elements.learnMore, "click", () => {
-    elements.window.openWebLinkIn("https://profiler.firefox.com/docs/", "tab");
-    view.hidePopup();
-  });
-
   addHandler(elements.presetsMenuList, "command", () => {
     lazy
       .PrefsPresets()

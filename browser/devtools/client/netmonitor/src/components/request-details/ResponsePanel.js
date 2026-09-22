@@ -24,9 +24,6 @@ const {
   parseJSON,
 } = require("resource://devtools/client/netmonitor/src/utils/request-utils.js");
 const {
-  getCORSErrorURL,
-} = require("resource://devtools/client/netmonitor/src/utils/doc-utils.js");
-const {
   Filters,
 } = require("resource://devtools/client/netmonitor/src/utils/filter-predicates.js");
 const {
@@ -232,10 +229,6 @@ class ResponsePanel extends Component {
       blockedMessage
     );
 
-    const learnMoreTooltip = L10N.getStr(
-      "netmonitor.headers.blockedByCORSTooltip"
-    );
-
     // Create a notifications map with the CORS error notification
     const notifications = new Map();
     notifications.set("CORS-error", {
@@ -245,12 +238,7 @@ class ResponsePanel extends Component {
       priority: PriorityLevels.PRIORITY_INFO_HIGH,
       type: "info",
       eventCallback: () => {},
-      buttons: [
-        {
-          mdnUrl: getCORSErrorURL(blockedReason),
-          label: learnMoreTooltip,
-        },
-      ],
+      buttons: [],
     });
 
     return NotificationBox({

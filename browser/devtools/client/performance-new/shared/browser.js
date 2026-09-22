@@ -205,7 +205,55 @@ async function openScriptInDebugger(tabId, scriptUrl, line, columnOneBased) {
   );
 }
 
+/**
+ * Save a captured profile locally without sending it to a web service.
+ * @param {import("../@types/perf").ProfileCaptureResult} result
+ */
+async function saveProfileToFile(result) {
+  const win =
+    Services.wm.getMostRecentBrowserWindow() ||
+    Services.wm.getMostRecentWindow("devtools:toolbox");
+  if (!win) {
+    throw new Error("No browser window");
+  }
+  try {
+    if (result.type === "ERROR") {
+      throw result.error;
+    }
+    const profile = result.profile;
+    const compressed = ChromeUtils.getClassName(profile) === "ArrayBuffer";
+    const filePicker = Cc["@mozilla.org/filepicker;1"].createInstance(
+      Ci.nsIFilePicker
+    );
+    filePicker.init(
+      win.browsingContext,
+      "Save profile",
+      Ci.nsIFilePicker.modeSave
+    );
+    filePicker.defaultString = compressed ? "profile.json.gz" : "profile.json";
+    filePicker.appendFilter(
+      compressed ? "Compressed JSON" : "JSON",
+      compressed ? "*.json.gz" : "*.json"
+    );
+    const choice = await new Promise(resolve => filePicker.open(resolve));
+    if (
+      choice !== Ci.nsIFilePicker.returnOK &&
+      choice !== Ci.nsIFilePicker.returnReplace
+    ) {
+      return;
+    }
+    if (compressed) {
+      await IOUtils.write(filePicker.file.path, new Uint8Array(profile));
+    } else {
+      await IOUtils.writeUTF8(filePicker.file.path, JSON.stringify(profile));
+    }
+  } catch (error) {
+    Services.prompt.alert(win, "Unable to save profile", String(error));
+  }
+}
+
 module.exports = {
+  saveProfileToFile,
   openProfilerTab,
   restartBrowserWithEnvironmentVariable,
   openFilePickerForObjdir,

@@ -66,6 +66,7 @@ const reducers = require("resource://devtools/client/performance-new/store/reduc
 const actions = require("resource://devtools/client/performance-new/store/actions.js");
 const {
   openProfilerTab,
+  saveProfileToFile,
 } = require("resource://devtools/client/performance-new/shared/browser.js");
 const { createLocalSymbolicationService } = ChromeUtils.importESModule(
   "resource://devtools/shared/performance-new/symbolication.sys.mjs"
@@ -135,6 +136,23 @@ async function gInit(perfFront, traits, pageContext, openAboutProfiling) {
    * @param {Error | string} [error]
    */
   const onProfileReceived = async (profileAndAdditionalInformation, error) => {
+    const { AppConstants } = ChromeUtils.importESModule(
+      "resource://gre/modules/AppConstants.sys.mjs"
+    );
+    if (AppConstants.MOZ_APP_NAME === "bashkitten") {
+      await saveProfileToFile(
+        error || !profileAndAdditionalInformation
+          ? {
+              type: "ERROR",
+              error: new Error(String(error || "No profile data was received.")),
+            }
+          : {
+              type: "SUCCESS",
+              profile: profileAndAdditionalInformation.profile,
+            }
+      );
+      return;
+    }
     const objdirs = selectors.getObjdirs(store.getState());
     const profilerViewMode = getProfilerViewModeForCurrentPreset(pageContext);
     const browser = await openProfilerTab({ profilerViewMode });

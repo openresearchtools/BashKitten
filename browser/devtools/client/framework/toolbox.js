@@ -758,6 +758,16 @@ class Toolbox extends EventEmitter {
     if (!profile) {
       return;
     }
+    const { AppConstants } = ChromeUtils.importESModule(
+      "resource://gre/modules/AppConstants.sys.mjs"
+    );
+    if (AppConstants.MOZ_APP_NAME === "bashkitten") {
+      const { saveProfileToFile } = require(
+        "resource://devtools/client/performance-new/shared/browser.js"
+      );
+      await saveProfileToFile({ type: "SUCCESS", profile });
+      return;
+    }
     const browser = await openProfilerTab({ defaultPanel: "stack-chart" });
 
     const profileCaptureResult = {

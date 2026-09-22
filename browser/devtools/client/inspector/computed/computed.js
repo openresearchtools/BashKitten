@@ -46,11 +46,6 @@ loader.lazyRequireGetter(
   "resource://devtools/client/shared/link.js",
   true
 );
-const lazy = {};
-ChromeUtils.defineESModuleGetters(lazy, {
-  getMdnLinkParams: "resource://devtools/shared/mdn.mjs",
-});
-
 const STYLE_INSPECTOR_PROPERTIES =
   "devtools/shared/locales/styleinspector.properties";
 const { LocalizationHelper } = require("resource://devtools/shared/l10n.js");
@@ -1053,10 +1048,6 @@ class PropertyView {
 
     this.isCustomProperty = isCustomProperty;
 
-    if (!this.isCustomProperty) {
-      this.link = `https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/${name}?${lazy.getMdnLinkParams("computed-panel")}`;
-    }
-
     this.#propertyInfo = new PropertyInfo(tree, name);
     const win = this.#tree.styleWindow;
     this.#abortController = new win.AbortController();
@@ -1203,12 +1194,6 @@ class PropertyView {
     this.shortcuts = new KeyShortcuts({
       window: this.#tree.styleWindow,
       target: this.element,
-    });
-    this.shortcuts.on("F1", event => {
-      this.mdnLinkClick(event);
-      // Prevent opening the options panel
-      event.preventDefault();
-      event.stopPropagation();
     });
     this.shortcuts.on("Return", this.onMatchedToggle);
     this.shortcuts.on("Space", this.onMatchedToggle);
@@ -1575,16 +1560,6 @@ class PropertyView {
     this.matchedExpanded = !this.matchedExpanded;
     this.refreshMatchedSelectors();
     event.preventDefault();
-  }
-
-  /**
-   * The action when a user clicks on the MDN help link for a property.
-   */
-  mdnLinkClick() {
-    if (!this.link) {
-      return;
-    }
-    openContentLink(this.link);
   }
 
   /**

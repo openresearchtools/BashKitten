@@ -13,7 +13,6 @@ const { KeyCodes } = require("resource://devtools/client/shared/keycodes.js");
 const {
   getUnicodeHostname,
 } = require("resource://devtools/client/shared/unicode-url.js");
-const getStorageTypeURL = require("resource://devtools/client/storage/utils/doc-utils.js");
 
 // GUID to be used as a separator in compound keys. This must match the same
 // constant in devtools/server/actors/resources/storage/index.js,
@@ -1293,10 +1292,12 @@ class StorageUI extends EventEmitter {
           storageTypeHintL10nId = "storage-table-type-sessionstorage-hint";
           break;
       }
-      this.table.setPlaceholder(
-        storageTypeHintL10nId,
-        getStorageTypeURL(this.table.datatype)
-      );
+      this.table.setPlaceholder(storageTypeHintL10nId);
+      // Retain the localized storage explanation without its vendor-help link.
+      const help = this._panelDoc.createElement("a");
+      help.setAttribute("data-l10n-name", "learn-more-link");
+      help.hidden = true;
+      this.table.placeholder.appendChild(help);
 
       // If selected item has no host then reset table headers
       await this.clearHeaders();

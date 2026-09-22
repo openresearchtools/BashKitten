@@ -15,8 +15,8 @@ const {
 } = require("resource://devtools/client/shared/vendor/react.mjs");
 const {
   div,
-  button,
   p,
+  span,
 } = require("resource://devtools/client/shared/vendor/react-dom-factories.js");
 const Localized = createFactory(
   require("resource://devtools/client/shared/vendor/fluent-react.js").Localized
@@ -29,31 +29,13 @@ const Localized = createFactory(
  * @augments {React.PureComponent<Props>}
  */
 class Description extends PureComponent {
-  /**
-   * @param {React.MouseEvent<HTMLButtonElement>} event
-   */
-  handleLinkClick = event => {
-    const {
-      openDocLink,
-    } = require("resource://devtools/client/shared/link.js");
-
-    /** @type HTMLButtonElement */
-    const target = /** @type {any} */ (event.target);
-
-    openDocLink(target.value, {});
-  };
-
   render() {
     return div(
       { className: "perf-description" },
       Localized(
         {
           id: "perftools-description-intro",
-          a: button({
-            className: "perf-external-link",
-            onClick: this.handleLinkClick,
-            value: "https://profiler.firefox.com",
-          }),
+          a: span({ hidden: true }),
         },
         p({})
       )

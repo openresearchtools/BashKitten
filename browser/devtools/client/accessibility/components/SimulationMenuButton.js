@@ -23,10 +23,6 @@ const {
 const MenuButton = createFactory(
   require("resource://devtools/client/shared/components/menu/MenuButton.js")
 );
-const { openDocLink } = require("resource://devtools/client/shared/link.js");
-const {
-  A11Y_SIMULATION_DOCUMENTATION_LINK,
-} = require("resource://devtools/client/accessibility/constants.js");
 const {
   accessibility: { SIMULATION_TYPE },
 } = require("resource://devtools/shared/constants.js");
@@ -50,7 +46,6 @@ const SIMULATION_MENU_LABELS = {
   [SIMULATION_TYPE.DEUTERANOPIA]: "accessibility.simulation.deuteranopia",
   [SIMULATION_TYPE.TRITANOPIA]: "accessibility.simulation.tritanopia",
   [SIMULATION_TYPE.CONTRAST_LOSS]: "accessibility.simulation.contrastLoss",
-  DOCUMENTATION: "accessibility.documentation.label",
 };
 
 class SimulationMenuButton extends Component {
@@ -114,15 +109,6 @@ class SimulationMenuButton extends Component {
           onClick: this.toggleSimulation.bind(this, simType),
         })
       ),
-      hr({ key: "hr-2" }),
-      // Documentation link
-      MenuItem({
-        className: "link",
-        key: "simulation-documentation",
-        label: L10N.getStr(SIMULATION_MENU_LABELS.DOCUMENTATION),
-        role: "link",
-        onClick: () => openDocLink(A11Y_SIMULATION_DOCUMENTATION_LINK),
-      }),
     ];
 
     return div(

@@ -23,9 +23,6 @@ const FieldPair = createFactory(
 
 const Types = require("resource://devtools/client/aboutdebugging/src/types/index.js");
 
-const TEMP_ID_DOC_URL =
-  "https://extensionworkshop.com/documentation/develop/extensions-and-the-add-on-id/";
-
 /**
  * This component displays detail information for a temporary extension.
  */
@@ -42,11 +39,7 @@ class TemporaryExtensionDetail extends PureComponent {
     return Localized(
       {
         id: "about-debugging-tmp-extension-temporary-id",
-        a: dom.a({
-          className: "qa-temporary-id-link",
-          href: TEMP_ID_DOC_URL,
-          target: "_blank",
-        }),
+        a: dom.span({ hidden: true }),
       },
       dom.div({
         className: "qa-temporary-id-message",

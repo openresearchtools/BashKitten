@@ -26,26 +26,10 @@ loader.lazyGetter(this, "MenuList", function () {
 
 loader.lazyRequireGetter(
   this,
-  "openDocLink",
-  "resource://devtools/client/shared/link.js",
-  true
-);
-loader.lazyRequireGetter(
-  this,
   "assert",
   "resource://devtools/shared/DevToolsUtils.js",
   true
 );
-
-const openDevToolsDocsLink = () => {
-  openDocLink("https://firefox-source-docs.mozilla.org/devtools-user/");
-};
-
-const openCommunityLink = () => {
-  openDocLink(
-    "https://discourse.mozilla.org/c/devtools?utm_source=devtools&utm_medium=tabbar-menu"
-  );
-};
 
 class MeatballMenu extends PureComponent {
   static get propTypes() {
@@ -279,28 +263,6 @@ class MeatballMenu extends PureComponent {
         })
       );
     }
-
-    items.push(hr({ key: "docs-separator-2" }));
-
-    // Getting started
-    items.push(
-      MenuItem({
-        id: "toolbox-meatball-menu-documentation",
-        key: "documentation",
-        l10nID: "toolbox-meatball-menu-documentation-label",
-        onClick: openDevToolsDocsLink,
-      })
-    );
-
-    // Give feedback
-    items.push(
-      MenuItem({
-        id: "toolbox-meatball-menu-community",
-        key: "community",
-        l10nID: "toolbox-meatball-menu-community-label",
-        onClick: openCommunityLink,
-      })
-    );
 
     return MenuList({ id: "toolbox-meatball-menu" }, items);
   }

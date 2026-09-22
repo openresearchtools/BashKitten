@@ -4,37 +4,12 @@
 
 "use strict";
 
-const PropTypes = require("resource://devtools/client/shared/vendor/react-prop-types.mjs");
-const dom = require("resource://devtools/client/shared/vendor/react-dom-factories.js");
-const { a } = dom;
-
-loader.lazyRequireGetter(
-  this,
-  "openDocLink",
-  "resource://devtools/client/shared/link.js",
-  true
-);
-
-function MDNLink({ url, title }) {
-  return a({
-    className:
-      "devtools-button learn-more-link" +
-      (url.startsWith("https://developer.mozilla.org") ? " mdn-link" : ""),
-    title,
-    onClick: e => onLearnMoreClick(e, url),
-  });
+// BashKitten retains the diagnostics beside these upstream documentation badges.
+// External vendor-help controls are not part of the product UI.
+function MDNLink() {
+  return null;
 }
 
 MDNLink.displayName = "MDNLink";
-
-MDNLink.propTypes = {
-  url: PropTypes.string.isRequired,
-};
-
-function onLearnMoreClick(e, url) {
-  e.stopPropagation();
-  e.preventDefault();
-  openDocLink(url);
-}
 
 module.exports = MDNLink;

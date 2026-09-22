@@ -5,7 +5,6 @@
 "use strict";
 
 const {
-  openDocLink,
   openTrustedLink,
 } = require("resource://devtools/client/shared/link.js");
 const {
@@ -28,13 +27,6 @@ const Localized = createFactory(FluentReact.Localized);
 const {
   services,
 } = require("resource://devtools/client/application/src/modules/application-services.js");
-const { getMdnLinkParams } = ChromeUtils.importESModule(
-  "resource://devtools/shared/mdn.mjs"
-);
-const DOC_URL =
-  "https://developer.mozilla.org/docs/Web/API/Service_Worker_API/Using_Service_Workers?" +
-  getMdnLinkParams("sw-panel-blank");
-
 /**
  * This component displays help information when no service workers are found for the
  * current target.
@@ -50,10 +42,6 @@ class RegistrationListEmpty extends PureComponent {
 
   openAboutDebugging() {
     openTrustedLink("about:debugging#workers");
-  }
-
-  openDocumentation() {
-    openDocLink(DOC_URL);
   }
 
   render() {
@@ -95,15 +83,6 @@ class RegistrationListEmpty extends PureComponent {
             }),
           },
           p({})
-        ),
-        p(
-          {},
-          Localized(
-            { id: "serviceworker-empty-intro-link" },
-            a({
-              onClick: () => this.openDocumentation(),
-            })
-          )
         ),
         p(
           {},

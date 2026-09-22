@@ -24,11 +24,6 @@ const {
   COMPATIBILITY_STATUS,
 } = require("resource://devtools/client/shared/remote-debugging/version-checker.js");
 
-const TROUBLESHOOTING_URL =
-  "https://firefox-source-docs.mozilla.org/devtools-user/about_colon_debugging/";
-const FENNEC_TROUBLESHOOTING_URL =
-  "https://firefox-source-docs.mozilla.org/devtools-user/about_colon_debugging/index.html#connection-to-firefox-for-android-68";
-
 const Types = require("resource://devtools/client/aboutdebugging/src/types/index.js");
 
 class CompatibilityWarning extends PureComponent {
@@ -68,11 +63,6 @@ class CompatibilityWarning extends PureComponent {
         break;
     }
 
-    const troubleshootingUrl =
-      status === COMPATIBILITY_STATUS.TOO_OLD_FENNEC
-        ? FENNEC_TROUBLESHOOTING_URL
-        : TROUBLESHOOTING_URL;
-
     const messageLevel =
       status === COMPATIBILITY_STATUS.TOO_OLD_FENNEC
         ? MESSAGE_LEVEL.ERROR
@@ -86,10 +76,7 @@ class CompatibilityWarning extends PureComponent {
       Localized(
         {
           id: localizationId,
-          a: dom.a({
-            href: troubleshootingUrl,
-            target: "_blank",
-          }),
+          a: dom.span({ hidden: true }),
           $localID: localID,
           $localVersion: localVersion,
           $minVersion: minVersion,

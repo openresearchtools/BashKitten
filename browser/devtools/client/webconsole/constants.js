@@ -197,10 +197,12 @@ const historyCommands = {
   HISTORY_FORWARD: 1,
 };
 
-const urls = {
-  // URL opened when executing `:help` command in the input
-  HELP_URL:
-    "https://firefox-source-docs.mozilla.org/devtools-user/web_console/helpers/",
+const helperHelp = {
+  HELP_TEXT:
+    "Console helpers: $(selector), $$(selector), $x(xpath), $0 (selected element), " +
+    "$_ (last result), keys(object), values(object), inspect(object), copy(value), " +
+    "clear(), and :history. JavaScript expressions run in the selected page. " +
+    "Use help() or :help to show this message.",
 };
 
 const evaluationNotifications = {
@@ -223,7 +225,7 @@ module.exports = Object.assign(
   jstermCommands,
   prefs,
   historyCommands,
-  urls,
+  helperHelp,
   historyCommands,
   evaluationNotifications
 );

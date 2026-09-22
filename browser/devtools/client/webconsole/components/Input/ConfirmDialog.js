@@ -36,8 +36,6 @@ const {
   l10n,
 } = require("resource://devtools/client/webconsole/utils/messages.js");
 
-const LEARN_MORE_URL = `https://firefox-source-docs.mozilla.org/devtools-user/web_console/invoke_getters_from_autocomplete/`;
-
 class ConfirmDialog extends Component {
   static get propTypes() {
     return {
@@ -60,7 +58,6 @@ class ConfirmDialog extends Component {
 
     this.cancel = this.cancel.bind(this);
     this.confirm = this.confirm.bind(this);
-    this.onLearnMoreClick = this.onLearnMoreClick.bind(this);
   }
 
   componentDidMount() {
@@ -88,10 +85,6 @@ class ConfirmDialog extends Component {
   componentDidThrow(e) {
     console.error("Error in ConfirmDialog", e);
     this.setState(state => ({ ...state, hasError: true }));
-  }
-
-  onLearnMoreClick(e) {
-    this.props.serviceContainer.openLink(LEARN_MORE_URL, e);
   }
 
   cancel() {
@@ -130,16 +123,6 @@ class ConfirmDialog extends Component {
       ["Tab"]
     );
 
-    const learnMoreElement = dom.a(
-      {
-        className: "learn-more-link",
-        key: "learn-more-link",
-        title: LEARN_MORE_URL.split("?")[0],
-        onClick: this.onLearnMoreClick,
-      },
-      l10n.getStr("webConsoleMoreInfoLabel")
-    );
-
     return createPortal(
       [
         dom.div(
@@ -168,7 +151,6 @@ class ConfirmDialog extends Component {
           },
           invokeButtonLabel
         ),
-        learnMoreElement,
       ],
       this.tooltip.panel
     );

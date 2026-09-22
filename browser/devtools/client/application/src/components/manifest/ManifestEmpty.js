@@ -4,14 +4,11 @@
 
 "use strict";
 
-const { openDocLink } = require("resource://devtools/client/shared/link.js");
-
 const {
   createFactory,
   PureComponent,
 } = require("resource://devtools/client/shared/vendor/react.mjs");
 const {
-  a,
   article,
   aside,
   div,
@@ -23,22 +20,11 @@ const {
 const FluentReact = require("resource://devtools/client/shared/vendor/fluent-react.js");
 const Localized = createFactory(FluentReact.Localized);
 
-const { getMdnLinkParams } = ChromeUtils.importESModule(
-  "resource://devtools/shared/mdn.mjs"
-);
-const DOC_URL =
-  "https://developer.mozilla.org/docs/Web/Progressive_web_apps/Manifest?" +
-  getMdnLinkParams("sw-panel-blank");
-
 /**
  * This component displays help information when no manifest is found for the
  * current target.
  */
 class ManifestEmpty extends PureComponent {
-  openDocumentation() {
-    openDocLink(DOC_URL);
-  }
-
   render() {
     return article(
       { className: "app-page__icon-container js-manifest-empty" },
@@ -64,15 +50,6 @@ class ManifestEmpty extends PureComponent {
             id: "manifest-empty-intro2",
           },
           h1({ className: "app-page__title" })
-        ),
-        p(
-          {},
-          Localized(
-            { id: "manifest-empty-intro-link" },
-            a({
-              onClick: () => this.openDocumentation(),
-            })
-          )
         ),
         Localized({ id: "manifest-non-existing" }, p({}))
       )
