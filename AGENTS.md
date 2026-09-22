@@ -17,9 +17,14 @@ revert. Run the relevant checks before committing, push to the current branch's
 remote, and report the commit IDs and push result.
 Stage only files belonging to the task; preserve unrelated work and never commit
 credentials, signing keys or personal runtime data.
-Read `docs/android-termux-suite-plan.md` in full before implementation and after
-compaction. Keep the shared code small; reuse upstream components unmodified
-except for the documented Termux integration/build patches.
+Read `docs/browser-integration-plan.md` in full before browser-migration work and
+after compaction. It records the requested replacement of the native wrappers
+and Termux suite with one Android/Linux browser, Caddy/Authelia authentication
+and optional desktop llama runtime/relay. It supersedes the older plan and the
+current-implementation descriptions below where those requirements differ;
+it does not claim that migration is already implemented. For existing-suite
+maintenance, also read `docs/android-termux-suite-plan.md` in full. Keep shared
+code small and preserve upstream components and licenses.
 
 ## Runtime ownership
 

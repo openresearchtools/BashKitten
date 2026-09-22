@@ -1,5 +1,12 @@
 # BashKitten Android and Termux suite: implementation plan
 
+**Migration note, 22 September 2026:** the requested next architecture is in
+[the browser integration plan](browser-integration-plan.md). It replaces this
+plan's native wrappers, Termux-suite distribution/API/X11 requirements, graphics
+controls and app authentication design. This document remains the historical
+plan for the existing implementation; unchanged shared UI, stock Pi, data and
+package-maintenance requirements carry forward as specified in the new plan.
+
 Status: implementation in progress, researched 19–20 September 2026. The `main`
 branch supplies the web UI and native Pi adapter, promoted from `codex/pi-termux-rpc`. This
 document adds a plan for a portable shared server, the Android host, signed
