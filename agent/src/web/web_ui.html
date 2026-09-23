@@ -25,10 +25,11 @@
       --activity: #232323;
       --overlay: #1e1e1eeb;
       --shadow: #0006;
-      /* Match Gecko's small, medium and large corner tokens. */
-      --radius-small: 4px;
-      --radius-control: 8px;
-      --radius-card: 16px;
+      /* Rounded panels, pill controls and circular icon buttons match the browser. */
+      --radius-small: 8px;
+      --radius-control: 12px;
+      --radius-card: 24px;
+      --radius-pill: 999px;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -80,9 +81,10 @@
     html, body { width: 100%; height: 100%; overflow: hidden; }
     body { margin: 0; overflow: hidden; background: var(--bg); color: var(--text); font-size: 14px; }
     button, input, select, textarea { color: inherit; font: inherit; }
-    button { cursor: pointer; border-radius: var(--radius-control); }
-    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { border-radius: var(--radius-control); }
-    input::file-selector-button { border-radius: var(--radius-control); }
+    button { cursor: pointer; border-radius: var(--radius-pill); }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { border-radius: var(--radius-pill); }
+    textarea { border-radius: var(--radius-control); }
+    input::file-selector-button { border-radius: var(--radius-pill); }
     summary { border-radius: var(--radius-control); }
     button:disabled { cursor: default; opacity: .52; }
     .hidden { display: none !important; }
@@ -94,13 +96,13 @@
       place-items: center;
       padding: 0;
       border: 1px solid transparent;
-      border-radius: var(--radius-control);
+      border-radius: 50%;
       background: transparent;
       color: var(--muted);
     }
     .icon-button:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .icon-button.active { background: var(--surface-2); color: var(--text); }
-    #piInstance[data-stopped="true"] { width: auto; flex-shrink: 0; padding-inline: 8px; white-space: nowrap; font-size: 12px; }
+    #piInstance[data-stopped="true"] { width: auto; flex-shrink: 0; padding-inline: 10px; border-radius: var(--radius-pill); white-space: nowrap; font-size: 12px; }
     .primary { border: 0; background: var(--accent); color: var(--accent-text); font-weight: 650; }
     .primary:hover { background: var(--accent-hover); }
 
@@ -283,7 +285,7 @@
     .message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
     .inline-image { position: relative; display: inline-flex; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--activity); }
     .message-images img { display: block; max-width: 300px; max-height: 240px; cursor: zoom-in; object-fit: contain; }
-    .image-download { position: absolute; right: 5px; bottom: 5px; display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid #fff4; border-radius: var(--radius-control); background: #111c; color: #fff; text-decoration: none; }
+    .image-download { position: absolute; right: 5px; bottom: 5px; display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid #fff4; border-radius: 50%; background: #111c; color: #fff; text-decoration: none; }
     .image-download:hover { background: #111; }
     .tool-body .message-images { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line-soft); }
     .tool-body .message-images img { max-width: 260px; max-height: 220px; }
@@ -297,7 +299,7 @@
     .message.assistant .message-actions { left: 0; }
     .message.user .message-actions { right: 0; }
     .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
-    .message-actions button { height: 20px; padding: 0 5px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--muted); font-size: 10px; }
+    .message-actions button { height: 20px; padding: 0 7px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--muted); font-size: 10px; }
     .message-actions button:hover { background: var(--surface-2); color: var(--text); }
 
     #imageViewer { position: absolute; z-index: 60; inset: 0; display: grid; min-width: 0; min-height: 0; grid-template-rows: 49px minmax(0, 1fr); background: var(--overlay); }
@@ -380,12 +382,12 @@
     .subscription-settings { margin: 18px 0; padding: 16px 0; border-block: 1px solid var(--line-soft); }
     .subscription-settings h3 { margin: 0 0 8px; font-size: 15px; }
     .subscription-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
-    .subscription-actions button, .subscription-actions a { padding: 7px 10px; border-radius: var(--radius-control); font-size: 13px; }
+    .subscription-actions button, .subscription-actions a { padding: 7px 12px; border-radius: var(--radius-pill); font-size: 13px; }
     #oauthManual label { display: block; font-size: 13px; }
     #oauthCode { width: 100%; margin-top: 8px; }
     #oauthUserCode { display: block; padding: 8px 0; font: 600 20px monospace; letter-spacing: 2px; }
     #prompt { display: block; width: 100%; min-height: 42px; max-height: 160px; padding: 10px 11px 2px; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.4; }
-    .composer-toolbar { display: flex; min-width: 0; align-items: center; gap: 2px; padding: 4px 5px 5px; }
+    .composer-toolbar { display: flex; min-width: 0; align-items: center; gap: 4px; padding: 4px 8px 8px; }
     .composer-toolbar select { height: 27px; min-width: 0; padding: 0 22px 0 6px; overflow: hidden; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; }
     .composer-toolbar select:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .composer-toolbar select:focus { border-color: var(--line); outline: 0; box-shadow: none; }
@@ -403,18 +405,18 @@
     #compactionStatus { padding:10px 12px; border-top:1px solid var(--line); color:var(--text); font-size:13px; }
     #goalStatus { max-height:4.5em; overflow:auto; padding:3px 8px; }
     #goalChip { display:inline-flex; align-items:center; gap:8px; margin:0 10px 3px; padding:3px 7px; border:1px solid var(--line); border-radius:var(--radius-control); color:var(--text); font-size:12px; }
-    #goalChip button { padding:0; width:18px; height:18px; border:0; background:transparent; color:var(--muted); }
-    #sendBtn { display: grid; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; place-items: center; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
+    #goalChip button { padding:0; width:18px; height:18px; border:0; border-radius:50%; background:transparent; color:var(--muted); }
+    #sendBtn { display: grid; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; border-radius: 50%; place-items: center; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
     #sendBtn:hover { background: var(--muted); }
     #sendBtn[data-mode="pause"] { font-size: 12px; letter-spacing: -2px; }
     #composerHint { min-height: 14px; padding-top: 3px; color: var(--muted); font-size: 10px; text-align: center; }
 
     #queuePanel { display: flex; max-height: 140px; flex-direction: column; gap: 2px; margin: 0 3px 5px; overflow: auto; }
-    .queue-item { display: grid; min-height: 28px; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; border-left: 2px solid var(--line); border-radius: var(--radius-control); background: var(--activity); font-size: 11px; }
+    .queue-item { display: grid; min-height: 28px; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 5px; padding: 3px 6px 3px 10px; border-left: 2px solid var(--line); border-radius: var(--radius-pill); background: var(--activity); font-size: 11px; }
     .queue-item.steer { border-left-color: var(--accent); }
     .queue-kind { color: var(--muted); font-size: 10px; text-transform: uppercase; }
     .queue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .queue-item button { height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--radius-small); background: transparent; color: var(--muted); font-size: 10px; }
+    .queue-item button { height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--radius-pill); background: transparent; color: var(--muted); font-size: 10px; }
     .queue-item button:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .queue-item button.queue-steer { color: var(--accent); }
     .queue-item.editing { outline: 1px solid var(--accent); }
@@ -469,7 +471,7 @@
     .file-tabs { margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
     .file-tabs button { margin:3px 0; padding:8px 10px; border:0; background:transparent; color:var(--muted); }
     .file-tabs button:hover, .file-tabs button[aria-selected="true"] { background:var(--surface-2); color:var(--text); }
-    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-control); color:var(--text); font-size:12px; text-decoration:none; }
+    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-pill); color:var(--text); font-size:12px; text-decoration:none; }
     .file-toolbar [aria-pressed="true"] { background:var(--surface-2); border-color:var(--text); }
     .file-toolbar button.danger { color:var(--danger); }
     .file-icon { display:block; width:16px; height:16px; flex:0 0 16px; }
@@ -477,7 +479,7 @@
     #fileActions button, .file-path button, .file-toolbar .file-icon-action { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:32px; padding:6px; border-color:transparent; background:transparent; white-space:nowrap; }
     #fileActions button:hover, .file-path button:hover, .file-toolbar .file-icon-action:hover { background:var(--surface-2); }
     #fileActions button[aria-pressed="true"] { background:var(--surface-2); color:var(--text); box-shadow:inset 0 0 0 1px var(--line); }
-    #fileActions .file-icon-action, .file-path button, .file-toolbar .file-icon-action { width:30px; flex-shrink:0; }
+    #fileActions .file-icon-action, .file-path button, .file-toolbar .file-icon-action { width:32px; flex-shrink:0; border-radius:50%; }
     #fileActions button:focus-visible, .file-path button:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
     #fileSelection { display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:28px; padding:0 5px; color:var(--muted); }
     #fileSelection label { display:inline-flex; align-items:center; gap:7px; font-size:12px; cursor:pointer; }

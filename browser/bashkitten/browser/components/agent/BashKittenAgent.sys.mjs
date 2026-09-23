@@ -131,7 +131,7 @@ class AgentView {
     this.pane = xul(doc, "vbox", { id: "bashkitten-agent-pane" });
     const bar = html(doc, "div", { id: "bashkitten-agent-bar", style: "display:flex" });
     bar.append(html(doc, "label", {}, "Agent"));
-    this.choice = html(doc, "select", { id: "bashkitten-agent-choice", "aria-label": "Agent server" });
+    this.choice = html(doc, "select", { id: "bashkitten-agent-choice", "aria-label": "Agent connection: Local or remote", title: "Choose Local, a saved remote, or Connect to remote…" });
     this.choice.addEventListener("change", () => this.run(() => {
       if (this.choice.value === "connect-remote") {
         this.choice.value = this.remote?.id || "";
@@ -143,7 +143,7 @@ class AgentView {
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
     bar.append(this.power);
-    const menu = html(doc, "button", { type: "button", "aria-label": "Browser menu", "aria-haspopup": "menu" }, "☰");
+    const menu = html(doc, "button", { id: "bashkitten-agent-menu", type: "button", "aria-label": "Browser menu", "aria-haspopup": "menu" }, "☰");
     menu.addEventListener("click", event => this.win.PanelUI.toggle(event, menu));
     bar.append(menu);
     this.state = html(doc, "section", { id: "bashkitten-agent-state" });
