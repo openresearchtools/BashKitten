@@ -72,16 +72,30 @@ public final class TermuxConnection {
             throw new IllegalStateException("BashKitten's launch activity is unavailable.");
         }
         ComponentName destination = launch.getComponent();
-        return "mkdir -p ~/.termux && "
+        final String checksum;
+        try { checksum = asset("keyring-sha256.txt").trim(); }
+        catch (Exception error) { throw new IllegalStateException("The repository keyring checksum is unavailable.", error); }
+        if (!checksum.matches("[a-f0-9]{64}")) throw new IllegalStateException("Invalid bundled repository checksum.");
+        // pkg owns dependency resolution. Only repository registration belongs here;
+        // the bashkitten .deb declares every Agent/runtime/desktop dependency.
+        return "(set -eu; export DEBIAN_FRONTEND=noninteractive; "
+                + "bashkitten_setup=$(mktemp -d); trap 'rm -rf -- \"$bashkitten_setup\"' EXIT; "
+                + "curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 "
+                + "-o \"$bashkitten_setup/keyring.deb\" https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-termux-keyring_2026.09.19_aarch64.deb; "
+                + "printf '%s  %s\\n' " + shellQuote(checksum) + " \"$bashkitten_setup/keyring.deb\" | sha256sum -c -; "
+                + "pkg install -y -o Dpkg::Options::=--force-confold \"$bashkitten_setup/keyring.deb\" x11-repo; "
+                + "pkg update; pkg install -y -o Dpkg::Options::=--force-confold bashkitten; "
+                + "mkdir -p ~/.termux; "
                 + "{ if grep -q '^[[:space:]]*allow-external-apps[[:space:]]*=' ~/.termux/termux.properties 2>/dev/null; then "
                 + "sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps=true/' ~/.termux/termux.properties; "
                 + "else printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties; fi; } && "
                 + "termux-reload-settings && am start --user \"$(( $(id -u) / 100000 ))\" -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "
-                + shellQuote(destination.flattenToShortString());
+                + shellQuote(destination.flattenToShortString()) + ")";
     }
 
     public void probe(Consumer<JSONObject> done, Consumer<String> fail) {
-        String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
+        String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ] "
+                + "&& [ \"$(dpkg-query -W -f='${Status}' bashkitten 2>/dev/null)\" = 'install ok installed' ]; then "
                 + "printf '{\"connected\":true,\"packages\":true}'; else "
                 + "printf '{\"connected\":true,\"packages\":false}'; fi";
         execute(script, new String[0], null, 20000, done, fail);
@@ -102,32 +116,6 @@ public final class TermuxConnection {
                 + "printf '{\"error\":\"BashKitten packages are not installed yet.\"}' >&2; exit 1; fi";
         long timeout = command.equals("start") || command.equals("restart") || command.equals("status") ? 120000 : 60000;
         execute(script, new String[] { command }, input, timeout, done, fail);
-    }
-
-    /** Start the packaged, pinned bootstrap; its durable log is read with bootstrapStatus(). */
-    public void bootstrap(Consumer<JSONObject> done, Consumer<String> fail) {
-        try {
-            requirePermission();
-            String checksum = asset("keyring-sha256.txt").trim();
-            if (!checksum.matches("[a-f0-9]{64}")) throw new IllegalStateException("Invalid bundled repository checksum.");
-            String script = asset("bootstrap.sh");
-            // The task belongs to Termux's foreground service and continues when Agent is hidden.
-            context.startForegroundService(commandIntent(script, new String[] { checksum, "external" }, null));
-            done.accept(new JSONObject().put("accepted", true));
-        } catch (Exception error) {
-            fail.accept(message(error, "Unable to start Termux setup."));
-        }
-    }
-
-    public void bootstrapStatus(Consumer<JSONObject> done, Consumer<String> fail) {
-        String script = "dir=\"$HOME/.local/share/bashkitten-pi/bootstrap\"\n"
-                + "state=$(cat \"$dir/status.json\" 2>/dev/null || printf '{}')\n"
-                + "if [ -f \"$dir/lock\" ] && flock -n \"$dir/lock\" true; then\n"
-                + "  case \"$state\" in *'\"status\":\"running\"'*) state='{\"status\":\"interrupted\",\"phase\":\"Setup interrupted. Resume to continue.\"}';; esac\n"
-                + "fi\n"
-                + "log=$(tail -c 24000 \"$dir/output.log\" 2>/dev/null | base64 | tr -d '\\n')\n"
-                + "printf '{\"bootstrap\":%s,\"logBase64\":\"%s\"}\\n' \"$state\" \"$log\"";
-        execute(script, new String[0], null, 20000, done, fail);
     }
 
     private void requirePermission() {

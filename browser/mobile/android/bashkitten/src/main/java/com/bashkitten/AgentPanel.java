@@ -40,9 +40,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private boolean shown = true;
     private boolean split;
     private boolean browserUi;
-    private boolean startedBootstrap;
     private boolean destroyed;
-    private final Runnable bootstrapPoll = this::bootstrapProgress;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     private String setupId;
@@ -141,7 +139,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         }
         layoutPanels();
     }
-    public void destroy() { destroyed = true; app.main.removeCallbacks(bootstrapPoll); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
+    public void destroy() { destroyed = true; runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override public void changed() {
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
@@ -158,10 +156,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             app.main.post(() -> {
                 if (!destroyed && runtime.state.equals("setup") && runtime.setupStep.equals("permission") && runtime.isOnRequested()) requestTermuxPermission();
             });
-        }
-        if (runtime.installingPackages && !startedBootstrap && runtime.termux.permissionGranted()
-                && (runtime.state.equals("setup") && runtime.setupStep.equals("install") || runtime.state.equals("stopping"))) {
-            startedBootstrap = true; bootstrapProgress();
         }
         if (runtime.state.equals("stopping")) {
             JSONObject packages = runtime.status.optJSONObject("packages");
@@ -306,7 +300,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) { action(state.equals("stop-failed") ? "Retry shutdown" : "Turn on", state.equals("stop-failed") ? runtime::turnOff : runtime::turnOn); return; }
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
-        if (runtime.installingPackages && runtime.setupStep.equals("install")) { message.setText("Installing Agent packages…"); return; }
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); return; }
         if (runtime.setupStep.equals("permission")) {
             if (permissionNeedsSettings()) {
@@ -315,12 +308,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             } else message.setText("Approve Android’s Termux permission prompt to continue. If you dismissed it, turn Agent off and on to try again.");
         } else if (runtime.setupStep.equals("connection")) {
             TextView guide = new TextView(activity);
-            guide.setText("Copy this command, open Termux, paste it and press Enter. BashKitten will return and install the Agent packages automatically.");
+            guide.setText("Copy this command, open Termux, paste it and press Enter. It installs the Open Research Tools keyring and BashKitten with all its dependencies through pkg. Progress appears in Termux. After installation, it returns here and starts Agent automatically.");
             actions.addView(guide);
             TextView command = new TextView(activity);
             command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12);
             command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true);
-            command.setPadding(0, dp(12), 0, dp(12)); actions.addView(command);
+            command.setPadding(0, dp(12), 0, dp(12));
             action("Copy command", () -> {
                 ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Set up BashKitten", runtime.termux.setupCommand()));
                 Toast.makeText(activity, "Command copied", Toast.LENGTH_SHORT).show();
@@ -329,8 +322,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 app.policies.edit().putBoolean("agent.termuxSetupPending", true).apply();
                 runtime.termux.openTermux();
             });
-        } else if (runtime.setupStep.equals("install-failed")) {
-            action("Retry installation", runtime::startInstallation);
+            ScrollView commandScroll = new ScrollView(activity); commandScroll.setNestedScrollingEnabled(true);
+            commandScroll.addView(command); actions.addView(commandScroll, new LayoutParams(-1, dp(180)));
         } else {
             action("Retry start", runtime::turnOn);
         }
@@ -340,35 +333,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         log.setText(text);
         logScroll.setVisibility(text.isEmpty() ? GONE : VISIBLE);
         if (follow && !text.isEmpty()) logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
-    }
-    private void bootstrapProgress() {
-        if (!startedBootstrap || destroyed || activity.isDestroyed()) return;
-        runtime.termux.bootstrapStatus(value -> {
-            if (destroyed || activity.isDestroyed()) return;
-            JSONObject bootstrap = value.optJSONObject("bootstrap");
-            if (bootstrap == null) { bootstrapFailed("Termux returned an invalid installation status."); return; }
-            String output;
-            try {
-                output = new String(android.util.Base64.decode(value.optString("logBase64"), android.util.Base64.DEFAULT), java.nio.charset.StandardCharsets.UTF_8);
-            } catch (IllegalArgumentException error) {
-                bootstrapFailed("The installation output could not be read. Check installation status again."); return;
-            }
-            String status = bootstrap.optString("status");
-            String phase = bootstrap.optString("phase", "Installing Agent packages…");
-            showLog(output);
-            message.setText(phase);
-            if (status.equals("complete")) {
-                startedBootstrap = false; runtime.installationFinished(null);
-            } else if (status.equals("failed") || status.equals("interrupted")) {
-                bootstrapFailed(phase);
-            } else app.main.postDelayed(bootstrapPoll, 2000);
-        }, this::bootstrapFailed);
-    }
-    private void bootstrapFailed(String text) {
-        if (destroyed || activity.isDestroyed()) return;
-        startedBootstrap = false;
-        String output = log.getText().toString();
-        runtime.installationFinished(text); showLog(output);
     }
     private void account() {
         EditText username = field("Username", false); EditText password = field("Password", true); actions.addView(username); actions.addView(password);

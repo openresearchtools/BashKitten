@@ -480,16 +480,23 @@ not need a local Termux installation merely to display that remote's UI.
 1. If `com.termux` is absent, offer **Download Termux** using the current
    official GitHub release's matching APK and the browser's normal download and
    Android installation flow. Do not substitute our old suite build.
-2. Open Termux for its initial bootstrap. Show one copyable command that enables
-   external apps, reloads settings and returns to the installed BashKitten
-   activity. The final activity component must come from the actual new APK.
+2. Open Termux for its initial bootstrap. Show one copyable command that downloads
+   and verifies our published Open Research Tools Termux keyring package, installs
+   it and `x11-repo` through `pkg`, refreshes the repositories and runs
+   `pkg install bashkitten`. The `.deb` declares all required Node, Python,
+   Git/archive, search/native-library and desktop dependencies, including XFCE,
+   LibreOffice and Xvfb. Keep no duplicate dependency installer inside the APK.
+   The same command enables external apps, reloads settings and returns through
+   the installed BashKitten launcher after successful installation. The final
+   activity component must come from the actual new APK.
 3. On return, BashKitten requests Android's `com.termux.permission.RUN_COMMAND`
    permission directly. Verify a real command result before marking connected.
    Denied/permanently denied permission gets an appropriate Retry/Settings link.
-4. Install our keyring and server through the existing authenticated package
-   flow, display real progress, start the service and complete account/2FA setup.
+4. On the successful return, probe the installed package and start the service
+   automatically, then complete account/2FA setup. No separate Connect or
+   Install packages action is needed.
 
-The command's core remains:
+After installing the package, the command enables the ordinary Termux bridge:
 
 ```sh
 mkdir -p ~/.termux && printf '\nallow-external-apps=true\n' >> ~/.termux/termux.properties && termux-reload-settings
@@ -503,15 +510,14 @@ This follows Termux's [RUN_COMMAND interface](https://github.com/termux/termux-a
 
 Keep the normal setup screen to the Termux button, one visible copyable command
 and the existing Turn on/off control. The Start action drives this sequence. Request the normal Android permission
-when it is needed, then probe the real Termux connection, install missing Agent
-packages and start the service automatically. After the one-time command is
+when it is needed, then probe the real Termux connection. Missing packages show
+the same copyable `pkg` command. After the one-time command is
 pasted in Termux, return through BashKitten's exported launcher and continue
 without another Connect button. Do not show already-satisfied permission steps
 or send every user to Android app settings. Show a settings recovery action only
-when Android has denied further permission prompts. Decode the installer's actual
-progress response into a readable, bounded scrolling log and advance on its
-completion status; raw JSON/base64 is never installation UI. Preserve observation
-of an ongoing install across activity or process recreation.
+when Android has denied further permission prompts. Installation displays native
+`pkg` progress in Termux; there is no JSON/base64 installer screen in the APK.
+Returning or reopening the browser reconciles the actual installed package.
 
 The user requires normal locked retail Android 17 first-install verification,
 using visible UI without ADB grants, root, developer settings or preconfigured

@@ -27,7 +27,6 @@ public final class AgentRuntime {
     private boolean launched, desired, busy, polling, localControlRequested;
     private int operation;
     public boolean visible;
-    public boolean installingPackages;
     public String setupStep = "";
     public boolean permissionPromptPending;
     public boolean permissionRequestInFlight;
@@ -47,7 +46,6 @@ public final class AgentRuntime {
         try { previousIdentity = identities.read().has("local"); }
         catch (Exception error) { previousIdentity = true; }
         localControlRequested = app.policies.getBoolean("agent.localControlRequested", previousIdentity);
-        installingPackages = app.policies.getBoolean("agent.installingPackages", false);
     }
     public void attach(GeckoRuntime engine, Listener listener) {
         this.engine = engine; listeners.add(listener);
@@ -86,42 +84,16 @@ public final class AgentRuntime {
         if (!selected.equals("local")) { connectRemote(); return; }
         if (!termux.installed()) { recordLocalControl(false); setup("termux", "Install Termux to run Agent on this device."); return; }
         if (!termux.permissionGranted()) { permissionPromptPending = true; setup("permission", "Allow BashKitten to run your Agent in Termux."); return; }
-        if (installingPackages) { setup("install", "Checking package installation…"); return; }
         final int generation = operation;
         termux.probe(value -> {
             if (generation != operation || !desired) return;
-            if (!value.optBoolean("packages")) { busy = false; startInstallation(); return; }
+            if (!value.optBoolean("packages")) { setup("connection", "Install Agent with the command below in Termux."); return; }
             recordLocalControl(true);
             command("start", new JSONObject(), result -> {
                 if (generation != operation || !desired) return;
                 busy = false; acceptStatus(result); poll();
             }, message -> { if (generation == operation) setup(message); });
         }, message -> { if (generation == operation) setup("connection", message); });
-    }
-    public void startInstallation() {
-        if (installingPackages || !desired) return;
-        installingPackages = true;
-        termux.bootstrap(value -> {
-            recordLocalControl(true);
-            app.policies.edit().putBoolean("agent.installingPackages", true).apply();
-            setup("install", "Installing Agent packages…");
-        }, message -> {
-            installingPackages = false;
-            setup("install-failed", message);
-        });
-    }
-    public void installationFinished(String failure) {
-        installingPackages = false;
-        app.policies.edit().remove("agent.installingPackages").apply();
-        busy = false;
-        if (!desired) {
-            final int generation = operation;
-            termux.probe(value -> {
-                if (generation != operation || desired) return;
-                if (value.optBoolean("packages")) requestStop(generation); else stopped();
-            }, message -> stopFailed(generation, message));
-        } else if (failure != null) setup("install-failed", failure);
-        else turnOn();
     }
     public void turnOff() {
         if (state.equals("stopping")) return;
@@ -133,7 +105,6 @@ public final class AgentRuntime {
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
-        if (installingPackages) { error = "Finishing package installation before stopping…"; changed(); return; }
         if ((!selected.equals("local") && !localControlRequested) || setupWithoutService || !termuxInstalled) { stopped(); return; }
         requestStop(operation);
     }
