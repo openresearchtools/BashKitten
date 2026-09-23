@@ -31,7 +31,6 @@ import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.settings.about.AboutItemType.LICENSING_INFO
-import org.mozilla.fenix.settings.about.AboutItemType.PRIVACY_NOTICE
 import org.mozilla.fenix.settings.about.AboutItemType.RIGHTS
 import org.mozilla.fenix.settings.about.AboutItemType.SUPPORT
 import org.mozilla.fenix.settings.about.AboutItemType.WHATS_NEW
@@ -201,7 +200,7 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     WHATS_NEW,
-                    "https://github.com/openresearchtools/bashkitten-android/commits/main/",
+                    "https://github.com/openresearchtools/bashkitten/releases",
                 ),
                 // Note: Fenix only has release notes for 'Release' versions, NOT 'Beta' & 'Nightly'.
                 getString(R.string.about_whats_new, appName),
@@ -209,17 +208,9 @@ class AboutFragment(
             AboutPageItem(
                 AboutItem.ExternalLink(
                     SUPPORT,
-                    "https://github.com/openresearchtools/bashkitten-android/issues",
+                    "https://github.com/openresearchtools/bashkitten/issues",
                 ),
                 getString(R.string.about_support),
-            ),
-
-            AboutPageItem(
-                AboutItem.ExternalLink(
-                    PRIVACY_NOTICE,
-                    "https://github.com/openresearchtools/bashkitten-android/blob/main/bashkitten/android/README.md",
-                ),
-                getString(R.string.about_privacy_notice),
             ),
 
             AboutPageItem(
