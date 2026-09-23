@@ -123,11 +123,11 @@ browser's selected tab.
 ```
 
 The built-in PDF viewer can be read and controlled when displaying an HTTP or
-HTTPS PDF in an ordinary browsing tab, including its Download button. Internal browser
-pages and local files remain outside the page-control interface.
+HTTPS PDF in an ordinary browsing tab, including its Download button. Browser
+chrome remains outside the page-control interface.
 
-Snapshots return at most 200 nodes within Android's response budget and mark
-`truncated` when limited. Use `depth` or `maxNodes` to request a smaller tree.
+Snapshots default to 200 nodes and 60,000 bytes and mark `truncated` when the
+requested budget is reached. Set `depth`, `maxNodes` or `maxBytes` to adjust it.
 To inspect a container in more detail, call `snapshot {tabId,target}` with its
 opaque reference from the preceding snapshot; this returns that subtree.
 A fresh snapshot replaces the previous snapshot's element references.
@@ -155,13 +155,19 @@ trying keys saved for other sites.
 
 Element references are opaque, tied to a tab/document, and refreshed by each
 snapshot. Optional `frameId` values must identify a frame inside the requested
-tab. Content tools only operate on HTTP/HTTPS documents. Raw Gecko references,
-privileged URLs, arbitrary files, engine preferences, process/window controls
+tab. Content tools operate on ordinary web documents, including file/blob/data
+documents already loaded in a tab and about:blank. Raw Gecko references,
+privileged URLs, arbitrary filesystem access, engine preferences, process/window controls
 and unrestricted remote debugging are not exposed. There is no `browser.close`
 or application-kill method. Desktop-only tool parity must not be assumed: use
-capability discovery. Requests are limited to 200,000 characters and responses
-to 200,000 characters; narrow large snapshots/read queries. Evaluations and
-waits are bounded to 30 seconds.
+capability discovery. Evaluation and wait timeouts are caller-selectable;
+their Android default is 10 seconds. Native Binder transaction constraints still
+apply; the Termux CLI uses the streamed command/file transfer paths.
+
+The complete, topic-based command reference ships with Pi's
+[Android browser skill](../../../agent/pi/skills/browser-android/SKILL.md).
+Pi adds `browserGuide` and `browserHelp` paths to capability discovery and
+handles `help {topic}` without exposing an additional native browser method.
 
 `evaluate.code` is an asynchronous function body; use `return` to return a value. `act` supports snapshot references for click, focus, fill, check/uncheck and select; `fill` accepts `value` and optional `clear`.
 
@@ -177,6 +183,6 @@ failed connection revokes the grant. Reconnecting requires fresh native approval
 
 Remote screenshots return `data` as PNG base64. Remote file export copies only
 an already-authorized browser file transfer and returns `data`, `mimeType`,
-`name` and `size`; files above 23 MiB return a clear size error. Termux's native
-`--output` path remains a streamed transfer without this remote JSON limit.
+`name` and `size`. Termux's native `--output` path uses a streamed transfer;
+remote JSON file results currently encode the file in memory.
 Commands are not replayed when delivery or a reply becomes uncertain.
