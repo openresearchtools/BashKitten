@@ -19,7 +19,8 @@ async function localBrowserOwner() {
   if (!browserOwner) {
     browserOwner = (async () => {
       const pid = Services.appinfo.processID;
-      const stat = await IOUtils.readUTF8(`/proc/${pid}/stat`);
+      // procfs reports a zero file size; request bytes explicitly instead.
+      const stat = new TextDecoder().decode(await IOUtils.read(`/proc/${pid}/stat`, { maxBytes: 4096 }));
       const started = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19];
       if (!/^[1-9][0-9]*$/.test(started)) throw new Error("Could not identify the browser process.");
       const owner = { pid, started };
