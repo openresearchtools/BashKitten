@@ -36,6 +36,7 @@ repositories {
 
 dependencies {
     implementation project(':geckoview')
+    implementation project(':components:support-utils')
     implementation libs.androidx.appcompat
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
     implementation 'info.guardianproject:jtorctl:0.4.5.7'
