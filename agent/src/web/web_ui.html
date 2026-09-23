@@ -685,7 +685,7 @@
             <h3>Download models</h3>
             <p class="meta">Find models on Hugging Face and download their files to this server. Downloads continue when you close this page.</p>
             <label>Models directory<span class="folder-field"><input id="modelsDirectory" autocomplete="off" spellcheck="false"><button id="modelsDirectoryBrowse" type="button">Browse…</button><button id="modelsDirectorySave" type="button">Save</button></span></label>
-            <p class="meta">Local llama.cpp uses this same directory.</p>
+            <p id="modelsLlamaDirectoryNote" class="meta hidden">Local llama.cpp uses this same directory.</p>
             <details class="settings-section"><summary>Hugging Face token</summary>
               <p id="modelTokenStatus" class="meta" role="status"></p>
               <label>Access token<input id="modelToken" type="password" placeholder="hf_…" autocomplete="new-password" spellcheck="false"></label>
@@ -1690,6 +1690,7 @@
       serverPlatform = value.platform;
       $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
       $('#managedLlama').classList.toggle('hidden', serverPlatform !== 'linux');
+      $('#modelsLlamaDirectoryNote').classList.toggle('hidden', serverPlatform !== 'linux');
       await loadNotifications();
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
