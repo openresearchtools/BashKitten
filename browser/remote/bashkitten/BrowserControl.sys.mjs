@@ -2142,7 +2142,8 @@ class BrowserControlService {
     if (typeof args.page === "string" && /^[1-9]\d*$/.test(args.page)) args.page = Number(args.page);
     if (method === "capabilities") {
       return { platform: "linux", transport: "unix", explicitTabIds: true,
-        methods: [...CONTROL_TOOLS], tabs: ["list", "new", "show", "close"],
+        methods: [...CONTROL_TOOLS, "tabs.list", "tabs.create", "tabs.open", "tabs.show", "tabs.close"],
+        tabs: ["list", "new", "activate", "close"],
         protectedAgent: true };
     }
     if (method.startsWith("tabs.")) {

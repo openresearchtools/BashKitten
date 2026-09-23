@@ -2,18 +2,19 @@
 // Adapted from Wild Buzzard's native Pi integration; see NOTICE.
 import { Type } from 'typebox';
 import { browserCall, captureScreenshot, saveDownload } from './client.mjs';
-import { fileURLToPath } from 'node:url';
+import { browserDocumentation, browserHelp } from './browser-help.mjs';
 
 export default function bashkitten(pi) {
   pi.registerTool({
     name: 'bashkitten_browser', label: 'BashKitten browser',
-    description: 'Control ordinary browser tabs. First call capabilities and read the browser skill matching that client (Android or Linux). Use explicit tabId for page actions; tabs.list lists and tabs.create {url} opens. snapshot gets element references for act. Agent, login and credential views are protected. Native approval may be required on the first Android call.',
+    description: 'Control ordinary browser tabs. Start with capabilities for the connected client platform and guide. help {topic} gives exact commands/parameters for tabs, input, files or desktop debug; omit topic to list sections. Use explicit tabId. tabs.list lists; tabs.create {url} opens; snapshot gives references for act (desktop ref, Android target). Protected Agent views are excluded. First Android use may require native approval.',
     parameters: Type.Object({ method: Type.String(), params: Type.Optional(Type.Record(Type.String(), Type.Any())) }),
     async execute(_id, { method, params = {} }, signal) {
-      let result = await browserCall(method, params, { signal });
+      let result = method === 'help'
+        ? await browserHelp(await browserCall('capabilities', {}, { signal }), params.topic)
+        : await browserCall(method, params, { signal });
       if (method === 'capabilities' && result?.platform) {
-        const target = ['android', 'termux'].includes(result.platform) ? 'android' : result.platform === 'linux' ? 'linux' : null;
-        if (target) result = { ...result, browserGuide: fileURLToPath(new URL(`./skills/browser-${target}/SKILL.md`, import.meta.url)) };
+        result = { ...result, ...browserDocumentation(result.platform) };
       }
       return { content: [{ type: 'text', text: JSON.stringify(result) }], details: { result } };
     },
