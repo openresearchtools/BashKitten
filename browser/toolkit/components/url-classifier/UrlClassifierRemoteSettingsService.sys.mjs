@@ -41,6 +41,14 @@ UrlClassifierRemoteSettingsService.prototype = {
 
     this._initialized = true;
 
+    // BashKitten does not use the general Remote Settings push connection.
+    // Refresh this signed collection before using bundled attachment URLs:
+    // older attachments may have been removed before the daily timer fires.
+    // Offline startup still falls back to the existing records and classifier.
+    try {
+      await rs.sync({ trigger: "startup" });
+    } catch (e) {}
+
     let entries;
     try {
       entries = await rs.get();
