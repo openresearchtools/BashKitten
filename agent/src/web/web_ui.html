@@ -686,12 +686,14 @@
             <h3>Download models</h3>
             <p class="meta">Find models on Hugging Face and download their files to this server. Downloads continue when you close this page.</p>
             <label>Models directory<span class="folder-field"><input id="modelsDirectory" autocomplete="off" spellcheck="false"><button id="modelsDirectoryBrowse" type="button">Browse…</button><button id="modelsDirectorySave" type="button">Save</button></span></label>
+            <p id="modelsDirectoryNotice" class="meta" role="status"></p>
             <p id="modelsLlamaDirectoryNote" class="meta hidden">Local llama.cpp uses this same directory.</p>
             <details class="settings-section"><summary>Hugging Face token</summary>
               <p id="modelTokenStatus" class="meta" role="status"></p>
               <label>Access token<input id="modelToken" type="password" placeholder="hf_…" autocomplete="new-password" spellcheck="false"></label>
               <p class="meta">Saved privately on this server for downloads, including when no browser is open. Gated models also require access to be granted on Hugging Face.</p>
               <div class="subscription-actions"><button id="modelTokenSave" type="button">Save token</button><button id="modelTokenRemove" type="button">Remove token</button></div>
+              <p id="modelTokenNotice" class="meta" role="status"></p>
             </details>
             <div class="settings-section">
               <label for="modelSearch">Search Hugging Face or enter an owner/repository</label>
@@ -2001,18 +2003,19 @@
     async function saveModelSettings(settings, button) {
       if (modelSettingsBusy) return;
       const directoryRevision = modelsDirectoryRevision;
+      const notice = 'token' in settings ? $('#modelTokenNotice') : $('#modelsDirectoryNotice');
       modelSettingsBusy = true;
       for (const id of ['#modelsDirectorySave','#modelTokenSave','#modelTokenRemove']) $(id).disabled = true;
-      $('#modelDownloadsNotice').textContent = '';
-      try { await api('/api/models/settings', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(settings)}); if ('directory' in settings && directoryRevision === modelsDirectoryRevision) modelsDirectoryDirty = false; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); $('#modelDownloadsNotice').textContent = 'token' in settings ? (settings.token ? 'Token saved.' : 'Token removed.') : 'Models directory saved.'; }
-      catch (error) { $('#modelDownloadsNotice').textContent = error.message; }
+      notice.textContent = 'Saving…';
+      try { await api('/api/models/settings', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(settings)}); if ('directory' in settings && directoryRevision === modelsDirectoryRevision) modelsDirectoryDirty = false; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); notice.textContent = 'token' in settings ? (settings.token ? 'Token saved.' : 'Token removed.') : 'Models directory saved.'; }
+      catch (error) { notice.textContent = error.message; }
       finally { modelSettingsBusy = false; for (const id of ['#modelsDirectorySave','#modelTokenSave']) $(id).disabled = false; $('#modelTokenRemove').disabled = !modelDownloadsState?.hasToken; }
     }
     $('#modelsDirectory').oninput = () => { modelsDirectoryDirty = true; modelsDirectoryRevision++; };
     $('#modelsDirectoryBrowse').onclick = () => openFolderPicker('Models directory', $('#modelsDirectory').value, path => { $('#modelsDirectory').value = path; modelsDirectoryDirty = true; modelsDirectoryRevision++; });
     $('#modelsDirectorySave').onclick = () => saveModelSettings({directory:$('#modelsDirectory').value.trim()}, $('#modelsDirectorySave'));
     $('#modelsDirectory').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#modelsDirectorySave').click(); } };
-    $('#modelTokenSave').onclick = () => { const token = $('#modelToken').value.trim(); $('#modelToken').value = ''; if (!token) { $('#modelDownloadsNotice').textContent = 'Enter a token to save, or use Remove token.'; return; } saveModelSettings({token}, $('#modelTokenSave')); };
+    $('#modelTokenSave').onclick = () => { const token = $('#modelToken').value.trim(); $('#modelToken').value = ''; if (!token) { $('#modelTokenNotice').textContent = 'Enter a token to save, or use Remove token.'; return; } saveModelSettings({token}, $('#modelTokenSave')); };
     $('#modelTokenRemove').onclick = () => { $('#modelToken').value = ''; saveModelSettings({token:''}, $('#modelTokenRemove')); };
     $('#modelToken').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#modelTokenSave').click(); } };
     $('#modelDownloadsRefresh').onclick = async () => { $('#modelDownloadsNotice').textContent = ''; $('#modelDownloadsRefresh').disabled = true; try { await refreshModelDownloads(); } finally { $('#modelDownloadsRefresh').disabled = false; } };
