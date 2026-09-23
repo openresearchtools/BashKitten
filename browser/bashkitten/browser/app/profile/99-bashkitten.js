@@ -325,10 +325,6 @@ pref(
   "about:blank",
   locked
 );
-pref("extensions.update.enabled", false, locked);
-pref("extensions.update.autoUpdateDefault", false, locked);
-pref("extensions.update.url", "", locked);
-pref("extensions.update.background.url", "", locked);
 pref("extensions.blocklist.enabled", false, locked);
 pref("extensions.blocklist.url", "", locked);
 pref("extensions.blocklist.detailsURL", "about:blank", locked);
@@ -369,11 +365,10 @@ pref("dom.push.connection.enabled", false, locked);
 pref("dom.push.serverURL", "", locked);
 pref("webextensions.storage.sync.serverURL", "", locked);
 
-// No automatic DNS partner. Users may deliberately configure their own DoH
-// endpoint later by changing policy in a downstream or local build.
-pref("network.trr.mode", 5, locked);
-pref("network.trr.uri", "", locked);
-pref("network.trr.custom_uri", "", locked);
+// Use system DNS by default; the normal browser settings can select DoH.
+pref("network.trr.mode", 5);
+pref("network.trr.uri", "");
+pref("network.trr.custom_uri", "");
 pref("network.trr_ui.skip_reason_learn_more_url", "about:blank", locked);
 
 // Experimental Mozilla-hosted browser surfaces and model services.
