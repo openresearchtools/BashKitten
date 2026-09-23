@@ -101,7 +101,7 @@ export function socketRequest(socket, route, value, timeout = 120000) {
     const req = http.request({ socketPath: socket, path: route, method: value === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } }, res => {
       body(res).then(bytes => {
         const result = JSON.parse(bytes.toString());
-        if (res.statusCode >= 400) reject(Error(result.error)); else resolve(result);
+        if (res.statusCode >= 400) reject(Object.assign(Error(result.error), { code: result.code })); else resolve(result);
       }).catch(reject);
     });
     req.setTimeout(timeout, () => req.destroy(Error('Local service did not respond')));

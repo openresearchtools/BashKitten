@@ -30,9 +30,17 @@ const stateFile = path.join(dataDir, 'control.json');
 const script = fileURLToPath(import.meta.url);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function controlRequest(command, value) {
+  const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
     try { return await socketRequest(controlSocket, '/' + command, value, command === 'start' || command === 'restart' ? 120000 : 30000); }
     catch (error) {
+      // A fresh launch can reach the old controller after its status reply but
+      // before shutdown finishes. Only retry an explicitly rejected start;
+      // never replay an operation whose response was lost.
+      if (command === 'start' && error.code === 'AGENT_SHUTTING_DOWN' && Date.now() < deadline) {
+        await ensureManager({ waitForShutdown: true });
+        continue;
+      }
       if (command !== 'status' || attempt >= 10 || !['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(error.code)) throw error;
       await sleep(100);
     }
@@ -47,23 +55,25 @@ function spawnManager(detached) {
   if (log !== null) closeSync(log);
   return child;
 }
-export async function ensureManager() {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    try {
-      const existing = await socketRequest(controlSocket, '/status', undefined, 3000);
-      if (!existing.manager?.exiting) return;
-      await sleep(100);
-    } catch { break; }
-  }
+export async function ensureManager({ waitForShutdown = false } = {}) {
   await privateDir(path.dirname(controlSocket));
-  const child = spawnManager(true); child.unref();
-  let error; child.on('error', value => { error = value; });
+  let child, error, draining = false;
   for (const deadline = Date.now() + 30000; Date.now() < deadline;) {
     if (error) throw error;
-    try { await socketRequest(controlSocket, '/status', undefined, 3000); return; } catch {}
+    try {
+      const existing = await socketRequest(controlSocket, '/status', undefined, 3000);
+      draining = existing.manager?.exiting || waitForShutdown && existing.web?.status === 'stopping';
+      if (!draining) return;
+    } catch (failure) {
+      if (!['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(failure.code)) throw failure;
+      if (!child || child.exitCode !== null || child.signalCode !== null) {
+        child = spawnManager(true); child.unref();
+        child.on('error', value => { error = value; });
+      }
+    }
     await sleep(100);
   }
-  throw Error('Could not start Agent controller; see control.log');
+  throw Error(draining ? 'Agent is still completing shutdown; retry Turn on' : 'Could not start Agent controller; see control.log');
 }
 async function ownedWorker(id) {
   const pid = Number(await fs.readFile(socketPath(id) + '.lock', 'utf8').catch(() => '0'));
@@ -228,7 +238,7 @@ async function serve() {
   }
   async function action(command, value = {}) {
     if (command === 'status') return status();
-    if (exiting) throw Error('Agent controller is completing shutdown; retry Turn on');
+    if (exiting) throw Object.assign(Error('Agent controller is completing shutdown; retry Turn on'), { code: 'AGENT_SHUTTING_DOWN' });
     if (command === 'browser-shutdown') {
       if (!browserOwner || browserOwner.pid !== value.browserOwner?.pid || browserOwner.started !== value.browserOwner?.started) throw Error('This browser does not own the local Agent');
       browserClosing = true;
@@ -260,8 +270,8 @@ async function serve() {
     } else if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
       if (command === 'stop' || command === 'shutdown') { await turnOff(); if (!stopping) scheduleExit(); }
       else {
-        if (browserClosing) throw Error('The browser is stopping Agent');
-        if (stopping || jobs.busy && command === 'restart') throw Error('Wait for package maintenance to finish');
+        if (browserClosing || stopping) throw Object.assign(Error('Agent is completing shutdown'), { code: 'AGENT_SHUTTING_DOWN' });
+        if (jobs.busy && command === 'restart') throw Error('Wait for package maintenance to finish');
         if (value.browserOwner) await adoptBrowser(value.browserOwner);
         if (command === 'restart') await stopGroup();
         state.web = true; lastError = null; await persist(); await startWeb();
@@ -312,7 +322,7 @@ async function serve() {
       }
       const operation = serial.then(() => action(req.url.slice(1), value)); serial = operation.catch(() => {});
       json(res, await operation);
-    } catch (error) { json(res, { error: error.message }, 400); }
+    } catch (error) { json(res, { error: error.message, code: error.code }, 400); }
   });
   function scheduleExit() {
     if (exiting) return; exiting = true;
