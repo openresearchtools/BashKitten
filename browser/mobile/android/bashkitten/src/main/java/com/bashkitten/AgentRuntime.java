@@ -34,6 +34,7 @@ public final class AgentRuntime {
     private JSONObject localHostedRecord;
     private String pendingHostedUrl = "";
     private boolean openingHosted, connectingHosted;
+    private boolean reloadOnConnect;
 
     AgentRuntime(BrowserApp app) {
         this.app = app; termux = new TermuxConnection(app); identities = new SecretStore(app, "agent-identities");
@@ -72,6 +73,9 @@ public final class AgentRuntime {
     public void freshLaunch() { if (!desired && !busy) turnOn(); }
     public void turnOn() {
         if (busy) return;
+        // Turn off suspends the protected document at about:blank. Its saved
+        // endpoint can stay unchanged when the verified service starts again.
+        reloadOnConnect = true;
         desired = true; busy = true; operation++; state = "starting"; error = "";
         app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
         changed();
@@ -194,7 +198,7 @@ public final class AgentRuntime {
         final GeckoSession target = next;
         final int generation = operation;
         final String previousUrl = url;
-        boolean needsLoad = !endpoint.equals(url) || !state.equals("on") || !target.isOpen();
+        boolean needsLoad = reloadOnConnect || !endpoint.equals(url) || !state.equals("on") || !target.isOpen();
         String request = new JSONObject().put("method", "agent.configure").put("params", params).toString();
         Runnable connect = () -> BashKittenController.request(target, request).accept(result -> {
             try {
@@ -203,7 +207,10 @@ public final class AgentRuntime {
                 if (reply.has("error")) throw new IllegalStateException(reply.getString("error"));
                 boolean changedUrl = !endpoint.equals(url);
                 url = endpoint;
-                if (changedUrl || needsLoad) target.loadUri(endpoint);
+                if (changedUrl || needsLoad) {
+                    target.loadUri(endpoint);
+                    reloadOnConnect = false;
+                }
                 changed();
             } catch (Exception exception) { fail("Could not verify Agent connection: " + exception.getMessage()); }
         }, exception -> { if (generation == operation) fail("Could not configure the protected Agent connection."); });
