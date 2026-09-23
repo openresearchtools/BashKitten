@@ -66,6 +66,7 @@ export class BrowserDOMWindow {
       triggeringPrincipal: principal,
       userContextId: openWindowInfo?.originAttributes.userContextId,
       referrerInfo,
+      inBackground: false,
     };
     const opener = lazy.URILoadingHelper.agentOpener(this.win, params);
     if (opener === false) {

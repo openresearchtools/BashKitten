@@ -200,6 +200,7 @@ class AgentView {
   }
 
   show() {
+    this.closeConnections();
     this.layout = "full";
     this.pane.hidden = false;
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", "true");
@@ -342,6 +343,7 @@ class AgentView {
   }
 
   async choose(id) {
+    this.closeConnections();
     this.pendingHosted = null;
     this.selection = id;
     clearTimeout(this.timer);
@@ -374,6 +376,7 @@ class AgentView {
   }
 
   async start() {
+    this.closeConnections();
     if (this.off) this.localConnection = null;
     this.off = false;
     this.power.textContent = "Starting…";
@@ -388,6 +391,7 @@ class AgentView {
   }
 
   async stop() {
+    this.closeConnections();
     this.pendingHosted = null;
     clearTimeout(this.timer);
     this.off = true;
@@ -411,6 +415,7 @@ class AgentView {
   }
 
   stopped() {
+    this.closeConnections();
     lazy.BrowserControlChannel.close("Agent stopped");
     AgentRemotes.deactivate().catch(console.error);
     this.localConnection = null;
@@ -689,8 +694,29 @@ class AgentView {
     form.append(submit, resume, error); content.append(form);
   }
 
+  closeConnections() {
+    const panel = this.connectionsPanel;
+    if (!panel) return;
+    this.connectionsPanel = null;
+    this.pane.removeAttribute("data-connections");
+    panel.dispatchEvent(new this.win.Event("close"));
+    panel.remove();
+    this.activeBrowser?.focus();
+  }
+
   async remotes() {
-    const { dialog, content } = this.dialog("Browser connections");
+    if (this.connectionsPanel) { this.connectionsPanel.querySelector("button").focus(); return; }
+    const panel = html(this.doc, "section", { id: "bashkitten-agent-connections", "aria-labelledby": "bashkitten-connections-title" });
+    const content = html(this.doc, "div", { class: "connections-content" });
+    const heading = html(this.doc, "div", { class: "connections-heading" });
+    const back = html(this.doc, "button", { type: "button" }, "Back to Agent");
+    back.addEventListener("click", () => this.closeConnections());
+    heading.append(back, html(this.doc, "h2", { id: "bashkitten-connections-title" }, "Browser connections"));
+    content.append(heading); panel.append(content);
+    this.connectionsPanel = panel;
+    this.pane.append(panel);
+    this.pane.setAttribute("data-connections", "true");
+    back.focus();
     content.append(html(this.doc, "p", {}, "Saved in this browser. Choose Local or a saved server from the Agent selector."));
     const error = html(this.doc, "p", { role: "alert" });
     const saved = html(this.doc, "div");
@@ -714,7 +740,7 @@ class AgentView {
             await AgentRemotes.stopRelay(record.id); await AgentRemotes.startRelay(record.id, { port: 0 }); await refresh();
           }));
         } else {
-          item.append(button("Connect", async () => { await this.choose(record.id); dialog.close(); }));
+          item.append(button("Connect", async () => { await this.choose(record.id); }));
           item.append(button("Allow browser control", async () => {
             lazy.BrowserControlChannel.allowAgain(record.id);
             if (this.remote?.id !== record.id) await this.choose(record.id);
@@ -771,19 +797,22 @@ class AgentView {
       await enroll(JSON.parse(source)); file.value = "";
     }));
     const input = html(this.doc, "textarea", { rows: "3", placeholder: "Paste connection JSON", "aria-label": "Connection JSON" });
+    panel.addEventListener("close", () => { key.value = token.value = input.value = file.value = ""; }, { once: true });
     const paste = button("Import pasted connection", async () => { await enroll(JSON.parse(input.value)); input.value = ""; });
     const camera = button("Scan QR with camera", async () => {
       const video = html(this.doc, "video", { autoplay: "", muted: "", style: "width:100%;max-height:260px" });
       const stream = await this.win.navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      if (this.connectionsPanel !== panel) { stream.getTracks().forEach(track => track.stop()); return; }
       video.srcObject = stream; content.append(video);
       let timer;
       const stop = () => { clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); video.remove(); };
-      dialog.addEventListener("close", stop, { once: true });
+      panel.addEventListener("close", stop, { once: true });
       const scan = async () => {
-        if (!dialog.open) return stop();
+        if (this.connectionsPanel !== panel) return stop();
         try {
           if (video.readyState >= 2) {
             const source = await this.decodeQR(video);
+            if (this.connectionsPanel !== panel) return stop();
             await enroll(JSON.parse(source)); stop(); return;
           }
         } catch (e) { if (e.message !== "No connection QR code was found.") { error.textContent = e.message; stop(); return; } }
@@ -872,6 +901,7 @@ class AgentView {
   }
 
   destroy() {
+    this.closeConnections();
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);

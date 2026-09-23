@@ -12,6 +12,18 @@
 #bashkitten-agent-state p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 #bashkitten-agent-views { min-height: 0; }
 #bashkitten-agent-views > browser { min-width: 0; min-height: 0; }
+#bashkitten-agent-pane[data-connections] > :is(#bashkitten-agent-state, #bashkitten-agent-views) { display: none !important; }
+#bashkitten-agent-connections { flex: 1; min-height: 0; overflow: auto; padding: 24px; font: menu; }
+#bashkitten-agent-connections .connections-content { width: min(650px, 100%); margin-inline: auto; }
+#bashkitten-agent-connections .connections-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
+#bashkitten-agent-connections h2 { margin: 0; font-size: 20px; }
+#bashkitten-agent-connections p { overflow-wrap: anywhere; line-height: 1.5; }
+#bashkitten-agent-connections form, #bashkitten-agent-connections label { display: grid; gap: 8px; }
+#bashkitten-agent-connections form { gap: 12px; }
+#bashkitten-agent-connections input, #bashkitten-agent-connections textarea { min-width: 0; padding: 6px 10px; border: 1px solid var(--border-color, ThreeDShadow); border-radius: 6px; background: Field; color: FieldText; font: inherit; }
+#bashkitten-agent-connections textarea { display: block; box-sizing: border-box; width: 100%; margin-block: 12px; }
+#bashkitten-agent-connections input[type="checkbox"] { justify-self: start; }
+#bashkitten-agent-connections [hidden] { display: none !important; }
 #bashkitten-agent-button { font-weight: 600; min-width: 110px; margin: 4px 2px; padding-inline: 18px; border-radius: 8px; }
 #bashkitten-agent-button[checked] { background: var(--tab-selected-bgcolor, var(--toolbar-bgcolor, Canvas)); box-shadow: 0 1px 4px #0003; }
 #bashkitten-agent-pane-toggle { min-width: 100px; }
