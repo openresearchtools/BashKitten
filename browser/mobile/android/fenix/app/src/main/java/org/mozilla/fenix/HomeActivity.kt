@@ -554,9 +554,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                 val content = destination.id == R.id.homeFragment || destination.id == R.id.browserFragment
                 val menu = destination.id == R.id.menuDialogFragment
                 if (content && bashKittenMenuFromAgent) {
-                    if (bashKittenBrowserUiBack || previousDestination == R.id.menuDialogFragment) {
-                        bashKittenAgentPanel?.showAgent()
-                    } else {
+                    // Returning from native UI restores the existing full/split
+                    // Agent layout; only a forward browser action selects a page.
+                    if (!bashKittenBrowserUiBack && previousDestination != R.id.menuDialogFragment) {
                         bashKittenAgentPanel?.showBrowser()
                     }
                     bashKittenMenuFromAgent = false

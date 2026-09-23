@@ -3521,7 +3521,7 @@
     function renderDiffBlocks(text) {
       const fragment=document.createDocumentFragment(),notes=[];let body=null,oldLine=0,newLine=0,hunks=0,oldMode='',newMode='';
       const range=(start,count)=>count===0?'No lines':count===1?'Line '+start:'Lines '+start+'–'+(start+count-1);
-      for(const line of text.split('\n').slice(0,4000)) {
+      for(const line of text.split('\n')) {
         const hunk=/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: ?(.*))?$/.exec(line);
         if(hunk){
           oldLine=Number(hunk[1]);newLine=Number(hunk[3]);hunks++;
@@ -3561,11 +3561,10 @@
       try{
         const result=await api('/api/git/diff?root='+encodeURIComponent(root)+'&path='+encodeURIComponent(path),{signal:diffAbort.signal});
         if(diffPath!==path||generation!==changesGeneration||request!==diffRequest)return;
-        const text=(result.diff||'').slice(0,262144),limited=result.truncated||(result.diff||'').length>text.length||text.split('\n').length>4000;
+        const text=result.diff||'';
         const rendered=renderDiffBlocks(text),notes=rendered.notes;
         if(result.binary)notes.unshift('Binary file changed. A text comparison is not available.');
         if(result.comparison==='staged-and-unstaged')notes.unshift('Staged and unstaged changes cancel in the working file.');
-        if(limited)notes.push('Large diff · showing a limited preview.');
         $('#diffNotice').textContent=notes.join(' ');
         if(!rendered.hunks&&!notes.length){const empty=document.createElement('p');empty.className='diff-empty';empty.textContent='No text changes to display.';$('#fileDiff').append(empty);}
         $('#fileDiff').scrollTop=scroll;
@@ -3594,7 +3593,7 @@
         const actions=document.createElement('div');actions.className='subscription-actions';
         for(const method of service.methods){const button=document.createElement('button');button.type='button';button.textContent=method.name;
           button.onclick=async()=>{try{
-            if(method.type==='oauth'){
+            if(method.type==='oauth'&&!nativeHost){
               window.open('/pi-login?provider='+encodeURIComponent(service.id),'_blank','noopener');
               $('#settingsNotice').textContent='Complete Pi’s login in the browser tab. This page updates when you return.';
             }else{await servicePost('login',{provider:service.id,type:method.type});await refreshServices();}
