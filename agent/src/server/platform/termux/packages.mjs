@@ -13,17 +13,17 @@ export function requireTermux() { if (platform !== 'termux') throw Error('APT pa
 export async function apt(job, args) { requireTermux(); return job.exec('apt-get', [...options, ...args], { env: environment }); }
 export async function packageState(names) {
   requireTermux();
-  const { stdout } = await exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${db:Status-Status}\n'], { maxBuffer: 4 * 1024 * 1024 });
+  const { stdout } = await exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${db:Status-Status}\n'], { maxBuffer: Infinity });
   return Object.fromEntries(stdout.trim().split('\n').map(line => line.split('\t')).filter(([name, , state]) => names.includes(name) && state === 'installed').map(([name, version]) => [name, version]));
 }
 // Explicit local inventory: no registry or repository requests.
 export async function packageInventory() {
-  const { stdout } = await exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${db:Status-Status}\n'], { timeout: 15000, maxBuffer: 4 * 1024 * 1024 });
+  const { stdout } = await exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${db:Status-Status}\n'], { timeout: 15000, maxBuffer: Infinity });
   const apt = stdout.trim().split('\n').map(line => line.split('\t')).filter(([, , state]) => state === 'installed').map(([name, version]) => ({ name, version }));
   let npm = [], npmError;
   try {
     let output;
-    try { ({ stdout: output } = await exec('npm', ['ls', '--global', '--depth=0', '--json', '--offline', '--update-notifier=false'], { timeout: 15000, maxBuffer: 1024 * 1024 })); }
+    try { ({ stdout: output } = await exec('npm', ['ls', '--global', '--depth=0', '--json', '--offline', '--update-notifier=false'], { timeout: 15000, maxBuffer: Infinity })); }
     catch (error) { if (error.code !== 1 || !error.stdout) throw error; output = error.stdout; }
     const value = JSON.parse(output);
     npm = Object.entries(value.dependencies || {}).map(([name, item]) => ({ name, version: item.version || 'Unknown' }));

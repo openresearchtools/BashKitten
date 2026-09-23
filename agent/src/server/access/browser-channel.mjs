@@ -7,7 +7,6 @@ import { dataDir, digest, privateDir, body, json } from '../common.mjs';
 import { watch } from '../http/web-auth.mjs';
 
 const channels = new Map(), sockets = new Map(), bindings = new Map(), openingSockets = new Map();
-const limit = 32 * 1024 * 1024;
 const sessionPattern = /^[a-f0-9-]{36}$/;
 export const browserSocketPath = id => {
   if (!sessionPattern.test(id)) throw Error('Invalid Pi session');
@@ -18,7 +17,7 @@ function close(channel, reason = 'Browser control disconnected') {
   if (!channels.delete(channel.id)) return;
   clearTimeout(channel.expiry); channel.unwatch?.();
   channel.poll?.finish({ closed: true, commands: [] });
-  for (const pending of channel.pending.values()) { clearTimeout(pending.timer); pending.reject(failure(reason)); }
+  for (const pending of channel.pending.values()) { pending.reject(failure(reason)); }
 }
 export function closeBrowserChannels(key) {
   for (const channel of channels.values()) if (!key || channel.key === key) close(channel);
@@ -48,12 +47,9 @@ function targetFor(sessionId) {
 function dispatch(sessionId, command) {
   const channel = targetFor(sessionId);
   if (typeof command.method !== 'string' || command.method.length > 128 || !command.params || typeof command.params !== 'object' || Array.isArray(command.params)) throw failure('Invalid browser command', 'invalid_command');
-  if (channel.pending.size >= 64) throw failure('Browser command queue is full', 'busy');
   return new Promise((resolve, reject) => {
     const id = randomUUID();
-    const timer = setTimeout(() => { channel.pending.delete(id); channel.queue = channel.queue.filter(item => item.id !== id); reject(failure('Browser command timed out; its action was not retried', 'timeout')); }, 180000);
-    timer.unref();
-    channel.pending.set(id, { resolve, reject, timer });
+    channel.pending.set(id, { resolve, reject });
     channel.queue.push({ id, sessionId, method: command.method, params: command.params });
     deliver(channel);
   });
@@ -72,7 +68,7 @@ async function openBrowserSocket(id) {
   const server = http.createServer(async (req, res) => {
     try {
       if (req.method !== 'POST' || req.url !== '/browser') throw failure('Unknown browser operation', 'invalid_command');
-      const input = JSON.parse((await body(req, limit)).toString());
+      const input = JSON.parse((await body(req, Infinity)).toString());
       const result = await dispatch(id, { method: input.method, params: input.params || {} });
       json(res, { result });
     } catch (error) { json(res, { error: { message: error.message, code: error.code || 'browser_error' } }, 400); }
@@ -92,12 +88,11 @@ export async function closeBrowserSocket(id) {
 export async function handleBrowserChannel(req, res, record, route) {
   if (!route.startsWith('/api/browser-channel/')) return false;
   if (req.method !== 'POST') throw Object.assign(Error('Use POST'), { status: 405 });
-  const input = JSON.parse((await body(req, limit)).toString() || '{}');
+  const input = JSON.parse((await body(req, Infinity)).toString() || '{}');
   const operation = route.slice('/api/browser-channel/'.length);
   if (operation === 'open') {
     if (!['linux', 'android'].includes(input.platform) || typeof input.clientId !== 'string' || input.clientId.length > 128) throw Error('Invalid browser identity');
     for (const old of channels.values()) if (old.clientId === input.clientId && old.key === record.key) close(old);
-    if (channels.size >= 16) throw Error('Too many browser connections');
     const channel = { id: randomUUID(), clientId: input.clientId, key: record.key, owner: record.username, platform: input.platform,
       name: String(input.name || 'Browser').slice(0, 100), capabilities: input.capabilities || {}, queue: [], pending: new Map() };
     channel.unwatch = watch(record, () => close(channel, 'Browser authentication expired'));
@@ -113,7 +108,7 @@ export async function handleBrowserChannel(req, res, record, route) {
   } else if (operation === 'result') {
     const pending = channel.pending.get(input.id);
     if (!pending) throw Error('Browser command is no longer pending');
-    channel.pending.delete(input.id); clearTimeout(pending.timer);
+    channel.pending.delete(input.id);
     if (input.error) pending.reject(failure(typeof input.error === 'string' ? input.error : input.error.message || 'Browser action failed', input.error.code));
     else pending.resolve(input.result);
     json(res, { ok: true });

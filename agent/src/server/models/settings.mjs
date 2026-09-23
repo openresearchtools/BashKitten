@@ -35,7 +35,7 @@ export async function saveModelSettings(value) {
       saved.directory = directory.path;
     }
     if (Object.hasOwn(value, 'token')) {
-      if (typeof value.token !== 'string' || value.token.length > 4096 || /[\x00-\x20\x7f]/.test(value.token)) throw Error('Use a valid Hugging Face token without spaces');
+      if (typeof value.token !== 'string' || /[\x00-\x20\x7f]/.test(value.token)) throw Error('Use a valid Hugging Face token without spaces');
       saved.token = value.token;
     }
     await writeJson(settingsFile, saved);

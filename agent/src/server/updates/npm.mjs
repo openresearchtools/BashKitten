@@ -8,7 +8,7 @@ const packageName = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 export async function checkNpm() {
   return sourceResult('npm', async () => {
     let stdout;
-    try { ({ stdout } = await exec('npm', ['outdated', '--global', '--json'], { timeout: 60000, maxBuffer: 1024 * 1024 })); }
+    try { ({ stdout } = await exec('npm', ['outdated', '--global', '--json'], { timeout: 60000, maxBuffer: Infinity })); }
     catch (error) { if (error.code !== 1 || !error.stdout) throw error; stdout = error.stdout; }
     const values = JSON.parse(stdout || '{}');
     if (values.error) throw Error(values.error.summary || 'npm update check failed');

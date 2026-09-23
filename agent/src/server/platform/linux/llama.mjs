@@ -46,7 +46,7 @@ export async function llamaRuntimeOptions() {
   try {
     // This loads the packaged backends and initializes actual drivers/devices.
     // An NVIDIA vendor ID or presence of a library alone is not readiness.
-    const result = await exec(executable, ['--list-devices'], { env: runtimeEnv(), timeout: 20000, maxBuffer: 256000 });
+    const result = await exec(executable, ['--list-devices'], { env: runtimeEnv(), timeout: 20000, maxBuffer: Infinity });
     info.devices = devicesFrom(result.stdout);
     info.backend = info.devices.some(device => device.backend === 'cuda') ? 'cuda' : info.devices.some(device => device.backend === 'vulkan') ? 'vulkan' : 'cpu';
   } catch (error) { info.error = `The installed llama.cpp runtime cannot load: ${(error.stderr || error.message).slice(-2000)}`; }

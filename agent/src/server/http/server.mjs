@@ -372,7 +372,7 @@ async function handler(req, res) {
     requireMethod(req, ['POST', 'DELETE', 'PATCH']);
     if (!action && req.method === 'PATCH') {
       const input = await jsonBody(req), title = String(input.name || '').trim();
-      if (!title || title.length > 200) throw Error('Choose a name of 1–200 characters');
+      if (!title) throw Error('Choose a name');
       await ensureWorker(id); await workerRequest(id, '/rename', { title }); return json(res, { title });
     }
     if (!action || action === 'delete') { if (req.method !== 'DELETE' && action !== 'delete') throw Error('Use DELETE'); await deleteSession(id); return json(res, { deleted: [id] }); }
@@ -398,7 +398,7 @@ async function handler(req, res) {
     const input = await jsonBody(req);
     if (['fork', 'clone'].includes(action)) return json(res, await workerRequest(id, '/' + action, input));
     if (action === 'title' || action === 'rename') {
-      const title = String(input.title || input.name || '').trim(); if (!title || title.length > 200) throw Error('Choose a name of 1–200 characters');
+      const title = String(input.title || input.name || '').trim(); if (!title) throw Error('Choose a name');
       return json(res, await workerRequest(id, '/rename', { title }));
     }
     if (!['stop', 'queue', 'model', 'compact', 'reply'].includes(action)) throw Error('Unknown session action');

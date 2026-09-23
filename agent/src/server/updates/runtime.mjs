@@ -21,7 +21,7 @@ export async function sourceResult(source, operation) {
 export async function checkPi() {
   return sourceResult('pi', async () => {
     const runtime = selectedRuntime();
-    const { stdout } = await exec('npm', ['view', '@earendil-works/pi-coding-agent@latest', 'version', 'engines', 'dist.integrity', '--json'], { timeout: 45000, maxBuffer: 1024 * 1024 });
+    const { stdout } = await exec('npm', ['view', '@earendil-works/pi-coding-agent@latest', 'version', 'engines', 'dist.integrity', '--json'], { timeout: 45000, maxBuffer: Infinity });
     const latest = JSON.parse(stdout);
     if (!semver.valid(latest.version)) throw Error('npm returned an invalid Pi version');
     const compatible = !latest.engines?.node || semver.satisfies(process.version, latest.engines.node);

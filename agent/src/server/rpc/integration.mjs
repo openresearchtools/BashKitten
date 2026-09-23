@@ -1,16 +1,27 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { spawn } from 'node:child_process';
 import { bundledRoot, loadPi } from './runtime.mjs';
 import { platform, telemetryOff } from '../platform/index.mjs';
 import { dataDir, readJson, writeJson } from '../common.mjs';
 
-const exec = promisify(execFile);
 export const integrationRoot = path.join(bundledRoot, 'pi');
 const sourceOf = item => typeof item === 'string' ? item : item.source;
 let installing;
+
+function packageCommand(cli, command, source) {
+  return new Promise((resolve, reject) => {
+    // Package output is not a response payload. Let Pi finish independently of
+    // its output size, without collecting the full output in the worker.
+    const child = spawn(process.execPath, [cli, command, source], {
+      env: { ...process.env, ...telemetryOff }, cwd: os.homedir(),
+      stdio: ['ignore', 'ignore', 'inherit'],
+    });
+    child.once('error', reject);
+    child.once('close', (code, signal) => code === 0 ? resolve() : reject(Error(`Pi package ${command} failed (${signal || code})`)));
+  });
+}
 
 // Use Pi's normal local-package installation. It records a path and never
 // downloads another Pi, edits native sessions or replaces user extensions.
@@ -32,7 +43,7 @@ async function register() {
   let current = settings();
   const installed = current.getPackages().find(item => matches(item, integrationRoot));
   if (!installed) {
-    await exec(process.execPath, [runtime.cli, 'install', integrationRoot], { env: { ...process.env, ...telemetryOff }, cwd: os.homedir(), timeout: 60000, maxBuffer: 1024 * 1024 });
+    await packageCommand(runtime.cli, 'install', integrationRoot);
     current = settings();
     current.setPackages(current.getPackages().map(item => matches(item, integrationRoot) ? {
       source: sourceOf(item),
@@ -44,7 +55,7 @@ async function register() {
   // installed WildBuzzard extension or any of its user's files.
   const legacy = path.join(dataDir, 'integrations/wildbuzzard');
   if (current.getPackages().some(item => matches(item, legacy))) {
-    await exec(process.execPath, [runtime.cli, 'remove', legacy], { env: { ...process.env, ...telemetryOff }, cwd: os.homedir(), timeout: 60000, maxBuffer: 1024 * 1024 });
+    await packageCommand(runtime.cli, 'remove', legacy);
   }
   await writeJson(path.join(dataDir, 'integrations/browser.json'), { package: integrationRoot, platform, runtime: runtime.version });
   return integrationStatus();

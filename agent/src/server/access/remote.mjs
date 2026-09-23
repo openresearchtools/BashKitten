@@ -98,8 +98,7 @@ export class RemoteAccess {
       const runtime = kind === 'llama' ? await this.llama() : null;
       if (kind === 'llama' && (!runtime?.bearerToken || !runtime?.upstream)) throw Error('Start the managed llama provider first');
       const title = String(name || '').trim();
-      if (!title || title.length > 100) throw Error('Name this connection (1–100 characters)');
-      if (state.devices.length >= 64) throw Error('Revoke an unused connection before adding another');
+      if (!title) throw Error('Name this connection');
       const key = deviceKey(), id = randomUUID();
       const device = { id, name: title, kind, publicKey: key.publicKey, createdAt: new Date().toISOString() };
       await writeJson(stateFile, { ...state, devices: [...state.devices, device] });
@@ -113,7 +112,9 @@ export class RemoteAccess {
         caSha256: this.stack.identity.caSha256, instanceId: this.stack.identity.instanceId,
         ...(kind === 'llama' ? { bearerToken: runtime.bearerToken } : {}) };
       const { default: QRCode } = await import('qrcode');
-      return { connection, qrDataUrl: await QRCode.toDataURL(JSON.stringify(connection), { errorCorrectionLevel: 'M', margin: 2, width: 384 }) };
+      // A connection can exceed a QR code's capacity and still be saved as a file.
+      const qrDataUrl = await QRCode.toDataURL(JSON.stringify(connection), { errorCorrectionLevel: 'M', margin: 2, width: 384 }).catch(() => null);
+      return { connection, qrDataUrl };
     });
   }
   async revoke(id) {

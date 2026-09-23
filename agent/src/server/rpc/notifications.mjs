@@ -60,7 +60,7 @@ export async function pendingNotifications() {
   return result;
 }
 export async function acknowledgeNotifications(keys) {
-  if (!Array.isArray(keys) || keys.length > 1000 || keys.some(key => !/^[a-f0-9]{64}$/.test(key))) throw Error('Invalid notification IDs');
+  if (!Array.isArray(keys) || keys.some(key => !/^[a-f0-9]{64}$/.test(key))) throw Error('Invalid notification IDs');
   let acknowledged = 0;
   for (const key of keys) {
     const file = path.join(outbox, key + '.json'), value = await readJson(file, null);

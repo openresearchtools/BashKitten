@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 
-export function unixRequest(socketPath, route, { method = 'GET', headers = {}, body, limit = 2 * 1024 * 1024, timeout = 15000 } = {}) {
+export function unixRequest(socketPath, route, { method = 'GET', headers = {}, body, limit = Infinity, timeout = 15000 } = {}) {
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath, path: route, method, headers }, res => {
       let bytes = 0; const chunks = [];
@@ -21,10 +21,7 @@ export function command(file, args, { env = process.env, timeout = 30000 } = {})
     const child = spawn(file, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', failed = false;
     const timer = setTimeout(() => { failed = true; child.kill('SIGKILL'); }, timeout);
-    for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => {
-      if (Buffer.byteLength(output) + chunk.length > 131072) { failed = true; child.kill('SIGKILL'); }
-      else output += chunk;
-    });
+    for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { output += chunk; });
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', code => { clearTimeout(timer); if (code || failed) reject(Error(`${file.split('/').pop()} command failed (${code ?? 'timeout'})`)); else resolve(output); });
   });

@@ -8,7 +8,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import http from 'node:http';
 
 const execute = promisify(execFile);
-const byteLimit = 32 * 1024 * 1024;
 function unwrap(response) {
   if (response.error) throw Object.assign(new Error(response.error.message || String(response.error)), { code: response.error.code });
   return response.result;
@@ -23,7 +22,7 @@ async function androidCall(method, params, { output, signal }) {
   if (output) args.push('--output', output);
   args.push('--json', JSON.stringify({ method, params }));
   try {
-    const result = await execute('/system/bin/app_process', args, { env, signal, timeout: 240000, maxBuffer: byteLimit });
+    const result = await execute('/system/bin/app_process', args, { env, signal, maxBuffer: Infinity });
     return unwrap(JSON.parse(result.stdout));
   } catch (error) {
     if (error.stdout) {
@@ -38,13 +37,11 @@ async function androidCall(method, params, { output, signal }) {
 function linuxCall(method, params, { signal }) {
   return new Promise((resolveCall, reject) => {
     const process = spawn('bashkitten', ['--no-start', '--agent-json'], { signal, stdio: ['pipe', 'pipe', 'pipe'] });
-    const chunks = [], errors = []; let bytes = 0, errorBytes = 0;
-    const timer = setTimeout(() => { process.kill(); reject(Error('The browser command timed out')); }, 240000);
-    process.on('error', error => { clearTimeout(timer); reject(error); });
-    process.stdout.on('data', chunk => { bytes += chunk.length; if (bytes > byteLimit) { process.kill(); reject(Error('The browser response is too large')); } else chunks.push(chunk); });
+    const chunks = [], errors = []; let errorBytes = 0;
+    process.on('error', reject);
+    process.stdout.on('data', chunk => chunks.push(chunk));
     process.stderr.on('data', chunk => { errorBytes += chunk.length; if (errorBytes < 65536) errors.push(chunk); });
     process.on('close', code => {
-      clearTimeout(timer);
       try {
         const text = Buffer.concat(chunks).toString();
         if (!text.trim()) throw Error(Buffer.concat(errors).toString().trim() || `Browser command exited with ${code}`);
@@ -62,8 +59,8 @@ async function remoteCall(socket, method, params, { signal }) {
   if (!parent.isDirectory() || parent.isSymbolicLink() || (parent.mode & 0o077) || parent.uid !== process.getuid()) throw Error('Browser bridge must use an owner-private directory');
   return new Promise((resolveCall, reject) => {
     const request = http.request({ socketPath: socket, path: '/browser', method: 'POST', signal, headers: { 'Content-Type': 'application/json' } }, response => {
-      const chunks = []; let bytes = 0;
-      response.on('data', chunk => { bytes += chunk.length; if (bytes > byteLimit) request.destroy(Error('The browser response is too large')); else chunks.push(chunk); });
+      const chunks = [];
+      response.on('data', chunk => chunks.push(chunk));
       response.on('error', reject);
       response.on('end', () => {
         try {
@@ -73,7 +70,6 @@ async function remoteCall(socket, method, params, { signal }) {
         } catch (error) { reject(error); }
       });
     });
-    request.setTimeout(240000, () => request.destroy(Error('The remote browser did not respond')));
     request.on('error', reject);
     request.end(JSON.stringify({ method, params }));
   });
@@ -98,7 +94,7 @@ async function saveResult(result, destination) {
   const encoded = result?.data ?? result?.base64;
   if (typeof encoded === 'string') {
     const data = Buffer.from(encoded, 'base64');
-    if (!data.length || data.length > byteLimit) throw Error('Invalid browser file transfer');
+    if (!data.length) throw Error('Invalid browser file transfer');
     await writeFile(destination, data, { flag: 'wx', mode: 0o600 });
   }
   // Android's Binder transfer writes this exact requested destination itself.
@@ -111,7 +107,6 @@ export async function captureScreenshot(manager, tabId, signal) {
   await browserCall('tabs.show', { tabId }, { signal });
   const result = await browserCall('screenshot', { tabId, transfer: true }, { output: destination, signal });
   const info = await saveResult(result, destination);
-  if (info.size > byteLimit) throw Error('Browser screenshot is too large');
   const data = await readFile(destination);
   if (!data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) throw Error('Browser did not return a PNG image');
   return { content: [{ type: 'text', text: `Screenshot saved to ${destination}` }, { type: 'image', data: data.toString('base64'), mimeType: 'image/png' }], details: { path: destination, width: result?.width, height: result?.height } };

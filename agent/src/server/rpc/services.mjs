@@ -22,7 +22,7 @@ export class Services {
     allowRuntimeWork();
     runtime ||= await this.runtime();
     if (!runtime.getProvider(provider)) throw Error('Unknown Pi provider');
-    const result = await runtime.refresh({ providers: [provider], allowNetwork: true, force: true, signal: AbortSignal.timeout(15000) });
+    const result = await runtime.refresh({ providers: [provider], allowNetwork: true, force: true });
     if (result.aborted || result.errors.size) throw Error('Pi could not refresh this service’s models. Check the server connection and retry.');
   }
   async list() {
@@ -63,10 +63,9 @@ export class Services {
     const lease = path.join(dataDir, 'run/login.json');
     await writeJson(lease, { pid: process.pid, id: attempt.id });
     try { allowRuntimeWork(); } catch (error) { this.attempt = null; await fs.rm(lease, { force: true }); throw error; }
-    const timer = setTimeout(() => attempt.controller.abort(), 15 * 60 * 1000);
     attempt.finished = runtime.login(provider, type, {
       signal: attempt.controller.signal,
-      notify: event => { attempt.events.push(event); if (attempt.events.length > 30) attempt.events.shift(); },
+      notify: event => { attempt.events.push(event); },
       prompt: prompt => new Promise((resolve, reject) => {
         const promptId = randomUUID();
         attempt.prompt = { ...prompt, signal: undefined, id: promptId };
@@ -84,7 +83,7 @@ export class Services {
       attempt.status = attempt.controller.signal.aborted ? 'cancelled' : 'failed';
       // Do not expose provider response bodies, which may contain credentials.
       attempt.error = attempt.status === 'failed' ? 'Pi could not complete login. Check the selected method and try again.' : undefined;
-    }).finally(async () => { clearTimeout(timer); attempt.prompt = null; attempt.answer = null; await fs.rm(lease, { force: true }); });
+    }).finally(async () => { attempt.prompt = null; attempt.answer = null; await fs.rm(lease, { force: true }); });
     return this.state();
   }
   answer(id, promptId, input) {
