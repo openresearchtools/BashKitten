@@ -38,3 +38,8 @@ Android does not expose desktop drag, hover_at or JavaScript-dialog actions.
 Selector means existence, not necessarily visibility. Returns `matched`; false
 means timeout. For a pause use `for:"time",value:milliseconds`. After uncertain
 input inspect the page instead of automatically replaying the action.
+
+`type`, `type_at` and `fill` also accept `delayMs` (default0), a non-negative
+inter-character delay for terminals/remote viewers that need paced input.
+Modifiers are held across each key; shifted punctuation and uppercase generate
+the corresponding physical Shift events. Inspect the destination after typing.

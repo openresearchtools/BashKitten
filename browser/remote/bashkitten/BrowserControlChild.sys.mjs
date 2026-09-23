@@ -793,25 +793,53 @@ function sendKey(win, key, modifiers = 0) {
     F12: "\uE03C",
     Meta: "\uE03D",
   };
-  const sequence = [];
   const modifierKeys = [
     [Ci.nsIDOMWindowUtils.MODIFIER_CONTROL, "\uE009"],
     [Ci.nsIDOMWindowUtils.MODIFIER_ALT, "\uE00A"],
     [Ci.nsIDOMWindowUtils.MODIFIER_SHIFT, "\uE008"],
     [Ci.nsIDOMWindowUtils.MODIFIER_META, "\uE03D"],
   ];
-  for (const [flag, value] of modifierKeys) {
-    if (modifiers & flag) {
-      sequence.push(value);
+  let value = special[key] ?? key;
+  if (modifiers & Ci.nsIDOMWindowUtils.MODIFIER_SHIFT) {
+    value = lazy.keyData.getShiftedKey(value);
+  }
+  const data = lazy.keyData.getData(value);
+  if (data.shifted) modifiers |= Ci.nsIDOMWindowUtils.MODIFIER_SHIFT;
+  const held = [];
+  const state = { ctrlKey: false, altKey: false, shiftKey: false, metaKey: false };
+  try {
+    // Modifier flags on the character alone are insufficient for web terminals
+    // and remote desktops which forward physical keydown/keyup sequences.
+    for (const [flag, character] of modifierKeys) {
+      if (!(modifiers & flag)) continue;
+      const modifier = lazy.keyData.getData(character);
+      state[modifier.modifier] = true;
+      held.push(modifier);
+      lazy.event.sendKeyDown({ ...modifier, ...state }, win);
+    }
+    lazy.event.sendSingleKey({ ...data, ...state }, win);
+  } finally {
+    for (const modifier of held.reverse()) {
+      state[modifier.modifier] = false;
+      lazy.event.sendKeyUp({ ...modifier, ...state }, win);
     }
   }
-  sequence.push(special[key] ?? key);
-  for (const [flag, value] of modifierKeys.reverse()) {
-    if (modifiers & flag) {
-      sequence.push(value);
-    }
+}
+
+async function typeText(target, text, delayMs = 0) {
+  if (typeof text !== "string" || !Number.isFinite(delayMs) || delayMs < 0) {
+    throw new Error("type/fill require string text and a non-negative delayMs");
   }
-  lazy.event.sendKeys(sequence.join(""), win);
+  // Preserve Gecko's special form-control behavior and interactability checks.
+  if (["file", "date", "time"].includes(target.type)) {
+    return lazy.interaction.sendKeysToElement(target, text, { webdriverClick: true });
+  }
+  await lazy.interaction.sendKeysToElement(target, "", { webdriverClick: true });
+  const win = target.ownerDocument.defaultView;
+  for (const character of text) {
+    sendKey(win, character === "\n" ? "Enter" : character === "\t" ? "Tab" : character);
+    if (delayMs) await new Promise(resolve => win.setTimeout(resolve, delayMs));
+  }
 }
 
 function clearFocusedField(win, target) {
@@ -1725,10 +1753,10 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
             if (args.clear) {
               clearFocusedField(win, fieldTarget);
             }
-            await lazy.interaction.sendKeysToElement(
+            await typeText(
               fieldTarget,
               field.value ?? "",
-              { webdriverClick: true }
+              args.delayMs
             );
           }
           break;
@@ -1743,9 +1771,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
             if (args.clear) {
               clearFocusedField(win, active);
             }
-            await lazy.interaction.sendKeysToElement(active, args.text ?? "", {
-              webdriverClick: true,
-            });
+            await typeText(active, args.text ?? "", args.delayMs);
           }
           break;
         case "press":

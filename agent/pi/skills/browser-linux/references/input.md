@@ -42,3 +42,8 @@ inspect again. These are page JavaScript dialogs, not native OS permissions.
 selector's existence (not necessarily visibility). Timeout defaults to2000ms.
 Inspect `matched`: false means timeout. An intentional pause uses
 `{tabId,for:"time",value:milliseconds}`. Prefer page conditions for loading.
+
+`type`, `type_at` and `fill` also accept `delayMs` (default0), a non-negative
+inter-character delay for terminals/remote viewers that need paced input.
+Modifiers are held across each key; shifted punctuation and uppercase generate
+the corresponding physical Shift events. Inspect the destination after typing.

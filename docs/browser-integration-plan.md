@@ -128,14 +128,14 @@ Pi browser integration lives under `agent/pi/`, sharing common code where useful
 but providing distinct **Android/Termux and desktop Linux browser skills**.
 The Android skill describes the mobile browser's actual tools, Binder transport
 and native approval flow; the Linux skill describes its desktop tools and private
-Unix socket. Each local target registers its matching browser skill/entry point,
-with a short entry guide and complete, separately loaded command references.
+Unix socket. Each local target registers its matching browser skill/entry point
+alongside the common web-search skill, with a short entry guide and complete, separately loaded command references.
 Pi capability discovery identifies the connected browser's guide and reference
 paths; `help` returns only the requested topic. Cover every public command,
 parameters, result shapes and platform differences without requiring an agent
 to read implementation source. Verify controls by using them during the normal
 Android UI flow and fix observed input/control failures on both platforms.
-alongside the common web-search skill. Keep both skill documents available in
+Keep both skill documents available in
 the integration package for remote browser control: choose the guide/capabilities
 for the authorized client browser, not the remote Pi server's OS. Do not present
 desktop-only commands to the mobile agent or assume the browser capabilities are
