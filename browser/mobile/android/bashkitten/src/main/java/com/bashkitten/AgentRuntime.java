@@ -403,11 +403,6 @@ public final class AgentRuntime {
             }
             if (command.equals("notify-turn")) { reply.accept(new JSONObject().put("result", notifyTurn(args)).toString()); return; }
             if (command.equals("sign-in")) { signIn(); reply.accept("{\"result\":true}"); return; }
-            if (command.equals("import-remote")) {
-                Activity current = activity.get();
-                if (current == null) throw new IllegalStateException("Open BashKitten to import a remote.");
-                current.startActivity(new Intent(current, AgentRemotesActivity.class)); reply.accept("{\"result\":true}"); return;
-            }
             if (!command.equals("notification-settings")) throw new SecurityException("Unsupported browser action.");
             if (args.has("enabled")) {
                 app.policies.edit().putBoolean("agent.notifications", args.optBoolean("enabled"))

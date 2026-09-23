@@ -16,7 +16,6 @@ export class BashKittenAgentParent extends JSWindowActorParent {
     if (!entry) throw new Error("This document is not an active Agent view.");
     if (name === "Ready" || name === "DraftReady") { await entry.host.contentReady(entry, this, name === "DraftReady"); return; }
     if (name === "SignIn") { await entry.host.signIn(); return { ok: true }; }
-    if (name === "ImportRemote") { await entry.host.remotes(); return { ok: true }; }
     if (name === "OpenHosted") { await entry.host.openHosted(this.browsingContext.embedderElement, data.url); return { ok: true }; }
     if (!entry.local) throw new Error("This action is available only in the local Agent view.");
     if (name === "ChooseFolder") return entry.host.chooseFolder(this.browsingContext.embedderElement, data);
