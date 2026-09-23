@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
@@ -153,11 +153,14 @@ async function deleteSession(id) {
   await closeBrowserSocket(id);
 }
 function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 }); }
-const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));
-const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
-const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
 const favicon = await fs.readFile(path.join(here, '../../web/favicon.ico'));
+const logoUrl = '/logo.png?v=' + createHash('sha256').update(logo).digest('hex');
+const faviconUrl = '/favicon.ico?v=' + createHash('sha256').update(favicon).digest('hex');
+const html = (await fs.readFile(path.join(here, '../../web/web_ui.html'), 'utf8'))
+  .replaceAll('/logo.png', logoUrl).replaceAll('/favicon.ico', faviconUrl);
+const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
+const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 let activeServer;
 async function handler(req, res) {
   try {

@@ -2613,6 +2613,8 @@
               }
               subscribed = true;
               clearTimeout(timeout);
+              updateInstanceControl(false);
+              $('#composerHint').textContent = 'Paste, drag, or attach files';
               consume({type:'snapshot', data:value.data});
               resolve();
               return;
@@ -2628,10 +2630,11 @@
           if (!subscribed) reject(new Error('Agent session is offline'));
           else if (sessionView === view) {
             if (current) current.running = false;
+            updateInstanceControl(true);
             renderQueueState({busy: false});
             setCompacting(false);
             refreshQueue().catch(()=>{});
-            $('#composerHint').textContent = 'Paste, drag, or attach files';
+            $('#composerHint').textContent = 'Pi is stopped. Send a message or select Resume Pi to continue this chat.';
           }
         });
       });
