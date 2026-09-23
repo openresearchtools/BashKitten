@@ -690,7 +690,8 @@ class AgentView {
   }
 
   async remotes() {
-    const { dialog, content } = this.dialog("Remotes");
+    const { dialog, content } = this.dialog("Browser connections");
+    content.append(html(this.doc, "p", {}, "Saved in this browser. Choose Local or a saved server from the Agent selector."));
     const error = html(this.doc, "p", { role: "alert" });
     const saved = html(this.doc, "div");
     const report = async task => { try { error.textContent = ""; await task(); } catch (e) { error.textContent = e.message; } };

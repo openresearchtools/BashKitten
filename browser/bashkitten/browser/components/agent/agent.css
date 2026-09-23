@@ -23,6 +23,7 @@
 .bashkitten-agent-dialog h2 { margin-top: 0; }
 .bashkitten-agent-dialog form { display: grid; gap: 12px; }
 .bashkitten-agent-dialog label { display: grid; gap: 5px; }
+.bashkitten-agent-dialog [hidden] { display: none !important; }
 .bashkitten-agent-dialog img { width: 210px; height: 210px; background: white; }
 .bashkitten-agent-dialog pre, .bashkitten-agent-dialog textarea { white-space: pre-wrap; overflow-wrap: anywhere; width: 100%; box-sizing: border-box; }
 .bashkitten-agent-dialog a { color: LinkText; }

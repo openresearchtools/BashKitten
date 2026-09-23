@@ -692,7 +692,7 @@
             <h3>Remote access</h3>
             <p class="meta">Connect to this Agent through Tor. Your account and second factor are required.</p>
             <p id="remoteStatus" class="meta" role="status"></p>
-            <div class="subscription-actions"><button id="remoteToggle" type="button">Enable remote access</button><button id="remoteRefresh" type="button">Refresh</button><button id="remoteImport" type="button">Import a connection</button></div>
+            <div class="subscription-actions"><button id="remoteToggle" type="button">Enable remote access</button><button id="remoteRefresh" type="button">Refresh</button></div>
             <label>Address<input id="remoteAddress" readonly autocomplete="off"></label>
             <section class="settings-section" aria-labelledby="hostedTitle">
               <div class="settings-heading"><h3 id="hostedTitle">Hosted web services</h3><button id="hostingRefresh" type="button">Check services</button></div>
@@ -2139,11 +2139,6 @@
       qr.classList.toggle('hidden', !reveal); $('#remoteQrToggle').textContent = reveal ? 'Hide QR' : 'Show QR';
     };
     $('#remoteClear').onclick = clearRemoteExport;
-    $('#remoteImport').onclick = async () => {
-      if (!nativeHost) { $('#remoteNotice').textContent = 'Import the connection from Remotes in the BashKitten browser.'; return; }
-      try { await nativeHost.call('import-remote', {}); }
-      catch (error) { $('#remoteNotice').textContent = error.message; }
-    };
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
         $('#remoteConnection').value = remoteExport ? '••••••••  Private connection' : '';
