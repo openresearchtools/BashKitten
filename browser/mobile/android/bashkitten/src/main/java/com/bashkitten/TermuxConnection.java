@@ -6,7 +6,6 @@ import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -73,17 +72,11 @@ public final class TermuxConnection {
             throw new IllegalStateException("BashKitten's launch activity is unavailable.");
         }
         ComponentName destination = launch.getComponent();
-        try {
-            ActivityInfo info = packages.getActivityInfo(destination, 0);
-            if (info.targetActivity != null) destination = new ComponentName(context.getPackageName(), info.targetActivity);
-        } catch (PackageManager.NameNotFoundException error) {
-            throw new IllegalStateException("BashKitten's launch activity is unavailable.", error);
-        }
         return "mkdir -p ~/.termux && "
                 + "{ if grep -q '^[[:space:]]*allow-external-apps[[:space:]]*=' ~/.termux/termux.properties 2>/dev/null; then "
                 + "sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps=true/' ~/.termux/termux.properties; "
                 + "else printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties; fi; } && "
-                + "termux-reload-settings && am start --user \"$(( $(id -u) / 100000 ))\" -n "
+                + "termux-reload-settings && am start --user \"$(( $(id -u) / 100000 ))\" -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "
                 + shellQuote(destination.flattenToString());
     }
 

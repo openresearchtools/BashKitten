@@ -127,6 +127,14 @@ with 64 GiB userdata for Android testing. The user explicitly rejected a separat
 Keep build-time 16 KB alignment checks and report runtime coverage accurately.
 External checks must reserve isolated ports,
 stop all their owned processes in cleanup, and verify normal-profile startup too.
+The user's latest verification requirement is manual interaction through the
+visible application and normal Android system dialogs. Do not add or run
+BashKitten-owned scripted tests. First-install acceptance must cover an ordinary
+locked retail device on the newest Android release (currently Android 17), with
+no ADB grants, root, developer options, seeded setup state or hidden permission
+changes. Build and artifact-integrity checks are not evidence of that user flow.
+Do not describe the unlocked Cuttlefish guest as a retail Pixel or publish a fix
+as verified on a locked Pixel when that device has not actually been tested.
 Preserve unmodified upstream sources and
 licenses. Do not commit runtime credentials, node_modules or personal sessions.
 

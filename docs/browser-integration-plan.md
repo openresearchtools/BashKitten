@@ -501,6 +501,22 @@ not grant an Android permission; the foreground BashKitten activity requests
 the normal system dialog. The return intent accepts no arbitrary command to run.
 This follows Termux's [RUN_COMMAND interface](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent).
 
+The Start action drives this sequence. Request the normal Android permission
+when it is needed, then probe the real Termux connection, install missing Agent
+packages and start the service automatically. After the one-time command is
+pasted in Termux, return through BashKitten's exported launcher and continue
+without another Connect button. Do not show already-satisfied permission steps
+or send every user to Android app settings. Show a settings recovery action only
+when Android has denied further permission prompts. Decode the installer's actual
+progress response into a readable, bounded scrolling log and advance on its
+completion status; raw JSON/base64 is never installation UI. Preserve observation
+of an ongoing install across activity or process recreation.
+
+The user requires normal locked retail Android 17 first-install verification,
+using visible UI without ADB grants, root, developer settings or preconfigured
+state. Do not add or run BashKitten-owned scripted tests. Compilation or upgraded
+emulator installations do not satisfy that acceptance check.
+
 Existing compatible Termux installations stay installed. Use their ordinary
 command interface; no signing match or new Termux patch is required. Retain an
 existing suite-specific connection only as upgrade compatibility while moving

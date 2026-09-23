@@ -94,7 +94,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             return insets;
         });
         layoutPanels(); changed();
-        if (runtime.installingPackages) { startedBootstrap = true; bootstrapProgress(); }
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private Button barButton(String label, Runnable action) {
@@ -131,7 +130,17 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         runtime.visible = agentVisible;
         if (runtime.session != null) runtime.session.setActive(agentVisible);
     }
-    public void resume() { app.showPendingApproval(activity); if (runtime.state.equals("on")) runtime.refresh(); layoutPanels(); }
+    public void resume() {
+        app.showPendingApproval(activity);
+        if (runtime.state.equals("on")) runtime.refresh();
+        else if (runtime.state.equals("setup") && runtime.isOnRequested()) {
+            boolean returnedFromTermux = app.policies.getBoolean("agent.termuxSetupPending", false);
+            app.policies.edit().remove("agent.termuxSetupPending").apply();
+            if (returnedFromTermux || runtime.setupStep.equals("termux") && runtime.termux.installed()
+                    || runtime.setupStep.equals("permission") && runtime.termux.permissionGranted()) runtime.turnOn();
+        }
+        layoutPanels();
+    }
     public void destroy() { destroyed = true; app.main.removeCallbacks(bootstrapPoll); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override public void changed() {
@@ -144,6 +153,16 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             bindSession(attached); view.setSession(attached);
         }
         if (!renderedState.equals(runtime.state + runtime.error)) { renderedState = runtime.state + runtime.error; renderSetup(); }
+        if (runtime.state.equals("setup") && runtime.setupStep.equals("permission") && runtime.permissionPromptPending) {
+            runtime.permissionPromptPending = false;
+            app.main.post(() -> {
+                if (!destroyed && runtime.state.equals("setup") && runtime.setupStep.equals("permission") && runtime.isOnRequested()) requestTermuxPermission();
+            });
+        }
+        if (runtime.installingPackages && !startedBootstrap && runtime.termux.permissionGranted()
+                && (runtime.state.equals("setup") && runtime.setupStep.equals("install") || runtime.state.equals("stopping"))) {
+            startedBootstrap = true; bootstrapProgress();
+        }
         if (runtime.state.equals("stopping")) {
             JSONObject packages = runtime.status.optJSONObject("packages");
             JSONObject job = packages == null ? null : packages.optJSONObject("job");
@@ -260,7 +279,26 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         } else response.complete(prompt.dismiss());
         return true;
     }
-    public void permissionResult(int request) { if (request == TERMUX_PERMISSION && runtime.termux.permissionGranted()) runtime.turnOn(); }
+    public void permissionResult(int request) {
+        if (request != TERMUX_PERMISSION) return;
+        runtime.permissionRequestInFlight = false;
+        if (runtime.termux.permissionGranted()) { if (runtime.isOnRequested()) runtime.turnOn(); }
+        else {
+            app.policies.edit().putBoolean("agent.termuxPermissionBlocked", !activity.shouldShowRequestPermissionRationale(TermuxConnection.PERMISSION)).apply();
+            renderSetup();
+        }
+    }
+    private boolean permissionNeedsSettings() {
+        return app.policies.getBoolean("agent.termuxPermissionBlocked", false)
+            && !activity.shouldShowRequestPermissionRationale(TermuxConnection.PERMISSION);
+    }
+    private void requestTermuxPermission() {
+        if (runtime.permissionRequestInFlight) return;
+        if (runtime.termux.permissionGranted()) { runtime.turnOn(); return; }
+        if (permissionNeedsSettings()) { renderSetup(); return; }
+        runtime.permissionRequestInFlight = true;
+        runtime.termux.requestPermission(activity, TERMUX_PERMISSION);
+    }
     private void renderSetup() {
         actions.removeAllViews(); showLog("");
         String state = runtime.state;
@@ -268,16 +306,27 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) { action(state.equals("stop-failed") ? "Retry shutdown" : "Turn on", state.equals("stop-failed") ? runtime::turnOff : runtime::turnOn); return; }
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
-        if (runtime.installingPackages) { message.setText("Installing Agent packages…"); return; }
+        if (runtime.installingPackages && runtime.setupStep.equals("install")) { message.setText("Installing Agent packages…"); return; }
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); action("Check again", runtime::turnOn); return; }
-        action("Open Termux", runtime.termux::openTermux);
-        TextView command = new TextView(activity); command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12); command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true); actions.addView(command);
-        action("Copy connection command", () -> ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Connect BashKitten", runtime.termux.setupCommand())));
-        action("Allow connection", () -> runtime.termux.requestPermission(activity, TERMUX_PERMISSION));
-        action("App permissions", runtime.termux::openPermissionSettings);
-        if (runtime.termux.permissionGranted()) {
-            action("Connect", runtime::turnOn);
-            action("Install Agent packages", () -> runtime.termux.bootstrap(value -> { runtime.bootstrapStarted(); startedBootstrap = true; renderSetup(); bootstrapProgress(); }, this::error));
+        if (runtime.setupStep.equals("permission")) {
+            if (permissionNeedsSettings()) {
+                message.setText("Android has denied Termux command access. Open Permissions, then Additional permissions, and allow BashKitten to run commands in Termux. Startup continues when you return.");
+                action("Open Android permission settings", runtime.termux::openPermissionSettings);
+            } else action("Continue", this::requestTermuxPermission);
+        } else if (runtime.setupStep.equals("connection")) {
+            TextView guide = new TextView(activity);
+            guide.setText("One-time Termux setup: copy the command, paste it into Termux and press Enter. BashKitten will reopen and continue installation automatically.");
+            actions.addView(guide);
+            action("Copy and open Termux", () -> {
+                ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Set up BashKitten", runtime.termux.setupCommand()));
+                app.policies.edit().putBoolean("agent.termuxSetupPending", true).apply();
+                runtime.termux.openTermux();
+            });
+            action("Retry start", runtime::turnOn);
+        } else if (runtime.setupStep.equals("install-failed")) {
+            action("Retry installation", runtime::startInstallation);
+        } else {
+            action("Retry start", runtime::turnOn);
         }
     }
     private void showLog(String text) {
@@ -303,8 +352,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             showLog(output);
             message.setText(phase);
             if (status.equals("complete")) {
-                startedBootstrap = false; runtime.installingPackages = false;
-                if (runtime.isOnRequested()) runtime.turnOn(); else runtime.turnOff();
+                startedBootstrap = false; runtime.installationFinished(null);
             } else if (status.equals("failed") || status.equals("interrupted")) {
                 bootstrapFailed(phase);
             } else app.main.postDelayed(bootstrapPoll, 2000);
@@ -312,9 +360,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     private void bootstrapFailed(String text) {
         if (destroyed || activity.isDestroyed()) return;
-        startedBootstrap = false; runtime.installingPackages = false;
+        startedBootstrap = false;
         String output = log.getText().toString();
-        renderSetup(); showLog(output); message.setText(text);
+        runtime.installationFinished(text); showLog(output);
     }
     private void account() {
         EditText username = field("Username", false); EditText password = field("Password", true); actions.addView(username); actions.addView(password);
