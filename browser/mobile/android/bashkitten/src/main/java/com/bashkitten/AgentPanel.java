@@ -15,6 +15,7 @@ import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.AppCompatButton;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.io.*;
 import java.net.URI;
@@ -102,7 +103,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try { b.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
         return button(b, label, action);
     }
-    private Button button(String label, Runnable action) { return button(new Button(activity), label, action); }
+    private Button button(String label, Runnable action) {
+        MaterialButton b = new MaterialButton(activity);
+        b.setCornerRadius(dp(24));
+        return button(b, label, action);
+    }
     private Button button(Button b, String label, Runnable action) { b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
     public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
@@ -296,8 +301,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private void renderSetup() {
         actions.removeAllViews(); showLog("");
         String state = runtime.state;
-        message.setText(runtime.error.isEmpty() ? state.equals("off") ? "Agent off. Your chats and projects are saved." : state.equals("enroll") ? "Create your local account and enable two-factor authentication." : "Starting your Agent…" : runtime.error);
-        if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) { action(state.equals("stop-failed") ? "Retry shutdown" : "Turn on", state.equals("stop-failed") ? runtime::turnOff : runtime::turnOn); return; }
+        String description = "Starting your Agent…";
+        if (state.equals("off")) description = "Agent off. Your chats and projects are saved.";
+        else if (state.equals("stopping")) description = "Stopping your Agent…";
+        else if (state.equals("enroll")) description = "Create your local account and enable two-factor authentication.";
+        message.setText(runtime.error.isEmpty() ? description : runtime.error);
+        if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) return;
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); return; }
