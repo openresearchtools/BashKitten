@@ -862,6 +862,30 @@ static void ClearAgentTLSConnections() {
   if (observers) observers->NotifyObservers(nullptr, "net:cancel-all-connections", nullptr);
 }
 
+static nsresult AgentNetworkAttributes(const nsACString& host,
+                                      const OriginAttributes& supplied,
+                                      OriginAttributes& network) {
+  network = supplied;
+  if (!network.mPartitionKey.IsEmpty()) return NS_OK;
+  nsAutoCString origin("https://");
+  origin.Append(host);
+  nsCOMPtr<nsIURI> uri;
+  nsresult rv = NS_NewURI(getter_AddRefs(uri), origin);
+  NS_ENSURE_SUCCESS(rv, rv);
+  // Top-level HTTPS loads add a network partition even when their content
+  // principal is unpartitioned. Enroll that exact first-party variant as well
+  // as privileged background requests; never ignore arbitrary OA differences.
+  network.SetPartitionKey(uri, false);
+  return NS_OK;
+}
+
+static bool AgentRootMatches(const nsACString& host,
+                             const OriginAttributes& attrs,
+                             const nsTArray<uint8_t>& root) {
+  auto previous = GetAgentRoot(host, attrs);
+  return previous && previous.ref() == root;
+}
+
 NS_IMETHODIMP nsCertOverrideService::SetAgentCA(
     const nsACString& host, JS::Handle<JS::Value> originAttributes,
     nsIX509Cert* ca, JSContext* cx) {
@@ -874,9 +898,13 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentCA(
   nsTArray<uint8_t> root;
   nsresult rv = ca->GetRawDER(root);
   if (NS_FAILED(rv) || root.Length() > 65536) return NS_ERROR_INVALID_ARG;
-  auto previous = GetAgentRoot(host, attrs);
-  if (previous && previous.ref() == root) return NS_OK;
+  OriginAttributes network;
+  rv = AgentNetworkAttributes(host, attrs, network);
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (AgentRootMatches(host, attrs, root) &&
+      AgentRootMatches(host, network, root)) return NS_OK;
   SetAgentRoot(host, attrs, root);
+  if (network != attrs) SetAgentRoot(host, network, root);
   ClearAgentTLSConnections();
   return NS_OK;
 }
@@ -887,7 +915,11 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentCA(
   OriginAttributes attrs;
   if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
       !IsAgentScope(host, attrs)) return NS_ERROR_INVALID_ARG;
+  OriginAttributes network;
+  nsresult rv = AgentNetworkAttributes(host, attrs, network);
+  NS_ENSURE_SUCCESS(rv, rv);
   SetAgentRoot(host, attrs, nsTArray<uint8_t>());
+  if (network != attrs) SetAgentRoot(host, network, nsTArray<uint8_t>());
   ClearAgentTLSConnections();
   return NS_OK;
 }
@@ -911,9 +943,13 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentHostedCA(
   if (NS_FAILED(rv) || root.IsEmpty() || root.Length() > 65536) {
     return NS_ERROR_INVALID_ARG;
   }
-  auto previous = GetAgentRoot(host, attrs);
-  if (previous && previous.ref() == root) return NS_OK;
+  OriginAttributes network;
+  rv = AgentNetworkAttributes(host, attrs, network);
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (AgentRootMatches(host, attrs, root) &&
+      AgentRootMatches(host, network, root)) return NS_OK;
   SetAgentRoot(host, attrs, root);
+  if (network != attrs) SetAgentRoot(host, network, root);
   ClearAgentTLSConnections();
   return NS_OK;
 }
@@ -930,7 +966,11 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentHostedCA(
       !IsAgentHostedScope(parentHost, host, attrs)) {
     return NS_ERROR_INVALID_ARG;
   }
+  OriginAttributes network;
+  nsresult rv = AgentNetworkAttributes(host, attrs, network);
+  NS_ENSURE_SUCCESS(rv, rv);
   SetAgentRoot(host, attrs, nsTArray<uint8_t>());
+  if (network != attrs) SetAgentRoot(host, network, nsTArray<uint8_t>());
   ClearAgentTLSConnections();
   return NS_OK;
 }
@@ -943,7 +983,14 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentOnionEnrollment(
   if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
       !IsAgentScope(host, attrs) || !IsV3OnionIdentity(host) ||
       GetAgentRoot(host, attrs).isSome()) return NS_ERROR_INVALID_ARG;
+  OriginAttributes network;
+  nsresult rv = AgentNetworkAttributes(host, attrs, network);
+  NS_ENSURE_SUCCESS(rv, rv);
+  if (GetAgentRoot(host, network).isSome()) return NS_ERROR_INVALID_ARG;
   mozilla::psm::SetAgentOnionEnrollment(host, attrs, enabled);
+  if (network != attrs) {
+    mozilla::psm::SetAgentOnionEnrollment(host, network, enabled);
+  }
   ClearAgentTLSConnections();
   return NS_OK;
 }
