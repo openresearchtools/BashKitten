@@ -690,10 +690,25 @@
           </section>
           <section id="settingsRemote" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabRemote">
             <h3>Remote access</h3>
-            <p class="meta">Connect to this Agent through Tor. Your account and second factor are required.</p>
+            <p class="meta">Let other devices connect to this Agent through Tor. They use the same account and second factor. Local stays connected directly.</p>
             <p id="remoteStatus" class="meta" role="status"></p>
-            <div class="subscription-actions"><button id="remoteToggle" type="button">Enable remote access</button><button id="remoteRefresh" type="button">Refresh</button></div>
+            <div class="subscription-actions"><button id="remoteToggle" type="button">Publish over Tor</button><button id="remoteRefresh" type="button">Refresh</button></div>
             <label>Address<input id="remoteAddress" readonly autocomplete="off"></label>
+            <div id="remotePublishing" class="hidden settings-section">
+              <h3>Add a device</h3>
+              <p class="meta">Create a connection for another device, then scan its QR code or save the connection file.</p>
+              <label>Device name<input id="remoteDeviceName" placeholder="My laptop" autocomplete="off"></label>
+              <label id="remoteKindLabel" class="hidden">Connection<select id="remoteKind"><option value="agent">Agent</option><option value="llama">llama.cpp API</option></select></label>
+              <button id="remoteCreate" type="button">Create connection</button>
+              <div id="remoteExport" class="hidden settings-section">
+                <p class="meta">Save this private connection for the device. Revoke it below to remove access.</p>
+                <textarea id="remoteConnection" readonly autocomplete="off" rows="4" spellcheck="false" aria-label="Private connection record"></textarea>
+                <div class="subscription-actions"><button id="remoteReveal" type="button">Reveal</button><button id="remoteCopy" type="button">Copy</button><button id="remoteSave" type="button">Save file</button><button id="remoteQrToggle" type="button">Show QR</button><button id="remoteClear" type="button">Hide connection</button></div>
+                <img id="remoteQr" class="hidden" alt="Private connection QR code" style="width:min(100%,280px);height:auto;margin-top:12px;background:white;padding:12px">
+              </div>
+              <h4>Authorized devices</h4>
+              <div id="remoteDevices"></div>
+            </div>
             <section class="settings-section" aria-labelledby="hostedTitle">
               <div class="settings-heading"><h3 id="hostedTitle">Hosted web services</h3><button id="hostingRefresh" type="button">Check services</button></div>
               <p class="meta">Publish a local web service under this Agent’s onion address. Visitors use the same account and second factor.</p>
@@ -707,20 +722,6 @@
               <div class="subscription-actions"><button id="hostingSave" type="button">Add service</button><button id="hostingCancel" class="hidden" type="button">Cancel edit</button></div>
               <p id="hostingNotice" class="meta" role="status"></p>
             </section>
-            <div id="remotePublishing" class="hidden settings-section">
-              <h3>Add a device</h3>
-              <label>Device name<input id="remoteDeviceName" maxlength="80" placeholder="My laptop" autocomplete="off"></label>
-              <label id="remoteKindLabel" class="hidden">Connection<select id="remoteKind"><option value="agent">Agent</option><option value="llama">llama.cpp API</option></select></label>
-              <button id="remoteCreate" type="button">Create connection</button>
-              <div id="remoteExport" class="hidden settings-section">
-                <p class="meta">Save this private connection for the device. Revoke it below to remove access.</p>
-                <textarea id="remoteConnection" readonly autocomplete="off" rows="4" spellcheck="false" aria-label="Private connection record"></textarea>
-                <div class="subscription-actions"><button id="remoteReveal" type="button">Reveal</button><button id="remoteCopy" type="button">Copy</button><button id="remoteSave" type="button">Save file</button><button id="remoteQrToggle" type="button">Show QR</button><button id="remoteClear" type="button">Hide connection</button></div>
-                <img id="remoteQr" class="hidden" alt="Private connection QR code" style="width:min(100%,280px);height:auto;margin-top:12px;background:white;padding:12px">
-              </div>
-              <h4>Authorized devices</h4>
-              <div id="remoteDevices"></div>
-            </div>
             <p id="remoteNotice" class="meta" role="status"></p>
           </section>
           <div class="settings-section"><button id="signOut" type="button">Sign out</button></div>
@@ -2068,9 +2069,9 @@
     }
     async function refreshRemote() {
       const value = await control('get_remote_access'); remoteState = value;
-      $('#remoteStatus').textContent = value.enabled ? (value.address ? 'Remote access is on' : 'Starting Tor…') : 'Remote access is off';
+      $('#remoteStatus').textContent = value.enabled ? (value.address ? 'This Agent is published over Tor' : 'Starting Tor…') : 'This Agent is not published';
       $('#remoteAddress').value = value.address || '';
-      $('#remoteToggle').textContent = value.enabled ? 'Turn off remote access' : 'Enable remote access';
+      $('#remoteToggle').textContent = value.enabled ? 'Stop publishing' : 'Publish over Tor';
       $('#remotePublishing').classList.toggle('hidden', !value.enabled);
       $('#remoteKindLabel').classList.toggle('hidden', serverPlatform !== 'linux');
       if (serverPlatform !== 'linux') $('#remoteKind').value = 'agent';
