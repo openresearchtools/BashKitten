@@ -38,10 +38,25 @@
     "commit": "8646fe473c9501799fcad6e26138d49b32810561",
     "image": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6"
   },
-  "build": { "go": "1.27.1", "node": "24", "pnpm": "12" },
+  "build": {
+    "go": "1.27.1",
+    "node": "24",
+    "pnpm": "12"
+  },
   "reference": {
     "repository": "https://github.com/openresearchtools/torkitten",
     "commit": "783c0899029aad22cec9562142c067f6b55408a7",
     "license": "Apache-2.0"
+  },
+  "valkey": {
+    "repository": "https://github.com/valkey-io/valkey.git",
+    "branch": "unstable",
+    "version": "9.1.2",
+    "tag": "9.1.2",
+    "commit": "7f1dffedff6de73058b2c2a389422b6ecd56c8fb",
+    "archive": "https://codeload.github.com/valkey-io/valkey/tar.gz/refs/tags/9.1.2",
+    "sha256": "19c23908e7d57e8d91ef85b41f5646307582f10f4f0fb999bbf89ed24ec9c983",
+    "license": "valkey/COPYING",
+    "tree": "c8cbc1ffb2c4526c3f487aaeadcb0234636f5ca5"
   }
 }

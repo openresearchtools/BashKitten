@@ -4,7 +4,9 @@ set -euo pipefail
 
 component=${1:?component required}
 output=${2:?output directory required}
-case "$component" in caddy|tor|authelia) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
+case "$component" in caddy|tor|authelia|valkey) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
+executable=$component
+[[ $component != valkey ]] || executable=valkey-server
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
 [[ $(uname -m) == x86_64 ]] || { echo 'The pinned Termux builder requires an amd64 runner.' >&2; exit 2; }
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -98,13 +100,15 @@ deb=${packages[0]}
 mkdir -p "$work/unpacked" "$output/share/metadata" "$output/share/licenses/$component"
 dpkg-deb -x "$deb" "$work/unpacked"
 prefix="$work/unpacked/data/data/com.termux/files/usr"
-test -x "$prefix/lib/bashkitten/auth/bin/$component"
+test -x "$prefix/lib/bashkitten/auth/bin/$executable"
 cp -a "$prefix/lib/bashkitten/auth/." "$output/"
 cp "$work/bashkitten-dependencies.json" "$output/share/metadata/$component-termux-build-dependencies.json"
 if [[ -d "$prefix/share/doc/$package" ]]; then
   cp -a "$prefix/share/doc/$package/." "$output/share/licenses/$component/"
 fi
-install -Dm644 "$source_dir/LICENSE" "$output/share/licenses/$component/LICENSE"
+license_file=LICENSE
+[[ $component != valkey ]] || license_file=COPYING
+install -Dm644 "$source_dir/$license_file" "$output/share/licenses/$component/LICENSE"
 dpkg-deb -f "$deb" Depends > "$output/share/metadata/$component.dependencies"
 python3 - "$deb" "$output/share/metadata/$component-termux.json" "$component" "${pin[0]}" "${pin[1]}" <<'PY'
 import json, subprocess, sys

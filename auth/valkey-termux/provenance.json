@@ -1,0 +1,47 @@
+{
+  "repository": "https://github.com/termux/termux-packages",
+  "branch": "master",
+  "commit": "8646fe473c9501799fcad6e26138d49b32810561",
+  "files": [
+    {
+      "path": "fix-cflags.patch",
+      "upstreamPath": "packages/valkey/fix-cflags.patch",
+      "sha256": "4a68de916e41817f34c6294260353300b850b01429863059a80b5b8eac17da21"
+    },
+    {
+      "path": "fix-deps-lua.patch",
+      "upstreamPath": "packages/valkey/fix-deps-lua.patch",
+      "sha256": "ce412600fc23f4131cc2935cb5e1a69b5041a3c2e1e23822703613a0db3f6724"
+    },
+    {
+      "path": "fix-unused-variable-static-assert-i686.patch",
+      "upstreamPath": "packages/valkey/fix-unused-variable-static-assert-i686.patch",
+      "sha256": "4401d8fe391feabd8bcb7151fa9852ce4adb66900e4cfbe73c3ed340f073ef88"
+    },
+    {
+      "path": "pthread_cancel.patch",
+      "upstreamPath": "packages/valkey/pthread_cancel.patch",
+      "sha256": "d993fb7c787a03f62b7b467d371417f0ca9cabb6004b216d48210e7e6c01446f"
+    },
+    {
+      "path": "rename-struct-user.patch",
+      "upstreamPath": "packages/valkey/rename-struct-user.patch",
+      "sha256": "f3135764bdad06e28bb7d25e4d09e566e68488feb29bfed4a6ed467483adde05"
+    },
+    {
+      "path": "setproctitle.patch",
+      "upstreamPath": "packages/valkey/setproctitle.patch",
+      "sha256": "051a6867c1f98fd5957d29181a7b649b09524097cc5d91ef09b169f50621a60b"
+    },
+    {
+      "path": "upstream-build.sh",
+      "upstreamPath": "packages/valkey/build.sh",
+      "sha256": "27414fb143b2f90fce4decb8ad24719ec8540e172314f8b8e4282202fa46b5e9"
+    }
+  ],
+  "license": "BSD-3-Clause",
+  "licensePolicy": "https://github.com/termux/termux-packages/blob/8646fe473c9501799fcad6e26138d49b32810561/LICENSE.md",
+  "omittedPatches": {
+    "valkey.conf.patch": "The public system daemon configuration is not installed; BashKitten generates its private Unix-socket configuration."
+  }
+}

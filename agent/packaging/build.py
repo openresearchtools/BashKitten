@@ -229,7 +229,7 @@ def assemble(args):
         extract(args.auth_archive, auth)
         auth_meta = read_json(auth / 'share/metadata/runtime.json')
         require(auth_meta['target'] == target and auth_meta['architecture'] == args.architecture, 'Native auth target mismatch')
-        for executable_name in ['authelia', 'caddy', 'tor', 'runtime-guard']:
+        for executable_name in ['authelia', 'caddy', 'tor', 'valkey-server', 'runtime-guard']:
             require(os.access(auth / 'bin' / executable_name, os.X_OK), f'Missing native {executable_name}')
         search_hash = checked_archive(args.search_archive)
         with tempfile.TemporaryDirectory(prefix='search-input-', dir=temporary) as incoming:

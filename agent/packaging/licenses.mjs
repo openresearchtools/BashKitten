@@ -90,9 +90,9 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   const auth = await json(path.join(root, 'auth/share/metadata/runtime.json'));
   if (!auth.target?.startsWith(target === 'termux' ? 'termux-' : 'linux-') || !['amd64', 'arm64', 'aarch64'].includes(auth.architecture)) throw Error('Native access stack does not match the package target');
   const components = new Set(auth.components?.map(value => value.name));
-  for (const name of ['authelia', 'caddy', 'tor']) {
+  for (const name of ['authelia', 'caddy', 'tor', 'valkey']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);
-    await fs.access(path.join(root, 'auth/bin', name));
+    await fs.access(path.join(root, 'auth/bin', name === 'valkey' ? 'valkey-server' : name));
     await legalText(path.join(root, 'auth/share/licenses', name, 'LICENSE'));
   }
   const records = await npmInventory(root, target, auth.architecture);
