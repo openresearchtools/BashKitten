@@ -135,7 +135,7 @@ class AgentView {
     this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "Agent", class: "toolbarbutton-1", role: "tab", removable: "false", skipintoolbarset: "true", tooltiptext: "Agent" });
     this.button.addEventListener("command", () => this.show());
     doc.getElementById("tabbrowser-tabs").before(this.button);
-    this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", tooltiptext: "Show or hide the Agent pane" });
+    this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", overflows: "false", tooltiptext: "Show or hide the Agent pane" });
     this.paneToggle.addEventListener("command", () => {
       this.browseWithAgent = !this.browseWithAgent;
       Services.prefs.setBoolPref("bashkitten.agent.splitBrowsing", this.browseWithAgent);
