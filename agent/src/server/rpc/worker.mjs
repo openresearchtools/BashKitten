@@ -9,12 +9,16 @@ import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
 import { notifyTurn } from './notifications.mjs';
 import { claimInstance } from '../instance.mjs';
 import { attachmentImages } from '../files/files.mjs';
+import { browserSocketPath } from '../access/browser-channel.mjs';
 
 process.umask(0o077);
 let id = process.argv[2];
 let meta = await readMeta(id);
+// A resumed native fork gets its own worker; only a live fork retains the
+// original process identity and browser socket until that process exits.
+meta.workerOwner = id;
+meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
 let rpc, busy = false, compacting = false, stopping = false, changing = false;
-let lastAccess = Date.now();
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
@@ -71,6 +75,7 @@ async function adoptSession(state, follow) {
   await writeMeta(meta);
   ownership = await claimInstance('pi-' + id);
   await listen();
+  await socketRequest(browserSocketPath(meta.browserOwner), '/session', { id });
   oldServer.close();
   await fs.rm(socketPath(previous) + '.lock', { force: true });
   oldOwnership.close();
@@ -228,7 +233,6 @@ async function rebuildQueue(mutate) {
 async function handle(req, res) {
   // A native session switch rebinds this worker; do not reuse its old control connection.
   res.setHeader('Connection', 'close');
-  if (req.url !== '/status') lastAccess = Date.now();
   try {
     if (req.url === '/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
@@ -340,10 +344,3 @@ if (!ownership) process.exit(0);
 try { await launch(); await listen(); }
 catch (error) { console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
 process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });
-// Release idle Pi processes on memory-constrained phones. Active turns, queues,
-// extension dialogs and subscribed browsers always retain their worker.
-setInterval(async () => {
-  if (stopping || changing || busy || compacting || clients.size || queue.length || dialogs.size || Date.now() - lastAccess < 300000) return;
-  stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true });
-  server.close(() => process.exit(0));
-}, 30000).unref();

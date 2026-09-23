@@ -3,10 +3,11 @@ import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { dataDir, digest, privateDir, body, json } from '../common.mjs';
+import { dataDir, digest, privateDir, body, json, readMeta } from '../common.mjs';
 import { watch } from '../http/web-auth.mjs';
 
 const channels = new Map(), sockets = new Map(), bindings = new Map(), openingSockets = new Map();
+const socketSessions = new Map();
 const sessionPattern = /^[a-f0-9-]{36}$/;
 export const browserSocketPath = id => {
   if (!sessionPattern.test(id)) throw Error('Invalid Pi session');
@@ -54,7 +55,9 @@ function dispatch(sessionId, command) {
     deliver(channel);
   });
 }
-export function ensureBrowserSocket(id) {
+export function ensureBrowserSocket(id, sessionId = id) {
+  if (!sessionPattern.test(sessionId)) throw Error('Invalid Pi session');
+  socketSessions.set(id, sessionId);
   if (openingSockets.has(id)) return openingSockets.get(id);
   const operation = openBrowserSocket(id).finally(() => openingSockets.delete(id));
   openingSockets.set(id, operation); return operation;
@@ -67,9 +70,16 @@ async function openBrowserSocket(id) {
   await fs.rm(file, { force: true });
   const server = http.createServer(async (req, res) => {
     try {
+      if (req.method === 'POST' && req.url === '/session') {
+        const input = JSON.parse((await body(req)).toString());
+        const meta = await readMeta(input.id);
+        if ((meta.browserOwner || meta.workerOwner || meta.id) !== id) throw failure('Invalid browser session owner', 'invalid_session');
+        socketSessions.set(id, input.id);
+        return json(res, { ok: true });
+      }
       if (req.method !== 'POST' || req.url !== '/browser') throw failure('Unknown browser operation', 'invalid_command');
       const input = JSON.parse((await body(req, Infinity)).toString());
-      const result = await dispatch(id, { method: input.method, params: input.params || {} });
+      const result = await dispatch(socketSessions.get(id), { method: input.method, params: input.params || {} });
       json(res, { result });
     } catch (error) { json(res, { error: { message: error.message, code: error.code || 'browser_error' } }, 400); }
   });
@@ -78,12 +88,16 @@ async function openBrowserSocket(id) {
   try { await opening; await fs.chmod(file, 0o600); return file; }
   catch (error) { sockets.delete(id); throw error; }
 }
-export async function closeBrowserSocket(id) {
-  await openingSockets.get(id)?.catch(() => {});
-  const server = sockets.get(id);
-  if (server) { sockets.delete(id); server.close(); server.closeAllConnections(); }
-  bindings.delete(id);
-  await fs.rm(browserSocketPath(id), { force: true });
+export async function closeBrowserSocket(id, { keepBinding = false } = {}) {
+  if (!keepBinding) bindings.delete(id);
+  for (const [owner, sessionId] of socketSessions) {
+    if (sessionId !== id) continue;
+    await openingSockets.get(owner)?.catch(() => {});
+    const server = sockets.get(owner);
+    if (server) { sockets.delete(owner); server.close(); server.closeAllConnections(); }
+    socketSessions.delete(owner);
+    await fs.rm(browserSocketPath(owner), { force: true });
+  }
 }
 export async function handleBrowserChannel(req, res, record, route) {
   if (!route.startsWith('/api/browser-channel/')) return false;

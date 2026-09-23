@@ -56,7 +56,7 @@ export class PiRpc extends EventEmitter {
       if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
       if (meta.thinking) args.push('--thinking', meta.thinking);
     }
-    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0', BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0', BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {
       if (value.type === 'response') {

@@ -71,13 +71,14 @@ async function ownedWorker(id) {
   if (!started) return null;
   const worker = fileURLToPath(new URL('./rpc/worker.mjs', import.meta.url));
   const args = (await fs.readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '')).split('\0');
-  return args.includes(worker) && args.includes(id) ? { pid, started } : null;
+  const owner = (await readMeta(id)).workerOwner || id;
+  return args.includes(worker) && args.includes(owner) ? { pid, started } : null;
 }
 async function stopPi(id, force = false, markStopped = true) {
   await readMeta(id);
   if (markStopped) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
   const owned = await ownedWorker(id);
-  try { await socketRequest(socketPath(id), '/shutdown', {}, force ? 1000 : 10000); }
+  try { await socketRequest(socketPath(id), '/shutdown', { restart: !markStopped }, force ? 1000 : 10000); }
   catch (error) { if (!force && !['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
   if (!owned) return;
   for (let i = 0; i < 40 && await processStart(owned.pid) === owned.started; i++) await sleep(50);

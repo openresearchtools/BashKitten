@@ -65,18 +65,19 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function running(id) { try { return await workerRequest(id, '/status'); } catch { return null; } }
 async function ensureWorker(id, explicit = false) {
   allowRuntimeWork();
-  const browserSocket = await ensureBrowserSocket(id);
   const lifecycle = path.join(sessionDir(id), 'lifecycle.json');
   if ((await readJson(lifecycle, {})).stopped) {
-    if (!explicit) throw Error('Pi instance is stopped. Press Start Pi to resume.');
+    if (!explicit) throw Error('Pi is stopped. Use Resume Pi or send a message to continue.');
     await writeJson(lifecycle, { stopped: false });
   }
   if (starts.has(id)) return starts.get(id);
   const starting = (async () => {
-    if (await running(id)) return;
-    await readMeta(id);
+    const meta = await readMeta(id);
+    if (await running(id)) { await ensureBrowserSocket(meta.browserOwner || meta.workerOwner || id, id); return; }
+    await closeBrowserSocket(id, { keepBinding: true });
+    const browserOwner = randomUUID(), browserSocket = await ensureBrowserSocket(browserOwner, id);
     const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
-    const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket } });
+    const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
     closeSync(log); child.unref();
     let failure; child.on('error', error => { failure = error; });
     for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
@@ -366,7 +367,7 @@ async function handler(req, res) {
       if (!file) throw Object.assign(Error('Attachment not found'), { status: 404 });
       return await sendFile(req, res, file.path, url.searchParams.get('download') === 'true');
     }
-    if (action === 'fork-messages') { requireMethod(req, ['GET']); await ensureWorker(id); return json(res, await workerRequest(id, '/fork-messages')); }
+    if (action === 'fork-messages') { requireMethod(req, ['GET']); await ensureWorker(id, true); return json(res, await workerRequest(id, '/fork-messages')); }
     if (action === 'status') { requireMethod(req, ['GET']); return json(res, await running(id) || { data: await savedView(meta) }); }
     if (action.startsWith('segments/')) { requireMethod(req, ['GET']); const view = await workerRequest(id, '/view').catch(() => savedView(meta)); return json(res, { segment: 1, entries: view.entries }); }
     requireMethod(req, ['POST', 'DELETE', 'PATCH']);
@@ -381,7 +382,7 @@ async function handler(req, res) {
       if ((await readJson(path.join(sessionDir(id), 'lifecycle.json'), {})).stopped && !value.start) return json(res, { stopped: true, snapshot: await savedView(meta) });
       await ensureWorker(id, Boolean(value.start)); return json(res, { ok: true });
     }
-    await ensureWorker(id);
+    await ensureWorker(id, ['messages', 'fork', 'clone', 'compact'].includes(action));
     if (action === 'messages') {
       const form = await formBody(req);
       try {
@@ -416,7 +417,7 @@ await new Promise((resolve, reject) => { activeServer.once('error', reject); act
 await fs.chmod(process.env.BASHKITTEN_BACKEND_SOCKET, 0o600);
 await writeJson(paths.backendInfo, { pid: process.pid, started });
 for (const meta of await allMeta()) if (await running(meta.id)) {
-  await ensureBrowserSocket(meta.id);
+  await ensureBrowserSocket(meta.browserOwner || meta.workerOwner || meta.id, meta.id);
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
 console.log('BashKitten private Pi RPC backend ready');
