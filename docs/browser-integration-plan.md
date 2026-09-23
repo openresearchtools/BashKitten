@@ -493,10 +493,12 @@ not need a local Termux installation merely to display that remote's UI.
    Android installation flow. Do not substitute our old suite build.
 2. Open Termux for its initial bootstrap. Show one copyable command that downloads
    and verifies our published Open Research Tools Termux keyring package, installs
-   it and `x11-repo` through `pkg`, refreshes the repositories and runs
+   it and `x11-repo` through `pkg`, upgrades the existing Termux packages and runs
    `pkg install bashkitten`. The `.deb` declares all required Node, Python,
    Git/archive, search/native-library and desktop dependencies, including XFCE,
    LibreOffice and Xvfb. Keep no duplicate dependency installer inside the APK.
+   The upgrade is required before dependency installation: a fresh APK bootstrap
+   may contain an older C++ runtime than the rolling repository's native packages.
    The same command enables external apps, reloads settings and returns through
    the installed BashKitten launcher after successful installation. The final
    activity component must come from the actual new APK.
