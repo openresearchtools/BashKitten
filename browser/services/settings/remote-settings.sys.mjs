@@ -288,6 +288,10 @@ function remoteSettingsFunction() {
         const collection = changeset.metadata.id;
         const identifier = `${bucket}/${collection}`;
 
+        if (!lazy.BashKittenSettingsPolicy.canSync(bucket, collection)) {
+          continue;
+        }
+
         if (pulled.includes(identifier)) {
           // The startup bundles contain both main and preview changesets.
           // Importing both increases complexity down the line, and brings no value.

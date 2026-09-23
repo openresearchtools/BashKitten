@@ -42,7 +42,10 @@ real APT/npm progress, backend controls and Pi stop/kill controls. No applicatio
 is automatically uninstalled, including previously installed suite components.
 
 Keep Waterfox-derived privacy features, private tabs, Tor, ad blocking and normal
-browser functions. Remove torrents, qBittorrent/libtorrent, their exclusive
+browser functions. Enhanced Tracking Protection keeps Gecko's signed tracking
+list updates on both platforms; disabling telemetry and promotional feeds must
+not leave its native controls without current blocking data.
+Remove torrents, qBittorrent/libtorrent, their exclusive
 Qt/Boost/build dependencies, custom search/torrent extensions and their special
 permissions. Remove the external WildBuzzard extensions repository dependency.
 Ordinary address-bar search, downloads and normal Firefox extension support are
@@ -943,7 +946,7 @@ pipeline. No `provider`, `searxngUrl`, `--extra`, provider routing, repeated
 operation name or different search/fetch command for the model to choose.
 Remove unused provider-specific schemas, switches, imports and dependencies
 from the adapted helper. DDGS handles its own search engines. Keep sensible
-defaults (five results) and existing operational limits; optional supported
+defaults (five results), without arbitrary size/count/time caps; optional supported
 filters/output-directory settings need not clutter the basic skill examples.
 
 Adapt the short model guidance from Unsloth's
@@ -966,8 +969,8 @@ Every successful page read returns its actual saved path, even for a short page.
 Keep the 16,000-character inline budget and let Pi read the saved file for the
 rest, instead of downloading again or mistaking the preview for the full page.
 Never write only that shortened preview to the purported full Markdown file.
-Retain download/page limits and disclose when those prevent complete extraction.
-Preserve timeouts, cancellation and redirect/DNS/content checks; these apply to
+Report actual download/extraction errors without imposing download/page quotas.
+Preserve user-specified deadlines, cancellation and redirect/DNS/content checks; these apply to
 this helper, not to Pi's unrestricted native tools.
 
 Replace hardcoded `/tmp` and `/usr` assumptions with the platform paths. Default
@@ -1105,6 +1108,11 @@ Pi, use that provider's supported remote/manual callback path; a localhost
 callback in a client browser cannot magically reach another machine.
 
 Keep About/Licenses in the browser menu, available offline and before login.
+Both Android and Linux include the same product blocks in the engine license
+page, without the inherited document illustration or dead rights link. Clearly
+identify Waterfox, BrowserOS browser tools and Unsloth Studio search adaptations
+with their original licenses, exact source provenance and dated modification
+notices in the applicable engine and bundled-component inventories.
 Use separate engine-license and bundled-component-license buttons in the same
 native About area, with an accurate browser/server inventory. Node, Termux and
 OS libraries retain their own external

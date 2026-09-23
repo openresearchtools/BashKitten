@@ -2,9 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-// BashKitten keeps Remote Settings fully offline. Collections read their
-// records from dumps bundled with the build and never contact Mozilla or a
-// BashKitten-operated replacement service.
+// Tracking protection needs current signed classifier lists. Other collections
+// retain the bundled records used by BashKitten's offline features.
 
 // Packaged dump-only collections that active desktop features read at runtime.
 const REQUIRED_OFFLINE_DUMPS = Object.freeze([
@@ -36,11 +35,11 @@ const REQUIRED_OFFLINE_DUMPS = Object.freeze([
 export const BashKittenSettingsPolicy = {
   requiredOfflineDumps: REQUIRED_OFFLINE_DUMPS,
 
-  canSync() {
-    return false;
+  canSync(bucket, collection) {
+    return bucket === "main" && collection === "tracking-protection-lists";
   },
 
-  canDownloadAttachments() {
-    return false;
+  canDownloadAttachments(bucket, collection) {
+    return this.canSync(bucket, collection);
   },
 };

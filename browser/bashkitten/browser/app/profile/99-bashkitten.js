@@ -67,10 +67,8 @@ pref("app.normandy.api_url", "", locked);
 pref("app.normandy.shieldLearnMoreUrl", "about:blank", locked);
 pref("messaging-system.rsexperimentloader.enabled", false, locked);
 
-// Firefox Remote Settings and sponsored/recommendation feeds. The data: URL is
-// a syntactically valid, local-only endpoint; it prevents startup code from
-// manufacturing a relative URL or contacting a vendor when polling is invoked.
-pref("services.settings.server", "data:,#remote-settings-disabled/v1", locked);
+// Gecko's signed tracking-protection lists use its normal Remote Settings
+// endpoint. BashKittenSettingsPolicy keeps unrelated collections offline.
 pref("services.settings.preview_enabled", false, locked);
 pref("security.remote_settings.intermediates.enabled", false, locked);
 pref("security.remote_settings.crlite_filters.enabled", false, locked);

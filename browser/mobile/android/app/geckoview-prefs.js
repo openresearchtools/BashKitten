@@ -423,7 +423,6 @@ pref("network.webtransport.enabled", false);
 pref("network.http.http3.enable", false);
 pref("remote.active-protocols", 0);
 pref("devtools.debugger.remote-enabled", false);
-pref("services.settings.server", "");
 pref("extensions.update.enabled", false);
 pref("extensions.getAddons.cache.enabled", false);
 pref("browser.region.network.url", "");
@@ -433,7 +432,7 @@ pref("network.connectivity-service.enabled", false);
 pref("extensions.telemetry.EnvironmentAddonBuilder", false);
 pref("browser.ipProtection.enabled", false);
 pref("browser.ipProtection.guardian.endpoint", "");
-pref("browser.safebrowsing.provider.mozilla.updateURL", "");
+// Keep Gecko's moz-sbrs tracking-list updates for the native protection controls.
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "");
 
 // Share the desktop product's audited no-vendor-service policy, including locks.
