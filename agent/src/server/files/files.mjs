@@ -74,7 +74,7 @@ export async function uploadFiles(root, relative, files) {
   if (!(await fs.stat(dir)).isDirectory()) throw Error('Upload destination is not a folder');
   for (const file of files) {
     const target = path.join(dir, safeName(file.name));
-    await fs.writeFile(target, Buffer.from(await file.arrayBuffer()), { flag: 'wx', mode: 0o600 });
+    await storeUpload(file, target);
     saved.push(path.relative(root, target));
   }
   return saved;
@@ -88,25 +88,23 @@ export async function saveAttachments(files) {
     name = safeName(name);
     if (attachments.some(a => a.name === name)) name = `${index}-${name}`;
     const target = path.join(dir, name);
-    await fs.writeFile(target, Buffer.from(await file.arrayBuffer()), { mode: 0o600, flag: 'wx' });
+    await storeUpload(file, target);
     attachments.push({ type: 'attachment', path: target, name, mimeType: mimeType(name), size: file.size });
   }
   return attachments;
 }
-export function inlineAttachments(values) {
-  return values.map(value => {
-    const file = JSON.parse(value);
-    if (typeof file.name !== 'string' || typeof file.data !== 'string' || file.data.length % 4 || /[^A-Za-z0-9+/=]/.test(file.data)) throw Error('Invalid pasted file');
-    const bytes = Buffer.from(file.data, 'base64');
-    if (bytes.toString('base64') !== file.data) throw Error('Invalid pasted file');
-    return new File([bytes], safeName(file.name));
-  });
+async function storeUpload(file, target) {
+  if (typeof file.path !== 'string') throw Error('Choose a file to upload');
+  try { await fs.link(file.path, target); }
+  catch (error) {
+    if (error.code !== 'EXDEV') throw error;
+    await fs.copyFile(file.path, target, constants.COPYFILE_EXCL);
+  }
 }
-export async function promptWithAttachments(text, attachments) {
+export async function attachmentImages(attachments) {
   const images = [];
   for (const file of attachments) {
     if (['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.mimeType)) images.push({ type: 'image', data: (await fs.readFile(file.path)).toString('base64'), mimeType: file.mimeType });
   }
-  const references = attachments.map(a => `${a.name}: ${a.path}`).join('\n');
-  return { text, attachments, images, wire: text + (references ? `\n\nAttached files:\n${references}` : '') };
+  return images;
 }

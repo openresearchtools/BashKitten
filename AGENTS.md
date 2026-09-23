@@ -84,6 +84,13 @@ upstream components and licenses.
 
 ## UI and filesystem
 
+Do not impose arbitrary upload/download, ZIP size/entry/selection, tab-count,
+search-extraction or model-download quotas. Use ordinary backend file operations
+and browser downloads; stream large files rather than buffering whole uploads.
+Preserve complete saved documents and user-requested content. The requested
+Agent isolation applies to automation, not user screenshots or ordinary content
+tabs. Keep actual protocol/format validation and user cancellation.
+
 - Preserve the existing transcript, thinking/tool streaming, compaction styling,
   image viewer, themes and project/chat sidebar. Adapt layout for narrow screens.
 - On Termux, working-folder choices are writable directories inside home only.

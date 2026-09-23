@@ -15,7 +15,7 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { fileDirectory, filePath, listFiles, sendFile, uploadFiles, saveAttachments, inlineAttachments, promptWithAttachments } from '../files/files.mjs';
+import { fileDirectory, filePath, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs } from '../files/jobs.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
@@ -291,7 +291,11 @@ async function handler(req, res) {
       const relative = url.searchParams.get('path') || '';
       if (route.endsWith('/content')) return await sendFile(req, res, await filePath(root, relative), url.searchParams.get('download') === 'true');
       if (route.endsWith('/archive')) return await sendZip(req, res, root);
-      if (mutation) { const form = await formBody(req); return json(res, { saved: await uploadFiles(root, relative, form.getAll('file')) }); }
+      if (mutation) {
+        const form = await formBody(req);
+        try { return json(res, { saved: await uploadFiles(root, relative, form.getAll('file')) }); }
+        finally { await form.cleanup(); }
+      }
       return json(res, await listFiles(root, relative));
     }
     if (route === '/api/git/changes' || route === '/api/git/diff') {
@@ -326,7 +330,11 @@ async function handler(req, res) {
     }
     if (route === '/api/sessions') {
       requireMethod(req, ['GET', 'POST']);
-      if (mutation) { const form = await formBody(req); const meta = await createSession(Object.fromEntries(form)); await ensureWorker(meta.id); return json(res, { id: meta.id }); }
+      if (mutation) {
+        const form = await formBody(req);
+        try { const meta = await createSession(Object.fromEntries(form)); await ensureWorker(meta.id); return json(res, { id: meta.id }); }
+        finally { await form.cleanup(); }
+      }
       const sessions = await sessionList(), offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(100, Number(url.searchParams.get('limit')) || 100);
       return json(res, { sessions: sessions.slice(offset, offset + limit), nextOffset: offset + limit < sessions.length ? offset + limit : null });
     }
@@ -375,13 +383,17 @@ async function handler(req, res) {
     }
     await ensureWorker(id);
     if (action === 'messages') {
-      const form = await formBody(req), text = String(form.get('content') || '');
-      const attachments = await saveAttachments([...form.getAll('file'), ...inlineAttachments(form.getAll('inline_file'))]);
-      const known = (meta.messages || []).flatMap(m => m.attachments);
-      for (const retained of form.getAll('retained_attachment')) { const file = known.find(a => a.path === retained); if (!file) throw Error('Unknown retained attachment'); if (!attachments.some(a => a.path === file.path)) attachments.push(file); }
-      if (!text.trim() && !attachments.length) throw Error('Write a message or attach a file');
-      if (form.get('goal')) throw Error('Goals are provided by Pi extensions; use a configured Pi command');
-      return json(res, await workerRequest(id, '/message', { ...await promptWithAttachments(text, attachments), kind: form.get('delivery') === 'steer' ? 'steer' : 'queue' }));
+      const form = await formBody(req);
+      try {
+        const text = String(form.get('content') || ''), attachments = await saveAttachments(form.getAll('file'));
+        const known = (meta.messages || []).flatMap(m => m.attachments);
+        for (const retained of form.getAll('retained_attachment')) { const file = known.find(a => a.path === retained); if (!file) throw Error('Unknown retained attachment'); if (!attachments.some(a => a.path === file.path)) attachments.push(file); }
+        if (!text.trim() && !attachments.length) throw Error('Write a message or attach a file');
+        if (form.get('goal')) throw Error('Goals are provided by Pi extensions; use a configured Pi command');
+        const references = attachments.map(a => `${a.name}: ${a.path}`).join('\n');
+        const wire = text + (references ? `\n\nAttached files:\n${references}` : '');
+        return json(res, await workerRequest(id, '/message', { text, attachments, wire, kind: form.get('delivery') === 'steer' ? 'steer' : 'queue' }));
+      } finally { await form.cleanup(); }
     }
     const input = await jsonBody(req);
     if (['fork', 'clone'].includes(action)) return json(res, await workerRequest(id, '/' + action, input));
@@ -397,6 +409,8 @@ async function handler(req, res) {
   }
 }
 activeServer = http.createServer(handler);
+// Uploads stream to disk; a large file may legitimately take more than five minutes.
+activeServer.requestTimeout = 0;
 await fs.rm(process.env.BASHKITTEN_BACKEND_SOCKET, { force: true });
 await new Promise((resolve, reject) => { activeServer.once('error', reject); activeServer.listen(process.env.BASHKITTEN_BACKEND_SOCKET, resolve); });
 await fs.chmod(process.env.BASHKITTEN_BACKEND_SOCKET, 0o600);

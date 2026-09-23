@@ -7,6 +7,13 @@ where they differ. Existing releases continue working until their replacements
 pass the checks below. No donor repository, branch or release is deleted as part
 of preparing this plan.
 
+Latest clarification, 23 September: remove unrequested hard size/count/time
+quotas in file transfers, ZIP operations, browser tools, search extraction and
+model downloads. Keep ordinary backend/browser behavior, user cancellation and
+actual format/protocol validation. Agent-tab protection must not restrict the
+user’s own screenshots or ordinary content tabs. This supersedes earlier
+references below to retained arbitrary operational limits.
+
 ## 1. Product boundary
 
 Make BashKitten a Firefox-based browser on Android and Linux, using the existing

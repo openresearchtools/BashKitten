@@ -896,7 +896,7 @@
         const link = event.target.closest('a');
         if (!link) return;
         const url = new URL(link.href, location.href);
-        if ((url.origin === location.origin && /^\/api\/(files\/content|sessions\/[^/]+\/attachments\/)/.test(url.pathname)) || /^data:image\//.test(link.href)) {
+        if (url.origin === location.origin && /^\/api\/(files\/content|sessions\/[^/]+\/attachments\/)/.test(url.pathname)) {
           event.preventDefault();
           nativeHost.call('open-file', {url:link.href}).catch(error => { $('#composerHint').textContent = error.message; });
         }
@@ -3014,10 +3014,9 @@
       else if (event.key === '+' || event.key === '=') { event.preventDefault(); setViewerZoom(viewerZoom * 1.25); }
     });
     $('#files').onchange = event => { addAttachments(event.target.files); event.target.value = ''; };
-    const clipboardFiles = new WeakSet();
     $('#prompt').addEventListener('paste', event => {
       const files = [...(event.clipboardData?.files || [])];
-      if (files.length) { event.preventDefault(); files.forEach(file=>clipboardFiles.add(file)); addAttachments(files); }
+      if (files.length) { event.preventDefault(); addAttachments(files); }
     });
     const composeBox = $('.compose-box');
     composeBox.addEventListener('dragenter', event => { event.preventDefault(); composeBox.classList.add('dragging'); });
@@ -3118,14 +3117,7 @@
         messageForm.append('content', text);
         if(sendingGoal)messageForm.append('goal','true');
         messageForm.append('delivery', 'queue');
-        for (const file of files) {
-          if(clipboardFiles.has(file)) {
-            // Android Chromium may stall when FormData streams a clipboard Blob.
-            // Read it in the renderer and send text; Pi still receives image bytes.
-            const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader(),timer=setTimeout(()=>{reader.abort();reject(Error('The browser could not read this clipboard image. Try attaching the file.'));},15000);reader.onload=()=>{clearTimeout(timer);resolve(reader.result.slice(reader.result.indexOf(',')+1));};reader.onerror=()=>{clearTimeout(timer);reject(Error('Could not read pasted image'));};reader.readAsDataURL(file);});
-            messageForm.append('inline_file',JSON.stringify({name:file.name,data:encoded}));
-          } else messageForm.append('file', file);
-        }
+        for (const file of files) messageForm.append('file', file);
         for (const path of retained) messageForm.append('retained_attachment', path);
         const result = await api(`/api/sessions/${current.id}/messages`, {method: 'POST', body: messageForm});
         renderQueueState(result.data);

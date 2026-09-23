@@ -1,7 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-const MAX_FILE_BYTES = 100 * 1024 * 1024;
-
 export class BashKittenAgentChild extends JSWindowActorChild {
   handleEvent(event) {
     if (event.type === "DOMContentLoaded" || event.type === "BashKittenDraftReady") {
@@ -46,26 +44,8 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     }
     if (command !== "open-file" || typeof data.url !== "string") throw new Error("Unsupported native action.");
     const url = new URL(data.url, this.document.location.href);
-    const image = /^data:image\/(png|jpeg|gif|webp|avif);base64,/i.test(url.href);
-    if (!image && (url.origin !== entry.origin || !/^\/api\/(files\/content(?:$|\/)|sessions\/[^/]+\/attachments\/)/.test(url.pathname))) throw new Error("Only local Agent files can be opened.");
-    const response = await this.contentWindow.fetch(url.href, { credentials: "same-origin", redirect: "error" });
-    if (!response.ok) throw new Error(`Could not read the file (${response.status}).`);
-    if (Number(response.headers.get("content-length") || 0) > MAX_FILE_BYTES) throw new Error("The file is too large to open here.");
-    const reader = response.body.getReader();
-    const chunks = []; let length = 0;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      length += value.byteLength;
-      if (length > MAX_FILE_BYTES) { await reader.cancel(); throw new Error("The file is too large to open here."); }
-      chunks.push(value);
-    }
-    const bytes = new Uint8Array(length); let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    let name = image ? `image.${url.href.match(/^data:image\/([^;]+)/i)[1]}` : decodeURIComponent(url.pathname.split("/").at(-1));
-    const disposition = response.headers.get("content-disposition") || "";
-    const filename = disposition.match(/filename\*=UTF-8''([^;]+)/i) || disposition.match(/filename="([^"]+)"/i);
-    if (filename) { try { name = decodeURIComponent(filename[1]); } catch {} }
-    return this.sendQuery("OpenFile", { name, bytes });
+    if (url.origin !== entry.origin || url.username || url.password ||
+        !/^\/api\/(?:files\/content|sessions\/[a-f0-9-]{36}\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) throw new Error("Only local Agent files can be opened.");
+    return this.sendQuery("OpenFile", { url: url.href });
   }
 }

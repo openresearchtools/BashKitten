@@ -2,38 +2,29 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-const MAX_FILES = 1000, MAX_LIST = 2 * 1024 * 1024, MAX_DIFF = 512 * 1024;
 const DIFF_OPTIONS = ['--no-ext-diff', '--no-textconv', '--no-color', '--find-renames=50%', '--submodule=short'];
 const inside = (root, file) => { const rel = path.relative(root, file); return rel !== '..' && !rel.startsWith('../') && !path.isAbsolute(rel); };
 
 // Git owns the comparison. It runs outside the HTTP event loop, never refreshes
 // the index, launches a pager, or invokes a configured diff/textconv/fsmonitor.
-function git(cwd, args, { signal, limit = MAX_LIST, partial = false } = {}) {
+function git(cwd, args, { signal } = {}) {
   signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('GIT_')));
     Object.assign(env, { GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' });
     const child = spawn('git', ['--no-optional-locks', '--no-pager', '--literal-pathspecs',
       '-c', 'core.fsmonitor=false', '-c', 'core.untrackedCache=false', '-c', 'diff.autoRefreshIndex=false', ...args], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    const chunks = []; let bytes = 0, stderr = '', truncated = false, failure;
+    const chunks = []; let stderr = '', failure;
     const stop = error => { failure ||= error; child.kill('SIGKILL'); };
     const abort = () => stop(signal.reason || Error('Git request cancelled'));
-    const timer = setTimeout(() => stop(Error('Git scan timed out; refresh to try again')), 15000);
-    timer.unref(); signal?.addEventListener('abort', abort, { once: true });
-    child.stdout.on('data', chunk => {
-      const room = limit - bytes;
-      if (room > 0) { chunks.push(chunk.subarray(0, room)); bytes += Math.min(room, chunk.length); }
-      if (chunk.length > room) {
-        truncated = true;
-        if (partial) child.kill('SIGKILL'); else stop(Error('Git change list is too large to display'));
-      }
-    });
+    signal?.addEventListener('abort', abort, { once: true });
+    child.stdout.on('data', chunk => chunks.push(chunk));
     child.stderr.on('data', chunk => { if (stderr.length < 8192) stderr += chunk.toString().slice(0, 8192 - stderr.length); });
     child.on('error', error => { failure = error.code === 'ENOENT' ? Error('Git is not installed') : error; });
     child.on('close', code => {
-      clearTimeout(timer); signal?.removeEventListener('abort', abort);
+      signal?.removeEventListener('abort', abort);
       if (failure) reject(failure);
-      else resolve({ code, output: Buffer.concat(chunks).toString('utf8'), stderr: stderr.trim(), truncated });
+      else resolve({ code, output: Buffer.concat(chunks).toString('utf8'), stderr: stderr.trim(), truncated: false });
     });
     if (signal?.aborted) abort();
   });
@@ -95,27 +86,29 @@ async function fileInfo(root, relative) {
   return { file, stat: await fs.lstat(file) };
 }
 
-async function untrackedCounts(root, row, budget, signal) {
+async function untrackedCounts(root, row, signal) {
   signal?.throwIfAborted();
   try {
     const { file, stat } = await fileInfo(root, row.path);
-    let bytes;
-    if (stat.isSymbolicLink()) bytes = Buffer.from(await fs.readlink(file));
-    else if (stat.isFile() && stat.size <= Math.min(256 * 1024, budget.remaining)) {
-      budget.remaining -= stat.size;
-      // O_NOFOLLOW prevents a file replaced with an external symlink mid-read.
+    let lines = 0, bytes = 0, last = -1;
+    const count = chunk => {
+      if (bytes < 8000 && chunk.subarray(0, 8000 - bytes).includes(0)) return false;
+      bytes += chunk.length;
+      for (const byte of chunk) if (byte === 10) lines++;
+      if (chunk.length) last = chunk.at(-1);
+      return true;
+    };
+    if (stat.isSymbolicLink()) count(Buffer.from(await fs.readlink(file)));
+    else if (stat.isFile()) {
       const handle = await fs.open(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
       try {
-        bytes = Buffer.alloc(Math.min(stat.size + 1, 256 * 1024 + 1));
-        const read = await handle.read(bytes, 0, bytes.length, 0); bytes = bytes.subarray(0, read.bytesRead);
-        if (bytes.length > stat.size) return Object.assign(row, { added: null, countsTruncated: true });
+        for await (const chunk of handle.createReadStream({ signal, autoClose: false })) {
+          if (!count(chunk)) return Object.assign(row, { added: null, deleted: null, binary: true });
+        }
       } finally { await handle.close(); }
     } else return Object.assign(row, { added: null, countsTruncated: true });
     signal?.throwIfAborted();
-    if (bytes.subarray(0, 8000).includes(0)) return Object.assign(row, { added: null, deleted: null, binary: true });
-    let lines = bytes.length && bytes.at(-1) !== 10 ? 1 : 0;
-    for (const byte of bytes) if (byte === 10) lines++;
-    return Object.assign(row, { added: lines });
+    return Object.assign(row, { added: lines + (bytes && last !== 10 ? 1 : 0) });
   } catch (error) {
     signal?.throwIfAborted();
     return Object.assign(row, { added: null, countsTruncated: true, error: error.code === 'ENOENT' ? 'File changed; refresh to update' : error.message });
@@ -140,13 +133,13 @@ export async function gitChanges(input, { signal, authorizeRoot } = {}) {
       status: untracked ? '?' : xy.trim()[0], added: 0, deleted: 0, ...(!untracked ? { netUnchanged: true } : {}) });
     Object.assign(rows.get(file), { staged, unstaged });
   }
-  const all = [...rows.values()].sort((a, b) => a.path.localeCompare(b.path)), files = all.slice(0, MAX_FILES);
-  const budget = { remaining: 4 * 1024 * 1024 }, pending = files.filter(row => row.status === '?');
+  const files = [...rows.values()].sort((a, b) => a.path.localeCompare(b.path));
+  const pending = files.filter(row => row.status === '?');
   // Four bounded asynchronous readers; never spawn one Git process per file.
   await Promise.all(Array.from({ length: Math.min(4, pending.length) }, async () => {
-    for (;;) { const row = pending.shift(); if (!row) return; await untrackedCounts(root, row, budget, signal); }
+    for (;;) { const row = pending.shift(); if (!row) return; await untrackedCounts(root, row, signal); }
   }));
-  return { repository: true, root, unborn, files, total: all.length, truncated: all.length > files.length };
+  return { repository: true, root, unborn, files, total: files.length, truncated: false };
 }
 
 export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
@@ -161,7 +154,7 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
     const status = fields[i++], first = fields[i++], renamed = /^[RC]/.test(status), file = renamed ? fields[i++] : first;
     if (file === relative) { tracked = true; if (renamed) oldPath = first; break; }
   }
-  const options = { signal, limit: MAX_DIFF, partial: true };
+  const options = { signal };
   let result, comparison;
   if (tracked) {
     result = await git(root, ['diff', ...DIFF_OPTIONS, '--unified=3', base, '--', ...(oldPath ? [oldPath] : []), relative], options);
@@ -169,11 +162,10 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
     // empty, but committing would still change HEAD: show both native patches.
     if (!result.output && result.code === 0) {
       const heading = 'Staged changes (HEAD → index)\n', middle = '\nUnstaged changes (index → working tree)\n';
-      const staged = await git(root, ['diff', ...DIFF_OPTIONS, '--cached', '--unified=3', base, '--', ...(oldPath ? [oldPath] : []), relative], { ...options, limit: MAX_DIFF - Buffer.byteLength(heading) });
+      const staged = await git(root, ['diff', ...DIFF_OPTIONS, '--cached', '--unified=3', base, '--', ...(oldPath ? [oldPath] : []), relative], options);
       if (!staged.truncated && staged.code !== 0) checked(staged);
       if (staged.output) {
-        const remaining = MAX_DIFF - Buffer.byteLength(heading + staged.output + middle);
-        const unstaged = remaining > 0 && !staged.truncated ? await git(root, ['diff', ...DIFF_OPTIONS, '--unified=3', '--', ...(oldPath ? [oldPath] : []), relative], { ...options, limit: remaining }) : null;
+        const unstaged = await git(root, ['diff', ...DIFF_OPTIONS, '--unified=3', '--', ...(oldPath ? [oldPath] : []), relative], options);
         if (unstaged && !unstaged.truncated && unstaged.code !== 0) checked(unstaged);
         result = { code: 0, output: heading + staged.output + (unstaged ? middle + unstaged.output : ''), truncated: staged.truncated || !unstaged || unstaged.truncated };
         comparison = 'staged-and-unstaged';

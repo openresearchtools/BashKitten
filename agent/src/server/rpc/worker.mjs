@@ -8,6 +8,7 @@ import { syncContext } from './context.mjs';
 import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
 import { notifyTurn } from './notifications.mjs';
 import { claimInstance } from '../instance.mjs';
+import { attachmentImages } from '../files/files.mjs';
 
 process.umask(0o077);
 let id = process.argv[2];
@@ -185,7 +186,7 @@ async function send(item) {
   await prepareManagedModel();
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
-  await rpc.command('prompt', { message: item.wire, images: item.images || [], streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
+  await rpc.command('prompt', { message: item.wire, images: item.images || await attachmentImages(item.attachments || []), streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
   // A native extension may consume the input without starting a model turn.
   const state = await rpc.command('get_state');
   if (!state.isStreaming && !state.pendingMessageCount && queue.includes(item)) { queue.splice(queue.indexOf(item), 1); queueChanged(); }

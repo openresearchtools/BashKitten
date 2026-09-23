@@ -3,7 +3,6 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { Transform } from 'node:stream';
 import yazl from 'yazl';
 
 process.umask(0o077);
@@ -98,17 +97,12 @@ async function discardCopy(parent, name, owned, scope) {
 async function archiveFiles(job) {
   const archive = new yazl.ZipFile();
   const output = await fs.open(job.output, 'wx', 0o600);
-  let written = 0, count = 0, archiveError;
-  const limiter = new Transform({ transform(chunk, encoding, callback) {
-    written += chunk.length;
-    callback(written > job.archiveLimit ? Error('Archive exceeds the 4 GiB temporary download limit') : null, chunk);
-  } });
-  const stream = pipeline(archive.outputStream, limiter, output.createWriteStream(), { signal: abort.signal });
+  let archiveError;
+  const stream = pipeline(archive.outputStream, output.createWriteStream(), { signal: abort.signal });
   stream.catch(error => { archiveError = error; });
   archive.on('error', error => { archiveError = error; archive.outputStream.destroy(error); });
   async function add(parent, name, relative) {
     check(); if (archiveError) throw archiveError;
-    if (++count > 250000) throw Error('Archive exceeds the 250,000 entry limit');
     if (relative.includes('\\') || relative.split('/').includes('..')) throw Error('This filename cannot be safely stored in a ZIP');
     const full = path.join(fdPath(parent), name), stat = await fs.lstat(full);
     progress(relative, false);

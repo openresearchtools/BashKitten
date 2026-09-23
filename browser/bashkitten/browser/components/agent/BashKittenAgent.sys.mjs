@@ -51,13 +51,12 @@ async function readPipe(pipe) {
     const value = await pipe.readString();
     if (!value) return output;
     output += value;
-    if (output.length > 4 * 1024 * 1024) throw new Error("The local controller response is too large.");
   }
 }
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "account-create", "account-enroll", "account-totp", "hosting-client", "project-root"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "account-create", "account-enroll", "account-totp", "hosting-client", "project-root", "native-file"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -239,6 +238,25 @@ class AgentView {
       browser.outerWindowID, null, browser.browsingContext.usePrivateBrowsing
     );
     return true;
+  }
+
+  async resolveLocalFile(browser, value) {
+    const entry = ownedViews.get(browser);
+    if (!entry?.local || entry.authFor || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to open this file.");
+    const url = new URL(value);
+    if (url.origin !== new URL(entry.connection.url).origin || url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password ||
+        !/^\/api\/(?:files\/content|sessions\/[a-f0-9-]{36}\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) throw new Error("Only local Agent files can be opened.");
+    // Authenticate in the enrolled document's cookie context, then resolve the
+    // existing file through the same private controller that owns Local. Only
+    // its path crosses this bridge; file contents stay on disk.
+    const response = await AgentRemotes.request(entry.connection, "/api/bootstrap");
+    if (response.status !== 200 || !response.data?.authenticated) throw new Error("Sign in again to open this file.");
+    let current = ownedViews.get(browser);
+    if (this.off || this.activeBrowser !== browser || !current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    const file = await control("native-file", { url: url.href });
+    current = ownedViews.get(browser);
+    if (this.off || this.activeBrowser !== browser || !current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    return file;
   }
 
   async chooseFolder(browser, { title, path } = {}) {
@@ -748,7 +766,6 @@ class AgentView {
     const file = html(this.doc, "input", { type: "file", accept: ".json,application/json,image/*", "aria-label": "Import connection file or QR image" });
     file.addEventListener("change", () => report(async () => {
       const selected = file.files[0]; if (!selected) return;
-      if (selected.size > 16 * 1024 * 1024) throw new Error("The connection file or QR image is too large.");
       const source = selected.type.startsWith("image/") ? await this.decodeQR(await this.win.createImageBitmap(selected)) : await selected.text();
       await enroll(JSON.parse(source)); file.value = "";
     }));
@@ -781,7 +798,7 @@ class AgentView {
     if (!this.win.jsQR) Services.scriptloader.loadSubScript("chrome://browser/content/bashkitten/agent/jsQR.js", this.win);
     const width = source.videoWidth || source.width;
     const height = source.videoHeight || source.height;
-    if (!width || !height || width * height > 16 * 1024 * 1024) throw new Error("The QR image dimensions are invalid or too large.");
+    if (!width || !height) throw new Error("The QR image dimensions are invalid.");
     const scale = Math.min(1, 1600 / Math.max(width, height));
     const canvas = html(this.doc, "canvas"); canvas.width = Math.round(width * scale); canvas.height = Math.round(height * scale);
     const context = canvas.getContext("2d", { willReadFrequently: true });

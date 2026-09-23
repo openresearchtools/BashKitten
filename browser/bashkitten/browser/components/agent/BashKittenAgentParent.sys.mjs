@@ -26,13 +26,12 @@ export class BashKittenAgentParent extends JSWindowActorParent {
       if (info.type !== "directory") throw new Error("This folder no longer exists.");
       return openPath(data.path);
     }
-    if (name !== "OpenFile" || !(data.bytes instanceof Uint8Array) || data.bytes.byteLength > 100 * 1024 * 1024) throw new Error("Invalid file request.");
-    const root = PathUtils.join(PathUtils.profileDir, "agent-open-files");
-    await IOUtils.makeDirectory(root, { permissions: 0o700, ignoreExisting: true });
-    const safeName = String(data.name || "file").replace(/[\x00-\x1f\x7f/\\]/g, "_").slice(-180);
-    const path = PathUtils.join(root, `${Services.uuid.generateUUID().toString().slice(1, -1)}-${safeName}`);
-    await IOUtils.write(path, data.bytes, { mode: "create" });
-    await IOUtils.setPermissions(path, 0o600);
-    return openPath(path);
+    if (name !== "OpenFile" || typeof data.url !== "string") throw new Error("Invalid file request.");
+    const file = await entry.host.resolveLocalFile(this.browsingContext.embedderElement, data.url);
+    if (typeof file.path !== "string" || !PathUtils.isAbsolute(file.path) || file.path.includes("\0")) throw new Error("Invalid local file path.");
+    if ((await IOUtils.stat(file.path)).type !== "regular") throw new Error("This file no longer exists.");
+    const current = protectedAgentView(this);
+    if (!current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    return openPath(file.path);
   }
 }

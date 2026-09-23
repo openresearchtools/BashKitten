@@ -3,6 +3,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash, randomBytes } from 'node:crypto';
 import http from 'node:http';
+import { createWriteStream } from 'node:fs';
+import { pipeline } from 'node:stream/promises';
+import multipart from 'busboy';
 
 export const dataDir = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
 export const sessionsDir = path.join(dataDir, 'sessions');
@@ -49,7 +52,7 @@ export function json(res, value, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
   res.end(JSON.stringify(value));
 }
-export async function body(req, limit = 32 * 1024 * 1024) {
+export async function body(req, limit = Infinity) {
   const chunks = []; let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
@@ -63,7 +66,32 @@ export async function jsonBody(req) {
   try { return bytes.length ? JSON.parse(bytes) : {}; } catch { throw Error('Invalid JSON request'); }
 }
 export async function formBody(req) {
-  return new Response(await body(req), { headers: { 'Content-Type': req.headers['content-type'] } }).formData();
+  const parser = multipart({ headers: req.headers, preservePath: true, defParamCharset: 'utf8', limits: { fieldSize: Infinity } });
+  const parent = path.join(dataDir, 'run'); await privateDir(parent);
+  const directory = await fs.mkdtemp(path.join(parent, 'upload-'));
+  const entries = [], writes = [], streams = new Set();
+  let failure;
+  const cleanup = () => fs.rm(directory, { recursive: true, force: true });
+  parser.on('field', (name, value) => entries.push([name, value]));
+  parser.on('file', (field, stream, info) => {
+    const file = { name: info.filename, type: info.mimeType, size: 0, path: path.join(directory, randomToken()) };
+    entries.push([field, file]); streams.add(stream);
+    stream.on('data', chunk => { file.size += chunk.length; });
+    writes.push(pipeline(stream, createWriteStream(file.path, { flags: 'wx', mode: 0o600 }))
+      .catch(error => { failure ||= error; parser.destroy(error); })
+      .finally(() => streams.delete(stream)));
+  });
+  try {
+    await pipeline(req, parser);
+    await Promise.all(writes);
+    if (failure) throw failure;
+    return { get: name => entries.find(entry => entry[0] === name)?.[1] ?? null,
+      getAll: name => entries.filter(entry => entry[0] === name).map(entry => entry[1]),
+      [Symbol.iterator]: () => entries[Symbol.iterator](), cleanup };
+  } catch (error) {
+    for (const stream of streams) stream.destroy(error);
+    await Promise.all(writes); await cleanup(); throw error;
+  }
 }
 export function workerRequest(id, route, value) {
   return socketRequest(socketPath(id), route, value);
@@ -71,7 +99,7 @@ export function workerRequest(id, route, value) {
 export function socketRequest(socket, route, value, timeout = 120000) {
   return new Promise((resolve, reject) => {
     const req = http.request({ socketPath: socket, path: route, method: value === undefined ? 'GET' : 'POST', headers: { 'Content-Type': 'application/json' } }, res => {
-      body(res, 128 * 1024 * 1024).then(bytes => {
+      body(res).then(bytes => {
         const result = JSON.parse(bytes.toString());
         if (res.statusCode >= 400) reject(Error(result.error)); else resolve(result);
       }).catch(reject);
