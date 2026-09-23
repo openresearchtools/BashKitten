@@ -5,6 +5,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.*;
 import android.content.pm.PackageManager;
+import android.content.res.TypedArray;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.*;
@@ -13,6 +14,7 @@ import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.AppCompatButton;
 import java.io.*;
 import java.net.URI;
 import java.util.*;
@@ -51,12 +53,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         setBaselineAligned(false);
         agent = new LinearLayout(activity); agent.setOrientation(VERTICAL);
         bar = new LinearLayout(activity); bar.setGravity(Gravity.CENTER_VERTICAL); agent.addView(bar, new LayoutParams(-1, dp(48)));
-        Button toggle = button("Agent", this::toggle); bar.addView(toggle, new LayoutParams(dp(72), -1));
-        location = button("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
-        power = button("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
+        TypedArray barTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.colorBackground});
+        try { bar.setBackgroundColor(barTheme.getColor(0, 0)); } finally { barTheme.recycle(); }
+        Button toggle = barButton("Agent", this::toggle); bar.addView(toggle, new LayoutParams(dp(72), -1));
+        location = barButton("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
+        power = barButton("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
-        Button menu = button("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
-        hideAgent = button("−", () -> { split = false; layoutPanels(); });
+        Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
+        hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
@@ -86,7 +90,16 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         layoutPanels(); changed();
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
-    private Button button(String label, Runnable action) { Button b = new Button(activity); b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
+    private Button barButton(String label, Runnable action) {
+        AppCompatButton b = new AppCompatButton(activity, null, androidx.appcompat.R.attr.borderlessButtonStyle);
+        // Fenix supplies a stateful foreground for its current light/dark/private
+        // surface; do not combine it with the framework's default button fill.
+        TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
+        try { b.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
+        return button(b, label, action);
+    }
+    private Button button(String label, Runnable action) { return button(new Button(activity), label, action); }
+    private Button button(Button b, String label, Runnable action) { b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
     public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
     public void showBrowser() { shown = false; split = true; browserUi = false; layoutPanels(); }
