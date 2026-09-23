@@ -38,7 +38,7 @@ async function readPipe(pipe) {
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "account-create", "account-enroll", "account-totp", "hosting-client"].includes(command)) {
+  if (!["start", "status", "stop", "account-create", "account-enroll", "account-totp", "hosting-client", "project-root"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   const process = await Subprocess.call({
@@ -219,6 +219,24 @@ class AgentView {
       browser.outerWindowID, null, browser.browsingContext.usePrivateBrowsing
     );
     return true;
+  }
+
+  async chooseFolder(browser, { title, path } = {}) {
+    const entry = ownedViews.get(browser);
+    if (!entry?.local || entry.authFor || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to choose a folder.");
+    const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+    picker.init(this.win.browsingContext, typeof title === "string" ? title.slice(0, 200) : "Choose a folder", Ci.nsIFilePicker.modeGetFolder);
+    if (typeof path === "string" && PathUtils.isAbsolute(path) && !path.includes("\0")) {
+      try {
+        const directory = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
+        directory.initWithPath(path);
+        picker.displayDirectory = directory;
+      } catch { /* A removed initial folder must not prevent choosing another. */ }
+    }
+    const selected = await new Promise(resolve => picker.open(resolve));
+    if (selected !== Ci.nsIFilePicker.returnOK) return null;
+    if (this.off || this.activeBrowser !== browser || ownedViews.get(browser) !== entry) throw new Error("The selected Agent changed.");
+    return control("project-root", { path: picker.file.path });
   }
 
   async openHosted(browser, url, { tab = null, forceSignIn = false } = {}) {

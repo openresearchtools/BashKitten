@@ -19,6 +19,7 @@ export class BashKittenAgentParent extends JSWindowActorParent {
     if (name === "ImportRemote") { await entry.host.remotes(); return { ok: true }; }
     if (name === "OpenHosted") { await entry.host.openHosted(this.browsingContext.embedderElement, data.url); return { ok: true }; }
     if (!entry.local) throw new Error("This action is available only in the local Agent view.");
+    if (name === "ChooseFolder") return entry.host.chooseFolder(this.browsingContext.embedderElement, data);
     if (name === "OpenFolder") {
       if (typeof data.path !== "string" || !PathUtils.isAbsolute(data.path) || data.path.includes("\0")) throw new Error("Invalid folder path.");
       const info = await IOUtils.stat(data.path);

@@ -40,6 +40,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     if (command === "import-remote") return this.sendQuery("ImportRemote");
     if (command === "open-hosted" && typeof data.url === "string") return this.sendQuery("OpenHosted", { url: data.url });
     if (!entry.local) throw new Error("Files on a remote Agent use browser downloads.");
+    if (command === "choose-folder") return this.sendQuery("ChooseFolder", { title: data.title, path: data.path });
     if (command === "open-folder" || command === "open-file" && typeof data.folder === "string") {
       return this.sendQuery("OpenFolder", { path: data.path || data.folder });
     }

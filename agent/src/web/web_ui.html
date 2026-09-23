@@ -2942,6 +2942,10 @@
     }
 
     async function openFolderPicker(title, path, onSelect) {
+      if (nativeLinux) {
+        try { const selected = await nativeHost.call('choose-folder', {title, path}); if (selected) await onSelect(selected.path); return; }
+        catch (error) { $('#composerHint').textContent = error.message; }
+      }
       folderSelection = onSelect;
       folderView = {path: '', parent: null};
       $('#newFolderName').value = '';
