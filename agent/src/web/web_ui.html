@@ -235,6 +235,7 @@
     .local-model-description .meta { margin: 3px 0 0; font-size: 11px; }
     .local-model-row button, .model-folder-row button { flex: 0 0 auto; }
     .model-list { max-height: 380px; overflow: auto; }
+    #modelRepository, #modelSearchResults { scroll-margin-top: 64px; }
     .settings-section { padding: 18px 0; border-top: 1px solid var(--line-soft); margin-top: 18px; }
     .settings-section > summary { font-weight: 500; }
     .settings-page label { display: block; margin: 11px 0; color: var(--muted); font-size: 12px; }
@@ -695,15 +696,17 @@
             <div class="settings-section">
               <label for="modelSearch">Search Hugging Face or enter an owner/repository</label>
               <div class="model-search-row"><input id="modelSearch" placeholder="Search models" autocomplete="off"><button id="modelSearchButton" type="button">Search</button><button id="modelRepositoryOpen" type="button">Open repository</button></div>
+              <p id="modelSearchNotice" class="meta" role="status"></p>
               <div id="modelSearchResults" class="model-list" aria-label="Model search results"></div>
               <section id="modelRepository" class="hidden settings-section" aria-labelledby="modelRepositoryTitle">
+                <button id="modelSearchBack" type="button" class="hidden">Back to search results</button>
                 <h3 id="modelRepositoryTitle"></h3><p id="modelRepositoryInfo" class="meta"></p>
                 <label class="check-label"><input id="modelGgufOnly" type="checkbox" checked> GGUF files only</label>
                 <div class="subscription-actions"><button id="modelFilesAll" type="button">Select shown</button><button id="modelFilesNone" type="button">Clear selection</button></div>
                 <div id="modelRepositoryFiles" class="model-list"></div>
                 <p id="modelSelection" class="meta"></p><button id="modelDownload" type="button" disabled>Download selected files</button>
+                <p id="modelDownloadNotice" class="meta" role="status"></p>
               </section>
-              <p id="modelSearchNotice" class="meta" role="status"></p>
             </div>
             <div class="settings-section"><div class="settings-heading"><h3>Downloads</h3><button id="modelDownloadsRefresh" type="button">Refresh</button></div><div id="modelDownloads"></div></div>
             <p id="modelDownloadsNotice" class="meta" role="status"></p>
@@ -2033,19 +2036,32 @@
     }
     async function browseModelRepository(id) {
       id = id.trim(); if (!id) { $('#modelSearchNotice').textContent = 'Enter an owner/repository or choose a search result.'; return; }
-      const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = 'Loading repository…';
-      $('#modelRepository').classList.add('hidden'); modelRepository = null; modelSelectedFiles.clear();
+      const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = '';
+      modelRepository = null; modelSelectedFiles.clear();
+      $('#modelDownloadNotice').textContent = '';
+      $('#modelSearchResults').classList.add('hidden');
+      $('#modelSearchBack').classList.toggle('hidden', !$('#modelSearchResults').children.length);
+      $('#modelRepositoryTitle').textContent = id; $('#modelRepositoryInfo').textContent = 'Loading repository…';
+      $('#modelRepositoryFiles').replaceChildren(); updateModelSelection();
+      $('#modelRepository').classList.remove('hidden');
+      $('#modelRepository').scrollIntoView({block:'start'});
       try {
         const value = await api('/api/models/repository', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id})});
         if (generation !== modelCatalogGeneration) return;
         modelRepository = value; $('#modelRepositoryTitle').textContent = value.id;
         $('#modelRepositoryInfo').textContent = [value.gated ? 'Gated model · A saved token and Hugging Face access are required.' : '', `${value.files.length} files`, value.revision ? `Revision ${value.revision.slice(0,12)}` : ''].filter(Boolean).join(' · ');
         $('#modelRepository').classList.remove('hidden'); renderModelFiles(); $('#modelSearchNotice').textContent = '';
-      } catch (error) { if (generation === modelCatalogGeneration) $('#modelSearchNotice').textContent = error.message; }
+      } catch (error) { if (generation === modelCatalogGeneration) $('#modelRepositoryInfo').textContent = error.message; }
     }
+    $('#modelSearchBack').onclick = () => {
+      modelCatalogGeneration++; modelRepository = null; modelSelectedFiles.clear();
+      $('#modelRepository').classList.add('hidden'); $('#modelSearchResults').classList.remove('hidden');
+      $('#modelSearchResults').scrollIntoView({block:'start'});
+    };
     async function searchDownloadModels() {
       const query = $('#modelSearch').value.trim(); if (!query) { $('#modelSearchNotice').textContent = 'Enter a model name or an owner/repository.'; return; }
       const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = 'Searching Hugging Face…'; $('#modelSearchResults').replaceChildren();
+      $('#modelSearchResults').classList.remove('hidden');
       $('#modelRepository').classList.add('hidden'); modelRepository = null; modelSelectedFiles.clear();
       try {
         const value = await api('/api/models/search', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({query})});
@@ -2068,11 +2084,11 @@
     $('#modelFilesNone').onclick = () => { modelSelectedFiles.clear(); renderModelFiles(); };
     $('#modelDownload').onclick = async () => {
       if (modelDownloadStarting || !modelRepository || !modelSelectedFiles.size) return;
-      if (modelSettingsBusy) { $('#modelSearchNotice').textContent = 'Wait for model settings to finish saving.'; return; }
-      if (modelsDirectoryDirty) { $('#modelSearchNotice').textContent = 'Save the models directory before starting a download.'; return; }
-      modelDownloadStarting = true; updateModelSelection(); $('#modelSearchNotice').textContent = '';
-      try { await api('/api/models/downloads', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id:modelRepository.id,revision:modelRepository.revision,files:[...modelSelectedFiles]})}); $('#modelSearchNotice').textContent = 'Download added.'; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); }
-      catch (error) { $('#modelSearchNotice').textContent = error.message; }
+      if (modelSettingsBusy) { $('#modelDownloadNotice').textContent = 'Wait for model settings to finish saving.'; return; }
+      if (modelsDirectoryDirty) { $('#modelDownloadNotice').textContent = 'Save the models directory before starting a download.'; return; }
+      modelDownloadStarting = true; updateModelSelection(); $('#modelDownloadNotice').textContent = 'Starting download…';
+      try { await api('/api/models/downloads', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id:modelRepository.id,revision:modelRepository.revision,files:[...modelSelectedFiles]})}); $('#modelDownloadNotice').textContent = 'Download added.'; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); }
+      catch (error) { $('#modelDownloadNotice').textContent = error.message; }
       finally { modelDownloadStarting = false; updateModelSelection(); }
     };
     document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; } else if (csrf) { refreshHosting(); if (modelDownloadsVisible()) refreshModelDownloads(); } });
