@@ -18,7 +18,7 @@ permissions:
   contents: read
   actions: read
 concurrency:
-  group: complete-candidates-${{ github.ref }}-${{ inputs.native_only }}-${{ inputs.linux_only }}
+  group: complete-candidates-${{ github.ref }}-${{ github.sha }}-${{ inputs.native_only }}-${{ inputs.linux_only }}
   cancel-in-progress: false
 jobs:
   auth:
