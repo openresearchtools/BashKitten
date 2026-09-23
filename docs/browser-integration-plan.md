@@ -739,6 +739,14 @@ protects a whole onion service, not individual URL paths.
 The Agent bar has **Local / named remote** selection and connection status.
 Switching changes the protected view's server while keeping per-server login
 state and reconnect information. It does not create a browser profile or window.
+Client connection import and saved connections belong only to the browser's
+selector and a non-modal browser-owned view with Back to Agent, never an overlay
+over server settings or a web-to-browser import shortcut. The server web UI only
+sends publishing/key/export requests to the backend. Put its device connection,
+QR and file export controls immediately below the published server address.
+Enabling or disabling publishing must retain the local loopback endpoint and
+local login session; it must not select a Tor client connection or restart
+Authelia merely to add/remove the already prepared onion cookie scope.
 An ordinary onion link remains an ordinary private Tor tab. The enrolled Agent
 context can persist its login independently; its cookies/keys never become the
 ordinary onion tab's session. Enrollment/remote-management tools are not exposed
