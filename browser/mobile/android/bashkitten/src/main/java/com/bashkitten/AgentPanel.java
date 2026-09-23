@@ -45,6 +45,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         app = BrowserApp.get(activity); runtime = app.agent;
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
         setOrientation(HORIZONTAL);
+        // Weighted panes must keep a bounded height: baseline alignment first
+        // measures them with UNSPECIFIED constraints, which Compose cannot scroll in.
+        setBaselineAligned(false);
         agent = new LinearLayout(activity); agent.setOrientation(VERTICAL);
         bar = new LinearLayout(activity); bar.setGravity(Gravity.CENTER_VERTICAL); agent.addView(bar, new LayoutParams(-1, dp(48)));
         Button toggle = button("Agent", this::toggle); bar.addView(toggle, new LayoutParams(dp(72), -1));
@@ -66,7 +69,17 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         addView(agent); addView(browser);
         runtime.attach(engine, this);
         setOnApplyWindowInsetsListener((v, insets) -> {
-            if (Build.VERSION.SDK_INT >= 30) { android.graphics.Insets i = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout()); agent.setPadding(i.left, i.top, i.right, i.bottom); }
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets i = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                // Fenix pads the content root for browser fragments but forwards
+                // their insets unchanged. Apply only the remaining inset to Agent.
+                View content = activity.findViewById(android.R.id.content);
+                agent.setPadding(
+                    Math.max(0, i.left - content.getPaddingLeft()),
+                    Math.max(0, i.top - content.getPaddingTop()),
+                    Math.max(0, i.right - content.getPaddingRight()),
+                    Math.max(0, i.bottom - content.getPaddingBottom()));
+            }
             return insets;
         });
         layoutPanels(); changed();

@@ -49,6 +49,7 @@ import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.appservices.places.BookmarkRoot
@@ -69,6 +70,7 @@ import mozilla.components.feature.media.ext.findActiveMediaTab
 import mozilla.components.feature.privatemode.notification.PrivateNotificationFeature
 import mozilla.components.feature.search.BrowserStoreSearchAdapter
 import mozilla.components.lib.crash.store.CrashAction
+import mozilla.components.lib.state.ext.flow
 import mozilla.components.service.fxa.sync.SyncReason
 import mozilla.components.support.base.feature.ActivityResultHandler
 import mozilla.components.support.base.feature.UserInteractionHandler
@@ -524,6 +526,11 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         if (this !is ExternalAppBrowserActivity) {
             bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime)
             setContentView(bashKittenAgentPanel)
+            lifecycleScope.launch {
+                components.core.store.flow().map { it.tabs.isEmpty() }
+                    .distinctUntilChanged()
+                    .collect { empty -> if (empty) bashKittenAgentPanel?.showAgent() }
+            }
             if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch()
         } else {
             setContentView(binding.root)
