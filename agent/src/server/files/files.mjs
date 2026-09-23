@@ -95,11 +95,9 @@ export async function saveAttachments(files) {
 }
 async function storeUpload(file, target) {
   if (typeof file.path !== 'string') throw Error('Choose a file to upload');
-  try { await fs.link(file.path, target); }
-  catch (error) {
-    if (error.code !== 'EXDEV') throw error;
-    await fs.copyFile(file.path, target, constants.COPYFILE_EXCL);
-  }
+  // Android app data can forbid hard links even within the same filesystem.
+  // Copy without buffering the upload or replacing an existing destination.
+  await fs.copyFile(file.path, target, constants.COPYFILE_EXCL);
 }
 export async function attachmentImages(attachments) {
   const images = [];
