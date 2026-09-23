@@ -501,7 +501,8 @@ not grant an Android permission; the foreground BashKitten activity requests
 the normal system dialog. The return intent accepts no arbitrary command to run.
 This follows Termux's [RUN_COMMAND interface](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent).
 
-The Start action drives this sequence. Request the normal Android permission
+Keep the normal setup screen to the Termux button, one visible copyable command
+and the existing Turn on/off control. The Start action drives this sequence. Request the normal Android permission
 when it is needed, then probe the real Termux connection, install missing Agent
 packages and start the service automatically. After the one-time command is
 pasted in Termux, return through BashKitten's exported launcher and continue

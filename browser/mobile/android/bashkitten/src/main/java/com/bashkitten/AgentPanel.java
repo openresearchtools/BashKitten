@@ -307,22 +307,28 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
         if (runtime.installingPackages && runtime.setupStep.equals("install")) { message.setText("Installing Agent packages…"); return; }
-        if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); action("Check again", runtime::turnOn); return; }
+        if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); return; }
         if (runtime.setupStep.equals("permission")) {
             if (permissionNeedsSettings()) {
                 message.setText("Android has denied Termux command access. Open Permissions, then Additional permissions, and allow BashKitten to run commands in Termux. Startup continues when you return.");
                 action("Open Android permission settings", runtime.termux::openPermissionSettings);
-            } else action("Continue", this::requestTermuxPermission);
+            } else message.setText("Approve Android’s Termux permission prompt to continue. If you dismissed it, turn Agent off and on to try again.");
         } else if (runtime.setupStep.equals("connection")) {
             TextView guide = new TextView(activity);
-            guide.setText("One-time Termux setup: copy the command, paste it into Termux and press Enter. BashKitten will reopen and continue installation automatically.");
+            guide.setText("Copy this command, open Termux, paste it and press Enter. BashKitten will return and install the Agent packages automatically.");
             actions.addView(guide);
-            action("Copy and open Termux", () -> {
+            TextView command = new TextView(activity);
+            command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12);
+            command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true);
+            command.setPadding(0, dp(12), 0, dp(12)); actions.addView(command);
+            action("Copy command", () -> {
                 ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Set up BashKitten", runtime.termux.setupCommand()));
+                Toast.makeText(activity, "Command copied", Toast.LENGTH_SHORT).show();
+            });
+            action("Open Termux", () -> {
                 app.policies.edit().putBoolean("agent.termuxSetupPending", true).apply();
                 runtime.termux.openTermux();
             });
-            action("Retry start", runtime::turnOn);
         } else if (runtime.setupStep.equals("install-failed")) {
             action("Retry installation", runtime::startInstallation);
         } else {

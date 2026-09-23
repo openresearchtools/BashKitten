@@ -77,7 +77,7 @@ public final class TermuxConnection {
                 + "sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps=true/' ~/.termux/termux.properties; "
                 + "else printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties; fi; } && "
                 + "termux-reload-settings && am start --user \"$(( $(id -u) / 100000 ))\" -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "
-                + shellQuote(destination.flattenToString());
+                + shellQuote(destination.flattenToShortString());
     }
 
     public void probe(Consumer<JSONObject> done, Consumer<String> fail) {
