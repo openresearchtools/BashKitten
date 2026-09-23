@@ -34,10 +34,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
-    private final TextView message, log;
+    private final TextView message, log, connectionStatus;
     private final LinearLayout actions;
     private GeckoSession attached;
     private String renderedState = "";
+    private String connectionError = "";
     private boolean shown = true;
     private boolean split;
     private boolean browserUi;
@@ -66,6 +67,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
+        connectionStatus = new TextView(activity);
+        connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
+        connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
+        body.addView(connectionStatus, new LayoutParams(-1, -2));
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
         setup = new ScrollView(activity); setup.setFillViewport(true);
         LinearLayout setupBody = new LinearLayout(activity); setupBody.setPadding(dp(24), dp(28), dp(24), dp(24)); setupBody.setOrientation(VERTICAL); setup.addView(setupBody);
@@ -150,12 +155,21 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
         power.setEnabled(!runtime.state.equals("starting") && !runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
-        boolean online = runtime.state.equals("on"); view.setVisibility(online ? VISIBLE : GONE); setup.setVisibility(online ? GONE : VISIBLE);
+        boolean online = runtime.state.equals("on");
         if (runtime.session != null && runtime.session != attached) {
+            connectionError = "";
+            connectionStatus.setVisibility(online ? VISIBLE : GONE);
             if (attached != null) view.releaseSession(); attached = runtime.session;
             bindSession(attached); view.setSession(attached);
         }
+        view.setVisibility(online && connectionError.isEmpty() ? VISIBLE : GONE);
+        setup.setVisibility(online && connectionError.isEmpty() ? GONE : VISIBLE);
+        if (!online) connectionStatus.setVisibility(GONE);
         if (!renderedState.equals(runtime.state + runtime.error)) { renderedState = runtime.state + runtime.error; renderSetup(); }
+        if (online && !connectionError.isEmpty()) {
+            message.setText(connectionError); actions.removeAllViews();
+            action("Reconnect", runtime::recoverSession);
+        }
         if (runtime.state.equals("setup") && runtime.setupStep.equals("permission") && runtime.permissionPromptPending) {
             runtime.permissionPromptPending = false;
             app.main.post(() -> {
@@ -210,13 +224,23 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 return GeckoResult.fromValue(AllowOrDeny.DENY);
             }
             @Override public GeckoResult<String> onLoadError(GeckoSession s, String uri, WebRequestError error) {
-                message.setText("Agent connection failed. Reconnect checks its current address and saved certificate.");
-                view.setVisibility(GONE); setup.setVisibility(VISIBLE); actions.removeAllViews(); action("Reconnect", runtime::refresh);
+                if (s == runtime.session && runtime.isOnRequested()) {
+                    connectionError = "Agent connection failed (" + error.code + "). Reconnect checks its current address and saved certificate.";
+                    connectionStatus.setVisibility(GONE); changed();
+                }
                 return null;
             }
         });
         session.setProgressDelegate(new GeckoSession.ProgressDelegate() {
+            @Override public void onPageStart(GeckoSession s, String uri) {
+                if (s != runtime.session || !runtime.isOnRequested() || "about:blank".equals(uri)) return;
+                connectionError = ""; connectionStatus.setVisibility(VISIBLE); changed();
+            }
             @Override public void onPageStop(GeckoSession s, boolean success) {
+                if (s != runtime.session || !runtime.isOnRequested() || "about:blank".equals(currentLocation[0])) return;
+                connectionStatus.setVisibility(GONE);
+                if (!success && connectionError.isEmpty()) connectionError = "Agent could not finish loading. Reconnect to try again.";
+                changed();
                 if (success) runtime.hostedPageReady(s, currentLocation[0]);
             }
         });
