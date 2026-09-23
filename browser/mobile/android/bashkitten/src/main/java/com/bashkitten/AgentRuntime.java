@@ -27,6 +27,7 @@ public final class AgentRuntime {
     private boolean launched, desired, busy, polling, localControlRequested;
     private int operation;
     public boolean visible;
+    public boolean installingPackages;
     java.lang.ref.WeakReference<Activity> activity = new java.lang.ref.WeakReference<>(null);
     private final Map<String, GeckoSession> sessions = new HashMap<>();
     private final Set<String> posted = new LinkedHashSet<>();
@@ -69,7 +70,7 @@ public final class AgentRuntime {
         localControlRequested = requested;
         app.policies.edit().putBoolean("agent.localControlRequested", requested).apply();
     }
-    public void bootstrapStarted() { recordLocalControl(true); }
+    public void bootstrapStarted() { installingPackages = true; recordLocalControl(true); }
     public void freshLaunch() { if (!desired && !busy) turnOn(); }
     public void turnOn() {
         if (busy) return;

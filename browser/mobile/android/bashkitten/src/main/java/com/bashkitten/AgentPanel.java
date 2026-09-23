@@ -32,6 +32,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final Button power, location, hideAgent;
     private final GeckoView view;
     private final ScrollView setup;
+    private final ScrollView logScroll;
     private final TextView message, log;
     private final LinearLayout actions;
     private GeckoSession attached;
@@ -40,6 +41,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private boolean split;
     private boolean browserUi;
     private boolean startedBootstrap;
+    private boolean destroyed;
+    private final Runnable bootstrapPoll = this::bootstrapProgress;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     private String setupId;
@@ -70,7 +73,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TextView title = new TextView(activity); title.setText("BashKitten"); title.setTextSize(28); setupBody.addView(title);
         message = new TextView(activity); message.setTextSize(16); message.setPadding(0, dp(12), 0, dp(20)); setupBody.addView(message);
         actions = new LinearLayout(activity); actions.setOrientation(VERTICAL); setupBody.addView(actions);
-        log = new TextView(activity); log.setTextSize(12); log.setTypeface(android.graphics.Typeface.MONOSPACE); log.setTextIsSelectable(true); setupBody.addView(log);
+        log = new TextView(activity); log.setTextSize(12); log.setTypeface(android.graphics.Typeface.MONOSPACE); log.setTextIsSelectable(true);
+        logScroll = new ScrollView(activity); logScroll.setNestedScrollingEnabled(true); logScroll.addView(log); logScroll.setVisibility(GONE);
+        setupBody.addView(logScroll, new LayoutParams(-1, dp(240)));
         body.addView(setup, new LayoutParams(-1, 0, 1));
         addView(agent); addView(browser);
         runtime.attach(engine, this);
@@ -89,6 +94,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             return insets;
         });
         layoutPanels(); changed();
+        if (runtime.installingPackages) { startedBootstrap = true; bootstrapProgress(); }
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private Button barButton(String label, Runnable action) {
@@ -126,7 +132,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (runtime.session != null) runtime.session.setActive(agentVisible);
     }
     public void resume() { app.showPendingApproval(activity); if (runtime.state.equals("on")) runtime.refresh(); layoutPanels(); }
-    public void destroy() { runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
+    public void destroy() { destroyed = true; app.main.removeCallbacks(bootstrapPoll); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override public void changed() {
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
@@ -141,7 +147,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (runtime.state.equals("stopping")) {
             JSONObject packages = runtime.status.optJSONObject("packages");
             JSONObject job = packages == null ? null : packages.optJSONObject("job");
-            if (job != null) log.setText(job.optString("phase") + "\n" + job.optString("log"));
+            if (job != null) showLog(job.optString("phase") + "\n" + job.optString("log"));
         }
         layoutPanels();
     }
@@ -256,12 +262,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void permissionResult(int request) { if (request == TERMUX_PERMISSION && runtime.termux.permissionGranted()) runtime.turnOn(); }
     private void renderSetup() {
-        actions.removeAllViews(); log.setText("");
+        actions.removeAllViews(); showLog("");
         String state = runtime.state;
         message.setText(runtime.error.isEmpty() ? state.equals("off") ? "Agent off. Your chats and projects are saved." : state.equals("enroll") ? "Create your local account and enable two-factor authentication." : "Starting your Agent…" : runtime.error);
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) { action(state.equals("stop-failed") ? "Retry shutdown" : "Turn on", state.equals("stop-failed") ? runtime::turnOff : runtime::turnOn); return; }
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
+        if (runtime.installingPackages) { message.setText("Installing Agent packages…"); return; }
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); action("Check again", runtime::turnOn); return; }
         action("Open Termux", runtime.termux::openTermux);
         TextView command = new TextView(activity); command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12); command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true); actions.addView(command);
@@ -270,16 +277,44 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         action("App permissions", runtime.termux::openPermissionSettings);
         if (runtime.termux.permissionGranted()) {
             action("Connect", runtime::turnOn);
-            action("Install Agent packages", () -> runtime.termux.bootstrap(value -> { runtime.bootstrapStarted(); startedBootstrap = true; bootstrapProgress(); }, this::error));
+            action("Install Agent packages", () -> runtime.termux.bootstrap(value -> { runtime.bootstrapStarted(); startedBootstrap = true; renderSetup(); bootstrapProgress(); }, this::error));
         }
     }
+    private void showLog(String text) {
+        boolean follow = !logScroll.canScrollVertically(1);
+        log.setText(text);
+        logScroll.setVisibility(text.isEmpty() ? GONE : VISIBLE);
+        if (follow && !text.isEmpty()) logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
+    }
     private void bootstrapProgress() {
-        if (!startedBootstrap || activity.isDestroyed()) return;
+        if (!startedBootstrap || destroyed || activity.isDestroyed()) return;
         runtime.termux.bootstrapStatus(value -> {
-            log.setText(value.optString("log", value.toString()));
-            if (value.optBoolean("ready") || value.optString("status").equals("complete")) { startedBootstrap=false; if (runtime.isOnRequested()) runtime.turnOn(); else runtime.turnOff(); }
-            else app.main.postDelayed(this::bootstrapProgress, 2000);
-        }, this::error);
+            if (destroyed || activity.isDestroyed()) return;
+            JSONObject bootstrap = value.optJSONObject("bootstrap");
+            if (bootstrap == null) { bootstrapFailed("Termux returned an invalid installation status."); return; }
+            String output;
+            try {
+                output = new String(android.util.Base64.decode(value.optString("logBase64"), android.util.Base64.DEFAULT), java.nio.charset.StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException error) {
+                bootstrapFailed("The installation output could not be read. Check installation status again."); return;
+            }
+            String status = bootstrap.optString("status");
+            String phase = bootstrap.optString("phase", "Installing Agent packages…");
+            showLog(output);
+            message.setText(phase);
+            if (status.equals("complete")) {
+                startedBootstrap = false; runtime.installingPackages = false;
+                if (runtime.isOnRequested()) runtime.turnOn(); else runtime.turnOff();
+            } else if (status.equals("failed") || status.equals("interrupted")) {
+                bootstrapFailed(phase);
+            } else app.main.postDelayed(bootstrapPoll, 2000);
+        }, this::bootstrapFailed);
+    }
+    private void bootstrapFailed(String text) {
+        if (destroyed || activity.isDestroyed()) return;
+        startedBootstrap = false; runtime.installingPackages = false;
+        String output = log.getText().toString();
+        renderSetup(); showLog(output); message.setText(text);
     }
     private void account() {
         EditText username = field("Username", false); EditText password = field("Password", true); actions.addView(username); actions.addView(password);
