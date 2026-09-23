@@ -79,8 +79,13 @@ def main():
         raise ValueError('Exactly one production APK is required')
     apk = apks[0]
     manifest = json.loads((apk.parent / 'build-manifest.json').read_text())
-    if manifest.get('source') != revision or manifest.get('product_version') != version or manifest.get('firefox_version') != engine:
+    if manifest.get('product_version') != version or manifest.get('firefox_version') != engine:
         raise ValueError('APK product, engine or source revision mismatch')
+    if manifest.get('source') != revision:
+        inputs = subprocess.check_output(
+            ['python3', str(ROOT / 'agent/packaging/browser-component.py'), 'fingerprint', 'android'], text=True).strip()
+        if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')) or manifest.get('browser_input_sha256') != inputs:
+            raise ValueError('Cached APK inputs do not match this source')
     if manifest.get('package_id') != 'com.bashkitten' or not manifest.get('publisher_signed'):
         raise ValueError('APK must be the signed BashKitten product')
     if manifest.get('apks', {}).get(apk.name) != sha(apk):
@@ -94,7 +99,9 @@ def main():
         raise ValueError('APK did not use the existing Droid signing certificate')
     app = {**copy(apk), 'packageId': 'com.bashkitten', 'versionName': version,
            'versionCode': manifest['version_code'], 'abi': 'arm64-v8a',
-           'certificateSha256': CERT, 'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID')}
+           'certificateSha256': CERT, 'sourceCommit': manifest['source'],
+           'buildRepository': manifest.get('build_repository', 'openresearchtools/bashkitten'),
+           'buildRun': manifest.get('build_run') or args.run or os.environ.get('GITHUB_RUN_ID')}
     packages = []
     architectures = set()
     for file in sorted(args.candidates.rglob('*.deb')):

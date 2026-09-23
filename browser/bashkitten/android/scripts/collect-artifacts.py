@@ -99,6 +99,11 @@ manifest = {'source': revision, 'product_version': version, 'firefox_version': e
             'package_id': identity[1], 'version_code': int(identity[2]), 'publisher_signed': True,
             'architecture': 'arm64-v8a', 'native_libraries': native, 'certificate_sha256': certificate,
             'apks': {destination.name: hashlib.sha256(destination.read_bytes()).hexdigest()}}
+manifest['browser_input_sha256'] = subprocess.check_output(
+    ['python3', str(ROOT.parent / 'agent/packaging/browser-component.py'), 'fingerprint', 'android'],
+    text=True).strip()
+manifest['build_repository'] = os.environ.get('GITHUB_REPOSITORY', '')
+manifest['build_run'] = os.environ.get('GITHUB_RUN_ID', '')
 source_inventories = list((OBJ / 'gradle/build/mobile/android/fenix').rglob('generated/bashkitten-sources/sources.json'))
 if len(source_inventories) != 1:
     raise SystemExit('Expected exactly one resolved Android dependency source inventory, found ' + str(len(source_inventories)))

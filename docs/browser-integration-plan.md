@@ -14,6 +14,16 @@ actual format/protocol validation. Agent-tab protection must not restrict the
 user’s own screenshots or ordinary content tabs. This supersedes earlier
 references below to retained arbitrary operational limits.
 
+Latest delivery clarification, 23 September: promote the browser implementation
+onto `main` and delete the previous BashKitten releases. This supersedes the
+earlier instruction to preserve the legacy release and separate product branch.
+Use three build-only repositories, `bashkitten-build-arm64`,
+`bashkitten-build-amd64` and `bashkitten-build-android`, for independent compiler
+caches. Product source remains in this repository. Each builder checks out the
+requested exact product commit and exposes its installable artifact in Actions;
+the main workflow collects it immediately after upload. Builders never publish
+releases. See `agent/packaging/README.md` for the workflow and secret arrangement.
+
 ## 1. Product boundary
 
 Make BashKitten a Firefox-based browser on Android and Linux, using the existing

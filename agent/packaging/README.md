@@ -1,16 +1,41 @@
 # Product packaging
 
 All compilation runs in GitHub Actions. Dispatch `Complete BashKitten candidates`
-on the implementation branch to build the Android APK and complete Linux amd64,
-Linux arm64 and Termux aarch64 packages. The workflow builds independent native
-authentication, search and browser components, then verifies their hashes and
-assembles matching payloads. It does not publish a release or update APT.
+on `main` to build the Android APK and complete Linux amd64, Linux arm64 and
+Termux aarch64 packages. The main workflow builds authentication/search components,
+Termux and source bundles. It dispatches the exact product commit to these builders:
+
+- `openresearchtools/bashkitten-build-arm64`: complete Linux ARM64 `.deb`.
+- `openresearchtools/bashkitten-build-amd64`: complete Linux AMD64 `.deb`.
+- `openresearchtools/bashkitten-build-android`: signed Android APK.
+
+Each builder has its own compiler cache and uploads its installable candidate to
+its Actions run. Those artifacts can be downloaded manually immediately. The
+main workflow collects each target as soon as its upload appears; it does not
+wait for the other builders. Complete release assembly still requires all four
+binaries. Neither the builders nor the candidate workflow publish releases or APT.
+
+`BUILD_REPOS_TOKEN` exists only as an encrypted Actions secret in the product
+repository. Its fine-grained scope is Actions read/write on those three builders.
+Builders use their own job token to read the public product's component artifacts;
+only the Android builder also needs the four existing Android signing secrets.
+Never put credential values in source or workflow files.
+
+The builder workflow sources are `.github/builders/linux.yml` and `android.yml`.
+Deploy each to `.github/workflows/build.yml` on its builder's `main` when changing
+the build recipe. The builder repositories contain workflow configuration only;
+all application source remains here and is checked out by exact commit.
 
 The Linux browser workflow retains the external build directories, Mozilla
 bootstrap toolchains, compiler cache and optional gkrust warm-up from WildBuzzard.
-Browser archives are cached by their actual input digest; Agent-only changes
-reassemble the package without rebuilding unchanged Gecko. Cached archives retain
-their original source commit. Native arm64 builds use an arm64 runner.
+Completed browser archives/APKs are reused as Actions artifacts when their build
+inputs match, leaving the cache quota for compiler objects. Agent-only changes
+reassemble the Linux package without rebuilding unchanged Gecko. Cached binaries
+retain their actual producing commit in provenance. Native arm64 builds use an
+arm64 runner. Initial builds in the new repositories start with empty caches.
+Android caches Gradle dependency downloads without storing the multi-gigabyte
+Mozilla bootstrap directory. Compiler statistics are saved immediately after
+Gecko compilation and remain downloadable from each run.
 
 `build.py` accepts `linux|termux`, `--architecture`, `--auth-archive`,
 `--search-archive` and `--output`; Linux also requires `--browser-dir`.

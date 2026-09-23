@@ -1,0 +1,221 @@
+name: BashKitten Linux package
+run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
+'on':
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact BashKitten source commit
+        required: true
+        type: string
+      request_id:
+        description: Request from the main workflow
+        required: true
+        type: string
+      warm_gkrust:
+        default: false
+        type: boolean
+      auth_run:
+        required: true
+        type: string
+      search_run:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: browser-${{ inputs.source_sha }}
+  cancel-in-progress: false
+jobs:
+  browser:
+    runs-on: ${{ github.repository == 'openresearchtools/bashkitten-build-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 360
+    env:
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTUP_TOOLCHAIN: 1.96.0
+      BASHKITTEN_BUILD_JOBS: '2'
+      BASHKITTEN_BUILD_RUN_ID: hosted
+      MOZBUILD_STATE_PATH: ${{ github.workspace }}/.bashkitten-build/browser/state
+      SCCACHE_IDLE_TIMEOUT: '0'
+      GH_TOKEN: ${{ github.token }}
+      PI_TELEMETRY: '0'
+      PI_OFFLINE: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        repository: openresearchtools/bashkitten
+        ref: ${{ inputs.source_sha }}
+        path: source/bashkitten
+        persist-credentials: false
+    - name: Select the native target
+      run: |
+        case "$GITHUB_REPOSITORY" in
+          openresearchtools/bashkitten-build-arm64) echo 'BROWSER_TARGET=linux-arm64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=arm64' >> "$GITHUB_ENV" ;;
+          openresearchtools/bashkitten-build-amd64) echo 'BROWSER_TARGET=linux-amd64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=amd64' >> "$GITHUB_ENV" ;;
+          *) exit 1 ;;
+        esac
+    - id: component
+      name: Restore a matching completed browser artifact
+      run: python3 source/bashkitten/agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+    - name: Prepare runner
+      if: steps.component.outputs.hit != 'true'
+      run: source/bashkitten/agent/packaging/linux/prepare-runner.sh
+    - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+      if: steps.component.outputs.hit != 'true'
+      with:
+        version: v0.17.0
+    - name: Install the compatible Rust toolchain
+      if: steps.component.outputs.hit != 'true'
+      run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+    - name: Bootstrap pinned Mozilla toolchain
+      if: steps.component.outputs.hit != 'true'
+      working-directory: source/bashkitten/browser
+      run: ./mach --no-interactive bootstrap --application-choice browser
+    - name: Optional native Rust cache warm-up
+      if: steps.component.outputs.hit != 'true' && inputs.warm_gkrust
+      run: source/bashkitten/browser/bashkitten/scripts/build-linux-external.sh --action gkrust --build-root "$GITHUB_WORKSPACE/.bashkitten-build/warm" --jobs 2 --ref HEAD
+    - name: Build the complete browser archive
+      if: steps.component.outputs.hit != 'true'
+      run: |
+        source/bashkitten/browser/bashkitten/ci/build-browser-artifact.sh \
+          --bashkitten "$GITHUB_WORKSPACE/source/bashkitten/browser" \
+          --commit "$SOURCE_SHA" --architecture "$BROWSER_ARCH" \
+          --input-digest "$INPUT_DIGEST" \
+          --work-dir "$GITHUB_WORKSPACE/.bashkitten-build" \
+          --artifact-dir "$RUNNER_TEMP/browser/stage"
+      env:
+        SOURCE_SHA: ${{ inputs.source_sha }}
+        INPUT_DIGEST: ${{ steps.component.outputs.digest }}
+    - name: Verify the browser archive and source inputs
+      run: python3 source/bashkitten/agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory "$RUNNER_TEMP/browser/stage"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ steps.component.outputs.artifact }}
+        path: ${{ runner.temp }}/browser/stage/
+        compression-level: 0
+        if-no-files-found: error
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Install assembly tools
+      run: sudo apt-get update && sudo apt-get install -y zstd python3
+    - name: Download native components for this source
+      env:
+        AUTH_RUN: ${{ inputs.auth_run }}
+        SEARCH_RUN: ${{ inputs.search_run }}
+      run: |
+        for item in "auth:$AUTH_RUN:auth-$BROWSER_TARGET" "search:$SEARCH_RUN:search-runtime-$BROWSER_TARGET"; do
+          IFS=: read -r target run artifact <<< "$item"
+          while ! gh api "repos/openresearchtools/bashkitten/actions/runs/$run/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"; do
+            status=$(gh api "repos/openresearchtools/bashkitten/actions/runs/$run" --jq '.status')
+            if [ "$status" = completed ]; then echo "Required $artifact is missing from completed run $run" >&2; exit 1; fi
+            sleep 30
+          done
+          gh run download "$run" --repo openresearchtools/bashkitten --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
+        done
+    - name: Assemble complete native package
+      run: |
+        python3 agent/packaging/build.py linux \
+          --architecture "$BROWSER_ARCH" --output "$RUNNER_TEMP/package" \
+          --auth-archive "$RUNNER_TEMP/companion/auth/auth-$BROWSER_TARGET.tar.gz" \
+          --search-archive "$RUNNER_TEMP/companion/search/search-runtime-$BROWSER_TARGET.tar.zst" \
+          --browser-dir "$RUNNER_TEMP/browser/stage"
+      working-directory: source/bashkitten
+    - name: Install and run the native Linux candidate
+      timeout-minutes: 15
+      run: |
+        # Ubuntu 26.04 provides the declared Node/npm dependencies. Docker uses
+        # this matrix runner's CPU directly; no emulated or unpack-only check.
+        docker run --rm --init --shm-size=1g -i \
+          -v "$RUNNER_TEMP/package:/candidate:ro" \
+          -e PACKAGE_ARCHITECTURE="$BROWSER_ARCH" \
+          -e PRODUCT_VERSION="$(cat browser/bashkitten/config/version.txt)" \
+          -e FIREFOX_VERSION="$(cat browser/browser/config/version_display.txt)" \
+          -e SOURCE_REVISION="$SOURCE_SHA" \
+          ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 bash -se <<'CONTAINER'
+        set -euo pipefail
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+          "/candidate/bashkitten_${PRODUCT_VERSION}_${PACKAGE_ARCHITECTURE}.deb" jq binutils
+        test "$(dpkg --print-architecture)" = "$PACKAGE_ARCHITECTURE"
+        test "$(dpkg-query -W -f='${Version}' bashkitten)" = "$PRODUCT_VERSION"
+        jq -e --arg version "$PRODUCT_VERSION" --arg revision "$SOURCE_REVISION" \
+          --arg arch "$PACKAGE_ARCHITECTURE" --arg firefox "$FIREFOX_VERSION" \
+          '.version == $version and .revision == $revision and .architecture == $arch
+           and .components.browser.firefox_version == $firefox' /usr/lib/bashkitten/build-platform.json
+        browser_source=$(jq -r '.components.browser.bashkitten_commit' /usr/lib/bashkitten/build-platform.json)
+        grep -Fx "SourceStamp=$browser_source" /usr/lib/bashkitten/browser/application.ini
+        case "$PACKAGE_ARCHITECTURE" in
+          amd64) machine='Advanced Micro Devices X86-64' ;;
+          arm64) machine='AArch64' ;;
+        esac
+        readelf -h /usr/lib/bashkitten/browser/bashkitten | grep -F "$machine"
+        useradd --create-home --home-dir /tmp/bashkitten-home candidate
+        install -d -m 700 -o candidate -g candidate /tmp/bashkitten-home/runtime
+        runuser -u candidate -- env HOME=/tmp/bashkitten-home \
+          XDG_CONFIG_HOME=/tmp/bashkitten-home/.config XDG_DATA_HOME=/tmp/bashkitten-home/.local/share \
+          XDG_CACHE_HOME=/tmp/bashkitten-home/.cache XDG_RUNTIME_DIR=/tmp/bashkitten-home/runtime \
+          PI_CODING_AGENT_DIR=/tmp/bashkitten-home/.pi/agent PI_OFFLINE=1 PI_TELEMETRY=0 DO_NOT_TRACK=1 \
+          bash -se <<'INSTALLED'
+        set -euo pipefail
+        cd "$HOME"
+        trap 'bashkittenctl stop >/dev/null || true' EXIT
+        app_version=$(sed -n 's/^Version=//p' /usr/lib/bashkitten/browser/application.ini)
+        bashkitten --version | tee browser-version.txt
+        grep -F "$app_version" browser-version.txt
+        timeout 90s bashkitten --headless --screenshot "$HOME/browser.png" about:blank
+        test -s browser.png
+        bashkittenctl start >started.json
+        jq -e '.web.status == "running" and (.web.url | startswith("https://127.0.0.1:"))' started.json
+        bashkittenctl status >status.json
+        jq -e '.web.status == "running"' status.json
+        endpoint=$(jq -r '.web.url' status.json)
+        jq -r '.web.identity.caPem' status.json >ca.pem
+        curl --fail --silent --show-error --cacert ca.pem "$endpoint/favicon.ico" >favicon.ico
+        test -s favicon.ico
+        test -s /usr/lib/bashkitten/licenses.json
+        locked=$(curl --silent --show-error --cacert ca.pem -H 'Accept: application/json' \
+          -o /dev/null -w '%{http_code}' "$endpoint/api/projects")
+        case "$locked" in 401|403|302) ;; *) echo "Unauthenticated API returned $locked" >&2; exit 1 ;; esac
+        /usr/bin/python3 -I - <<'PYTHON'
+        import sys
+        from pathlib import Path
+        runtime = Path('/usr/lib/bashkitten/search/runtime')
+        sys.path[:0] = [str(runtime / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages'), str(runtime / 'site-packages')]
+        from ddgs.ddgs import DDGS
+        import primp, pymupdf, pymupdf4llm
+        from lxml import etree
+        print('Installed DDGS, primp, PyMuPDF, PyMuPDF4LLM and lxml imports succeeded')
+        PYTHON
+        bashkittenctl stop >stopped.json
+        jq -e '.web.status == "stopped"' stopped.json
+        trap - EXIT
+        INSTALLED
+        CONTAINER
+      working-directory: source/bashkitten
+      env:
+        SOURCE_SHA: ${{ inputs.source_sha }}
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: bashkitten-${{ env.BROWSER_TARGET }}-candidate
+        path: ${{ runner.temp }}/package/
+        if-no-files-found: error
+        compression-level: 0
+    - name: Record actual compiler cache statistics
+      if: always() && steps.component.outputs.hit != 'true' && env.SCCACHE_PATH != ''
+      run: |
+        "$SCCACHE_PATH" --show-stats --stats-format=json > "$RUNNER_TEMP/sccache-statistics.json"
+        "$SCCACHE_PATH" --show-stats >> "$GITHUB_STEP_SUMMARY"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: always() && steps.component.outputs.hit != 'true'
+      with:
+        name: compiler-cache-statistics
+        path: ${{ runner.temp }}/sccache-statistics.json
+        if-no-files-found: ignore
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: failure()
+      with:
+        name: browser-build-logs
+        path: .bashkitten-build/browser/runs/hosted/logs/
+        if-no-files-found: ignore

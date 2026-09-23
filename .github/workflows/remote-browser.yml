@@ -1,0 +1,49 @@
+name: Collect a separate browser build
+'on':
+  workflow_call:
+    inputs:
+      target:
+        required: true
+        type: string
+      auth_run:
+        default: ''
+        type: string
+      search_run:
+        default: ''
+        type: string
+      warm_gkrust:
+        default: false
+        type: boolean
+    secrets:
+      BUILD_REPOS_TOKEN:
+        required: true
+permissions:
+  contents: read
+  actions: read
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - name: Dispatch and collect this target independently
+      env:
+        GH_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+        BROWSER_TARGET: ${{ inputs.target }}
+        AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
+        SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
+        WARM_GKRUST: ${{ inputs.warm_gkrust }}
+      run: python3 agent/packaging/remote-browser.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/component" --auth-run "$AUTH_RUN" --search-run "$SEARCH_RUN" --warm-gkrust "$WARM_GKRUST"
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: ${{ inputs.target == 'android' && 'bashkitten-android-candidate' || format('bashkitten-{0}-candidate', inputs.target) }}
+        path: ${{ runner.temp }}/component/
+        if-no-files-found: error
+        compression-level: 0
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: builder-provenance-${{ inputs.target }}
+        path: ${{ runner.temp }}/builder-${{ inputs.target }}.json
+        if-no-files-found: error

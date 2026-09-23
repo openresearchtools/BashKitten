@@ -1,5 +1,5 @@
 name: Complete BashKitten candidates
-on:
+'on':
   workflow_dispatch:
     inputs:
       warm_gkrust:
@@ -25,215 +25,110 @@ jobs:
     uses: ./.github/workflows/auth-native.yml
   search:
     uses: ./.github/workflows/search-native.yml
-  browser:
+  browser_arm64:
     if: ${{ !inputs.native_only }}
-    uses: ./.github/workflows/browser-linux.yml
+    uses: ./.github/workflows/remote-browser.yml
     with:
+      target: linux-arm64
       warm_gkrust: ${{ inputs.warm_gkrust }}
+    secrets:
+      BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
+  browser_amd64:
+    if: ${{ !inputs.native_only }}
+    uses: ./.github/workflows/remote-browser.yml
+    with:
+      target: linux-amd64
+      warm_gkrust: ${{ inputs.warm_gkrust }}
+    secrets:
+      BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
   android:
     if: ${{ !inputs.native_only && !inputs.linux_only }}
     uses: ./.github/workflows/android.yml
     secrets: inherit
-  packages:
-    needs: [auth, search, browser]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04
-            target: linux
-            architecture: amd64
-            component: linux-amd64
-          - runner: ubuntu-24.04-arm
-            target: linux
-            architecture: arm64
-            component: linux-arm64
-    runs-on: ${{ matrix.runner }}
-    env:
-      PI_TELEMETRY: '0'
-      PI_OFFLINE: '1'
-      DO_NOT_TRACK: '1'
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24'
-      - name: Install assembly tools
-        run: sudo apt-get update && sudo apt-get install -y zstd python3
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: auth-${{ matrix.component }}
-          path: inputs/auth
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: search-runtime-${{ matrix.component }}
-          path: inputs/search
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: browser-linux-${{ matrix.architecture }}
-          path: inputs/browser
-      - name: Assemble complete native package
-        run: |
-          python3 agent/packaging/build.py '${{ matrix.target }}' \
-            --architecture '${{ matrix.architecture }}' --output dist \
-            --auth-archive 'inputs/auth/auth-${{ matrix.component }}.tar.gz' \
-            --search-archive 'inputs/search/search-runtime-${{ matrix.component }}.tar.zst' \
-            --browser-dir inputs/browser
-      - name: Install and run the native Linux candidate
-        timeout-minutes: 15
-        run: |
-          # Ubuntu 26.04 provides the declared Node/npm dependencies. Docker uses
-          # this matrix runner's CPU directly; no emulated or unpack-only check.
-          docker run --rm --init --shm-size=1g -i \
-            -v "$GITHUB_WORKSPACE/dist:/candidate:ro" \
-            -e PACKAGE_ARCHITECTURE='${{ matrix.architecture }}' \
-            -e PRODUCT_VERSION="$(cat browser/bashkitten/config/version.txt)" \
-            -e FIREFOX_VERSION="$(cat browser/browser/config/version_display.txt)" \
-            -e SOURCE_REVISION="$GITHUB_SHA" \
-            ubuntu:26.04@sha256:da6fc2be547864451aa253836dd926da33623312df4a9a243e35dc877c378a78 bash -se <<'CONTAINER'
-          set -euo pipefail
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            "/candidate/bashkitten_${PRODUCT_VERSION}_${PACKAGE_ARCHITECTURE}.deb" jq binutils
-          test "$(dpkg --print-architecture)" = "$PACKAGE_ARCHITECTURE"
-          test "$(dpkg-query -W -f='${Version}' bashkitten)" = "$PRODUCT_VERSION"
-          jq -e --arg version "$PRODUCT_VERSION" --arg revision "$SOURCE_REVISION" \
-            --arg arch "$PACKAGE_ARCHITECTURE" --arg firefox "$FIREFOX_VERSION" \
-            '.version == $version and .revision == $revision and .architecture == $arch
-             and .components.browser.firefox_version == $firefox' /usr/lib/bashkitten/build-platform.json
-          browser_source=$(jq -r '.components.browser.bashkitten_commit' /usr/lib/bashkitten/build-platform.json)
-          grep -Fx "SourceStamp=$browser_source" /usr/lib/bashkitten/browser/application.ini
-          case "$PACKAGE_ARCHITECTURE" in
-            amd64) machine='Advanced Micro Devices X86-64' ;;
-            arm64) machine='AArch64' ;;
-          esac
-          readelf -h /usr/lib/bashkitten/browser/bashkitten | grep -F "$machine"
-          useradd --create-home --home-dir /tmp/bashkitten-home candidate
-          install -d -m 700 -o candidate -g candidate /tmp/bashkitten-home/runtime
-          runuser -u candidate -- env HOME=/tmp/bashkitten-home \
-            XDG_CONFIG_HOME=/tmp/bashkitten-home/.config XDG_DATA_HOME=/tmp/bashkitten-home/.local/share \
-            XDG_CACHE_HOME=/tmp/bashkitten-home/.cache XDG_RUNTIME_DIR=/tmp/bashkitten-home/runtime \
-            PI_CODING_AGENT_DIR=/tmp/bashkitten-home/.pi/agent PI_OFFLINE=1 PI_TELEMETRY=0 DO_NOT_TRACK=1 \
-            bash -se <<'INSTALLED'
-          set -euo pipefail
-          cd "$HOME"
-          trap 'bashkittenctl stop >/dev/null || true' EXIT
-          app_version=$(sed -n 's/^Version=//p' /usr/lib/bashkitten/browser/application.ini)
-          bashkitten --version | tee browser-version.txt
-          grep -F "$app_version" browser-version.txt
-          timeout 90s bashkitten --headless --screenshot "$HOME/browser.png" about:blank
-          test -s browser.png
-          bashkittenctl start >started.json
-          jq -e '.web.status == "running" and (.web.url | startswith("https://127.0.0.1:"))' started.json
-          bashkittenctl status >status.json
-          jq -e '.web.status == "running"' status.json
-          endpoint=$(jq -r '.web.url' status.json)
-          jq -r '.web.identity.caPem' status.json >ca.pem
-          curl --fail --silent --show-error --cacert ca.pem "$endpoint/favicon.ico" >favicon.ico
-          test -s favicon.ico
-          test -s /usr/lib/bashkitten/licenses.json
-          locked=$(curl --silent --show-error --cacert ca.pem -H 'Accept: application/json' \
-            -o /dev/null -w '%{http_code}' "$endpoint/api/projects")
-          case "$locked" in 401|403|302) ;; *) echo "Unauthenticated API returned $locked" >&2; exit 1 ;; esac
-          /usr/bin/python3 -I - <<'PYTHON'
-          import sys
-          from pathlib import Path
-          runtime = Path('/usr/lib/bashkitten/search/runtime')
-          sys.path[:0] = [str(runtime / f'python{sys.version_info.major}.{sys.version_info.minor}' / 'site-packages'), str(runtime / 'site-packages')]
-          from ddgs.ddgs import DDGS
-          import primp, pymupdf, pymupdf4llm
-          from lxml import etree
-          print('Installed DDGS, primp, PyMuPDF, PyMuPDF4LLM and lxml imports succeeded')
-          PYTHON
-          bashkittenctl stop >stopped.json
-          jq -e '.web.status == "stopped"' stopped.json
-          trap - EXIT
-          INSTALLED
-          CONTAINER
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: ${{ !cancelled() && hashFiles('dist/*.deb') != '' }}
-        with:
-          name: bashkitten-${{ matrix.component }}-candidate
-          path: dist/
-          if-no-files-found: error
-          compression-level: 0
   termux:
-    needs: [auth, search]
+    needs:
+    - auth
+    - search
     runs-on: ubuntu-24.04
     env:
       PI_TELEMETRY: '0'
       PI_OFFLINE: '1'
       DO_NOT_TRACK: '1'
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24'
-      - name: Install assembly tools
-        run: sudo apt-get update && sudo apt-get install -y zstd python3
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: auth-termux-aarch64
-          path: inputs/auth
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          name: search-runtime-termux-aarch64
-          path: inputs/search
-      - name: Assemble native Termux package
-        run: |
-          python3 agent/packaging/build.py termux \
-            --architecture aarch64 --output dist \
-            --auth-archive inputs/auth/auth-termux-aarch64.tar.gz \
-            --search-archive inputs/search/search-runtime-termux-aarch64.tar.zst
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: bashkitten-termux-aarch64-candidate
-          path: dist/
-          if-no-files-found: error
-          compression-level: 0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Install assembly tools
+      run: sudo apt-get update && sudo apt-get install -y zstd python3
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: auth-termux-aarch64
+        path: inputs/auth
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: search-runtime-termux-aarch64
+        path: inputs/search
+    - name: Assemble native Termux package
+      run: |
+        python3 agent/packaging/build.py termux \
+          --architecture aarch64 --output dist \
+          --auth-archive inputs/auth/auth-termux-aarch64.tar.gz \
+          --search-archive inputs/search/search-runtime-termux-aarch64.tar.zst
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: bashkitten-termux-aarch64-candidate
+        path: dist/
+        if-no-files-found: error
+        compression-level: 0
   sources:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: '24'
-      - name: Collect exact product and locked npm source
-        run: python3 agent/packaging/sources.py "$RUNNER_TEMP/sources"
-      - name: Collect retained adblock corresponding source
-        run: |
-          python3 -I -B browser/bashkitten/scripts/blocker_asset_provenance.py build \
-            --repository "$GITHUB_WORKSPACE/browser" \
-            --cache-dir "$RUNNER_TEMP/blocker-source-cache" \
-            --output "$RUNNER_TEMP/sources/bashkitten-blocker-assets-source.tar.xz" \
-            --skip-reproduction-check
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: bashkitten-corresponding-source
-          path: ${{ runner.temp }}/sources/
-          if-no-files-found: error
-          compression-level: 0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '24'
+    - name: Collect exact product and locked npm source
+      run: python3 agent/packaging/sources.py "$RUNNER_TEMP/sources"
+    - name: Collect retained adblock corresponding source
+      run: |
+        python3 -I -B browser/bashkitten/scripts/blocker_asset_provenance.py build \
+          --repository "$GITHUB_WORKSPACE/browser" \
+          --cache-dir "$RUNNER_TEMP/blocker-source-cache" \
+          --output "$RUNNER_TEMP/sources/bashkitten-blocker-assets-source.tar.xz" \
+          --skip-reproduction-check
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: bashkitten-corresponding-source
+        path: ${{ runner.temp }}/sources/
+        if-no-files-found: error
+        compression-level: 0
   complete:
-    needs: [auth, search, browser, android, packages, termux, sources]
+    needs:
+    - auth
+    - search
+    - browser_arm64
+    - browser_amd64
+    - android
+    - termux
+    - sources
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
-        with:
-          path: candidates
-      - name: Verify four primary binaries and source inventory
-        run: python3 agent/packaging/release.py candidates release --candidate-only
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: bashkitten-complete-candidate
-          path: release/
-          if-no-files-found: error
-          compression-level: 0
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        persist-credentials: false
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        path: candidates
+    - name: Verify four primary binaries and source inventory
+      run: python3 agent/packaging/release.py candidates release --candidate-only
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: bashkitten-complete-candidate
+        path: release/
+        if-no-files-found: error
+        compression-level: 0
