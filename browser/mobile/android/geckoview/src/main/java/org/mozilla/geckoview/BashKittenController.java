@@ -60,7 +60,7 @@ public final class BashKittenController {
             GeckoSession current = session.get();
             if (!active || current == null || HOSTS.get(current) != this || args.length() > 200000 ||
                     !("notification-settings".equals(command) || "notify-turn".equals(command) ||
-                      "import-remote".equals(command) || "sign-in".equals(command))) {
+                      "import-remote".equals(command) || "sign-in".equals(command) || "open-hosted".equals(command))) {
                 callback.sendSuccess("{\"error\":\"Unsupported Agent host request\"}");
                 return;
             }

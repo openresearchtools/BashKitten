@@ -110,7 +110,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         layoutPanels();
     }
     private void bindSession(GeckoSession session) {
+        final String[] currentLocation = {""};
         session.setNavigationDelegate(new GeckoSession.NavigationDelegate() {
+            @Override public void onLocationChange(GeckoSession s, String address, List<GeckoSession.PermissionDelegate.ContentPermission> permissions, Boolean hasUserGesture) {
+                currentLocation[0] = address == null ? "" : address;
+            }
             @Override public GeckoResult<AllowOrDeny> onLoadRequest(GeckoSession s, LoadRequest request) {
                 if (request.uri.equals("about:blank")) return GeckoResult.fromValue(AllowOrDeny.ALLOW);
                 try {
@@ -127,7 +131,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                                 return GeckoResult.fromValue(AllowOrDeny.DENY);
                             }
                         }
-                        if (target.getPath().startsWith("/login")) app.remoteControl.disconnect();
+                        if (target.getPath().startsWith("/login")) { app.remoteControl.disconnect(); runtime.clearHosted(s); }
                         if (request.target == TARGET_WINDOW_NEW) { s.loadUri(request.uri); return GeckoResult.fromValue(AllowOrDeny.DENY); }
                         return GeckoResult.fromValue(AllowOrDeny.ALLOW);
                     }
@@ -139,6 +143,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 message.setText("Agent connection failed. Reconnect checks its current address and saved certificate.");
                 view.setVisibility(GONE); setup.setVisibility(VISIBLE); actions.removeAllViews(); action("Reconnect", runtime::refresh);
                 return null;
+            }
+        });
+        session.setProgressDelegate(new GeckoSession.ProgressDelegate() {
+            @Override public void onPageStop(GeckoSession s, boolean success) {
+                if (success) runtime.hostedPageReady(s, currentLocation[0]);
             }
         });
         session.setContentDelegate(new GeckoSession.ContentDelegate() {

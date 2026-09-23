@@ -19,6 +19,8 @@ final class TorManager {
     private volatile TorService service;
     private volatile TorGateway gateway;
     private final Set<String> installed = ConcurrentHashMap.newKeySet();
+    private final Map<String, Integer> temporaryReferences = new HashMap<>();
+    private final Map<String, String> temporaryKeys = new HashMap<>();
     private boolean starting, connecting;
     private static final class Waiting {
         final Consumer<Integer> success;
@@ -80,6 +82,9 @@ final class TorManager {
                         current.getTorControlConnection().onionClientAuthAdd(host.substring(0, 56), new OnionKey(host, stored.getString(host)).controlKey());
                         enrolled.add(host);
                     }
+                    for (Map.Entry<String, String> entry : temporaryKeys.entrySet()) {
+                        current.getTorControlConnection().onionClientAuthAdd(entry.getKey().substring(0, 56), new OnionKey(entry.getKey(), entry.getValue()).controlKey());
+                    }
                     installed.clear(); installed.addAll(enrolled);
                     restored = true;
                 }
@@ -114,12 +119,19 @@ final class TorManager {
             try {
                 TorService current = service;
                 if (current == null || current.getTorControlConnection() == null) throw new IllegalStateException();
+                String activeKey = temporaryKeys.get(key.host);
+                if (activeKey != null && !activeKey.equals(key.key)) throw new IllegalStateException("Another enrollment is active for this Agent");
                 current.getTorControlConnection().onionClientAuthAdd(key.host.substring(0, 56), key.controlKey());
+                temporaryKeys.put(key.host, key.key);
+                temporaryReferences.put(key.host, temporaryReferences.getOrDefault(key.host, 0) + 1);
                 java.util.concurrent.atomic.AtomicBoolean closed = new java.util.concurrent.atomic.AtomicBoolean();
                 Runnable restore = () -> {
                     if (!closed.compareAndSet(false, true)) return;
                     io.execute(() -> {
                         try {
+                            int remaining = temporaryReferences.getOrDefault(key.host, 1) - 1;
+                            if (remaining > 0) { temporaryReferences.put(key.host, remaining); return; }
+                            temporaryReferences.remove(key.host); temporaryKeys.remove(key.host);
                             TorService active = service;
                             if (active == null || active.getTorControlConnection() == null) return;
                             String previous = keys.read().optString(key.host, "");

@@ -2,7 +2,7 @@
 import { GeckoViewActorParent } from "resource://gre/modules/GeckoViewActorParent.sys.mjs";
 import { BashKittenHost } from "resource://gre/modules/BashKittenHost.sys.mjs";
 
-const commands = new Set(["notification-settings", "notify-turn", "import-remote", "sign-in"]);
+const commands = new Set(["notification-settings", "notify-turn", "import-remote", "sign-in", "open-hosted"]);
 
 export class BashKittenHostParent extends GeckoViewActorParent {
   async receiveMessage({ name, data }) {

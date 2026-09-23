@@ -68,10 +68,11 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     }
 
     override fun create(owner: String, contextId: String): BrowserApp.Tab {
-        val engine = components.core.engine.createSession(private = false, contextId = contextId) as GeckoEngineSession
+        val privateTab = contextId.startsWith("bashkitten-tor-hosted-")
+        val engine = components.core.engine.createSession(private = privateTab, contextId = contextId) as GeckoEngineSession
         val id = components.useCases.tabsUseCases.addTab(
             url = "about:blank", selectTab = false, startLoading = false,
-            contextId = contextId, engineSession = engine,
+            contextId = contextId, engineSession = engine, private = privateTab,
         )
         return BrowserApp.Tab(id, owner, engine.bashKittenSession())
     }
@@ -134,7 +135,8 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     }
     override fun show(id: String) {
         components.useCases.tabsUseCases.selectTab(id)
-        application.startActivity(launchIntent())
+        val privateTab = components.core.store.state.tabs.find { it.id == id }?.content?.private == true
+        application.startActivity(launchIntent().putExtra(HomeActivity.PRIVATE_BROWSING_MODE, privateTab))
     }
     override fun desktop(id: String, enabled: Boolean) {
         components.useCases.sessionUseCases.requestDesktopSite(enabled, id)
