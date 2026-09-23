@@ -24,7 +24,7 @@ import { visibleSession } from '../rpc/notifications.mjs';
 import { claimInstance, processStart, probeBackend } from '../instance.mjs';
 import { paths } from '../access/paths.mjs';
 import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
-import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads } from '../models/downloads.mjs';
+import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, setDownloadCompleteHandler } from '../models/downloads.mjs';
 import { saveModelSettings } from '../models/settings.mjs';
 
 process.umask(0o077);
@@ -53,6 +53,7 @@ if (!ownership) {
 const instanceToken = process.env.BASHKITTEN_INSTANCE_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(instanceToken || '')) throw Error('Private controller token required');
 const started = await processStart(process.pid);
+if (platform === 'linux') setDownloadCompleteHandler(() => controlRequest('llama-refresh', { onlyIfRunning: true }));
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const scheme = 'https';

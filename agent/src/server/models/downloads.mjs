@@ -15,6 +15,8 @@ export { searchModels, modelRepository } from './huggingface.mjs';
 const recordsDir = path.join(modelDataDir, 'downloads');
 const jobs = new Map(), running = new Map();
 let loaded, closing = false, mutations = Promise.resolve();
+let downloadCompleteHandler;
+export function setDownloadCompleteHandler(handler) { downloadCompleteHandler = handler; }
 const terminal = new Set(['complete', 'cancelled']);
 // Node does not expose O_PATH on every supported release. Linux and Android
 // share this flag: traversing /data requires search access, not directory reads.
@@ -231,6 +233,12 @@ async function run(job, controller) {
   } catch (error) {
     if (job.status === 'downloading') { job.status = 'error'; job.error = publicModelError(error); }
   } finally { await persist(job); }
+  if (job.status === 'complete' && !closing) {
+    // Refresh only after the complete job is published and durable. A stopped
+    // or unavailable inference service cannot turn a successful download into
+    // a failed transfer; reopening the router also reads the models directory.
+    try { await downloadCompleteHandler?.(); } catch {}
+  }
 }
 function pump() {
   if (closing) return;
