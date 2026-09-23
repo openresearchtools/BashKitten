@@ -1,0 +1,26 @@
+Keep all one-time-code digits on one row on narrow Android screens. This is a
+BashKitten layout adaptation, 23 September 2026; Authelia's authentication and
+field behavior are unchanged. Original file: Apache-2.0, Copyright 2026 Authelia.
+
+--- a/web/src/views/LoginPortal/SecondFactor/OTPDial.tsx
++++ b/web/src/views/LoginPortal/SecondFactor/OTPDial.tsx
+@@ -44,8 +44,8 @@
+             <span
+                 id="otp-input"
+                 className={cn(
+-                    "mt-4 inline-block",
+-                    "[&_input]:mx-1 [&_input]:box-border [&_input]:size-10 [&_input]:rounded-[5px] [&_input]:border [&_input]:border-black/30 [&_input]:text-center [&_input]:text-lg",
++                    "mt-4 block w-full",
++                    "[&_input]:box-border [&_input]:h-10 [&_input]:min-w-0 [&_input]:w-full [&_input]:rounded-lg [&_input]:border [&_input]:border-black/30 [&_input]:text-center [&_input]:text-lg",
+                     "[&_input:disabled]:cursor-not-allowed [&_input:disabled]:opacity-50",
+                     props.state === State.Failure && "[&_input]:border-[rgba(255,2,2,0.95)]",
+                 )}
+@@ -55,6 +55,8 @@
+                 </label>
+                 <OTPField.Root
+                     id={fieldId}
++                    className="grid justify-center gap-2"
++                    style={{ gridTemplateColumns: `repeat(${props.digits}, minmax(0, 2.5rem))` }}
+                     length={props.digits}
+                     value={props.passcode}
+                     onValueChange={props.onChange}

@@ -10,6 +10,7 @@ case "$target" in linux-amd64|linux-arm64|termux-aarch64) ;; *) exit 2 ;; esac
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/bashkitten-authelia.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/authelia" "$work/source"
+patch --directory "$work/source" --strip 1 < "$root/auth/build/authelia-mobile-otp.patch"
 export DO_NOT_TRACK=1 GOTELEMETRY=off GOTOOLCHAIN=local PNPM_DISABLE_SELF_UPDATE_CHECK=true
 export NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false NPM_CONFIG_UPDATE_NOTIFIER=false
 (
