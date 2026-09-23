@@ -35,7 +35,6 @@ jobs:
       RUSTUP_TOOLCHAIN: 1.96.0
       BASHKITTEN_BUILD_JOBS: '2'
       BASHKITTEN_BUILD_RUN_ID: hosted
-      MOZBUILD_STATE_PATH: ${{ github.workspace }}/.bashkitten-build/browser/state
       SCCACHE_IDLE_TIMEOUT: '0'
       GH_TOKEN: ${{ github.token }}
       PI_TELEMETRY: '0'
@@ -50,6 +49,8 @@ jobs:
         persist-credentials: false
     - name: Select the native target
       run: |
+        # Python's IPDL workers create Unix sockets below the build temp path.
+        echo "MOZBUILD_STATE_PATH=$RUNNER_TEMP/bk/browser/state" >> "$GITHUB_ENV"
         case "$GITHUB_REPOSITORY" in
           openresearchtools/bashkitten-build-arm64) echo 'BROWSER_TARGET=linux-arm64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=arm64' >> "$GITHUB_ENV" ;;
           openresearchtools/bashkitten-build-amd64) echo 'BROWSER_TARGET=linux-amd64' >> "$GITHUB_ENV"; echo 'BROWSER_ARCH=amd64' >> "$GITHUB_ENV" ;;
@@ -74,7 +75,7 @@ jobs:
       run: ./mach --no-interactive bootstrap --application-choice browser
     - name: Optional native Rust cache warm-up
       if: steps.component.outputs.hit != 'true' && inputs.warm_gkrust
-      run: source/bashkitten/browser/bashkitten/scripts/build-linux-external.sh --action gkrust --build-root "$GITHUB_WORKSPACE/.bashkitten-build/warm" --jobs 2 --ref HEAD
+      run: source/bashkitten/browser/bashkitten/scripts/build-linux-external.sh --action gkrust --build-root "$RUNNER_TEMP/bk/warm" --jobs 2 --ref HEAD
     - name: Build the complete browser archive
       if: steps.component.outputs.hit != 'true'
       run: |
@@ -82,7 +83,7 @@ jobs:
           --bashkitten "$GITHUB_WORKSPACE/source/bashkitten/browser" \
           --commit "$SOURCE_SHA" --architecture "$BROWSER_ARCH" \
           --input-digest "$INPUT_DIGEST" \
-          --work-dir "$GITHUB_WORKSPACE/.bashkitten-build" \
+          --work-dir "$RUNNER_TEMP/bk" \
           --artifact-dir "$RUNNER_TEMP/browser/stage"
       env:
         SOURCE_SHA: ${{ inputs.source_sha }}
@@ -217,5 +218,5 @@ jobs:
       if: failure()
       with:
         name: browser-build-logs
-        path: .bashkitten-build/browser/runs/hosted/logs/
+        path: ${{ runner.temp }}/bk/browser/runs/hosted/logs/
         if-no-files-found: ignore
