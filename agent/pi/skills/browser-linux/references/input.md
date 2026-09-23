@@ -9,6 +9,8 @@ Retake a snapshot for stale refs. Desktop snapshot has no container `target`.
 `act` takes `tabId,kind` and the fields below. Use opaque snapshot `ref` IDs,
 not raw Gecko target objects. Refs resolve their child frame automatically.
 Coordinates are viewport CSS pixels in the top document without a ref.
+`drag_at` holds the button for 500ms; equal start/end coordinates perform a
+stationary hold, useful for a remote touchscreen's long-press menu.
 
 | Kind | Additional fields |
 | --- | --- |
