@@ -31,6 +31,7 @@ import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.settings.about.AboutItemType.LICENSING_INFO
+import org.mozilla.fenix.settings.about.AboutItemType.PRIVACY_NOTICE
 import org.mozilla.fenix.settings.about.AboutItemType.RIGHTS
 import org.mozilla.fenix.settings.about.AboutItemType.SUPPORT
 import org.mozilla.fenix.settings.about.AboutItemType.WHATS_NEW
