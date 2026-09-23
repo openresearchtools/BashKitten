@@ -44,7 +44,7 @@ export class RemoteAccess {
     const value = (await fs.readFile(path.join(root, kind, 'hostname'), 'utf8').catch(() => '')).trim();
     return onion.test(value) ? value : null;
   }
-  async prepare(stack, port) {
+  async prepare(stack, port, { reload = false } = {}) {
     this.stack = stack;
     const state = await this.state();
     if (!state.enabled) return [];
@@ -64,7 +64,8 @@ export class RemoteAccess {
       text += `HiddenServiceDir ${JSON.stringify(service)}\nHiddenServiceVersion 3\nHiddenServicePort 443 127.0.0.1:${port}\n`;
     }
     const config = path.join(root, 'torrc'); await fs.writeFile(config, text, { mode: 0o600 });
-    await stack.launch('tor', binary('tor'), ['-f', config], process.env);
+    if (reload) await stack.reloadPublisher();
+    else await stack.launch('tor', binary('tor'), ['-f', config], process.env);
     for (let attempt = 0; attempt < 150; attempt++) {
       const names = await Promise.all(kinds.map(kind => this.hostname(kind)));
       if (names.every(Boolean)) return ['https://' + names[0]];
@@ -102,7 +103,10 @@ export class RemoteAccess {
       const key = deviceKey(), id = randomUUID();
       const device = { id, name: title, kind, publicKey: key.publicKey, createdAt: new Date().toISOString() };
       await writeJson(stateFile, { ...state, devices: [...state.devices, device] });
-      await this.stack.reconfigureRemote();
+      // Adding an authorization only needs Tor's native config reload. Restarting
+      // the publisher here cuts an onion caller's request before its one-time
+      // connection key can be delivered. Revocation still closes old circuits.
+      await this.stack.reconfigureRemote({ restartTor: false });
       const host = await this.hostname(kind);
       if (!host || !this.stack.identity?.caSha256) throw Error('The remote endpoint is not ready');
       const connection = { version: 1, name: title, kind, url: 'https://' + host, clientAuthorization: key.privateKey,

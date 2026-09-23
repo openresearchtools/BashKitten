@@ -163,7 +163,12 @@ ${backend}
     }
     await fs.writeFile(paths.caddy, config, { mode: 0o600 });
   }
-  async reconfigureRemote() {
+  async reloadPublisher() {
+    const record = this.children.find(child => child.name === 'tor');
+    if (!record || !await sameProcess(record)) throw Error('Tor publisher is not running');
+    process.kill(record.pid, 'SIGHUP');
+  }
+  async reconfigureRemote({ restartTor = true } = {}) {
     if (!this.ready || this.stopping) throw Error('Turn on Agent before changing remote access');
     this.reconfiguring = true;
     this.ready = false;
@@ -173,22 +178,21 @@ ${backend}
       if (record) { await terminate(record); this.children = this.children.filter(child => child !== record); }
     };
     try {
-      await stopNamed('tor');
-      this.remoteOrigins = await this.remote.prepare(this, Number(new URL(this.origin).port));
+      if (restartTor) await stopNamed('tor');
+      this.remoteOrigins = await this.remote.prepare(this, Number(new URL(this.origin).port), { reload: !restartTor });
       if (JSON.stringify(this.remoteOrigins) !== previous) {
-        await stopNamed('caddy'); await stopNamed('authelia');
-        await fs.rm(paths.auth, { force: true }); await fs.rm(paths.admin, { force: true });
+        // Keep the proxy accepting its already-authorized control request while
+        // Authelia's cookie providers change. New auth checks fail closed during
+        // the socket replacement; Caddy applies the new hosts by live reload.
+        await stopNamed('authelia');
+        await fs.rm(paths.auth, { force: true });
         await renderAuthelia([this.origin, ...this.remoteOrigins], this.identity.instanceId);
         await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
         await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
         await this.waitUntil(async () => { await authCall(this.origin, '/api/health', undefined, '', 2000); return true; }, 'Authelia');
-        await this.writeCaddy();
-        await this.launch('caddy', binary('caddy'), ['run', '--config', paths.caddy, '--adapter', 'caddyfile'], { ...process.env, XDG_DATA_HOME: paths.storage });
-        await this.waitUntil(() => verifiedHttps(this.origin, this.identity.caPem), 'HTTPS');
-      } else {
-        await this.writeCaddy();
-        await command(binary('caddy'), ['reload', '--config', paths.caddy, '--adapter', 'caddyfile', '--address', 'unix/' + paths.admin]);
       }
+      await this.writeCaddy();
+      await command(binary('caddy'), ['reload', '--config', paths.caddy, '--adapter', 'caddyfile', '--address', 'unix/' + paths.admin]);
       this.info.children = this.identities(); await writeJson(serverFile, this.info);
       this.ready = true;
     } catch (error) { this.fatal?.(error); throw error; }
