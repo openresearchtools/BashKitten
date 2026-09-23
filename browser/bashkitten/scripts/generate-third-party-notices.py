@@ -73,6 +73,11 @@ def components(source_root):
             "extensions/spellcheck/locales/en-US/hunspell/README_en_US.txt",
             "extensions/spellcheck/locales/en-US/hunspell/en-GB.SOURCE.json",
         ])]
+    result.append(source_component(source_root.parent, "bashkitten-unsloth-notices",
+        "Unsloth Studio search adaptations in the companion Agent server", [
+            "agent/search/third_party/unsloth-studio/NOTICE",
+            "agent/search/third_party/unsloth-studio/LICENSE",
+        ]))
     for slug, name, path in [
         ("tor", "Tor third-party notices", "runtime/tor/tor"),
     ]:
@@ -249,6 +254,7 @@ def packaged_inventory(browser_dir):
                     for anchor, name, license_name in (
                         ("bashkitten-waterfox-notices", "Waterfox source and modifications", "MPL-2.0; retained per-file licenses"),
                         ("bashkitten-browseros-notices", "BrowserOS browser tools and modifications", "AGPL-3.0-or-later"),
+                        ("bashkitten-unsloth-notices", "Unsloth Studio search adaptations", "AGPL-3.0-only"),
                     ):
                         match = re.search(r'<tr>\s*<td>\s*<h1 id="' + anchor + r'">.*?</tr>', contents, re.S)
                         if not match:
