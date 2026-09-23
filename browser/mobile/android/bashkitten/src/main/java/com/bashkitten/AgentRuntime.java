@@ -80,7 +80,7 @@ public final class AgentRuntime {
         app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
         changed();
         if (!selected.equals("local")) { connectRemote(); return; }
-        if (!termux.installed()) { setup("Install Termux to run Agent on this device."); return; }
+        if (!termux.installed()) { recordLocalControl(false); setup("Install Termux to run Agent on this device."); return; }
         if (!termux.permissionGranted()) { setup("Connect Termux to start your local Agent."); return; }
         final int generation = operation;
         termux.probe(value -> {
@@ -95,13 +95,15 @@ public final class AgentRuntime {
     }
     public void turnOff() {
         if (state.equals("stopping")) return;
-        boolean setupWithoutService = state.equals("setup") && (!termux.installed() || !localControlRequested);
+        boolean termuxInstalled = termux.installed();
+        if (!termuxInstalled) recordLocalControl(false);
+        boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
         releaseRemoteAuthorization();
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
-        if (!selected.equals("local") || setupWithoutService) { stopped(); return; }
+        if ((!selected.equals("local") && !localControlRequested) || setupWithoutService || !termuxInstalled) { stopped(); return; }
         requestStop(operation);
     }
     private void requestStop(int generation) {

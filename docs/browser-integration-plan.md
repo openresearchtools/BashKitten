@@ -425,6 +425,8 @@ are not shut down by this Agent control. The desktop llama relay used for Agent
 is disconnected on Turn off. This client control does not silently shut down a
 remote machine: in remote-only mode it disconnects the client and releases its
 browser lock, without requiring Termux or attempting remote OS power management.
+If Android previously started Local, Turn off also stops that retained local
+group and releases its Termux lock after switching to Remote.
 
 On Android, closing/hiding the browser UI is not Turn off. Its foreground service can keep
 the browser lock while alive and Termux can keep its own lock. Android can still
