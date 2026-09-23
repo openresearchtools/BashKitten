@@ -450,6 +450,7 @@ let JSWINDOWACTORS = {
     allFrames: true,
     messageManagerGroups: [
       "browsers",
+      "bashkitten-agent",
       "webext-browsers",
       "chatbot-browser",
       "",

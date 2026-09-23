@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { argon2id } from 'hash-wasm';
 import { privateDir, readJson, writeJson, randomToken } from '../common.mjs';
 import { accessDir, paths, binary } from './paths.mjs';
@@ -45,6 +46,7 @@ export async function renderAuthelia(origins, instanceId) {
   const config = {
     theme: 'auto',
     server: { address: `unix://${paths.auth}?umask=0077&path=login`, disable_healthcheck: true,
+      asset_path: fileURLToPath(new URL('../../web/', import.meta.url)),
       endpoints: { enable_pprof: false, enable_expvars: false,
         authz: { 'forward-auth': { implementation: 'ForwardAuth', authn_strategies: [{ name: 'CookieSession' }] } } } },
     log: { level: 'warn', format: 'json' },
