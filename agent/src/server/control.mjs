@@ -333,6 +333,9 @@ async function serve() {
       server.close(() => { ownership.close(); process.exit(0); });
     }, 100).unref();
   }
+  // Recover an interrupted On state in the same queue as explicit commands.
+  // A browser's first start must wait for recovery to publish its HTTPS URL.
+  serial = serial.then(async () => { if (state.web) await startWeb(); }).catch(() => {});
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
   let failedHealth = 0;
@@ -357,7 +360,6 @@ async function serve() {
   }, 3000);
   process.on('SIGTERM', () => { serial = serial.then(async () => { await turnOff(); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; }); });
   process.on('SIGINT', () => process.emit('SIGTERM'));
-  if (state.web) await startWeb().catch(() => {});
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === script) {
