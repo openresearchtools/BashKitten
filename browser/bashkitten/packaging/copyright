@@ -699,14 +699,17 @@ same release set.
 
 ==============================================================================
 
-SHA-256: 8278fa443444e44b6175aaca0eb0714c53ce110383d3892c3e4c062641733f8c
+SHA-256: f4fd57a2660dbfae229e3b10282483d4d3c78c438f0b8065ac0e1fb9fd1ada21
 Packages: BashKitten browser licences and source notices
 Upstream paths: bashkitten/browser/branding/LICENSE
 
-The BashKitten cat icon in assets/bashkitten.svg and its generated raster variants
-are original BashKitten material under GPL-3.0-only, reused unchanged from the
-Android VectorDrawable in BashKitten commit 571b446. The SVG is the preferred
-source; scripts/render-branding.py produces the native icon sizes during builds.
+The BashKitten kitten-and-terminal logo in assets/bashkitten-logo-original.png
+is the original transparent PNG supplied for BashKitten on 23 September 2026,
+distributed under GPL-3.0-only. The supplied file is preserved unchanged
+(SHA-256: 3188b511e193bb25bab93b51e8c647695f7bdb61d11b41a4c3bfd89c4b58d750).
+scripts/render-branding.py only scales the image and adds transparent padding
+for native icon sizes and Android adaptive launcher masks. The generated SVG
+embeds the PNG; it is not separately drawn vector artwork.
 
 Retained WildBuzzard branding and wordmark material is distributed under
 AGPL-3.0-or-later. Historical WildBuzzard artwork remains credited to the

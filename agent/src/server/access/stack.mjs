@@ -141,7 +141,7 @@ reverse_proxy ${quote('unix/' + paths.auth)} {
 ${proxyHeaders()}
 }
 }
-@about path /about /licenses.json /about.js /app.css /.well-known/bashkitten-ca
+@about path /about /licenses.json /about.js /app.css /logo.png /favicon.ico /.well-known/bashkitten-ca
 handle @about {
 ${backend}
 }

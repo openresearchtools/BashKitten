@@ -26,17 +26,17 @@
     <item type="drawable" name="ic_kit_heart">@drawable/bashkitten_logo</item>
     <item type="drawable" name="ic_kit_shield_off_state">@drawable/bashkitten_logo</item>
     <item type="drawable" name="ic_kit_shield_on_state">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_cool">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_cuddling">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_flaming">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_minimal">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_momo">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_pixelated">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_pride">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_foreground_retro_2004">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_monochrome">@drawable/bashkitten_logo</item>
-    <item type="drawable" name="ic_launcher_private_foreground">@drawable/bashkitten_logo</item>
+    <item type="drawable" name="ic_launcher_foreground">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_cool">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_cuddling">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_flaming">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_minimal">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_momo">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_pixelated">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_pride">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_foreground_retro_2004">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_monochrome">@drawable/bashkitten_launcher_foreground</item>
+    <item type="drawable" name="ic_launcher_private_foreground">@drawable/bashkitten_launcher_foreground</item>
     <item type="drawable" name="ic_logo_wordmark_normal">@drawable/bashkitten_logo</item>
     <item type="drawable" name="ic_logo_wordmark_private">@drawable/bashkitten_logo</item>
     <item type="drawable" name="ic_minimal">@drawable/bashkitten_logo</item>

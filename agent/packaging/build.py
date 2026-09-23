@@ -163,11 +163,12 @@ def package_browser(args, app, stage, version, auth):
                        'Exec=bashkitten %u\nIcon=com.bashkitten\nTerminal=false\nType=Application\n'
                        'Categories=Network;WebBrowser;Development;\nStartupNotify=true\n'
                        'MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;\n')
-    icon = REPOSITORY / 'browser/bashkitten/browser/branding/content/about-logo.svg'
-    require(icon.is_file(), 'Missing BashKitten desktop icon')
-    installed_icon = stage / 'usr/share/icons/hicolor/scalable/apps/com.bashkitten.svg'
-    installed_icon.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(icon, installed_icon)
+    for size in (16, 22, 24, 32, 48, 64, 128, 256, 512):
+        icon = REPOSITORY / f'browser/bashkitten/browser/branding/default{size}.png'
+        require(icon.is_file(), 'Missing BashKitten desktop icon')
+        installed_icon = stage / f'usr/share/icons/hicolor/{size}x{size}/apps/com.bashkitten.png'
+        installed_icon.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(icon, installed_icon)
     provenance = app / 'components/browser'
     provenance.mkdir(parents=True)
     for name in ['browser-artifact-manifest.txt', 'browser-build-manifest.txt', 'SHA256SUMS']:

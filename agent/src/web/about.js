@@ -1,12 +1,13 @@
 /* Shared About view for the web UI and the offline Android/Linux shells. */
-window.renderBashKittenAbout = (root, { version = '', notice, licenses, loadLicenses, license = 'GPL-3.0-only', description = 'A browser interface for the Pi coding agent.' }) => {
-  root.innerHTML = `<h3></h3>
+window.renderBashKittenAbout = (root, { version = '', notice, licenses, loadLicenses, logo = '/logo.png', license = 'GPL-3.0-only', description = 'A browser interface for the Pi coding agent.' }) => {
+  root.innerHTML = `<h3 style="display:flex;align-items:center;gap:10px"><img data-logo width="40" height="40" alt=""><span></span></h3>
     <p data-description></p>
     <p data-notice></p>
     <p><a href="https://github.com/openresearchtools/bashkitten" target="_blank" rel="noopener">Source code</a></p>
     <button type="button" id="viewLicenses">Licenses</button>
     <div id="licenseList" class="settings-section"></div>`;
-  root.querySelector('h3').textContent = ['BashKitten', version].filter(Boolean).join(' ');
+  root.querySelector('h3 span').textContent = ['BashKitten', version].filter(Boolean).join(' ');
+  root.querySelector('[data-logo]').src = logo;
   root.querySelector('[data-description]').textContent = `${description} ${license}. No warranty.`;
   root.querySelector('[data-notice]').textContent = notice;
   const button = root.querySelector('#viewLicenses'), list = root.querySelector('#licenseList');

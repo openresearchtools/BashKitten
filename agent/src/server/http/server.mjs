@@ -157,6 +157,8 @@ const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 const aboutHtml = await fs.readFile(path.join(here, '../../web/about.html'));
 const aboutScript = await fs.readFile(path.join(here, '../../web/about.js'));
+const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
+const favicon = await fs.readFile(path.join(here, '../../web/favicon.ico'));
 let activeServer;
 async function handler(req, res) {
   try {
@@ -177,7 +179,11 @@ async function handler(req, res) {
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
     if (route === '/about.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(aboutScript); }
     if (route === '/licenses.json' && req.method === 'GET') return json(res, await licenses());
-    if (route === '/favicon.ico') { res.writeHead(204); return res.end(); }
+    if (['/logo.png', '/favicon.ico'].includes(route) && ['GET', 'HEAD'].includes(req.method)) {
+      const image = route === '/logo.png' ? logo : favicon;
+      res.writeHead(200, { 'Content-Type': route === '/logo.png' ? 'image/png' : 'image/x-icon', 'Content-Length': image.length, 'Cache-Control': 'public, max-age=86400' });
+      return res.end(req.method === 'HEAD' ? undefined : image);
+    }
     const mutation = !['GET', 'HEAD'].includes(req.method);
     if (mutation) auth.checkOrigin(req);
     const record = await auth.login(req);

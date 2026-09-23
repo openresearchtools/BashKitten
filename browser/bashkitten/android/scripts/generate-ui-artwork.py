@@ -209,7 +209,7 @@ def main():
     for name in aliases:
         for p in list(RES.glob('drawable*/'+name+'.*'))+list(RES.glob('mipmap*/'+name+'.*')):
             p.unlink()
-    (RES/'values/bashkitten_artwork.xml').write_text(HEADER+'<resources>\n'+''.join(f'    <item type="drawable" name="{n}">@drawable/bashkitten_logo</item>\n' for n in sorted(aliases))+'</resources>\n')
+    (RES/'values/bashkitten_artwork.xml').write_text(HEADER+'<resources>\n'+''.join(f'    <item type="drawable" name="{n}">@drawable/{"bashkitten_launcher_foreground" if n.startswith("ic_launcher_") and ("foreground" in n or "monochrome" in n) else "bashkitten_logo"}</item>\n' for n in sorted(aliases))+'</resources>\n')
     assets=ROOT/'mobile/android/fenix/app/src/main/assets'
     for src in (COMPONENTS/'ui/icons/src/main/assets').glob('*.svg'):
         name=src.stem
@@ -230,7 +230,7 @@ def main():
     launcher = RES / 'mipmap-anydpi-v26'
     launcher.mkdir(exist_ok=True)
     for name in ('ic_launcher', 'ic_launcher_round'):
-        (launcher / (name+'.xml')).write_text(HEADER + '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/bashkitten_launcher_background"/><foreground android:drawable="@drawable/bashkitten_logo"/><monochrome android:drawable="@drawable/bashkitten_logo"/></adaptive-icon>\n')
+        (launcher / (name+'.xml')).write_text(HEADER.replace('original Wild Buzzard artwork.', 'BashKitten logo; adaptive icon structure derived from Wild Buzzard.') + '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@android:color/transparent"/><foreground android:drawable="@drawable/bashkitten_launcher_foreground"/><monochrome android:drawable="@drawable/bashkitten_launcher_foreground"/></adaptive-icon>\n')
     (RES / 'values/bashkitten_launcher_colors.xml').write_text(HEADER + '<resources><color name="bashkitten_launcher_background">#1B1A17</color></resources>\n')
     manifest_path.write_text(json.dumps({'description':'Original-resource audit; generated app overrides replace upstream illustration and icon geometry. Structural shapes/selectors retain upstream licenses. Website content and Android framework controls are outside app branding.','brand_aliases':sorted(aliases),'resources':dict(sorted(manifest.items())), 'pdf_viewer_images':old.get('pdf_viewer_images', {}), 'engine_resources':old.get('engine_resources', {}), 'android_extension_assets':old.get('android_extension_assets', {}), 'inline_ui_resources':old.get('inline_ui_resources', {})},indent=2)+'\n')
     print(f'Audited {len(manifest)} drawable variants; {len(aliases)} brand aliases.')

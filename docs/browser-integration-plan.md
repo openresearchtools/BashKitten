@@ -276,6 +276,10 @@ replaces the current BashKitten APK. Historical copyrights, upstream links and
 license attribution retain their original names. Do not replace or rename an
 installed independent WildBuzzard application.
 
+Use the supplied black kitten with the gold terminal as the product logo. Keep
+the original transparent PNG in the repository, generate square Linux/web icons,
+and pad the Android foreground transparently to fit adaptive icon masks.
+
 ## 3. One window and a protected Agent view
 
 One product profile and one browser window. Remove profile creation/switching

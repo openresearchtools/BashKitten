@@ -3805,13 +3805,13 @@
       "source": "toolkit/components/satchel/megalist/content/icons/cpm-fox-illustration.svg",
       "original_sha256": "815b6f447ad3baa56dc2c23d59a7baaf9e237697f7e7556e7acf7e22059add18",
       "action": "original brand-svg artwork",
-      "sha256": "e189d8ed04ba0f7f13a1e951da125726e688acd697906df528023f1ef29fb844"
+      "sha256": "2c4dcbeee94d1106709cf8e0903caedf9d3c6a0373e2bbdb1eef53d99c197949"
     },
     "chrome/toolkit/content/global/ml/mozilla-logo.webp": {
       "source": "toolkit/components/ml/content/mozilla-logo.webp",
       "original_sha256": "c47dbb392a6cb491011ed68fdfb29715dbb54c89c0ada9b6019b3161ed27e6ac",
       "action": "original brand-webp artwork",
-      "sha256": "2c852a3223def40da5eb120aa461f85bd38fce3cdbea3cfc3f80dd18eb2cae73"
+      "sha256": "6b02d7f612c6c763edcc51e0d2ec93f514295a848d228051ed9ffdd1b0d90702"
     },
     "chrome/toolkit/res/broken-image.png": {
       "source": "layout/generic/broken-image.png",
@@ -3835,7 +3835,7 @@
       "source": "toolkit/themes/shared/illustrations/error-malformed-url.svg",
       "original_sha256": "97d83082296c26efc493edd0268fd9ce8a7b37dc09b70ca3e3b84d0b13a4c838",
       "action": "original brand-svg artwork",
-      "sha256": "e189d8ed04ba0f7f13a1e951da125726e688acd697906df528023f1ef29fb844"
+      "sha256": "2c4dcbeee94d1106709cf8e0903caedf9d3c6a0373e2bbdb1eef53d99c197949"
     },
     "chrome/toolkit/res/accessiblecaret-normal.svg": {
       "source": "layout/style/res/accessiblecaret-normal.svg",
