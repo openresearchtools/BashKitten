@@ -1539,7 +1539,8 @@ public class GeckoSession {
         final int flags,
         final @Nullable String triggeringUri,
         final boolean hasUserGesture,
-        final boolean isTopLevel) {
+        final boolean isTopLevel,
+        final boolean isDownload) {
       final Double onLoadRequestProfilerStartTime = ProfilerController.getProfilerTime();
       final Runnable addMarker =
           () ->
@@ -1586,7 +1587,8 @@ public class GeckoSession {
                       windowType,
                       flags,
                       hasUserGesture,
-                      false /* isDirectNavigation */);
+                      false /* isDirectNavigation */,
+                      isDownload);
               final GeckoResult<AllowOrDeny> reqResponse =
                   isTopLevel
                       ? delegate.onLoadRequest(session, req)
@@ -4687,12 +4689,24 @@ public class GeckoSession {
           final int flags,
           final boolean hasUserGesture,
           final boolean isDirectNavigation) {
+        this(uri, triggerUri, geckoTarget, flags, hasUserGesture, isDirectNavigation, false);
+      }
+
+      /* package */ LoadRequest(
+          @NonNull final String uri,
+          @Nullable final String triggerUri,
+          final int geckoTarget,
+          final int flags,
+          final boolean hasUserGesture,
+          final boolean isDirectNavigation,
+          final boolean isDownload) {
         this.uri = uri;
         this.triggerUri = triggerUri;
         this.target = convertGeckoTarget(geckoTarget);
         this.isRedirect = (flags & LOAD_REQUEST_IS_REDIRECT) != 0;
         this.hasUserGesture = hasUserGesture;
         this.isDirectNavigation = isDirectNavigation;
+        this.isDownload = isDownload;
       }
 
       /** Empty constructor for tests. */
@@ -4703,6 +4717,7 @@ public class GeckoSession {
         isRedirect = false;
         hasUserGesture = false;
         isDirectNavigation = false;
+        isDownload = false;
       }
 
       // This needs to match nsIBrowserDOMWindow.idl
@@ -4748,6 +4763,9 @@ public class GeckoSession {
        * calling {@link GeckoSession#load}.
        */
       public final boolean isDirectNavigation;
+
+      /** True when Gecko has identified this request as an explicit download. */
+      public final boolean isDownload;
 
       @Override
       public String toString() {

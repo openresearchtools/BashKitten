@@ -969,7 +969,7 @@ auto DocumentLoadListener::Open(nsDocShellLoadState* aLoadState,
           aLoadState->URI(), nsIBrowserDOMWindow::OPEN_CURRENTWINDOW,
           aLoadState->InternalLoadFlags(), aLoadState->TriggeringPrincipal(),
           aLoadState->HasValidUserGestureActivation(),
-          documentContext->IsTopContent());
+          documentContext->IsTopContent(), mIsDownload);
     }
   }
 
@@ -3266,7 +3266,8 @@ DocumentLoadListener::AsyncOnChannelRedirect(
     promise = window->OnLoadRequest(uriBeingLoaded,
                                     nsIBrowserDOMWindow::OPEN_CURRENTWINDOW,
                                     nsIWebNavigation::LOAD_FLAGS_IS_REDIRECT,
-                                    nullptr, false, bc->IsTopContent());
+                                    nullptr, false, bc->IsTopContent(),
+                                    mIsDownload);
   }
 
   if (promise) {

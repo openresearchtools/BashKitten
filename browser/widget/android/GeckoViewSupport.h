@@ -87,7 +87,8 @@ class GeckoViewSupport final
 
   auto OnLoadRequest(mozilla::jni::String::Param aUri, int32_t aWindowType,
                      int32_t aFlags, mozilla::jni::String::Param aTriggeringUri,
-                     bool aHasUserGesture, bool aIsTopLevel) const
+                     bool aHasUserGesture, bool aIsTopLevel,
+                     bool aIsDownload) const
       -> java::GeckoResult::LocalRef;
 
   void OnShowDynamicToolbar() const;

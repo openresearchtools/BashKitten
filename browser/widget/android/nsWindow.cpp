@@ -2058,14 +2058,14 @@ auto GeckoViewSupport::OnLoadRequest(mozilla::jni::String::Param aUri,
                                      int32_t aWindowType, int32_t aFlags,
                                      mozilla::jni::String::Param aTriggeringUri,
                                      bool aHasUserGesture,
-                                     bool aIsTopLevel) const
+                                     bool aIsTopLevel, bool aIsDownload) const
     -> java::GeckoResult::LocalRef {
   GeckoSession::Window::LocalRef window(mGeckoViewWindow);
   if (!window) {
     return nullptr;
   }
   return window->OnLoadRequest(aUri, aWindowType, aFlags, aTriggeringUri,
-                               aHasUserGesture, aIsTopLevel);
+                               aHasUserGesture, aIsTopLevel, aIsDownload);
 }
 
 void GeckoViewSupport::OnShowDynamicToolbar() const {
@@ -2414,7 +2414,7 @@ void nsWindow::DidClearParent(nsIWidget*) {
 RefPtr<MozPromise<bool, bool, false>> nsWindow::OnLoadRequest(
     nsIURI* aUri, int32_t aWindowType, int32_t aFlags,
     nsIPrincipal* aTriggeringPrincipal, bool aHasUserGesture,
-    bool aIsTopLevel) {
+    bool aIsTopLevel, bool aIsDownload) {
   auto geckoViewSupport(mGeckoViewSupport.Access());
   if (!geckoViewSupport) {
     return MozPromise<bool, bool, false>::CreateAndResolve(false, __func__);
@@ -2446,7 +2446,7 @@ RefPtr<MozPromise<bool, bool, false>> nsWindow::OnLoadRequest(
   auto geckoResult = geckoViewSupport->OnLoadRequest(
       spec.get(), aWindowType, aFlags,
       isNullPrincipal ? nullptr : triggeringSpec.get(), aHasUserGesture,
-      aIsTopLevel);
+      aIsTopLevel, aIsDownload);
   return geckoResult
              ? MozPromise<bool, bool, false>::FromGeckoResult(geckoResult)
              : nullptr;

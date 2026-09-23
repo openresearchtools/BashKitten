@@ -63,7 +63,7 @@ class nsWindow final : public nsIWidget {
   RefPtr<mozilla::MozPromise<bool, bool, false>> OnLoadRequest(
       nsIURI* aUri, int32_t aWindowType, int32_t aFlags,
       nsIPrincipal* aTriggeringPrincipal, bool aHasUserGesture,
-      bool aIsTopLevel);
+      bool aIsTopLevel, bool aIsDownload);
 
  private:
   nsCOMPtr<nsIUserIdleServiceInternal> mIdleService;

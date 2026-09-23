@@ -154,6 +154,16 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 if (request.uri.equals("about:blank")) return GeckoResult.fromValue(AllowOrDeny.ALLOW);
                 try {
                     URI target = URI.create(request.uri), own = URI.create(runtime.url);
+                    if ("blob".equals(target.getScheme())) {
+                        // Only Gecko's native download marker may admit an own-origin Blob.
+                        // The triggering principal remains available across panel recreation.
+                        boolean download = s == runtime.session && request.isDownload
+                            && request.hasUserGesture && !request.isRedirect && !request.isDirectNavigation
+                            && request.target == TARGET_WINDOW_CURRENT && request.triggerUri != null
+                            && sameAgentOrigin(URI.create(request.triggerUri), own)
+                            && sameAgentOrigin(URI.create(target.getRawSchemeSpecificPart()), own);
+                        return GeckoResult.fromValue(download ? AllowOrDeny.ALLOW : AllowOrDeny.DENY);
+                    }
                     if (Objects.equals(target.getScheme(), own.getScheme()) && Objects.equals(target.getHost(), own.getHost()) && target.getPort() == own.getPort() ) {
                         String path = target.getRawPath();
                         if ("/api/files/content".equals(path) || (path != null && path.matches("/api/sessions/[a-f0-9-]{36}/attachments/[^/]+/[^/]+"))) {
@@ -209,6 +219,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 GeckoResult<PromptResponse> result = new GeckoResult<>(); new AlertDialog.Builder(activity).setMessage(p.message).setPositiveButton("OK", (d,w) -> result.complete(p.dismiss())).setOnCancelListener(d -> result.complete(p.dismiss())).show(); return result;
             }
         });
+    }
+    private static boolean sameAgentOrigin(URI candidate, URI own) {
+        return "https".equals(own.getScheme()) && own.getHost() != null
+            && own.getUserInfo() == null && candidate.getUserInfo() == null
+            && Objects.equals(candidate.getScheme(), own.getScheme())
+            && Objects.equals(candidate.getHost(), own.getHost())
+            && candidate.getPort() == own.getPort();
     }
     public boolean activityResult(int request, int result, Intent data) {
         if (request != FILE_REQUEST || fileResult == null) return false;
