@@ -115,7 +115,11 @@ public final class AgentRuntime {
         app.policies.edit().remove("agent.installingPackages").apply();
         busy = false;
         if (!desired) {
-            termux.probe(value -> { if (value.optBoolean("packages")) requestStop(operation); else stopped(); }, this::stopFailed);
+            final int generation = operation;
+            termux.probe(value -> {
+                if (generation != operation || desired) return;
+                if (value.optBoolean("packages")) requestStop(generation); else stopped();
+            }, message -> stopFailed(generation, message));
         } else if (failure != null) setup("install-failed", failure);
         else turnOn();
     }
