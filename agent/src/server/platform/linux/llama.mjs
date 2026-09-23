@@ -23,12 +23,12 @@ function settings(value) {
   for (const key of Object.keys(defaults)) if (value[key] !== undefined) result[key] = value[key];
   if (typeof result.enabled !== 'boolean' || !['auto', 'cuda', 'vulkan', 'cpu'].includes(result.backend)) throw Error('Choose Auto, CUDA, Vulkan or CPU');
   for (const key of ['model', 'alias', 'publishHost']) if (typeof result[key] !== 'string' || result[key].includes('\0')) throw Error(`Invalid ${key}`);
-  if (result.model.length > 8192 || /[\x00-\x1f\x7f]/.test(result.model)) throw Error('Choose a model from the models folder');
-  if (!/^[a-zA-Z0-9_.-]{1,120}$/.test(result.alias)) throw Error('Use a short model name containing letters, numbers, dots or dashes');
+  if (/[\x00-\x1f\x7f]/.test(result.model)) throw Error('Choose a model from the models folder');
+  if (!/^[a-zA-Z0-9_.-]+$/.test(result.alias)) throw Error('Use a model name containing letters, numbers, dots or dashes');
   if (result.publishHost && !/^[a-z2-7]{56}\.onion$/.test(result.publishHost)) throw Error('Publish llama.cpp through its own exact v3 onion hostname');
-  if (!Number.isInteger(result.contextSize) || result.contextSize < 128 || result.contextSize > 2097152) throw Error('Invalid model context size');
-  if (!Number.isInteger(result.threads) || result.threads < 0 || result.threads > 4096) throw Error('Invalid CPU thread count');
-  if (!['auto', 'all'].includes(result.gpuLayers) && (!Number.isInteger(result.gpuLayers) || result.gpuLayers < 0 || result.gpuLayers > 100000)) throw Error('Invalid GPU layer count');
+  if (!Number.isSafeInteger(result.contextSize) || result.contextSize < 0) throw Error('Invalid model context size');
+  if (!Number.isSafeInteger(result.threads) || result.threads < 0) throw Error('Invalid CPU thread count');
+  if (!['auto', 'all'].includes(result.gpuLayers) && (!Number.isSafeInteger(result.gpuLayers) || result.gpuLayers < 0)) throw Error('Invalid GPU layer count');
   return result;
 }
 async function installedPackages() {
@@ -109,12 +109,10 @@ async function responseJson(url, apiKey, timeout = 5000, value) {
   const response = await fetch(url, { method: value === undefined ? 'GET' : 'POST', headers: { ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}), ...(value === undefined ? {} : { 'Content-Type': 'application/json' }) }, body: value === undefined ? undefined : JSON.stringify(value), redirect: 'error', signal: AbortSignal.timeout(timeout) });
   if ([401, 403].includes(response.status)) throw Error('llama.cpp rejected the API key');
   if (!response.ok) throw Object.assign(Error(`llama.cpp returned HTTP ${response.status}`), { status: response.status });
-  const length = Number(response.headers.get('content-length'));
-  if (length > 1024 * 1024) { await response.body?.cancel(); throw Error('llama.cpp returned oversized model metadata'); }
-  const reader = response.body.getReader(); let bytes = 0, output = '';
+  const reader = response.body.getReader(); let output = '';
   const decoder = new TextDecoder();
   try {
-    for (;;) { const { done, value } = await reader.read(); if (done) break; bytes += value.byteLength; if (bytes > 1024 * 1024) throw Error('llama.cpp returned oversized model metadata'); output += decoder.decode(value, { stream: true }); }
+    for (;;) { const { done, value } = await reader.read(); if (done) break; output += decoder.decode(value, { stream: true }); }
     return JSON.parse(output + decoder.decode());
   } finally { await reader.cancel().catch(() => {}); }
 }

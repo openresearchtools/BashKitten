@@ -51,10 +51,10 @@ async function load() {
       const handle = await fs.open(path.join(recordsDir, name), constants.O_RDONLY | constants.O_NOFOLLOW);
       let job;
       try {
-        if (!(await handle.stat()).isFile() || (await handle.stat()).size > 2 * 1024 * 1024) throw modelError('Invalid saved download record');
+        if (!(await handle.stat()).isFile()) throw modelError('Invalid saved download record');
         job = JSON.parse(await handle.readFile('utf8'));
       } finally { await handle.close(); }
-      if (job.id + '.json' !== name || !Array.isArray(job.files) || !job.files.length || job.files.length > 1000 || !path.isAbsolute(job.directory)) throw modelError('Invalid saved download record');
+      if (job.id + '.json' !== name || !Array.isArray(job.files) || !job.files.length || !path.isAbsolute(job.directory)) throw modelError('Invalid saved download record');
       repositoryId(job.repository); revisionId(job.revision);
       for (const file of job.files) {
         repositoryPath(file.path); repositoryPath(file.outputPath);
@@ -270,7 +270,7 @@ function selectedFiles(repository, files, entries) {
     const split = file.match(/-(\d{5})-of-(\d{5})\.gguf$/i);
     if (!split) continue;
     const count = Number(split[2]), stem = family(file);
-    if (count < 1 || count > 1000) throw modelError('The model has an unsupported number of split files');
+    if (count < 1) throw modelError('The model has an invalid number of split files');
     for (let index = 1; index <= count; index++) {
       const shard = stem + '-' + String(index).padStart(5, '0') + '-of-' + split[2] + file.slice(-5);
       if (!entries.has(shard) || !files.includes(shard)) throw modelError(`Select all ${count} split GGUF files for this model before downloading`);
@@ -292,7 +292,7 @@ function selectedFiles(repository, files, entries) {
 }
 export async function startDownload({ id, revision, files } = {}) {
   repositoryId(id); revisionId(revision);
-  if (!Array.isArray(files) || !files.length || files.length > 1000 || new Set(files).size !== files.length) throw modelError('Choose between one and 1,000 distinct repository files');
+  if (!Array.isArray(files) || !files.length || new Set(files).size !== files.length) throw modelError('Choose distinct repository files');
   files.forEach(repositoryPath);
   await load();
   if (closing) throw modelError('Agent is stopping');
@@ -303,14 +303,12 @@ export async function startDownload({ id, revision, files } = {}) {
   if (!Number.isSafeInteger(selected.reduce((sum, file) => sum + file.size, 0))) throw modelError('The selected download is too large');
   return serialize(async () => {
     if (closing) throw modelError('Agent is stopping');
-    if ([...jobs.values()].filter(job => !terminal.has(job.status)).length >= 32) throw modelError('Finish or cancel an existing download before starting another');
     for (const job of jobs.values()) {
       if (terminal.has(job.status) || job.directory !== directory) continue;
       if (job.files.some(file => selected.some(selection => selection.outputPath === file.outputPath))) throw modelError('A download already owns one of these files; resume or cancel it first');
     }
     const now = new Date().toISOString();
     const job = { id: randomUUID(), repository: id, revision, directory, createdAt: now, updatedAt: now, status: 'queued', error: null, files: selected };
-    if (Buffer.byteLength(JSON.stringify(job)) > 1024 * 1024) throw modelError('Choose fewer repository files for one download');
     await persist(job); jobs.set(job.id, job); pump(); return publicJob(job);
   });
 }

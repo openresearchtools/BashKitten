@@ -5,7 +5,7 @@ import { getHuggingFaceToken } from './settings.mjs';
 const origin = 'https://huggingface.co';
 export const modelError = message => Object.assign(Error(message), { modelError: true });
 export function repositoryId(value) {
-  if (typeof value !== 'string' || value.length > 200 || !/^[\w.-]+\/[\w.-]+$/.test(value) || value.split('/').some(x => x === '.' || x === '..')) throw modelError('Use a Hugging Face repository ID such as organization/model');
+  if (typeof value !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(value) || value.split('/').some(x => x === '.' || x === '..')) throw modelError('Use a Hugging Face repository ID such as organization/model');
   return value;
 }
 export function revisionId(value) {
@@ -13,7 +13,7 @@ export function revisionId(value) {
   return value;
 }
 export function repositoryPath(value) {
-  if (typeof value !== 'string' || !value || value.length > 3000 || /[\\\x00-\x1f\x7f]/.test(value) || value.split('/').some(x => !x || x === '.' || x === '..' || Buffer.byteLength(x) > 240 || x.startsWith('.bashkitten-'))) throw modelError('The repository contains an unsafe file path');
+  if (typeof value !== 'string' || !value || /[\\\x00-\x1f\x7f]/.test(value) || value.split('/').some(x => !x || x === '.' || x === '..' || x.startsWith('.bashkitten-'))) throw modelError('The repository contains an unsafe file path');
   return value;
 }
 const encodedPath = value => value.split('/').map(encodeURIComponent).join('/');
@@ -45,7 +45,10 @@ export async function hfRequest(route, { signal, range } = {}) {
   const resetTimeout = () => { clearTimeout(timer); timer = setTimeout(abort, 60000); timer.unref?.(); };
   const close = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); controller.abort(); };
   try {
-    for (let redirects = 0; redirects < 8; redirects++) {
+    const seen = new Set();
+    for (;;) {
+      if (seen.has(url.href)) throw modelError('Hugging Face returned a redirect cycle');
+      seen.add(url.href);
       resetTimeout();
       const headers = { 'Accept-Encoding': 'identity' };
       if (token) headers.Authorization = 'Bearer ' + token;
@@ -64,16 +67,14 @@ export async function hfRequest(route, { signal, range } = {}) {
       if (!response.ok) { await response.body?.cancel(); throw statusError(response.status); }
       return { response, resetTimeout, close };
     }
-    throw modelError('Hugging Face returned too many redirects');
   } catch (error) { close(); throw error?.modelError ? error : modelError('Hugging Face could not be reached; check your connection and retry'); }
 }
 async function jsonRequest(route, signal) {
   const request = await hfRequest(route, { signal });
   try {
-    const chunks = []; let length = 0;
+    const chunks = [];
     for await (const chunk of request.response.body) {
-      request.resetTimeout(); length += chunk.length;
-      if (length > 16 * 1024 * 1024) throw modelError('Hugging Face returned too much metadata');
+      request.resetTimeout();
       chunks.push(chunk);
     }
     let value;
@@ -83,8 +84,8 @@ async function jsonRequest(route, signal) {
   } finally { request.close(); }
 }
 export async function searchModels({ query } = {}) {
-  if (typeof query !== 'string' || !query.trim() || query.length > 200) throw modelError('Enter a model name to search');
-  const parameters = new URLSearchParams({ search: query.trim(), filter: 'gguf', sort: 'downloads', direction: '-1', limit: '20' });
+  if (typeof query !== 'string' || !query.trim()) throw modelError('Enter a model name to search');
+  const parameters = new URLSearchParams({ search: query.trim(), filter: 'gguf', sort: 'downloads', direction: '-1' });
   const { value } = await jsonRequest('/api/models?' + parameters);
   if (!Array.isArray(value)) throw modelError('Hugging Face returned invalid search results');
   return { models: value.filter(x => typeof x.id === 'string').map(x => ({ id: x.id, downloads: Number(x.downloads) || 0, likes: Number(x.likes) || 0 })) };
@@ -98,7 +99,7 @@ export async function repositoryFiles(id, requestedRevision, signal) {
   let next = prefix + '?recursive=true&expand=false';
   const seen = new Set(), files = new Map();
   while (next) {
-    if (seen.has(next) || seen.size >= 200) throw modelError('Hugging Face repository listing has too many or repeated pages');
+    if (seen.has(next)) throw modelError('Hugging Face repository listing has repeated pages');
     seen.add(next);
     const { value, headers } = await jsonRequest(next, signal);
     if (!Array.isArray(value)) throw modelError('Hugging Face returned invalid repository files');
@@ -109,7 +110,6 @@ export async function repositoryFiles(id, requestedRevision, signal) {
       const hash = item.lfs?.oid || item.oid;
       if (typeof hash !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(hash)) throw modelError('Hugging Face did not report a valid file identity');
       files.set(path, { path, size, gguf: /\.gguf$/i.test(path), hash });
-      if (files.size > 100000) throw modelError('Hugging Face repository contains too many files');
     }
     next = null;
     for (const link of (headers.get('link') || '').split(',')) {
