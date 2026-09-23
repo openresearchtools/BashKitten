@@ -25,7 +25,7 @@ arguments. No Agent/native-dialog capture or shared-storage permission is needed
 
 1. Click the real download link with act and inspect the result.
 2. `downloads.list {}` returns downloads associated with ordinary open tabs,
-   with IDs/status. A pending download can need confirmation.
+   with `id,tabId,name,mimeType,status,size`. A pending download can need confirmation.
 3. `downloads.accept {tabId,downloadId}` accepts that tab's requested pending
    download. Use observed IDs; this is a download confirmation, not installation.
 4. Once status is `COMPLETED`, call
@@ -38,4 +38,7 @@ filesystem path; use the helper to copy it. Keep the originating tab open until
 transfer completes. Incomplete/failed downloads are errors, not files.
 Local Binder transfers stream; remotes use the authorized browser channel.
 Helper paths belong to Pi's host. A content URI is not a filesystem path.
+Known download/tab associations survive browser restarts while that ordinary tab
+remains open. Older downloads without a recorded association stay unavailable;
+do not infer ownership from a filename or URL.
 Android exposes no automated upload command: use the normal user file picker.

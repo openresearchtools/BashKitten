@@ -6,8 +6,8 @@ parameter names. Tab IDs are opaque strings returned by the browser.
 | Method | Parameters | Result / behavior |
 | --- | --- | --- |
 | `capabilities` | none | Platform/method inventory, authorization and foreground behavior; Pi adds guide/help paths. |
-| `tabs.list` | none | Array of ordinary tabs, including restored ones. |
-| `tabs.create` | `url?` (about:blank), `tor?` (false) | New tab record/ID. No desktop background/private/group options. |
+| `tabs.list` | none | Array of ordinary records: `id,url,title,tor,desktop,adblock,loading,error`, including restored tabs. |
+| `tabs.create` | `url?` (about:blank), `tor?` (false) | New record; use its `id` as tabId. Initial URL may still be about:blank while loading. No desktop background/private/group options. |
 | `tabs.show` | `tabId` | Shows the tab via Android's normal activity rules. |
 | `tabs.close` | `tabId` | Closes that ordinary tab. |
 | `navigate` | `tabId,url` | Starts navigation; wait/snapshot afterwards. |

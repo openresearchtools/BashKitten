@@ -55,7 +55,7 @@ public final class BrowserApp extends ContextWrapper {
             this.file = new java.io.File(path); this.size = size;
         }
         JSONObject json() throws JSONException {
-            return new JSONObject().put("id", id).put("name", name).put("mimeType", mime).put("status", status).put("size", size);
+            return new JSONObject().put("id", id).put("tabId", tabId).put("name", name).put("mimeType", mime).put("status", status).put("size", size);
         }
     }
     public static final class Tab {
@@ -348,10 +348,12 @@ public final class BrowserApp extends ContextWrapper {
     }
 
     public void rememberDownload(String id, String tabId) {
-        if (tabId == null || policies.contains("download." + id + ".owner")) return;
+        if (tabId == null || policies.contains("download." + id + ".tab")) return;
         String owner = policies.getString(tabId + ".owner", USER);
-        policies.edit().putString("download." + id + ".owner", owner).apply();
+        policies.edit().putString("download." + id + ".owner", owner)
+            .putString("download." + id + ".tab", tabId).apply();
     }
+    public String downloadTab(String id) { return policies.getString("download." + id + ".tab", null); }
     boolean ownsDownload(String id, String owner) { return owner.equals(policies.getString("download." + id + ".owner", USER)); }
     public boolean agentTab(String id) { return !USER.equals(policies.getString(id + ".owner", USER)); }
     public void closeUnapprovedTabs() {

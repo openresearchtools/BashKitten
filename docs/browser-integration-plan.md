@@ -373,6 +373,9 @@ and quit/restart commands. Keep useful tab navigation, DOM, input, screenshots,
 network/debugging and file actions. Closing the last ordinary tab leaves Agent.
 Concurrent Pi sessions use explicit tab IDs rather than a shared selected-tab
 variable. Pi's own session identities and history are unaffected.
+Android download results include their originating ordinary tab ID. Persist that
+association across browser restarts so a restored open tab retains its completed
+downloads; unknown historical associations remain unavailable to automation.
 
 Reuse Android Binder and the desktop private Unix socket. **Any installed
 `com.termux` can attempt browser control**, including official GitHub, F-Droid

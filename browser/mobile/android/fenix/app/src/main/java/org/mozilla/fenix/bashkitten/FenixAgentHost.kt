@@ -172,9 +172,10 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     override fun downloads(): List<BrowserApp.Download> {
         val state = components.core.store.state
         val downloads = (state.downloads.values + state.tabs.mapNotNull { it.content.download }).distinctBy { it.id }
+        val app = BrowserApp.get(application)
         return downloads.map { value ->
             BrowserApp.Download(
-                value.id, value.sessionId, value.fileName ?: "download", value.contentType ?: "application/octet-stream",
+                value.id, value.sessionId ?: app.downloadTab(value.id), value.fileName ?: "download", value.contentType ?: "application/octet-stream",
                 value.status.name, value.filePath, value.contentLength ?: value.currentBytesCopied,
             )
         }
