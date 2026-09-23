@@ -28,6 +28,12 @@ compaction display, attachments, repository browsing, backend ZIP downloads,
 provider login and native Pi session behavior. Pi remains stock: its own tools,
 extensions, skills, models, credentials, sessions and RPC. This is not another
 Pi adapter rewrite.
+Use the browser's rounded control and panel styling throughout the Agent web UI.
+The chat `/login` command opens Providers, like `/providers`. Native fork/clone
+operations add and select their new chat in the existing sidebar. Sending to a
+saved stopped chat resumes its native Pi session; whole-app shutdown must not
+mark every chat as deliberately stopped. Preserve an explicit Stop Pi until
+the user sends, resumes or performs another session action.
 
 Replace the Android WebView and Linux GTK/WebKit hosts with the browser. Remove
 the Termux-suite distribution/store integration, API/X11 APK requirements,
@@ -283,7 +289,8 @@ replaces the current BashKitten APK. Historical copyrights, upstream links and
 license attribution retain their original names. Do not replace or rename an
 installed independent WildBuzzard application.
 
-Use the supplied black kitten with the gold terminal as the product logo. Keep
+Use the supplied black-and-white kitten wearing glasses with the gold terminal
+as the product logo, as selected on 23 September. Keep
 the original transparent PNG in the repository, generate square Linux/web icons,
 and pad the Android foreground transparently to fit adaptive icon masks.
 
@@ -582,8 +589,15 @@ one On/Off state, child-exit handling and group shutdown. Do not describe that
 as an in-process library implementation. If one PID becomes a hard requirement,
 resolve that architecture separately rather than claiming this satisfies it.
 
-Use Authelia's file user store, SQLite storage and built-in memory sessions;
-no Redis, LDAP, second BashKitten account database or custom authentication layer.
+Use Authelia's file user store and SQLite storage, with its supported Redis
+session provider backed by an owned, bundled Valkey process. The user's
+23 September requirement that Remember me survive full app/service restarts
+supersedes the earlier memory-only/no-Redis choice. Use a private Unix socket
+with no TCP listener and durable session persistence under the existing private
+access directory. Preserve Authelia's session encryption, expiry, logout and
+mandatory second factor. Start and stop this store with the whole service group;
+do not keep authentication processes alive after Turn off. No LDAP, second
+BashKitten account database or custom authentication layer.
 Reuse Torkitten's local account/TOTP enrollment approach, calling Authelia's own
 commands/APIs and requiring a valid second factor before setup completes.
 Enrollment is available only through the local private setup controller; remote
@@ -691,9 +705,11 @@ session files remain the recovery source: restarting opens the existing history
 without replaying an interrupted prompt. Keep individual Pi stop/kill controls
 in settings as well as the compact whole-Agent power button.
 
-Browser cookies survive browser restarts. Authelia's stock memory session store
-does not survive an Authelia restart, so that restart requires login again;
-do not add Redis merely to conceal this distinction.
+Browser cookies and remembered Authelia sessions survive browser and service
+restarts, including a changed dynamic port. Verify this with a real two-factor
+Remember me login, complete group shutdown/start and the same cookie, then
+verify that explicit logout still revokes it. Bundle the session-store binary,
+source and notices for Linux amd64/arm64 and native Termux aarch64.
 
 **First technical gate:** build the vendored Caddy/Tor for Termux using the
 recorded upstream Termux recipes/patches. Authelia had no recipe at the checked

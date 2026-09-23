@@ -14,7 +14,8 @@ This branch runs unmodified Pi rather than porting its behavior:
 
 The RPC documentation and public types shipped with that release are the adapter's
 specification. Inference runs through the CLI's RPC mode. Provider setup uses its
-public `ModelRuntime`; history forking uses its public `SessionManager`. No Pi
+public `ModelRuntime`; session forks and clones use its native RPC commands.
+History is read through Pi's native parser without writing session files. No Pi
 files or dependencies are patched. Built-in startup network operations are disabled
 with Pi's supported offline/telemetry flags.
 
