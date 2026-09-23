@@ -553,6 +553,10 @@
     .folder-heading span { flex:1; overflow:hidden; text-overflow:ellipsis; }
     .service-row { padding:10px 0; border-bottom:1px solid var(--line-soft); }
     #serviceLogin { border:1px solid var(--line); border-radius:var(--radius-card); padding:12px; margin:12px 0; overflow-wrap:anywhere; }
+    #serviceLogin a { display:inline-block; padding:10px 0; }
+    #serviceLogin label { display:block; margin-top:12px; }
+    #serviceLogin button { margin:10px 8px 0 0; }
+    .service-notice { margin:8px 0; overflow-wrap:anywhere; }
     #remoteQr { border-radius:var(--radius-control); }
     #serviceLogin input, #serviceLogin select, #piDialogInput input, #piDialogInput textarea, #piDialogInput select { width:100%; padding:9px; border:1px solid var(--line); background:var(--bg); }
     @media (max-width:1100px) and (min-width:701px) {
@@ -3612,35 +3616,47 @@
     window.addEventListener('focus',refreshVisibleProject);
     document.addEventListener('visibilitychange',()=>{if(document.hidden)clearTimeout(fileJobTimer);else refreshVisibleProject();});
 
-    let serviceRows=[], loginRender='', loginPromptId=null, loginPending=false;
+    let serviceRows=[], servicesRender='', serviceLogin=null, loginRender='', loginPromptId=null, loginPending=false;
+    const serviceLoginRoot=$('#serviceLogin'), serviceNotices=new Map(), serviceBusy=new Set();
     const servicePost=(action,body={})=>api('/api/services/'+action,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+    function serviceNotice(provider,text) {
+      serviceNotices.set(provider,text);
+      const row=[...$('#servicesList').children].find(row=>row.dataset.provider===provider);
+      const notice=row?.querySelector('.service-notice');
+      if(notice){notice.textContent=text;notice.classList.toggle('hidden',!text);}
+    }
     function renderServices() {
-      const root=$('#servicesList');root.replaceChildren();const filter=$('#serviceFilter').value.toLowerCase();
-      for(const service of serviceRows.filter(s=>(s.name+' '+s.id).toLowerCase().includes(filter))) {
-        const row=document.createElement('div');row.className='service-row';
+      const root=$('#servicesList'),filter=$('#serviceFilter').value.toLowerCase();
+      const signature=JSON.stringify([serviceRows,filter,serviceLogin?.provider]);
+      if(signature===servicesRender)return;servicesRender=signature;
+      serviceLoginRoot.remove();root.replaceChildren();
+      for(const service of serviceRows.filter(s=>s.id===serviceLogin?.provider||(s.name+' '+s.id).toLowerCase().includes(filter))) {
+        const row=document.createElement('div');row.className='service-row';row.dataset.provider=service.id;
         const name=document.createElement('strong');name.textContent=service.name;
         const state=document.createElement('span');state.className='meta';state.textContent=service.connected?' · Connected'+(service.credentialType?' ('+service.credentialType+')':''):' · Not connected';
         const actions=document.createElement('div');actions.className='subscription-actions';
         for(const method of service.methods){const button=document.createElement('button');button.type='button';button.textContent=method.name;
-          button.onclick=async()=>{try{
+          button.onclick=async()=>{if(serviceBusy.has(service.id))return;serviceBusy.add(service.id);button.disabled=true;serviceNotice(service.id,'Preparing '+method.name+'…');try{
             if(method.type==='oauth'&&!nativeHost){
               window.open('/pi-login?provider='+encodeURIComponent(service.id),'_blank','noopener');
-              $('#settingsNotice').textContent='Complete Pi’s login in the browser tab. This page updates when you return.';
-            }else{await servicePost('login',{provider:service.id,type:method.type});await refreshServices();}
-          }catch(error){$('#settingsNotice').textContent=error.message;}};actions.append(button);}
-        if(service.credentialType){const button=document.createElement('button');button.type='button';button.textContent='Log out';button.onclick=async()=>{try{await servicePost('logout',{provider:service.id});await refreshServices();await loadModels();}catch(error){$('#settingsNotice').textContent=error.message;}};actions.append(button);}
-        if(service.id==='llama.cpp'&&service.connected){const button=document.createElement('button');button.type='button';button.textContent='Refresh models';button.onclick=async()=>{button.disabled=true;try{await servicePost('refresh',{provider:service.id});await loadModels();$('#settingsNotice').textContent='Pi’s llama.cpp models refreshed.';}catch(error){$('#settingsNotice').textContent=error.message;}finally{button.disabled=false;}};actions.append(button);}
+              serviceNotice(service.id,'Complete Pi’s login in the browser tab. If it did not open, allow this site to open a tab and try again.');
+            }else{const value=await servicePost('login',{provider:service.id,type:method.type});serviceNotice(service.id,'');renderServiceLogin(value.login);await refreshServices();}
+          }catch(error){serviceNotice(service.id,error.message);}finally{serviceBusy.delete(service.id);button.disabled=false;}};actions.append(button);}
+        if(service.credentialType){const button=document.createElement('button');button.type='button';button.textContent='Log out';button.onclick=async()=>{button.disabled=true;serviceNotice(service.id,'Logging out…');try{await servicePost('logout',{provider:service.id});serviceNotice(service.id,'Logged out.');await refreshServices();await loadModels();}catch(error){serviceNotice(service.id,error.message);}finally{button.disabled=false;}};actions.append(button);}
+        if(service.id==='llama.cpp'&&service.connected){const button=document.createElement('button');button.type='button';button.textContent='Refresh models';button.onclick=async()=>{button.disabled=true;serviceNotice(service.id,'Refreshing models…');try{await servicePost('refresh',{provider:service.id});await loadModels();serviceNotice(service.id,'Pi’s llama.cpp models refreshed.');}catch(error){serviceNotice(service.id,error.message);}finally{button.disabled=false;}};actions.append(button);}
         if(!service.methods.length){const hint=document.createElement('span');hint.className='meta';hint.textContent='Uses credentials configured in Pi';actions.append(hint);}
-        row.append(name,state,actions);root.append(row);
+        const notice=document.createElement('p');notice.className='service-notice meta';notice.setAttribute('role','status');notice.textContent=serviceNotices.get(service.id)||'';notice.classList.toggle('hidden',!notice.textContent);
+        row.append(name,state,actions,notice);if(service.id===serviceLogin?.provider)row.append(serviceLoginRoot);root.append(row);
       }
     }
     function renderServiceLogin(login) {
-      loginPending=login?.status==='pending';
-      const root=$('#serviceLogin');root.classList.toggle('hidden',!login);if(!login)return;
+      serviceLogin=login;loginPending=login?.status==='pending';renderServices();
+      const root=serviceLoginRoot;root.classList.toggle('hidden',!login);if(!login){root.replaceChildren();loginRender='';loginPromptId=null;return;}
       const signature=JSON.stringify(login);if(signature===loginRender)return;loginRender=signature;
-      const previous=root.querySelector('[data-login-input]')?.value, previousPrompt=loginPromptId;
+      const previousField=root.querySelector('[data-login-input]'), previous=previousField?.value, previousPrompt=loginPromptId;
+      const restoreFocus=previousField===document.activeElement, fallbackOpen=root.querySelector('details')?.open;
       root.replaceChildren();
-      const title=document.createElement('strong');title.textContent=login.provider+' · '+login.status;root.append(title);
+      const title=document.createElement('strong');title.textContent=(serviceRows.find(s=>s.id===login.provider)?.name||login.provider)+' · '+login.status;root.append(title);
       for(const event of login.events||[]) {
         const line=document.createElement('p');line.className='meta';line.textContent=event.message||event.instructions||'';root.append(line);
         const links=event.type==='auth_url'?[{url:event.url,label:'Open browser login'}]:event.type==='device_code'?[{url:event.verificationUri,label:'Open verification page'}]:(event.links||[]);
@@ -3652,24 +3668,25 @@
         const p=login.prompt;loginPromptId=p.id;let promptRoot=root;
         if(p.type==='manual_code'){
           const hint=document.createElement('p');hint.className='meta';hint.textContent='Finish authorization in your browser. Pi receives the callback automatically.';root.append(hint);
-          const fallback=document.createElement('details'),summary=document.createElement('summary');summary.textContent='If automatic login cannot finish';fallback.append(summary);root.append(fallback);promptRoot=fallback;
+          const fallback=document.createElement('details'),summary=document.createElement('summary');fallback.open=previousPrompt===p.id&&Boolean(fallbackOpen);summary.textContent='If automatic login cannot finish';fallback.append(summary);root.append(fallback);promptRoot=fallback;
         }
-        const label=document.createElement('label');label.textContent=p.message;promptRoot.append(label);
-        const field=document.createElement(p.type==='select'?'select':'input');field.dataset.loginInput='true';field.autocomplete='off';
+        const label=document.createElement('label');label.textContent=p.message;label.htmlFor='providerLoginInput';promptRoot.append(label);
+        const field=document.createElement(p.type==='select'?'select':'input');field.id=label.htmlFor;field.dataset.loginInput='true';field.autocomplete='off';
         if(p.type==='select')for(const option of p.options)field.add(new Option(option.label,option.id));
         else{field.type=p.type==='secret'?'password':'text';field.placeholder=p.placeholder||'';}
         if(previousPrompt===p.id&&previous!==undefined)field.value=previous;promptRoot.append(field);
-        const submit=document.createElement('button');submit.type='button';submit.textContent='Continue';submit.onclick=async()=>{try{const input=field.value;field.value='';await servicePost('answer',{id:login.id,promptId:p.id,input});await refreshServices();}catch(error){$('#settingsNotice').textContent=error.message;}};promptRoot.append(submit);
+        if(previousPrompt===p.id&&restoreFocus)field.focus({preventScroll:true});
+        const submit=document.createElement('button');submit.type='button';submit.textContent='Continue';submit.onclick=async()=>{submit.disabled=true;serviceNotice(login.provider,'Continuing login…');try{const input=field.value;field.value='';const value=await servicePost('answer',{id:login.id,promptId:p.id,input});serviceNotice(login.provider,'');renderServiceLogin(value.login);}catch(error){serviceNotice(login.provider,error.message);}finally{submit.disabled=false;}};promptRoot.append(submit);
         field.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();submit.click();}};
       }
-      if(login.status==='pending'){const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel login';cancel.onclick=async()=>{await servicePost('cancel');await refreshServices();};root.append(cancel);}
+      if(login.status==='pending'){const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel login';cancel.onclick=async()=>{cancel.disabled=true;try{const value=await servicePost('cancel',{id:login.id});serviceNotice(login.provider,'');renderServiceLogin(value.login);}catch(error){serviceNotice(login.provider,error.message);}finally{cancel.disabled=false;}};root.append(cancel);}
       if(login.status==='complete'){loadModels().catch(()=>{});refreshServices().catch(()=>{});}
     }
     async function refreshServices(){const value=await api('/api/services');serviceRows=value.services;renderServices();renderServiceLogin(value.login);}
     $('#refreshServices').onclick=()=>refreshServices().catch(error=>$('#settingsNotice').textContent=error.message);
     $('#serviceFilter').oninput=renderServices;
     $('#importPiSessions').onclick=async()=>{try{const value=await api('/api/pi-sessions');const root=$('#piSessions');root.replaceChildren();for(const session of value.sessions){const button=document.createElement('button');button.type='button';button.className='folder-row';button.textContent=session.name+' · '+session.cwd;button.onclick=async()=>{try{const result=await api('/api/sessions/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:session.path})});const sessions=await loadSessions();await openSession(sessions.find(s=>s.id===result.id));}catch(error){$('#settingsNotice').textContent=error.message;}};root.append(button);}if(!value.sessions.length)root.textContent='No native Pi sessions found.';}catch(error){$('#settingsNotice').textContent=error.message;}};
-    setInterval(()=>{if(csrf&&loginPending)api('/api/services/login-status').then(value=>renderServiceLogin(value.login)).catch(()=>{});},1000);
+    setInterval(()=>{if(csrf&&loginPending)api('/api/services/login-status').then(value=>renderServiceLogin(value.login)).catch(error=>{if(serviceLogin)serviceNotice(serviceLogin.provider,error.message);});},1000);
     document.addEventListener('visibilitychange',()=>{if(!document.hidden&&csrf&&activeSettingsTab==='services')refreshServices().then(()=>loadModels()).catch(()=>{});});
     window.addEventListener('focus',()=>{if(csrf&&activeSettingsTab==='services')refreshServices().catch(()=>{});});
 

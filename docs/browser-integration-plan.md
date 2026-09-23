@@ -40,8 +40,13 @@ extensions, skills, models, credentials, sessions and RPC. This is not another
 Pi adapter rewrite.
 Use the browser's rounded control and panel styling throughout the Agent web UI.
 The chat `/login` command opens Providers, like `/providers`. Native fork/clone
-operations add and select their new chat in the existing sidebar. Sending to a
-saved stopped chat resumes its native Pi session; whole-app shutdown must not
+operations add and select their new chat in the existing sidebar.
+Provider API-key prompts, OAuth links/device codes, pending status, cancellation
+and errors appear inside the selected provider's own block. Show immediate local
+feedback on clicking a method; never place the active flow offscreen at the top
+of the provider list. Preserve input and expanded callback instructions during
+status refreshes, including on mobile.
+Sending to a saved stopped chat resumes its native Pi session; whole-app shutdown must not
 mark every chat as deliberately stopped. Preserve an explicit Stop Pi until
 the user sends, resumes or performs another session action.
 
