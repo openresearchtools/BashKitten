@@ -38,7 +38,7 @@ export async function renderAuthelia(origins, instanceId) {
   }
   // One parent cookie provider supplies SSO to registered hosted routes. Caddy
   // only serves exact enabled hostnames, while this policy stays stable as the
-  // owner edits mappings so their Authelia memory sessions survive those edits.
+  // owner edits mappings without interrupting their Authelia sessions.
   const domains = origins.flatMap(origin => {
     const host = new URL(origin).hostname;
     return /^[a-z2-7]{56}\.onion$/.test(host) ? [host, '*.' + host] : [host];
@@ -56,6 +56,7 @@ export async function renderAuthelia(origins, instanceId) {
       file: { path: paths.users, watch: true, search: { email: false, case_insensitive: false } } },
     access_control: { default_policy: 'deny', rules: [{ domain: domains, subject: 'group:owner', policy: 'two_factor' }] },
     session: { name: 'bashkitten_' + instanceId.slice(0, 16), same_site: 'lax', inactivity: '1h', expiration: '12h', remember_me: '30d',
+      redis: { host: paths.sessionSocket, port: 0 },
       cookies: origins.map(origin => ({ domain: new URL(origin).hostname, authelia_url: origin + '/login', default_redirection_url: origin + '/' })) },
     regulation: { modes: ['user'], max_retries: 3, find_time: '2m', ban_time: '5m' },
     storage: { local: { path: paths.database } },

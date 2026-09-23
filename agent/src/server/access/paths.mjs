@@ -11,6 +11,8 @@ export const paths = {
   database: path.join(accessDir, 'authelia.sqlite3'), pending: path.join(accessDir, 'enrollment.json'),
   complete: path.join(accessDir, 'initialized.json'), qr: path.join(accessDir, 'totp.png'),
   auth: path.join(runDir, 'auth.sock'), backend: path.join(runDir, 'web.sock'),
+  sessionSocket: path.join(runDir, 'sessions.sock'), sessionConfig: path.join(accessDir, 'valkey.conf'),
+  sessionStore: path.join(accessDir, 'sessions'),
   admin: path.join(runDir, 'caddy.sock'), caddy: path.join(accessDir, 'Caddyfile'),
   storage: path.join(accessDir, 'caddy'), identity: path.join(accessDir, 'identity.json'),
   backendInfo: path.join(runDir, 'backend.json'), group: path.join(runDir, 'access.json'),

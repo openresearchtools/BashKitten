@@ -41,8 +41,30 @@ export class AccessStack {
       this.origin = 'https://127.0.0.1:' + port;
       this.proxyToken = randomToken(); this.instanceToken = randomToken();
       try {
-        this.remoteOrigins = this.remote ? await this.remote.prepare(this, port) : [];
-        await renderAuthelia([this.origin, ...this.remoteOrigins], identity.instanceId);
+        this.remoteOrigins = this.remote ? await this.remote.prepare(this, port, { initialize: true }) : [];
+        // First startup can briefly use offline Tor to create the service keys.
+        // It is owned by this group and must not remain running with publishing off.
+        if (!this.remoteOrigins.length) {
+          const publisher = this.children.find(child => child.name === 'tor');
+          if (publisher) { await terminate(publisher); this.children = this.children.filter(child => child !== publisher); }
+        }
+        const remoteHost = await this.remote?.hostname('agent');
+        this.remoteAuthOrigin = remoteHost ? 'https://' + remoteHost : null;
+        // Authelia encrypts its session values with the persistent session secret.
+        // Keep them durable across whole-group shutdown without a public listener.
+        await privateDir(paths.sessionStore);
+        await fs.writeFile(paths.sessionConfig, `port 0\nunixsocket ${quote(paths.sessionSocket)}\nunixsocketperm 700\nprotected-mode yes\ndaemonize no\nset-proc-title no\nloglevel warning\ndir ${quote(paths.sessionStore)}\nsave ""\nappendonly yes\nappendfsync always\n`, { mode: 0o600 });
+        await this.launch('valkey', binary('valkey-server'), [paths.sessionConfig], process.env);
+        await this.waitUntil(() => new Promise(resolve => {
+          const client = net.createConnection(paths.sessionSocket);
+          let response = '';
+          client.setTimeout(2000, () => client.destroy());
+          client.on('connect', () => client.write('*1\r\n$4\r\nPING\r\n'));
+          client.on('data', chunk => { response += chunk; if (response.includes('\r\n')) client.destroy(); });
+          client.on('error', () => {});
+          client.on('close', () => resolve(response === '+PONG\r\n'));
+        }), 'Valkey');
+        await renderAuthelia([this.origin, ...(this.remoteAuthOrigin ? [this.remoteAuthOrigin] : [])], identity.instanceId);
         this.authEnv = await authEnvironment();
         await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
         await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
@@ -172,7 +194,6 @@ ${backend}
     if (!this.ready || this.stopping) throw Error('Turn on Agent before changing remote access');
     this.reconfiguring = true;
     this.ready = false;
-    const previous = JSON.stringify(this.remoteOrigins || []);
     const stopNamed = async name => {
       const record = this.children.find(child => child.name === name);
       if (record) { await terminate(record); this.children = this.children.filter(child => child !== record); }
@@ -180,17 +201,8 @@ ${backend}
     try {
       if (restartTor) await stopNamed('tor');
       this.remoteOrigins = await this.remote.prepare(this, Number(new URL(this.origin).port), { reload: !restartTor });
-      if (JSON.stringify(this.remoteOrigins) !== previous) {
-        // Keep the proxy accepting its already-authorized control request while
-        // Authelia's cookie providers change. New auth checks fail closed during
-        // the socket replacement; Caddy applies the new hosts by live reload.
-        await stopNamed('authelia');
-        await fs.rm(paths.auth, { force: true });
-        await renderAuthelia([this.origin, ...this.remoteOrigins], this.identity.instanceId);
-        await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
-        await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
-        await this.waitUntil(async () => { await authCall(this.origin, '/api/health', undefined, '', 2000); return true; }, 'Authelia');
-      }
+      if (this.remoteOrigins.some(origin => origin !== this.remoteAuthOrigin)) throw Error('The remote identity changed; restart Agent to load its authentication scope');
+      // Only publishing and proxy routes change; keep Local authentication live.
       await this.writeCaddy();
       await command(binary('caddy'), ['reload', '--config', paths.caddy, '--adapter', 'caddyfile', '--address', 'unix/' + paths.admin]);
       this.info.children = this.identities(); await writeJson(serverFile, this.info);
@@ -222,7 +234,7 @@ ${backend}
     for (const child of [...this.children].reverse()) await terminate(child);
     this.children = [];
     await fs.rm(paths.group, { force: true });
-    for (const file of [paths.auth, paths.admin, paths.backend, paths.backendInfo]) await fs.rm(file, { force: true });
+    for (const file of [paths.auth, paths.sessionSocket, paths.admin, paths.backend, paths.backendInfo]) await fs.rm(file, { force: true });
   }
   async cleanPrevious() {
     const group = await readJson(paths.group, null);
@@ -230,7 +242,7 @@ ${backend}
     for (const child of [...(group?.children || [])].reverse()) await terminate(child);
     const legacy = await readJson(serverFile, null);
     if (legacy && await backendAlive(legacy)) await terminate({ pid: legacy.pid, started: legacy.started, file: legacy.script });
-    for (const file of [paths.auth, paths.admin, paths.backend, paths.backendInfo]) await fs.rm(file, { force: true });
+    for (const file of [paths.auth, paths.sessionSocket, paths.admin, paths.backend, paths.backendInfo]) await fs.rm(file, { force: true });
   }
 }
 async function availablePort(preferred) {

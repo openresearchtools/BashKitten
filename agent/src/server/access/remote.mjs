@@ -44,13 +44,16 @@ export class RemoteAccess {
     const value = (await fs.readFile(path.join(root, kind, 'hostname'), 'utf8').catch(() => '')).trim();
     return onion.test(value) ? value : null;
   }
-  async prepare(stack, port, { reload = false } = {}) {
+  async prepare(stack, port, { reload = false, initialize = false } = {}) {
     this.stack = stack;
     const state = await this.state();
-    if (!state.enabled) return [];
+    if (!state.enabled && (!initialize || await this.hostname('agent'))) return [];
     await privateDir(root); await privateDir(path.join(root, 'data'));
     let text = `DataDirectory ${JSON.stringify(path.join(root, 'data'))}\nSocksPort 0\nAvoidDiskWrites 1\nLog err stderr\n`;
-    const kinds = ['agent', ...(state.devices.some(device => device.kind === 'llama') || await this.llama() ? ['llama'] : [])];
+    // Tor creates its persistent service identity without connecting or publishing.
+    // Auth can then keep the same cookie scopes when publishing is later enabled.
+    if (!state.enabled) text += 'DisableNetwork 1\n';
+    const kinds = ['agent', ...(state.enabled && (state.devices.some(device => device.kind === 'llama') || await this.llama()) ? ['llama'] : [])];
     for (const kind of kinds) {
       const service = path.join(root, kind), authorized = path.join(service, 'authorized_clients');
       await privateDir(service); await privateDir(authorized);
@@ -68,7 +71,7 @@ export class RemoteAccess {
     else await stack.launch('tor', binary('tor'), ['-f', config], process.env);
     for (let attempt = 0; attempt < 150; attempt++) {
       const names = await Promise.all(kinds.map(kind => this.hostname(kind)));
-      if (names.every(Boolean)) return ['https://' + names[0]];
+      if (names.every(Boolean)) return state.enabled ? ['https://' + names[0]] : [];
       if (stack.children.find(child => child.name === 'tor')?.exit !== undefined) throw Error('Tor could not start; see tor.log');
       await wait(100);
     }
