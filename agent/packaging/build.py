@@ -304,7 +304,7 @@ fi
             profile.parent.mkdir(parents=True)
             profile.write_text('export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1\n'
                                'export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1\n')
-        base_deps = (['nodejs-lts (>= 22.19)', 'python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar'] if termux else
+        base_deps = (['nodejs-lts (>= 22.19)', 'python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar'] if termux else
                      ['nodejs (>= 22.19)', 'npm', 'python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
                       'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1'])
         depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'])

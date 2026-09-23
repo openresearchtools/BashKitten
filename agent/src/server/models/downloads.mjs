@@ -5,6 +5,7 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { modelDataDir, modelSettings, getModelsDirectory } from './settings.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
 import { privateDir } from '../common.mjs';
@@ -15,6 +16,9 @@ const recordsDir = path.join(modelDataDir, 'downloads');
 const jobs = new Map(), running = new Map();
 let loaded, closing = false, mutations = Promise.resolve();
 const terminal = new Set(['complete', 'cancelled']);
+// Node does not expose O_PATH on every supported release. Linux and Android
+// share this flag: traversing /data requires search access, not directory reads.
+const directoryPathFlags = (constants.O_PATH ?? 0x200000) | constants.O_DIRECTORY | constants.O_NOFOLLOW;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const serialize = action => { const next = mutations.then(action); mutations = next.catch(() => {}); return next; };
 const publicJob = job => ({ id: job.id, repository: job.repository, revision: job.revision, directory: job.directory,
@@ -66,16 +70,19 @@ async function load() {
 async function outputDirectory(job, file, create = true) {
   const canonical = (await pickerDirectory(job.directory)).path;
   if (canonical !== job.directory) throw modelError('The models folder has moved; choose its current location');
-  let parent = await fs.open('/', constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+  let parent = await fs.open('/', directoryPathFlags);
   const pieces = file.outputPath.split('/');
   const filename = pieces.pop();
   try {
     // A canonical absolute path can acquire a symlink in an ancestor between
     // validation and open. Pin every component, including the selected root.
     for (const component of canonical.split('/').filter(Boolean)) {
-      const child = await fs.open(`/proc/self/fd/${parent.fd}/${component}`, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+      const child = await fs.open(`/proc/self/fd/${parent.fd}/${component}`, directoryPathFlags);
       await parent.close(); parent = child;
     }
+    // Reopen the pinned writable root for fsync; an O_PATH handle cannot sync.
+    const writableRoot = await fs.open(`/proc/self/fd/${parent.fd}/.`, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    await parent.close(); parent = writableRoot;
     for (const component of pieces) {
       const target = `/proc/self/fd/${parent.fd}/${component}`;
       if (create) await fs.mkdir(target, { mode: 0o700 }).catch(error => { if (error.code !== 'EEXIST') throw error; });
@@ -87,6 +94,20 @@ async function outputDirectory(job, file, create = true) {
 }
 const statOrNull = file => fs.lstat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
 const sameFile = (stat, identity) => stat?.isFile() && identity && stat.dev === identity.dev && stat.ino === identity.ino;
+
+async function publish(destination) {
+  if (process.platform !== 'android') return fs.link(destination.partial, destination.final);
+  // Android app SELinux denies hard links. Termux coreutils uses native
+  // renameat2(RENAME_NOREPLACE); inherit the pinned directory, not its pathname.
+  await new Promise((resolve, reject) => {
+    const child = spawn('mv', ['--no-clobber', '--no-target-directory', '--',
+      '/proc/self/fd/3/' + path.basename(destination.partial), '/proc/self/fd/3/' + path.basename(destination.final)],
+    { stdio: ['ignore', 'ignore', 'ignore', destination.parent.fd] });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 10000);
+    child.once('error', error => { clearTimeout(timer); reject(error); });
+    child.once('close', code => { clearTimeout(timer); code === 0 ? resolve() : reject(modelError('Could not publish the completed model')); });
+  });
+}
 
 async function checkpoint(job, file, output) {
   await output.sync();
@@ -178,16 +199,17 @@ async function downloadFile(job, file, signal) {
       throw modelError('The downloaded bytes did not match Hugging Face; resume to retry');
     }
     await checkpoint(job, file, output);
-    // link() publishes without replacing an existing name; rename() would clobber.
+    // Publish without replacing an existing name; plain rename() would clobber.
     // Check that no outside writer replaced/hard-linked the partial meanwhile.
     const stat = await fs.lstat(destination.partial);
     if (!sameFile(stat, file.partialIdentity) || stat.nlink !== 1 || stat.size !== file.size) throw modelError('The partial download changed before completion');
-    await fs.link(destination.partial, destination.final).catch(error => { if (error.code === 'EEXIST') throw modelError('A destination file appeared during download; it was not replaced'); throw error; });
+    await publish(destination).catch(error => { if (error.code === 'EEXIST') throw modelError('A destination file appeared during download; it was not replaced'); throw error; });
     if (!sameFile(await fs.lstat(destination.final), file.partialIdentity)) {
-      await fs.unlink(destination.final);
-      throw modelError('The partial download was replaced during publication');
+      throw modelError('A destination file appeared during download; it was not replaced');
     }
-    await fs.unlink(destination.partial); await destination.parent.sync();
+    const remaining = await statOrNull(destination.partial);
+    if (sameFile(remaining, file.partialIdentity)) await fs.unlink(destination.partial);
+    await destination.parent.sync();
     file.identity = file.partialIdentity; delete file.partialIdentity;
     file.status = 'complete'; await persist(job);
   } finally {
