@@ -199,7 +199,15 @@ import mozilla.components.ui.icons.R as iconsR
 open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, CrashActionDispatcher {
     var bashKittenAgentPanel: com.bashkitten.AgentPanel? = null
         private set
+    private var bashKittenMenuFromAgent = false
+    private var bashKittenBrowserUiBack = false
     fun showBashKittenAgent() { bashKittenAgentPanel?.showAgent() }
+
+    private fun openBashKittenBrowserMenu() {
+        bashKittenMenuFromAgent = true
+        // The protected Agent has no ordinary page actions or extension menu context.
+        navHost.navController.navigate(NavGraphDirections.actionGlobalMenuDialogFragment(MenuAccessPoint.Home))
+    }
 
     @VisibleForTesting
     internal lateinit var binding: ActivityHomeBinding
@@ -386,11 +394,21 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         dispatcher = onBackPressedDispatcher,
     ) {
         override fun handleOnBackPressed() {
-            if (bashKittenAgentPanel?.isShownAgent == true) { bashKittenAgentPanel?.showBrowser(); return }
+            if (bashKittenAgentPanel?.isShownAgent == true && navHost.navController.currentDestination?.id != R.id.menuDialogFragment) {
+                bashKittenAgentPanel?.showBrowser()
+                return
+            }
             if (shouldUsePredictiveBackLongPress()) {
                 backLongPressJob?.cancel()
             }
-            super.handleOnBackPressed()
+            bashKittenBrowserUiBack = true
+            try {
+                super.handleOnBackPressed()
+            } finally {
+                // FragmentManager may enqueue the pop; let that navigation finish
+                // before distinguishing another explicit browser navigation.
+                binding.root.post { bashKittenBrowserUiBack = false }
+            }
         }
 
         private fun isButtonPress(backEvent: BackEventCompat): Boolean {
@@ -524,12 +542,34 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         }
 
         if (this !is ExternalAppBrowserActivity) {
-            bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime)
+            bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime, ::openBashKittenBrowserMenu)
             setContentView(bashKittenAgentPanel)
+            bashKittenMenuFromAgent = savedInstanceState?.getBoolean("bashkitten.menuFromAgent") == true
+            var previousDestination = navHost.navController.currentDestination?.id
+            navHost.navController.addOnDestinationChangedListener { _, destination, _ ->
+                val content = destination.id == R.id.homeFragment || destination.id == R.id.browserFragment
+                val menu = destination.id == R.id.menuDialogFragment
+                if (content && bashKittenMenuFromAgent) {
+                    if (bashKittenBrowserUiBack || previousDestination == R.id.menuDialogFragment) {
+                        bashKittenAgentPanel?.showAgent()
+                    } else {
+                        bashKittenAgentPanel?.showBrowser()
+                    }
+                    bashKittenMenuFromAgent = false
+                }
+                // Native settings and libraries use the full Fenix pane; the Agent
+                // document stays attached and returns when the user goes back.
+                bashKittenAgentPanel?.setBrowserUiVisible(!content && !menu)
+                previousDestination = destination.id
+            }
             lifecycleScope.launch {
+                var hadTabs = components.core.store.state.tabs.isNotEmpty()
                 components.core.store.flow().map { it.tabs.isEmpty() }
                     .distinctUntilChanged()
-                    .collect { empty -> if (empty) bashKittenAgentPanel?.showAgent() }
+                    .collect { empty ->
+                        if (hadTabs && empty) bashKittenAgentPanel?.showAgent()
+                        hadTabs = !empty
+                    }
             }
             if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch()
         } else {
@@ -898,6 +938,12 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     }
 
     @CallSuper
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("bashkitten.menuFromAgent", bashKittenMenuFromAgent)
+        super.onSaveInstanceState(outState)
+    }
+
+    @CallSuper
     override fun onDestroy() {
         bashKittenAgentPanel?.destroy()
         val startTimeProfiler = components.core.engine.profiler?.getProfilerTime()
@@ -1148,6 +1194,10 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         // after navigating to another fragment like Settings or Bookmarks, and then back this
         // key event is somehow getting consumed before it reaches onKeyDown or onKeyUp.
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_MENU) {
+            if (bashKittenAgentPanel?.isShownAgent == true) {
+                openBashKittenBrowserMenu()
+                return true
+            }
             val navHostFragment =
                 supportFragmentManager.findFragmentById(R.id.container) as? NavHostFragment
             val currentFragment = navHostFragment?.childFragmentManager?.primaryNavigationFragment

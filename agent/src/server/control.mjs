@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// One private controller owns the complete Agent lifecycle; closing UI is independent.
+// One private controller owns Agent. Linux may bind it to its native browser;
+// Termux and an explicit standalone CLI keep their independent lifetime.
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import { openSync, closeSync } from 'node:fs';
@@ -92,6 +93,7 @@ async function serve() {
   await fs.writeFile(lock, String(process.pid), { mode: 0o600 });
   let state = await readJson(stateFile, { web: false }), serial = Promise.resolve();
   let starting = false, stopping = false, lastError = state.error || null, restartPending = false, exiting = false;
+  let browserOwner = null, browserWatcher = null, browserClosing = false;
   const manifestFile = path.join(bundledRoot, 'build-platform.json');
   const packageFile = (await readJson(manifestFile, null))?.installationStamp || manifestFile;
   const revision = (await readJson(packageFile, null))?.revision;
@@ -117,6 +119,53 @@ async function serve() {
     serial = serial.then(async () => { await syncManagedLlamaProvider(current); await stack.reload(); }).catch(error => { lastError = error.message; });
   });
   async function persist() { await writeJson(stateFile, { ...state, error: lastError }); }
+  async function adoptBrowser(value) {
+    if (platform !== 'linux') throw Error('Browser-owned Agent is only available on Linux');
+    if (!Number.isInteger(value?.pid) || value.pid < 2 || !/^[1-9][0-9]*$/.test(value.started || '')) throw Error('Invalid browser process identity');
+    if (browserClosing) throw Error('The previous browser is stopping Agent; retry Turn on');
+    if (browserOwner) {
+      if (browserOwner.pid !== value.pid || browserOwner.started !== value.started) throw Error('Agent is already owned by another browser process');
+      return;
+    }
+    if (await processStart(value.pid) !== value.started || (await fs.stat(`/proc/${value.pid}`)).uid !== process.getuid()) throw Error('The browser process is no longer running');
+    const child = spawn(binary('runtime-guard'), ['wait-owner', String(value.pid), value.started], { stdio: ['ignore', 'pipe', 'inherit'] });
+    browserWatcher = child;
+    const closed = error => {
+      if (browserWatcher !== child || exiting) return;
+      browserWatcher = null; browserClosing = true;
+      serial = serial.then(async () => { await turnOff(error); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; });
+    };
+    child.once('exit', code => closed(code === 0 ? null : 'Browser lifetime tracking stopped'));
+    child.once('error', error => closed(error.message));
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => finish(Error('Could not track the browser process')), 5000);
+        let output = '';
+        const finish = (error) => {
+          clearTimeout(timer);
+          child.stdout.removeListener('data', data);
+          child.removeListener('exit', earlyExit);
+          child.removeListener('error', finish);
+          error ? reject(error) : resolve();
+        };
+        const data = bytes => {
+          output += bytes;
+          if (output === 'ready\n') finish();
+          else if (output.length > 64 || output.includes('\n')) finish(Error('Invalid browser lifetime tracker response'));
+        };
+        const earlyExit = () => finish(Error('The browser lifetime tracker could not start'));
+        child.stdout.on('data', data);
+        child.once('exit', earlyExit);
+        child.once('error', finish);
+      });
+      if (browserClosing || await processStart(value.pid) !== value.started) throw Error('The browser process is no longer running');
+      browserOwner = { pid: value.pid, started: value.started };
+    } catch (error) {
+      browserClosing = true;
+      child.kill('SIGTERM');
+      throw error;
+    }
+  }
   async function startWeb() {
     if (starting || stopping || stack.ready) return;
     starting = true; lastError = null;
@@ -130,23 +179,32 @@ async function serve() {
       await persist(); throw error;
     } finally { starting = false; }
   }
+  async function stopWorkers() {
+    const workers = await Promise.allSettled((await allMeta()).map(meta => stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false))));
+    const failure = workers.find(result => result.status === 'rejected');
+    if (failure) throw failure.reason;
+  }
   async function stopGroup() {
     await stack.stopIngress();
-    const workers = await Promise.allSettled((await allMeta()).map(meta => stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false))));
+    // Complete the rest of group cleanup even if a worker needs the guard's
+    // final descendant cleanup.
+    const workerError = await stopWorkers().then(() => null, error => error);
     if (platform === 'linux') await stopManagedLlama();
     await stack.stop();
     await releaseWake();
-    const failure = workers.find(result => result.status === 'rejected');
-    if (failure) throw failure.reason;
+    if (workerError) throw workerError;
   }
   async function turnOff(error = null) {
     state.web = false; stopping = true;
     if (error) lastError = error;
     await persist();
     await stack.stopIngress();
-    // No new prompts can enter while an existing package transaction finishes.
-    if (jobs.busy) { await jobs.cancel(); return; }
-    try { await stopGroup(); stopping = false; await persist(); }
+    try {
+      // Stop Pi now while an existing package transaction finishes safely.
+      // Cancellation lets the current native package step finish.
+      if (jobs.busy) { await jobs.cancel(); await stopWorkers(); return; }
+      await stopGroup(); stopping = false; await persist();
+    }
     catch (failure) { lastError = failure.message; await persist(); throw failure; }
   }
   async function status() {
@@ -154,7 +212,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
+    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, browserOwner, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
       packages: { ...await updateStatus(), job: await jobs.status() },
       web: { status: stopping ? 'stopping' : starting || stack.reconfiguring ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
         desired: state.web, url: stack.ready || stack.reconfiguring ? stack.origin : undefined, error: lastError, ...await stack.status() },
@@ -170,6 +228,12 @@ async function serve() {
   async function action(command, value = {}) {
     if (command === 'status') return status();
     if (exiting) throw Error('Agent controller is completing shutdown; retry Turn on');
+    if (command === 'browser-shutdown') {
+      if (!browserOwner || browserOwner.pid !== value.browserOwner?.pid || browserOwner.started !== value.browserOwner?.started) throw Error('This browser does not own the local Agent');
+      browserClosing = true;
+      await turnOff(); if (!stopping) scheduleExit();
+      return status();
+    }
     if (command === 'get_remote_access') return remote.status();
     if (command === 'set_remote_access') return remote.setEnabled(value.enabled);
     if (command === 'create_remote_connection') return remote.create(value);
@@ -195,7 +259,9 @@ async function serve() {
     } else if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
       if (command === 'stop' || command === 'shutdown') { await turnOff(); if (!stopping) scheduleExit(); }
       else {
+        if (browserClosing) throw Error('The browser is stopping Agent');
         if (stopping || jobs.busy && command === 'restart') throw Error('Wait for package maintenance to finish');
+        if (value.browserOwner) await adoptBrowser(value.browserOwner);
         if (command === 'restart') await stopGroup();
         state.web = true; lastError = null; await persist(); await startWeb();
       }
@@ -251,6 +317,7 @@ async function serve() {
     if (exiting) return; exiting = true;
     setTimeout(async () => {
       clearInterval(monitor);
+      browserWatcher?.kill('SIGTERM'); browserWatcher = null;
       await fs.rm(lock, { force: true });
       server.close(() => { ownership.close(); process.exit(0); });
     }, 100).unref();
@@ -294,10 +361,14 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     }
   } else {
     try {
-      await ensureManager();
       const input = process.argv[3];
       const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin, 65536)).toString() || '{}') : input ? JSON.parse(input) : {};
-      console.log(JSON.stringify(await controlRequest(command, command === 'status' ? undefined : value)));
+      if (command !== 'browser-shutdown') await ensureManager();
+      const result = await controlRequest(command, command === 'status' ? undefined : value).catch(error => {
+        if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };
+        throw error;
+      });
+      console.log(JSON.stringify(result));
     } catch (error) { console.error(JSON.stringify({ error: error.message })); process.exitCode = 1; }
   }
 }

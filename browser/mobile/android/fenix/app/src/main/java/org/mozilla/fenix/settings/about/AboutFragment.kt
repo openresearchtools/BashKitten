@@ -223,6 +223,10 @@ class AboutFragment(
             ),
 
             AboutPageItem(
+                AboutItem.ExternalLink(LICENSING_INFO, ABOUT_LICENSE_URL),
+                getString(R.string.bashkitten_engine_licenses),
+            ),
+            AboutPageItem(
                 AboutItem.Libraries,
                 getString(R.string.about_other_open_source_libraries),
             ),

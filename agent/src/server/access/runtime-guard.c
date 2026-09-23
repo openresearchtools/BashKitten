@@ -3,12 +3,14 @@
 #include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -118,6 +120,47 @@ static void child_setup(pid_t expected_parent, int death_signal) {
     if (sigprocmask(SIG_SETMASK, &empty, NULL) != 0) _exit(125);
 }
 
+/* The desktop controller adopts its browser's lifetime without a lease or a
+ * heartbeat. A pidfd cannot silently become a different process after PID reuse.
+ * This helper remains a child of the existing controller/subreaper; it never
+ * signals an arbitrary PID or survives the controller that requested it. */
+static int wait_owner(const char *pid_text, const char *started_text) {
+    pid_t parent = getppid();
+    child_setup(parent, SIGKILL);
+    char *end;
+    errno = 0;
+    long number = strtol(pid_text, &end, 10);
+    if (errno || *end || number <= 1 || number > INT_MAX) return 64;
+    pid_t pid = (pid_t)number;
+    errno = 0;
+    unsigned long long started = strtoull(started_text, &end, 10);
+    if (errno || *end || !started) return 64;
+    struct identity before, after;
+    if (!identify(pid, &before) || before.started != started) return 125;
+    int descriptor = (int)syscall(SYS_pidfd_open, pid, 0);
+    if (descriptor < 0) {
+        perror("runtime-guard: watch browser");
+        return 125;
+    }
+    if (!identify(pid, &after) || after.started != started) {
+        close(descriptor);
+        return 125;
+    }
+    struct pollfd owner = {.fd = descriptor, .events = POLLIN};
+    if (poll(&owner, 1, 0) != 0) {
+        close(descriptor);
+        return 125;
+    }
+    if (puts("ready") < 0 || fflush(stdout) != 0) {
+        close(descriptor);
+        return 125;
+    }
+    int result;
+    do { result = poll(&owner, 1, -1); } while (result < 0 && errno == EINTR);
+    close(descriptor);
+    return result > 0 && (owner.revents & POLLIN) ? 0 : 125;
+}
+
 static bool release_wake_lock(void) {
     if (!wake_owned) return true;
     pid_t owner = getpid(), child = fork();
@@ -156,6 +199,8 @@ static bool release_wake_lock(void) {
 }
 
 int main(int argc, char **argv) {
+    if (argc == 4 && strcmp(argv[1], "wait-owner") == 0)
+        return wait_owner(argv[2], argv[3]);
     if (argc < 4 || strcmp(argv[argc - 1], "serve") != 0) {
         fprintf(stderr, "Usage: runtime-guard <node> <control.mjs> serve\n");
         return 64;

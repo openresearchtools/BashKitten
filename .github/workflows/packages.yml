@@ -131,8 +131,9 @@ jobs:
           jq -e '.web.status == "running"' status.json
           endpoint=$(jq -r '.web.url' status.json)
           jq -r '.web.identity.caPem' status.json >ca.pem
-          curl --fail --silent --show-error --cacert ca.pem "$endpoint/about" >about.html
-          grep -qi bashkitten about.html
+          curl --fail --silent --show-error --cacert ca.pem "$endpoint/favicon.ico" >favicon.ico
+          test -s favicon.ico
+          test -s /usr/lib/bashkitten/licenses.json
           locked=$(curl --silent --show-error --cacert ca.pem -H 'Accept: application/json' \
             -o /dev/null -w '%{http_code}' "$endpoint/api/projects")
           case "$locked" in 401|403|302) ;; *) echo "Unauthenticated API returned $locked" >&2; exit 1 ;; esac

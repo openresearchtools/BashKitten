@@ -7,11 +7,11 @@ import android.widget.TextView;
 import java.io.InputStream;
 import org.mozilla.geckoview.*;
 
-/** The shared About renderer is bundled and remains available before login or service setup. */
+/** Bundled component notices remain available before login or service setup. */
 public final class LicensesActivity extends ProductActivity {
     private GeckoSession session;
     @Override public void onCreate(Bundle saved) {
-        super.onCreate(saved); setTitle("About BashKitten");
+        super.onCreate(saved); setTitle("Bundled component licenses");
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         BrowserApp app = BrowserApp.get(this);
         session = new GeckoSession(new GeckoSessionSettings.Builder().contextId("bashkitten-agent-ui-about").build());

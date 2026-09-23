@@ -294,12 +294,6 @@ fun MainMenu(
                 beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_settings_24),
                 onClick = onSettingsButtonClick,
             )
-            val appContext = LocalContext.current
-            MenuItem(
-                label = "About and licenses",
-                beforeIconPainter = painterResource(id = iconsR.drawable.mozac_ic_information_24),
-                onClick = { appContext.startActivity(android.content.Intent(appContext, com.bashkitten.LicensesActivity::class.java)) },
-            )
         }
 
         if (showQuitMenu) {

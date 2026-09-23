@@ -35,12 +35,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private String renderedState = "";
     private boolean shown = true;
     private boolean split;
+    private boolean browserUi;
     private boolean startedBootstrap;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     private String setupId;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312;
-    public AgentPanel(Activity activity, View browser, GeckoRuntime engine) {
+    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, Runnable openBrowserMenu) {
         super(activity); this.activity = activity; this.browser = browser;
         app = BrowserApp.get(activity); runtime = app.agent;
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
@@ -54,7 +55,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         location = button("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
         power = button("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
-        Button menu = button("☰", () -> menu()); menu.setContentDescription("Agent menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
+        Button menu = button("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
         hideAgent = button("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
@@ -87,17 +88,18 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private Button button(String label, Runnable action) { Button b = new Button(activity); b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
-    public void showAgent() { shown = true; split = false; layoutPanels(); }
-    public void showBrowser() { shown = false; split = true; layoutPanels(); }
-    public boolean isShownAgent() { return shown; }
+    public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
+    public void showBrowser() { shown = false; split = true; browserUi = false; layoutPanels(); }
+    public void setBrowserUiVisible(boolean visible) { browserUi = visible; layoutPanels(); }
+    public boolean isShownAgent() { return shown && !browserUi; }
     public void toggle() { if (shown) showBrowser(); else showAgent(); }
     private void layoutPanels() {
-        boolean sideBySide = split && !shown && getResources().getConfiguration().screenWidthDp >= 600;
-        boolean agentVisible = shown || sideBySide;
+        boolean sideBySide = !browserUi && split && !shown && getResources().getConfiguration().screenWidthDp >= 600;
+        boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
         hideAgent.setVisibility(sideBySide ? VISIBLE : GONE);
         agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
-        browser.setVisibility(sideBySide || !shown ? VISIBLE : GONE);
+        browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
         browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
         runtime.visible = agentVisible;
         if (runtime.session != null) runtime.session.setActive(agentVisible);
@@ -170,6 +172,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             @Override public void onExternalResponse(GeckoSession s, WebResponse response) { download(response); }
         });
         session.setPromptDelegate(new GeckoSession.PromptDelegate() {
+            @Override public GeckoResult<PromptResponse> onChoicePrompt(GeckoSession s, ChoicePrompt prompt) {
+                return AgentChoicePrompt.show(activity, prompt);
+            }
             @Override public GeckoResult<PromptResponse> onFilePrompt(GeckoSession s, FilePrompt prompt) {
                 if (fileResult != null) return GeckoResult.fromValue(prompt.dismiss());
                 filePrompt = prompt; fileResult = new GeckoResult<>();
@@ -187,13 +192,29 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public boolean activityResult(int request, int result, Intent data) {
         if (request != FILE_REQUEST || fileResult == null) return false;
+        GeckoSession.PromptDelegate.FilePrompt prompt = filePrompt;
+        GeckoResult<GeckoSession.PromptDelegate.PromptResponse> response = fileResult;
+        filePrompt = null; fileResult = null;
         if (result == Activity.RESULT_OK && data != null) {
             ArrayList<Uri> uris = new ArrayList<>();
             if (data.getClipData() != null) for (int i=0;i<data.getClipData().getItemCount();i++) uris.add(data.getClipData().getItemAt(i).getUri());
             else if (data.getData() != null) uris.add(data.getData());
-            fileResult.complete(uris.isEmpty() ? filePrompt.dismiss() : filePrompt.confirm(activity, uris.toArray(new Uri[0])));
-        } else fileResult.complete(filePrompt.dismiss());
-        filePrompt = null; fileResult = null; return true;
+            if (uris.isEmpty()) response.complete(prompt.dismiss());
+            else if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.FOLDER)
+                response.complete(prompt.confirm(activity, uris.toArray(new Uri[0])));
+            else new Thread(() -> {
+                try {
+                    Uri[] files = AgentFilePicker.copy(app, uris);
+                    app.main.post(() -> { if (!prompt.isComplete()) response.complete(prompt.confirm(app, files)); });
+                } catch (Exception exception) {
+                    app.main.post(() -> {
+                        if (!prompt.isComplete()) response.complete(prompt.dismiss());
+                        error("Selected files could not be read. Choose readable files totaling less than 32 MiB.");
+                    });
+                }
+            }, "agent-file-picker").start();
+        } else response.complete(prompt.dismiss());
+        return true;
     }
     public void permissionResult(int request) { if (request == TERMUX_PERMISSION && runtime.termux.permissionGranted()) runtime.turnOn(); }
     private void renderSetup() {
@@ -272,23 +293,15 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             }catch(Exception e){app.main.post(()->error("Unable to read the official Termux release. Try again when online."));}
         },"termux-release").start();
     }
-    private void menu() {
-        PopupMenu menu=new PopupMenu(activity,bar.getChildAt(3));
-        menu.getMenu().add("Packages").setOnMenuItemClickListener(i->{packages();return true;});
-        menu.getMenu().add(app.remoteControl.active() ? "Disconnect browser control" : "Allow Agent browser control").setOnMenuItemClickListener(i -> {
-            if (app.remoteControl.active()) app.remoteControl.disconnect();
-            else app.remoteControl.authorize(activity, runtime.session, runtime.url, runtime.selected.equals("local") ? "Local Agent" : "Remote Agent");
-            return true;
-        });
-        menu.getMenu().add("Agent access").setOnMenuItemClickListener(i->{activity.startActivity(new Intent(activity,AgentAccessActivity.class));return true;});
-        menu.getMenu().add("Check for browser update").setOnMenuItemClickListener(i -> { checkBrowserUpdate(); return true; });
-        menu.getMenu().add("Notifications").setOnMenuItemClickListener(i->{notifications();return true;});
-        menu.getMenu().add("Appearance").setOnMenuItemClickListener(i->{appearance();return true;});
-        menu.getMenu().add("About and licenses").setOnMenuItemClickListener(i->{activity.startActivity(new Intent(activity,LicensesActivity.class));return true;});
-        menu.getMenu().add("New tab").setOnMenuItemClickListener(i->{app.create(BrowserApp.USER,false,"about:blank",tab->{app.show(tab);showBrowser();},app::message);return true;});menu.show();
+    public void browserControl() {
+        if (app.remoteControl.active()) {
+            new AlertDialog.Builder(activity).setTitle("Agent browser control")
+                .setMessage("This Agent can control ordinary browser tabs.")
+                .setPositiveButton("Disconnect", (d,w) -> app.remoteControl.disconnect())
+                .setNegativeButton("Cancel", null).show();
+        } else app.remoteControl.authorize(activity, runtime.session, runtime.url, runtime.selected.equals("local") ? "Local Agent" : "Remote Agent");
     }
-    private void appearance(){String[] modes={"System","Light","Dark"};new AlertDialog.Builder(activity).setTitle("Appearance").setSingleChoiceItems(modes,app.policies.getInt("agent.theme",0),(d,i)->{app.policies.edit().putInt("agent.theme",i).apply();androidx.appcompat.app.AppCompatDelegate.setDefaultNightMode(i==1?androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_NO:i==2?androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES:androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);d.dismiss();}).show();}
-    private void notifications() {
+    public void notifications() {
         boolean[] enabled = {app.policies.getBoolean("agent.notifications", false), app.policies.getBoolean("agent.notifications.hidden", true), app.policies.getBoolean("agent.notifications.preview", true)};
         new AlertDialog.Builder(activity).setTitle("Completed turns")
             .setMultiChoiceItems(new String[]{"Notify when a turn completes", "Only while Agent is hidden", "Include message preview"}, enabled, (d,i,checked) -> enabled[i] = checked)
@@ -298,7 +311,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 if (enabled[0] && Build.VERSION.SDK_INT >= 33) activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION);
             }).setNegativeButton("Cancel", null).show();
     }
-    private void checkBrowserUpdate() {
+    public void checkBrowserUpdate() {
         app.message("Checking for a BashKitten update…");
         new Thread(() -> {
             try {

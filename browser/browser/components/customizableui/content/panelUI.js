@@ -246,7 +246,7 @@ const PanelUI = {
    *
    * @param aEvent the event that triggers the toggle.
    */
-  toggle(aEvent) {
+  toggle(aEvent, aAnchor) {
     // Don't show the panel if the window is in customization mode,
     // since this button doubles as an exit path for the user in this case.
     if (document.documentElement.hasAttribute("customizing")) {
@@ -256,7 +256,7 @@ const PanelUI = {
     if (this.panel.state == "open") {
       this.hide();
     } else if (this.panel.state == "closed") {
-      this.show(aEvent);
+      this.show(aEvent, aAnchor);
     }
   },
 
@@ -267,7 +267,7 @@ const PanelUI = {
    *
    * @param aEvent the event (if any) that triggers showing the menu.
    */
-  show(aEvent) {
+  show(aEvent, aAnchor = this.menuButton) {
     this._ensureShortcutsShown();
     (async () => {
       await this.ensureReady();
@@ -292,7 +292,7 @@ const PanelUI = {
         domEvent = aEvent;
       }
 
-      let anchor = this._getPanelAnchor(this.menuButton);
+      let anchor = this._getPanelAnchor(aAnchor);
       await PanelMultiView.openPopup(this.panel, anchor, {
         triggerEvent: domEvent,
       });
@@ -439,6 +439,7 @@ const PanelUI = {
         setTimeout(() => BrowserCommands.fullScreen(), 0);
         break;
       case "appMenu-settings-button":
+        window.BashKittenAgent?.browse();
         openPreferences();
         break;
       case "appMenu-more-button2":

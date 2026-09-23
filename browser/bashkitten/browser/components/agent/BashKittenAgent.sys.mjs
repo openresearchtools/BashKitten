@@ -1,19 +1,37 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
-import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
+import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const HTML = "http://www.w3.org/1999/xhtml";
 const CONTROLLER = "/usr/bin/bashkittenctl";
-const FILE_ROOT = "/usr/lib/bashkitten";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, { BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs" });
 const contexts = new Map();
 const ownedViews = new WeakMap();
 let actorRegistered = false;
+let browserOwner;
+
+async function localBrowserOwner() {
+  if (!browserOwner) {
+    browserOwner = (async () => {
+      const pid = Services.appinfo.processID;
+      const stat = await IOUtils.readUTF8(`/proc/${pid}/stat`);
+      const started = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19];
+      if (!/^[1-9][0-9]*$/.test(started)) throw new Error("Could not identify the browser process.");
+      const owner = { pid, started };
+      AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: stop owned local Agent", async () => {
+        try { await control("browser-shutdown", { browserOwner: owner }); }
+        catch (error) { console.error("BashKitten Agent shutdown failed", error); }
+      });
+      return owner;
+    })().catch(error => { browserOwner = null; throw error; });
+  }
+  return browserOwner;
+}
 
 function html(doc, name, attrs = {}, text) {
   const node = doc.createElementNS(HTML, name);
@@ -38,9 +56,10 @@ async function readPipe(pipe) {
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "account-create", "account-enroll", "account-totp", "hosting-client", "project-root"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "account-create", "account-enroll", "account-totp", "hosting-client", "project-root"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
+  if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
   const process = await Subprocess.call({
     command: CONTROLLER, arguments: [command, "--stdin"], stderr: "pipe",
   });
@@ -124,8 +143,8 @@ class AgentView {
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
     bar.append(this.power);
-    const menu = html(doc, "button", { type: "button", "aria-label": "Agent menu" }, "☰");
-    menu.addEventListener("click", () => this.menu());
+    const menu = html(doc, "button", { type: "button", "aria-label": "Browser menu", "aria-haspopup": "menu" }, "☰");
+    menu.addEventListener("click", event => this.win.PanelUI.toggle(event, menu));
     bar.append(menu);
     this.state = html(doc, "section", { id: "bashkitten-agent-state" });
     this.viewBox = xul(doc, "vbox", { id: "bashkitten-agent-views", flex: "1" });
@@ -143,8 +162,8 @@ class AgentView {
     });
     doc.getElementById("urlbar-container").before(this.paneToggle);
     const appMenu = this.win.PanelUI.mainView.querySelector("#appMenu-settings-button");
-    const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-agent", label: "Agent · Appearance · About", class: "subviewbutton" });
-    nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.menu(); });
+    const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-about", label: "About BashKitten", class: "subviewbutton" });
+    nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.win.openAboutDialog(); });
     appMenu.before(nativeMenu);
     for (const item of doc.querySelectorAll('[command="cmd_newNavigator"], [command="Tools:PrivateBrowsing"], [command^="Profiles:"], #key_newNavigator, #key_privatebrowsing')) item.remove();
     this.observer = { observe: () => this.refreshRemotes().catch(console.error) };
@@ -292,14 +311,14 @@ class AgentView {
   }
 
   async refreshRemotes() {
-    const selected = this.remote?.id || "";
+    const remotes = await AgentRemotes.list();
     this.choice.replaceChildren(html(this.doc, "option", { value: "" }, "Local"));
-    for (const remote of await AgentRemotes.list()) {
+    for (const remote of remotes) {
       if (remote.kind === "llama") continue;
       this.choice.append(html(this.doc, "option", { value: remote.id }, remote.name));
     }
     this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"));
-    this.choice.value = selected;
+    this.choice.value = this.selection;
   }
 
   async choose(id) {
@@ -400,7 +419,9 @@ class AgentView {
     }
     const url = new URL(web.url);
     if (url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password) throw new Error("The local controller supplied an invalid HTTPS address.");
-    if (this.currentIdentity && this.currentIdentity !== web.identity.caSha256) throw new Error("The local Agent certificate identity changed. Reconnect from settings after checking the service.");
+    if (this.currentIdentity && this.currentIdentity !== web.identity.caSha256) {
+      throw Object.assign(new Error("The local Agent certificate identity changed. Check the service before trusting its replacement."), { code: "local_identity_changed" });
+    }
     if (!this.localConnection || this.localConnection.url !== new URL(web.url).href || this.currentIdentity !== web.identity.caSha256) {
       await AgentRemotes.trustLocal({ url: web.url, ...web.identity });
       this.localConnection = await AgentRemotes.activate("local");
@@ -516,6 +537,11 @@ class AgentView {
     this.off = !stopping;
     if (this.power) this.power.textContent = stopping ? "Retry Turn off" : "Turn on";
     if (this.state) this.message(stopping ? "Shutdown not confirmed" : "Agent unavailable", error.message || String(error));
+    if (!this.remote && error.code === "local_identity_changed") {
+      const review = html(this.doc, "button", { type: "button" }, "Review changed connection identity");
+      review.addEventListener("click", () => this.localIdentity());
+      this.state.append(review);
+    }
     console.error("BashKitten Agent operation failed", error);
   }
 
@@ -533,28 +559,6 @@ class AgentView {
     this.doc.documentElement.append(dialog);
     dialog.showModal();
     return { dialog, content, actions };
-  }
-
-  menu() {
-    const { dialog, content } = this.dialog("BashKitten");
-    const add = (label, handler) => {
-      const button = html(this.doc, "button", { type: "button", style: "display:block;width:100%;margin:8px 0;text-align:start" }, label);
-      button.addEventListener("click", () => { dialog.close(); handler(); });
-      content.append(button);
-    };
-    add("Remotes", () => this.remotes());
-    if (!this.remote) {
-      add("Local connection identity", () => this.localIdentity());
-    }
-    for (const [name, value] of [["System", 2], ["Light", 1], ["Dark", 0]]) {
-      add(`${Services.prefs.getIntPref("layout.css.prefers-color-scheme.content-override", 2) === value ? "✓ " : ""}${name}`, () => {
-        Services.prefs.setIntPref("layout.css.prefers-color-scheme.content-override", value);
-        Services.prefs.setIntPref("ui.systemUsesDarkTheme", value === 0 ? 1 : 0);
-        if (value === 2) Services.prefs.clearUserPref("ui.systemUsesDarkTheme");
-      });
-    }
-    add("About · Licenses", () => this.about());
-    add("Quit BashKitten", () => this.win.goQuitApplication());
   }
 
   async localIdentity() {
@@ -827,26 +831,23 @@ class AgentView {
     await this.connect({ ...entry.connection, url: origin + "/login?rd=" + encodeURIComponent(returnTo) }, entry.local, { authFor: original });
   }
 
-  async about() {
-    const { content } = this.dialog("About BashKitten");
+  async licenses() {
+    const { content } = this.dialog("Bundled component licenses");
     try {
-      const file = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
-      file.initWithPath(`${FILE_ROOT}/src/web/about.js`);
-      Services.scriptloader.loadSubScriptWithOptions(Services.io.newFileURI(file).spec, {
-        target: this.win,
-        // This exact read-only package file is shared with the web About view.
-        allowUnsafeURL: true,
-      });
-      const build = await IOUtils.readJSON(`${FILE_ROOT}/build-platform.json`);
-      this.win.renderBashKittenAbout(content, {
-        version: build.version || Services.appinfo.version,
-        description: `A browser interface for the Pi coding agent. Firefox ${AppConstants.MOZ_APP_VERSION_DISPLAY}. No warranty.`,
-        license: "AGPL-3.0-or-later",
-        notice: "BashKitten includes its browser, Agent server, Pi, search and authentication components. Node, Python and Linux system libraries such as GTK are installed separately and governed by their package licenses. Mozilla, Waterfox, BrowserOS and all other retained components keep their own notices.",
-        loadLicenses: () => IOUtils.readJSON("/usr/lib/bashkitten/licenses.json"),
-      });
+      const records = await IOUtils.readJSON("/usr/lib/bashkitten/licenses.json");
+      content.append(html(this.doc, "p", {}, "Full notices for the bundled browser, Agent, Pi, search and authentication components. Node, Python and Linux system libraries retain their separately installed package licenses."));
+      for (const record of records) {
+        const detail = html(this.doc, "details");
+        detail.append(html(this.doc, "summary", {}, [record.name, record.version, record.license].filter(Boolean).join(" · ")));
+        detail.addEventListener("toggle", () => {
+          if (detail.open && detail.childElementCount === 1) {
+            detail.append(html(this.doc, "pre", { style: "max-height:24rem;overflow:auto" }, record.text));
+          }
+        });
+        content.append(detail);
+      }
     } catch (error) {
-      content.textContent = `BashKitten ${Services.appinfo.version}. AGPL-3.0-or-later. Offline license files could not be opened: ${error.message || error}`;
+      content.textContent = `Offline license files could not be opened: ${error.message || error}`;
     }
   }
 

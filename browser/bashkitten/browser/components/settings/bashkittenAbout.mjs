@@ -36,7 +36,7 @@ Preferences.addSetting({
   id: "bashkittenAboutLicenses",
   onUserClick(event) {
     event.preventDefault();
-    window.browsingContext.topChromeWindow.BashKittenAgent.about();
+    window.browsingContext.topChromeWindow.BashKittenAgent.licenses();
   },
 });
 Preferences.addSetting({ id: "bashkittenPackageUpdatesDescription" });

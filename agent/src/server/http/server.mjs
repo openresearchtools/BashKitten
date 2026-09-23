@@ -12,7 +12,6 @@ import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, read
 import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
-import { licenses } from '../licenses.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
@@ -156,8 +155,6 @@ function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw 
 const html = await fs.readFile(path.join(here, '../../web/web_ui.html'));
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
-const aboutHtml = await fs.readFile(path.join(here, '../../web/about.html'));
-const aboutScript = await fs.readFile(path.join(here, '../../web/about.js'));
 const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
 const favicon = await fs.readFile(path.join(here, '../../web/favicon.ico'));
 let activeServer;
@@ -175,11 +172,8 @@ async function handler(req, res) {
     }
     auth.origin(req);
     if (route === '/.well-known/bashkitten-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
-    if (route === '/about' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(aboutHtml); }
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
     if (route === '/app.css' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(css); }
-    if (route === '/about.js' && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' }); return res.end(aboutScript); }
-    if (route === '/licenses.json' && req.method === 'GET') return json(res, await licenses());
     if (['/logo.png', '/favicon.ico'].includes(route) && ['GET', 'HEAD'].includes(req.method)) {
       const image = route === '/logo.png' ? logo : favicon;
       res.writeHead(200, { 'Content-Type': route === '/logo.png' ? 'image/png' : 'image/x-icon', 'Content-Length': image.length, 'Cache-Control': 'public, max-age=86400' });

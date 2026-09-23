@@ -189,7 +189,7 @@ class AgentRemoteStore {
       const { identity } = certificate(caPem, caSha256);
       const previous = this.entries.get("local");
       if (previous && (previous.instanceId != instanceId || previous.caSha256 != identity)) {
-        throw new Error("The local server identity changed. Re-enroll it from Agent settings.");
+        throw Object.assign(new Error("The local server identity changed. Check the service before trusting its replacement."), { code: "local_identity_changed" });
       }
       const entry = { id: "local", kind: "agent", name: "Local", url, caPem, caSha256: identity, instanceId,
         userContextId: previous?.userContextId ?? this.allocateContext() };
@@ -208,7 +208,7 @@ class AgentRemoteStore {
       const url = validateURL(record.url);
       const name = String(record.name || new URL(url).hostname).trim().slice(0, 120);
       const key = onionPrivateKey(record.clientAuthorization);
-      const previous = [...this.entries.values()].find(entry => entry.kind == record.kind && entry.url == url);
+      const previous = [...this.entries.values()].find(entry => entry.id != "local" && entry.id != "local-hosting" && entry.kind == record.kind && entry.url == url);
       const entry = {
         id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1),
         kind: record.kind, name, url, clientAuthorization: key,

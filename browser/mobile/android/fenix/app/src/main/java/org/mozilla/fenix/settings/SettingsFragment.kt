@@ -15,6 +15,7 @@ import androidx.preference.PreferenceFragmentCompat
 import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
 import mozilla.components.support.utils.BuildManufacturerChecker
 import mozilla.components.support.utils.ext.navigateToDefaultBrowserAppsSettings
+import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.R
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.navigateToNotificationsSettings
@@ -23,7 +24,6 @@ import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.ext.showToolbarWithIconButton
 import com.bashkitten.AgentAccessActivity
 import com.bashkitten.BrowserApp
-import com.bashkitten.LicensesActivity
 import mozilla.components.ui.icons.R as iconsR
 
 /** Settings for the capabilities shipped by BashKitten. */
@@ -33,11 +33,37 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
         val category = PreferenceCategory(requireContext()).apply {
-            title = "BashKitten"
+            title = "Agent"
             key = "bashkitten_settings"
             isIconSpaceReserved = false
         }
         preferenceScreen.addPreference(category)
+        category.addPreference(Preference(requireContext()).apply {
+            title = "Packages"
+            summary = "Manage the local Agent's Termux, APT and Pi packages"
+            isIconSpaceReserved = false
+            setOnPreferenceClickListener {
+                (activity as? HomeActivity)?.bashKittenAgentPanel?.packages()
+                true
+            }
+        })
+        category.addPreference(Preference(requireContext()).apply {
+            title = "Agent browser control"
+            summary = "Allow or disconnect this Agent's access to ordinary browser tabs"
+            isIconSpaceReserved = false
+            setOnPreferenceClickListener {
+                (activity as? HomeActivity)?.bashKittenAgentPanel?.browserControl()
+                true
+            }
+        })
+        category.addPreference(Preference(requireContext()).apply {
+            title = "Completed-turn notifications"
+            isIconSpaceReserved = false
+            setOnPreferenceClickListener {
+                (activity as? HomeActivity)?.bashKittenAgentPanel?.notifications()
+                true
+            }
+        })
         category.addPreference(Preference(requireContext()).apply {
             title = "Agent access"
             summary = "Allow or revoke access for Termux and other apps"
@@ -56,11 +82,11 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
                 true
             }
         })
-        category.addPreference(Preference(requireContext()).apply {
-            title = "Licenses and source"
+        requirePreference<Preference>(R.string.pref_key_about).parent?.addPreference(Preference(requireContext()).apply {
+            title = "Check for browser update"
             isIconSpaceReserved = false
             setOnPreferenceClickListener {
-                startActivity(Intent(requireContext(), LicensesActivity::class.java))
+                (activity as? HomeActivity)?.bashKittenAgentPanel?.checkBrowserUpdate()
                 true
             }
         })

@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>BashKitten</title>
   <link rel="icon" href="/favicon.ico" sizes="32x32">
-  <script src="/about.js"></script>
   <style>
     :root, :root[data-theme="dark"] {
       color-scheme: dark;
@@ -571,7 +570,6 @@
     <h1><img src="/logo.png" width="40" height="40" alt="" style="vertical-align:middle;margin-inline-end:8px">BashKitten</h1>
     <p id="authHint">Connecting to your agent…</p>
     <a id="authLogin" href="/login" target="_blank" rel="noopener" class="hidden">Sign in</a>
-    <p><a href="/about" target="_blank" rel="noopener">About and licenses</a></p>
     <button id="authRetry" type="button">Reconnect</button>
     <p id="authError" class="meta" role="status"></p>
   </section>
@@ -611,7 +609,6 @@
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
             <button id="tabDownloads" type="button" role="tab" aria-selected="false" aria-controls="settingsDownloads" tabindex="-1" data-settings-tab="downloads">Download models</button>
             <button id="tabRemote" type="button" role="tab" aria-selected="false" aria-controls="settingsRemote" tabindex="-1" data-settings-tab="remote">Remote access</button>
-            <button id="tabAbout" type="button" role="tab" aria-selected="false" aria-controls="settingsAbout" tabindex="-1" data-settings-tab="about">About</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
@@ -725,8 +722,6 @@
               <div id="remoteDevices"></div>
             </div>
             <p id="remoteNotice" class="meta" role="status"></p>
-          </section>
-          <section id="settingsAbout" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabAbout">
           </section>
           <div class="settings-section"><button id="signOut" type="button">Sign out</button></div>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
@@ -3217,14 +3212,6 @@
         if (next !== undefined) { event.preventDefault(); selectSettingsTab(settingsTabs[next].dataset.settingsTab, true); }
       };
     }
-    renderBashKittenAbout($('#settingsAbout'), {
-      notice: 'The BashKitten browser connects to this separate Agent server. Its package includes unmodified Pi, npm dependencies, the search helper, Caddy, Authelia and Tor under their own licenses. Termux, Node.js, Python and system libraries are installed separately and retain their own licenses.',
-      loadLicenses: async () => {
-        const response = await fetch('/licenses.json');
-        if (!response.ok) throw Error('Could not load licenses');
-        return response.json();
-      }
-    });
     $('#settingsDone').onclick = showChatView;
     $('#settingsForm').onsubmit = async event => {
       event.preventDefault();

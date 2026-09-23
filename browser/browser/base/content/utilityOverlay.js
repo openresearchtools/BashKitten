@@ -389,7 +389,8 @@ function openAboutDialog() {
     AppConstants.MOZ_APP_NAME == "bashkitten" &&
     browserWindow?.BashKittenAgent
   ) {
-    browserWindow.BashKittenAgent.about();
+    browserWindow.BashKittenAgent.browse();
+    browserWindow.openPreferences("paneAbout");
     return;
   }
   for (let win of Services.wm.getEnumerator("Browser:About")) {

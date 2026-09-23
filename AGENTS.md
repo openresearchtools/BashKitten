@@ -68,7 +68,10 @@ upstream components and licenses.
   saved in its native header; only new chats choose a folder. Read saved history
   through the native parser into an in-memory view without file writes.
 - Run Pi as a separate RPC process per session. A detached Node worker owns the
-  process; closing a browser or restarting the web server must not stop a turn.
+  process. Android browser closure leaves Termux work running. The Linux browser
+  adopts its local service group: Quit, close or browser death stops that group
+  and its Pi workers, preserving unrelated terminal Pi. Standalone server CLI
+  remains independent until a native Linux browser adopts its group.
 - Use Pi's public ModelRuntime for service login because RPC has no login command.
   Open authorization in the Android browser and let Pi receive its own loopback
   callback. Present all required steps in the browser, without terminal sign-in.
@@ -128,8 +131,11 @@ Audit desktop menus, submenus, settings and built-in pages for inherited
 Firefox/Mozilla product, support and promotional links and controls for removed
 services. Remove those affordances while preserving working browser functions,
 DevTools, normal extension support and mandatory offline license attribution.
-The native apps are thin hosts, but the separate server is part of BashKitten:
-its .deb bundles Pi/npm dependencies; Node/Termux/system web engines are external.
+The native apps are browsers and the separate server is part of BashKitten:
+its .deb bundles Pi/npm dependencies; Node, Termux and OS libraries are external.
+Use the browser's native menus and appearance settings. About contains separate
+engine and bundled-component license buttons, available without login or backend.
+Do not restore the duplicate Agent shell menu or standalone web About/licenses.
 Keep About text accurate for both. Generate full offline license texts from
 actual bundled artifacts; fail builds on missing texts. Preserve source licenses,
 including native transitive dependencies, and publish matching source archives.

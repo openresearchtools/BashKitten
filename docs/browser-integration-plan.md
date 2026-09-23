@@ -426,10 +426,20 @@ is disconnected on Turn off. This client control does not silently shut down a
 remote machine: in remote-only mode it disconnects the client and releases its
 browser lock, without requiring Termux or attempting remote OS power management.
 
-Closing/hiding the browser UI is not Turn off. Its foreground service can keep
+On Android, closing/hiding the browser UI is not Turn off. Its foreground service can keep
 the browser lock while alive and Termux can keep its own lock. Android can still
 kill either process; wake locks prevent CPU suspension, not process termination.
 Reopening reconciles the actual services and reacquires the required locks.
+
+On Linux, Quit, closing the browser window, or killing its main process stops
+the local Agent group it started or attached to, including owned Pi workers.
+Track the exact browser PID/start identity through the existing native guard;
+normal Quit also requests graceful shutdown. Stop Pi promptly while allowing
+an active package transaction to finish safely. Switching to Remote does not
+discard ownership of a local group already adopted in this browser run. A fresh
+remote-only browser owns no local service and never stops the remote server.
+An explicitly launched server CLI stays independent until the native browser
+adopts it. Do not kill unrelated terminal Pi or other services.
 
 ## 4. Android setup with ordinary Termux
 
@@ -576,8 +586,10 @@ use private Unix sockets where supported, not a second public HTTP port.
 Protect chat, RPC, events, files, uploads, settings and WebSocket upgrades using
 Authelia `two_factor` forward authentication. Strip incoming identity/forwarded
 headers and derive identity only from the trusted proxy. Keep Origin/CSRF and
-filesystem confinement checks. Only the required login assets/endpoints and
-non-sensitive public About/licenses are outside login. Long-lived authenticated
+filesystem confinement checks. Only required login assets/endpoints, branding
+assets and scoped certificate discovery are outside login. About and license
+notices are packaged in native browser settings, with no standalone web pages.
+Long-lived authenticated
 channels must close on logout/revocation and reauthenticate after expiration;
 authenticating their initial upgrade alone is not indefinite authorization.
 See [Authelia's Caddy integration](https://www.authelia.com/integration/proxies/caddy/).
@@ -661,9 +673,10 @@ an origin/port change through existing state handling or the protected browser
 host; never replay a consumed prompt as part of reconnecting.
 On Android resume, request status through Termux. An explicit Turn off or a
 failed group remains Off during that app run, with Turn on available; a fresh
-user launch defaults to On as specified above. Closing the UI does not stop the
-service. Workers remain independent of UI lifetime, but no longer outlive an
-explicit whole-group shutdown or fatal core-group failure. This supersedes the
+user launch defaults to On as specified above. Android UI closure does not stop
+the service; Linux browser closure stops its adopted local group as specified
+above. Workers never outlive an explicit whole-group shutdown or fatal core-group
+failure. This supersedes the
 previous plan's independent Pi survival across an access-stack failure. Native
 session files remain the recovery source: restarting opens the existing history
 without replaying an interrupted prompt. Keep individual Pi stop/kill controls
@@ -688,8 +701,10 @@ proot fallback. This portability and shutdown behavior are not yet tested.
 Every backend has **Settings → Remote access**: off/on, address, QR, save/import
 connection file and copy/reveal controls. Keys are masked by default. Publish
 through a backend-owned Tor onion service, separate from the browser's client
-Tor process. Closing the browser UI must not stop the published server; explicit
-Turn off on its hosting machine does stop that service with the rest of Agent.
+Tor process. Android browser closure leaves publishing running. Linux browser
+closure stops its adopted group, including publishing; standalone CLI servers
+remain independent until adopted. Explicit Turn off stops the published service
+with the rest of Agent.
 
 Use Torkitten's v3 client authorization and Caddy/Authelia route pattern. A remote
 connection record contains its name, kind, onion endpoint, client authorization
@@ -810,7 +825,7 @@ behavior, retaining donor license texts and provenance. Search Hugging Face,
 browse repository files and sizes, choose downloads, and display real progress
 with Pause, Resume and Cancel. Pin each download to its selected immutable
 revision, stream to temporary files, validate resumed ranges, and retain progress
-across server restarts. Closing the UI does not stop a download; whole-Agent
+across server restarts. Hiding the Agent view does not stop a download; whole-Agent
 shutdown stops owned transfers safely. Do not add another resident daemon.
 
 Save an optional masked Hugging Face token in private server credential storage,
@@ -982,7 +997,7 @@ code is separate and must not be relabeled MIT. Preserve retained MIT
 PyMuPDF licenses and native/font/transitive notices for what is actually shipped.
 Regenerate the inventory for the new targets: the donor's amd64 PyInstaller
 license bundle is evidence, not an accurate inventory of our new packages.
-Include search licenses in offline browser About and web About, and publish
+Include search licenses in offline browser About, and publish
 matching source/build material. Do not import the donor's application test suite,
 fixtures or verification utilities into product source or release payloads;
 keep our checks in the external verification workspace.
@@ -1025,7 +1040,8 @@ Verify both 4 KB and 16 KB Android execution for the APK's native libraries and
 executable Termux packages. Keep the APK's current signing identity and the
 separate APT signing identity. A Linux browser can connect remotely without
 starting its local backend; the packaged server CLI can likewise run while the
-browser is closed. Package contents do not couple their process lifetimes.
+browser is closed. A Linux browser that starts or attaches to Local adopts that
+group's lifetime; closing or killing that browser stops the adopted group.
 
 Reuse current APK update checking/signing and APT/npm jobs, replacing suite
 catalog ownership with browser/server release metadata. Preserve selected
@@ -1041,7 +1057,9 @@ Use the browser's existing native appearance settings for System/Light/Dark;
 the shared web UI follows that host preference. The Agent menu button opens the
 native browser menu. Remove the duplicate shell menu, separate Agent theme
 overrides and duplicate Quit/About controls. Keep About and complete offline
-licenses in the normal browser About/settings paths, as well as web About.
+licenses in the normal browser About/settings paths. Remove standalone web
+About/license pages, settings tabs and login-screen links. Keep connections in
+the Local/remote selector, not in the native browser menu.
 Local HTTPS identity verification remains automatic; do not expose its internal
 certificate fingerprint as a routine menu item. Offer explicit identity recovery
 only when an actual changed local installation needs it.
@@ -1053,9 +1071,10 @@ browser tab and retains Pi's supported callback/device-code behavior. For remote
 Pi, use that provider's supported remote/manual callback path; a localhost
 callback in a client browser cannot magically reach another machine.
 
-Keep About/Licenses in the browser menu, available offline and before login,
-and keep web About/Licenses. Reuse their current renderer/style with an accurate
-browser/server inventory. Node, Termux and OS libraries retain their own external
+Keep About/Licenses in the browser menu, available offline and before login.
+Use separate engine-license and bundled-component-license buttons in the same
+native About area, with an accurate browser/server inventory. Node, Termux and
+OS libraries retain their own external
 package notices; Pi/npm dependencies bundled in the server remain in its license
 inventory even though the server is installed separately from the APK.
 
