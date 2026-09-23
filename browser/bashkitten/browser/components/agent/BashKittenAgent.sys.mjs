@@ -255,7 +255,8 @@ class AgentView {
     }
     const selected = await new Promise(resolve => picker.open(resolve));
     if (selected !== Ci.nsIFilePicker.returnOK) return null;
-    if (this.off || this.activeBrowser !== browser || ownedViews.get(browser) !== entry) throw new Error("The selected Agent changed.");
+    const current = ownedViews.get(browser);
+    if (this.off || this.activeBrowser !== browser || !current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
     return control("project-root", { path: picker.file.path });
   }
 
