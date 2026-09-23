@@ -1,0 +1,71 @@
+name: Publish testing release
+'on':
+  workflow_dispatch:
+    inputs:
+      candidate_run:
+        description: Successful Complete BashKitten candidates run to publish
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: publish-testing-release
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: openresearchtools/BashKitten
+      CANDIDATE_RUN: ${{ inputs.candidate_run }}
+    steps:
+    - name: Locate successful complete candidate
+      id: candidate
+      shell: bash
+      run: |
+        [[ "$CANDIDATE_RUN" =~ ^[0-9]+$ ]]
+        gh api "repos/$GH_REPO/actions/runs/$CANDIDATE_RUN" > "$RUNNER_TEMP/candidate.json"
+        jq -e '.conclusion == "success" and .path == ".github/workflows/packages.yml" and .event == "workflow_dispatch"' "$RUNNER_TEMP/candidate.json"
+        revision=$(jq -r .head_sha "$RUNNER_TEMP/candidate.json")
+        [[ "$revision" =~ ^[0-9a-f]{40}$ ]]
+        printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ steps.candidate.outputs.revision }}
+        persist-credentials: false
+    - name: Download complete release artifacts
+      run: gh run download "$CANDIDATE_RUN" --name bashkitten-complete-candidate --dir release
+    - name: Verify artifacts and required testing notice
+      id: release
+      env:
+        CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
+      run: |
+        cd release
+        sha256sum --check SHA256SUMS
+        python3 - <<'PY'
+        import json, os, re
+        from pathlib import Path
+        release = json.loads(Path('release.json').read_text())
+        notes = Path('release-notes.md').read_text()
+        if release['sourceCommit'] != os.environ['CANDIDATE_REVISION']:
+            raise SystemExit('Candidate source does not match the successful build')
+        if not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
+            raise SystemExit('The testing release warning is required')
+        if not re.fullmatch(r'v\d+\.\d+(?:\.\d+)?', release['tag']):
+            raise SystemExit('Invalid product release tag')
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+            output.write('tag=' + release['tag'] + '\n')
+        PY
+    - name: Publish with the README warning and complete sources
+      env:
+        RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
+      run: |
+        gh release create "$RELEASE_TAG" release/* \
+          --target "$CANDIDATE_REVISION" \
+          --title "BashKitten ${RELEASE_TAG#v} · Testing release" \
+          --notes-file release/release-notes.md

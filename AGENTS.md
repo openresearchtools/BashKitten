@@ -142,6 +142,9 @@ licenses. Do not commit runtime credentials, node_modules or personal sessions.
 
 Keep README and release notes short, factual and for users. Preserve developer
 details in docs/usage.md, packaging/README.md and the implementation status.
+For now, every release must prominently include the README testing-release SVG
+and text stating that it is for testing only and not ready for production.
+Use the generated `release-notes.md` when publishing, including manual publication.
 Audit desktop menus, submenus, settings and built-in pages for inherited
 Firefox/Mozilla product, support and promotional links and controls for removed
 services. Remove those affordances while preserving working browser functions,

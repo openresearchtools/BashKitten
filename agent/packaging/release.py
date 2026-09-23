@@ -125,7 +125,19 @@ def main():
     for token in ('bashkitten-source-', 'dependency-source-', 'auth', 'search', 'blocker', 'android-library-source'):
         if not any(token in name for name in names):
             raise ValueError('Missing corresponding source bundle: ' + token)
-    result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine,
+    # Share the README's warning instead of allowing release notes to imply
+    # that a candidate build has passed retail-device acceptance.
+    readme = (ROOT / 'README.md').read_text()
+    banner = next(line for line in readme.splitlines() if '](docs/testing-releases.svg)' in line)
+    banner = banner.replace('(docs/testing-releases.svg)',
+                            '(https://raw.githubusercontent.com/openresearchtools/BashKitten/main/docs/testing-releases.svg)')
+    notes = (banner + '\n\n> [!WARNING]\n> **Testing release only. Not ready for production. Coming soon.**\n\n'
+             f'BashKitten {version} · Firefox ESR {engine}.\n\n'
+             '- **Android:** install the ARM64 APK, open Agent and follow the Termux setup command.\n'
+             '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n\n'
+             'Checksums and corresponding source archives are attached.\n')
+    (args.output / 'release-notes.md').write_text(notes)
+    result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
               'apps': [app], 'packages': packages, 'sources': sources}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')

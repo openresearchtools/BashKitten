@@ -1081,6 +1081,12 @@ keep our checks in the external verification workspace.
 
 ## 9. Delivery, retained behavior and licenses
 
+For now, all published releases are testing releases. Every release description
+must include the README's testing-warning SVG and explicit text that the release
+is not ready for production. Keep this notice in generated release notes and
+the publication workflow, and apply it to already published releases. A testing
+label does not claim retail-device acceptance or replace the required checks.
+
 Build these **four primary binary artifacts from this one repository**:
 
 | Artifact | Complete product payload |
