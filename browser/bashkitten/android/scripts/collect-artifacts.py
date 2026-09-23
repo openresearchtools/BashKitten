@@ -99,8 +99,11 @@ manifest = {'source': revision, 'product_version': version, 'firefox_version': e
             'package_id': identity[1], 'version_code': int(identity[2]), 'publisher_signed': True,
             'architecture': 'arm64-v8a', 'native_libraries': native, 'certificate_sha256': certificate,
             'apks': {destination.name: hashlib.sha256(destination.read_bytes()).hexdigest()}}
-sources = OBJ / 'gradle/build/mobile/android/fenix/generated/bashkitten-sources'
-source_manifest = json.loads((sources / 'sources.json').read_text())
+source_inventories = list((OBJ / 'gradle/build/mobile/android/fenix').rglob('generated/bashkitten-sources/sources.json'))
+if len(source_inventories) != 1:
+    raise SystemExit('Expected exactly one resolved Android dependency source inventory, found ' + str(len(source_inventories)))
+sources = source_inventories[0].parent
+source_manifest = json.loads(source_inventories[0].read_text())
 if not isinstance(source_manifest, list) or not source_manifest:
     raise SystemExit('Resolved Android dependency source inventory is missing')
 for entry in source_manifest:
