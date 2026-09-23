@@ -869,7 +869,10 @@ never status responses, URLs, logs or browser localStorage. Preserve native
 password-store integration where the client owns a credential, without making
 headless or remote downloads depend on that client staying open.
 
-One working-folder-style picker selects the shared models directory. Downloads
+Local Linux uses the browser's native system folder picker for working and models
+directories, accepting the selected directory directly and preserving cancellation.
+Android/Termux and remote sessions use the backend folder picker, which lists
+the actual subdirectories at every depth. One picker selects the shared models directory. Downloads
 go there, and managed desktop llama.cpp receives that same directory through
 its native `--models-dir`. Store each GGUF model/quantization family in a direct
 child directory that native llama.cpp discovers, preserving filenames and split

@@ -2949,7 +2949,10 @@
     async function openFolderPicker(title, path, onSelect) {
       if (nativeLinux) {
         try { const selected = await nativeHost.call('choose-folder', {title, path}); if (selected) await onSelect(selected.path); return; }
-        catch (error) { $('#composerHint').textContent = error.message; }
+        catch (error) {
+          $(title === 'Models directory' ? '#modelDownloadsNotice' : title === 'Default working folder' ? '#settingsNotice' : '#composerHint').textContent = error.message;
+          return;
+        }
       }
       folderSelection = onSelect;
       folderView = {path: '', parent: null};
