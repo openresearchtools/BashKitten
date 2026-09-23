@@ -327,7 +327,11 @@ public final class AgentRuntime {
                         try {
                             if (generation != operation) throw new IllegalStateException("Connection selection changed. Retry enrollment.");
                             JSONObject reply = new JSONObject(result);
-                            if (reply.has("error")) throw new IllegalStateException("The remote Agent identity could not be verified.");
+                            if (reply.has("error")) {
+                                cleanup.run();
+                                failure.accept("Remote Agent: " + reply.getString("error") + ". Retry when the server is reachable.");
+                                return;
+                            }
                             JSONObject identity = reply.getJSONObject("result");
                             String expected = record.optString("caSha256", "").replace(":", "");
                             if (!expected.isEmpty() && !expected.equalsIgnoreCase(identity.getString("caSha256").replace(":", ""))) {

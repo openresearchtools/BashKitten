@@ -382,7 +382,10 @@ export class GeckoViewBashKitten extends GeckoViewModule {
           },
           onStopRequest(request, status) {
             clearTimeout(timer);
-            if (failure || !Components.isSuccessCode(status)) { reject(failure || new Error("Agent channel disconnected")); return; }
+            if (failure || !Components.isSuccessCode(status)) {
+              reject(failure || new Error("Agent channel disconnected (" + Components.Exception("", status).name + ")"));
+              return;
+            }
             try { resolve(JSON.parse(new TextDecoder().decode(Uint8Array.from(bytes, c => c.charCodeAt(0))))); }
             catch (error) { reject(new Error("Invalid Agent channel response")); }
           },
