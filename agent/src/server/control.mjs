@@ -35,9 +35,9 @@ export async function controlRequest(command, value) {
     try { return await socketRequest(controlSocket, '/' + command, value, command === 'start' || command === 'restart' ? 120000 : 30000); }
     catch (error) {
       // A fresh launch can reach the old controller after its status reply but
-      // before shutdown finishes. Only retry an explicitly rejected start;
-      // never replay an operation whose response was lost.
-      if (command === 'start' && error.code === 'AGENT_SHUTTING_DOWN' && Date.now() < deadline) {
+      // before shutdown finishes. Retry rejected starts or failed connections,
+      // never an operation whose response was lost after connecting.
+      if (command === 'start' && ['AGENT_SHUTTING_DOWN', 'ENOENT', 'ECONNREFUSED'].includes(error.code) && Date.now() < deadline) {
         await ensureManager({ waitForShutdown: true });
         continue;
       }
