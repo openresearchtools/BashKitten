@@ -543,6 +543,10 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
 
         if (this !is ExternalAppBrowserActivity) {
             bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime, ::openBashKittenBrowserMenu)
+            // Theme and tablet-layout recreation retain the selected pane. New
+            // launches keep AgentPanel's full-Agent default; ACTION_MAIN also
+            // explicitly selects Agent when delivered through onNewIntent.
+            bashKittenAgentPanel?.restoreLayoutState(savedInstanceState?.getBundle("bashkitten.panel"))
             setContentView(bashKittenAgentPanel)
             bashKittenMenuFromAgent = savedInstanceState?.getBoolean("bashkitten.menuFromAgent") == true
             var previousDestination = navHost.navController.currentDestination?.id
@@ -940,6 +944,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     @CallSuper
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("bashkitten.menuFromAgent", bashKittenMenuFromAgent)
+        outState.putBundle("bashkitten.panel", bashKittenAgentPanel?.saveLayoutState())
         super.onSaveInstanceState(outState)
     }
 

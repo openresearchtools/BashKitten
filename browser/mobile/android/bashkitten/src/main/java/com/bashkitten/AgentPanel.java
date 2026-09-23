@@ -103,6 +103,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
     public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
     public void showBrowser() { shown = false; split = true; browserUi = false; layoutPanels(); }
+    public Bundle saveLayoutState() {
+        Bundle state = new Bundle(); state.putBoolean("shown", shown); state.putBoolean("split", split); return state;
+    }
+    public void restoreLayoutState(Bundle state) {
+        if (state == null) return;
+        shown = state.getBoolean("shown", true); split = state.getBoolean("split", false); layoutPanels();
+    }
     public void setBrowserUiVisible(boolean visible) { browserUi = visible; layoutPanels(); }
     public boolean isShownAgent() { return shown && !browserUi; }
     public void toggle() { if (shown) showBrowser(); else showAgent(); }
