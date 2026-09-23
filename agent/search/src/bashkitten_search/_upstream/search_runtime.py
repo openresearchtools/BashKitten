@@ -2,7 +2,7 @@
 # Copyright 2026-present the Unsloth AI Inc. team. All rights reserved.
 # Modified by the Wild Buzzard Project in 2026: extracted the web-search and page-fetch implementation into a standalone package; adjusted package-local imports and logging.
 
-# Modified by OpenResearchTools in 2026: selected fetch helpers, explicit download-limit metadata.
+# Modified by OpenResearchTools in 2026: local CLI fetch helpers with complete downloads and extraction.
 
 from __future__ import annotations
 
@@ -28,13 +28,6 @@ EMPTY_SEARCH_RESULTS = (
 )
 _DDGS_EMPTY_SWEEP = "No results found"
 
-_MAX_PAGE_CHARS = 16000  # cap fetched page text (after HTML-to-MD conversion)
-# Raw download cap > _MAX_PAGE_CHARS since SSR pages embed large <head> sections
-# stripped during conversion; 512 KB still reaches article content.
-_MAX_FETCH_BYTES = 512 * 1024
-# PDF cross-reference data lives at EOF, so extraction needs the whole body.
-_MAX_PDF_FETCH_BYTES = 10 * 1024 * 1024
-_MAX_WEB_PDF_PAGES = 50
 # Control/undecodable chars, excluding text whitespace and ESC (for ANSI logs).
 # Binary when they exceed 12.5%, after allowing 16 minor encoding glitches.
 _BINARY_CHAR_RE = re.compile("[\\x00-\\x08\\x0b\\x0c\\x0e-\\x1a\\x1c-\\x1f\\x7f-\\x9f\\ufffd]")
@@ -107,39 +100,11 @@ def _extract_pdf_text(data: bytes) -> str:
     """Extract page-delimited text with the same parser used by RAG ingestion."""
     from ._rag.parsers import parse_pdf_bytes
 
-    pages, total_pages = parse_pdf_bytes(data, max_pages = _MAX_WEB_PDF_PAGES)
-    page_limit_reached = total_pages > _MAX_WEB_PDF_PAGES
-    parts: list[str] = []
-    length = 0
-    text_limited = False
-    for page in pages:
-        page_text = page.text.strip()
-        if not page_text:
-            continue
-        section = f"## Page {page.page_number}\n\n{page_text}"
-        piece = ("\n\n" if parts else "") + section
-        remaining = _MAX_PAGE_CHARS - length
-        if len(piece) > remaining:
-            parts.append(piece[:remaining])
-            text_limited = True
-            break
-        parts.append(piece)
-        length += len(piece)
-
-    text = "".join(parts).rstrip()
-    if not text:
-        if page_limit_reached:
-            return f"(PDF contains no extractable text in the first {_MAX_WEB_PDF_PAGES} pages)"
-        return ""
-    limits = []
-    if text_limited:
-        limits.append(f"text limited to {_MAX_PAGE_CHARS:,} characters")
-    if page_limit_reached:
-        limits.append(f"page processing capped at {_MAX_WEB_PDF_PAGES} pages")
-    if limits:
-        marker = f"\n\n... (PDF extraction {'; '.join(limits)})"
-        text = text[: _MAX_PAGE_CHARS - len(marker)].rstrip() + marker
-    return text
+    pages, _total_pages = parse_pdf_bytes(data)
+    return "\n\n".join(
+        f"## Page {page.page_number}\n\n{page.text.strip()}"
+        for page in pages if page.text.strip()
+    )
 
 
 _USER_AGENTS = (
@@ -233,36 +198,8 @@ def _validate_and_resolve_host(hostname: str, port: int) -> tuple[bool, str, str
     to *resolved_ip* (with a ``Host`` header) to prevent DNS rebinding between
     validation and the actual fetch.
     """
-    import ipaddress
-    import socket
-
-    try:
-        infos = socket.getaddrinfo(hostname, port, type = socket.SOCK_STREAM)
-    except (OSError, UnicodeError) as e:
-        # IDNA encoding rejects a hostname with UnicodeError, not OSError.
-        return False, f"Failed to resolve host: {e}", ""
-
-    if not infos:
-        return False, f"Failed to resolve host: no addresses for {hostname!r}", ""
-
-    for *_, sockaddr in infos:
-        ip = ipaddress.ip_address(sockaddr[0])
-        # `not ip.is_global` is the source of truth (also rejects CGNAT and
-        # benchmarking/doc ranges); the explicit predicates only label the error.
-        if (
-            not ip.is_global
-            or ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_multicast
-            or ip.is_reserved
-            or ip.is_unspecified
-        ):
-            return False, f"Blocked: refusing to fetch non-public address {ip}.", ""
-
-    # Return the first resolved address for pinning.
-    first_ip = infos[0][4][0]
-    return True, "", first_ip
+    from ..network_compat import validate_and_resolve_public_host
+    return validate_and_resolve_public_host(hostname, port)
 
 
 # Binary application subtypes rejected by MIME; other application types are
@@ -342,7 +279,7 @@ _GITHUB_NAME_RE = re.compile(r"\A[A-Za-z0-9_.\-]{1,100}\Z")
 
 
 # A single fetch can chain several steps (README API attempt, HTML fallback, up
-# to five redirect hops, each reading a body). A per-operation socket timeout
+# through redirect hops, each reading a body). A per-operation socket timeout
 # bounds one stalled step but not their sum, and nothing aborts on client
 # disconnect, so one overall wall-clock deadline (plus a cooperative
 # cancel_event) bounds the whole fetch instead.
@@ -402,8 +339,8 @@ def _resolve_with_budget(hostname, port, deadline, cancel_event):
             continue
 
 
-def _read_capped_body(resp, max_bytes, timeout, deadline, cancel_event):
-    """Read up to ``max_bytes``, enforcing the overall budget between chunks.
+def _read_body(resp, max_bytes, timeout, deadline, cancel_event):
+    """Read the body, respecting an optional caller-selected byte budget.
 
     A single ``resp.read(max_bytes)`` can block for the whole transfer if the
     server dribbles bytes just inside each socket-inactivity timeout, so the body
@@ -417,7 +354,7 @@ def _read_capped_body(resp, max_bytes, timeout, deadline, cancel_event):
     sock = getattr(getattr(getattr(resp, "fp", None), "raw", None), "_sock", None)
     chunks = []
     remaining = max_bytes
-    while remaining > 0:
+    while remaining is None or remaining > 0:
         budget_error = _fetch_budget_exceeded(deadline, cancel_event)
         if budget_error is not None:
             try:
@@ -430,11 +367,12 @@ def _read_capped_body(resp, max_bytes, timeout, deadline, cancel_event):
                 sock.settimeout(_fetch_hop_timeout(timeout, deadline))
             except Exception:
                 pass
-        chunk = resp.read(min(65536, remaining))
+        chunk = resp.read(65536 if remaining is None else min(65536, remaining))
         if not chunk:
             break
         chunks.append(chunk)
-        remaining -= len(chunk)
+        if remaining is not None:
+            remaining -= len(chunk)
     budget_error = _fetch_budget_exceeded(deadline, cancel_event)
     if budget_error is not None:
         try:
@@ -497,18 +435,17 @@ def _normalize_url_scheme(url: str) -> str:
 
 def _fetch_url_raw(
     url: str,
-    timeout: int = 30,
+    timeout: int | None = None,
     extra_headers: dict | None = None,
     deadline: float | None = None,
     cancel_event = None,
     website_policy: dict | None = None,
     read_info: dict | None = None,
 ) -> tuple[str | None, str, str]:
-    """Fetch a URL with SSRF protection; return ``(error, body_text, content_type)``.
+    """Fetch an HTTP(S) URL; return ``(error, body_text, content_type)``.
 
     ``error`` is a user-facing message string when the fetch failed (the
     existing "Blocked:" / "Failed to fetch URL:" wording), else ``None``.
-    Blocks private/loopback/link-local targets and caps the download size.
     No input reaches the caller as an exception: the URL is model-supplied, so
     every malformed form resolves to one of these strings.
 
@@ -542,12 +479,13 @@ def _fetch_url_raw(
         from urllib.error import HTTPError as _HTTPError
         from urllib.parse import urljoin, urlunparse
 
-        max_bytes = _MAX_FETCH_BYTES
         current_url = url
         current_host = canonical_host
         ua = random.choice(_USER_AGENTS)
 
-        for _hop in range(5):
+        visited = set()
+        while current_url not in visited:
+            visited.add(current_url)
             budget_error = _fetch_budget_exceeded(deadline, cancel_event)
             if budget_error is not None:
                 return budget_error, "", ""
@@ -623,12 +561,10 @@ def _fetch_url_raw(
             else:
                 content_type = (resp.headers.get_content_type() or "").lower()
 
-            # Success: read the capped body enforcing the budget between chunks
-            # (see _read_capped_body), so a slow-drip server can't stretch a
-            # single resp.read past the deadline.
+            # Read the complete body with cancellation and an optional caller deadline.
             declared_pdf = content_type == "application/pdf"
-            read_limit = _MAX_PDF_FETCH_BYTES + 1 if declared_pdf else max_bytes + 1
-            body_error, raw_bytes = _read_capped_body(
+            read_limit = None
+            body_error, raw_bytes = _read_body(
                 resp,
                 read_limit,
                 timeout,
@@ -638,35 +574,12 @@ def _fetch_url_raw(
             if body_error is not None:
                 return body_error, "", ""
 
-            # A missing or wrong PDF MIME type is common: once the initial text-sized
-            # read identifies PDF magic, finish the bounded download to reach the EOF xref.
-            if not declared_pdf and len(raw_bytes) > max_bytes and _has_pdf_magic(raw_bytes):
-                tail_error, tail = _read_capped_body(
-                    resp,
-                    _MAX_PDF_FETCH_BYTES - len(raw_bytes) + 1,
-                    timeout,
-                    deadline,
-                    cancel_event,
-                )
-                if tail_error is not None:
-                    return tail_error, "", ""
-                raw_bytes += tail
             break
         else:
-            return "Failed to fetch URL: too many redirects.", "", ""
+            return "Failed to fetch URL: redirect loop.", "", ""
 
         is_pdf = declared_pdf or _has_pdf_magic(raw_bytes)
-        if not is_pdf and len(raw_bytes) > max_bytes:
-            raw_bytes = raw_bytes[:max_bytes]
-            if read_info is not None:
-                read_info["downloadLimitBytes"] = max_bytes
         if is_pdf:
-            if len(raw_bytes) > _MAX_PDF_FETCH_BYTES:
-                return (
-                    "(PDF content exceeds the download limit; not readable as text)",
-                    "",
-                    content_type,
-                )
             budget_error = _fetch_budget_exceeded(deadline, cancel_event)
             if budget_error is not None:
                 return budget_error, "", content_type

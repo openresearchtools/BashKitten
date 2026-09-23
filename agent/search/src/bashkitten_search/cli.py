@@ -40,12 +40,9 @@ def main() -> int:
         signal.signal(signal.SIGTERM, _cancel)
         signal.signal(signal.SIGINT, _cancel)
         signal.signal(signal.SIGALRM, _cancel)
-        signal.setitimer(signal.ITIMER_REAL, 60)
-        raw = sys.stdin.buffer.read(65537)
-        if len(raw) > 65536:
-            raise ValueError("Input exceeds 64 KiB")
+        raw = sys.stdin.buffer.read()
         request = validate(json.loads(raw, object_pairs_hook=_unique_object))
-        signal.setitimer(signal.ITIMER_REAL, request["timeoutSeconds"])
+        signal.setitimer(signal.ITIMER_REAL, request["timeoutSeconds"] or 0)
         # Some converter libraries print progress on stdout; JSON remains the
         # only stdout contract and their diagnostics go to the ordinary log.
         with contextlib.redirect_stdout(sys.stderr):
@@ -57,7 +54,7 @@ def main() -> int:
         result = {"ok": False, "content": "", "error": {"code": "invalid_request", "message": str(error)}}
         exit_code = 2
     except Exception as error:
-        result = {"ok": False, "content": "", "error": {"code": "request_failed", "message": (str(error) or type(error).__name__)[:4096]}}
+        result = {"ok": False, "content": "", "error": {"code": "request_failed", "message": str(error) or type(error).__name__}}
         exit_code = 1
     finally:
         signal.setitimer(signal.ITIMER_REAL, 0)

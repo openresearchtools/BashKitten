@@ -16,14 +16,12 @@ from .github_repository import fetch_github_repository
 from .network_compat import validate_and_resolve_public_host
 from .youtube_transcript import InvalidYouTubeInput, canonicalize_youtube_input, fetch_youtube_transcript
 
-# Extraction limits are separate from the model's 16,000-character preview.
-search_runtime._MAX_PAGE_CHARS = 8 * 1024 * 1024
 search_runtime._validate_and_resolve_host = validate_and_resolve_public_host
 
 
-def _integer(value: Any, name: str, low: int, high: int) -> int:
-    if type(value) is not int or not low <= value <= high:
-        raise ValueError(f"{name} must be an integer between {low} and {high}")
+def _integer(value: Any, name: str, low: int) -> int:
+    if type(value) is not int or value < low:
+        raise ValueError(f"{name} must be an integer at least {low}")
     return value
 
 
@@ -37,15 +35,14 @@ def validate(request: Any) -> dict[str, Any]:
         raise ValueError("Supply exactly one query or url")
     field = "query" if "query" in request else "url"
     value = request[field]
-    limit = 512 if field == "query" else 8192
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f"{field} must contain 1 to {limit} characters")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty string")
     request = dict(request, **{field: value.strip()})
-    request["timeoutSeconds"] = _integer(request.get("timeoutSeconds", 60), "timeoutSeconds", 1, 300)
+    request["timeoutSeconds"] = _integer(request["timeoutSeconds"], "timeoutSeconds", 1) if request.get("timeoutSeconds") is not None else None
     if field == "query":
         if set(request) & {"outputDirectory", "languages", "timestamped"}:
             raise ValueError("outputDirectory, languages and timestamped apply only to URL reads")
-        request["maxResults"] = _integer(request.get("maxResults", 5), "maxResults", 1, 20)
+        request["maxResults"] = _integer(request.get("maxResults", 5), "maxResults", 1)
     else:
         if "maxResults" in request:
             raise ValueError("maxResults applies only to searches")
@@ -58,8 +55,8 @@ def validate(request: Any) -> dict[str, Any]:
     return request
 
 
-def _collapsed(value: Any, limit: int) -> str:
-    return " ".join(str(value or "").split())[:limit]
+def _collapsed(value: Any) -> str:
+    return " ".join(str(value or "").split())
 
 
 def _search(request: dict[str, Any]) -> dict[str, Any]:
@@ -74,9 +71,9 @@ def _search(request: dict[str, Any]) -> dict[str, Any]:
     results = []
     for item in raw or []:
         url = str(item.get("href") or "").strip()
-        if len(url) > 4096 or not check_url_access(url, None)[0]:
+        if not check_url_access(url, None)[0]:
             continue
-        results.append({"title": _collapsed(item.get("title"), 500) or url, "url": url, "snippet": _collapsed(item.get("body"), 4000)})
+        results.append({"title": _collapsed(item.get("title")) or url, "url": url, "snippet": _collapsed(item.get("body"))})
         if len(results) >= request["maxResults"]:
             break
     content = "\n\n".join(f"Title: {item['title']}\nURL: {item['url']}\nSnippet: {item['snippet']}" for item in results)
@@ -101,13 +98,13 @@ def _read(request: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "url": transcript["url"], "title": transcript["title"], "content": transcript["content"], "fullMarkdownPath": transcript["path"], "contentLength": transcript["content_length"], "truncated": transcript["truncated"], "language": transcript["language"], "segmentCount": transcript["segment_count"]}
     if "languages" in request or "timestamped" in request:
         raise ValueError("languages and timestamped apply only to YouTube transcripts")
-    document = fetch_github_repository(url, timeout=min(request["timeoutSeconds"], 60))
+    document = fetch_github_repository(url, timeout=request["timeoutSeconds"])
     details: dict[str, Any] = {}
     if document is not None:
         markdown, title = document.markdown, document.title
         details.update(canonicalUrl=document.canonical_url, immutableUrl=document.pinned_url, commit=document.commit)
     else:
-        error, body, content_type = search_runtime._fetch_url_raw(url, timeout=min(request["timeoutSeconds"], 60), deadline=time.monotonic() + request["timeoutSeconds"], read_info=details)
+        error, body, content_type = search_runtime._fetch_url_raw(url, timeout=request["timeoutSeconds"], deadline=time.monotonic() + request["timeoutSeconds"] if request["timeoutSeconds"] is not None else None, read_info=details)
         if error:
             raise RuntimeError(error)
         if "html" in content_type or search_runtime._looks_like_html(body):
@@ -117,14 +114,12 @@ def _read(request: dict[str, Any]) -> dict[str, Any]:
             markdown = body.strip()
         if not markdown.strip():
             raise RuntimeError("Page returned no readable text; use the browser skill for JavaScript-only content")
-        if details.get("downloadLimitBytes"):
-            markdown += f"\n\n… (Download capped at {details['downloadLimitBytes']:,} bytes; extracted content may be incomplete.)"
         details["contentType"] = content_type
         title = title_for_document(markdown, url)
         markdown = f"Source: <{url}>\n\n{markdown}"
     if not markdown.strip():
         raise RuntimeError("Resource returned no readable content")
-    # Write the original extraction, including any disclosed source limits.
+    # Write the complete extraction.
     # The inline preview is produced only after the complete file is saved.
     path = write_markdown(title, markdown, output_directory=directory)
     return {"ok": True, "url": url, "title": title, "content": preview(markdown), "fullMarkdownPath": str(path), "contentLength": len(markdown), "truncated": len(markdown) > MAX_PAGE_CHARS, **details}

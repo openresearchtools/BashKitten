@@ -4,7 +4,7 @@
 # extraction design from agent/extensions/web-access/github.ts as a bounded
 # Python Git-object inspector.
 
-# Modified by OpenResearchTools in 2026: package-relative executable paths for Linux and Termux.
+# Modified by OpenResearchTools in 2026: package-relative executable paths and complete repository extraction without policy size/count limits.
 
 from __future__ import annotations
 
@@ -26,17 +26,6 @@ from urllib.parse import quote, unquote_to_bytes, urlsplit
 from ._upstream.web_access_policy import hostname_allowed
 
 
-MAX_COMMAND_OUTPUT_BYTES = 1024 * 1024
-MAX_TREE_OUTPUT_BYTES = 8 * 1024 * 1024
-MAX_REPOSITORY_BYTES = 128 * 1024 * 1024
-MAX_REPOSITORY_ENTRIES = 100_000
-MAX_TREE_ENTRIES = 20_000
-MAX_SELECTED_FILES = 128
-MAX_FILE_BYTES = 512 * 1024
-MAX_DOCUMENT_BYTES = 16 * 1024 * 1024
-MAX_TREE_MARKDOWN_BYTES = 4 * 1024 * 1024
-MAX_URL_BYTES = 8 * 1024
-MAX_PATH_BYTES = 4 * 1024
 
 GITHUB_FETCH_PROVENANCE = {
     "implementation": "buzzard-quick-search-git-object-inspector-v1",
@@ -258,7 +247,6 @@ def _decode_segment(value: str) -> str:
         or "/" in decoded
         or "\\" in decoded
         or any(ord(character) < 32 or ord(character) == 127 for character in decoded)
-        or len(decoded.encode("utf-8")) > 255
     ):
         raise GitHubUrlError("GitHub URL contains an unsafe path segment")
     return decoded
@@ -267,11 +255,6 @@ def _decode_segment(value: str) -> str:
 def parse_github_repository_url(raw_url: str) -> GitHubLocation | None:
     if not isinstance(raw_url, str) or not raw_url:
         return None
-    try:
-        if len(raw_url.encode("utf-8")) > MAX_URL_BYTES:
-            return None
-    except UnicodeEncodeError as exc:
-        raise GitHubUrlError("GitHub URL contains invalid Unicode") from exc
     if "\\" in raw_url or any(character.isspace() or ord(character) < 32 for character in raw_url):
         if "github.com" in raw_url.lower():
             raise GitHubUrlError("GitHub URL contains invalid characters")
@@ -314,10 +297,8 @@ def parse_github_repository_url(raw_url: str) -> GitHubLocation | None:
             return None
         kind = segments[2]
         tail = segments[3:]
-        if not tail or len(tail) > 256 or (kind == "blob" and len(tail) < 2):
+        if not tail or (kind == "blob" and len(tail) < 2):
             raise GitHubUrlError(f"GitHub {kind} URL is incomplete")
-        if len("/".join(tail).encode("utf-8")) > MAX_PATH_BYTES:
-            raise GitHubUrlError("GitHub repository path is too long")
         if _COMMIT_RE.fullmatch(tail[0]):
             tail = (tail[0].lower(), *tail[1:])
 
@@ -331,7 +312,6 @@ def parse_github_repository_url(raw_url: str) -> GitHubLocation | None:
 def _valid_ref(value: str) -> bool:
     return bool(
         value
-        and len(value.encode("utf-8")) <= 255
         and _REF_RE.fullmatch(value)
         and not value.startswith(("/", ".", "-"))
         and not value.endswith(("/", ".", ".lock"))
@@ -373,42 +353,12 @@ def _find_git(git_executable: str | os.PathLike[str] | None) -> str:
     return resolved
 
 
-def _repository_usage(root: str) -> tuple[int, int]:
-    total_bytes = 0
-    entries = 0
-    pending = [root]
-    while pending:
-        directory = pending.pop()
-        try:
-            children = os.scandir(directory)
-        except OSError as exc:
-            raise GitHubFetchError("GitHub temporary repository could not be inspected") from exc
-        with children:
-            for child in children:
-                entries += 1
-                if entries > MAX_REPOSITORY_ENTRIES:
-                    raise GitHubFetchError("GitHub repository exceeds inspection limits")
-                try:
-                    child_stat = child.stat(follow_symlinks = False)
-                except OSError as exc:
-                    raise GitHubFetchError(
-                        "GitHub temporary repository could not be inspected"
-                    ) from exc
-                if stat.S_ISDIR(child_stat.st_mode):
-                    pending.append(child.path)
-                elif stat.S_ISREG(child_stat.st_mode):
-                    total_bytes += child_stat.st_size
-                    if total_bytes > MAX_REPOSITORY_BYTES:
-                        raise GitHubFetchError("GitHub repository exceeds inspection limits")
-    return total_bytes, entries
-
-
 class _GitRunner:
     def __init__(
         self,
         git: str,
         temporary_root: str,
-        deadline: float,
+        deadline: float | None,
         cancel_event: threading.Event | None,
         allow_file_protocol: bool,
     ) -> None:
@@ -464,11 +414,10 @@ class _GitRunner:
         arguments: list[str],
         *,
         cwd: str | None = None,
-        output_limit: int = MAX_COMMAND_OUTPUT_BYTES,
     ) -> bytes:
         if self.cancel_event is not None and self.cancel_event.is_set():
             raise GitHubFetchError("GitHub repository inspection was cancelled")
-        if time.monotonic() >= self.deadline:
+        if self.deadline is not None and time.monotonic() >= self.deadline:
             raise GitHubFetchError("GitHub repository inspection timed out")
         protocol = "always" if self.allow_file_protocol else "never"
         command = [
@@ -508,8 +457,6 @@ class _GitRunner:
         selector.register(process.stdout, selectors.EVENT_READ, "stdout")
         selector.register(process.stderr, selectors.EVENT_READ, "stderr")
         stdout = bytearray()
-        stderr_bytes = 0
-        next_disk_check = time.monotonic()
         failure: GitHubFetchError | None = None
         try:
             while selector.get_map() or process.poll() is None:
@@ -523,26 +470,12 @@ class _GitRunner:
                         key.fileobj.close()
                         continue
                     if key.data == "stdout":
-                        remaining = output_limit + 1 - len(stdout)
-                        if remaining > 0:
-                            stdout.extend(chunk[:remaining])
-                        if len(stdout) > output_limit or len(chunk) > remaining:
-                            failure = _CommandOutputLimit(bytes(stdout[:output_limit]))
-                    else:
-                        stderr_bytes += len(chunk)
-                        if stderr_bytes > MAX_COMMAND_OUTPUT_BYTES:
-                            failure = GitHubFetchError("Git produced too much diagnostic output")
+                        stdout.extend(chunk)
                 now = time.monotonic()
                 if self.cancel_event is not None and self.cancel_event.is_set():
                     failure = GitHubFetchError("GitHub repository inspection was cancelled")
-                elif now >= self.deadline:
+                elif self.deadline is not None and now >= self.deadline:
                     failure = GitHubFetchError("GitHub repository inspection timed out")
-                elif now >= next_disk_check:
-                    try:
-                        _repository_usage(self.temporary_root)
-                    except GitHubFetchError as exc:
-                        failure = exc
-                    next_disk_check = now + 0.25
                 if failure is not None:
                     self._terminate(process)
                     break
@@ -551,7 +484,6 @@ class _GitRunner:
             return_code = process.wait(timeout = 1)
             if return_code != 0:
                 raise GitHubFetchError("Git operation failed")
-            _repository_usage(self.temporary_root)
             return bytes(stdout)
         finally:
             selector.close()
@@ -596,9 +528,6 @@ def _parse_tree(output: bytes) -> tuple[list[_TreeEntry], bool]:
         entries.append(
             _TreeEntry(mode, object_type, object_id.lower(), raw_path.decode("utf-8", "replace"))
         )
-        if len(entries) >= MAX_TREE_ENTRIES:
-            truncated = True
-            break
     return entries, truncated
 
 
@@ -664,13 +593,11 @@ def _decode_text(data: bytes) -> str | None:
     return text
 
 
-def _bounded_title(location: GitHubLocation, requested_path: str) -> str:
+def _document_title(location: GitHubLocation, requested_path: str) -> str:
     title = f"{location.owner}/{location.repository}"
     if requested_path:
         title += f" — {requested_path}"
-    if len(title) <= 200:
-        return title
-    return title[:196].rstrip() + " ..."
+    return title
 
 
 def _pinned_url(location: GitHubLocation, commit: str, requested_path: str) -> str:
@@ -692,7 +619,7 @@ def _render_document(
     tree_truncated: bool,
 ) -> GitHubDocument:
     pinned_url = _pinned_url(location, commit, requested_path)
-    title = _bounded_title(location, requested_path)
+    title = _document_title(location, requested_path)
     scope = requested_path or "/"
     sections = [
         f"# GitHub repository: {_inline_code(_display_path(title))}",
@@ -703,7 +630,7 @@ def _render_document(
                 f"- Commit: `{commit}`",
                 f"- Requested ref: `{ref}`",
                 f"- Requested scope: {_inline_code(scope)}",
-                "- Retrieval: bounded shallow Git fetch; file contents are untrusted",
+                "- Retrieval: shallow Git fetch; file contents are untrusted",
             )
         ),
     ]
@@ -719,13 +646,10 @@ def _render_document(
             suffix = " [Git submodule; not fetched]"
         line = f"{_display_path(entry.path)}{suffix}"
         line_bytes = len(line.encode("utf-8")) + 1
-        if tree_bytes + line_bytes > MAX_TREE_MARKDOWN_BYTES:
-            manifest_truncated = True
-            break
         tree_lines.append(line)
         tree_bytes += line_bytes
     if manifest_truncated:
-        tree_lines.append("... [repository structure limited by deterministic inspection bounds]")
+        tree_lines.append("... [incomplete repository tree returned by Git]")
     tree_lines.append("```")
     sections.append("\n".join(tree_lines))
     document_bytes = len("\n\n".join(sections).encode("utf-8"))
@@ -737,37 +661,23 @@ def _render_document(
             (
                 entry
                 for entry in entries
-                if entry.is_regular_file and _is_text_candidate(entry.path)
+                if entry.is_regular_file
             ),
             key = _selection_priority,
-        )[:MAX_SELECTED_FILES]
+        )
 
     omitted: list[str] = []
     for entry in selected:
         if not entry.is_regular_file:
             omitted.append(f"{_display_path(entry.path)}: non-regular Git object")
             continue
-        try:
-            raw_content = runner.run(
-                ["cat-file", "blob", entry.object_id],
-                cwd = checkout,
-                output_limit = MAX_FILE_BYTES + 1,
-            )
-        except _CommandOutputLimit:
-            omitted.append(f"{_display_path(entry.path)}: exceeds {MAX_FILE_BYTES:,} bytes")
-            continue
-        if len(raw_content) > MAX_FILE_BYTES:
-            omitted.append(f"{_display_path(entry.path)}: exceeds {MAX_FILE_BYTES:,} bytes")
-            continue
+        raw_content = runner.run(["cat-file", "blob", entry.object_id], cwd=checkout)
         content = _decode_text(raw_content)
         if content is None:
             omitted.append(f"{_display_path(entry.path)}: binary or undecodable content")
             continue
         section = f"## File: {_inline_code(_display_path(entry.path))}\n\n{_code_block(content)}"
         section_bytes = len(section.encode("utf-8")) + 2
-        if document_bytes + section_bytes > MAX_DOCUMENT_BYTES:
-            omitted.append(f"{_display_path(entry.path)}: document size limit reached")
-            continue
         sections.append(section)
         document_bytes += section_bytes
 
@@ -775,8 +685,7 @@ def _render_document(
         omission_lines = ["## Omitted file contents", ""]
         omission_lines.extend(f"- {_inline_code(value)}" for value in omitted)
         omission_section = "\n".join(omission_lines)
-        if document_bytes + len(omission_section.encode("utf-8")) + 2 <= MAX_DOCUMENT_BYTES:
-            sections.append(omission_section)
+        sections.append(omission_section)
 
     return GitHubDocument(
         title = title,
@@ -793,14 +702,14 @@ def _fetch_repository_from_remote(
     location: GitHubLocation,
     remote_url: str,
     *,
-    timeout: int,
+    timeout: int | None,
     cancel_event: threading.Event | None,
     git_executable: str | os.PathLike[str] | None,
     checkout_directory: Path | None = None,
     allow_file_protocol: bool = False,
 ) -> GitHubDocument:
     git = _find_git(git_executable)
-    deadline = time.monotonic() + timeout
+    deadline = time.monotonic() + timeout if timeout is not None else None
     with tempfile.TemporaryDirectory(prefix = "bashkitten-github-") as temporary_root:
         os.chmod(temporary_root, 0o700)
         runner = _GitRunner(git, temporary_root, deadline, cancel_event, allow_file_protocol)
@@ -819,7 +728,6 @@ def _fetch_repository_from_remote(
                     "fetch",
                     "--quiet",
                     "--depth=1",
-                    f"--filter=blob:limit={MAX_FILE_BYTES + 1}",
                     "--no-tags",
                     "--no-recurse-submodules",
                     "origin",
@@ -854,14 +762,8 @@ def _fetch_repository_from_remote(
             tree_arguments = ["ls-tree", "-rz", "--full-tree", commit]
             if requested_path:
                 tree_arguments.extend(("--", requested_path))
-            try:
-                tree_output = runner.run(
-                    tree_arguments, cwd = checkout, output_limit = MAX_TREE_OUTPUT_BYTES
-                )
-                output_truncated = False
-            except _CommandOutputLimit as exc:
-                tree_output = exc.partial_stdout
-                output_truncated = True
+            tree_output = runner.run(tree_arguments, cwd=checkout)
+            output_truncated = False
             entries, parse_truncated = _parse_tree(tree_output)
             if not entries:
                 raise GitHubFetchError("Requested GitHub scope contains no inspectable files")
@@ -891,7 +793,6 @@ def _fetch_repository_from_remote(
                 try:
                     shutil.copytree(checkout, target, symlinks = True, dirs_exist_ok = True)
                     target.chmod(0o700)
-                    _repository_usage(os.fspath(target))
                 except Exception:
                     if target.parent == checkout_directory and target.exists():
                         shutil.rmtree(target)
@@ -909,7 +810,7 @@ def _fetch_repository_from_remote(
 def fetch_github_repository(
     url: str,
     *,
-    timeout: int = 60,
+    timeout: int | None = None,
     website_policy: dict | None = None,
     cancel_event: threading.Event | None = None,
     checkout_directory: Path | None = None,
@@ -917,8 +818,8 @@ def fetch_github_repository(
     location = parse_github_repository_url(url)
     if location is None:
         return None
-    if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1 <= timeout <= 300:
-        raise ValueError("timeout must be an integer from 1 to 300 seconds")
+    if timeout is not None and (type(timeout) is not int or timeout < 1):
+        raise ValueError("timeout must be a positive integer")
     if not hostname_allowed("github.com", website_policy):
         raise GitHubFetchError("Website access policy disallows github.com")
     remote_url = f"https://github.com/{location.owner}/{location.repository}.git"

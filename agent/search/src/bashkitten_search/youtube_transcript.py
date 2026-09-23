@@ -18,11 +18,6 @@ from .artifacts import preview, write_markdown
 
 
 INLINE_CONTENT_LIMIT = 16_000
-MAX_INPUT_LENGTH = 4_096
-MAX_TITLE_LENGTH = 300
-MAX_TITLE_RESPONSE_BYTES = 65_536
-MAX_SEGMENTS = 100_000
-MAX_TRANSCRIPT_CHARACTERS = 16_000_000
 VIDEO_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{11}")
 LANGUAGE_PATTERN = re.compile(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*")
 YOUTUBE_HOSTS = {
@@ -47,8 +42,8 @@ def canonicalize_youtube_input(source: str) -> tuple[str, str]:
     if not isinstance(source, str):
         raise InvalidYouTubeInput("YouTube input must be a string")
     value = source.strip()
-    if not value or len(value) > MAX_INPUT_LENGTH:
-        raise InvalidYouTubeInput("YouTube input is empty or too long")
+    if not value:
+        raise InvalidYouTubeInput("YouTube input is empty")
     if VIDEO_ID_PATTERN.fullmatch(value):
         return value, _canonical_url(value)
 
@@ -80,7 +75,6 @@ def canonicalize_youtube_input(source: str) -> tuple[str, str]:
                 query = parse_qs(
                     parsed.query,
                     keep_blank_values=True,
-                    max_num_fields=32,
                 )
             except ValueError as error:
                 raise InvalidYouTubeInput("Malformed YouTube query") from error
@@ -141,7 +135,7 @@ def fetch_youtube_transcript(
 
     fetch_title = title_fetcher or _fetch_oembed_title
     try:
-        title = _one_line(fetch_title(canonical_url), MAX_TITLE_LENGTH)
+        title = _one_line(fetch_title(canonical_url))
     except Exception:
         title = ""
     if not title:
@@ -188,8 +182,8 @@ def _validate_languages(languages: Sequence[str] | None) -> tuple[str, ...]:
         return ("en",)
     if isinstance(languages, (str, bytes)) or not isinstance(languages, Sequence):
         raise InvalidYouTubeInput("languages must be a list of language codes")
-    if not 1 <= len(languages) <= 10:
-        raise InvalidYouTubeInput("languages must contain between one and ten codes")
+    if not languages:
+        raise InvalidYouTubeInput("languages must contain at least one code")
     validated: list[str] = []
     for language in languages:
         if not isinstance(language, str) or not LANGUAGE_PATTERN.fullmatch(language):
@@ -202,12 +196,7 @@ def _validate_languages(languages: Sequence[str] | None) -> tuple[str, ...]:
 def _new_http_session() -> Any:
     from requests import Session
 
-    class BoundedSession(Session):
-        def request(self, method: str, url: str, **kwargs: Any) -> Any:
-            kwargs.setdefault("timeout", (5, 30))
-            return super().request(method, url, **kwargs)
-
-    session = BoundedSession()
+    session = Session()
     session.trust_env = False
     session.proxies.clear()
     return session
@@ -227,25 +216,15 @@ def _fetch_oembed_title(canonical_url: str) -> str | None:
             params={"url": canonical_url, "format": "json"},
             allow_redirects=False,
             stream=True,
-            timeout=(5, 10),
         )
         if response.status_code != 200:
             return None
         content_type = response.headers.get("Content-Type", "").casefold()
         if "application/json" not in content_type:
             return None
-        content_length = response.headers.get("Content-Length")
-        if content_length is not None:
-            try:
-                if int(content_length) > MAX_TITLE_RESPONSE_BYTES:
-                    return None
-            except ValueError:
-                return None
         body = bytearray()
         for chunk in response.iter_content(8_192):
             body.extend(chunk)
-            if len(body) > MAX_TITLE_RESPONSE_BYTES:
-                return None
         payload = json.loads(body.decode("utf-8"))
         title = payload.get("title") if isinstance(payload, dict) else None
         return title if isinstance(title, str) else None
@@ -257,15 +236,11 @@ def _collect_segments(fetched: Iterable[Any]) -> list[dict[str, object]]:
     segments: list[dict[str, object]] = []
     text_characters = 0
     for snippet in fetched:
-        if len(segments) >= MAX_SEGMENTS:
-            raise YouTubeTranscriptError("Transcript exceeded the safe segment limit")
         text = getattr(snippet, "text", None)
         if not isinstance(text, str):
             raise YouTubeTranscriptError("Transcript segment omitted text")
         text = _clean_segment_text(text)
         text_characters += len(text)
-        if text_characters > MAX_TRANSCRIPT_CHARACTERS:
-            raise YouTubeTranscriptError("Transcript exceeded the safe text limit")
         start = _nonnegative_number(getattr(snippet, "start", None), "start")
         duration = _nonnegative_number(
             getattr(snippet, "duration", None), "duration"
@@ -360,7 +335,7 @@ def _markdown_text(value: str) -> str:
     return escaped
 
 
-def _one_line(value: object, limit: int) -> str:
+def _one_line(value: object, limit: int | None = None) -> str:
     if not isinstance(value, str):
         return ""
     normalized = unicodedata.normalize("NFKC", value)
@@ -369,5 +344,5 @@ def _one_line(value: object, limit: int) -> str:
         for character in normalized
         if not unicodedata.category(character).startswith("C")
     )
-    return " ".join(printable.split())[:limit].strip()
+    return " ".join(printable.split()).strip()
 
