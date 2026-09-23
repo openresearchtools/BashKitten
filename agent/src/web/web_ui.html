@@ -25,6 +25,10 @@
       --activity: #232323;
       --overlay: #1e1e1eeb;
       --shadow: #0006;
+      /* Match Gecko's small, medium and large corner tokens. */
+      --radius-small: 4px;
+      --radius-control: 8px;
+      --radius-card: 16px;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
 
@@ -76,7 +80,10 @@
     html, body { width: 100%; height: 100%; overflow: hidden; }
     body { margin: 0; overflow: hidden; background: var(--bg); color: var(--text); font-size: 14px; }
     button, input, select, textarea { color: inherit; font: inherit; }
-    button { cursor: pointer; }
+    button { cursor: pointer; border-radius: var(--radius-control); }
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { border-radius: var(--radius-control); }
+    input::file-selector-button { border-radius: var(--radius-control); }
+    summary { border-radius: var(--radius-control); }
     button:disabled { cursor: default; opacity: .52; }
     .hidden { display: none !important; }
 
@@ -87,12 +94,13 @@
       place-items: center;
       padding: 0;
       border: 1px solid transparent;
-      border-radius: 9px;
+      border-radius: var(--radius-control);
       background: transparent;
       color: var(--muted);
     }
     .icon-button:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .icon-button.active { background: var(--surface-2); color: var(--text); }
+    #piInstance[data-stopped="true"] { width: auto; flex-shrink: 0; padding-inline: 8px; white-space: nowrap; font-size: 12px; }
     .primary { border: 0; background: var(--accent); color: var(--accent-text); font-weight: 650; }
     .primary:hover { background: var(--accent-hover); }
 
@@ -101,14 +109,14 @@
       margin: 12vh auto;
       padding: 28px;
       border: 1px solid var(--line);
-      border-radius: 18px;
+      border-radius: var(--radius-card);
       background: var(--surface);
       box-shadow: 0 24px 70px var(--shadow);
     }
     #auth h1 { margin: 0 0 8px; font-size: 24px; }
     #auth p { color: var(--muted); }
     #auth a { display: inline-block; margin: 10px 0; color: var(--text); }
-    #auth button { width: 100%; margin-top: 5px; padding: 11px; border-radius: 10px; }
+    #auth button { width: 100%; margin-top: 5px; padding: 11px; }
 
     #app { display: grid; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100dvh; min-height: 0; overflow: hidden; }
     #sidebar { display: flex; min-width: 0; min-height: 0; overflow: hidden; flex-direction: column; border-right: 1px solid var(--line-soft); background: var(--sidebar); }
@@ -122,7 +130,7 @@
       gap: 10px;
       padding: 0 10px;
       border: 0;
-      border-radius: 7px;
+      border-radius: var(--radius-control);
       background: transparent;
       color: var(--text);
       font-size: 14px;
@@ -143,6 +151,7 @@
       color: var(--muted);
       font-size: 13px;
       font-weight: 570;
+      border-radius: var(--radius-control);
     }
     .folder-heading svg { width: 17px; height: 17px; flex: 0 0 auto; }
     .folder-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -151,15 +160,15 @@
       margin: 1px 0;
       padding: 7px 9px 7px 34px;
       overflow: hidden;
-      border-radius: 7px;
+      border-radius: var(--radius-control);
       cursor: pointer;
     }
     .session:hover { background: var(--surface); }
     .session.active { background: var(--surface-2); }
     .session { padding-right: 22px; }
     .session:focus-visible, .folder-heading:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
-    #sessionActions { position:fixed; z-index:80; min-width:150px; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:7px; box-shadow:0 6px 20px var(--shadow); }
-    #sessionActions button { display:block; width:100%; text-align:left; padding:8px 10px; border:0; background:transparent; }
+    #sessionActions { position:fixed; z-index:80; min-width:150px; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-control); box-shadow:0 6px 20px var(--shadow); }
+    #sessionActions button { display:block; width:100%; text-align:left; padding:8px 10px; border:0; border-radius:var(--radius-small); background:transparent; }
     #sessionActions button.hidden { display:none; }
     #sessionActions button:hover, #sessionActions button:focus-visible { background:var(--surface-2); }
     .dialog-actions .delete-confirm { background:var(--danger); color:#fff; border:0; }
@@ -171,7 +180,7 @@
     .hosted-bookmarks { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
     .hosted-bookmarks > span { color: var(--muted); font-size: 11px; }
     #hostedLinks { display: flex; flex: 1; gap: 4px; min-width: 0; overflow-x: auto; }
-    #hostedLinks a { display: block; max-width: 180px; flex-shrink: 0; padding: 4px 7px; border-radius: 5px; color: var(--text); font-size: 12px; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    #hostedLinks a { display: block; max-width: 180px; flex-shrink: 0; padding: 4px 7px; border-radius: var(--radius-control); color: var(--text); font-size: 12px; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     #hostedLinks a:hover { background: var(--surface-2); }
     .hosted-bookmarks .icon-button { width: 26px; height: 26px; flex-shrink: 0; }
     .chat-heading { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; }
@@ -185,7 +194,7 @@
       padding: 5px 8px;
       overflow: hidden;
       border: 1px solid transparent;
-      border-radius: 7px;
+      border-radius: var(--radius-control);
       background: transparent;
       color: var(--muted);
       font-size: 13px;
@@ -207,9 +216,9 @@
     .settings-page h2 { margin: 0; font-size: 20px; }
     .settings-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
     .settings-tabs { position: sticky; top: 0; z-index: 2; background: var(--bg); display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; }
-    .settings-tabs button { flex: 1 0 auto; padding: 10px 14px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--muted); }
-    .settings-tabs button[aria-selected="true"] { border-bottom-color: var(--text); color: var(--text); }
-    .settings-page button:not([role="tab"]):not(.primary) { padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); font-size: 12px; }
+    .settings-tabs button { flex: 1 0 auto; margin: 4px 0; padding: 10px 14px; border: 0; background: transparent; color: var(--muted); }
+    .settings-tabs button:hover, .settings-tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--text); }
+    .settings-page button:not([role="tab"]):not(.primary) { padding: 7px 10px; border: 1px solid var(--line); background: var(--surface-2); font-size: 12px; }
     .settings-page button:not([role="tab"]):not(.primary):hover { border-color: var(--muted); }
     .settings-page button:disabled { opacity: .5; cursor: default; }
     .settings-panel { min-width: 0; }
@@ -227,7 +236,7 @@
     .settings-section { padding: 18px 0; border-top: 1px solid var(--line-soft); margin-top: 18px; }
     .settings-section > summary { font-weight: 500; }
     .settings-page label { display: block; margin: 11px 0; color: var(--muted); font-size: 12px; }
-    .settings-page input, .settings-page select, .settings-page textarea { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .settings-page input, .settings-page select, .settings-page textarea { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); background: var(--surface); }
     .settings-page .check-label { display: flex; align-items: center; gap: 7px; }
     .settings-page .check-label input { width: auto; margin: 0; }
     .hosted-service, .model-download { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
@@ -246,19 +255,22 @@
     .model-file > span { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
     .model-file small { display: block; margin-top: 4px; color: var(--muted); }
     .model-download progress { display: block; width: 100%; height: 6px; margin: 8px 0; accent-color: var(--muted); }
+    progress { border-radius: var(--radius-small); overflow: hidden; }
+    progress::-moz-progress-bar { border-radius: inherit; }
+    progress::-webkit-progress-bar, progress::-webkit-progress-value { border-radius: inherit; }
     .model-download details { margin: 8px 0; color: var(--muted); font-size: 11px; }
     .model-download details p { margin: 4px 0; }
     #modelRepositoryTitle { overflow-wrap: anywhere; }
     .chat-inner { width: min(790px, calc(100% - 44px)); min-height: 100%; margin: 0 auto; padding: 24px 0 28px; }
     .welcome { display: grid; min-height: calc(100dvh - 260px); place-content: center; color: var(--muted); text-align: center; }
-    .welcome .cat { margin-bottom: 8px; font-size: 30px; filter: grayscale(.15); }
+    .welcome .cat { width: 64px; height: 64px; margin: 0 auto 12px; background: url('/logo.png') center / contain no-repeat; font-size: 0; }
     .welcome strong { color: var(--text); font-size: 20px; font-weight: 600; letter-spacing: -.02em; }
     .welcome p { margin: 7px 0 0; font-size: 13px; }
     .message { position: relative; display: flex; margin: 14px 0 24px; }
     .message.activity-message { margin: 1px 0; }
     .message.user { justify-content: flex-end; }
     .message-content { min-width: 0; max-width: 100%; font-size: 15px; line-height: 1.62; overflow-wrap: anywhere; }
-    .message.user .message-content { max-width: 82%; padding: 9px 13px; border-radius: 17px 17px 4px 17px; background: var(--surface-2); font-size: 14px; }
+    .message.user .message-content { max-width: 82%; padding: 9px 13px; border-radius: var(--radius-card); background: var(--surface-2); font-size: 14px; }
     .message.assistant .message-content { width: 100%; }
     .message.error .message-content { padding-left: 10px; border-left: 2px solid var(--danger); color: var(--danger); }
     .markdown p { margin: 0 0 8px; }
@@ -266,18 +278,18 @@
     .markdown ul, .markdown ol { margin: 5px 0 10px; padding-left: 24px; }
     .markdown h1, .markdown h2, .markdown h3 { margin: 14px 0 7px; line-height: 1.25; }
     .markdown h1 { font-size: 20px; } .markdown h2 { font-size: 17px; } .markdown h3 { font-size: 15px; }
-    .markdown code { padding: 2px 5px; border-radius: 4px; background: var(--code); color: var(--text); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .markdown pre, .tool-body pre { margin: 6px 0 0; padding: 9px 10px; overflow: auto; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--code); color: var(--text); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+    .markdown code { padding: 2px 5px; border-radius: var(--radius-small); background: var(--code); color: var(--text); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .markdown pre, .tool-body pre { margin: 6px 0 0; padding: 9px 10px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--code); color: var(--text); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
     .message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
-    .inline-image { position: relative; display: inline-flex; overflow: hidden; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--activity); }
+    .inline-image { position: relative; display: inline-flex; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--activity); }
     .message-images img { display: block; max-width: 300px; max-height: 240px; cursor: zoom-in; object-fit: contain; }
-    .image-download { position: absolute; right: 5px; bottom: 5px; display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid #fff4; border-radius: 6px; background: #111c; color: #fff; text-decoration: none; }
+    .image-download { position: absolute; right: 5px; bottom: 5px; display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid #fff4; border-radius: var(--radius-control); background: #111c; color: #fff; text-decoration: none; }
     .image-download:hover { background: #111; }
     .tool-body .message-images { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line-soft); }
     .tool-body .message-images img { max-width: 260px; max-height: 220px; }
     .sent-attachments { display: flex; flex-wrap: wrap; gap: 7px; margin: 0 0 8px; }
     .sent-attachments img { display: block; max-width: 170px; max-height: 132px; cursor: zoom-in; object-fit: contain; }
-    .sent-file { display: flex; min-width: 0; max-width: 290px; height: 37px; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--activity); color: var(--text); text-decoration: none; }
+    .sent-file { display: flex; min-width: 0; max-width: 290px; height: 37px; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--activity); color: var(--text); text-decoration: none; }
     .sent-file:hover { background: var(--surface); }
     .sent-file .attachment-name { font-size: 12px; }
     .sent-file-download { margin-left: auto; color: var(--muted); font-size: 14px; }
@@ -285,7 +297,7 @@
     .message.assistant .message-actions { left: 0; }
     .message.user .message-actions { right: 0; }
     .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
-    .message-actions button { height: 20px; padding: 0 5px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 10px; }
+    .message-actions button { height: 20px; padding: 0 5px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--muted); font-size: 10px; }
     .message-actions button:hover { background: var(--surface-2); color: var(--text); }
 
     #imageViewer { position: absolute; z-index: 60; inset: 0; display: grid; min-width: 0; min-height: 0; grid-template-rows: 49px minmax(0, 1fr); background: var(--overlay); }
@@ -295,7 +307,7 @@
     .image-viewer-toolbar .icon-button { width: 31px; height: 31px; font-size: 17px; }
     #imageViewport { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; }
     #imageStage { display: grid; width: max-content; min-width: 100%; height: max-content; min-height: 100%; padding: 24px; place-items: center; }
-    #viewerImage { display: block; max-width: none; max-height: none; border-radius: 4px; box-shadow: 0 8px 32px var(--shadow); }
+    #viewerImage { display: block; max-width: none; max-height: none; border-radius: var(--radius-small); box-shadow: 0 8px 32px var(--shadow); }
 
     .turn-work {
       margin: 5px 0 14px;
@@ -334,100 +346,100 @@
       margin: 0;
       overflow: visible;
       border: 0;
-      border-radius: 0;
+      border-radius: var(--radius-control);
       background: transparent;
       color: var(--muted);
     }
     .activity[open] { border: 0; }
     .activity summary { display: flex; min-height: 32px; align-items: center; gap: 8px; padding: 3px 2px; cursor: pointer; list-style: none; font-size: 13px; }
     .activity summary::-webkit-details-marker { display: none; }
-    .tool-icon { display: inline-grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border: 1px solid var(--muted); border-radius: 4px; color: var(--muted); font: 9px ui-monospace, monospace; }
+    .tool-icon { display: inline-grid; width: 17px; height: 17px; flex: 0 0 auto; place-items: center; border: 1px solid var(--muted); border-radius: var(--radius-small); color: var(--muted); font: 9px ui-monospace, monospace; }
     .activity .tool-name { color: var(--text); font-weight: 450; white-space: nowrap; }
     .activity .tool-focus { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .activity summary::after { color: var(--muted); content: "⌄"; font-size: 14px; transform: rotate(-90deg); transition: transform .12s; }
     .activity[open] summary::after { transform: rotate(0deg); }
     .activity .tool-state { margin-left: auto; flex: 0 0 auto; color: var(--ok); font-size: 12px; white-space: nowrap; }
     .activity.error .tool-state { color: var(--danger); }
-    .tool-body { margin: 1px 20px 7px 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--activity); }
-    .tool-body pre { max-height: 330px; margin: 0; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; }
+    .tool-body { margin: 1px 20px 7px 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--activity); }
+    .tool-body pre { max-height: 330px; margin: 0; padding: 10px 12px; border: 0; border-radius: inherit; background: transparent; }
     .thought summary { color: var(--muted); font-style: normal; }
     .thought .tool-body { margin-left: 25px; }
 
     #composerWrap { padding: 0 16px 10px; background: linear-gradient(180deg, transparent, var(--bg) 12px); }
     #composer { width: min(790px, 100%); margin: 0 auto; }
     #attachmentTray { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 8px 0; }
-    .attachment { position: relative; width: 58px; height: 58px; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+    .attachment { position: relative; width: 58px; height: 58px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); }
     .attachment img { width: 100%; height: 100%; cursor: zoom-in; object-fit: cover; }
     .attachment.file { display: flex; width: min(220px, 100%); height: 40px; align-items: center; gap: 8px; padding: 6px 27px 6px 9px; }
     .attachment-kind { flex: 0 0 auto; color: var(--muted); font: 9px ui-monospace, monospace; }
     .attachment-name { min-width: 0; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
     .attachment button { position: absolute; top: 2px; right: 2px; width: 19px; height: 19px; padding: 0; border: 0; border-radius: 50%; background: #000c; color: white; font-size: 12px; }
-    .compose-box { position: relative; overflow: visible; border: 1px solid var(--line); border-radius: 0; background: var(--surface); box-shadow: none; }
+    .compose-box { position: relative; overflow: visible; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); box-shadow: none; }
     .compose-box:focus-within { border-color: var(--line); }
-    .compose-box.dragging::after { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; border: 1px dashed var(--muted); border-radius: 0; background: var(--overlay); color: var(--text); content: "Drop files"; pointer-events: none; }
+    .compose-box.dragging::after { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; border: 1px dashed var(--muted); border-radius: inherit; background: var(--overlay); color: var(--text); content: "Drop files"; pointer-events: none; }
     .subscription-settings { margin: 18px 0; padding: 16px 0; border-block: 1px solid var(--line-soft); }
     .subscription-settings h3 { margin: 0 0 8px; font-size: 15px; }
     .subscription-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
-    .subscription-actions button, .subscription-actions a { padding: 7px 10px; font-size: 13px; }
+    .subscription-actions button, .subscription-actions a { padding: 7px 10px; border-radius: var(--radius-control); font-size: 13px; }
     #oauthManual label { display: block; font-size: 13px; }
     #oauthCode { width: 100%; margin-top: 8px; }
     #oauthUserCode { display: block; padding: 8px 0; font: 600 20px monospace; letter-spacing: 2px; }
     #prompt { display: block; width: 100%; min-height: 42px; max-height: 160px; padding: 10px 11px 2px; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.4; }
     .composer-toolbar { display: flex; min-width: 0; align-items: center; gap: 2px; padding: 4px 5px 5px; }
-    .composer-toolbar select { height: 27px; min-width: 0; padding: 0 22px 0 6px; overflow: hidden; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; }
+    .composer-toolbar select { height: 27px; min-width: 0; padding: 0 22px 0 6px; overflow: hidden; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; }
     .composer-toolbar select:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .composer-toolbar select:focus { border-color: var(--line); outline: 0; box-shadow: none; }
     #model { width: 100px; } #thinking { width: 82px; }
     .toolbar-spacer { flex: 1; }
     #attachBtn { width: 27px; height: 27px; }
     #folderBtn:not(:disabled) { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
-    #composerActions { position:absolute; z-index:12; bottom:43px; left:8px; min-width:180px; padding:5px; background:var(--surface); border:1px solid var(--line); box-shadow:0 4px 18px #0002; }
-    #composerActions button { display:block; width:100%; text-align:left; border:0; padding:9px 12px; background:transparent; color:var(--text); }
+    #composerActions { position:absolute; z-index:12; bottom:43px; left:8px; min-width:180px; padding:5px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-control); box-shadow:0 4px 18px #0002; }
+    #composerActions button { display:block; width:100%; text-align:left; border:0; border-radius:var(--radius-small); padding:9px 12px; background:transparent; color:var(--text); }
     #composerActions button.hidden { display:none; }
     #forkMessages { display:grid; gap:6px; max-height:50vh; overflow:auto; }
     #forkMessages button { text-align:left; white-space:pre-wrap; overflow-wrap:anywhere; }
-    #composerActions button:hover, #composerActions button:focus-visible { background:var(--hover); }
+    #composerActions button:hover, #composerActions button:focus-visible { background:var(--surface-2); }
     .compaction-output { max-height:330px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; margin:7px 0; }
     #compactionStatus { padding:10px 12px; border-top:1px solid var(--line); color:var(--text); font-size:13px; }
     #goalStatus { max-height:4.5em; overflow:auto; padding:3px 8px; }
-    #goalChip { display:inline-flex; align-items:center; gap:8px; margin:0 10px 3px; padding:3px 7px; border:1px solid var(--line); color:var(--text); font-size:12px; }
+    #goalChip { display:inline-flex; align-items:center; gap:8px; margin:0 10px 3px; padding:3px 7px; border:1px solid var(--line); border-radius:var(--radius-control); color:var(--text); font-size:12px; }
     #goalChip button { padding:0; width:18px; height:18px; border:0; background:transparent; color:var(--muted); }
-    #sendBtn { display: grid; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; place-items: center; border-radius: 6px; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
+    #sendBtn { display: grid; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; place-items: center; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
     #sendBtn:hover { background: var(--muted); }
     #sendBtn[data-mode="pause"] { font-size: 12px; letter-spacing: -2px; }
     #composerHint { min-height: 14px; padding-top: 3px; color: var(--muted); font-size: 10px; text-align: center; }
 
     #queuePanel { display: flex; max-height: 140px; flex-direction: column; gap: 2px; margin: 0 3px 5px; overflow: auto; }
-    .queue-item { display: grid; min-height: 28px; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; border-left: 2px solid var(--line); border-radius: 4px; background: var(--activity); font-size: 11px; }
+    .queue-item { display: grid; min-height: 28px; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 5px; padding: 3px 4px 3px 8px; border-left: 2px solid var(--line); border-radius: var(--radius-control); background: var(--activity); font-size: 11px; }
     .queue-item.steer { border-left-color: var(--accent); }
     .queue-kind { color: var(--muted); font-size: 10px; text-transform: uppercase; }
     .queue-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .queue-item button { height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--muted); font-size: 10px; }
+    .queue-item button { height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--radius-small); background: transparent; color: var(--muted); font-size: 10px; }
     .queue-item button:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .queue-item button.queue-steer { color: var(--accent); }
     .queue-item.editing { outline: 1px solid var(--accent); }
 
-    dialog { width: min(560px, calc(100vw - 28px)); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 24px 80px var(--shadow); }
+    dialog { width: min(560px, calc(100vw - 28px)); padding: 0; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--surface); color: var(--text); box-shadow: 0 24px 80px var(--shadow); }
     dialog::backdrop { background: #0008; }
     .dialog-body { padding: 20px; }
     .dialog-body h2 { margin: 0 0 16px; font-size: 18px; }
     .dialog-body label { display: block; margin: 11px 0; color: var(--muted); font-size: 12px; }
-    .dialog-body input, .dialog-body select { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+    .dialog-body input, .dialog-body select, .dialog-body textarea { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); background: var(--bg); }
     .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-    .dialog-actions button { padding: 8px 13px; border: 1px solid var(--line); border-radius: 8px; }
+    .dialog-actions button { padding: 8px 13px; border: 1px solid var(--line); }
     .dialog-actions button:not(.primary) { background: transparent; }
     .dialog-actions .primary { border: 0; }
     #folderDialog { width: min(620px, calc(100vw - 28px)); }
     .folder-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
-    .folder-toolbar button, .folder-create button, #folderLocations button { padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+    .folder-toolbar button, .folder-create button, #folderLocations button { padding: 7px 9px; border: 1px solid var(--line); background: var(--surface-2); }
     #folderLocations { margin-bottom: 8px; }
-    #folderPath { width: 100%; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
-    #folderList { height: min(280px, 32dvh); margin-top: 8px; overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
-    .folder-row { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 9px; border: 0; border-bottom: 1px solid var(--line-soft); border-radius: 0; background: transparent; color: var(--text); text-align: left; }
+    #folderPath { width: 100%; padding: 7px 8px; border: 1px solid var(--line); background: var(--bg); }
+    #folderList { height: min(280px, 32dvh); margin-top: 8px; padding: 3px; overflow: auto; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--bg); }
+    .folder-row { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 9px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--text); text-align: left; }
     .folder-row:hover { background: var(--surface-2); }
     .folder-empty { padding: 18px; color: var(--muted); text-align: center; }
     .folder-create { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin-top: 8px; }
-    .folder-create input { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
+    .folder-create input { padding: 7px 8px; border: 1px solid var(--line); background: var(--bg); }
     .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
     .settings-grid .wide { grid-column: 1 / -1; }
     .check:not(.hidden) { display: flex !important; align-items: center; gap: 8px; }
@@ -455,9 +467,9 @@
     .file-heading strong { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .file-tabs, .file-toolbar { display:flex; flex-shrink:0; flex-wrap:wrap; gap:6px; align-items:center; }
     .file-tabs { margin-bottom:8px; border-bottom:1px solid var(--line-soft); }
-    .file-tabs button { padding:8px 10px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--muted); }
-    .file-tabs button[aria-selected="true"] { border-color:var(--text); color:var(--text); }
-    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:5px; color:var(--text); font-size:12px; text-decoration:none; }
+    .file-tabs button { margin:3px 0; padding:8px 10px; border:0; background:transparent; color:var(--muted); }
+    .file-tabs button:hover, .file-tabs button[aria-selected="true"] { background:var(--surface-2); color:var(--text); }
+    .file-toolbar button, .file-toolbar a, .file-path button { padding:7px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-control); color:var(--text); font-size:12px; text-decoration:none; }
     .file-toolbar [aria-pressed="true"] { background:var(--surface-2); border-color:var(--text); }
     .file-toolbar button.danger { color:var(--danger); }
     .file-icon { display:block; width:16px; height:16px; flex:0 0 16px; }
@@ -473,7 +485,7 @@
     #fileNotice:empty { display:none; }
     .file-pane { display:flex; flex-direction:column; flex:1; min-height:0; overflow:hidden; gap:8px; }
     .file-path { display:flex; gap:4px; }
-    .file-path input { flex:1; width:0; min-width:0; padding:7px; border:1px solid var(--line); border-radius:5px; background:var(--bg); font-size:12px; }
+    .file-path input { flex:1; width:0; min-width:0; padding:7px; border:1px solid var(--line); background:var(--bg); font-size:12px; }
     #fileDestination, #fileNotice, #changesNotice, #changesRoot, #fileJobText { overflow-wrap:anywhere; margin:0; padding:3px 2px; }
     #fileTree, #changesList { flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
     #fileTree details { margin-left:10px; }
@@ -483,7 +495,8 @@
     #fileTree .file-disclosure { width:11px; height:11px; flex-basis:11px; }
     #fileTree details[open] > summary .file-disclosure { transform:rotate(90deg); }
     #fileTree .file-icon { color:var(--muted); }
-    #fileTree summary:hover, .file-row:hover { background:var(--surface-2); border-radius:5px; }
+    #fileTree summary, .file-row { border-radius:var(--radius-control); }
+    #fileTree summary:hover, .file-row:hover { background:var(--surface-2); }
     #fileTree input[type="checkbox"] { margin:0; vertical-align:middle; accent-color:var(--ok); }
     #fileTree:not(.selecting) input[type="checkbox"] { display:none; }
     .file-row { display:flex; gap:7px; padding:8px 4px 8px 22px; align-items:center; font-size:12px; }
@@ -508,10 +521,10 @@
     #diffTitle { display:block; overflow-wrap:anywhere; font-size:13px; font-weight:550; }
     #diffNotice { margin:5px 0 0; line-height:1.5; }
     #diffNotice:empty { display:none; }
-    #closeDiff { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:5px 7px; border:0; border-radius:5px; color:var(--muted); background:transparent; font-size:12px; }
+    #closeDiff { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:5px 7px; border:0; color:var(--muted); background:transparent; font-size:12px; }
     #closeDiff:hover { background:var(--surface-2); color:var(--text); }
     #fileDiff { flex:1; min-height:0; overflow:auto; padding:16px 20px 32px; font:12px/1.7 ui-monospace,monospace; tab-size:4; }
-    .diff-block { margin:0 0 18px; border:1px solid var(--line-soft); border-radius:6px; overflow:clip; }
+    .diff-block { margin:0 0 18px; border:1px solid var(--line-soft); border-radius:var(--radius-control); overflow:clip; }
     .diff-range { padding:7px 10px; border-bottom:1px solid var(--line-soft); background:var(--surface-2); color:var(--muted); font:11px/1.6 ui-monospace,monospace; overflow-wrap:anywhere; }
     .diff-table-scroll { overflow-x:auto; }
     .diff-block table { width:100%; border-collapse:collapse; }
@@ -537,19 +550,20 @@
     .session .icon-button, .folder-heading .icon-button { width:26px; height:26px; flex-shrink:0; }
     .folder-heading span { flex:1; overflow:hidden; text-overflow:ellipsis; }
     .service-row { padding:10px 0; border-bottom:1px solid var(--line-soft); }
-    #serviceLogin { border:1px solid var(--line); padding:12px; margin:12px 0; overflow-wrap:anywhere; }
+    #serviceLogin { border:1px solid var(--line); border-radius:var(--radius-card); padding:12px; margin:12px 0; overflow-wrap:anywhere; }
+    #remoteQr { border-radius:var(--radius-control); }
     #serviceLogin input, #serviceLogin select, #piDialogInput input, #piDialogInput textarea, #piDialogInput select { width:100%; padding:9px; border:1px solid var(--line); background:var(--bg); }
     @media (max-width:1100px) and (min-width:701px) {
       #app { grid-template-columns:220px minmax(0,1fr); }
       #app.files-open { grid-template-columns:220px minmax(0,1fr); }
-      #filePanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; box-shadow:-10px 0 30px var(--shadow); }
+      #filePanel { position:absolute; z-index:30; right:0; top:58px; bottom:0; width:320px; border-start-start-radius:var(--radius-card); box-shadow:-10px 0 30px var(--shadow); }
     }
     @media (max-width:700px) {
       #app, #app.files-open { grid-template-columns:minmax(0,1fr); }
       #sidebarToggle { display:inline-grid; flex-shrink:0; }
-      #sidebar { display:none; position:absolute; z-index:40; inset:0 auto 0 0; width:min(86vw,300px); box-shadow:10px 0 30px var(--shadow); }
+      #sidebar { display:none; position:absolute; z-index:40; inset:0 auto 0 0; width:min(86vw,300px); border-radius:0 var(--radius-card) var(--radius-card) 0; box-shadow:10px 0 30px var(--shadow); }
       #app.sidebar-open #sidebar { display:flex; }
-      #filePanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); }
+      #filePanel { position:absolute; z-index:40; inset:0 0 0 auto; width:min(90vw,340px); border-radius:var(--radius-card) 0 0 var(--radius-card); }
       #drawerBackdrop:not(.hidden) { display:block; position:absolute; inset:0; z-index:35; border:0; background:#0006; }
       .topbar { flex-wrap:nowrap; gap:4px; padding:5px 8px; }
       .chat-heading { flex-basis:auto; }
@@ -747,7 +761,7 @@
                 <button id="menuCompact" data-command="compact" data-session type="button" role="menuitem">Compact context <small>/compact</small></button>
                 <button data-command="fork" data-session type="button" role="menuitem">Fork chat <small>/fork</small></button>
                 <button data-command="clone" data-session type="button" role="menuitem">Clone chat <small>/clone</small></button>
-                <button data-command="providers" type="button" role="menuitem">Providers <small>/providers</small></button>
+                <button data-command="providers" data-aliases="login" type="button" role="menuitem">Providers <small>/login · /providers</small></button>
                 <button data-command="settings" type="button" role="menuitem">Settings <small>/settings</small></button>
               </div>
               <select id="model" title="Model"></select>
@@ -789,7 +803,7 @@
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
   <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
-  <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
+  <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="piDialog"><form id="piDialogForm" class="dialog-body"><h2 id="piDialogTitle"></h2><p id="piDialogMessage"></p><div id="piDialogInput"></div><div class="dialog-actions"><button id="piDialogCancel" type="button">Cancel</button><button class="primary">Continue</button></div></form></dialog>
 
   <dialog id="folderDialog">
@@ -1503,7 +1517,7 @@
     function renderEvent(event) {
       if (event.type === 'session') return;
       if (event.type === 'session_changed') {
-        loadSessions().then(sessions => openSession(sessions.find(session => session.id === event.id))).catch(error => { $('#composerHint').textContent = error.message; });
+        openSessionById(event.id).catch(error => { $('#composerHint').textContent = error.message; });
         return;
       }
       if (event.type === 'snapshot') { renderSnapshot(event.data); return; }
@@ -2378,8 +2392,8 @@
             item.append(dot);
           }
           bindSessionContextMenu(item,session);
-          item.onclick = () => openSession(session);
-          item.addEventListener('keydown',event=>{if(event.target===item&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openSession(session);}});
+          item.onclick = () => openSession(session).catch(error => { $('#composerHint').textContent = error.message; });
+          item.addEventListener('keydown',event=>{if(event.target===item&&(event.key==='Enter'||event.key===' ')){event.preventDefault();item.click();}});
           group.append(item);
         }
         root.append(group);
@@ -2664,7 +2678,7 @@
         updateInstanceControl(resumed.stopped);
         if (resumed.stopped) {
           renderEvent({type:'snapshot', data:resumed.snapshot});
-          $('#composerHint').textContent = 'Pi is stopped. Press Start Pi to continue.';
+          $('#composerHint').textContent = 'Pi is stopped. Send a message or select Resume Pi to continue this chat.';
         } else { await loadModels(); await connectSession(session.id, renderEvent, view); }
         if (sessionView !== view) return;
         setSidebar(false);
@@ -2721,8 +2735,8 @@
       const button = $('#piInstance');
       button.classList.toggle('hidden', !current);
       button.dataset.stopped = String(Boolean(stopped));
-      button.textContent = stopped ? '▶' : '■';
-      button.title = stopped ? 'Start Pi instance' : 'Stop Pi instance';
+      button.textContent = stopped ? 'Resume Pi' : '■';
+      button.title = stopped ? 'Resume Pi in this chat' : 'Stop Pi instance';
       button.setAttribute('aria-label', button.title);
     }
     $('#piInstance').onclick = async () => {
@@ -2809,7 +2823,7 @@
       const id = current.id, view = sessionView;
       const model = $('#model').value, thinking = includeThinking ? $('#thinking').value : '';
       if (!source) {
-        await api(`/api/sessions/${id}/resume`, {method:'POST'});
+        await api(`/api/sessions/${id}/resume`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({start:true})});
         if (view !== sessionView) return;
         await connectSession(id, renderEvent, view);
       }
@@ -2988,7 +3002,7 @@
     function closeComposerActions(){ slashMenu = false; $('#composerActions').classList.add('hidden'); $('#attachBtn').setAttribute('aria-expanded','false'); }
     function showComposerActions(filter = '') {
       for (const button of commandButtons) {
-        button.classList.toggle('hidden', !button.dataset.command.startsWith(filter));
+        button.classList.toggle('hidden', ![button.dataset.command, ...(button.dataset.aliases || '').split(' ')].some(command => command.startsWith(filter)));
         button.disabled = button.hasAttribute('data-session') && !current;
       }
       const visible = commandButtons.some(button => !button.classList.contains('hidden'));
@@ -3031,13 +3045,24 @@
     $('#thinking').onchange = async () => { try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
-    function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|providers|settings|attach)$/.test(text); }
+    function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|login|providers|settings|attach)$/.test(text); }
+    async function openSessionById(id) {
+      // A list request started before Pi forked cannot contain the new session.
+      if (loadingSessions) await loadingSessions;
+      let sessions = await loadSessions();
+      let session = sessions.find(item => item.id === id);
+      while (!session && nextSessionOffset !== null) {
+        sessions = await loadSessions(true);
+        session = sessions.find(item => item.id === id);
+      }
+      if (!session) throw Error('Pi created the chat, but it could not be found in the chat list. Refresh to reconnect.');
+      await openSession(session);
+      document.querySelector(`.session[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({block:'nearest'});
+    }
     async function branchSession(kind, entryId, sourceId = current?.id) {
       const result = await api(`/api/sessions/${encodeURIComponent(sourceId)}/${kind}`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entryId})});
-      if (result.cancelled) return;
-      const sessions = await loadSessions(), created = sessions.find(session => session.id === result.id);
-      if (!created) throw Error('The new chat could not be opened');
-      await openSession(created);
+      if (result.cancelled) throw Error(`Pi cancelled the ${kind}; the original chat is unchanged.`);
+      await openSessionById(result.id);
       if (kind === 'fork') { $('#prompt').value=result.text || ''; $('#prompt').dispatchEvent(new Event('input')); }
       $('#prompt').focus();
     }
@@ -3045,22 +3070,22 @@
       const command = text.split(/\s/)[0];
       const consume = () => { if (consumeDraft) { $('#prompt').value=''; $('#prompt').dispatchEvent(new Event('input')); } closeComposerActions(); };
       if (command === '/attach') { $('#files').click(); consume(); return; }
-      if (command === '/settings' || command === '/providers') { consume(); showSettingsView(); if (command === '/providers') selectSettingsTab('services'); return; }
+      if (command === '/settings' || command === '/providers' || command === '/login') { consume(); showSettingsView(); if (command !== '/settings') selectSettingsTab('services'); return; }
       if (!current) { $('#composerHint').textContent = 'Open a chat first.'; return; }
       try {
         if (command === '/fork') {
           const sourceId = current.id, result = await api(`/api/sessions/${sourceId}/fork-messages`), root=$('#forkMessages');
-          root.replaceChildren();
+          root.replaceChildren(); $('#forkError').textContent = '';
           if (!result.messages.length) throw Error('This chat has no messages to fork yet.');
           for (const message of result.messages) {
             const button=document.createElement('button'); button.type='button'; button.textContent=message.text || '(Attachment)';
-            button.onclick=async()=>{button.disabled=true;try{await branchSession('fork',message.entryId,sourceId);$('#forkDialog').close();}catch(error){$('#composerHint').textContent=error.message;}finally{button.disabled=false;}};
+            button.onclick=async()=>{for(const item of root.children)item.disabled=true;$('#forkError').textContent='Forking chat…';try{await branchSession('fork',message.entryId,sourceId);$('#forkDialog').close();}catch(error){$('#forkError').textContent=error.message;}finally{for(const item of root.children)item.disabled=false;}};
             root.append(button);
           }
           consume(); $('#forkDialog').showModal(); return;
         }
         if (command === '/clone') { await branchSession('clone'); consume(); return; }
-        await api(`/api/sessions/${current.id}/resume`, {method:'POST'});
+        await api(`/api/sessions/${current.id}/resume`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({start:true})});
         if (!source) await connectSession(current.id);
         await api(`/api/sessions/${current.id}/compact`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({instructions:text.slice(8).trim()})});
         consume();
@@ -3106,7 +3131,8 @@
           $('#folderBtn').title = `Saved working folder: ${displayFolder(current.cwd)}. Start a new chat to choose another.`;
         }
         if (!source || !queueState.busy) {
-          await api(`/api/sessions/${current.id}/resume`, {method:'POST'});
+          await api(`/api/sessions/${current.id}/resume`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({start:true})});
+          updateInstanceControl(false);
           await connectSession(current.id);
         }
         const messageForm = new FormData();

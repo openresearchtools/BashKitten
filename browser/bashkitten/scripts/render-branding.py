@@ -2,13 +2,15 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Size the supplied transparent PNG for browser, desktop and Android icons."""
 import base64
+import hashlib
+import json
 from pathlib import Path
 import shutil
 import subprocess
 
 root = Path(__file__).resolve().parents[1] / "browser/branding"
 gecko = root.parents[2]
-source = root / "assets/bashkitten-logo-original.png"
+source = root / "assets/bashkitten-logo-glasses-original.png"
 renderer = shutil.which("magick") or shutil.which("convert")
 if not renderer:
     raise SystemExit("ImageMagick is required to render browser branding")
@@ -53,3 +55,11 @@ subprocess.run([renderer, str(root / "default256.png"), "-strip", "-define",
                 "webp:lossless=true", str(gecko / "toolkit/components/ml/content/mozilla-logo.webp")], check=True)
 render(gecko.parent / "agent/src/web/logo.png", 256)
 render(gecko.parent / "agent/src/web/favicon.ico", 32)
+
+# Keep the APK's existing artwork inventory in sync with these branded assets.
+inventory_path = gecko / "bashkitten/android/ui-artwork.json"
+inventory = json.loads(inventory_path.read_text())
+for entry in inventory["engine_resources"].values():
+    if entry["action"] in ("original brand-svg artwork", "original brand-webp artwork"):
+        entry["sha256"] = hashlib.sha256((gecko / entry["source"]).read_bytes()).hexdigest()
+inventory_path.write_text(json.dumps(inventory, indent=2) + "\n")
