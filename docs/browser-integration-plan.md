@@ -524,10 +524,12 @@ when Android has denied further permission prompts. Installation displays native
 `pkg` progress in Termux; there is no JSON/base64 installer screen in the APK.
 Returning or reopening the browser reconciles the actual installed package.
 
-The user requires normal locked retail Android 17 first-install verification,
-using visible UI without ADB grants, root, developer settings or preconfigured
-state. Do not add or run BashKitten-owned scripted tests. Compilation or upgraded
-emulator installations do not satisfy that acceptance check.
+Latest verification clarification: run normal Android in Cuttlefish and use its
+visible UI for installation and operation. Do not use ADB, root commands,
+bootloader changes, developer-option workarounds or preconfigured setup state.
+Do not add or run BashKitten-owned scripted tests. Complete builds and manual
+first-install flows, fixing discovered failures before stopping. Label emulator
+results accurately; compilation alone does not satisfy this acceptance check.
 
 Existing compatible Termux installations stay installed. Use their ordinary
 command interface; no signing match or new Termux patch is required. Retain an

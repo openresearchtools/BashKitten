@@ -43,9 +43,9 @@ svg = ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1
 
 android = gecko / "mobile/android/fenix/app/src/main/res"
 render(android / "drawable-nodpi/bashkitten_logo.png", 512)
-# A 108dp adaptive layer is masked by the launcher. A centered 60dp image keeps
+# A 108dp adaptive layer is masked by the launcher. A centered 65dp image keeps
 # this artwork inside its central 66dp safe circle, with transparent padding.
-render(android / "drawable-nodpi/bashkitten_launcher_foreground.png", 240, "432x432")
+render(android / "drawable-nodpi/bashkitten_launcher_foreground.png", 260, "432x432")
 for name, size in (("about", 192), ("favicon32", 32), ("favicon64", 64)):
     render(gecko / f"mobile/android/branding/bashkitten/content/{name}.png", size)
 for relative in ("toolkit/components/satchel/megalist/content/icons/cpm-fox-illustration.svg",
