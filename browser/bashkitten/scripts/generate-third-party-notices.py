@@ -59,9 +59,14 @@ def components(source_root):
         "BashKitten browser licences and source notices", [
             "LICENSE", "COPYING", "bashkitten/SOURCE-NOTICE",
             "bashkitten/BLOCKER-ASSET-SOURCE-NOTICE",
-            "bashkitten/components/bashkitten-cli/NOTICE",
             "bashkitten/components/bashkitten-cli/MOZILLA-MCP-LICENSE",
             "bashkitten/browser/branding/LICENSE",
+        ]), source_component(source_root, "bashkitten-waterfox-notices",
+        "Waterfox source and modification notices", [
+            "bashkitten/WATERFOX-NOTICE",
+        ]), source_component(source_root, "bashkitten-browseros-notices",
+        "BrowserOS browser tools, modifications and GNU AGPL 3.0", [
+            "bashkitten/components/bashkitten-cli/NOTICE", "COPYING",
         ]), source_component(source_root, "bashkitten-spelling-notices",
         "English UK and US spelling dictionary notices", [
             "extensions/spellcheck/locales/en-US/hunspell/README_en_GB.txt",
@@ -234,13 +239,30 @@ def packaged_inventory(browser_dir):
             for name in bundle.namelist():
                 if name.endswith("/global/license.html"):
                     contents = bundle.read(name).decode("utf-8")
-                    return [{
+                    records = [{
                         "name": "BashKitten browser and Gecko bundled dependencies",
                         "version": (SOURCE_ROOT / "bashkitten/config/version.txt").read_text().strip(),
                         "license": "See included per-component licenses",
                         "source": "https://github.com/openresearchtools/bashkitten",
                         "text": license_page_text(contents),
                     }]
+                    for anchor, name, license_name in (
+                        ("bashkitten-waterfox-notices", "Waterfox source and modifications", "MPL-2.0; retained per-file licenses"),
+                        ("bashkitten-browseros-notices", "BrowserOS browser tools and modifications", "AGPL-3.0-or-later"),
+                    ):
+                        match = re.search(r'<tr>\s*<td>\s*<h1 id="' + anchor + r'">.*?</tr>', contents, re.S)
+                        if not match:
+                            raise ValidationError(f"built browser is missing {name}")
+                        text = license_page_text(match[0])
+                        if anchor == "bashkitten-waterfox-notices":
+                            mpl = re.search(r'<tr>\s*<td>\s*<h1 id="mpl">.*?</tr>', contents, re.S)
+                            if not mpl:
+                                raise ValidationError("built browser is missing the full MPL 2.0")
+                            text += "\n" + license_page_text(mpl[0])
+                        records.append({"name": name, "version": "", "license": license_name,
+                                        "source": "about:license#" + anchor,
+                                        "text": text})
+                    return records
     raise ValidationError("built browser has no complete about:license page")
 
 

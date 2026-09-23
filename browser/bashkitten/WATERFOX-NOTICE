@@ -1,0 +1,24 @@
+Waterfox source and modifications
+
+BashKitten retains Waterfox-derived browser features through WildBuzzard.
+Waterfox source: https://github.com/BrowserWorks/waterfox
+Recorded Waterfox donor revision: 8ae6e039a06bcff8173cb4a4c0262beb21f81286
+The exact retained ports and their revisions are recorded in
+browser/bashkitten/upstreams.toml and browser/bashkitten/ports.toml.
+
+Waterfox and Mozilla source files retain their original Mozilla Public License
+2.0 notices and copyrights. The full MPL 2.0 and inherited third-party license
+inventory are available offline in about:license. Other components retain
+their individual license terms; this notice does not relicense them.
+
+Modified by the WildBuzzard and BashKitten projects. BashKitten's changes include
+product branding, a single-window browser, a protected Agent view, native local
+and remote Agent integration, and ordinary-tab browser controls. The retained
+Waterfox work includes browser privacy, private-tab and content-blocking ports;
+the source records identify which changes are present in this build.
+
+Complete corresponding source and build material:
+https://github.com/openresearchtools/bashkitten
+Each release identifies its exact source revision. Historical author and
+copyright notices remain in their original source files. No rights to the
+Waterfox or Mozilla names and logos are granted by these source licenses.

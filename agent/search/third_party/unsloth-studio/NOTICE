@@ -1,0 +1,35 @@
+Unsloth Studio — adapted search and page-reading code
+
+Copyright 2026-present the Unsloth AI Inc. team. All rights reserved.
+Licensed under GNU Affero General Public License version 3 only (AGPL-3.0-only).
+The complete, unmodified license text is included alongside this notice.
+
+Source: https://github.com/unslothai/unsloth
+Upstream commit: bfcaea46574d63ec470ce9c7d7221471a38ea7e4
+Retained code and behaviour: WEB_SEARCH_TOOL/_web_search guidance, URL access
+policy, HTTP fetching, HTML-to-Markdown conversion and PDF text/Markdown
+extraction. Exact original file hashes are in SOURCE-MANIFEST.sha256.
+
+Modified by the Wild Buzzard Project in 2026: extracted selected Unsloth Studio
+search/read code into Buzzard Search, with package-local imports and logging.
+The donor is https://github.com/openresearchtools/buzzard-search at commit
+05721962dd11c7506286ecc9aa5b35f6fc4828d0.
+
+Modified by OpenResearchTools for BashKitten on 23 September 2026:
+- Expose one JSON query-or-URL command, using DDGS for search, and a normally
+  discovered Pi skill with adapted search-then-read guidance.
+- Run with packaged native Linux/Termux Python dependencies and private,
+  persistent output paths. Keep the search helper separate from stock Pi.
+- Save the complete extracted Markdown before returning a 16,000-character
+  inline preview and the full file path. Remove hard download-size, page-count
+  and extraction-count caps; preserve explicit cancellation and read errors.
+- Retain the PDF reader and its text/layout fallback, always attempt Markdown
+  conversion, and omit unrelated RAG ingestion and image tools.
+- Integrate the separately attributed GitHub repository and YouTube transcript
+  readers into the same command. SearXNG and the Unsloth Studio application
+  itself are not included.
+
+The dependency versions and limits recorded in UPSTREAM.toml describe the
+original upstream snapshot. The packaged runtime manifest and BashKitten source
+describe this modified implementation. Corresponding source and build material:
+https://github.com/openresearchtools/bashkitten

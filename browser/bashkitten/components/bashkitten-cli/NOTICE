@@ -31,3 +31,19 @@ Mozilla's public tool names are not exposed as a second model-facing API.
 Their Firefox transport, console, network, debugging, download, screenshot,
 input, and lifecycle behavior is adapted behind the BrowserOS-compatible
 WildBuzzard tool contract.
+
+BashKitten modifications, 23 September 2026
+
+BashKitten adapts the retained BrowserOS-compatible tools to its Gecko browser
+on Linux and Android. Commands execute through the browser's native Linux Unix
+socket or Android Binder approval flow and operate on ordinary tabs. The Agent,
+account setup and authentication views are excluded from browser automation.
+The separate Agent service uses stock Pi for its agent loop; BashKitten does
+not bundle the BrowserOS agent runtime or expose Mozilla's tools as a second
+model-facing API. File-level BrowserOS and Mozilla attribution remains intact.
+
+The complete GNU Affero General Public License version 3 is bundled offline in
+about:license with this notice; derived AGPL files permit version 3 or later.
+The complete corresponding source, modifications and build material are at:
+https://github.com/openresearchtools/bashkitten
+The release metadata identifies the exact source revision used for each build.

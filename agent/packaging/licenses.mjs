@@ -50,9 +50,9 @@ async function npmInventory(root, target, architecture) {
 }
 async function sourceNotices(root, component, specifications) {
   const records = [];
-  for (const [name, license, files] of specifications) {
+  for (const [name, license, files, metadata = {}] of specifications) {
     const text = (await Promise.all(files.map(file => relativeText(root, file)))).join('\n\n');
-    records.push(record({ name, license, text }, component));
+    records.push(record({ ...metadata, name, license, text }, component));
   }
   return records;
 }
@@ -61,7 +61,16 @@ async function searchInventory(root, expectedTarget) {
   if (manifest.target !== expectedTarget) throw Error(`Search runtime target ${manifest.target} does not match ${expectedTarget}`);
   const inventory = await json(path.join(runtime, 'licenses.json'));
   if (inventory.format !== 1 || !Array.isArray(inventory.components) || !inventory.components.length) throw Error('Invalid search license inventory');
-  const records = [], included = new Set();
+  const records = await sourceNotices(path.join(root, 'search'), 'Search', [
+    ['Unsloth Studio — adapted search and page reading', 'AGPL-3.0-only',
+      ['third_party/unsloth-studio/NOTICE', 'third_party/unsloth-studio/LICENSE'],
+      { source: 'https://github.com/unslothai/unsloth/tree/bfcaea46574d63ec470ce9c7d7221471a38ea7e4', version: 'bfcaea46574d' }],
+    ['BashKitten Search / Buzzard Search', 'AGPL-3.0-only', ['THIRD_PARTY_NOTICES.md', 'LICENSE'],
+      { source: 'https://github.com/openresearchtools/buzzard-search/tree/05721962dd11c7506286ecc9aa5b35f6fc4828d0' }],
+    ['pi-web-access repository reader', 'MIT', ['third_party/pi-web-access/LICENSE']],
+    ['youtube-transcript-api', 'MIT', ['third_party/youtube-transcript-api/LICENSE']],
+  ]);
+  const included = new Set();
   for (const component of inventory.components) {
     if (!Array.isArray(component.licenseFiles) || !component.licenseFiles.length) throw Error('Missing search license text: ' + component.name);
     const text = (await Promise.all(component.licenseFiles.map(file => relativeText(runtime, file)))).join('\n\n');
@@ -76,11 +85,6 @@ async function searchInventory(root, expectedTarget) {
     if (component.scope === 'system') records.push(record({ name: component.package || component.name, version: component.version,
       license: 'External package', text: `${component.package || component.name} is installed separately by the operating-system package manager. It is not bundled in this search runtime and remains governed by its package licenses and accompanying notices.` }, 'Search', 'external'));
   }
-  records.push(...await sourceNotices(path.join(root, 'search'), 'Search', [
-    ['BashKitten Search / Buzzard Search / Unsloth Studio', 'AGPL-3.0-only', ['LICENSE', 'THIRD_PARTY_NOTICES.md', 'third_party/unsloth-studio/LICENSE']],
-    ['pi-web-access repository reader', 'MIT', ['third_party/pi-web-access/LICENSE']],
-    ['youtube-transcript-api', 'MIT', ['third_party/youtube-transcript-api/LICENSE']],
-  ]));
   return records;
 }
 

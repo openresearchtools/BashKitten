@@ -34,6 +34,16 @@ if CONFIG["OS_TARGET"] == "Android":
 if CONFIG["MOZ_INSTALL_TRACKING"]:
     DEFINES["MOZ_INSTALL_TRACKING"] = 1
 
+if CONFIG["MOZ_APP_DISPLAYNAME"] == "BashKitten":
+    # GeckoView uses this page directly; desktop also supplies a browser override.
+    for name, filename in (
+        ("APP_LICENSE_BLOCK", "app-license.html"),
+        ("APP_LICENSE_PRODUCT_NAME", "app-license-name.html"),
+        ("APP_LICENSE_LIST_BLOCK", "app-license-list.html"),
+        ("APP_LICENSE_BODY_BLOCK", "app-license-body.html"),
+    ):
+        DEFINES[name] = "%s/browser/base/content/overrides/%s" % (TOPSRCDIR, filename)
+
 JAR_MANIFESTS += ["jar.mn"]
 
 SPHINX_TREES["toolkit_widgets"] = "widgets/docs"

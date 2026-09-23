@@ -1,7 +1,11 @@
-The BashKitten kitten-and-terminal logo in assets/bashkitten-logo-original.png
-is the original transparent PNG supplied for BashKitten on 23 September 2026,
-distributed under GPL-3.0-only. The supplied file is preserved unchanged
-(SHA-256: 3188b511e193bb25bab93b51e8c647695f7bdb61d11b41a4c3bfd89c4b58d750).
+The BashKitten kitten-with-glasses logo in
+assets/bashkitten-logo-glasses-original.png is the original transparent PNG
+selected for BashKitten on 23 September 2026, distributed under GPL-3.0-only.
+The supplied file is preserved unchanged (SHA-256:
+adee0eba93f17f983a58e7288e3e0ae2bff86e0b11ff226e349b3e7177fd8ce5).
+The earlier kitten logo remains in assets/bashkitten-logo-original.png under
+the same terms (SHA-256:
+3188b511e193bb25bab93b51e8c647695f7bdb61d11b41a4c3bfd89c4b58d750).
 scripts/render-branding.py only scales the image and adds transparent padding
 for native icon sizes and Android adaptive launcher masks. The generated SVG
 embeds the PNG; it is not separately drawn vector artwork.

@@ -17,7 +17,7 @@
   "adaptations": [
     "Single JSON query-or-url CLI; DDGS only",
     "Persistent private artifacts, unique transcript saves and Termux-native paths",
-    "Keep complete extracted Markdown before bounded preview; explicit read errors and download/page-limit notices",
+    "Keep complete extracted Markdown before the 16000-character inline preview; remove hard download/page/extraction caps and preserve explicit read errors and cancellation",
     "Selected PDF extraction functions only; no unrelated RAG ingestion or image tools"
   ]
 }

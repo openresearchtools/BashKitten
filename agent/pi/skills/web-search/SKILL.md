@@ -30,11 +30,12 @@ Both calls return JSON with `ok` and `content`. Searches add `results` with
 titles, URLs and snippets. Every successful URL read saves the complete extracted
 Markdown and returns `fullMarkdownPath`, `contentLength` and `truncated`.
 The inline preview stops at 16,000 characters; read the saved path with Pi's
-normal `read` tool for the rest. Download/page limits are disclosed in the
-saved document. The saved path belongs to the machine running Pi.
+normal `read` tool for the rest. The preview does not shorten the saved document.
+The saved path belongs to the machine running Pi.
 
-Default search count is five (`maxResults`: 1–20). Either call accepts
-`timeoutSeconds`: 1–300. A URL read may set `outputDirectory` to a project;
+Default search count is five; `maxResults` accepts a positive integer.
+Either call accepts an optional positive integer `timeoutSeconds`; no request
+deadline is imposed when omitted. A URL read may set `outputDirectory` to a project;
 files go in its private `bashkitten-search/` subdirectory. YouTube reads can
 set `languages` (for example `["en","de"]`) and `timestamped: true`.
 
