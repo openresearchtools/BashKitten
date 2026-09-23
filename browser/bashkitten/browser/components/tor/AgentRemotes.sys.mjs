@@ -67,15 +67,24 @@ function readResponse(channel, { body, signal, limit = 2 * 1024 * 1024, timeout 
       onStopRequest(_request, status) {
         clearTimeout(timer);
         signal?.removeEventListener("abort", cancel);
+        let httpStatus = 0;
+        try { httpStatus = channel.responseStatus; } catch {}
+        // Authelia may return plain text or HTML here. Preserve denial before
+        // JSON parsing, including redirects which this channel never follows.
+        if (!signal?.aborted && (httpStatus == 401 || httpStatus == 403 ||
+            (httpStatus >= 300 && httpStatus < 400))) {
+          resolve({ status: httpStatus, data: null });
+          return;
+        }
         if (!Components.isSuccessCode(status)) {
           reject(new Error(signal?.aborted ? "Connection cancelled." : "The enrolled server could not be reached securely."));
           return;
         }
         try {
           const text = new TextDecoder().decode(Uint8Array.from(data, char => char.charCodeAt(0)));
-          resolve({ status: channel.responseStatus, data: text ? JSON.parse(text) : null });
+          resolve({ status: httpStatus, data: text ? JSON.parse(text) : null });
         } catch {
-          reject(new Error("The server returned an invalid response."));
+          reject(new Error(`The server returned an invalid response (HTTP ${httpStatus}).`));
         }
       },
     });
@@ -403,17 +412,28 @@ class AgentRemoteStore {
     }
     if (!path.startsWith("/") || path.startsWith("//") || /[\x00-\x20\x7f#\\]/.test(path)) throw new Error("Invalid Agent path.");
     const uri = Services.io.newURI(entry.url.slice(0, -1) + path);
-    const principal = Services.scriptSecurityManager.createContentPrincipal(uri, { userContextId: entry.userContextId });
+    const context = connection.requestContext;
+    const global = context?.currentWindowGlobal;
+    const principal = global?.documentPrincipal;
+    if (!context || context !== context.top || !principal?.isContentPrincipal ||
+        principal.originNoSuffix !== new URL(entry.url).origin ||
+        principal.originAttributes.userContextId !== entry.userContextId || !global.cookieJarSettings) {
+      throw new Error("The protected Agent document is not ready.");
+    }
     const channel = NetUtil.newChannel({ uri, loadingPrincipal: principal,
       securityFlags: Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
       contentPolicyType: Ci.nsIContentPolicy.TYPE_OTHER,
     }).QueryInterface(Ci.nsIHttpChannel);
+    // A native TYPE_OTHER channel has a blocking cookie jar by default. Use
+    // this protected document's policy and full principal, like its own fetch.
+    channel.loadInfo.cookieJarSettings = global.cookieJarSettings;
     channel.requestMethod = method;
     channel.setRequestHeader("Accept", "application/json", false);
     channel.setRequestHeader("Origin", new URL(entry.url).origin, false);
     if (csrf) channel.setRequestHeader("X-Bashkitten-Csrf", csrf, false);
     const response = await readResponse(channel, { body, signal });
-    if (response.status == 401 || response.status == 403) {
+    if (response.status == 401 || response.status == 403 ||
+        (response.status >= 300 && response.status < 400)) {
       Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", entry.id);
     }
     return response;

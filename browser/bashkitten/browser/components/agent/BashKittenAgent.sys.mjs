@@ -442,6 +442,7 @@ class AgentView {
         if (!this.off) this.run(() => local ? this.reconnect() : this.selectRemote(this.remote));
       });
     }
+    connection.requestContext = browser.browsingContext;
     ownedViews.set(browser, { host: this, connection, local, key, authFor });
     for (const item of this.views.values()) item.hidden = item !== browser;
     this.activeBrowser = browser;
