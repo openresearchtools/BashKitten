@@ -31,7 +31,6 @@ export class TorControl {
   send(command) {
     if (
       typeof command != "string" ||
-      command.length > 4096 ||
       /[^\x20-\x7e]/.test(command)
     ) {
       return Promise.reject(new Error("Invalid Tor control command"));
@@ -94,16 +93,12 @@ export class TorControl {
     );
     input.init(stream);
     this._buffer += input.read(count);
-    if (this._buffer.length > 65536) {
-      this.close();
-      return;
-    }
     let end;
     while ((end = this._buffer.indexOf("\r\n")) >= 0) {
       const line = this._buffer.slice(0, end);
       this._buffer = this._buffer.slice(end + 2);
       const match = /^(\d{3})([ -])(.*)$/.exec(line);
-      if (!match || !this._pending || this._lines.length > 128) {
+      if (!match || !this._pending) {
         this.close();
         return;
       }

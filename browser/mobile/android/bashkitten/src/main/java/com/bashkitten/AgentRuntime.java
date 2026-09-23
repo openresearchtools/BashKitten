@@ -299,19 +299,13 @@ public final class AgentRuntime {
                     engine.getStorageController().clearDataForSessionContext(context);
                     releaseKey.run();
                 };
-                Runnable timeout = () -> {
-                    if (!finished.compareAndSet(false, true)) return;
-                    cleanup.run(); failure.accept("Remote identity verification timed out. No direct connection was made.");
-                };
                 try {
                     enrollment.open(engine);
                     JSONObject params = new JSONObject().put("url", record.getString("url"))
                             .put("caSha256", record.optString("caSha256", ""))
                             .put("tor", true).put("port", port).put("proxySecret", app.tor.proxySecret());
-                    app.main.postDelayed(timeout, 60000);
                     BashKittenController.request(enrollment, new JSONObject().put("method", "agent.enroll").put("params", params).toString()).accept(result -> {
                         if (!finished.compareAndSet(false, true)) return;
-                        app.main.removeCallbacks(timeout);
                         JSONObject accepted;
                         try {
                             if (generation != operation) throw new IllegalStateException("Connection selection changed. Retry enrollment.");
@@ -333,12 +327,12 @@ public final class AgentRuntime {
                         cleanup.run(); done.accept(accepted);
                     }, error -> {
                         if (!finished.compareAndSet(false, true)) return;
-                        app.main.removeCallbacks(timeout); cleanup.run();
+                        cleanup.run();
                         failure.accept("The remote Agent could not be reached securely through Tor.");
                     });
                 } catch (Exception error) {
                     if (finished.compareAndSet(false, true)) {
-                        app.main.removeCallbacks(timeout); cleanup.run(); failure.accept("Could not start remote Agent enrollment.");
+                        cleanup.run(); failure.accept("Could not start remote Agent enrollment.");
                     }
                 }
             }, failure);

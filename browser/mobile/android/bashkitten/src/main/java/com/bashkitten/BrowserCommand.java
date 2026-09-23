@@ -40,9 +40,9 @@ public final class BrowserCommand {
             throw new IllegalArgumentException("Use native app approval and explicit tabId values; command keys and browser sessions are not supported");
         return nativeRun(args);
     }
-    private static byte[] readAtMost(InputStream stream, int limit) throws IOException {
+    private static byte[] readAll(InputStream stream) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count;
-        while (out.size() < limit && (count = stream.read(buffer, 0, Math.min(buffer.length, limit - out.size()))) != -1) out.write(buffer, 0, count);
+        while ((count = stream.read(buffer)) != -1) out.write(buffer, 0, count);
         return out.toByteArray();
     }
     private static int nativeRun(ArrayList<String> args) throws Exception {
@@ -55,8 +55,7 @@ public final class BrowserCommand {
         JSONObject command;
         if (authorize) command = new JSONObject().put("method", "app.authorize");
         else if (args.isEmpty()) {
-            byte[] bytes = readAtMost(System.in, 800001);
-            if (bytes.length > 800000) throw new IOException("Request too large");
+            byte[] bytes = readAll(System.in);
             command = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
         } else if (args.size() == 2 && args.get(0).equals("--json")) command = new JSONObject(args.get(1));
         else if (args.size() == 1 || args.size() == 2) command = new JSONObject().put("method", args.get(0))
@@ -90,7 +89,6 @@ public final class BrowserCommand {
             catch (Exception error) {
                 System.err.println("Open BashKitten to approve this app's pending browser-control request.");
             }
-            long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MINUTES.toNanos(3);
             do {
                 Thread.sleep(500);
                 JSONObject check = nativeRequest(browserUid, new JSONObject().put("method", "app.authorization").put("ticket", ticket));
@@ -101,7 +99,6 @@ public final class BrowserCommand {
                     System.out.println(new JSONObject().put("error", "Browser access " + status).put("code", "authorization_" + status));
                     return 1;
                 }
-                if (System.nanoTime() >= deadline) throw new IOException("Browser approval is still pending; open BashKitten to review it");
             } while (true);
         }
         if (!authorize && !response.has("error")) {
@@ -145,7 +142,7 @@ public final class BrowserCommand {
     private static int browserUid() throws Exception {
         Process process = new ProcessBuilder("/system/bin/cmd", "package", "list", "packages", "-U", "--user",
             Integer.toString(android.os.Process.myUid() / 100000), CommandProtocol.PACKAGE).redirectErrorStream(true).start();
-        String text = new String(readAtMost(process.getInputStream(), 16384), StandardCharsets.UTF_8);
+        String text = new String(readAll(process.getInputStream()), StandardCharsets.UTF_8);
         if (process.waitFor() != 0) throw new IOException("Cannot resolve the installed browser identity");
         java.util.regex.Matcher match = java.util.regex.Pattern.compile("(?m)^package:" + java.util.regex.Pattern.quote(CommandProtocol.PACKAGE) + " uid:(\\d+)\\s*$").matcher(text);
         if (!match.find()) throw new IOException("Install BashKitten first");
@@ -177,7 +174,6 @@ public final class BrowserCommand {
         return commandContext;
     }
     private static JSONObject nativeRequest(int browserUid, JSONObject request) throws Exception {
-        if (request.toString().length() > 200000) throw new IOException("Request too large");
         if (appEndpoint == null || !appEndpoint.isBinderAlive()) {
             java.util.concurrent.CompletableFuture<android.os.IBinder> connected = new java.util.concurrent.CompletableFuture<>();
             android.os.Binder callback = new android.os.Binder() {
@@ -211,17 +207,24 @@ public final class BrowserCommand {
                 result.complete(response); return true;
             }
         };
+        android.os.IBinder endpoint = appEndpoint;
+        android.os.IBinder.DeathRecipient disconnected = () -> result.completeExceptionally(new IOException("Browser connection closed"));
         android.os.Parcel data = android.os.Parcel.obtain();
         try {
+            endpoint.linkToDeath(disconnected, 0);
             data.writeInterfaceToken(AppCommandGateway.DESCRIPTOR); data.writeString(request.toString()); data.writeStrongBinder(callback);
-            appEndpoint.transact(AppCommandGateway.CONNECT, data, null, android.os.IBinder.FLAG_ONEWAY);
-        } catch (android.os.RemoteException error) { appEndpoint = null; throw new IOException("Browser connection closed", error); }
-        finally { data.recycle(); }
-        try {
-            long timeout = request.optString("method").equals("app.prepare") ? 7 : 215;
-            return new JSONObject(result.get(timeout, java.util.concurrent.TimeUnit.SECONDS));
-        } catch (java.util.concurrent.TimeoutException error) {
-            throw new IOException("Browser did not respond; open your terminal or BashKitten and retry", error);
+            if (!endpoint.transact(AppCommandGateway.CONNECT, data, null, android.os.IBinder.FLAG_ONEWAY))
+                throw new android.os.RemoteException("Browser rejected the command transaction");
+            return new JSONObject(result.get());
+        } catch (java.util.concurrent.ExecutionException error) {
+            appEndpoint = null;
+            throw new IOException("Browser connection closed before returning a result", error.getCause());
+        } catch (android.os.RemoteException error) {
+            appEndpoint = null;
+            throw new IOException("Android Binder could not deliver the browser command: " + error.getClass().getSimpleName(), error);
+        } finally {
+            data.recycle();
+            try { endpoint.unlinkToDeath(disconnected, 0); } catch (java.util.NoSuchElementException ignored) { }
         }
     }
     private static void copyTransfer(JSONObject transfer, Path destination) throws Exception {
@@ -229,7 +232,7 @@ public final class BrowserCommand {
         if (!url.getProtocol().equals("http") || !url.getHost().equals("127.0.0.1") || url.getUserInfo() != null)
             throw new SecurityException("Invalid browser transfer endpoint");
         HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(5000); connection.setReadTimeout(30000);
+        connection.setInstanceFollowRedirects(false);
         connection.setRequestProperty("Authorization", "Bearer " + transfer.getString("token"));
         boolean created = false, complete = false;
         try {
@@ -249,7 +252,7 @@ public final class BrowserCommand {
         if (extra != null) { command.add("--es"); command.add(extra); command.add(value); }
         Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
         ByteArrayOutputStream bytes = new ByteArrayOutputStream(); byte[] buffer = new byte[1024]; int count;
-        while ((count = process.getInputStream().read(buffer)) != -1) if (bytes.size() < 16384) bytes.write(buffer, 0, count);
+        while ((count = process.getInputStream().read(buffer)) != -1) bytes.write(buffer, 0, count);
         if (process.waitFor() != 0 || bytes.toString("UTF-8").contains("Error:"))
             throw new IOException("Android could not open BashKitten. Run from a visible terminal with Termux's am command, or open the browser yourself.");
     }

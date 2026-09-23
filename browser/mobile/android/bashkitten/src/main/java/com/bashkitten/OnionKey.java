@@ -32,7 +32,6 @@ final class OnionKey {
     }
     static OnionKey parse(String text) {
         String value = text.trim();
-        if (value.length() > 2048) throw new IllegalArgumentException("Credential too large");
         if (value.startsWith("http://") || value.startsWith("https://")) {
             URI uri = URI.create(value);
             if (uri.getUserInfo() != null || uri.getFragment() != null) throw new IllegalArgumentException("Invalid enrollment URL");

@@ -12,15 +12,12 @@ final class CommandGateway {
     private static final class Launch {
         final AgentController.Access access;
         final String tab;
-        final long expires = android.os.SystemClock.elapsedRealtime() + 30000;
         Launch(AgentController.Access access, String tab) { this.access = access; this.tab = tab; }
     }
     CommandGateway(BrowserApp app) { this.app = app; }
     synchronized void revokeAll() { launches.clear(); }
     synchronized String launch(AgentController.Access access, String tab) {
         access.check.run(); app.owned(tab, access.owner);
-        launches.entrySet().removeIf(entry -> entry.getValue().expires < android.os.SystemClock.elapsedRealtime());
-        if (launches.size() >= 32) throw new IllegalStateException("Too many launch requests");
         String nonce = UUID.randomUUID().toString();
         launches.put(nonce, new Launch(access, tab));
         return nonce;
@@ -28,7 +25,7 @@ final class CommandGateway {
     void show(String nonce) {
         Launch launch;
         synchronized (this) { launch = launches.remove(nonce); }
-        if (launch == null || launch.expires < android.os.SystemClock.elapsedRealtime()) throw new SecurityException("Launch expired");
+        if (launch == null) throw new SecurityException("Launch is unavailable");
         launch.access.check.run(); app.show(app.owned(launch.tab, launch.access.owner));
     }
 }

@@ -13,7 +13,6 @@ import com.journeyapps.barcodescanner.DecoratedBarcodeView;
 /** A visible cancellation control stays above the camera preview on every navigation mode. */
 public final class OnionCaptureActivity extends CaptureActivity {
     @Override protected DecoratedBarcodeView initializeContent() {
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         FrameLayout root = new FrameLayout(this);
         root.setBackgroundColor(0xff1e1e1e);
         DecoratedBarcodeView scanner = new DecoratedBarcodeView(this);

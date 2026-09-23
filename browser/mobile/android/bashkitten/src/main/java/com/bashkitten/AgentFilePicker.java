@@ -10,20 +10,14 @@ import java.util.*;
 
 /** Gives Gecko private local files for content selected in Android's document picker. */
 final class AgentFilePicker {
-    // The Agent HTTP multipart reader accepts at most 32 MiB per request.
-    private static final long MAX_BYTES = 32L * 1024 * 1024;
     static Uri[] copy(Context context, List<Uri> selected) throws IOException {
         File root = new File(context.getCacheDir(), "agent-uploads");
         if (!root.isDirectory() && !root.mkdirs()) throw new IOException("Upload cache is unavailable");
         // Cache files can outlive a prompt because the page retains its File objects.
-        File[] previous = root.listFiles();
-        if (previous != null) for (File directory : previous)
-            if (directory.lastModified() < System.currentTimeMillis() - 24L * 60 * 60 * 1000) remove(directory);
         File directory = new File(root, UUID.randomUUID().toString());
         if (!directory.mkdir()) throw new IOException("Upload cache is unavailable");
         try {
             ArrayList<Uri> files = new ArrayList<>();
-            long copied = 0;
             byte[] buffer = new byte[64 * 1024];
             for (Uri uri : selected) {
                 // A picker must grant content access, never nominate a private app path.
@@ -43,8 +37,6 @@ final class AgentFilePicker {
                         OutputStream output = new FileOutputStream(target)) {
                     if (input == null) throw new IOException("Selected file could not be read");
                     for (int count; (count = input.read(buffer)) != -1;) {
-                        copied += count;
-                        if (copied > MAX_BYTES) throw new IOException("Selected files exceed the 32 MiB upload limit");
                         output.write(buffer, 0, count);
                     }
                 }

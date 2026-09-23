@@ -40,20 +40,9 @@ const ACT_SETTLE_MS = 350;
 const DRAG_SETTLE_MS = 1000;
 const DOWNLOAD_TIMEOUT_MS = 50000;
 const MAX_INLINE_CHARS = 5000;
-const MAX_SCREENSHOT_DIMENSION = 8192;
-const MAX_SCREENSHOT_PIXELS = 8 * 1024 * 1024;
-const MAX_SCREENSHOT_BYTES = 16 * 1024 * 1024;
-const MAX_FRAME_DEPTH = 5;
-const MAX_CAPTURE_FRAMES = 64;
-const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
-const MAX_CONSOLE_FRAMES = 64;
-const MAX_CONSOLE_EVENTS = 2000;
-const MAX_CONSOLE_BYTES = 4 * 1024 * 1024;
 const MAX_STABLE_REFS = 20_000;
 const GREP_MATCH_LINE_MAX_CHARS = 500;
-const GREP_MAX_MATCHES = 200;
 const MAX_NETWORK_RECORDS = 1000;
-const MAX_NETWORK_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_NETWORK_BODY_TOTAL_CHARS = 20 * 1024 * 1024;
 const NETWORK_RECORD_TTL_MS = 5 * 60 * 1000;
 const LOGPOINT_SHARED_DATA_KEY = "bashkitten:browser-control-logpoints";
@@ -366,6 +355,11 @@ function headersObject(headers) {
   );
 }
 
+function isOrdinaryContentURI(uri) {
+  return ["http", "https", "file", "blob", "data"].includes(uri.scheme) ||
+    uri.spec === "about:blank" || uri.spec === "about:newtab";
+}
+
 function controlNavigationURI(url) {
   const value = String(url).trim();
   const normalized = /^[^:/?#\s]+\.onion(?::\d+)?(?:[/?#]|$)/i.test(value)
@@ -377,7 +371,7 @@ function controlNavigationURI(url) {
   } catch (error) {
     throw new Error(`Invalid URL: ${url} (${errorMessage(error)})`);
   }
-  if (!["http", "https"].includes(uri.scheme)) {
+  if (!isOrdinaryContentURI(uri)) {
     throw new Error(
       `scheme-refused: navigation to ${uri.scheme}: URLs is not allowed`
     );
@@ -494,7 +488,7 @@ class BrowserControlService {
       this.networkDecodedBodySizeMap,
       {
         decodeResponseBodies: true,
-        responseBodyLimit: MAX_NETWORK_BODY_BYTES,
+        responseBodyLimit: 0,
       }
     );
     this.networkListener.on("before-request-sent", this.#onBeforeRequestSent);
@@ -588,7 +582,7 @@ class BrowserControlService {
         if (!body?.value) {
           continue;
         }
-        if (bodyChars + body.value.length > MAX_NETWORK_BODY_TOTAL_CHARS) {
+        if (bodyChars > 0 && bodyChars + body.value.length > MAX_NETWORK_BODY_TOTAL_CHARS) {
           delete record[field];
           record[`${field}Unavailable`] = "evicted";
           continue;
@@ -716,11 +710,12 @@ class BrowserControlService {
     const contextId = browser?.browsingContext?.originAttributes?.userContextId ??
       Number(browser?.getAttribute("usercontextid") || 0);
     if (!browser || browser.hasAttribute("bashkitten-protected") ||
-        (contextId >= 0xB4500000 && contextId <= 0xB450FFFF)) {
+        (contextId >= 0xB4500000 && contextId <= 0xB450FFFF) ||
+        browser.browsingContext?.currentWindowGlobal?.documentPrincipal?.isSystemPrincipal) {
       return false;
     }
     const uri = browser.currentURI;
-    return !uri || ["http", "https"].includes(uri.scheme) || uri.spec === "about:blank" || uri.spec === "about:newtab";
+    return !uri || isOrdinaryContentURI(uri);
   }
 
   *tabs() {
@@ -851,33 +846,9 @@ class BrowserControlService {
     );
   }
 
-  async captureFrames(pageId, depth = 100) {
+  async captureFrames(pageId, options = {}) {
     const { browser } = this.pageForId(pageId);
     const frames = [];
-    let totalBytes = 0;
-    let truncated = false;
-    const addFrame = frame => {
-      const bytes = new TextEncoder().encode(JSON.stringify(frame)).byteLength;
-      if (
-        frames.length >= MAX_CAPTURE_FRAMES ||
-        totalBytes + bytes > MAX_CAPTURE_BYTES
-      ) {
-        if (!truncated) {
-          truncated = true;
-          frames.push({
-            url: frame?.url ?? "unknown",
-            browsingContextId: frame?.browsingContextId ?? null,
-            error: "Snapshot iframe aggregation was truncated",
-            truncated: true,
-            root: null,
-          });
-        }
-        return false;
-      }
-      totalBytes += bytes;
-      frames.push(frame);
-      return true;
-    };
     const captureContext = async browsingContext => {
       const deadline = Date.now() + 2000;
       let lastError = null;
@@ -885,7 +856,7 @@ class BrowserControlService {
         try {
           const frame = await this.actorForBrowsingContext(
             browsingContext
-          ).sendQuery("snapshot", { depth });
+          ).sendQuery("snapshot", { depth: options.depth ?? 100, maxNodes: options.maxNodes, maxBytes: options.maxBytes });
           if (frame?.root) {
             return frame;
           }
@@ -899,43 +870,31 @@ class BrowserControlService {
       }
       throw new Error("Gecko did not produce an accessibility/DOM snapshot");
     };
-    const visit = async (browsingContext, frameDepth) => {
-      if (!browsingContext || browsingContext.isDiscarded || truncated) {
+    const visit = async browsingContext => {
+      if (!browsingContext || browsingContext.isDiscarded) {
         return;
       }
       let frame;
       try {
         frame = await captureContext(browsingContext);
-        if (!addFrame(frame)) {
-          return;
-        }
+        frames.push(frame);
       } catch (error) {
-        if (
-          !addFrame({
-            url: browsingContext?.currentURI?.spec ?? "unknown",
-            browsingContextId: browsingContext?.id ?? null,
-            error: errorMessage(error),
-            root: null,
-          })
-        ) {
-          return;
-        }
-      }
-      if (frameDepth >= MAX_FRAME_DEPTH) {
-        return;
+        frames.push({
+          url: browsingContext?.currentURI?.spec ?? "unknown",
+          browsingContextId: browsingContext?.id ?? null,
+          error: errorMessage(error),
+          root: null,
+        });
       }
       const embedded = new Set(frame?.embeddedBrowsingContextIds ?? []);
       for (const child of browsingContext.children ?? []) {
         if (embedded.has(child.id)) {
           continue;
         }
-        await visit(child, frameDepth + 1);
-        if (truncated) {
-          return;
-        }
+        await visit(child);
       }
     };
-    await visit(browser.browsingContext, 0);
+    await visit(browser.browsingContext);
     return frames;
   }
 
@@ -995,10 +954,10 @@ class BrowserControlService {
   }
 
   async snapshot(pageId, options = {}) {
-    const frames = await this.captureFrames(pageId, 100);
+    const frames = await this.captureFrames(pageId, options);
     const maxDepth =
       typeof options.depth === "number" && Number.isFinite(options.depth)
-        ? Math.max(1, Math.min(100, Math.floor(options.depth)))
+        ? Math.max(1, Math.floor(options.depth))
         : null;
     const fullText = this.renderSnapshot(pageId, frames);
     const text = applySnapshotOptions(
@@ -1521,57 +1480,14 @@ class BrowserControlService {
   async consoleEvents(pageId) {
     const { browser } = this.pageForId(pageId);
     const events = [];
-    let frameCount = 0;
-    let totalBytes = 0;
-    let truncated = false;
-    const markTruncated = () => {
-      if (truncated) {
-        return;
-      }
-      truncated = true;
-      events.push({
-        timestamp: Date.now(),
-        type: "console",
-        level: "warn",
-        method: "warn",
-        text: "Console iframe aggregation was truncated",
-        source: { url: "", line: null, column: null, functionName: "" },
-        stack: [],
-      });
-    };
     const visit = async context => {
-      if (!context || context.isDiscarded || truncated) {
-        return;
-      }
-      if (frameCount >= MAX_CONSOLE_FRAMES) {
-        markTruncated();
-        return;
-      }
-      frameCount++;
+      if (!context || context.isDiscarded) return;
       try {
         const frameEvents =
           await this.actorForBrowsingContext(context).sendQuery("console");
-        for (const event of frameEvents) {
-          const bytes = new TextEncoder().encode(
-            JSON.stringify(event)
-          ).byteLength;
-          if (
-            events.length >= MAX_CONSOLE_EVENTS ||
-            totalBytes + bytes > MAX_CONSOLE_BYTES
-          ) {
-            markTruncated();
-            return;
-          }
-          events.push(event);
-          totalBytes += bytes;
-        }
+        for (const event of frameEvents) events.push(event);
       } catch {}
-      for (const child of context.children ?? []) {
-        await visit(child);
-        if (truncated) {
-          return;
-        }
-      }
+      for (const child of context.children ?? []) await visit(child);
     };
     await visit(browser.browsingContext);
 
@@ -1594,17 +1510,10 @@ class BrowserControlService {
   async clearConsoleEvents(pageId) {
     const { browser } = this.pageForId(pageId);
     let count = 0;
-    let frameCount = 0;
-    let truncated = false;
     const visit = async context => {
       if (!context || context.isDiscarded) {
         return;
       }
-      if (frameCount >= MAX_CONSOLE_FRAMES) {
-        truncated = true;
-        return;
-      }
-      frameCount++;
       try {
         count +=
           (await this.actorForBrowsingContext(context).sendQuery(
@@ -1616,7 +1525,7 @@ class BrowserControlService {
       }
     };
     await visit(browser.browsingContext);
-    return { count, truncated };
+    return { count, truncated: false };
   }
 
   networkForPage(pageId) {
@@ -2667,8 +2576,8 @@ class BrowserControlService {
       throw new Error(`Unknown history action: ${action}`);
     }
     const maxResults = args.maxResults ?? 100;
-    if (!Number.isInteger(maxResults) || maxResults < 1 || maxResults > 500) {
-      throw new Error("maxResults must be an integer between 1 and 500");
+    if (!Number.isInteger(maxResults) || maxResults < 1) {
+      throw new Error("maxResults must be a positive integer");
     }
     const database = await lazy.PlacesUtils.promiseDBConnection();
     const rows = await database.execute(
@@ -3127,7 +3036,7 @@ class BrowserControlService {
     }
     const requestedLimit = Number(args.limit ?? 50);
     const limit = Number.isFinite(requestedLimit)
-      ? Math.max(0, Math.min(GREP_MAX_MATCHES, Math.floor(requestedLimit)))
+      ? Math.max(0, Math.floor(requestedLimit))
       : 50;
     const matches = text
       .split("\n")
@@ -3175,13 +3084,13 @@ class BrowserControlService {
     const timeoutValue = Number(args.timeout ?? 2000);
     const timeout =
       Number.isFinite(timeoutValue) && timeoutValue >= 0
-        ? Math.min(timeoutValue, 30000)
+        ? timeoutValue
         : 2000;
     if (waitFor === "time") {
       const requested = Number(args.value ?? 2000);
       const waitMs =
         Number.isFinite(requested) && requested >= 0
-          ? Math.min(Math.round(requested), timeout)
+          ? Math.round(requested)
           : Math.min(2000, timeout);
       await abortableDelay(waitMs, signal);
       return textResult(`waited ${waitMs}ms`, {
@@ -3250,7 +3159,7 @@ class BrowserControlService {
     const timeoutValue = Number(args.timeout ?? 30000);
     const timeout =
       Number.isFinite(timeoutValue) && timeoutValue > 0
-        ? Math.min(Math.round(timeoutValue), 30000)
+        ? Math.round(timeoutValue)
         : 30000;
     let result;
     try {
@@ -3316,22 +3225,13 @@ class BrowserControlService {
       ) {
         throw new Error("Screenshot dimensions are invalid");
       }
-      const maximumWidth = Math.min(
-        args.size?.width ?? (fullPage ? MAX_SCREENSHOT_DIMENSION : 1024),
-        MAX_SCREENSHOT_DIMENSION
-      );
-      const maximumHeight = Math.min(
-        args.size?.height ?? (fullPage ? MAX_SCREENSHOT_DIMENSION : 768),
-        MAX_SCREENSHOT_DIMENSION
-      );
+      const maximumWidth = args.size?.width ?? (fullPage ? width : 1024);
+      const maximumHeight = args.size?.height ?? (fullPage ? height : 768);
       const requestedScale = fullPage ? 1 : (clip?.scale ?? 1);
-      const scale = Math.min(
-        requestedScale,
-        1,
-        maximumWidth / width,
-        maximumHeight / height,
-        Math.sqrt(MAX_SCREENSHOT_PIXELS / (width * height))
-      );
+      const scale = Math.min(requestedScale, maximumWidth / width, maximumHeight / height);
+      if (!Number.isFinite(scale) || scale <= 0) {
+        throw new Error("Screenshot scale is invalid");
+      }
       const annotationResults = args.annotate
         ? await Promise.all(
             annotationItems.map(item =>
@@ -3366,11 +3266,6 @@ class BrowserControlService {
         (args.quality ?? 80) / 100
       );
       const bytes = base64ByteLength(data);
-      if (bytes > MAX_SCREENSHOT_BYTES) {
-        throw new Error(
-          `Screenshot output exceeds ${MAX_SCREENSHOT_BYTES} bytes`
-        );
-      }
       return imageResult(data, mimeType, {
         page: args.page,
         format,

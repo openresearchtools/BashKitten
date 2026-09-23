@@ -22,10 +22,9 @@ final class AppGrants {
     static final class Request {
         final int uid;
         final String identity;
-        final long expires;
         String status = "pending";
         boolean presented;
-        Request(int uid, String identity) { this.uid = uid; this.identity = identity; expires = android.os.SystemClock.elapsedRealtime() + 300000; }
+        Request(int uid, String identity) { this.uid = uid; this.identity = identity; }
     }
     AppGrants(Context context) {
         this.context = context;
@@ -104,44 +103,40 @@ final class AppGrants {
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_ONE_SHOT, options.toBundle());
     }
     synchronized String ticket(int uid) {
-        pending.entrySet().removeIf(e -> e.getValue().expires < android.os.SystemClock.elapsedRealtime());
         String identity = identity(uid);
         for (Map.Entry<String, Request> entry : pending.entrySet()) {
             Request value = entry.getValue();
             if (value.uid == uid && value.identity.equals(identity) && value.status.equals("pending")) return entry.getKey();
         }
-        if (pending.size() >= 32) throw new SecurityException("Too many authorization requests");
         String nonce = UUID.randomUUID().toString();
         pending.put(nonce, new Request(uid, identity));
         return nonce;
     }
     synchronized String pendingTicket() {
-        long now = android.os.SystemClock.elapsedRealtime();
         for (Map.Entry<String, Request> entry : pending.entrySet()) {
             Request request = entry.getValue();
-            if (request.expires >= now && !request.presented && request.status.equals("pending")) return entry.getKey();
+            if (!request.presented && request.status.equals("pending")) return entry.getKey();
         }
         return null;
     }
     synchronized Request consume(String nonce, boolean restored) {
         Request request = pending.get(nonce);
-        if (request == null || request.expires < android.os.SystemClock.elapsedRealtime()
-                || !request.status.equals("pending") || (request.presented && !restored)
+        if (request == null || !request.status.equals("pending") || (request.presented && !restored)
                 || !request.identity.equals(identity(request.uid)))
-            throw new SecurityException("Authorization request expired");
+            throw new SecurityException("Authorization request is unavailable");
         request.presented = true;
         return request;
     }
     synchronized String status(int uid, String nonce) {
         Request request = pending.get(nonce);
-        if (request == null || request.expires < android.os.SystemClock.elapsedRealtime()) return "expired";
+        if (request == null) return "expired";
         if (request.uid != uid || !request.identity.equals(identity(uid))) throw new SecurityException("Caller changed");
         if (request.status.equals("approved") && !allowed(uid)) return "revoked";
         return request.status;
     }
     synchronized void approve(Request request) {
-        if (!request.identity.equals(identity(request.uid)) || !request.status.equals("pending")
-                || request.expires < android.os.SystemClock.elapsedRealtime()) throw new SecurityException("Caller changed or request expired");
+        if (!request.identity.equals(identity(request.uid)) || !request.status.equals("pending"))
+            throw new SecurityException("Caller changed or request is unavailable");
         preferences.edit().putBoolean(request.identity, true).apply();
         request.status = "approved";
     }

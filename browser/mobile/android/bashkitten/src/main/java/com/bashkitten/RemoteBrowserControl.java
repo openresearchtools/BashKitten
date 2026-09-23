@@ -78,7 +78,6 @@ final class RemoteBrowserControl {
             request(version, "/api/browser-channel/poll", new JSONObject().put("channelId", channel), result -> {
                 try {
                     JSONArray commands = result.getJSONArray("commands");
-                    if (commands.length() > 8) throw new IllegalArgumentException("Too many remote browser commands");
                     next(version, commands, 0);
                 } catch (Exception error) { failed(version, "Invalid Agent browser command"); }
             });
@@ -90,8 +89,7 @@ final class RemoteBrowserControl {
         try {
             JSONObject command = commands.getJSONObject(index);
             String id = command.getString("id");
-            if (id.length() > 128 || !completed.add(id) || completed.size() > 4096)
-                throw new IllegalArgumentException("Duplicate or excessive Agent command");
+            if (!completed.add(id)) throw new IllegalArgumentException("Duplicate Agent command");
             JSONObject request = new JSONObject().put("method", command.getString("method"))
                 .put("params", command.optJSONObject("params") == null ? new JSONObject() : command.getJSONObject("params"));
             if (request.getString("method").equals("screenshot")) request.getJSONObject("params").remove("transfer");
@@ -131,17 +129,14 @@ final class RemoteBrowserControl {
                         endpoint.getPort() < 1 || endpoint.getUserInfo() != null || endpoint.getQuery() != null || endpoint.getFragment() != null ||
                         !endpoint.getPath().matches("/files/[a-f0-9-]{36}") || !token.matches("[a-f0-9]{64}"))
                     throw new SecurityException("Invalid browser file transfer");
-                long limit = 23L * 1024 * 1024;
-                if (transfer.getLong("size") > limit) throw new IllegalArgumentException("File exceeds the 23 MiB remote transfer limit; download it on this device");
                 connection = (java.net.HttpURLConnection) endpoint.toURL().openConnection();
-                connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(5000); connection.setReadTimeout(30000);
+                connection.setInstanceFollowRedirects(false);
                 connection.setRequestProperty("Authorization", "Bearer " + token);
                 if (!active || version != generation || connection.getResponseCode() != 200) throw new SecurityException("Browser file transfer revoked");
                 try (java.io.InputStream input = connection.getInputStream(); java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream()) {
                     byte[] buffer = new byte[65536]; int count;
                     while ((count = input.read(buffer)) != -1) {
                         if (!active || version != generation) throw new SecurityException("Browser control revoked");
-                        if ((long) output.size() + count > limit) throw new IllegalArgumentException("File exceeds the 23 MiB remote transfer limit");
                         output.write(buffer, 0, count);
                     }
                     if (output.size() != transfer.getLong("size")) throw new java.io.IOException("Incomplete browser file transfer");

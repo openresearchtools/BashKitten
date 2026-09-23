@@ -247,7 +247,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 } catch (Exception exception) {
                     app.main.post(() -> {
                         if (!prompt.isComplete()) response.complete(prompt.dismiss());
-                        error("Selected files could not be read. Choose readable files totaling less than 32 MiB.");
+                        error("Selected files could not be read. Choose readable files and try again.");
                     });
                 }
             }, "agent-file-picker").start();
@@ -295,7 +295,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private EditText field(String hint, boolean secret) { EditText field = new EditText(activity); field.setHint(hint); field.setSingleLine(); if (secret) { field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD); field.setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_NO); } return field; }
     private void showFactor(JSONObject value) {
         setupId = value.optString("setupId"); actions.removeAllViews();
-        activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         String qr = value.optString("qrDataUrl");
         try { byte[] data = android.util.Base64.decode(qr.substring(qr.indexOf(',')+1), android.util.Base64.DEFAULT); ImageView image = new ImageView(activity); image.setImageBitmap(BitmapFactory.decodeByteArray(data,0,data.length)); actions.addView(image,new LayoutParams(-1,dp(240))); } catch(Exception ignored) {}
         TextView guide = new TextView(activity); guide.setText("Add BashKitten to your authenticator, then paste or enter its six-digit code."); actions.addView(guide);
@@ -316,7 +315,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 catch (ActivityNotFoundException error) { error("No authenticator app is installed. Add this account in an authenticator using the setup key or QR code."); }
             });
         EditText code = field("Authenticator code", false); code.setInputType(InputType.TYPE_CLASS_NUMBER); actions.addView(code);
-        action("Verify and continue", () -> { try { runtime.command("account-totp", new JSONObject().put("setupId",setupId).put("code",code.getText().toString()), result -> { activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE); runtime.refresh(); },this::error); } catch(JSONException ignored) {} });
+        action("Verify and continue", () -> { try { runtime.command("account-totp", new JSONObject().put("setupId",setupId).put("code",code.getText().toString()), result -> runtime.refresh(),this::error); } catch(JSONException ignored) {} });
     }
     private void downloadTermux() {
         message.setText("Finding the official Termux release…");

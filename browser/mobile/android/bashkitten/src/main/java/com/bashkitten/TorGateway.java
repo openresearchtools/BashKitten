@@ -17,21 +17,20 @@ final class TorGateway {
     private final String path;
     final String secret;
     private final ExecutorService connections = Executors.newCachedThreadPool();
-    private final Semaphore capacity = new Semaphore(64);
 
     TorGateway(String path) throws IOException {
         this.path = path;
         byte[] random = new byte[32]; new SecureRandom().nextBytes(random);
         secret = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
-        listener = new ServerSocket(0, 64, InetAddress.getByName("127.0.0.1"));
+        listener = new ServerSocket();
+        listener.bind(new InetSocketAddress("127.0.0.1", 0));
         Thread accept = new Thread(() -> {
             while (!listener.isClosed()) {
                 try {
                     Socket socket = listener.accept();
-                    if (!capacity.tryAcquire()) { socket.close(); continue; }
                     connections.execute(() -> {
                         try { forward(socket); } catch (IOException ignored) {}
-                        finally { try { socket.close(); } catch (IOException ignored) {} capacity.release(); }
+                        finally { try { socket.close(); } catch (IOException ignored) {} }
                     });
                 } catch (IOException ignored) { break; }
             }

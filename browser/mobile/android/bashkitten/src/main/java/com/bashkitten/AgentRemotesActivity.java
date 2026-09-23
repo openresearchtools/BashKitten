@@ -3,10 +3,8 @@ package com.bashkitten;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.text.InputFilter;
 import android.text.InputType;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -34,7 +32,6 @@ import java.util.Locale;
 /** Native enrollment: connection keys are never navigated to or exposed to the tab dispatcher. */
 public final class AgentRemotesActivity extends ProductActivity {
     private static final int OPEN_CONNECTION = 42;
-    private static final int MAX_CONNECTION_BYTES = 32768;
     private BrowserApp app;
     private LinearLayout connections, manual;
     private EditText name, address, secret;
@@ -47,7 +44,6 @@ public final class AgentRemotesActivity extends ProductActivity {
         super.onCreate(saved);
         app = BrowserApp.get(this);
         setTitle("Agent connections");
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         LinearLayout root = column();
         TextView description = text("Use Agent on this device or connect privately through Tor. Remote sign-in still requires your password and second factor.", 15);
         root.addView(description);
@@ -60,9 +56,9 @@ public final class AgentRemotesActivity extends ProductActivity {
                 .setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), OPEN_CONNECTION));
         button(root, "Enter address and key", () -> manual.setVisibility(manual.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
         manual = column(); manual.setVisibility(View.GONE); root.addView(manual);
-        name = field("Name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES, 120); manual.addView(name);
-        address = field("Agent onion address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, 256); manual.addView(address);
-        secret = field("Private connection key", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD, 64);
+        name = field("Name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES); manual.addView(name);
+        address = field("Agent onion address", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI); manual.addView(address);
+        secret = field("Private connection key", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         secret.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         secret.setSaveEnabled(false); secret.setFreezesText(false); manual.addView(secret);
         button(manual, "Connect", () -> {
@@ -116,7 +112,7 @@ public final class AgentRemotesActivity extends ProductActivity {
         if (busy) return;
         String host = URI.create(record.getString("url")).getHost();
         LinearLayout form = column(); form.setPadding(dp(24), 0, dp(24), 0);
-        EditText title = field("Name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES, 120);
+        EditText title = field("Name", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         title.setText(record.optString("name", "Remote Agent")); form.addView(title);
         TextView destination = text(host, 14); destination.setTextIsSelectable(true); form.addView(destination);
         TextView detail = text("The private connection key stays on this device. Sign in to the server after connecting.", 14);
@@ -169,7 +165,6 @@ public final class AgentRemotesActivity extends ProductActivity {
         OnionKey key = new OnionKey(host, input.getString("clientAuthorization"));
         String label = input.optString("name", "Remote Agent").trim();
         if (label.isEmpty()) label = "Remote Agent";
-        if (label.length() > 120) throw new IllegalArgumentException("Connection name is too long.");
         JSONObject record = new JSONObject().put("version", 1).put("kind", "agent").put("name", label)
                 .put("url", new URI("https", null, host, url.getPort(), "/", null, null).toString())
                 .put("clientAuthorization", key.key);
@@ -177,7 +172,6 @@ public final class AgentRemotesActivity extends ProductActivity {
         if (!fingerprint.isEmpty() && !fingerprint.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid certificate identity.");
         String pem = input.optString("caPem", "").trim();
         if (!pem.isEmpty()) {
-            if (pem.length() > 16384) throw new IllegalArgumentException("Certificate is too large.");
             X509Certificate ca = (X509Certificate) CertificateFactory.getInstance("X.509")
                     .generateCertificate(new java.io.ByteArrayInputStream(pem.getBytes(StandardCharsets.US_ASCII)));
             ca.checkValidity();
@@ -190,7 +184,6 @@ public final class AgentRemotesActivity extends ProductActivity {
         if (!fingerprint.isEmpty()) record.put("caSha256", fingerprint);
         if (input.has("instanceId")) {
             String id = input.getString("instanceId");
-            if (id.length() > 128) throw new IllegalArgumentException("Invalid instance identity.");
             record.put("instanceId", id);
         }
         return record;
@@ -198,7 +191,6 @@ public final class AgentRemotesActivity extends ProductActivity {
 
     private void importConnection(String json) {
         try {
-            if (json.getBytes(StandardCharsets.UTF_8).length > MAX_CONNECTION_BYTES) throw new IllegalArgumentException();
             confirm(normalize(new JSONObject(json)));
         } catch (Exception error) { message("Choose a valid Agent connection file or QR code."); }
     }
@@ -218,7 +210,6 @@ public final class AgentRemotesActivity extends ProductActivity {
                         int count;
                         while ((count = input.read(chunk)) != -1) {
                             output.write(chunk, 0, count);
-                            if (output.size() > MAX_CONNECTION_BYTES) throw new IllegalArgumentException();
                         }
                         text = new String(output.toByteArray(), StandardCharsets.UTF_8);
                     } finally { java.util.Arrays.fill(chunk, (byte) 0); }
@@ -243,14 +234,14 @@ public final class AgentRemotesActivity extends ProductActivity {
         name.setEnabled(!value); address.setEnabled(!value); secret.setEnabled(!value);
     }
     private void message(String value) {
-        status.setText(value.length() > 1200 ? value.substring(0, 1200) : value);
+        status.setText(value);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); return layout; }
     private TextView text(String value, int size) { TextView view = new TextView(this); view.setText(value); view.setTextSize(size); return view; }
-    private EditText field(String hint, int inputType, int limit) {
+    private EditText field(String hint, int inputType) {
         EditText field = new EditText(this); field.setHint(hint); field.setSingleLine(); field.setInputType(inputType);
-        field.setFilters(new InputFilter[] { new InputFilter.LengthFilter(limit) }); return field;
+        return field;
     }
     private Button button(LinearLayout row, String label, Runnable action) {
         Button button = new Button(this); button.setText(label); button.setAllCaps(false);

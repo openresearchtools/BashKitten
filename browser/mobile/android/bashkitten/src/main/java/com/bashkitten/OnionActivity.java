@@ -5,7 +5,6 @@ import android.app.*;
 import android.content.*;
 import android.os.Bundle;
 import android.text.InputType;
-import android.view.WindowManager;
 import android.widget.*;
 import androidx.appcompat.app.AlertDialog;
 import com.google.zxing.integration.android.IntentIntegrator;
@@ -21,7 +20,6 @@ public final class OnionActivity extends ProductActivity {
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved); app = BrowserApp.get(this);
         setTitle("Private Tor sites");
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24, 60, 24, 24);
         TextView description = new TextView(this); description.setText("Onion addresses open through Tor automatically. To add a private site, scan its credential QR or choose its .auth_private file. Both include the address and key."); root.addView(description);
         add(root, "Scan QR code", () -> new IntentIntegrator(this).setCaptureActivity(OnionCaptureActivity.class)
@@ -47,7 +45,6 @@ public final class OnionActivity extends ProductActivity {
         int padding = Math.round(20 * getResources().getDisplayMetrics().density); form.setPadding(padding, 0, padding, 0);
         TextView host = new TextView(this); host.setText(key.host); host.setTextIsSelectable(true); form.addView(host);
         EditText name = new EditText(this); name.setHint("Site name"); name.setSingleLine();
-        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(120)});
         name.setText(siteName(key.host)); form.addView(name);
         CheckBox bookmark = new CheckBox(this); bookmark.setText("Add to quick access"); bookmark.setChecked(true); form.addView(bookmark);
         new AlertDialog.Builder(this).setTitle("Add private Tor site").setView(form)
@@ -100,11 +97,14 @@ public final class OnionActivity extends ProductActivity {
         try {
             if (request == 20 && result == RESULT_OK && data != null && data.getData() != null) {
                 try (InputStream input = getContentResolver().openInputStream(data.getData())) {
-                    byte[] bytes = new byte[2049]; int total = 0, count;
-                    while (total < bytes.length && (count = input.read(bytes, total, bytes.length - total)) > 0) total += count;
-                    if (total > 2048) throw new IllegalArgumentException("Credential file too large");
-                    confirmImport(OnionKey.parse(new String(bytes, 0, total, StandardCharsets.UTF_8)));
-                    java.util.Arrays.fill(bytes, (byte) 0);
+                    if (input == null) throw new IOException("Credential file could not be read");
+                    ByteArrayOutputStream output = new ByteArrayOutputStream();
+                    byte[] chunk = new byte[8192]; int count;
+                    try { while ((count = input.read(chunk)) != -1) output.write(chunk, 0, count); }
+                    finally { java.util.Arrays.fill(chunk, (byte) 0); }
+                    byte[] bytes = output.toByteArray();
+                    try { confirmImport(OnionKey.parse(new String(bytes, StandardCharsets.UTF_8))); }
+                    finally { java.util.Arrays.fill(bytes, (byte) 0); }
                 }
             } else {
                 IntentResult scanned = IntentIntegrator.parseActivityResult(request, result, data);

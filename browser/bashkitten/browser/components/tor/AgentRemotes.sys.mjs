@@ -22,7 +22,7 @@ function validateURL(value, local = false) {
 
 function certificate(pem, expected = "") {
   const match = /^\s*-----BEGIN CERTIFICATE-----\s*([A-Za-z0-9+/=\s]+)\s*-----END CERTIFICATE-----\s*$/.exec(String(pem));
-  if (!match || pem.length > 65536) {
+  if (!match) {
     throw new Error("The server CA certificate is missing or invalid.");
   }
   const cert = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB)
@@ -34,7 +34,7 @@ function certificate(pem, expected = "") {
   return { cert, identity };
 }
 
-function readResponse(channel, { body, signal, limit = 2 * 1024 * 1024, timeout = 35000 } = {}) {
+function readResponse(channel, { body, signal, limit = Infinity, timeout = 35000 } = {}) {
   return new Promise((resolve, reject) => {
     let data = "";
     const cancel = () => channel.cancel(Cr.NS_BINDING_ABORTED);
@@ -116,11 +116,11 @@ class AgentRemoteStore {
     let entries = [];
     if (await IOUtils.exists(FILE)) {
       const saved = await IOUtils.readJSON(FILE);
-      if (saved.version != 1 || typeof saved.encrypted != "string" || saved.encrypted.length > 4 * 1024 * 1024) {
+      if (saved.version != 1 || typeof saved.encrypted != "string") {
         throw new Error("The saved remote connections could not be read.");
       }
       entries = JSON.parse(this.crypto.decrypt(saved.encrypted));
-      if (!Array.isArray(entries) || entries.length > 256) throw new Error("Invalid remote connections.");
+      if (!Array.isArray(entries)) throw new Error("Invalid remote connections.");
     }
     const ids = new Set();
     for (const entry of entries) {
@@ -185,7 +185,7 @@ class AgentRemoteStore {
     return this.serialized(async () => {
       await this.load();
       url = validateURL(url, true);
-      if (typeof instanceId != "string" || !instanceId || instanceId.length > 256) throw new Error("Missing local server identity.");
+      if (typeof instanceId != "string" || !instanceId) throw new Error("Missing local server identity.");
       const { identity } = certificate(caPem, caSha256);
       const previous = this.entries.get("local");
       if (previous && (previous.instanceId != instanceId || previous.caSha256 != identity)) {
@@ -206,7 +206,7 @@ class AgentRemoteStore {
       if (typeof record == "string") record = JSON.parse(record);
       if (record?.version != 1 || !["agent", "llama"].includes(record.kind)) throw new Error("Unsupported connection file.");
       const url = validateURL(record.url);
-      const name = String(record.name || new URL(url).hostname).trim().slice(0, 120);
+      const name = String(record.name || new URL(url).hostname).trim();
       const key = onionPrivateKey(record.clientAuthorization);
       const previous = [...this.entries.values()].find(entry => entry.id != "local" && entry.id != "local-hosting" && entry.kind == record.kind && entry.url == url);
       const entry = {
@@ -218,7 +218,7 @@ class AgentRemoteStore {
         bearerToken: record.kind == "llama" ? String(record.bearerToken || "") : undefined,
         port: previous?.port || 0,
       };
-      if (entry.kind == "llama" && (!entry.bearerToken || /[\x00-\x20\x7f]/.test(entry.bearerToken) || entry.bearerToken.length > 8192)) {
+      if (entry.kind == "llama" && (!entry.bearerToken || /[\x00-\x20\x7f]/.test(entry.bearerToken))) {
         throw new Error("Enter the llama.cpp bearer token.");
       }
       if (!entry.caPem) await this.enrollCertificate(entry);
@@ -501,7 +501,7 @@ class AgentRemoteStore {
         contentPolicyType: Ci.nsIContentPolicy.TYPE_OTHER,
       }).QueryInterface(Ci.nsIHttpChannel);
       channel.loadFlags |= Ci.nsIRequest.LOAD_ANONYMOUS | Ci.nsIRequest.LOAD_BYPASS_CACHE;
-      const response = await readResponse(channel, { limit: 65536, timeout: 60000 });
+      const response = await readResponse(channel, { timeout: 60000 });
       if (response.status != 200) throw new Error("The server did not provide its CA certificate.");
       const { identity } = certificate(response.data?.caPem, entry.caSha256);
       if (response.data.caSha256 && response.data.caSha256.toLowerCase() != identity) {

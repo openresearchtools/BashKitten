@@ -103,10 +103,6 @@ public final class TermuxConnection {
         }
         JSONObject args = request.optJSONObject("args");
         String input = (args == null ? new JSONObject() : args).toString();
-        if (input.getBytes(StandardCharsets.UTF_8).length > 131072) {
-            fail.accept("Service request is too large.");
-            return;
-        }
         // Secrets remain on stdin: no password, factor or connection key enters argv or logs.
         String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
                 + "exec '" + PREFIX + "/bin/bashkittenctl' \"$1\" --stdin; else "
@@ -210,7 +206,7 @@ public final class TermuxConnection {
                 catch (Exception ignored) { /* Do not expose raw shell output from a private account operation. */ }
             }
             if (error.isEmpty()) error = "Termux command failed. Check Termux setup and retry.";
-            request.fail.accept(error.substring(0, Math.min(error.length(), 1200)));
+            request.fail.accept(error);
             return;
         }
         JSONObject value;
@@ -223,7 +219,7 @@ public final class TermuxConnection {
         }
         if (value.has("error")) {
             String error = value.optString("error", "Service command failed.");
-            request.fail.accept(error.substring(0, Math.min(error.length(), 1200)));
+            request.fail.accept(error);
         } else request.done.accept(value);
     }
 
@@ -233,7 +229,6 @@ public final class TermuxConnection {
             int count;
             while ((count = input.read(buffer)) != -1) {
                 output.write(buffer, 0, count);
-                if (output.size() > 262144) throw new IllegalStateException("Bundled setup asset is too large.");
             }
             return new String(output.toByteArray(), StandardCharsets.UTF_8);
         }
@@ -242,7 +237,7 @@ public final class TermuxConnection {
     private static String shellQuote(String value) { return "'" + value.replace("'", "'\\''") + "'"; }
     private static String message(Exception error, String fallback) {
         String value = error.getMessage();
-        return value == null || value.isEmpty() ? fallback : value.substring(0, Math.min(value.length(), 1200));
+        return value == null || value.isEmpty() ? fallback : value;
     }
 
     private static final class Request {

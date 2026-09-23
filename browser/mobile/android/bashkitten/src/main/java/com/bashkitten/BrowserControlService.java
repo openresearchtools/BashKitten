@@ -10,7 +10,6 @@ import com.bashkitten.api.*;
 
 public final class BrowserControlService extends Service {
     BrowserApp app;
-    private final Set<Integer> awaitingApproval = Collections.synchronizedSet(new HashSet<>());
     @Override public void onCreate() {
         super.onCreate(); app = BrowserApp.get(this);
     }
@@ -30,28 +29,26 @@ public final class BrowserControlService extends Service {
         }
         @Override public void execute(String json, IAgentCallback callback) {
             if (callback == null) throw new IllegalArgumentException("Callback required");
-            if (json == null || json.length() > 200000) throw new IllegalArgumentException("Invalid request");
+            if (json == null) throw new IllegalArgumentException("Invalid request");
             int uid = Binder.getCallingUid();
             if (app.grants.allowed(uid)) { executeApproved(uid, json, callback); return; }
             if (app.grants.denied(uid)) {
                 result(callback, "{\"error\":\"Browser access denied\",\"code\":\"authorization_denied\"}"); return;
             }
-            if (!awaitingApproval.add(uid)) {
-                result(callback, "{\"error\":\"An app approval is already pending\",\"code\":\"authorization_pending\"}"); return;
-            }
             String ticket;
             try {
                 ticket = app.grants.ticket(uid);
                 callback.onApprovalRequired(app.grants.request(uid));
-            } catch (Exception error) { awaitingApproval.remove(uid); return; }
+            } catch (Exception error) {
+                result(callback, "{\"error\":\"Browser approval could not be delivered\",\"code\":\"transport_error\"}"); return;
+            }
             app.main.post(new Runnable() {
                 @Override public void run() {
-                    if (!callback.asBinder().isBinderAlive()) { awaitingApproval.remove(uid); return; }
+                    if (!callback.asBinder().isBinderAlive()) return;
                     String status;
                     try { status = app.grants.status(uid, ticket); }
                     catch (SecurityException error) { status = "revoked"; }
                     if (status.equals("pending")) { app.main.postDelayed(this, 500); return; }
-                    awaitingApproval.remove(uid);
                     if (status.equals("approved")) executeApproved(uid, json, callback);
                     else result(callback, "{\"error\":\"Browser access " + status + "\",\"code\":\"authorization_" + status + "\"}");
                 }
@@ -65,7 +62,11 @@ public final class BrowserControlService extends Service {
         catch (Exception error) { result(callback, "{\"error\":\"Invalid browser command\"}"); }
     }
     private void result(IAgentCallback callback, String value) {
-        try { callback.onResult(value); } catch (RemoteException ignored) { }
+        try { callback.onResult(value); }
+        catch (RemoteException error) {
+            try { callback.onResult("{\"error\":\"Android Binder could not deliver the browser result: " + error.getClass().getSimpleName() + "\",\"code\":\"transport_error\"}"); }
+            catch (RemoteException unavailable) { android.util.Log.w("BashKitten", "Browser callback is unavailable"); }
+        }
     }
     @Override public IBinder onBind(Intent intent) { return binder; }
 }

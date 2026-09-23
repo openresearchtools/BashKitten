@@ -7,15 +7,12 @@ import android.net.Uri;
 import androidx.core.content.FileProvider;
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.json.*;
 
 /** One authorized ordinary-tab dispatcher for local apps and approved remote agents. */
 final class AgentController extends ContextWrapper {
     final BrowserApp app;
-    final Map<String, AtomicInteger> pending = new ConcurrentHashMap<>();
     static final class Access {
         final String owner;
         final int uid;
@@ -36,27 +33,20 @@ final class AgentController extends ContextWrapper {
     }
     void execute(Access access, String json, Consumer<String> callback) {
         access.check.run();
-        if (callback == null || json == null || json.length() > 200000) throw new IllegalArgumentException("Invalid request");
-        AtomicInteger count = pending.computeIfAbsent(access.owner, ignored -> new AtomicInteger());
-        if (count.incrementAndGet() > 8) { count.decrementAndGet(); throw new IllegalStateException("Too many requests"); }
+        if (callback == null || json == null) throw new IllegalArgumentException("Invalid request");
         app.main.post(() -> {
             boolean[] completed = {false};
-            Runnable[] timeout = {null};
             Consumer<JSONObject> send = result -> {
                 if (completed[0]) return;
-                completed[0] = true; count.decrementAndGet();
-                app.main.removeCallbacks(timeout[0]);
+                completed[0] = true;
                 String response;
                 try { access.check.run(); response = result.toString(); }
                 catch (SecurityException error) { response = "{\"error\":\"Access revoked\"}"; }
-                if (response.length() > (access.uid < 0 ? 8 * 1024 * 1024 : 200000)) response = "{\"error\":\"Result too large; narrow the query\"}";
                 callback.accept(response);
             };
             Consumer<String> fail = message -> {
                 try { send.accept(new JSONObject().put("error", message)); } catch (JSONException ignored) {}
             };
-            timeout[0] = () -> fail.accept("Request timed out");
-            app.main.postDelayed(timeout[0], 210000);
             try { access.check.run(); run(new JSONObject(json), access, send, fail); }
             catch (Exception error) { fail.accept(error.getMessage() == null ? "Request failed" : error.getMessage()); }
         });
@@ -162,7 +152,6 @@ final class AgentController extends ContextWrapper {
                         String[] packages = getPackageManager().getPackagesForUid(uid);
                         if (packages != null) for (String name : packages) grantUriPermission(name, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
                         send.accept(new JSONObject().put("result", new JSONObject().put("uri", uri.toString()).put("mimeType", "image/png")));
-                        app.main.postDelayed(() -> { revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); file.delete(); }, 300000);
                     } catch (Exception error) { fail.accept("Screenshot failed"); }
                 }); return;
             }

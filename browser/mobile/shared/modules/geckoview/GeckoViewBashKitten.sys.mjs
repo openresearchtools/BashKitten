@@ -40,14 +40,10 @@ export class GeckoViewBashKitten extends GeckoViewModule {
   }
   async onEvent(event, data, callback) {
     try {
-      if (data.request.length > 33 * 1024 * 1024) throw new Error("Request too large");
       const request = JSON.parse(data.request);
-      if (data.request.length > 200000 && !(protectedContext(this.context) && request.method === "agent.request" &&
-          request.params?.path === "/api/browser-channel/result")) throw new Error("Request too large");
       await this.ready;
       const result = await this.request(request);
       const json = JSON.stringify({ result });
-      if (json.length > 2000000) throw new Error("Result too large; narrow the page query");
       callback.onSuccess(json);
     } catch (error) {
       callback.onSuccess(JSON.stringify({ error: String(error.message).slice(0, 500) }));
@@ -93,11 +89,11 @@ export class GeckoViewBashKitten extends GeckoViewModule {
         principal.URI.asciiHost.toLowerCase().replace(/\.$/, "") === this.hostedParentHost) {
       throw new Error("Agent views cannot be controlled");
     }
-    const webDocument = /^https?$/.test(principal?.URI?.scheme);
-    const webPdf = principal?.spec === "resource://pdf.js/web/viewer.html" &&
-      /^https?$/.test(windowGlobal.documentURI?.scheme);
-    if (!principal || principal.isSystemPrincipal || (!webDocument && !webPdf)) {
-      throw new Error("Agent page controls are restricted to HTTP and HTTPS documents and their PDF viewer");
+    const documentURI = windowGlobal?.documentURI;
+    const ordinaryDocument = ["http", "https", "file", "blob", "data"].includes(documentURI?.scheme) ||
+      documentURI?.spec === "about:blank";
+    if (!principal || principal.isSystemPrincipal || !ordinaryDocument) {
+      throw new Error("Browser chrome cannot be controlled as an ordinary page");
     }
     if (method === "diagnostics") {
       const evaluated = await context.currentWindowGlobal.getActor("BashKittenBrowserControl").sendQuery("evaluate", {
@@ -114,8 +110,8 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     const args = structuredClone(params);
     if (method === "snapshot") {
       args.domOnly = true;
-      args.maxNodes = Math.min(200, Math.max(1, Number(args.maxNodes) || 200));
-      args.maxBytes = 60000;
+      args.maxNodes ??= 200;
+      args.maxBytes ??= 60000;
     }
     delete args.frameId;
     if (method === "act" || method === "snapshot") {
@@ -138,8 +134,8 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       }
     }
     if (method === "wait" || method === "evaluate") {
-      args.timeout = Math.min(30000, Math.max(0, Number(args.timeout) || 10000));
-      if (method === "wait" && (!args.for || args.for === "time")) args.value = Math.min(30000, Math.max(0, Number(args.value) || 0));
+      args.timeout = Math.max(0, Number(args.timeout) || 10000);
+      if (method === "wait" && (!args.for || args.for === "time")) args.value = Math.max(0, Number(args.value) || 0);
     }
     const result = await context.currentWindowGlobal.getActor("BashKittenBrowserControl").sendQuery(method, args);
     if (method === "snapshot") {
@@ -339,7 +335,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     if (!bootstrap && !/^\/api\/browser-channel\/(open|poll|result|close|bind)$/.test(path)) throw new Error("Unsupported Agent channel endpoint");
     if (!bootstrap && (typeof csrf !== "string" || !csrf || /[\r\n]/.test(csrf))) throw new Error("Missing Agent CSRF token");
     const payload = bootstrap ? null : JSON.stringify(body ?? {});
-    if (payload?.length > (path === "/api/browser-channel/result" ? 32 * 1024 * 1024 : 200000)) throw new Error("Agent channel request too large");
     return this.agentFetch(origin, path, principal, current.cookieJarSettings, payload, csrf, true);
   }
   async agentFetch(origin, path, principal, cookies, payload, csrf, authenticated) {
@@ -383,9 +378,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
             }
           },
           onDataAvailable(request, input, offset, count) {
-            if (bytes.length + count > 2000000) {
-              failure = new Error("Agent channel response too large"); request.cancel(Cr.NS_BINDING_ABORTED); return;
-            }
             bytes += NetUtil.readInputStreamToString(input, count);
           },
           onStopRequest(request, status) {

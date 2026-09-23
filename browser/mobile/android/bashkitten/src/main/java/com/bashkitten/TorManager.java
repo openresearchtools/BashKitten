@@ -148,7 +148,6 @@ final class TorManager {
         io.execute(() -> {
             try {
                 JSONObject stored = keys.read();
-                if (!stored.has(key.host) && stored.length() >= 64) throw new IllegalStateException("Key limit reached");
                 stored.put(key.host, key.key); keys.write(stored);
                 app.main.post(() -> { saved.run(); ready(port -> io.execute(() -> {
                     try {

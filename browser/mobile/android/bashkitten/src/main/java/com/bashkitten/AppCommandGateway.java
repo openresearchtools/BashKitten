@@ -37,20 +37,27 @@ final class AppCommandGateway extends Binder {
         IBinder callback = data.readStrongBinder();
         if (callback == null) return true;
         Consumer<String> result = value -> {
-            Parcel out = Parcel.obtain();
-            try {
-                out.writeInterfaceToken(CALLBACK); out.writeString(value);
-                out.writeTypedObject(launchIntent(value), 0);
-                callback.transact(RESULT, out, null, IBinder.FLAG_ONEWAY);
-            } catch (RemoteException ignored) { /* The caller can exit before a page operation finishes. */ }
-            finally { out.recycle(); }
+            try { sendResult(callback, value); }
+            catch (RemoteException error) {
+                try { sendResult(callback, "{\"error\":\"Android Binder could not deliver the browser result: " + error.getClass().getSimpleName() + "\",\"code\":\"transport_error\"}"); }
+                catch (RemoteException unavailable) { android.util.Log.w("BashKitten", "Browser callback is unavailable"); }
+            }
         };
         dispatch(uid, json, result);
         return true;
     }
+    private void sendResult(IBinder callback, String value) throws RemoteException {
+        Parcel out = Parcel.obtain();
+        try {
+            out.writeInterfaceToken(CALLBACK); out.writeString(value);
+            out.writeTypedObject(launchIntent(value), 0);
+            if (!callback.transact(RESULT, out, null, IBinder.FLAG_ONEWAY))
+                throw new RemoteException("Browser callback rejected the result");
+        } finally { out.recycle(); }
+    }
     void dispatch(int uid, String json, Consumer<String> result) {
         try {
-            if (json == null || json.length() > 200000) throw new IllegalArgumentException("Request too large");
+            if (json == null) throw new IllegalArgumentException("Request required");
             JSONObject request = new JSONObject(json);
             if (request.has("session")) throw new IllegalArgumentException("Use explicit tabId values");
             String method = request.optString("method");

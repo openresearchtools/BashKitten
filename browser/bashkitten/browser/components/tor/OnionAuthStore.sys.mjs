@@ -74,13 +74,12 @@ export class OnionAuthStorage {
       const saved = await IOUtils.readJSON(this.path);
       if (
         saved.version != 1 ||
-        typeof saved.encrypted != "string" ||
-        saved.encrypted.length > 1024 * 1024
+        typeof saved.encrypted != "string"
       ) {
         throw new Error("The saved onion authorizations could not be read.");
       }
       entries = JSON.parse(this._crypto.decrypt(saved.encrypted));
-      if (!Array.isArray(entries) || entries.length > 1000) {
+      if (!Array.isArray(entries)) {
         throw new Error("The saved onion authorizations are invalid.");
       }
     }
@@ -90,7 +89,7 @@ export class OnionAuthStorage {
         {
           address: onionAddress(entry.address),
           key: entry.key == null ? null : onionPrivateKey(entry.key),
-          name: String(entry.name || "").slice(0, 120),
+          name: String(entry.name || ""),
           remember: entry.key != null,
           privateMode: entry.privateMode !== false,
         },
@@ -126,7 +125,7 @@ export class OnionAuthStorage {
         next.set(address, {
           address,
           key: value.key == null ? null : onionPrivateKey(value.key),
-          name: String(value.name || "").slice(0, 120),
+          name: String(value.name || ""),
           remember:
             value.key != null && (!privateMode || value.remember === true),
           privateMode,

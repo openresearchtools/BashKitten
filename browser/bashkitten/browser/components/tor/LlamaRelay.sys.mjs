@@ -12,7 +12,6 @@ const HOP_HEADERS = new Set([
 const PRIVATE_HEADERS = new Set([
   "authorization", "cookie", "host", "origin", "referer", "forwarded",
 ]);
-const MAX_HEADERS = 65536;
 
 function readBytes(stream, count) {
   const input = Cc["@mozilla.org/scriptableinputstream;1"].createInstance(Ci.nsIScriptableInputStream);
@@ -117,13 +116,7 @@ class RelayRequest {
       this.buffer += bytes;
       const end = this.buffer.indexOf("\r\n\r\n");
       if (end < 0) {
-        if (this.buffer.length > MAX_HEADERS) {
-          throw new Error("Request headers exceed the limit.");
-        }
         return;
-      }
-      if (end > MAX_HEADERS) {
-        throw new Error("Request headers exceed the limit.");
       }
       const head = this.buffer.slice(0, end);
       bytes = this.buffer.slice(end + 4);
@@ -153,13 +146,10 @@ class RelayRequest {
       if (this.chunkRemaining == null) {
         const end = this.buffer.indexOf("\r\n");
         if (end < 0) {
-          if (this.buffer.length > 128) {
-            throw new Error("Invalid chunk length.");
-          }
           return;
         }
         const length = this.buffer.slice(0, end);
-        if (!/^[0-9a-fA-F]{1,12}$/.test(length)) {
+        if (!/^[0-9a-fA-F]+$/.test(length) || !Number.isSafeInteger(Number.parseInt(length, 16))) {
           throw new Error("Invalid chunk length.");
         }
         this.chunkRemaining = Number.parseInt(length, 16);
@@ -221,7 +211,7 @@ class RelayRequest {
     const length = headers.get("content-length");
     const encoding = headers.get("transfer-encoding");
     if ((length !== undefined && encoding !== undefined) ||
-        (length !== undefined && !/^\d{1,15}$/.test(length)) ||
+        (length !== undefined && (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)))) ||
         (encoding !== undefined && encoding.toLowerCase() != "chunked")) {
       throw new Error("Invalid request framing.");
     }
@@ -298,10 +288,8 @@ class RelayRequest {
     this.responseHead += bytes;
     const end = this.responseHead.indexOf("\r\n\r\n");
     if (end < 0) {
-      if (this.responseHead.length > MAX_HEADERS) throw new Error("Response headers exceed the limit.");
       return;
     }
-    if (end > MAX_HEADERS) throw new Error("Response headers exceed the limit.");
     const lines = this.responseHead.slice(0, end).split("\r\n");
     const status = /^HTTP\/1\.[01] ([1-5]\d\d) ([^\x00-\x1f\x7f]*)$/.exec(lines.shift());
     if (!status || status[1] == "101") throw new Error("Invalid API response.");
@@ -380,8 +368,8 @@ export class LlamaRelay {
     if (this.socket) {
       return this.port;
     }
-    if (!Number.isInteger(port) || port < 0 || port > 65535 || (port && port < 1024)) {
-      throw new Error("Choose an unprivileged local port.");
+    if (!Number.isInteger(port) || port < 0 || port > 65535) {
+      throw new Error("Choose a valid local TCP port.");
     }
     const socket = Cc["@mozilla.org/network/server-socket;1"].createInstance(Ci.nsIServerSocket);
     socket.init(port || -1, true, 32);
@@ -389,10 +377,6 @@ export class LlamaRelay {
     this.port = socket.port;
     socket.asyncListen({
       onSocketAccepted: (_socket, transport) => {
-        if (this.requests.size >= 64) {
-          transport.close(Cr.NS_ERROR_ABORT);
-          return;
-        }
         this.requests.add(new RelayRequest(this, transport));
       },
       onStopListening: () => this.stop(),

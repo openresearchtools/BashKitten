@@ -23,10 +23,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
 const MAX_CONSOLE_MESSAGES = 1000;
 const MAX_CONSOLE_MESSAGE_BYTES = 64 * 1024;
 const MAX_CONSOLE_TOTAL_BYTES = 2 * 1024 * 1024;
-const MAX_CHILD_TEXT_CHARS = 2 * 1024 * 1024;
 const MAX_SNAPSHOT_NODES = 10000;
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
-const MAX_SNAPSHOT_FIELD_CHARS = 4000;
 const LOGPOINT_SHARED_DATA_KEY = "bashkitten:browser-control-logpoints";
 const TEXT_CONTENT_ROLES = new Set([
   "alert",
@@ -100,14 +98,13 @@ function statesFor(accessible) {
   return states;
 }
 
-function snapshotText(value, budget, maximum = MAX_SNAPSHOT_FIELD_CHARS) {
+function snapshotText(value, budget) {
   const text = String(value ?? "");
   const remaining = Math.max(
     0,
     Math.floor(((budget.maxBytes ?? MAX_SNAPSHOT_BYTES) - budget.bytes) / 3)
   );
-  const limit = Math.min(maximum, remaining);
-  const bounded = text.slice(0, limit);
+  const bounded = text.slice(0, remaining);
   budget.bytes += bounded.length * 3;
   if (bounded.length !== text.length) {
     budget.truncated = true;
@@ -130,16 +127,10 @@ function takeSnapshotNode(budget) {
 function attributesFor(accessible, budget) {
   const attributes = {};
   if (accessible.attributes) {
-    let count = 0;
     for (const { key, value } of accessible.attributes.enumerate()) {
-      if (count++ >= 50) {
-        budget.truncated = true;
-        break;
-      }
-      attributes[snapshotText(key, budget, 256)] = snapshotText(
+      attributes[snapshotText(key, budget)] = snapshotText(
         value,
-        budget,
-        1000
+        budget
       );
     }
   }
@@ -224,13 +215,10 @@ function snapshotAccessible(
   }
   const node = referenceNode(accessibleNode);
   const actions = [];
-  for (let index = 0; index < Math.min(accessible.actionCount, 20); index++) {
+  for (let index = 0; index < accessible.actionCount; index++) {
     actions.push(accessible.getActionDescription(index));
   }
-  if (accessible.actionCount > 20) {
-    budget.truncated = true;
-  }
-  const role = snapshotText(stringRole(accessible, service), budget, 128);
+  const role = snapshotText(stringRole(accessible, service), budget);
   const reference =
     node?.nodeType === node.ELEMENT_NODE ? ContentDOMReference.get(node) : null;
   const interactive = isInteractive(node, role);
@@ -260,25 +248,21 @@ function snapshotAccessible(
       .filter(Boolean)
       .join(" ")
       .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 500);
+      .trim();
   }
   if (!name && interactive) {
     name = (node?.innerText ?? node?.textContent ?? "")
       .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 500);
+      .trim();
   }
   name = snapshotText(name, budget);
   return {
     role,
     name,
     value: snapshotText(accessible.value, budget),
-    description: snapshotText(accessible.description, budget, 2000),
+    description: snapshotText(accessible.description, budget),
     states: statesFor(accessible),
-    actions: actions
-      .slice(0, 20)
-      .map(action => snapshotText(action, budget, 256)),
+    actions: actions.map(action => snapshotText(action, budget)),
     attributes: attributesFor(accessible, budget),
     tag: node?.tagName?.toLowerCase() ?? null,
     reference,
@@ -364,8 +348,7 @@ function snapshotDom(node, depth, maxDepth, budget) {
         UL: "list",
       }[node.tagName] ||
       "generic",
-    budget,
-    128
+    budget
   );
   const explicitName =
     node.getAttribute("aria-label") ||
@@ -384,7 +367,7 @@ function snapshotDom(node, depth, maxDepth, budget) {
   const name =
     explicitName ||
     associatedLabel ||
-    (canUseInnerText ? node.innerText?.trim().slice(0, 500) : "") ||
+    (canUseInnerText ? node.innerText?.trim() : "") ||
     "";
   const children = [];
   const childElements = [
@@ -406,8 +389,7 @@ function snapshotDom(node, depth, maxDepth, budget) {
     value: snapshotText("value" in node ? node.value : "", budget),
     description: snapshotText(
       node.getAttribute("aria-description"),
-      budget,
-      2000
+      budget
     ),
     states: [
       node.disabled ? "disabled" : null,
@@ -462,7 +444,7 @@ function snapshotEmbeddedFrames(document, depth, maxDepth, budget) {
       errors.push(...nested.errors);
       roots.push({
         role: "iframe",
-        name: snapshotText(frameDocument.URL, budget, 8000),
+        name: snapshotText(frameDocument.URL, budget),
         value: "",
         description: "",
         states: [],
@@ -501,7 +483,7 @@ function countDomInteractives(node, budget = { nodes: 0 }) {
   if (
     !node ||
     node.nodeType !== node.ELEMENT_NODE ||
-    budget.nodes++ >= MAX_SNAPSHOT_NODES
+    budget.nodes++ >= (budget.maxNodes ?? MAX_SNAPSHOT_NODES)
   ) {
     return 0;
   }
@@ -1531,8 +1513,8 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
         )
     );
     return {
-      source: source.slice(0, MAX_CHILD_TEXT_CHARS),
-      truncated: source.length > MAX_CHILD_TEXT_CHARS,
+      source,
+      truncated: false,
       startLine: Number.isFinite(startLine) ? startLine : null,
       endLine: Number.isFinite(endLine) ? endLine : null,
       possibleLines,
@@ -1580,8 +1562,8 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     const document = this.contentWindow.document;
     let root;
     const limits = {
-      maxNodes: Math.min(MAX_SNAPSHOT_NODES, Math.max(1, Number(maxNodes) || MAX_SNAPSHOT_NODES)),
-      maxBytes: Math.min(MAX_SNAPSHOT_BYTES, Math.max(1024, Number(maxBytes) || MAX_SNAPSHOT_BYTES)),
+      maxNodes: Math.max(1, Number(maxNodes) || MAX_SNAPSHOT_NODES),
+      maxBytes: Math.max(1, Number(maxBytes) || MAX_SNAPSHOT_BYTES),
     };
     let budget = { nodes: 0, bytes: 0, truncated: false, ...limits };
     const domSnapshot = () => {
@@ -1613,7 +1595,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
           : snapshotAccessible(accessible, service, document, 0, depth, budget);
       root ??= domSnapshot();
       if (
-        countDomInteractives(document.documentElement) >
+        countDomInteractives(document.documentElement, { nodes: 0, maxNodes: limits.maxNodes }) >
         countSnapshotInteractives(root)
       ) {
         root = domSnapshot();
@@ -1624,12 +1606,11 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     const embeddedFrames = snapshotEmbeddedFrames(document, 0, depth, budget);
     root.children.push(...embeddedFrames.roots);
     return {
-      url: snapshotText(document.URL, budget, 8000),
-      title: snapshotText(document.title, budget, 4000),
+      url: snapshotText(document.URL, budget),
+      title: snapshotText(document.title, budget),
       documentId: snapshotText(
         document.nodePrincipal.originNoSuffix + ":" + document.documentURI,
-        budget,
-        16000
+        budget
       ),
       browsingContextId: this.browsingContext.id,
       embeddedBrowsingContextIds: embeddedFrames.browsingContextIds,
@@ -1937,15 +1918,15 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
       throw new Error(`Selector did not match: ${options.selector}`);
     }
     if (options.format === "links") {
-      return [...root.querySelectorAll("a[href]")].slice(0, 5000).map(link => ({
-        text: link.innerText.trim().slice(0, 4000),
-        href: link.href.slice(0, 8000),
+      return [...root.querySelectorAll("a[href]")].map(link => ({
+        text: link.innerText.trim(),
+        href: link.href,
       }));
     }
     if (options.format === "text") {
-      return textFrom(root).slice(0, MAX_CHILD_TEXT_CHARS);
+      return textFrom(root);
     }
-    return markdownFor(root, options).slice(0, MAX_CHILD_TEXT_CHARS);
+    return markdownFor(root, options);
   }
 
   #downloadInfo({ target }) {
@@ -1967,7 +1948,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     const requestedTimeout = Number(timeout);
     const timeoutMs =
       Number.isFinite(requestedTimeout) && requestedTimeout > 0
-        ? Math.min(Math.round(requestedTimeout), 30000)
+        ? Math.round(requestedTimeout)
         : 30000;
     const value = await withUserInput(this.contentWindow, () =>
       lazy.evaluate.sandbox(
@@ -1992,12 +1973,6 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
     }
     try {
       const serialized = JSON.stringify(value);
-      if (serialized.length > MAX_CHILD_TEXT_CHARS) {
-        return {
-          hasValue: false,
-          description: `Evaluation result exceeded ${MAX_CHILD_TEXT_CHARS} characters`,
-        };
-      }
       return { hasValue: true, value: JSON.parse(serialized) };
     } catch {
       const description =
@@ -2015,7 +1990,7 @@ export class BashKittenBrowserControlChild extends JSWindowActorChild {
       );
       return { matched: true };
     }
-    const deadline = Date.now() + Math.min(Number(timeout), 30000);
+    const deadline = Date.now() + Number(timeout);
     while (Date.now() < deadline) {
       const matched =
         waitFor === "selector"

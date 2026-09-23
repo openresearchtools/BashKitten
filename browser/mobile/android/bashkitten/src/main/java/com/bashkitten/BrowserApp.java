@@ -99,8 +99,11 @@ public final class BrowserApp extends ContextWrapper {
     }
     public static String webUrl(String value) {
         URI uri = URI.create(value);
-        if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
-                || uri.getHost() == null || uri.getUserInfo() != null) throw new IllegalArgumentException("Use an HTTP or HTTPS URL without embedded credentials");
+        String scheme = Objects.toString(uri.getScheme(), "").toLowerCase(Locale.ROOT);
+        if (!(Arrays.asList("http", "https", "file", "blob", "data").contains(scheme)
+                || value.equals("about:blank"))) throw new IllegalArgumentException("Use an ordinary web page or file URL");
+        if ((scheme.equals("http") || scheme.equals("https")) && uri.getHost() == null)
+            throw new IllegalArgumentException("The website URL needs a host");
         return uri.toASCIIString();
     }
     public static boolean onion(String url) {
@@ -192,7 +195,6 @@ public final class BrowserApp extends ContextWrapper {
     }
     void create(String owner, boolean useTor, String url, Consumer<Tab> done, Consumer<String> fail) {
         refresh();
-        if (tabs.size() >= 64 || tabs.values().stream().filter(t -> t.owner.equals(owner)).count() >= 16) { fail.accept("Tab limit reached"); return; }
         boolean needsTor = useTor || onion(url);
         String context;
         if (needsTor) context = "bashkitten-tor-" + UUID.randomUUID();
@@ -262,7 +264,6 @@ public final class BrowserApp extends ContextWrapper {
     }
     void createHosted(String address, JSONObject identity, GeckoSession source, Consumer<Tab> done, Consumer<String> fail) {
         refresh();
-        if (tabs.size() >= 64) { fail.accept("Tab limit reached"); return; }
         try {
             String parent = URI.create(identity.getString("url")).getHost();
             OnionKey key = new OnionKey(parent, identity.getString("clientAuthorization"));
