@@ -1037,8 +1037,15 @@ shell cookies. Preserve old auth data privately until migration succeeds.
 Retire suite workflows/catalog use only after migrated clients no longer need
 them; do not delete installed applications or current working releases first.
 
-Keep System/Light/Dark in the browser menu, and the shared web UI following the
-host preference. Keep normal file uploads, image paste, downloads/open and
+Use the browser's existing native appearance settings for System/Light/Dark;
+the shared web UI follows that host preference. The Agent menu button opens the
+native browser menu. Remove the duplicate shell menu, separate Agent theme
+overrides and duplicate Quit/About controls. Keep About and complete offline
+licenses in the normal browser About/settings paths, as well as web About.
+Local HTTPS identity verification remains automatic; do not expose its internal
+certificate fingerprint as a routine menu item. Offer explicit identity recovery
+only when an actual changed local installation needs it.
+Keep normal file uploads, image paste, downloads/open and
 backend repository ZIPs on both platforms. Local Linux file/folder actions can
 open their real local paths via the OS; for a remote server those paths are
 remote, so use its web file/download behavior instead. OAuth opens an ordinary
