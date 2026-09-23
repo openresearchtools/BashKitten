@@ -26,6 +26,7 @@ import java.util.function.Consumer;
 public final class TermuxConnection {
     public static final String PACKAGE = "com.termux";
     public static final String PERMISSION = "com.termux.permission.RUN_COMMAND";
+    public static final String SETUP_COMPLETE = "com.bashkitten.TERMUX_SETUP_COMPLETE";
     public static final String PREFIX = "/data/data/com.termux/files/usr";
     private static final String HOME = "/data/data/com.termux/files/home";
     private static final String EXTRA = "com.termux.RUN_COMMAND_";
@@ -90,7 +91,7 @@ public final class TermuxConnection {
                 + "sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps=true/' ~/.termux/termux.properties; "
                 + "else printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties; fi; } && "
                 + "termux-reload-settings && am start --user \"$(( $(id -u) / 100000 ))\" -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "
-                + shellQuote(destination.flattenToShortString()) + ")";
+                + shellQuote(destination.flattenToShortString()) + " --ez " + SETUP_COMPLETE + " true)";
     }
 
     public void probe(Consumer<JSONObject> done, Consumer<String> fail) {

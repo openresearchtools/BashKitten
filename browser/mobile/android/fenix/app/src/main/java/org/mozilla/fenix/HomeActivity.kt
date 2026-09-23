@@ -575,7 +575,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                         hadTabs = !empty
                     }
             }
-            if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch()
+            if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch(intent)
         } else {
             setContentView(binding.root)
         }
@@ -1026,7 +1026,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     final override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleNewIntent(intent)
-        if (intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch()
+        if (intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch(intent)
         if (intent.getBooleanExtra("bashkitten.openAgent", false) || intent.action == Intent.ACTION_MAIN) bashKittenAgentPanel?.showAgent()
         else if (intent.action == Intent.ACTION_VIEW || intent.getBooleanExtra(OPEN_TO_BROWSER, false)) bashKittenAgentPanel?.showBrowser()
         startupPathProvider.onIntentReceived(intent)

@@ -503,6 +503,9 @@ not need a local Termux installation merely to display that remote's UI.
 3. On return, BashKitten requests Android's `com.termux.permission.RUN_COMMAND`
    permission directly. Verify a real command result before marking connected.
    Denied/permanently denied permission gets an appropriate Retry/Settings link.
+   A fresh setup shows the command before requesting or probing this bridge;
+   the successful command's launcher callback triggers permission and validation.
+   Merely returning from an empty Termux installation must not cause a bridge error.
 4. On the successful return, probe the installed package and start the service
    automatically, then complete account/2FA setup. No separate Connect or
    Install packages action is needed.

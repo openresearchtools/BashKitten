@@ -24,7 +24,7 @@ public final class AgentRuntime {
     public GeckoSession session;
     public String state = "off", error = "", url = "", selected = "local";
     public JSONObject status = new JSONObject();
-    private boolean launched, desired, busy, polling, localControlRequested;
+    private boolean launched, desired, busy, polling, localControlRequested, termuxSetupAttempted;
     private int operation;
     public boolean visible;
     public String setupStep = "";
@@ -46,6 +46,7 @@ public final class AgentRuntime {
         try { previousIdentity = identities.read().has("local"); }
         catch (Exception error) { previousIdentity = true; }
         localControlRequested = app.policies.getBoolean("agent.localControlRequested", previousIdentity);
+        termuxSetupAttempted = app.policies.getBoolean("agent.termuxSetupAttempted", previousIdentity);
     }
     public void attach(GeckoRuntime engine, Listener listener) {
         this.engine = engine; listeners.add(listener);
@@ -72,7 +73,15 @@ public final class AgentRuntime {
         localControlRequested = requested;
         app.policies.edit().putBoolean("agent.localControlRequested", requested).apply();
     }
-    public void freshLaunch() { if (!busy && (!desired || state.equals("setup"))) turnOn(); }
+    public void freshLaunch(Intent intent) {
+        if (intent.getBooleanExtra(TermuxConnection.SETUP_COMPLETE, false)) {
+            // This only requests a real bridge probe. It never grants permission
+            // or accepts a command, account or service identity from the intent.
+            termuxSetupAttempted = true;
+            app.policies.edit().putBoolean("agent.termuxSetupAttempted", true).apply();
+        }
+        if (!busy && (!desired || state.equals("setup"))) turnOn();
+    }
     public void turnOn() {
         if (busy) return;
         // Turn off suspends the protected document at about:blank. Its saved
@@ -82,7 +91,12 @@ public final class AgentRuntime {
         app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
         changed();
         if (!selected.equals("local")) { connectRemote(); return; }
-        if (!termux.installed()) { recordLocalControl(false); setup("termux", "Install Termux to run Agent on this device."); return; }
+        if (!termux.installed()) {
+            recordLocalControl(false); termuxSetupAttempted = false;
+            app.policies.edit().remove("agent.termuxSetupAttempted").apply();
+            setup("termux", "Install Termux to run Agent on this device."); return;
+        }
+        if (!termuxSetupAttempted) { setup("connection", "Set up Agent in Termux with the command below."); return; }
         if (!termux.permissionGranted()) { permissionPromptPending = true; setup("permission", "Allow BashKitten to run your Agent in Termux."); return; }
         final int generation = operation;
         termux.probe(value -> {
