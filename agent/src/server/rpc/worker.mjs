@@ -5,6 +5,7 @@ import { PiRpc, translateEvent, activeBranch, usageView, displayMessage, queueIt
 import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody, dataDir, socketRequest } from '../common.mjs';
 import path from 'node:path';
 import { syncContext } from './context.mjs';
+import { providerRevision } from './services.mjs';
 import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
 import { notifyTurn } from './notifications.mjs';
 import { claimInstance } from '../instance.mjs';
@@ -18,7 +19,7 @@ let meta = await readMeta(id);
 // original process identity and browser socket until that process exits.
 meta.workerOwner = id;
 meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
-let rpc, busy = false, compacting = false, stopping = false, changing = false;
+let rpc, providersVersion, busy = false, compacting = false, stopping = false, changing = false;
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
@@ -102,6 +103,7 @@ function reconcileQueue(event) {
 async function launch() {
   const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
+  providersVersion = await providerRevision();
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   rpc = new PiRpc(meta);
   rpc.on('event', event => {
@@ -147,13 +149,18 @@ async function launch() {
   if (newSession && meta.title) await rpc.command('set_session_name', { name: meta.title });
 }
 async function applyPending() {
-  if (stopping || busy || compacting || queue.some(q => !q.editToken && !q.held)) return;
+  if (stopping || busy || compacting || dialogs.size || queue.some(q => !q.editToken && !q.held)) return;
   const version = await syncContext();
-  if (pendingContext || version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root) {
+  if (pendingContext || version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root || await providerRevision() !== providersVersion) {
+    // Stock Pi snapshots its providers at startup. Reopen its own saved session
+    // only at an idle boundary after login/logout/catalog changes; never replay a turn.
+    const state = await rpc.command('get_state');
+    if (state.isStreaming || state.isCompacting || state.pendingMessageCount) return;
     changing = true;
     await rpc.close();
     try { await launch(); }
     finally { changing = false; pendingContext = false; }
+    emit({ type: 'models_changed', model: meta.model, thinking: meta.thinking }, false);
   }
   if (pendingModel) {
     const selection = pendingModel; pendingModel = null;
@@ -224,7 +231,15 @@ async function rebuildQueue(mutate) {
   }
   queue = retained;
   const toSend = retained.filter(q => !q.editToken && !q.held);
-  for (const item of toSend) await send(item);
+  for (let index = 0; index < toSend.length; index++) {
+    try { await send(toSend[index]); }
+    catch (error) {
+      // clear_queue removed these from Pi. A rejected draft send must remain
+      // held, including later unsent drafts, rather than block model changes.
+      for (const item of toSend.slice(index)) if (queue.includes(item)) item.held = item.recovered = true;
+      await checkpoint(); queueChanged(); throw error;
+    }
+  }
   // Native queue_update events may have run during send; held edits still exist.
   for (const item of retained.filter(q => q.editToken || q.held)) if (!queue.some(q => q.id === item.id)) queue.push(item);
   queueChanged();
@@ -244,7 +259,7 @@ async function handle(req, res) {
     if (req.url === '/status') return json(res, { data: status() });
     if (req.url === '/view') return json(res, snapshot());
     if (req.url === '/fork-messages') return json(res, await rpc.command('get_fork_messages'));
-    if (req.url === '/models') return json(res, await rpc.command('get_available_models'));
+    if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
     const value = await jsonBody(req);
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
@@ -270,7 +285,7 @@ async function handle(req, res) {
       if (stopping) throw Error('Pi instance is stopping');
       if (req.url === '/barrier') { const state = await rpc.command('get_state'); return { idle: !state.isStreaming && !state.isCompacting && !dialogs.size && !queue.some(q => !q.held && !q.editToken) }; }
       if (!['/context', '/barrier'].includes(req.url)) allowRuntimeWork();
-      if (req.url === '/context') { pendingContext = Boolean(value.reload) || (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
+      if (req.url === '/context') { pendingContext ||= Boolean(value.reload) || (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
       if (req.url === '/message') {
         await applyPending();
         meta.messages ||= [];
@@ -282,6 +297,7 @@ async function handle(req, res) {
         return { data: status() };
       }
       if (req.url === '/queue') {
+        await applyPending();
         await rebuildQueue(items => {
           const index = items.findIndex(q => q.id === value.id), item = items[index];
           if (!item) throw Error('Queued message no longer exists');

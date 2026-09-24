@@ -46,6 +46,11 @@ and errors appear inside the selected provider's own block. Show immediate local
 feedback on clicking a method; never place the active flow offscreen at the top
 of the provider list. Preserve input and expanded callback instructions during
 status refreshes, including on mobile.
+After provider login, logout or model refresh, update existing Pi workers at an
+idle boundary through their native saved sessions; do not replay messages or
+interrupt turns, queues or extension prompts. The model picker must show Pi's
+actual selection, including an unset default, rather than silently displaying
+the first available model without selecting it.
 Sending to a saved stopped chat resumes its native Pi session; whole-app shutdown must not
 mark every chat as deliberately stopped. Preserve an explicit Stop Pi until
 the user sends, resumes or performs another session action.

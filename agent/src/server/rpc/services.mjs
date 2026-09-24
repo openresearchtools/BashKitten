@@ -1,9 +1,13 @@
 import { loadPi, allowRuntimeWork } from './runtime.mjs';
-import { dataDir, writeJson } from '../common.mjs';
+import { dataDir, readJson, writeJson } from '../common.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+
+const providerRevisionFile = path.join(dataDir, 'provider-revision.json');
+export const providerRevision = () => readJson(providerRevisionFile, null);
+const providersChanged = () => writeJson(providerRevisionFile, randomUUID());
 
 /** The same ModelRuntime and auth.json used by Pi's CLI, with no catalog network refresh. */
 export class Services {
@@ -23,6 +27,7 @@ export class Services {
     runtime ||= await this.runtime();
     if (!runtime.getProvider(provider)) throw Error('Unknown Pi provider');
     const result = await runtime.refresh({ providers: [provider], allowNetwork: true, force: true });
+    await providersChanged();
     if (result.aborted || result.errors.size) throw Error('Pi could not refresh this service’s models. Check the server connection and retry.');
   }
   async list() {
@@ -77,6 +82,7 @@ export class Services {
         if (prompt.signal?.aborted || attempt.controller.signal.aborted) cancel();
       })
     }).then(async () => {
+      await providersChanged();
       if (provider === 'llama.cpp') await this.refresh(provider, runtime);
       attempt.status = 'complete';
     }).catch(() => {
@@ -94,5 +100,5 @@ export class Services {
     if (id && this.attempt?.id !== id) throw Error('This login is no longer active');
     if (this.attempt?.status === 'pending') { this.attempt.controller.abort(); await this.attempt.finished; }
   }
-  async logout(provider) { allowRuntimeWork(); if (this.attempt?.provider === provider) await this.cancel(); await (await this.runtime()).logout(provider); }
+  async logout(provider) { allowRuntimeWork(); if (this.attempt?.provider === provider) await this.cancel(); await (await this.runtime()).logout(provider); await providersChanged(); }
 }

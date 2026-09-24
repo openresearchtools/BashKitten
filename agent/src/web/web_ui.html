@@ -1590,6 +1590,7 @@
 
       } else if (event.type === 'agent_settled') {
         refreshProjectPanel();
+        loadModels().catch(() => {});
         finishRenderedTurn(Date.now());
         queueState.busy = false;
         clearLive();
@@ -1613,6 +1614,9 @@
         renderGoal(event.data);
       } else if (event.type === 'queue_state') {
         renderQueueState(event.data);
+      } else if (event.type === 'models_changed') {
+        applyModelSelection(event);
+        loadModels().catch(() => {});
       } else if (event.type === 'model_change') {
         applyModelSelection(event);
         $('#composerHint').textContent = `Using ${event.model}`;
@@ -1661,7 +1665,7 @@
 
     function fillSelect(element, list, chosen) {
       element.innerHTML = `<option value="" ${current && element.id === 'model' ? 'disabled' : ''}>Pi default</option>` + list.map(model => `<option value="${escapeHtml(`${model.provider}/${model.id}`)}" ${model.available ? '' : 'disabled'}>${escapeHtml(model.name)}${model.available ? '' : ' (unavailable)'}</option>`).join('');
-      if (chosen && list.some(model => `${model.provider}/${model.id}` === chosen)) element.value = chosen;
+      element.value = chosen && list.some(model => `${model.provider}/${model.id}` === chosen) ? chosen : '';
       setThinking(element, element.id === 'defaultModel' ? $('#defaultThinking') : $('#thinking'));
     }
 
@@ -1677,7 +1681,7 @@
       const thinking = $('#thinking').value;
       const value = await api('/api/models' + (current ? '?session=' + current.id : ''));
       models = value.models;
-      fillSelect($('#model'), models, current?.model || selected || value.defaultModel);
+      fillSelect($('#model'), models, current ? current.model || '' : selected || value.defaultModel);
       fillSelect($('#defaultModel'), models, value.defaultModel);
       setThinking($('#defaultModel'), $('#defaultThinking'));
       if ([...$('#thinking').options].some(option => option.value === thinking)) $('#thinking').value = thinking;
@@ -2840,7 +2844,7 @@
     }
 
     function applyModelSelection(selection) {
-      if (!current || !selection?.model) return;
+      if (!current || typeof selection?.model !== 'string') return;
       current.model = selection.model;
       current.thinking = selection.thinking;
       $('#model').value = selection.model;
