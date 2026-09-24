@@ -13,7 +13,6 @@ import android.provider.MediaStore;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.AppCompatButton;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -277,7 +276,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 activity.startActivityForResult(pick, FILE_REQUEST); return fileResult;
             }
             @Override public GeckoResult<PromptResponse> onAlertPrompt(GeckoSession s, AlertPrompt p) {
-                GeckoResult<PromptResponse> result = new GeckoResult<>(); new AlertDialog.Builder(activity).setMessage(p.message).setPositiveButton("OK", (d,w) -> result.complete(p.dismiss())).setOnCancelListener(d -> result.complete(p.dismiss())).show(); return result;
+                GeckoResult<PromptResponse> result = new GeckoResult<>(); new MaterialAlertDialogBuilder(activity).setMessage(p.message).setPositiveButton("OK", (d,w) -> result.complete(p.dismiss())).setOnCancelListener(d -> result.complete(p.dismiss())).show(); return result;
             }
         });
     }
@@ -430,7 +429,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void browserControl() {
         if (app.remoteControl.active()) {
-            new AlertDialog.Builder(activity).setTitle("Agent browser control")
+            new MaterialAlertDialogBuilder(activity).setTitle("Agent browser control")
                 .setMessage("This Agent can control ordinary browser tabs.")
                 .setPositiveButton("Disconnect", (d,w) -> app.remoteControl.disconnect())
                 .setNegativeButton("Cancel", null).show();
@@ -438,7 +437,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void notifications() {
         boolean[] enabled = {app.policies.getBoolean("agent.notifications", false), app.policies.getBoolean("agent.notifications.hidden", true), app.policies.getBoolean("agent.notifications.preview", true)};
-        new AlertDialog.Builder(activity).setTitle("Completed turns")
+        new MaterialAlertDialogBuilder(activity).setTitle("Completed turns")
             .setMultiChoiceItems(new String[]{"Notify when a turn completes", "Only while Agent is hidden", "Include message preview"}, enabled, (d,i,checked) -> enabled[i] = checked)
             .setPositiveButton("Save", (d,w) -> {
                 app.policies.edit().putBoolean("agent.notifications", enabled[0]).putBoolean("agent.notifications.hidden", enabled[1]).putBoolean("agent.notifications.preview", enabled[2]).apply();
@@ -465,11 +464,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 for (int i=0; i<assets.length(); i++) { JSONObject asset=assets.getJSONObject(i); if (asset.getString("name").endsWith("arm64-v8a.apk")) { download=asset.getString("browser_download_url"); break; } }
                 if (download == null) throw new IOException("Release has no Android APK.");
                 String link = download;
-                app.main.post(() -> new AlertDialog.Builder(activity).setTitle("BashKitten " + available).setMessage("A browser update is available.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
+                app.main.post(() -> new MaterialAlertDialogBuilder(activity).setTitle("BashKitten " + available).setMessage("A browser update is available.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
             } catch (Exception error) { app.main.post(() -> app.message("The update check failed. Try again when online.")); }
         }, "bashkitten-update").start();
     }
-    public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new AlertDialog.Builder(activity).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
+    public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new MaterialAlertDialogBuilder(activity).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
     private void packageCommand(String command, TextView output) {
         try {
             if (command.equals("status")) { runtime.command("package-inventory", new JSONObject(), value -> output.setText(inventoryText(value)), output::setText); return; }

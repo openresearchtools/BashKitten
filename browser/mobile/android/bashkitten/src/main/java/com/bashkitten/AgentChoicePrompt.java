@@ -5,8 +5,11 @@ import android.app.Activity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.CheckedTextView;
 import android.widget.ListView;
 import androidx.appcompat.app.AlertDialog;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.color.MaterialColors;
 import java.util.ArrayList;
 import org.mozilla.geckoview.GeckoResult;
 import org.mozilla.geckoview.GeckoSession.PromptDelegate.*;
@@ -44,20 +47,25 @@ final class AgentChoicePrompt {
         boolean multiple = prompt.type == ChoicePrompt.Type.MULTIPLE;
         ArrayList<String> labels = new ArrayList<>();
         for (Row row : rows) labels.add(row.label);
-        ListView list = new ListView(activity);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity).setTitle(prompt.title);
+        ListView list = new ListView(builder.getContext());
         list.setChoiceMode(multiple ? ListView.CHOICE_MODE_MULTIPLE : ListView.CHOICE_MODE_SINGLE);
-        list.setAdapter(new ArrayAdapter<String>(activity, multiple
+        list.setAdapter(new ArrayAdapter<String>(builder.getContext(), multiple
                 ? android.R.layout.simple_list_item_multiple_choice : android.R.layout.simple_list_item_single_choice, labels) {
             @Override public boolean areAllItemsEnabled() { return false; }
             @Override public boolean isEnabled(int position) { return !rows.get(position).disabled; }
             @Override public View getView(int position, View recycled, ViewGroup parent) {
-                View view = super.getView(position, recycled, parent);
-                view.setEnabled(isEnabled(position)); return view;
+                CheckedTextView view = (CheckedTextView) super.getView(position, recycled, parent);
+                int foreground = MaterialColors.getColor(view, com.google.android.material.R.attr.colorOnSurface);
+                view.setTextColor(foreground);
+                view.setCheckMarkTintList(android.content.res.ColorStateList.valueOf(foreground));
+                view.setEnabled(isEnabled(position));
+                view.setAlpha(isEnabled(position) ? 1f : .38f);
+                return view;
             }
         });
         for (int i = 0; i < rows.size(); i++) list.setItemChecked(i, rows.get(i).choice.selected);
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle(prompt.title)
-            .setView(list).setNegativeButton(android.R.string.cancel, null);
+        builder.setView(list).setNegativeButton(android.R.string.cancel, null);
         if (multiple) builder.setPositiveButton(android.R.string.ok, (dialog, which) -> {
             ArrayList<String> selected = new ArrayList<>();
             for (int i = 0; i < rows.size(); i++) if (list.isItemChecked(i)) selected.add(rows.get(i).choice.id);
