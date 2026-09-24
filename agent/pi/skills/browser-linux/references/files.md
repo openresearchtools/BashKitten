@@ -34,3 +34,8 @@ its command working directory. The Pi screenshot helper copies its image beside
 the Pi session. A remote Pi must not treat browser-host paths as local or assume
 upload transfers a Pi-local file across machines. Evaluation runs in page JS,
 not browser chrome or OS; whole-window screenshots are unavailable.
+
+For remote desktops/video, use the native screenshot, optionally with `clip` and
+`scale` for readability. Drawing the video into a canvas can hide overlays or a
+picture-in-picture placeholder and falsely suggest that clicks reach the screen.
+After uncertain input, inspect the visible tab before repeating the action.
