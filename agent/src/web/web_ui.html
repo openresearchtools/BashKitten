@@ -1339,7 +1339,7 @@
         find: ['Searched files', `${value.pattern || value.glob || '*'} in ${path}`],
         grep: ['Searched text', `${value.pattern || value.query || ''} in ${path}`]
       };
-      const [action, focusValue] = presentations[block.name] || [`Ran ${block.name}`, value.path || value.command || ''];
+      const [action, focusValue] = presentations[block.name] || [block.name ? `Ran ${block.name}` : 'Preparing tool', value.path || value.command || ''];
       const focus = typeof focusValue === 'string' ? focusValue : JSON.stringify(focusValue);
       return {action, focus: focus.length > 130 ? `${focus.slice(0, 129)}…` : focus};
     }
@@ -1546,26 +1546,23 @@
         clearLive();
         liveToolCalls.clear();
         renderMessage(event.message, event.entryId, true);
-      } else if (event.type === 'tool_call_start') {
-        const call = {id:event.id, name:event.name, arguments:{}, text:''};
-        liveToolCalls.set(event.index, call);
+      } else if (['tool_call_start', 'tool_call_delta', 'tool_call_end'].includes(event.type)) {
+        const previous = liveToolCalls.get(event.index);
+        const call = {id:event.id || previous?.id || `streaming-tool-${event.index}`, name:event.name || previous?.name || '',
+          arguments:event.arguments || previous?.arguments || {}, text:(previous?.text || '') + (event.delta || '')};
+        // Some providers supply the ID/name after the first streaming chunk.
+        // Keep one element per content index until Pi supplies the final call.
+        if (previous?.element) previous.element.dataset.call = call.id;
         const details = renderToolCall(call, ensureTurnWork());
+        call.element = details;
+        liveToolCalls.set(event.index, call);
         details.open = true;
         details.querySelector('.tool-state').textContent = 'Preparing';
-      } else if (event.type === 'tool_call_delta') {
-        const call = liveToolCalls.get(event.index);
-        if (call) {
-          call.text += event.delta;
-          const details = findTool(call.id);
-          if (details) {
-            let argumentsView = details.querySelector('.tool-arguments');
-            if (!argumentsView) {
-              argumentsView = document.createElement('pre');
-              argumentsView.className = 'tool-arguments';
-              details.querySelector('.tool-body').prepend(argumentsView);
-            }
-            argumentsView.textContent = call.text;
-          }
+        if (call.text && event.type !== 'tool_call_end') {
+          const argumentsView = document.createElement('pre');
+          argumentsView.className = 'tool-arguments';
+          argumentsView.textContent = call.text;
+          details.querySelector('.tool-body').prepend(argumentsView);
         }
       } else if (event.type === 'tool_start') {
         const details = findTool(event.id);

@@ -57,6 +57,8 @@ the user sends, resumes or performs another session action.
 Use Pi's accepted prompt and native pending count when retiring submitted queue
 items. Skill/template expansion or extension input transformations can change
 the text before the user message event; a consumed command must not remain queued.
+Read streaming tool identity and arguments from Pi's partial content block and
+final toolCall, retaining one visible tool card when a provider supplies its ID late.
 
 Replace the Android WebView and Linux GTK/WebKit hosts with the browser. Remove
 the Termux-suite distribution/store integration, API/X11 APK requirements,

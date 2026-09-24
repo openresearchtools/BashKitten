@@ -102,8 +102,11 @@ export function translateEvent(event) {
   if (event.type === 'message_update') {
     if (e.type === 'text_delta') return { type: 'assistant_delta', delta: e.delta };
     if (e.type === 'thinking_delta') return { type: 'thinking_delta', delta: e.delta };
-    if (e.type === 'toolcall_start') return { type: 'tool_call_start', index: e.contentIndex, id: e.id, name: e.toolName };
-    if (e.type === 'toolcall_delta') return { type: 'tool_call_delta', index: e.contentIndex, delta: e.delta };
+    if (['toolcall_start', 'toolcall_delta', 'toolcall_end'].includes(e.type)) {
+      const call = e.toolCall || e.partial?.content[e.contentIndex];
+      return { type: e.type.replace('toolcall_', 'tool_call_'), index: e.contentIndex,
+        id: call?.id, name: call?.name, arguments: call?.arguments, delta: e.delta };
+    }
     return null;
   }
   if (event.type === 'message_end') return { type: 'message', message: event.message };
