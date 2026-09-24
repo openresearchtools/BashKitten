@@ -11,3 +11,12 @@ the integration through stock Pi's package and skill interfaces.
 
 Search skill attribution is recorded with the bundled search sources under
 agent/search. Browser source and retained upstream notices are under browser/.
+
+Browser workflow guidance reviewed and adapted on 24 September 2026 from the
+same Wild Buzzard Android extension's native promptSnippet/promptGuidelines,
+its desktop SKILL.md and WildBuzzardCommand.sys.mjs command catalog, and the
+BrowserOS TypeScript snapshot/act/read contracts and mcp-prompt.ts at revision
+5a4a9ef8f64522a9f20ccc212642ee4bba35ad49 (AGPL-3.0-or-later):
+https://github.com/browseros-ai/BrowserOS/tree/5a4a9ef8f64522a9f20ccc212642ee4bba35ad49/packages/browseros-agent/packages/browser-mcp/src
+BashKitten documents its actual native Android/Linux interfaces; donor session
+ownership, MCP setup and workflow SDK commands are not part of that interface.
