@@ -7,11 +7,11 @@ import { browserDocumentation, browserHelp } from './browser-help.mjs';
 export default function bashkitten(pi) {
   pi.registerTool({
     name: 'bashkitten_browser', label: 'BashKitten browser',
-    description: 'Control ordinary browser tabs. Start with capabilities for the connected client platform and guide. help {topic} gives exact commands/parameters for tabs, input, files or desktop debug; omit topic to list sections. Use explicit tabId. tabs.list lists; tabs.create {url} opens; snapshot gives references for act (desktop ref, Android target). Protected Agent views are excluded. First Android use may require native approval.',
+    description: 'Control ordinary browser tabs. Start with capabilities and read the matching browserGuide once; help returns that complete skill, with every command and parameter. Use explicit tabId. tabs.list lists; tabs.create {url} opens; snapshot returns elements: desktop button "Continue" [ref=e4] means act {tabId,kind:"click",ref:"e4"}; Android node.reference is passed as target instead. Use actual returned references. Protected Agent views are excluded. First Android use may require native approval.',
     parameters: Type.Object({ method: Type.String(), params: Type.Optional(Type.Record(Type.String(), Type.Any())) }),
     async execute(_id, { method, params = {} }, signal) {
       let result = method === 'help'
-        ? await browserHelp(await browserCall('capabilities', {}, { signal }), params.topic)
+        ? await browserHelp(await browserCall('capabilities', {}, { signal }))
         : await browserCall(method, params, { signal });
       if (method === 'capabilities' && result?.platform) {
         result = { ...result, ...browserDocumentation(result.platform) };
