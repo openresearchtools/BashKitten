@@ -199,9 +199,11 @@ async function send(item) {
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
   await rpc.command('prompt', { message: item.wire, images: item.images || await attachmentImages(item.attachments || []), streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
-  // A native extension may consume the input without starting a model turn.
+  // Pi can expand skills/templates or transform input before message_start, so
+  // its consumed text need not equal item.wire. After accepted preflight, an
+  // empty native queue means this item is no longer pending even during a turn.
   const state = await rpc.command('get_state');
-  if (!state.isStreaming && !state.pendingMessageCount && queue.includes(item)) { queue.splice(queue.indexOf(item), 1); queueChanged(); }
+  if (!state.pendingMessageCount && queue.includes(item)) { queue.splice(queue.indexOf(item), 1); queueChanged(); }
   if (item.wire.startsWith('/')) { await refresh(); emit({ type: 'snapshot', data: snapshot() }, false); }
 }
 async function rebuildQueue(mutate) {

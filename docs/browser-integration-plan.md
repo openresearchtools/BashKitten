@@ -54,6 +54,9 @@ the first available model without selecting it.
 Sending to a saved stopped chat resumes its native Pi session; whole-app shutdown must not
 mark every chat as deliberately stopped. Preserve an explicit Stop Pi until
 the user sends, resumes or performs another session action.
+Use Pi's accepted prompt and native pending count when retiring submitted queue
+items. Skill/template expansion or extension input transformations can change
+the text before the user message event; a consumed command must not remain queued.
 
 Replace the Android WebView and Linux GTK/WebKit hosts with the browser. Remove
 the Termux-suite distribution/store integration, API/X11 APK requirements,
