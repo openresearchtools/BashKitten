@@ -39,7 +39,9 @@ Read only the needed reference, or use
 
 `help` without a topic lists sections. These references describe the complete
 public API; source code is not required. Check installed capabilities before
-assuming a command exists. Local control uses the installed executable and its private Unix socket;
+assuming a command exists. Agent chat uses the selected server's authenticated
+connection. Desktop Local connects after login; a remote requires the native
+**Allow browser control?** prompt. Ordinary terminal Pi uses the installed executable and its private Unix socket;
 no driver, TCP control service or MCP server is needed.
 
 Ordinary signed-in, private, container and Tor tabs remain controllable. Tabs
