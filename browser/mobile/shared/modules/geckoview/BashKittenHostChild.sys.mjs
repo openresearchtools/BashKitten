@@ -54,11 +54,12 @@ export class BashKittenHostChild extends JSWindowActorChild {
     }
     const draft = Cu.waiveXrays(window).bashkittenDraft;
     if (name === "CaptureDraft") {
-      return typeof draft?.capture === "function" ? structuredClone(draft.capture()) : null;
+      return typeof draft?.capture === "function"
+        ? Cu.cloneInto(await draft.capture(), {}, { wrapReflectors: true }) : null;
     }
     if (name === "RestoreDraft") {
       if (!this.draftReady || typeof draft?.restore !== "function") return false;
-      await draft.restore(Cu.cloneInto(data, window));
+      await draft.restore(Cu.cloneInto(data, window, { wrapReflectors: true }));
       return true;
     }
     throw new Error("Unsupported native draft request");

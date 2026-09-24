@@ -38,6 +38,9 @@ export const BashKittenHost = {
       throw new Error("An enrolled protected Agent origin is required");
     }
     const previous = views.get(browser);
+    // Status refreshes can reapply the same enrollment while a draft query is
+    // in flight. Keep its identity and pending restore operation intact.
+    if (previous?.context === context && previous.origin === origin) return;
     views.set(browser, {
       context, origin,
       draft: previous?.context === context ? previous.draft : null,
