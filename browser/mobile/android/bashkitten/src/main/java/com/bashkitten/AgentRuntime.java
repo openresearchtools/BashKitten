@@ -35,6 +35,10 @@ public final class AgentRuntime {
     private final Set<String> posted = new LinkedHashSet<>();
     private Runnable remoteAuthorizationCleanup;
     private JSONObject localHostedRecord;
+    // Hosted onion authentication has its own cookie context. Keep the local
+    // document intact and restore it after authentication or cancellation.
+    private GeckoSession hostedReturnSession;
+    private String hostedReturnUrl = "";
     private String pendingHostedUrl = "";
     private boolean openingHosted, connectingHosted;
     private boolean reloadOnConnect;
@@ -115,7 +119,9 @@ public final class AgentRuntime {
         if (!termuxInstalled) recordLocalControl(false);
         boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
+        restoreLocalAgent();
         releaseRemoteAuthorization();
+        suspendHostedSignIns();
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
@@ -161,7 +167,11 @@ public final class AgentRuntime {
     }
     private void setup(String message) { setup("retry", message); }
     private void setup(String step, String message) { busy = false; state = "setup"; setupStep = step; error = message; changed(); }
-    private void fail(String message) { clearHosted(session); releaseRemoteAuthorization(); app.remoteControl.disconnect(); busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed(); }
+    private void fail(String message) { restoreLocalAgent(); clearHosted(session); releaseRemoteAuthorization(); app.remoteControl.disconnect(); busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed(); }
+    private void connectionFailed(String message) {
+        if (isHostedSignIn()) { cancelHostedSignIn(); app.message(message); }
+        else fail(message);
+    }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
         try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
         catch (Exception exception) { fail.accept("Unable to send service command."); }
@@ -177,10 +187,10 @@ public final class AgentRuntime {
             rememberIdentity("local", identity);
             JSONObject auth = web.optJSONObject("auth");
             state = auth != null && (!auth.optBoolean("initialized") || auth.optBoolean("enrollmentRequired")) ? "enroll" : "on";
-            if (localHostedRecord != null && state.equals("on")) {
+            if (isHostedSignIn() && state.equals("on")) {
                 String hostedEndpoint = localHostedRecord.getString("url");
                 if (!connectingHosted && (!hostedEndpoint.equals(url) || remoteAuthorizationCleanup == null)) {
-                    connectLocalHosted(localHostedRecord, ignored -> {}, this::fail);
+                    connectLocalHosted(localHostedRecord, ignored -> {}, this::connectionFailed);
                 }
             } else configure(endpoint, identity, false, 0);
             busy = false; changed();
@@ -200,7 +210,7 @@ public final class AgentRuntime {
     }
     private void configure(String endpoint, JSONObject identity, boolean tor, int port) throws Exception {
         if (engine == null) throw new IllegalStateException("Browser engine is not ready.");
-        String sessionKey = selected.equals("local") && localHostedRecord != null
+        String sessionKey = isHostedSignIn()
             ? "local-hosted-" + URI.create(localHostedRecord.getString("url")).getHost() : selected;
         GeckoSession next = sessions.get(sessionKey);
         if (next == null) {
@@ -227,12 +237,14 @@ public final class AgentRuntime {
                 boolean changedUrl = !endpoint.equals(url);
                 url = endpoint;
                 if (changedUrl || needsLoad) {
+                    // Attach the panel's delegates before the first navigation events.
+                    changed();
                     target.loadUri(endpoint);
                     reloadOnConnect = false;
                 }
                 changed();
-            } catch (Exception exception) { fail("Could not verify Agent connection: " + exception.getMessage()); }
-        }, exception -> { if (generation == operation) fail("Could not configure the protected Agent connection."); });
+            } catch (Exception exception) { connectionFailed("Could not verify Agent connection: " + exception.getMessage()); }
+        }, exception -> { if (generation == operation) connectionFailed("Could not configure the protected Agent connection."); });
         if (!previousUrl.isEmpty() && !previousUrl.equals(endpoint)) captureDraft(target, connect);
         else connect.run();
     }
@@ -254,6 +266,10 @@ public final class AgentRuntime {
     }
     void clearHosted(GeckoSession source) {
         if (source == null) return;
+        if (source == sessions.get("local")) {
+            for (Map.Entry<String, GeckoSession> entry : sessions.entrySet())
+                if (entry.getKey().startsWith("local-hosted-")) clearHosted(entry.getValue());
+        }
         app.revokeHosted(source);
         BashKittenController.request(source, "{\"method\":\"agent.hostedClear\"}").accept(ignored -> {}, ignored -> {});
     }
@@ -264,18 +280,15 @@ public final class AgentRuntime {
         if (selected.equals("local")) refresh(); else connectRemote();
     }
     public void select(String id) {
+        if (isHostedSignIn()) cancelHostedSignIn();
         if (selected.equals(id)) {
-            if (id.equals("local") && localHostedRecord != null) {
-                if (session != null) suspendSession(session);
-                localHostedRecord = null; pendingHostedUrl = ""; url = "";
-                releaseRemoteAuthorization(); refresh();
-            }
             if (!id.equals("local")) { busy = false; turnOn(); }
             return;
         }
         operation++; busy = false;
         releaseRemoteAuthorization();
         if (session != null) { suspendSession(session); session.setActive(false); }
+        suspendHostedSignIns();
         app.remoteControl.disconnect();
         localHostedRecord = null; pendingHostedUrl = "";
         selected = id; url = ""; session = null;
@@ -456,12 +469,16 @@ public final class AgentRuntime {
                             if (generation != operation || source != session || !desired) throw new IllegalStateException("Agent selection changed");
                             if (!parent.equals(URI.create(record.getString("url")).getHost())) throw new SecurityException("Website does not belong to the enrolled Agent");
                             app.createHosted(target, record, source, tab -> {
-                                pendingHostedUrl = ""; app.show(tab); done.accept(true);
+                                pendingHostedUrl = ""; restoreLocalAgent(); app.show(tab); done.accept(true);
                             }, failure);
                         } catch (Exception error) { failure.accept(error.getMessage()); }
                     };
                     if (!selected.equals("local")) open.accept(remotes().getJSONObject(selected));
-                    else if (localHostedRecord != null) open.accept(localHostedRecord);
+                    else if (isHostedSignIn()) open.accept(localHostedRecord);
+                    else if (localHostedRecord != null) {
+                        pendingHostedUrl = target;
+                        connectLocalHosted(localHostedRecord, ignored -> { showProtectedAgent(); done.accept(true); }, failure);
+                    }
                     else command("hosting-client", new JSONObject(), record -> {
                         try {
                             if (generation != operation || source != session || !desired) throw new IllegalStateException("Agent selection changed");
@@ -490,18 +507,46 @@ public final class AgentRuntime {
                 try {
                     releaseRemoteAuthorization(); remoteAuthorizationCleanup = cleanup;
                     localHostedRecord = record;
+                    if (!isHostedSignIn()) {
+                        hostedReturnSession = session; hostedReturnUrl = url;
+                        if (session != null) session.setActive(false);
+                    }
                     configure(record.getString("url"), record, true, port);
                     done.accept(true);
-                } catch (Exception error) { cleanup.run(); remoteAuthorizationCleanup = null; failure.accept("Could not open the protected hosted-site sign-in"); }
+                } catch (Exception error) { cleanup.run(); remoteAuthorizationCleanup = null; restoreLocalAgent(); failure.accept("Could not open the protected hosted-site sign-in"); }
             }, error -> { connectingHosted = false; failure.accept(error); });
         } catch (Exception error) { connectingHosted = false; failure.accept("Invalid local hosted-site identity"); }
     }
     private void showProtectedAgent() {
         app.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true));
     }
+    public boolean isHostedSignIn() { return hostedReturnSession != null; }
+    private void restoreLocalAgent() {
+        if (!isHostedSignIn()) return;
+        if (session != null && session != hostedReturnSession) session.setActive(false);
+        session = hostedReturnSession; url = hostedReturnUrl;
+        hostedReturnSession = null; hostedReturnUrl = ""; pendingHostedUrl = "";
+        openingHosted = false; connectingHosted = false;
+        changed();
+    }
+    private void suspendHostedSignIns() {
+        for (Map.Entry<String, GeckoSession> entry : sessions.entrySet())
+            if (entry.getKey().startsWith("local-hosted-") && entry.getValue() != session) suspendSession(entry.getValue());
+    }
+    public void cancelHostedSignIn() {
+        if (!isHostedSignIn()) return;
+        operation++;
+        GeckoSession authentication = session;
+        restoreLocalAgent();
+        if (authentication != null) suspendSession(authentication);
+        releaseRemoteAuthorization();
+    }
     void showHostedSignIn(String address) {
-        pendingHostedUrl = address;
-        if (session != null && desired && state.equals("on")) { signIn(); showProtectedAgent(); }
+        if (session != null && desired && state.equals("on")) {
+            if (selected.equals("local") && !isHostedSignIn()) {
+                openHosted(session, address, ignored -> {}, app::message);
+            } else { pendingHostedUrl = address; signIn(); showProtectedAgent(); }
+        }
         else app.message("Turn on Agent and sign in to reopen this website");
     }
     void hostedPageReady(GeckoSession source, String address) {

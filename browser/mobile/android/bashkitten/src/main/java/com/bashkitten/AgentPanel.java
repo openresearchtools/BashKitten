@@ -30,7 +30,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button power, location, hideAgent;
+    private final Button power, location, hideAgent, hostedBack;
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
@@ -67,6 +67,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
+        hostedBack = barButton("← Back to local Agent", runtime::cancelHostedSignIn);
+        hostedBack.setVisibility(GONE); body.addView(hostedBack, new LayoutParams(-1, dp(48)));
         connectionStatus = text();
         connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
         connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
@@ -161,10 +163,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
         power.setEnabled(!runtime.state.equals("starting") && !runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
+        hostedBack.setVisibility(runtime.isHostedSignIn() ? VISIBLE : GONE);
+        connectionStatus.setText(runtime.isHostedSignIn() ? "Connecting to hosted-site sign-in…" : "Connecting to Agent…");
         boolean online = runtime.state.equals("on");
         if (runtime.session != null && runtime.session != attached) {
             connectionError = "";
-            connectionStatus.setVisibility(online ? VISIBLE : GONE);
+            // An existing local document can return without another navigation.
+            // Only onPageStart should show loading for a newly attached session.
+            connectionStatus.setVisibility(GONE);
             if (attached != null) view.releaseSession(); attached = runtime.session;
             bindSession(attached); view.setSession(attached);
         }

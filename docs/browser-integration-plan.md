@@ -846,6 +846,10 @@ global certificate bypass. Keep account/login pages protected from automation;
 hosted sites must not receive or overwrite Authelia credentials. Local and onion
 connections use the same account and factor, with stock Authelia cookie scopes;
 do not copy a loopback session into an onion cookie provider or bypass login.
+When Local needs the separate onion sign-in, keep its existing loopback document
+and draft intact. Show a temporary protected sign-in with a return control,
+restore Local after authentication or cancellation, and open the hosted website
+in an ordinary private tab. Do not leave the Local selection using Tor.
 
 ## 7. Desktop llama.cpp and the browser's loopback relay
 
