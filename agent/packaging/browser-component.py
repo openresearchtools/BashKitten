@@ -20,7 +20,8 @@ def fingerprint(target):
                   'agent/src/server/licenses.mjs',
                   'agent/package.json', 'agent/package-lock.json', 'agent/LICENSE',
                   'agent/PI_UPSTREAM.md', 'agent/THIRD_PARTY_NOTICES.md',
-                  'agent/licenses', 'agent/pi', 'agent/search',
+                  'agent/licenses', 'agent/pi/package.json', 'agent/pi/LICENSE',
+                  'agent/pi/NOTICE', 'agent/search',
                   'agent/src/server/access/NOTICE', 'agent/src/server/access/TORKITTEN-LICENSE',
                   'agent/src/server/models/third_party', 'agent/src/server/updates/platform-packages.mjs',
                   '.github/workflows/auth-native.yml', '.github/workflows/search-native.yml']
