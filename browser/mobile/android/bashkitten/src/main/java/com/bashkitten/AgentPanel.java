@@ -67,17 +67,17 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
-        connectionStatus = new TextView(activity);
+        connectionStatus = text();
         connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
         connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
         body.addView(connectionStatus, new LayoutParams(-1, -2));
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
         setup = new ScrollView(activity); setup.setFillViewport(true);
         LinearLayout setupBody = new LinearLayout(activity); setupBody.setPadding(dp(24), dp(28), dp(24), dp(24)); setupBody.setOrientation(VERTICAL); setup.addView(setupBody);
-        TextView title = new TextView(activity); title.setText("BashKitten"); title.setTextSize(28); setupBody.addView(title);
-        message = new TextView(activity); message.setTextSize(16); message.setPadding(0, dp(12), 0, dp(20)); setupBody.addView(message);
+        TextView title = text(); title.setText("BashKitten"); title.setTextSize(28); setupBody.addView(title);
+        message = text(); message.setTextSize(16); message.setPadding(0, dp(12), 0, dp(20)); setupBody.addView(message);
         actions = new LinearLayout(activity); actions.setOrientation(VERTICAL); setupBody.addView(actions);
-        log = new TextView(activity); log.setTextSize(12); log.setTypeface(android.graphics.Typeface.MONOSPACE); log.setTextIsSelectable(true);
+        log = text(); log.setTextSize(12); log.setTypeface(android.graphics.Typeface.MONOSPACE); log.setTextIsSelectable(true);
         logScroll = new ScrollView(activity); logScroll.setNestedScrollingEnabled(true); logScroll.addView(log); logScroll.setVisibility(GONE);
         setupBody.addView(logScroll, new LayoutParams(-1, dp(240)));
         body.addView(setup, new LayoutParams(-1, 0, 1));
@@ -100,6 +100,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         layoutPanels(); changed();
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+    private TextView text() {
+        TextView label = new TextView(activity);
+        TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
+        try { label.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
+        return label;
+    }
     private Button barButton(String label, Runnable action) {
         AppCompatButton b = new AppCompatButton(activity, null, androidx.appcompat.R.attr.borderlessButtonStyle);
         // Fenix supplies a stateful foreground for its current light/dark/private
@@ -340,10 +346,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 action("Open Android permission settings", runtime.termux::openPermissionSettings);
             } else message.setText("Approve Android’s Termux permission prompt to continue. If you dismissed it, turn Agent off and on to try again.");
         } else if (runtime.setupStep.equals("connection")) {
-            TextView guide = new TextView(activity);
+            TextView guide = text();
             guide.setText("Copy this command, open Termux, paste it and press Enter. It installs the Open Research Tools keyring and BashKitten with all its dependencies through pkg. Progress appears in Termux. After installation, it returns here and starts Agent automatically.");
             actions.addView(guide);
-            TextView command = new TextView(activity);
+            TextView command = text();
             command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12);
             command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true);
             command.setPadding(0, dp(12), 0, dp(12));
@@ -383,10 +389,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         setupId = value.optString("setupId"); actions.removeAllViews();
         String qr = value.optString("qrDataUrl");
         try { byte[] data = android.util.Base64.decode(qr.substring(qr.indexOf(',')+1), android.util.Base64.DEFAULT); ImageView image = new ImageView(activity); image.setImageBitmap(BitmapFactory.decodeByteArray(data,0,data.length)); actions.addView(image,new LayoutParams(-1,dp(240))); } catch(Exception ignored) {}
-        TextView guide = new TextView(activity); guide.setText("Add BashKitten to your authenticator, then paste or enter its six-digit code."); actions.addView(guide);
+        TextView guide = text(); guide.setText("Add BashKitten to your authenticator, then paste or enter its six-digit code."); actions.addView(guide);
         String secret = value.optString("secret"), otpauth = value.optString("otpauthUrl");
         if (!secret.isEmpty()) {
-            TextView key = new TextView(activity); key.setText(secret); key.setTypeface(android.graphics.Typeface.MONOSPACE); key.setTextIsSelectable(true); key.setPadding(0, dp(12), 0, dp(8)); actions.addView(key);
+            TextView key = text(); key.setText(secret); key.setTypeface(android.graphics.Typeface.MONOSPACE); key.setTextIsSelectable(true); key.setPadding(0, dp(12), 0, dp(8)); actions.addView(key);
             action("Copy setup key", () -> {
                 ClipData clip = ClipData.newPlainText("BashKitten authenticator setup key", secret);
                 PersistableBundle sensitive = new PersistableBundle(); sensitive.putBoolean("android.content.extra.IS_SENSITIVE", true); clip.getDescription().setExtras(sensitive);
