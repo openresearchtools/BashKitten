@@ -502,6 +502,17 @@ bridge to attach/start it if needed. If that fails, Agent shows the packaged
 onboarding page. It works before the backend exists. A selected remote does
 not need a local Termux installation merely to display that remote's UI.
 
+Turn on also checks Android's battery-optimization exemption for BashKitten
+and, for Local, Termux. Request missing exemptions using Android's own approval
+screen, verify the actual exemption on return, then continue startup. Skip
+already allowed apps; a remote-only client does not request Termux access.
+Cancellation offers retry or an explicit continuation with battery restrictions,
+without silently treating denial as approval or immediately prompting again.
+Foreground service and wake-lock acquisition remain part of the same power action.
+Local setup explains the separately authorized Android 14+ Disable child process
+restrictions toggle and opens the ordinary Settings screen. Battery permission
+and wake locks do not disable that system restriction; the app cannot grant it.
+
 1. If `com.termux` is absent, offer **Download Termux** using the current
    official GitHub release's matching APK and the browser's normal download and
    Android installation flow. Do not substitute our old suite build.

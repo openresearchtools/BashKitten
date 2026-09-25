@@ -14,6 +14,11 @@ account with two-factor authentication. Turning Agent off stops its services;
 closing the Linux browser also stops its local Agent. Closing the Android
 browser leaves Termux work running until Agent is turned off.
 
+Android setup includes battery-access prompts for background Agent work. For
+local Termux on Android 14+, enable **Developer options → Disable child process
+restrictions** and keep Developer options enabled. Setup links to Android Settings;
+this is separate from the wake locks managed by Turn on/off.
+
 [Releases](https://github.com/openresearchtools/bashkitten/releases) ·
 [Package repository](https://github.com/openresearchtools/apt) ·
 [Build packages](agent/packaging/README.md)

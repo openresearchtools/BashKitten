@@ -6,6 +6,7 @@ import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.PowerManager;
 import java.net.URI;
 import java.security.MessageDigest;
 import java.util.*;
@@ -30,6 +31,9 @@ public final class AgentRuntime {
     public String setupStep = "";
     public boolean permissionPromptPending;
     public boolean permissionRequestInFlight;
+    public boolean batteryPromptPending;
+    public String batteryPackage = "", batteryRequestInFlight = "";
+    private final Set<String> batteryDeferred = new HashSet<>();
     java.lang.ref.WeakReference<Activity> activity = new java.lang.ref.WeakReference<>(null);
     private final Map<String, GeckoSession> sessions = new HashMap<>();
     private final Set<String> posted = new LinkedHashSet<>();
@@ -88,13 +92,14 @@ public final class AgentRuntime {
     }
     public void turnOn() {
         if (busy) return;
+        if (!desired) batteryDeferred.clear();
         // Turn off suspends the protected document at about:blank. Its saved
         // endpoint can stay unchanged when the verified service starts again.
         reloadOnConnect = true;
         desired = true; busy = true; operation++; state = "starting"; error = "";
         app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
         changed();
-        if (!selected.equals("local")) { connectRemote(); return; }
+        if (!selected.equals("local")) { if (!needsBatteryPermission()) connectRemote(); return; }
         if (!termux.installed()) {
             recordLocalControl(false); termuxSetupAttempted = false;
             app.policies.edit().remove("agent.termuxSetupAttempted").apply();
@@ -106,12 +111,49 @@ public final class AgentRuntime {
         termux.probe(value -> {
             if (generation != operation || !desired) return;
             if (!value.optBoolean("packages")) { setup("connection", "Install Agent with the command below in Termux."); return; }
+            if (needsBatteryPermission()) return;
             recordLocalControl(true);
             command("start", new JSONObject(), result -> {
                 if (generation != operation || !desired) return;
                 busy = false; acceptStatus(result); poll();
             }, message -> { if (generation == operation) setup(message); });
         }, message -> { if (generation == operation) setup("connection", message); });
+    }
+    public boolean batteryExempt(String packageName) {
+        return app.getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(packageName);
+    }
+    private boolean needsBatteryPermission() {
+        String[] packages = selected.equals("local")
+            ? new String[]{app.getPackageName(), TermuxConnection.PACKAGE}
+            : new String[]{app.getPackageName()};
+        for (String packageName : packages) {
+            if (batteryDeferred.contains(packageName) || batteryExempt(packageName)) continue;
+            batteryPackage = packageName;
+            batteryPromptPending = batteryRequestInFlight.isEmpty();
+            setup("battery", "Allow " + (packageName.equals(TermuxConnection.PACKAGE) ? "Termux" : "BashKitten")
+                + " to run in the background so Agent can keep working when the screen is off. Android will ask for approval.");
+            return true;
+        }
+        batteryPackage = ""; batteryPromptPending = false;
+        return false;
+    }
+    public void batteryPermissionReturned() {
+        String requested = batteryRequestInFlight; batteryRequestInFlight = "";
+        if (requested.isEmpty() || !desired || !state.equals("setup") || !setupStep.equals("battery")) return;
+        if (!requested.equals(batteryPackage) || batteryExempt(requested)) { turnOn(); return; }
+        batteryPermissionFailed("Background battery access was not allowed. Allow it to keep Agent working with the screen off, or continue with Android's battery restrictions.");
+    }
+    public void batteryPermissionFailed(String message) {
+        batteryRequestInFlight = ""; batteryPromptPending = false;
+        if (desired && state.equals("setup") && setupStep.equals("battery")) setup("battery", message);
+    }
+    public void retryBatteryPermission() {
+        if (!desired || !state.equals("setup") || !setupStep.equals("battery") || !batteryRequestInFlight.isEmpty()) return;
+        batteryPromptPending = true; changed();
+    }
+    public void deferBatteryPermission() {
+        if (!desired || !state.equals("setup") || !setupStep.equals("battery") || !batteryRequestInFlight.isEmpty()) return;
+        batteryDeferred.add(batteryPackage); turnOn();
     }
     public void turnOff() {
         if (state.equals("stopping")) return;

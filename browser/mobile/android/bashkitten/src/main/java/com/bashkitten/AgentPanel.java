@@ -10,6 +10,7 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
@@ -45,7 +46,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     private String setupId;
-    public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312;
+    public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
     public AgentPanel(Activity activity, View browser, GeckoRuntime engine, Runnable openBrowserMenu) {
         super(activity); this.activity = activity; this.browser = browser;
         app = BrowserApp.get(activity); runtime = app.agent;
@@ -187,6 +188,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 if (!destroyed && runtime.state.equals("setup") && runtime.setupStep.equals("permission") && runtime.isOnRequested()) requestTermuxPermission();
             });
         }
+        if (runtime.state.equals("setup") && runtime.setupStep.equals("battery") && runtime.batteryPromptPending) {
+            app.main.post(() -> {
+                if (!destroyed && runtime.batteryPromptPending && runtime.state.equals("setup") && runtime.setupStep.equals("battery") && runtime.isOnRequested()) {
+                    runtime.batteryPromptPending = false;
+                    requestBatteryPermission();
+                }
+            });
+        }
         if (runtime.state.equals("stopping")) {
             JSONObject packages = runtime.status.optJSONObject("packages");
             JSONObject job = packages == null ? null : packages.optJSONObject("job");
@@ -288,6 +297,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             && candidate.getPort() == own.getPort();
     }
     public boolean activityResult(int request, int result, Intent data) {
+        if (request == BATTERY_PERMISSION) { runtime.batteryPermissionReturned(); return true; }
         if (request != FILE_REQUEST || fileResult == null) return false;
         GeckoSession.PromptDelegate.FilePrompt prompt = filePrompt;
         GeckoResult<GeckoSession.PromptDelegate.PromptResponse> response = fileResult;
@@ -333,6 +343,22 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         runtime.permissionRequestInFlight = true;
         runtime.termux.requestPermission(activity, TERMUX_PERMISSION);
     }
+    private void requestBatteryPermission() {
+        if (!runtime.batteryRequestInFlight.isEmpty()) return;
+        String packageName = runtime.batteryPackage;
+        if (packageName.isEmpty()) return;
+        if (runtime.batteryExempt(packageName)) { runtime.turnOn(); return; }
+        runtime.batteryRequestInFlight = packageName;
+        try {
+            boolean canRequest = activity.getPackageManager().checkPermission(
+                Manifest.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, packageName) == PackageManager.PERMISSION_GRANTED;
+            Intent intent = new Intent(canRequest ? Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
+                : Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + packageName));
+            activity.startActivityForResult(intent, BATTERY_PERMISSION);
+        } catch (ActivityNotFoundException | SecurityException error) {
+            runtime.batteryPermissionFailed("Android could not open battery access. Allow background running for BashKitten and Termux in Android Settings, then retry.");
+        }
+    }
     private void renderSetup() {
         actions.removeAllViews(); showLog("");
         String state = runtime.state;
@@ -344,6 +370,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) return;
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
+        if (runtime.setupStep.equals("battery")) {
+            if (!runtime.batteryPromptPending && runtime.batteryRequestInFlight.isEmpty()) {
+                action("Allow background running", runtime::retryBatteryPermission);
+                action("Continue with battery restrictions", runtime::deferBatteryPermission);
+            }
+            return;
+        }
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); return; }
         if (runtime.setupStep.equals("permission")) {
             if (permissionNeedsSettings()) {
@@ -354,6 +387,16 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             TextView guide = text();
             guide.setText("Copy this command, open Termux, paste it and press Enter. It installs the Open Research Tools keyring and BashKitten with all its dependencies through pkg. Progress appears in Termux. After installation, it returns here and starts Agent automatically.");
             actions.addView(guide);
+            if (Build.VERSION.SDK_INT >= 34) {
+                TextView processGuide = text();
+                processGuide.setText("One-time Android setting for local Agent: in Developer options, turn on Disable child process restrictions. This prevents Android's child-process limit from killing Termux commands. If Developer options is hidden, open About phone and tap Build number seven times. Keep Developer options enabled. Battery permission and wake locks do not change this setting.");
+                processGuide.setPadding(0, dp(12), 0, dp(8)); actions.addView(processGuide);
+                action("Open Android process settings", () -> {
+                    boolean enabled = Settings.Global.getInt(activity.getContentResolver(), Settings.Global.DEVELOPMENT_SETTINGS_ENABLED, 0) != 0;
+                    try { activity.startActivity(new Intent(enabled ? Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS : Settings.ACTION_DEVICE_INFO_SETTINGS)); }
+                    catch (ActivityNotFoundException error) { activity.startActivity(new Intent(Settings.ACTION_SETTINGS)); }
+                });
+            }
             TextView command = text();
             command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12);
             command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true);
