@@ -189,12 +189,14 @@ Android exposes no automated upload command: use the normal user file picker.
 
 ## Connection and boundaries
 
-In Agent chat, browser control uses the selected
-server's connection: the user enables **browser Settings → Agent browser control
-→ Allow**. This applies to Local too; a Termux app grant is separate.
-Ordinary terminal Pi uses Android Binder as Termux. A first call may open native
-approval; wait for the user. If Android blocks that launch, bring BashKitten
-forward. No command keys, specific signer, TCP server, shared-storage permission,
+Local Agent chat reconnects automatically using the saved Termux app approval.
+Ordinary terminal Pi uses Android Binder with the same approval. The first
+request may open a native approval screen; wait for the user. Later commands
+need no repeated approval or separate Local connect/disconnect action. If Android
+blocks that first screen, bring BashKitten forward; a denied app can be allowed
+in **browser Settings → Agent access**. A selected remote server instead needs
+**browser Settings → Remote Agent browser control → Allow** for that connection.
+No command keys, specific signer, TCP server, shared-storage permission,
 Termux:API or X11 APK is required. Desktop-only commands are not mobile features.
 
 Ordinary signed-in, private, container and Tor tabs remain controllable. Tabs

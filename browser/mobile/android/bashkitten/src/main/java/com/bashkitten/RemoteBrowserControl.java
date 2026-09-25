@@ -82,7 +82,11 @@ final class RemoteBrowserControl {
                         }
                     });
                 } catch (Exception error) { pendingLocal = null; app.message("Open Agent access and allow Termux to use browser tools"); }
-            }, error -> { if (version == generation) pendingLocal = null; });
+            }, error -> {
+                if (version != generation) return;
+                pendingLocal = null;
+                reconnectLocal(selected, serverOrigin);
+            });
         } catch (Exception error) { app.message("Could not verify the installed Termux app for browser control"); }
     }
     void authorize(Activity activity, GeckoSession selected, String address, String name) {
@@ -237,8 +241,19 @@ final class RemoteBrowserControl {
     }
     private void failed(int version, String message) {
         if (version != generation || !active) return;
+        GeckoSession previous = session;
+        String previousOrigin = origin;
+        boolean local = "bashkitten-agent-ui-local".equals(previous.getSettings().getContextId());
         disconnect();
+        if (local) { reconnectLocal(previous, previousOrigin); return; }
         app.message((message == null ? "Agent connection closed" : message) + ". Browser control is off; allow it again to reconnect.");
+    }
+    private void reconnectLocal(GeckoSession previous, String previousOrigin) {
+        int version = generation;
+        app.main.postDelayed(() -> {
+            if (version == generation && app.agent.session == previous && app.agent.isOnRequested())
+                connectLocal(app.agent.activity.get(), previous, previousOrigin, false);
+        }, 2000);
     }
     void disconnect() {
         GeckoSession previous = session;
