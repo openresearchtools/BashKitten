@@ -19,12 +19,72 @@ final class RemoteBrowserControl {
     private final java.util.concurrent.ExecutorService files = java.util.concurrent.Executors.newSingleThreadExecutor();
     private final Set<String> completed = new HashSet<>();
     private GeckoSession session;
+    private GeckoSession pendingLocal;
+    private String declinedLocalIdentity;
     private String origin, csrf, channel;
     private volatile int generation;
     private volatile boolean active;
     private AgentController.Access access;
     RemoteBrowserControl(BrowserApp app) { this.app = app; }
     boolean active() { return active; }
+    void connectLocal(Activity activity, GeckoSession selected, String address, boolean retry) {
+        try {
+            URI endpoint = URI.create(address);
+            if (!"https".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost()) ||
+                    endpoint.getUserInfo() != null || selected == null || !selected.isOpen() ||
+                    !"bashkitten-agent-ui-local".equals(selected.getSettings().getContextId()) ||
+                    !app.agent.selected.equals("local") || app.agent.session != selected || !app.agent.isOnRequested()) return;
+            String serverOrigin = new URI(endpoint.getScheme(), null, endpoint.getHost(), endpoint.getPort(), null, null, null).toString();
+            if (active && session == selected && serverOrigin.equals(origin)) {
+                try { access.check.run(); return; }
+                catch (SecurityException error) { disconnect(); }
+            }
+            if (pendingLocal == selected) return;
+            int uid = app.getPackageManager().getApplicationInfo(TermuxConnection.PACKAGE, 0).uid;
+            String identity = app.grants.identity(uid);
+            if (retry) declinedLocalIdentity = null;
+            if ((identity.equals(declinedLocalIdentity) && !app.grants.allowed(uid)) || (!retry && app.grants.denied(uid))) return;
+            disconnect();
+            int version = generation;
+            pendingLocal = selected;
+            // Use the same installed-app grant as Termux's native command path.
+            // A local web chat must not require a separate remote-server grant.
+            send(selected, serverOrigin, null, "/api/bootstrap", null, bootstrap -> {
+                if (version != generation || pendingLocal != selected) return;
+                if (!bootstrap.optBoolean("authenticated")) { pendingLocal = null; return; }
+                Runnable approved = () -> {
+                    if (version != generation || pendingLocal != selected) return;
+                    try {
+                        AgentController.Access caller = app.controller.forUid(uid, true);
+                        pendingLocal = null; session = selected; origin = serverOrigin; active = true;
+                        access = new AgentController.Access(caller.owner, uid, () -> {
+                            caller.check.run();
+                            if (!active || version != generation || session != selected || !selected.isOpen())
+                                throw new SecurityException("Local browser access revoked");
+                        }, true);
+                        connect(version, "Local Agent");
+                    } catch (Exception error) { pendingLocal = null; app.message("Allow Termux in Agent access to use browser tools"); }
+                };
+                if (app.grants.allowed(uid)) { approved.run(); return; }
+                if (activity == null || activity.isFinishing()) { pendingLocal = null; return; }
+                try {
+                    String ticket = app.grants.ticket(uid);
+                    app.grants.request(uid).send();
+                    app.main.post(new Runnable() {
+                        @Override public void run() {
+                            if (version != generation || pendingLocal != selected) return;
+                            String status;
+                            try { status = app.grants.status(uid, ticket); }
+                            catch (SecurityException error) { status = "revoked"; }
+                            if (status.equals("pending")) { app.main.postDelayed(this, 500); return; }
+                            if (status.equals("approved")) approved.run();
+                            else { pendingLocal = null; declinedLocalIdentity = identity; }
+                        }
+                    });
+                } catch (Exception error) { pendingLocal = null; app.message("Open Agent access and allow Termux to use browser tools"); }
+            }, error -> { if (version == generation) pendingLocal = null; });
+        } catch (Exception error) { app.message("Could not verify the installed Termux app for browser control"); }
+    }
     void authorize(Activity activity, GeckoSession selected, String address, String name) {
         disconnect();
         try {
@@ -183,7 +243,7 @@ final class RemoteBrowserControl {
     void disconnect() {
         GeckoSession previous = session;
         String previousOrigin = origin, previousToken = csrf, previousChannel = channel;
-        generation++; active = false; session = null; origin = csrf = channel = null; access = null; completed.clear();
+        generation++; active = false; session = null; pendingLocal = null; origin = csrf = channel = null; access = null; completed.clear();
         if (previous == null || !previous.isOpen()) return;
         try {
             BashKittenController.request(previous, "{\"method\":\"agent.cancel\"}").accept(ignored -> {

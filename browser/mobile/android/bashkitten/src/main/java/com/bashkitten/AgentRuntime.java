@@ -592,6 +592,12 @@ public final class AgentRuntime {
         else app.message("Turn on Agent and sign in to reopen this website");
     }
     void hostedPageReady(GeckoSession source, String address) {
+        if (source == session && desired && state.equals("on") && selected.equals("local") && !isHostedSignIn()) {
+            try {
+                if ("/".equals(URI.create(address).getPath()))
+                    app.remoteControl.connectLocal(activity.get(), source, url, false);
+            } catch (IllegalArgumentException ignored) { }
+        }
         if (pendingHostedUrl.isEmpty() || openingHosted || source != session || !desired) return;
         try {
             URI document = URI.create(address), endpoint = URI.create(url);

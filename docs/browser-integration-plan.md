@@ -414,6 +414,10 @@ authorize a caller. A different replacement APK requires approval again. Grants
 are revocable in Agent access. Pi and other programs in Termux share Termux's
 Android identity, and any shared-UID peers share that authority; do not pretend
 these are per-Pi Android permissions. Keep the user-facing prompt understandable.
+Local web chats reconnect browser control automatically after login and app
+resume using that installed Termux grant. Do not require a second Local Agent
+connect/disconnect action or approval for each command. Validate the real Termux
+UID and saved signing identity on every command, including after an APK update.
 Do not revive the legacy TCP command-key service or require manually copied
 browser-control keys.
 

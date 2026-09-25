@@ -148,7 +148,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void resume() {
         app.showPendingApproval(activity);
-        if (runtime.state.equals("on")) runtime.refresh();
+        if (runtime.state.equals("on")) {
+            runtime.refresh();
+            runtime.hostedPageReady(runtime.session, runtime.url);
+        }
         else if (runtime.state.equals("setup") && runtime.isOnRequested()) {
             boolean returnedFromTermux = app.policies.getBoolean("agent.termuxSetupPending", false);
             app.policies.edit().remove("agent.termuxSetupPending").apply();
@@ -471,12 +474,16 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         },"termux-release").start();
     }
     public void browserControl() {
+        if (runtime.selected.equals("local") && !runtime.isHostedSignIn()) {
+            app.remoteControl.connectLocal(activity, runtime.session, runtime.url, true);
+            return;
+        }
         if (app.remoteControl.active()) {
             new MaterialAlertDialogBuilder(activity).setTitle("Agent browser control")
                 .setMessage("This Agent can control ordinary browser tabs.")
                 .setPositiveButton("Disconnect", (d,w) -> app.remoteControl.disconnect())
                 .setNegativeButton("Cancel", null).show();
-        } else app.remoteControl.authorize(activity, runtime.session, runtime.url, runtime.selected.equals("local") ? "Local Agent" : "Remote Agent");
+        } else app.remoteControl.authorize(activity, runtime.session, runtime.url, "Remote Agent");
     }
     public void notifications() {
         boolean[] enabled = {app.policies.getBoolean("agent.notifications", false), app.policies.getBoolean("agent.notifications.hidden", true), app.policies.getBoolean("agent.notifications.preview", true)};

@@ -47,9 +47,9 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
                 true
             }
         })
-        category.addPreference(Preference(requireContext()).apply {
-            title = "Agent browser control"
-            summary = "Allow or disconnect this Agent's access to ordinary browser tabs"
+        if (BrowserApp.get(requireContext()).agent.selected != "local") category.addPreference(Preference(requireContext()).apply {
+            title = "Remote Agent browser control"
+            summary = "Allow or disconnect the remote Agent's access to ordinary browser tabs"
             isIconSpaceReserved = false
             setOnPreferenceClickListener {
                 (activity as? HomeActivity)?.bashKittenAgentPanel?.browserControl()
