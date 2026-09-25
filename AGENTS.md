@@ -132,6 +132,10 @@ visible Cuttlefish Android UI and normal system dialogs, as clarified on
 23 September. Do not add or run BashKitten-owned scripted tests. Install and use
 the apps as an ordinary Android user: no ADB, root commands, bootloader changes,
 developer-option workarounds, seeded setup state or hidden permission changes.
+On 25 September the user explicitly authorized turning off Android's child-process
+restrictions. Use the visible Settings → Developer options → Disable child process
+restrictions toggle for this one exception. Do not enable debugging, use ADB/root,
+change other developer settings or claim this is an unchanged-default device.
 Build and artifact-integrity checks are not evidence of that user flow. Continue
 through the builds and manual flows, fixing discovered failures; a dispatched
 build is not completion. Label Cuttlefish results accurately, without claiming

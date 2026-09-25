@@ -552,6 +552,11 @@ Returning or reopening the browser reconciles the actual installed package.
 Latest verification clarification: run normal Android in Cuttlefish and use its
 visible UI for installation and operation. Do not use ADB, root commands,
 bootloader changes, developer-option workarounds or preconfigured setup state.
+On 25 September the user explicitly authorized disabling Android's child-process
+restrictions through its visible Developer options toggle. This is the sole
+exception to the developer-settings restriction; ADB, root, debugging and other
+developer workarounds remain excluded. Record that setting in verification
+results rather than claiming unchanged-default Android process behavior.
 Do not add or run BashKitten-owned scripted tests. Complete builds and manual
 first-install flows, fixing discovered failures before stopping. Label emulator
 results accurately; compilation alone does not satisfy this acceptance check.
