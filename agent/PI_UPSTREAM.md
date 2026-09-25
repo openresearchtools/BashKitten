@@ -3,9 +3,9 @@
 This branch runs unmodified Pi rather than porting its behavior:
 
 - Repository: https://github.com/earendil-works/pi
-- Release: `v0.86.1`
-- Commit: `13cbf77df2396303013a41646bcfa77b4271ae56`
-- Packages: `@earendil-works/pi-coding-agent@0.86.1`, `@earendil-works/pi-ai@0.86.1`
+- Release: `v0.87.1`
+- Commit: `f07218c4d4bbc12bef056a7058c3dd49dfe41abe`
+- Packages: `@earendil-works/pi-coding-agent@0.87.1`, `@earendil-works/pi-ai@0.87.1`
 - Full transitive dependency resolution and tarball integrity: `package-lock.json`
 - Pi’s published shrinkwrap omits integrity for five internal packages. The root
   lock records the exact-version npm registry SRI for those entries as well;

@@ -1,7 +1,7 @@
 # BashKitten · native Pi / Linux and Termux
 
-This branch reuses BashKitten's browser UI with unmodified Pi 0.86.1
-(`13cbf77df2396303013a41646bcfa77b4271ae56`). It contains no Rust backend or
+This branch reuses BashKitten's browser UI with unmodified Pi 0.87.1
+(`f07218c4d4bbc12bef056a7058c3dd49dfe41abe`). It contains no Rust backend or
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
 `docs/pi-termux.md` describes the architecture and native boundaries.
 

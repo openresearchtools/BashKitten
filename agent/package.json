@@ -16,8 +16,8 @@
     "start": "node src/server/http/server.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.86.1",
-    "@earendil-works/pi-coding-agent": "0.86.1",
+    "@earendil-works/pi-ai": "0.87.1",
+    "@earendil-works/pi-coding-agent": "0.87.1",
     "busboy": "1.6.0",
     "hash-wasm": "4.12.0",
     "qrcode": "1.5.4",

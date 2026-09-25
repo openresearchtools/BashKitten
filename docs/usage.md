@@ -1,7 +1,7 @@
 # Using BashKitten
 
 BashKitten is a Firefox-based browser with a protected Agent view for stock
-Pi 0.86.1. Linux packages include the browser and server; Android runs the server
+Pi 0.87.1. Linux packages include the browser and server; Android runs the server
 in ordinary Termux. Current releases are for testing and are not ready for
 production; see the [README](../README.md).
 

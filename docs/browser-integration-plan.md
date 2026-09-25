@@ -1017,7 +1017,7 @@ replacement tools or new Pi RPC commands. Normal Pi `bash`/`read` calls already
 stream through the current transcript UI. Register the package for the selected
 Pi runtime through its supported mechanism, preserving user skills/extensions.
 It must also work from ordinary terminal Pi without the BashKitten UI.
-Follow the pinned [native Pi skills interface](https://github.com/badlogic/pi-mono/blob/13cbf77df2396303013a41646bcfa77b4271ae56/packages/coding-agent/docs/skills.md).
+Follow the pinned [native Pi skills interface](https://github.com/badlogic/pi-mono/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/docs/skills.md).
 
 ### One search/read call
 
