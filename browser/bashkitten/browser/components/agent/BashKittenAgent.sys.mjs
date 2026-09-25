@@ -95,7 +95,7 @@ export const BashKittenAgent = {
     if (!actorRegistered) {
       ChromeUtils.registerWindowActor("BashKittenAgent", {
         parent: { esModuleURI: "resource:///modules/BashKittenAgentParent.sys.mjs" },
-        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { wantUntrusted: true } } },
+        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { capture: true, wantUntrusted: true } } },
         allFrames: false,
         messageManagerGroups: ["bashkitten-agent"],
         matches: ["https://*/*"],

@@ -17,7 +17,9 @@ export const BashKittenHost = {
             DOMDocElementInserted: {},
             DOMContentLoaded: {},
             pageshow: {},
-            BashKittenDraftReady: { wantUntrusted: true },
+            // The page dispatches this non-bubbling event on its window.
+            // Actor listeners live above it on the chrome event target.
+            BashKittenDraftReady: { capture: true, wantUntrusted: true },
           },
         },
         allFrames: false,
