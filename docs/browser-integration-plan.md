@@ -1207,7 +1207,10 @@ callback in a client browser cannot magically reach another machine.
 
 Keep About/Licenses in the browser menu, available offline and before login.
 Both Android and Linux include the same product blocks in the engine license
-page, without the inherited document illustration or dead rights link. Clearly
+page, without the inherited document illustration or dead rights link.
+Package the license stylesheet on Android as well as desktop, use the device
+viewport, and stack the license name, provenance and full text on narrow screens
+so the notices remain readable without desktop-page zooming. Clearly
 identify Waterfox, BrowserOS browser tools and Unsloth Studio search adaptations
 with their original licenses, exact source provenance and dated modification
 notices in the applicable engine and bundled-component inventories.

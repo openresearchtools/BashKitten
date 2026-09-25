@@ -14,6 +14,9 @@
 toolkit.jar:
 % skin global classic/1.0 %skin/classic/global/
 
+# about:license is available on both desktop and Android.
+  skin/classic/global/aboutLicense.css                    (../../shared/aboutLicense.css)
+
 # images and CSS we need for widgets like video controls
   skin/classic/global/icons/eye.svg                        (../../shared/icons/eye.svg)
   skin/classic/global/icons/eye-slash.svg                  (../../shared/icons/eye-slash.svg)

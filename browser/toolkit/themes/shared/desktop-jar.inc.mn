@@ -17,7 +17,6 @@
   skin/classic/global/aboutNetError.css                    (../../shared/aboutNetError.css)
   skin/classic/global/aboutNetworking.css                  (../../shared/aboutNetworking.css)
   skin/classic/global/aboutReader.css                      (../../shared/aboutReader.css)
-  skin/classic/global/aboutLicense.css                     (../../shared/aboutLicense.css)
   skin/classic/global/aboutSupport.css                     (../../shared/aboutSupport.css)
   skin/classic/global/alert.css                            (../../shared/alert.css)
   skin/classic/global/appPicker.css                        (../../shared/appPicker.css)

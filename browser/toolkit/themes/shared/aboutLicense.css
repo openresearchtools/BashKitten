@@ -2,8 +2,70 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
+/* Android does not ship the desktop in-content theme. Keep the license page
+ * readable independently, with the same layout in narrow desktop windows. */
+:root {
+  color-scheme: light dark;
+  background: Canvas;
+  color: CanvasText;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  display: block;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  max-width: 100rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+h1 {
+  font-size: 1.5rem;
+}
+
+h2 {
+  font-size: 1.125rem;
+}
+
+table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 td:nth-child(1),
 td:nth-child(2) {
   text-align: left;
   vertical-align: top;
+}
+
+@media (max-width: 60rem) {
+  table,
+  tbody,
+  tr,
+  td {
+    display: block;
+    width: auto;
+    border: 0;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tr {
+    margin-block: 2rem;
+    padding-block-end: 1rem;
+    border-block-end: 1px solid GrayText;
+  }
+
+  td {
+    padding: 0;
+  }
 }
