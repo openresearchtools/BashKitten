@@ -1138,7 +1138,7 @@ class Settings(
 
     var shouldUseHttpsOnly by booleanPreference(
         appContext.getPreferenceKey(R.string.pref_key_https_only),
-        default = false,
+        default = true,
     )
 
     var shouldUseHttpsOnlyInAllTabs by booleanPreference(

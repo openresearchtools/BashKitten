@@ -32,6 +32,13 @@ pref("browser.aboutwelcome.experimentsGate.enabled", false, locked);
 pref("browser.startup.upgradeDialog.enabled", false, locked);
 pref("browser.shell.checkDefaultBrowser", false);
 pref("browser.laterrun.enabled", false, locked);
+
+// Start with HTTPS-Only on, while preserving an explicit user toggle choice.
+// Gecko always exempts localhost/loopback; onion services also keep HTTP support.
+pref("dom.security.https_only_mode", true);
+pref("dom.security.https_only_mode.upgrade_onion", false);
+pref("dom.security.https_only_mode.upgrade_local", true);
+
 pref("browser.toolbars.bookmarks.visibility", "never");
 pref("browser.newtabpage.activity-stream.asrouter.providers.onboarding",
      '{"id":"onboarding","enabled":false,"type":"local"}', locked);
