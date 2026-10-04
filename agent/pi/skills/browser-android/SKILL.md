@@ -555,7 +555,7 @@ it is not a Pi tool and is not an assumed installed executable:
 ```sh
 bk_android() {
   local apk
-  apk="$(pm path com.bashkitten 2>/dev/null | tr -d '\r' | sed -n 's/^package:\(.*\/base\.apk\)$/\1/p' | head -n 1)"
+  apk="$(pm path com.bashkitten </dev/null 2>/dev/null | tr -d '\r' | sed -n 's/^package:\(.*\/base\.apk\)$/\1/p' | head -n 1)"
   if [ -z "$apk" ]; then
     printf '%s\n' 'BashKitten base.apk was not found for this Android user.' >&2
     return 1
