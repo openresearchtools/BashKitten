@@ -654,6 +654,9 @@ identity, and missing Agent packages through the actual Termux bridge probe.
 Discard only the previous Local connection/cookie state and return to normal
 setup. Ordinary package updates keep that connection. A launcher callback alone
 cannot replace the saved certificate, and saved remote connections are unaffected.
+On upgrade from versions without that installation record, re-enroll Local once
+through the permission-checked Termux bridge without repeating a completed package
+setup. This also covers Termux being reinstalled before the browser is updated.
 
 Keep Node, Pi, Python, git, gh, archive utilities, the existing X11 repository and
 useful desktop packages such as LibreOffice. Add the native `xorg-server-xvfb`

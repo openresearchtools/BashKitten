@@ -115,6 +115,10 @@ public final class AgentRuntime {
         // An exported setup-complete intent alone must never replace its TLS pin.
         if (installation.isEmpty() || !termuxSetupAttempted
                 || (!previous.isEmpty() && !previous.equals(installation))) resetLocalSetup(proceed);
+        // Older versions did not bind their saved Local connection to an OS
+        // installation. Re-enroll once through the permission-checked Termux
+        // bridge, including when Termux was reinstalled before this APK update.
+        else if (previous.isEmpty()) resetLocalConnection(proceed);
         else proceed.run();
     }
     private void startLocal(int generation) {
@@ -142,6 +146,13 @@ public final class AgentRuntime {
         }, message -> { if (generation == operation) setup("connection", message); });
     }
     private void resetLocalSetup(Runnable done) {
+        resetLocalConnection(() -> {
+            recordLocalControl(false); termuxSetupAttempted = false;
+            app.policies.edit().remove("agent.termuxSetupAttempted").remove("agent.termuxSetupPending").apply();
+            done.run();
+        });
+    }
+    private void resetLocalConnection(Runnable done) {
         try {
             JSONObject remembered = identities.read(); remembered.remove("local"); identities.write(remembered);
             restoreLocalAgent(); suspendHostedSignIns();
@@ -150,8 +161,6 @@ public final class AgentRuntime {
             if (session == local) { session = null; url = ""; }
             if (local != null && local.isOpen()) { clearHosted(local); local.stop(); local.close(); }
             localSession = null; localSessionPending = false; status = new JSONObject();
-            recordLocalControl(false); termuxSetupAttempted = false;
-            app.policies.edit().remove("agent.termuxSetupAttempted").remove("agent.termuxSetupPending").apply();
             if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-local");
             done.run();
         } catch (Exception failure) { fail("Could not reset the previous local connection. Turn on to retry."); }
