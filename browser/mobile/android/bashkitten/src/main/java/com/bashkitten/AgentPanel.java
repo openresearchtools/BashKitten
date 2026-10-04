@@ -417,7 +417,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             ScrollView commandScroll = new ScrollView(activity);
             commandScroll.setNestedScrollingEnabled(true);
             commandScroll.setVerticalScrollBarEnabled(true);
-            commandScroll.setFadeScrollBars(false);
+            commandScroll.setScrollbarFadingEnabled(false);
             commandScroll.setClipToOutline(true);
             TypedArray colors = activity.obtainStyledAttributes(new int[]{android.R.attr.colorBackground});
             int background;
