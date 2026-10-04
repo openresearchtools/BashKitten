@@ -420,6 +420,9 @@ folding. The protected Agent panel must also reserve the visible keyboard inset
 when the host uses edge-to-edge layout, so chat, account/password and two-factor
 fields stay above the keyboard. Respect parent system-bar padding without
 subtracting it twice, and restore the full page height when the keyboard closes.
+For very short viewports, including landscape with the keyboard open, compact
+the chat header and composer and keep overflowing composer content scrollable
+so text and Send remain reachable.
 Profile creation and switching must be unavailable through menus,
 internal pages and launch flags; internal Gecko data storage does not provide a
 user-facing multiple-profile feature.
