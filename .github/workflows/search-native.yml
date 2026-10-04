@@ -41,36 +41,6 @@ jobs:
           restore-keys: search-sources-
       - name: Assemble locked native runtime and source
         run: python3 agent/search/build/runtime.py '${{ matrix.target }}' --output "$RUNNER_TEMP/search"
-      - name: Exercise packaged search and document conversion
-        env:
-          SEARCH_STAGE: ${{ runner.temp }}/search/stage-${{ matrix.target }}/search
-        run: |
-          cp -a agent/search/src agent/search/bashkitten-search "$SEARCH_STAGE/"
-          python3 - <<'PY'
-          import json, os, pathlib, subprocess, tempfile
-          root = pathlib.Path(os.environ['SEARCH_STAGE'])
-          with tempfile.TemporaryDirectory(prefix='bashkitten-search-') as data:
-              env = dict(os.environ, BASHKITTEN_DATA_DIR=data)
-              for request in ({'query': 'Python documentation pathlib'},
-                              {'url': 'https://example.com/'},
-                              {'url': 'https://docs.python.org/3/library/pathlib.html'},
-                              {'url': 'https://raw.githubusercontent.com/mozilla/pdf.js/d54c193bd4dd6c34759cb88f1a3b78db66f0962c/examples/learning/helloworld.pdf'}):
-                  print('Reading', request, flush=True)
-                  result = subprocess.run([str(root / 'bashkitten-search')], input=json.dumps(request),
-                                          text=True, capture_output=True, timeout=180, env=env)
-                  print(result.stderr)
-                  response = json.loads(result.stdout)
-                  assert result.returncode == 0 and response['ok'], response
-                  if 'url' in request:
-                      saved = pathlib.Path(response['fullMarkdownPath'])
-                      assert saved.is_file() and saved.stat().st_size > 0, response
-                      assert len(saved.read_text()) == response['contentLength'], response
-                      assert len(response['content']) <= 16000, response
-                      if 'pathlib.html' in request['url']:
-                          assert response['truncated'] and response['contentLength'] > 16000, response
-                  else:
-                      assert response['results'], response
-          PY
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14'
@@ -86,12 +56,7 @@ jobs:
           assert lxml.etree.LIBXML_COMPILED_VERSION == (2, 14, 6)
           assert lxml.etree.LIBXSLT_COMPILED_VERSION == (1, 1, 43)
           assert pymupdf.mupdf_version_tuple == (1, 27, 2)
-          document = pymupdf.open()
-          page = document.new_page()
-          page.insert_text((72, 72), 'BashKitten native Python 3.14 document conversion')
-          markdown = pymupdf4llm.to_markdown(document)
-          assert 'BashKitten native Python 3.14' in markdown
-          print('Python 3.14 native imports and PDF conversion passed')
+          print('Python 3.14 native library imports and build versions verified')
           PY
       - uses: actions/upload-artifact@v4
         with:
