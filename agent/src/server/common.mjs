@@ -22,10 +22,17 @@ export async function readJson(file, fallback) {
   catch (error) { if (error.code === 'ENOENT' && fallback !== undefined) return fallback; throw error; }
 }
 export async function writeJson(file, value) {
-  await privateDir(path.dirname(file));
+  const directory = path.dirname(file);
+  await privateDir(directory);
   const temp = `${file}.${randomToken().slice(0, 12)}.tmp`;
-  await fs.writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 });
-  await fs.rename(temp, file);
+  try {
+    // Rename is atomic, but without flushing it can leave an empty or zeroed
+    // replacement after power loss. Persist both the bytes and directory entry.
+    await fs.writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600, flag: 'wx', flush: true });
+    await fs.rename(temp, file);
+    const parent = await fs.open(directory, 'r');
+    try { await parent.sync(); } finally { await parent.close(); }
+  } finally { await fs.rm(temp, { force: true }); }
 }
 export async function createJson(file, value) {
   await privateDir(path.dirname(file));

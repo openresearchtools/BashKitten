@@ -102,7 +102,18 @@ async function serve() {
   await fs.rm(controlSocket, { force: true });
   const lock = controlSocket + '.lock';
   await fs.writeFile(lock, String(process.pid), { mode: 0o600 });
-  let state = await readJson(stateFile, { web: false }), serial = Promise.resolve();
+  let state;
+  try { state = await readJson(stateFile, { web: false }); }
+  catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    // This file records desired power state, not credentials or sessions. Keep
+    // the damaged file and let an explicit start recover after a power failure.
+    await fs.rename(stateFile, stateFile + `.corrupt-${Date.now()}`);
+    state = { web: false };
+    await writeJson(stateFile, state);
+    console.error('Recovered invalid controller power state; preserved the damaged control.json');
+  }
+  let serial = Promise.resolve();
   let starting = false, stopping = false, lastError = state.error || null, restartPending = false, exiting = false;
   let browserOwner = null, browserWatcher = null, browserClosing = false;
   const manifestFile = path.join(bundledRoot, 'build-platform.json');
