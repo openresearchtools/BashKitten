@@ -130,6 +130,6 @@ See [packaging](../agent/packaging/README.md) for GitHub Actions builds and the
 [integration plan](browser-integration-plan.md) for requirements and verification
 boundaries. Verification material stays outside product source and artifacts.
 
-Agent code is [GPL-3.0-only](../LICENSE). Browser and dependency licenses retain
+Agent code is [AGPL-3.0-only](../LICENSE). Browser and dependency licenses retain
 their own terms. Full notices are available offline in browser About and in
 [third-party notices](../agent/THIRD_PARTY_NOTICES.md).

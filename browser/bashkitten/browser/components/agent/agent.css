@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 #bashkitten-agent-pane { min-width: 320px; border-radius: 16px; overflow: clip; background: var(--toolbar-bgcolor, Canvas); color: var(--toolbar-color, CanvasText); }
 :root[bashkitten-agent-layout="split"] #bashkitten-agent-pane { width: 42vw; max-width: 70vw; border-inline-end: 1px solid var(--chrome-content-separator-color); }
 #bashkitten-agent-bar { min-height: 38px; align-items: center; gap: 6px; padding: 4px 8px; }

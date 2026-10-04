@@ -3,11 +3,13 @@
 # BashKitten licensing policy
 
 BashKitten is distributed as a combined work under
-`AGPL-3.0-or-later`. This choice applies strong copyleft to BashKitten-original
+`AGPL-3.0-only`. This choice applies strong copyleft to BashKitten-original
 browser, automation, service, and user-interface work, including the
 source-availability requirement for modified AGPL software used over a network.
-The Agent server/UI and copied native integration retain their GPL-3.0-only
-headers; GPLv3 section 13 governs their combination with the browser.
+From 4 October 2026, BashKitten-owned Agent server/UI, native integration and
+branding use AGPL-3.0-only. Previously distributed GPL versions keep their
+existing grants. WildBuzzard and other inherited AGPL-3.0-or-later files retain
+that permission; the change does not replace third-party license notices.
 
 It does not erase or replace inherited licenses.
 

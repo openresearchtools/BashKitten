@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-only
 // Merge the inventories shipped by the actual target component artifacts.
 import fs from 'node:fs/promises';
 import path from 'node:path';

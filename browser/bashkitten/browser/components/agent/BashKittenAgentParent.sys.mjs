@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
+/* SPDX-License-Identifier: AGPL-3.0-only */
 
 import { protectedAgentView } from "resource:///modules/BashKittenAgent.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";

@@ -83,7 +83,7 @@ for record in records:
         unique[key] = record
 records = list(unique.values())
 records.insert(0, {'name': 'BashKitten', 'version': json.loads((root / 'package.json').read_text())['version'],
-                  'license': 'GPL-3.0-only', 'source': 'https://github.com/openresearchtools/bashkitten',
+                  'license': 'AGPL-3.0-only', 'source': 'https://github.com/openresearchtools/bashkitten',
                   'text': (root / 'LICENSE').read_text()})
 assets = root / 'src/android/app/src/main/assets'
 records.append({'name': 'Termux app icons', 'version': '', 'license': 'Original project licenses',

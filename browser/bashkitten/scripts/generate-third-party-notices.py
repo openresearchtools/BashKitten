@@ -177,6 +177,7 @@ def text_body(component_list):
         "BashKitten browser copyright and licensing notice",
         "============================================",
         "",
+        "BashKitten-owned code and branding are licensed under AGPL-3.0-only.",
         "WildBuzzard-derived browser code is licensed under AGPL-3.0-or-later. Mozilla,",
         "Waterfox, and other inherited code remains under its existing licenses.",
         "The complete general license texts are installed beside this file and are",

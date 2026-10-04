@@ -157,8 +157,13 @@ const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
 const favicon = await fs.readFile(path.join(here, '../../web/favicon.ico'));
 const logoUrl = '/logo.png?v=' + createHash('sha256').update(logo).digest('hex');
 const faviconUrl = '/favicon.ico?v=' + createHash('sha256').update(favicon).digest('hex');
+const build = await readJson(path.join(here, '../../../build-platform.json'), {});
+const sourceRef = /^[a-f0-9]{40}$/.test(build.revision || '') ? build.revision : 'main';
+const sourceRoot = 'https://github.com/openresearchtools/BashKitten';
 const html = (await fs.readFile(path.join(here, '../../web/web_ui.html'), 'utf8'))
-  .replaceAll('/logo.png', logoUrl).replaceAll('/favicon.ico', faviconUrl);
+  .replaceAll('/logo.png', logoUrl).replaceAll('/favicon.ico', faviconUrl)
+  .replaceAll('/__bashkitten_source__', `${sourceRoot}/tree/${sourceRef}`)
+  .replaceAll('/__bashkitten_license__', `${sourceRoot}/blob/${sourceRef}/LICENSE`);
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 let activeServer;

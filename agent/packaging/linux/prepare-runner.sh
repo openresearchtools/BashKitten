@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 # Retain the resource settings from WildBuzzard's hosted desktop build.
 set -Eeuo pipefail
 for path in /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup \

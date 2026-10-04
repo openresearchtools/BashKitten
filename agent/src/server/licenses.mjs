@@ -26,7 +26,7 @@ export async function bundledLicenses(root = appRoot) {
     try { version = (await fs.readFile(path.join(root, '../browser/bashkitten/config/version.txt'), 'utf8')).trim(); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  const records = [{ name: 'BashKitten', version: version || pkg.version, license: 'GPL-3.0-only',
+  const records = [{ name: 'BashKitten', version: version || pkg.version, license: 'AGPL-3.0-only',
     source: 'https://github.com/openresearchtools/bashkitten', text: await fs.readFile(path.join(root, 'LICENSE'), 'utf8') }];
   const modelNotices = path.join(root, 'src/server/models/third_party');
   const modelProvenance = await fs.readFile(path.join(modelNotices, 'NOTICE'), 'utf8');

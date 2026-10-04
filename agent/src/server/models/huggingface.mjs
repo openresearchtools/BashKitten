@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-only
 // Changed JavaScript adaptation of BashKitten Rust / SimpleHF; see third_party/NOTICE.
 import { getHuggingFaceToken } from './settings.mjs';
 

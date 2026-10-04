@@ -12,7 +12,7 @@ listing, private settings, job controls and resumable download design from:
 
 The implementation is changed: it is a dependency-free JavaScript adaptation
 for the existing Node server, rather than the donor's Rust implementation.
-BashKitten's original JavaScript code and modifications are GPL-3.0-only;
+BashKitten's original JavaScript code and modifications are AGPL-3.0-only;
 the original source licenses and attributions remain applicable.
 
 The Rust donor records SimpleHF as the source of its repository listing and

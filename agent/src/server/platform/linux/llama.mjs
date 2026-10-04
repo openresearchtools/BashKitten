@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';

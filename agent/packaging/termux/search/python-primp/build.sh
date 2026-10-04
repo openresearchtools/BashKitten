@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 # BashKitten recipe; build framework pinned in search/runtime-lock.json.
 TERMUX_PKG_HOMEPAGE=https://github.com/deedy5/primp
 TERMUX_PKG_DESCRIPTION="BashKitten private native DDGS HTTP client"

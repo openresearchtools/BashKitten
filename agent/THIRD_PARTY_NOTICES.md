@@ -1,6 +1,6 @@
 # Third-party notices
 
-The Agent code is GPL-3.0-only. The browser retains its Mozilla/Waterfox MPL,
+The Agent code is AGPL-3.0-only. The browser retains its Mozilla/Waterfox MPL,
 BrowserOS-derived AGPL and other original notices. Each dependency keeps its
 own license; the offline **About → Licenses** pages include full bundled texts.
 
@@ -24,7 +24,7 @@ libraries. Optional llama.cpp, GPU drivers and model weights are separate.
 
 The browser's offline notices separately identify **Waterfox** and **BrowserOS**,
 their retained code, licenses and BashKitten adaptations. Original per-file
-notices remain intact; the product is not relabeled as wholly GPL-3.0-only.
+notices remain intact; third-party code is not relicensed by BashKitten’s own AGPL-3.0-only choice.
 
 ## pillama
 

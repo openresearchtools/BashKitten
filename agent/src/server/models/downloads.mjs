@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-only
+// SPDX-License-Identifier: AGPL-3.0-only
 // Changed JavaScript adaptation of BashKitten Rust / SimpleHF download behavior.
 // Original authors, source revisions and licenses: third_party/NOTICE.
 import fs from 'node:fs/promises';

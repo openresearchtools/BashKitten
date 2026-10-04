@@ -1,6 +1,7 @@
 BashKitten browser copyright and licensing notice
 ============================================
 
+BashKitten-owned code and branding are licensed under AGPL-3.0-only.
 WildBuzzard-derived browser code is licensed under AGPL-3.0-or-later. Mozilla,
 Waterfox, and other inherited code remains under its existing licenses.
 The complete general license texts are installed beside this file and are
@@ -699,29 +700,6 @@ same release set.
 
 ==============================================================================
 
-SHA-256: 7a81f5d2307e9f9c8f86c163e392648452a35f23bb696426f495b05a961a8bd1
-Packages: BashKitten browser licences and source notices
-Upstream paths: bashkitten/browser/branding/LICENSE
-
-The BashKitten kitten-with-glasses logo in
-assets/bashkitten-logo-glasses-original.png is the original transparent PNG
-selected for BashKitten on 23 September 2026, distributed under GPL-3.0-only.
-The supplied file is preserved unchanged (SHA-256:
-adee0eba93f17f983a58e7288e3e0ae2bff86e0b11ff226e349b3e7177fd8ce5).
-The earlier kitten logo remains in assets/bashkitten-logo-original.png under
-the same terms (SHA-256:
-3188b511e193bb25bab93b51e8c647695f7bdb61d11b41a4c3bfd89c4b58d750).
-scripts/render-branding.py only scales the image and adds transparent padding
-for native icon sizes and Android adaptive launcher masks. The generated SVG
-embeds the PNG; it is not separately drawn vector artwork.
-
-Retained WildBuzzard branding and wordmark material is distributed under
-AGPL-3.0-or-later. Historical WildBuzzard artwork remains credited to the
-WildBuzzard project; rebuilding replaces its old raster logo with BashKitten's
-cat icon. Inherited Mozilla document artwork retains its own MPL-2.0 headers.
-
-==============================================================================
-
 SHA-256: 861f33956a7ef8566ba36159c40f126c5ad9fbfe351f673545e0cc6f53fb7dde
 Packages: BashKitten browser licences and source notices
 Upstream paths: bashkitten/components/bashkitten-cli/MOZILLA-MCP-LICENSE
@@ -751,9 +729,16 @@ SOFTWARE.
 
 ==============================================================================
 
-SHA-256: 8d4fc3d54fa8964447a6402e24f5b8146deb18e6b7d277748916976fe7f4b6a2
+SHA-256: 937b0af1adcead7df5980d6a2d7efb28ca4e3f1d246d708ceb79ed97e5db9869
 Packages: BashKitten browser licences and source notices
 Upstream paths: LICENSE
+
+BashKitten-owned code and branding are licensed under GNU Affero General
+Public License version 3 only (AGPL-3.0-only), from 4 October 2026. The complete
+license text is in COPYING. Third-party material retains its stated licenses.
+See bashkitten/LICENSE-POLICY.md for the current product policy.
+
+Retained WildBuzzard licensing notice:
 
 WildBuzzard is distributed as a combined work under the GNU Affero General
 Public License, version 3.0 or (at your option) any later version. The complete
@@ -783,6 +768,29 @@ wildbuzzard/LICENSE-POLICY.md for the WildBuzzard source and asset policy.
 
 No rights or licenses are granted to the trademarks of the Mozilla Foundation
 or any other party, including the Firefox or Waterfox names and logos.
+
+==============================================================================
+
+SHA-256: 97c01d663782faf22125d54c0c1c153e58302bb846dca9394abca90b4c75a751
+Packages: BashKitten browser licences and source notices
+Upstream paths: bashkitten/browser/branding/LICENSE
+
+The BashKitten kitten-with-glasses logo in
+assets/bashkitten-logo-glasses-original.png is the original transparent PNG
+selected for BashKitten on 23 September 2026, distributed under AGPL-3.0-only.
+The supplied file is preserved unchanged (SHA-256:
+adee0eba93f17f983a58e7288e3e0ae2bff86e0b11ff226e349b3e7177fd8ce5).
+The earlier kitten logo remains in assets/bashkitten-logo-original.png under
+the same terms (SHA-256:
+3188b511e193bb25bab93b51e8c647695f7bdb61d11b41a4c3bfd89c4b58d750).
+scripts/render-branding.py only scales the image and adds transparent padding
+for native icon sizes and Android adaptive launcher masks. The generated SVG
+embeds the PNG; it is not separately drawn vector artwork.
+
+Retained WildBuzzard branding and wordmark material is distributed under
+AGPL-3.0-or-later. Historical WildBuzzard artwork remains credited to the
+WildBuzzard project; rebuilding replaces its old raster logo with BashKitten's
+cat icon. Inherited Mozilla document artwork retains its own MPL-2.0 headers.
 
 ==============================================================================
 

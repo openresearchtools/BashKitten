@@ -1,5 +1,5 @@
 // Authelia configuration/enrollment patterns adapted from Torkitten.
-// Copyright 2026 The Torkitten Authors (Apache-2.0); BashKitten changes GPL-3.0-only.
+// Copyright 2026 The Torkitten Authors (Apache-2.0); BashKitten changes AGPL-3.0-only.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';

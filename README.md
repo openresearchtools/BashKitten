@@ -24,5 +24,5 @@ this is separate from the wake locks managed by Turn on/off.
 [Build packages](agent/packaging/README.md)
 
 About and full licenses are available offline in the browser's settings.
-The Agent code is [GPL-3.0-only](LICENSE); browser and dependency notices retain
+BashKitten's own code is [AGPL-3.0-only](LICENSE); inherited browser and dependency notices retain
 their original terms. See [third-party notices](agent/THIRD_PARTY_NOTICES.md).

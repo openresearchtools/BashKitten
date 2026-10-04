@@ -1,5 +1,5 @@
 // Named onion routes follow Torkitten's Apache-2.0 mapping pattern; see NOTICE.
-// BashKitten persistence, loopback validation and cookie isolation are GPL-3.0-only.
+// BashKitten persistence, loopback validation and cookie isolation are AGPL-3.0-only.
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';

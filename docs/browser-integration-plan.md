@@ -1255,10 +1255,12 @@ inventory even though the server is installed separately from the APK.
 
 Preserve Mozilla/Waterfox MPL notices, BrowserOS-derived AGPL notices, Mozilla
 DevTools MCP attribution, retained ad-block data licenses, Tor and all remaining
-native/npm dependency notices. The browser currently follows AGPL-3.0-or-later
-for the combined product; do not relabel it as wholly GPL or erase per-file
-licenses. BashKitten's existing code remains GPL-3.0-only, including any copied
-integration portions. Preserve Torkitten's Apache-2.0 notices for reused code.
+native/npm dependency notices. The combined product uses AGPL-3.0-only for
+BashKitten-owned code from
+4 October 2026. Retained AGPL-3.0-or-later, MPL, GPL and other third-party
+permissions remain with their files; do not erase or narrow those notices.
+Preserve Torkitten's Apache-2.0 notices for reused code. Settings includes source
+and license links for the exact packaged revision, including remote web users.
 Account for GPLv3/AGPLv3 combination terms and MPL files marked incompatible with
 secondary licenses when integrating, rather than blanket-changing headers.
 See [GPLv3 section 13](https://www.gnu.org/licenses/gpl.en.html#section13) and

@@ -1,5 +1,5 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# SPDX-License-Identifier: GPL-3.0-only
+# SPDX-License-Identifier: AGPL-3.0-only
 # The app's short command upgrades Termux before curl downloads this file.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive

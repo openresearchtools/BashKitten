@@ -1,3 +1,7 @@
+Licensing update, 4 October 2026: BashKitten-owned code now uses
+AGPL-3.0-only. Earlier GPL references below describe the historical suite plan.
+Third-party licenses remain unchanged.
+
 # BashKitten Android and Termux suite: implementation plan
 
 **Migration note, 22 September 2026:** the requested next architecture is in
