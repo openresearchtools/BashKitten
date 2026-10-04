@@ -43,6 +43,16 @@ public final class TermuxConnection {
         }
     }
 
+    /** PackageManager keeps this value across updates, but changes it on reinstall. */
+    public String installationId() {
+        try {
+            android.content.pm.PackageInfo info = context.getPackageManager().getPackageInfo(PACKAGE, 0);
+            return info.applicationInfo.uid + ":" + info.firstInstallTime;
+        } catch (PackageManager.NameNotFoundException error) {
+            return "";
+        }
+    }
+
     public boolean permissionGranted() {
         return installed() && context.checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED;
     }

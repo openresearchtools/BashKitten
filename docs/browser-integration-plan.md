@@ -649,6 +649,12 @@ to the standard path. Permission for Termux/Pi to control the browser is a
 separate native browser grant from permission for BashKitten to command Termux.
 Present both during setup when required; do not claim one grant covers both.
 
+Detect a removed or reinstalled Termux using Android's package installation
+identity, and missing Agent packages through the actual Termux bridge probe.
+Discard only the previous Local connection/cookie state and return to normal
+setup. Ordinary package updates keep that connection. A launcher callback alone
+cannot replace the saved certificate, and saved remote connections are unaffected.
+
 Keep Node, Pi, Python, git, gh, archive utilities, the existing X11 repository and
 useful desktop packages such as LibreOffice. Add the native `xorg-server-xvfb`
 package for headless display and `xdotool` where needed. No Termux:X11 APK,

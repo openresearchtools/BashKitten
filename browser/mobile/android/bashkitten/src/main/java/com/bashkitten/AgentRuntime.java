@@ -67,6 +67,7 @@ public final class AgentRuntime {
     void changed() { for (Listener listener : new ArrayList<>(listeners)) listener.changed(); }
     public void refresh() {
         if (!desired || busy || !selected.equals("local")) return;
+        if (!termux.installationId().equals(app.policies.getString("agent.termuxInstallation", ""))) { turnOn(); return; }
         if (!termux.permissionGranted()) { setup("Allow BashKitten to connect to Termux."); return; }
         final int generation = operation;
         command("status", new JSONObject(), value -> {
@@ -102,6 +103,21 @@ public final class AgentRuntime {
         app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
         changed();
         if (!selected.equals("local")) { if (!needsBatteryPermission()) connectRemote(); return; }
+        final int generation = operation;
+        String installation = termux.installationId();
+        String previous = app.policies.getString("agent.termuxInstallation", "");
+        Runnable proceed = () -> {
+            if (generation != operation || !desired || !selected.equals("local")) return;
+            app.policies.edit().putString("agent.termuxInstallation", installation).apply();
+            startLocal(generation);
+        };
+        // Only OS installation state and a real bridge probe can reset Local.
+        // An exported setup-complete intent alone must never replace its TLS pin.
+        if (installation.isEmpty() || !termuxSetupAttempted
+                || (!previous.isEmpty() && !previous.equals(installation))) resetLocalSetup(proceed);
+        else proceed.run();
+    }
+    private void startLocal(int generation) {
         if (!termux.installed()) {
             recordLocalControl(false); termuxSetupAttempted = false;
             app.policies.edit().remove("agent.termuxSetupAttempted").apply();
@@ -109,10 +125,14 @@ public final class AgentRuntime {
         }
         if (!termuxSetupAttempted) { setup("connection", "Set up Agent in Termux with the command below."); return; }
         if (!termux.permissionGranted()) { permissionPromptPending = true; setup("permission", "Allow BashKitten to run your Agent in Termux."); return; }
-        final int generation = operation;
         termux.probe(value -> {
             if (generation != operation || !desired) return;
-            if (!value.optBoolean("packages")) { setup("connection", "Install Agent with the command below in Termux."); return; }
+            if (!value.optBoolean("packages")) {
+                resetLocalSetup(() -> {
+                    if (generation == operation && desired) setup("connection", "Install Agent with the command below in Termux.");
+                });
+                return;
+            }
             if (needsBatteryPermission()) return;
             recordLocalControl(true);
             command("start", new JSONObject(), result -> {
@@ -120,6 +140,21 @@ public final class AgentRuntime {
                 busy = false; acceptStatus(result); poll();
             }, message -> { if (generation == operation) setup(message); });
         }, message -> { if (generation == operation) setup("connection", message); });
+    }
+    private void resetLocalSetup(Runnable done) {
+        try {
+            JSONObject remembered = identities.read(); remembered.remove("local"); identities.write(remembered);
+            restoreLocalAgent(); suspendHostedSignIns();
+            app.remoteControl.disconnect();
+            GeckoSession local = sessions.remove("local");
+            if (session == local) { session = null; url = ""; }
+            if (local != null && local.isOpen()) { clearHosted(local); local.stop(); local.close(); }
+            localSession = null; localSessionPending = false; status = new JSONObject();
+            recordLocalControl(false); termuxSetupAttempted = false;
+            app.policies.edit().remove("agent.termuxSetupAttempted").remove("agent.termuxSetupPending").apply();
+            if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-local");
+            done.run();
+        } catch (Exception failure) { fail("Could not reset the previous local connection. Turn on to retry."); }
     }
     public boolean batteryExempt(String packageName) {
         return app.getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(packageName);
