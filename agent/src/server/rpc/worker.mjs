@@ -33,10 +33,11 @@ function checkpoint() {
   return work;
 }
 const clients = new Set(), dialogs = new Map();
+const extensionStatuses = new Map();
 let operations = Promise.resolve(), eventWork = Promise.resolve();
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
 function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e); }
-function status() { return { runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
+function status() { return { runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
   steeringMessages: queue.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: queue.filter(q => q.kind !== 'steer').map(queueItem) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
 function emit(event, remember = true) {
@@ -82,7 +83,7 @@ async function adoptSession(state, follow) {
   oldOwnership.close();
   if (follow) emit({ type: 'session_changed', id }, false);
   for (const client of clients) client.end();
-  clients.clear(); events = []; dialogs.clear(); queue = [];
+  clients.clear(); events = []; dialogs.clear(); extensionStatuses.clear(); queue = [];
   busy = state.isStreaming; compacting = state.isCompacting;
   pendingModel = null;
   await checkpoint();
@@ -101,12 +102,21 @@ function reconcileQueue(event) {
   queueChanged();
 }
 async function launch() {
+  extensionStatuses.clear();
   const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
   providersVersion = await providerRevision();
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   rpc = new PiRpc(meta);
   rpc.on('event', event => {
+    if (event.type === 'extension_ui_request' && event.method === 'setStatus') {
+      if (event.statusText === undefined) extensionStatuses.delete(event.statusKey);
+      else extensionStatuses.set(event.statusKey, event);
+      // Status is replaceable state, not transcript history. Keep the latest
+      // snapshot for reconnects without accumulating every telemetry heartbeat.
+      emit(event, false);
+      return;
+    }
     // State transitions are synchronous with the RPC input stream. Slow history
     // reads happen separately, so abort/extension replies never block on a turn.
     if (event.type === 'agent_start') busy = true;

@@ -38,6 +38,14 @@ compaction display, attachments, repository browsing, backend ZIP downloads,
 provider login and native Pi session behavior. Pi remains stock: its own tools,
 extensions, skills, models, credentials, sessions and RPC. This is not another
 Pi adapter rewrite.
+Bundle the pinned pillama extension with Pi on Linux and Termux. Under the
+existing token/compaction line, show its native RPC status text for llama.cpp
+loading, prefill progress, cached tokens, prefill/decode speeds and elapsed time.
+Keep the compact top-bar height; long mobile status text can scroll horizontally.
+Retain the latest status on reconnect, without writing telemetry to chat history.
+Product package upgrades adopt the newly bundled managed Pi at an idle/restart
+boundary, preserving credentials and sessions, explicit rollback for the current
+package, newer managed Pi versions and independently selected external runtimes.
 Use the browser's rounded control and panel styling throughout the Agent web UI.
 The chat `/login` command opens Providers, like `/providers`. Native fork/clone
 operations add and select their new chat in the existing sidebar.
@@ -1033,7 +1041,7 @@ replacement tools or new Pi RPC commands. Normal Pi `bash`/`read` calls already
 stream through the current transcript UI. Register the package for the selected
 Pi runtime through its supported mechanism, preserving user skills/extensions.
 It must also work from ordinary terminal Pi without the BashKitten UI.
-Follow the pinned [native Pi skills interface](https://github.com/badlogic/pi-mono/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/coding-agent/docs/skills.md).
+Follow the pinned [native Pi skills interface](https://github.com/earendil-works/pi/blob/cd32f7725fdbddbaecdff5b1e68491563394e0ca/packages/coding-agent/docs/skills.md).
 
 ### One search/read call
 

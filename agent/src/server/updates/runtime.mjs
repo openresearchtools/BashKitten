@@ -60,7 +60,8 @@ export async function activateRuntime(job, next) {
       for (const meta of await allMeta()) await socketRequest(socketPath(meta.id), '/context', {}, 20000).catch(error => { if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; });
     }
     try {
-      await writeJson(runtimeFile, { root: next.root, version: next.version, previous: { root: current.root, version: current.version } });
+      const packaged = await readJson(path.join(bundledRoot, 'runtime-default.json'), null);
+      await writeJson(runtimeFile, { root: next.root, version: next.version, packagedRoot: packaged?.root, previous: { root: current.root, version: current.version } });
       selectedRuntime(); await ensureIntegration(); await reload();
     } catch (error) {
       if (previousSelection) await writeJson(runtimeFile, previousSelection); else await fs.rm(runtimeFile, { force: true });

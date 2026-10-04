@@ -464,6 +464,9 @@
     .topbar { min-width:0; }
     .chat-heading { min-width:0; flex:1; }
     #usage { flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #usageSummary { display:block; overflow:hidden; text-overflow:ellipsis; }
+    #pillamaStatus { display:block; max-width:100%; overflow-x:auto; scrollbar-width:none; line-height:12px; }
+    #pillamaStatus:focus-visible { outline:1px solid var(--line); }
     #sidebarToggle { display:none; }
     #app.files-open { grid-template-columns:260px minmax(0,1fr) 300px; }
     #filePanel { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; border-left:1px solid var(--line-soft); background:var(--sidebar); padding:8px; }
@@ -576,6 +579,10 @@
       .topbar { flex-wrap:nowrap; gap:4px; padding:5px 8px; }
       .chat-heading { flex-basis:auto; }
       #usage { position:absolute; top:43px; left:48px; right:45px; width:auto; font-size:9px; }
+      .topbar:has(#pillamaStatus:not(.hidden)) { align-items:flex-start; padding-top:3px; }
+      .topbar:has(#pillamaStatus:not(.hidden)) .icon-button { width:28px; height:28px; min-height:28px; }
+      .topbar:has(#pillamaStatus:not(.hidden)) .chat-heading { height:28px; }
+      .topbar:has(#pillamaStatus:not(.hidden)) #usage { top:32px; line-height:12px; }
       #folderBtn { max-width:100%; padding:0; }
       #folderLabel { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       #model { width:145px; }
@@ -617,7 +624,7 @@
           <strong id="title" class="hidden">Settings</strong>
           <button id="folderBtn" type="button" title="Set working folder" aria-label="Working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
         </div>
-        <span id="usage"></span><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
+        <div id="usage"><span id="usageSummary"></span><span id="pillamaStatus" class="hidden" tabindex="0" aria-label="llama.cpp performance"></span></div><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
       <nav id="hostedBookmarks" class="hosted-bookmarks hidden" aria-label="Hosted services"><span>Services</span><div id="hostedLinks"></div><button id="hostedRefresh" class="icon-button" type="button" title="Check hosted services" aria-label="Check hosted services">↻</button></nav>
       </div>
@@ -1435,15 +1442,28 @@
 
     function resetUsage() {
       displayedUsage = null;
+      renderPillama();
       renderGoal(null);
       setCompacting(false);
-      $('#usage').textContent = '';
+      $('#usageSummary').textContent = '';
     }
 
     function renderUsage(value = displayedUsage) {
       displayedUsage = value;
       const count=value?.compactions ?? Math.max(0,(current?.current_segment||1)-1);
-      $('#usage').textContent = value ? (value.text+' · '+count+(count===1?' compaction':' compactions')+(isCompacting?' · Compacting…':'')) : '';
+      $('#usageSummary').textContent = value ? (value.text+' · '+count+(count===1?' compaction':' compactions')+(isCompacting?' · Compacting…':'')) : '';
+    }
+
+    function renderPillama(text = '') {
+      const line = $('#pillamaStatus');
+      line.textContent = typeof text === 'string' ? text : '';
+      line.title = line.textContent;
+      line.classList.toggle('hidden', !line.textContent);
+    }
+    function renderExtensionStatuses(statuses = []) {
+      renderPillama(statuses.find(value => value.statusKey === 'pillama')?.statusText);
+      const thinking = statuses.find(value => value.statusKey === 'pillama:thinking');
+      if (thinking) showPiRequest(thinking);
     }
 
     function liveCompaction(){let trace=$('#liveCompaction');if(!trace){trace=document.createElement('details');trace.id='liveCompaction';trace.className='turn-work';trace.open=true;const summary=document.createElement('summary');summary.textContent='Compacting context…';const body=document.createElement('div');body.className='turn-work-body';trace.append(summary,body);$('#chatInner').append(trace);}return trace;}
@@ -2271,6 +2291,7 @@
       if(value.data?.compacting!==undefined || !value.data?.busy)setCompacting(value.data?.compacting);
       applyModelSelection(value.data?.modelSelection);
       if (value.data?.usage) renderUsage(value.data.usage);
+      renderExtensionStatuses(value.data?.extensionStatuses);
     }
 
     async function mutateQueued(id, action, content = null) {
@@ -2593,7 +2614,7 @@
       $('#folderBtn').disabled = Boolean(current);
       setRunButton(queueState.busy || Boolean(current?.running));
       if (current) renderUsage();
-      else $('#usage').textContent = '';
+      else $('#usageSummary').textContent = '';
     }
 
     function showSettingsView() {
@@ -2750,7 +2771,7 @@
       $('#folderBtn').disabled = Boolean(current);
       $('#folderBtn').title = 'Set working folder';
       setRunButton(false);
-      $('#usage').textContent = '';
+      $('#usageSummary').textContent = '';
       if (config) {
         fillSelect($('#model'), models, config.default_model);
         $('#thinking').value = config.default_thinking;
@@ -2844,6 +2865,8 @@
       if (!current || typeof selection?.model !== 'string') return;
       current.model = selection.model;
       current.thinking = selection.thinking;
+      const model = models.find(item => `${item.provider}/${item.id}` === selection.model);
+      if (model && Array.isArray(selection.thinkingLevels)) model.thinking_levels = selection.thinkingLevels;
       $('#model').value = selection.model;
       setThinking($('#model'));
       $('#thinking').value = selection.thinking;
@@ -3303,6 +3326,7 @@
       (data.events || []).forEach(renderEvent);
       if (!(data.entries || []).length && !(data.events || []).length) showWelcome();
       renderQueueState(data); applyModelSelection(data.modelSelection); renderUsage(data.usage);
+      renderExtensionStatuses(data.extensionStatuses);
       setCompacting(data.compacting);
       if (current) {
         current.running = Boolean(data.busy);
@@ -3721,8 +3745,23 @@
 
     let piRequests=[], activePiRequest=null;
     function showPiRequest(request) {
+      if (request.method === 'setStatus' && request.statusKey === 'pillama') {
+        renderPillama(request.statusText); return;
+      }
+      if (request.method === 'setStatus' && request.statusKey === 'pillama:thinking') {
+        try {
+          const value = JSON.parse(request.statusText);
+          if (current?.model === `${value.provider}/${value.model}` && Array.isArray(value.levels)) {
+            applyModelSelection({model: current.model, thinking: value.selected, thinkingLevels: value.levels});
+          }
+        } catch { /* A cleared status has no JSON payload. */ }
+        return;
+      }
+      // Reserved pillama keys carry structured data, not another visible row or
+      // a prompt. These fire-and-forget events never receive a UI response.
+      if (request.method === 'setStatus' && request.statusKey?.startsWith('pillama:')) return;
       if(request.method==='set_editor_text'){ $('#prompt').value=request.text;$('#prompt').dispatchEvent(new Event('input'));return; }
-      if(['notify','setStatus','set_status','set_title','setTitle'].includes(request.method)){ $('#composerHint').textContent=request.message||request.text||request.title||'';return; }
+      if(['notify','setStatus','set_status','set_title','setTitle'].includes(request.method)){ $('#composerHint').textContent=request.message||request.statusText||request.text||request.title||'';return; }
       if(!['select','confirm','input','editor'].includes(request.method))return;
       if(activePiRequest?.id===request.id||piRequests.some(r=>r.id===request.id))return;
       piRequests.push({...request,sessionId:current.id});nextPiRequest();

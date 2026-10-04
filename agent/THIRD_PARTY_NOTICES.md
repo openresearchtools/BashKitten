@@ -25,3 +25,10 @@ libraries. Optional llama.cpp, GPU drivers and model weights are separate.
 The browser's offline notices separately identify **Waterfox** and **BrowserOS**,
 their retained code, licenses and BashKitten adaptations. Original per-file
 notices remain intact; the product is not relabeled as wholly GPL-3.0-only.
+
+## pillama
+
+The bundled Pi extension includes unmodified pillama 0.2.1 production sources
+(MIT), commit `e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f` from
+https://github.com/openresearchtools/pillama. Full license and source notice:
+`pi/vendor/pillama/LICENSE` and `pi/vendor/pillama/NOTICE`.

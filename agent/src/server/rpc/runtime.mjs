@@ -1,32 +1,52 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import semver from 'semver';
 import { dataDir } from '../common.mjs';
 
 export const bundledRoot = fileURLToPath(new URL('../../../', import.meta.url));
 export const runtimeFile = path.join(dataDir, 'runtime.json');
 export const maintenanceFile = path.join(dataDir, 'run/maintenance.json');
 export const appUpdateFile = path.join(dataDir, 'run/app-update.json');
+function saveSelection(selection) {
+  fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+  const temporary = runtimeFile + '.' + randomUUID() + '.tmp';
+  fs.writeFileSync(temporary, JSON.stringify(selection), { mode: 0o600 });
+  fs.renameSync(temporary, runtimeFile);
+}
 export function selectedRuntime() {
   let selection;
   try { selection = JSON.parse(fs.readFileSync(runtimeFile, 'utf8')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
-  if (!selection) {
-    try {
-      const bundled = JSON.parse(fs.readFileSync(path.join(bundledRoot, 'runtime-default.json'), 'utf8'));
+  try {
+    const bundled = JSON.parse(fs.readFileSync(path.join(bundledRoot, 'runtime-default.json'), 'utf8'));
+    if (!selection || selection.packagedRoot !== bundled.root) {
       if (!fs.existsSync(path.join(bundled.root, 'ready'))) throw Error('The packaged Pi runtime is not ready; finish package configuration');
-      fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
-      try { fs.writeFileSync(runtimeFile, JSON.stringify(bundled), { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-      selection = JSON.parse(fs.readFileSync(runtimeFile, 'utf8'));
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
-  }
+      let managed;
+      if (selection) {
+        try { managed = JSON.parse(fs.readFileSync(path.join(selection.root, 'managed.json'), 'utf8')); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+      }
+      // Adopt a new package at the existing idle/restart boundary. Never replace
+      // an independently selected external runtime or downgrade a newer Pi.
+      const upgrade = !selection || (managed?.owner === 'bashkitten' &&
+        semver.gte(bundled.version, selection.version));
+      const previous = selection && { root: selection.root, version: selection.version };
+      selection = upgrade ? { ...bundled, ...(previous && previous.root !== bundled.root ? { previous } : {}) } : selection;
+      selection.packagedRoot = bundled.root;
+      saveSelection(selection);
+    }
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const root = selection?.root || bundledRoot;
   const agent = path.join(root, 'node_modules/@earendil-works/pi-coding-agent');
   const ai = path.join(root, 'node_modules/@earendil-works/pi-ai');
   const pkg = JSON.parse(fs.readFileSync(path.join(agent, 'package.json'), 'utf8'));
   const aiPkg = JSON.parse(fs.readFileSync(path.join(ai, 'package.json'), 'utf8'));
   if (pkg.name !== '@earendil-works/pi-coding-agent' || aiPkg.name !== '@earendil-works/pi-ai' || pkg.version !== aiPkg.version || (selection && selection.version !== pkg.version)) throw Error('The selected Pi runtime is incomplete; use rollback in package controls');
-  return { root, version: pkg.version, cli: path.join(agent, 'dist/cli.js'), agent: path.join(agent, 'dist/index.js'), ai: path.join(ai, 'dist/index.js'), previous: selection?.previous };
+  const cli = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin?.pi;
+  if (!cli || !fs.existsSync(path.join(agent, cli))) throw Error('The selected Pi runtime has no CLI entry point');
+  return { root, version: pkg.version, cli: path.join(agent, cli), agent: path.join(agent, 'dist/index.js'), ai: path.join(ai, 'dist/index.js'), previous: selection?.previous };
 }
 export async function loadPi() {
   const runtime = selectedRuntime();

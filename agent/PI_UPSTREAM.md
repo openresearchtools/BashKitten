@@ -3,13 +3,10 @@
 This branch runs unmodified Pi rather than porting its behavior:
 
 - Repository: https://github.com/earendil-works/pi
-- Release: `v0.87.1`
-- Commit: `f07218c4d4bbc12bef056a7058c3dd49dfe41abe`
-- Packages: `@earendil-works/pi-coding-agent@0.87.1`, `@earendil-works/pi-ai@0.87.1`
+- Release: `v1.0.2`
+- Commit: `cd32f7725fdbddbaecdff5b1e68491563394e0ca`
+- Packages: `@earendil-works/pi-coding-agent@1.0.2`, `@earendil-works/pi-ai@1.0.2`
 - Full transitive dependency resolution and tarball integrity: `package-lock.json`
-- Pi’s published shrinkwrap omits integrity for five internal packages. The root
-  lock records the exact-version npm registry SRI for those entries as well;
-  package contents and versions remain unchanged.
 - License: MIT (see `reference/PI-LICENSE`)
 
 The RPC documentation and public types shipped with that release are the adapter's
@@ -21,3 +18,8 @@ with Pi's supported offline/telemetry flags.
 
 Only this native runtime pin applies to this branch. The old Rust port and its
 differential fixtures are available in Git history, outside the current tree.
+
+The bundled browser integration also installs unmodified pillama 0.2.1 production
+sources at `e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f`; its MIT license and
+provenance are in `pi/vendor/pillama/`. It uses native Pi extension status RPC
+for llama.cpp loading, prefill/cache, decode speeds and elapsed time.

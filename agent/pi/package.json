@@ -8,7 +8,7 @@
   "keywords": ["pi-package"],
   "peerDependencies": { "typebox": "*" },
   "pi": {
-    "extensions": ["./extension.mjs"],
+    "extensions": ["./extension.mjs", "./pillama.ts"],
     "skills": ["./skills/browser-android", "./skills/browser-linux", "./skills/web-search"]
   }
 }

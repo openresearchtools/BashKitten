@@ -109,6 +109,8 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   const integration = await json(path.join(root, 'pi/package.json'));
   records.push(...await sourceNotices(path.join(root, 'pi'), 'Pi integration', [
     [integration.name, integration.license, ['LICENSE', 'NOTICE']],
+    ['pillama', 'MIT', ['vendor/pillama/NOTICE', 'vendor/pillama/LICENSE'],
+      { version: '0.2.1', source: 'https://github.com/openresearchtools/pillama/tree/e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f' }],
   ]));
   if (target === 'linux') {
     if (!browser) throw Error('The complete Linux package requires its built browser license inventory');

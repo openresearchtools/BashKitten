@@ -1,0 +1,9 @@
+pillama 0.2.1 — MIT
+Source: https://github.com/openresearchtools/pillama
+Commit: e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f
+Imported 4 October 2026.
+
+The production TypeScript sources, package metadata, README and LICENSE are
+unmodified. Tests and development tooling are not distributed. BashKitten's
+separate pillama.ts adapter selects the built-in llama.cpp or managed
+bashkitten-llama provider; the web UI displays pillama's native RPC status text.
