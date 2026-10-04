@@ -351,7 +351,10 @@ session restore and agent tab commands cannot remove, duplicate or replace it.
 The user can still quit the application normally.
 
 On phones, place **Agent** to the left of the address bar while browsing. In
-Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/power/menu bar.
+the Android tabs screen, also place **Agent** at the far left of the top row,
+before Normal, Private and Tor. It closes the tray and restores the existing
+protected Agent view, preserving its chat and draft without creating a normal tab.
+In Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/power/menu bar.
 Use one small power control showing On, Starting, Stopping or Off. Its On action
 is **Turn off**; its Off action is **Turn on**. Do not add a separate wake-lock
 toolbar or crowd the mobile bar with service switches.

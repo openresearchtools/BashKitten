@@ -329,6 +329,11 @@ class TabManagementFragment : Fragment() {
                                 TabsTray(
                                     tabsTrayStore = tabsTrayStore,
                                     snackbarHostState = snackbarHostState,
+                                    onOpenAgentClick = {
+                                        val host = requireActivity() as HomeActivity
+                                        onTabsTrayDismissed()
+                                        host.showBashKittenAgent()
+                                    },
                                     onTabPageClick = { page ->
                                         onTabPageClick(
                                             tabsTrayInteractor = tabManagerInteractor,

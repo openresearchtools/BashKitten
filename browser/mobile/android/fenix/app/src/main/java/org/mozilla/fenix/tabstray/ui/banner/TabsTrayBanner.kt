@@ -95,6 +95,7 @@ private val RowHeight = 48.dp
  * @param onTabAutoCloseBannerShown Invoked when the auto-close banner is shown to the user.
  * @param onExitSelectModeClick Invoked when the user exits multi-select mode.
  * @param onAddToTabGroup Invoked when the user adds to a tab group.
+ * @param onOpenAgentClick Opens the existing protected Agent view.
  */
 @Suppress("LongParameterList", "LongMethod")
 @Composable
@@ -125,6 +126,7 @@ fun TabsTrayBanner(
     onExitSelectModeClick: () -> Unit,
     onAddToTabGroup: () -> Unit,
     torTabCount: Int = 0,
+    onOpenAgentClick: () -> Unit = {},
 ) {
     val isInMultiSelectMode by remember(selectionMode) {
         derivedStateOf {
@@ -173,6 +175,7 @@ fun TabsTrayBanner(
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
                 onTabPageIndicatorClicked = onTabPageIndicatorClicked,
+                onOpenAgentClick = onOpenAgentClick,
                 hasTabDataLoaded = hasTabDataLoaded,
             )
         }
@@ -232,6 +235,7 @@ fun TabsTrayBanner(
  * @param hasTabDataLoaded Whether the tab data has loaded.
  * @param onTabPageIndicatorClicked Invoked when the user clicks on a tab page button. Passes along the
  * [Page] that was clicked.
+ * @param onOpenAgentClick Opens the existing protected Agent view.
  */
 @Suppress("LongParameterList")
 @Composable
@@ -245,11 +249,13 @@ private fun TabPageBanner(
     syncedTabCount: Int,
     hasTabDataLoaded: Boolean,
     onTabPageIndicatorClicked: (Page) -> Unit,
+    onOpenAgentClick: () -> Unit,
 ) {
+    // Agent is a navigation action before the three ordinary tab pages.
     val selectedTabIndex = Page.pageToPosition(
         page = selectedPage,
         shouldShowTabGroupsPage = shouldShowTabGroupsPage,
-    )
+    ) + 1
 
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
         PrimaryTabRow(
@@ -284,6 +290,7 @@ private fun TabPageBanner(
                 tabGroupCount = tabGroupCount,
                 syncedTabCount = syncedTabCount,
                 onTabPageIndicatorClicked = onTabPageIndicatorClicked,
+                onOpenAgentClick = onOpenAgentClick,
                 hasTabDataLoaded = hasTabDataLoaded,
             )
         }
@@ -302,6 +309,7 @@ private fun TabPageBannerTabs(
     syncedTabCount: Int,
     hasTabDataLoaded: Boolean,
     onTabPageIndicatorClicked: (Page) -> Unit,
+    onOpenAgentClick: () -> Unit,
 ) {
     val privateTabDescription = stringResource(
         id = R.string.tabs_header_private_tabs_counter_title,
@@ -311,7 +319,14 @@ private fun TabPageBannerTabs(
         id = R.string.tabs_header_normal_tabs_counter_title,
         normalTabCount.toString(),
     )
-
+    BannerTab(
+        selected = false,
+        testTag = "agent_page_button",
+        contentDescription = stringResource(R.string.bashkitten_open_agent),
+        onClick = onOpenAgentClick,
+    ) {
+        Text(stringResource(R.string.bashkitten_agent), style = FirefoxTheme.typography.body2)
+    }
 
     BannerTab(
         selected = selectedPage == Page.NormalTabs,
