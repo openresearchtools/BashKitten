@@ -14,6 +14,7 @@ import android.os.Environment
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
 import mozilla.components.browser.state.state.content.DownloadState
@@ -107,6 +108,23 @@ class DefaultDownloadFileWriter(
         } ?: throw IOException(
             "Failed to create or find a document for the download: ${download.fileName}",
         )
+
+        if (isDefault) {
+            // MediaStore can resolve a filename collision after our initial check.
+            // Keep the name of the actual saved file for open/share/resume actions.
+            val savedName = resolver.query(
+                fileUri,
+                arrayOf(OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null,
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+            if (!savedName.isNullOrEmpty() && savedName != download.fileName) {
+                onUpdateState(download.copy(fileName = savedName))
+            }
+        }
 
         writeToFileUri(resolver, fileUri, append, block)
     }
