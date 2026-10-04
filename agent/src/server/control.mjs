@@ -109,16 +109,16 @@ async function serve() {
   const packageFile = (await readJson(manifestFile, null))?.installationStamp || manifestFile;
   const revision = (await readJson(packageFile, null))?.revision;
   const initialNode = (await fs.stat(process.execPath)).ino;
-  const remote = new RemoteAccess({ llama: async () => {
-    if (platform !== 'linux' || managedLlamaStatus().state !== 'ready') return null;
+  const remote = platform === 'linux' ? new RemoteAccess({ llama: async () => {
+    if (managedLlamaStatus().state !== 'ready') return null;
     const value = await readManagedLlamaConnection();
     return { upstream: new URL(value.url).host, bearerToken: value.apiKey };
-  } });
+  } }) : null;
   const stack = new AccessStack({
     fatal: error => { lastError = error.message; serial = serial.then(() => turnOff(error.message)).catch(error => { lastError = error.message; }); },
-    llamaProxy: () => remote.llamaProxy(),
+    llamaProxy: () => remote?.llamaProxy(),
   });
-  stack.remote = remote; remote.stack = stack;
+  stack.remote = remote; if (remote) remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
     'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
     'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages,
@@ -245,6 +245,15 @@ async function serve() {
       await turnOff(); if (!stopping) scheduleExit();
       return status();
     }
+    if (command === 'local-session') {
+      if (!stack.ready) throw Error('Turn on Agent before connecting');
+      return { url: stack.origin, identity: stack.identity, generation: stack.localGeneration,
+        cookie: { name: stack.localCookieName, value: stack.localToken } };
+    }
+    if (!remote && ['get_remote_access', 'set_remote_access', 'create_remote_connection', 'revoke_remote_connection',
+      'get_hosted_services', 'save_hosted_service', 'delete_hosted_service', 'hosting-client'].includes(command)) {
+      throw Error('Remote publishing is available on Linux only');
+    }
     if (command === 'get_remote_access') return remote.status();
     if (command === 'set_remote_access') return remote.setEnabled(value.enabled);
     if (command === 'create_remote_connection') return remote.create(value);
@@ -257,9 +266,18 @@ async function serve() {
     if (command === 'notifications') return { notifications: await pendingNotifications() };
     if (command === 'notification-settings') return notificationSettings(value.settings);
     if (command === 'notifications-ack') { await acknowledgeNotifications(value.keys); return { ok: true }; }
-    if (command === 'account-totp') return completeAccount(value);
+    if (command === 'account-cancel') {
+      if (remote && !(await remote.state()).enabled) await stack.stopAuthentication();
+      return { ok: true };
+    }
+    if (command === 'account-totp') {
+      if (!remote || !stack.ready || !stack.authStarted) throw Error('Start remote account setup on Linux first');
+      return completeAccount(value);
+    }
     if (['account-create', 'account-enroll', 'account-reset-totp'].includes(command)) {
       if (!stack.ready) throw Error('Turn on Agent before account setup');
+      if (!remote) throw Error('Remote account setup is available on Linux only');
+      await stack.startAuthentication();
       return enrollAccount(stack.origin, value, { create: command === 'account-create', reset: command === 'account-reset-totp' });
     }
     if (command === 'package-cancel') { await jobs.cancel(); return status(); }

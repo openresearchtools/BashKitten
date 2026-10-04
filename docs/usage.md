@@ -43,11 +43,12 @@ process restrictions** and keep Developer options enabled. If hidden, tap
 battery exemptions and wake locks; the app cannot silently change it.
 See the [Termux maintainer's guide](https://github.com/agnostic-apollo/Android-Docs/blob/master/en/docs/apps/processes/phantom-cached-and-empty-processes.md#commands-for-android-14-and-higher).
 
-Complete the local account and two-factor enrollment. **Remember me** retains
-the session across browser and service restarts until expiry or logout. Local
-uses the discovered `https://127.0.0.1:<port>` endpoint and its enrolled
-certificate identity. The port can change; do not use a fixed HTTP URL.
-Other browsers use their normal certificate trust controls.
+Local connects automatically through the browser's private native bridge,
+without creating an account or entering a password or two-factor code. It uses
+the discovered `https://127.0.0.1:<port>` endpoint and its enrolled certificate
+identity. The port can change; do not use a fixed HTTP URL. The local credential
+stays in the protected Agent cookie context and renews automatically after a
+service restart. Pi provider credentials and chat history remain in their stores.
 
 ## Providers and chats
 
@@ -85,9 +86,19 @@ matches the authorized client platform.
 ## Remotes and browser control
 
 Use the browser's **Local / remote** selector to add, import and select a remote.
-The server's **Settings → Remote access** enables publishing and shows the address,
-connection QR and file export. Publishing keeps Local on loopback. Exports omit
-passwords and second-factor seeds; remote access still requires both.
+On Linux, **Settings → Remote access → Publish over Tor** enables publishing.
+First use opens account creation and authenticator enrollment; verify a code
+before publishing starts. Existing accounts are reused. The panel then shows
+the address, connection QR and file export. Publishing defaults off, remembers
+your choice and keeps Local on loopback. **Stop publishing** disables remote
+access without interrupting Local. Android runs its local Termux Agent or
+connects to a Linux remote; it does not publish its own backend.
+
+Remote connections still require the exported Tor authorization, enrolled TLS
+identity and account with a second factor. Exports omit passwords and factor
+seeds. **Remember me** retains remote sessions across browser/service restarts
+until expiry or logout. Authelia and its durable session store run on the Linux
+publisher, separate from automatic local authentication.
 
 The same server panel can publish named loopback websites as authenticated onion
 services. Available sites appear above chat. Linux also supports a separately

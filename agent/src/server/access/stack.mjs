@@ -18,7 +18,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const backendScript = fileURLToPath(new URL('../http/server.mjs', import.meta.url));
 const quote = value => JSON.stringify(value);
 const portal = '/login /login/ /login/2fa/one-time-password /login/2fa/password /login/authenticated /login/logout /login/favicon.ico /login/manifest.json /login/robots.txt /login/static/* /login/locales /login/locales/* /login/api/state /login/api/configuration /login/api/configuration/password-policy /login/api/checks/safe-redirection /login/api/firstfactor /login/api/logout /login/api/user/info /login/api/secondfactor/totp';
-const untrusted = ['Remote-User', 'Remote-Groups', 'Remote-Email', 'Remote-Name', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Forwarded-URI', 'X-Forwarded-Method', 'X-Bashkitten-Proxy'];
+const untrusted = ['Remote-User', 'Remote-Groups', 'Remote-Email', 'Remote-Name', 'X-Forwarded-For', 'X-Forwarded-Host', 'X-Forwarded-Proto', 'X-Forwarded-URI', 'X-Forwarded-Method', 'X-Bashkitten-Proxy', 'X-Bashkitten-Access'];
 function proxyHeaders() { return 'header_up X-Forwarded-For 127.0.0.1\nheader_up X-Forwarded-Host {http.request.hostport}\nheader_up X-Forwarded-Proto https'; }
 
 export class AccessStack {
@@ -40,8 +40,12 @@ export class AccessStack {
       const port = await availablePort(attempt ? 0 : selected);
       this.origin = 'https://127.0.0.1:' + port;
       this.proxyToken = randomToken(); this.instanceToken = randomToken();
+      this.localToken = randomToken(); this.localGeneration = randomUUID();
+      this.localCookieName = '__Host-bashkitten_local_' + identity.instanceId.replaceAll('-', '');
+      // Tor must never forward to the native local listener, even with a forged Host.
+      do { this.remotePort = await availablePort(0); } while (this.remotePort === port);
       try {
-        this.remoteOrigins = this.remote ? await this.remote.prepare(this, port, { initialize: true }) : [];
+        this.remoteOrigins = this.remote ? await this.remote.prepare(this, this.remotePort, { initialize: true }) : [];
         // First startup can briefly use offline Tor to create the service keys.
         // It is owned by this group and must not remain running with publishing off.
         if (!this.remoteOrigins.length) {
@@ -50,29 +54,12 @@ export class AccessStack {
         }
         const remoteHost = await this.remote?.hostname('agent');
         this.remoteAuthOrigin = remoteHost ? 'https://' + remoteHost : null;
-        // Authelia encrypts its session values with the persistent session secret.
-        // Keep them durable across whole-group shutdown without a public listener.
-        await privateDir(paths.sessionStore);
-        await fs.writeFile(paths.sessionConfig, `port 0\nunixsocket ${quote(paths.sessionSocket)}\nunixsocketperm 700\nprotected-mode yes\ndaemonize no\nset-proc-title no\nloglevel warning\ndir ${quote(paths.sessionStore)}\nsave ""\nappendonly yes\nappendfsync always\n`, { mode: 0o600 });
-        await this.launch('valkey', binary('valkey-server'), [paths.sessionConfig], process.env);
-        await this.waitUntil(() => new Promise(resolve => {
-          const client = net.createConnection(paths.sessionSocket);
-          let response = '';
-          client.setTimeout(2000, () => client.destroy());
-          client.on('connect', () => client.write('*1\r\n$4\r\nPING\r\n'));
-          client.on('data', chunk => { response += chunk; if (response.includes('\r\n')) client.destroy(); });
-          client.on('error', () => {});
-          client.on('close', () => resolve(response === '+PONG\r\n'));
-        }), 'Valkey');
-        await renderAuthelia([this.origin, ...(this.remoteAuthOrigin ? [this.remoteAuthOrigin] : [])], identity.instanceId);
-        this.authEnv = await authEnvironment();
-        await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
-        await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
-        await this.waitUntil(async () => { await authCall(this.origin, '/api/health', undefined, '', 2000); return true; }, 'Authelia');
+        if (this.remoteOrigins.length) await this.startAuthentication();
         await this.launch('backend', process.execPath, [backendScript], { ...process.env,
           BASHKITTEN_ACCESS_ORIGIN: this.origin, BASHKITTEN_PROXY_TOKEN: this.proxyToken,
           BASHKITTEN_INSTANCE_TOKEN: this.instanceToken, BASHKITTEN_BACKEND_SOCKET: paths.backend,
-          BASHKITTEN_AUTH_SOCKET: paths.auth });
+          BASHKITTEN_AUTH_SOCKET: paths.auth, BASHKITTEN_LOCAL_COOKIE: this.localCookieName,
+          BASHKITTEN_LOCAL_TOKEN: this.localToken });
         await this.waitUntil(async () => {
           const response = await unixRequest(paths.backend, '/api/instance', { headers: { host: new URL(this.origin).host, authorization: 'Bearer ' + this.instanceToken } });
           return response.status === 200;
@@ -107,6 +94,52 @@ export class AccessStack {
     }
     throw failure;
   }
+  async startAuthentication() {
+    if (!this.remote) throw Error('Remote authentication is available on Linux only');
+    if (this.authStarted) return;
+    if (this.authStarting) return this.authStarting;
+    this.authStarting = (async () => {
+      // Authelia encrypts its session values with the persistent session secret.
+      // Keep them durable across whole-group shutdown without a public listener.
+      await privateDir(paths.sessionStore);
+      await fs.writeFile(paths.sessionConfig, `port 0\nunixsocket ${quote(paths.sessionSocket)}\nunixsocketperm 700\nprotected-mode yes\ndaemonize no\nset-proc-title no\nloglevel warning\ndir ${quote(paths.sessionStore)}\nsave ""\nappendonly yes\nappendfsync always\n`, { mode: 0o600 });
+      await this.launch('valkey', binary('valkey-server'), [paths.sessionConfig], process.env);
+      await this.waitUntil(() => new Promise(resolve => {
+        const client = net.createConnection(paths.sessionSocket);
+        let response = '';
+        client.setTimeout(2000, () => client.destroy());
+        client.on('connect', () => client.write('*1\r\n$4\r\nPING\r\n'));
+        client.on('data', chunk => { response += chunk; if (response.includes('\r\n')) client.destroy(); });
+        client.on('error', () => {});
+        client.on('close', () => resolve(response === '+PONG\r\n'));
+      }), 'Valkey');
+      await renderAuthelia([this.origin, ...(this.remoteAuthOrigin ? [this.remoteAuthOrigin] : [])], this.identity.instanceId);
+      this.authEnv = await authEnvironment();
+      await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
+      await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
+      await this.waitUntil(async () => { await authCall(this.origin, '/api/health', undefined, '', 2000); return true; }, 'Authelia');
+      this.authStarted = true;
+      if (this.info) { this.info.children = this.identities(); await writeJson(serverFile, this.info); }
+    })();
+    try { await this.authStarting; }
+    catch (error) { await this.stopAuthentication(); throw error; }
+    finally { this.authStarting = null; }
+  }
+  async stopNamed(name) {
+    const record = this.children.find(child => child.name === name);
+    if (!record) return;
+    record.stopping = true;
+    await terminate(record);
+    this.children = this.children.filter(child => child !== record);
+    await writeJson(paths.group, { manager: process.pid, managerStarted: await processStart(process.pid), children: this.identities() });
+  }
+  async stopAuthentication() {
+    this.authStarted = false;
+    await this.stopNamed('authelia');
+    await this.stopNamed('valkey');
+    for (const file of [paths.auth, paths.sessionSocket]) await fs.rm(file, { force: true });
+    if (this.info) { this.info.children = this.identities(); await writeJson(serverFile, this.info); }
+  }
   identities() { return this.children.map(({ name, pid, started, file }) => ({ name, pid, started, file })); }
   async launch(name, file, args, env) {
     const logFile = path.join(dataDir, name + '.log');
@@ -119,13 +152,13 @@ export class AccessStack {
     this.children.push(record); await writeJson(paths.group, { manager: process.pid, managerStarted: await processStart(process.pid), children: this.identities() });
     child.once('exit', (code, signal) => {
       record.exit = `${signal || code}`;
-      if (this.ready && !this.stopping) { this.ready = false; this.fatal?.(Error(`${name} stopped (${signal || code})`)); }
+      if (this.ready && !this.stopping && !record.stopping) { this.ready = false; this.fatal?.(Error(`${name} stopped (${signal || code})`)); }
     });
   }
   async waitUntil(probe, name) {
     const until = Date.now() + 25000;
     while (Date.now() < until) {
-      const dead = this.children.find(child => child.exit !== undefined);
+      const dead = this.children.find(child => child.exit !== undefined && !child.stopping);
       if (dead) throw Error(`${dead.name} stopped during startup; see ${dead.name}.log`);
       try { if (await probe()) return; } catch (error) { if (error.fatal) throw error; }
       await sleep(100);
@@ -133,9 +166,8 @@ export class AccessStack {
     throw Error(`${name} did not become ready; see its service log`);
   }
   async writeCaddy() {
-    const addresses = [this.origin, ...(this.remoteOrigins || []).map(origin => origin + ':' + new URL(this.origin).port)];
     const strip = untrusted.map(name => `request_header -${name}`).join('\n');
-    const backend = `reverse_proxy ${quote('unix/' + paths.backend)} {\n${proxyHeaders()}\nheader_up X-Bashkitten-Proxy ${this.proxyToken}\nflush_interval -1\n}`;
+    const backend = access => `reverse_proxy ${quote('unix/' + paths.backend)} {\n${proxyHeaders()}\nheader_up X-Bashkitten-Proxy ${this.proxyToken}\nheader_up X-Bashkitten-Access ${access}\nflush_interval -1\n}`;
     let config = `{
 admin ${quote('unix/' + paths.admin)}
 persist_config off
@@ -150,7 +182,19 @@ name "BashKitten Local CA"
 }
 }
 }
-${addresses.join(', ')} {
+${this.origin} {
+bind 127.0.0.1
+tls internal
+route {
+${strip}
+@private path /api/instance /login /login/*
+respond @private "Not found" 404
+${backend('local')}
+}
+}
+`;
+    const addresses = (this.remoteOrigins || []).map(origin => origin + ':' + this.remotePort);
+    if (addresses.length) config += `${addresses.join(', ')} {
 bind 127.0.0.1
 tls internal
 route {
@@ -165,7 +209,7 @@ ${proxyHeaders()}
 }
 @assets path /app.css /logo.png /favicon.ico /.well-known/bashkitten-ca
 handle @assets {
-${backend}
+${backend('remote')}
 }
 handle {
 forward_auth ${quote('unix/' + paths.auth)} {
@@ -173,15 +217,15 @@ uri /login/api/authz/forward-auth
 ${proxyHeaders()}
 copy_headers Remote-User Remote-Groups Remote-Email Remote-Name
 }
-${backend}
+${backend('remote')}
 }
 }
 }
 `;
-    config += await this.hosting.routes({ port: new URL(this.origin).port, authSocket: paths.auth, strip, proxyHeaders: proxyHeaders() });
+    config += await this.hosting.routes({ port: this.remotePort, authSocket: paths.auth, strip, proxyHeaders: proxyHeaders() });
     const proxy = await this.llamaProxy();
     if (proxy?.host && /^[a-z2-7]{56}\.onion$/.test(proxy.host) && /^127\.0\.0\.1:\d+$/.test(proxy.upstream)) {
-      config += `\nhttps://${proxy.host}:${new URL(this.origin).port} {\nbind 127.0.0.1\ntls internal\nroute {\n${strip}\nrequest_header -Cookie\n@identity {\npath /.well-known/bashkitten-ca\nmethod GET\n}\nhandle @identity {\n${backend}\n}\nhandle {\nreverse_proxy ${proxy.upstream} {\nflush_interval -1\n}\n}\n}\n}\n`;
+      config += `\nhttps://${proxy.host}:${this.remotePort} {\nbind 127.0.0.1\ntls internal\nroute {\n${strip}\nrequest_header -Cookie\n@identity {\npath /.well-known/bashkitten-ca\nmethod GET\n}\nhandle @identity {\n${backend('remote')}\n}\nhandle {\nreverse_proxy ${proxy.upstream} {\nflush_interval -1\n}\n}\n}\n}\n`;
     }
     await fs.writeFile(paths.caddy, config, { mode: 0o600 });
   }
@@ -194,17 +238,15 @@ ${backend}
     if (!this.ready || this.stopping) throw Error('Turn on Agent before changing remote access');
     this.reconfiguring = true;
     this.ready = false;
-    const stopNamed = async name => {
-      const record = this.children.find(child => child.name === name);
-      if (record) { await terminate(record); this.children = this.children.filter(child => child !== record); }
-    };
     try {
-      if (restartTor) await stopNamed('tor');
-      this.remoteOrigins = await this.remote.prepare(this, Number(new URL(this.origin).port), { reload: !restartTor });
+      if (restartTor) await this.stopNamed('tor');
+      if ((await this.remote.state()).enabled) await this.startAuthentication();
+      this.remoteOrigins = await this.remote.prepare(this, this.remotePort, { reload: !restartTor });
       if (this.remoteOrigins.some(origin => origin !== this.remoteAuthOrigin)) throw Error('The remote identity changed; restart Agent to load its authentication scope');
-      // Only publishing and proxy routes change; keep Local authentication live.
+      // The local listener and its native session stay live while publishing changes.
       await this.writeCaddy();
       await command(binary('caddy'), ['reload', '--config', paths.caddy, '--adapter', 'caddyfile', '--address', 'unix/' + paths.admin]);
+      if (!this.remoteOrigins.length) await this.stopAuthentication();
       this.info.children = this.identities(); await writeJson(serverFile, this.info);
       this.ready = true;
     } catch (error) { this.fatal?.(error); throw error; }
@@ -219,11 +261,11 @@ ${backend}
     if (!this.ready || !this.info) return false;
     for (const child of this.children) if (!await sameProcess(child)) return false;
     try {
-      await authCall(this.origin, '/api/health', undefined, '', 2000);
+      if (this.authStarted) await authCall(this.origin, '/api/health', undefined, '', 2000);
       return await verifiedHttps(this.origin, this.identity.caPem);
     } catch { return false; }
   }
-  async status() { return { identity: this.identity || await readJson(paths.identity, null), auth: await accountStatus() }; }
+  async status() { return { identity: this.identity || await readJson(paths.identity, null), auth: { mode: 'native-local', generation: this.localGeneration, ...await accountStatus() } }; }
   async stopIngress() {
     this.stopping = true; this.ready = false;
     const caddy = this.children.find(child => child.name === 'caddy');
@@ -232,7 +274,7 @@ ${backend}
   async stop() { this.stopping = true; this.ready = false; await this.stopChildren(); this.info = null; }
   async stopChildren() {
     for (const child of [...this.children].reverse()) await terminate(child);
-    this.children = [];
+    this.children = []; this.authStarted = false; this.localToken = null; this.localGeneration = null;
     await fs.rm(paths.group, { force: true });
     for (const file of [paths.auth, paths.sessionSocket, paths.admin, paths.backend, paths.backendInfo]) await fs.rm(file, { force: true });
   }

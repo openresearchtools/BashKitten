@@ -3,13 +3,23 @@ import { unixRequest } from '../access/io.mjs';
 
 const proxyToken = process.env.BASHKITTEN_PROXY_TOKEN;
 const authSocket = process.env.BASHKITTEN_AUTH_SOCKET;
+const localOrigin = process.env.BASHKITTEN_ACCESS_ORIGIN;
+const localCookieName = process.env.BASHKITTEN_LOCAL_COOKIE;
+const localToken = process.env.BASHKITTEN_LOCAL_TOKEN;
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 export function origin(req) {
   if (!proxyToken || !equal(req.headers['x-bashkitten-proxy'], proxyToken) || req.headers['x-forwarded-proto'] !== 'https') throw Object.assign(Error('Trusted HTTPS proxy required'), { status: 403 });
   return 'https://' + req.headers.host;
 }
 export async function login(req) {
-  origin(req);
+  const requestOrigin = origin(req);
+  if (req.headers['x-bashkitten-access'] === 'local') {
+    if (requestOrigin !== localOrigin || !localCookieName || !localToken) return null;
+    const values = String(req.headers.cookie || '').split(';').map(part => part.trim()).filter(part => part.startsWith(localCookieName + '='));
+    if (values.length !== 1 || !equal(values[0].slice(localCookieName.length + 1), localToken)) return null;
+    return { local: true, username: 'local', cookie: localToken, key: createHash('sha256').update('local\0' + localToken).digest('hex'), origin: requestOrigin };
+  }
+  if (req.headers['x-bashkitten-access'] !== 'remote') return null;
   const username = req.headers['remote-user'], cookie = req.headers.cookie;
   return typeof username === 'string' && username && cookie ? { username, cookie, key: createHash('sha256').update(cookie).digest('hex'), origin: origin(req) } : null;
 }
@@ -20,9 +30,10 @@ const csrf = record => createHmac('sha256', proxyToken).update(record.username +
 export function checkCsrf(req, record) {
   if (!equal(req.headers['x-bashkitten-csrf'], csrf(record))) throw Object.assign(Error('Invalid CSRF token'), { status: 403 });
 }
-export async function bootstrap(record) { return { hasUser: true, authenticated: Boolean(record), ...(record ? { csrf: csrf(record) } : { loginUrl: '/login' }) }; }
+export async function bootstrap(record) { return { hasUser: true, authenticated: Boolean(record), local: Boolean(record?.local), ...(record ? { csrf: csrf(record) } : { loginUrl: '/login' }) }; }
 export async function valid(record) {
   if (!record) return false;
+  if (record.local) return record.origin === localOrigin && equal(record.cookie, localToken);
   try {
     const result = await unixRequest(authSocket, '/login/api/authz/forward-auth', { headers: {
       host: new URL(record.origin).host, cookie: record.cookie,
@@ -46,6 +57,7 @@ export function watch(record, close) {
   return () => { clearInterval(timer); streams.get(key)?.delete(close); if (!streams.get(key)?.size) streams.delete(key); };
 }
 export async function logout(record, res) {
+  if (record.local) throw Error('Use Turn off to disconnect the local Agent');
   const result = await unixRequest(authSocket, '/login/api/logout', { method: 'POST', headers: {
     host: new URL(record.origin).host, cookie: record.cookie, 'content-type': 'application/json',
     'x-forwarded-host': new URL(record.origin).host, 'x-forwarded-proto': 'https', 'x-forwarded-for': '127.0.0.1',

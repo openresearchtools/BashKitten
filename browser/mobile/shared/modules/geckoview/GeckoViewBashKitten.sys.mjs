@@ -188,7 +188,22 @@ export class GeckoViewBashKitten extends GeckoViewModule {
         this.agentIdentity?.instanceId !== identity.instanceId) {
       this.clearHostedTargets();
     }
-    BashKittenAndroid.configure(this.context, this.browserId, { ...params, identities: [] });
+    // The native credential stays in the protected cookie jar; it is never
+    // passed to page script or to the ordinary-tab routing configuration.
+    const { localSession, ...routing } = params;
+    if (localSession) {
+      const expectedName = "__Host-bashkitten_local_" + String(identity.instanceId).replaceAll("-", "");
+      if (this.context !== contextPrefix("bashkitten-agent-ui-local") || onion ||
+          localSession.url !== endpoint.origin || localSession.identity?.instanceId !== identity.instanceId ||
+          localSession.identity?.caSha256 !== identity.caSha256 ||
+          localSession.cookie?.name !== expectedName || !/^[a-f0-9]{64}$/.test(localSession.cookie?.value || "")) {
+        throw new Error("Invalid native local Agent session");
+      }
+      Services.cookies.add("127.0.0.1", "/", expectedName, localSession.cookie.value, true, true, true,
+        Date.now() + 400 * 86400000, { geckoViewSessionContextId: this.context },
+        Ci.nsICookie.SAMESITE_STRICT, Ci.nsICookie.SCHEME_HTTPS);
+    }
+    BashKittenAndroid.configure(this.context, this.browserId, { ...routing, identities: [] });
     if (this.agentHost && this.agentHost !== endpoint.hostname) certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
     certificates.setAgentCA(endpoint.hostname, { geckoViewSessionContextId: this.context }, cert);
     this.agentHost = endpoint.hostname;

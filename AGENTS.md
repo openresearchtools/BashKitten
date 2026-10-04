@@ -112,9 +112,16 @@ tabs. Keep actual protocol/format validation and user cancellation.
 
 ## Local security and verification
 
-Bind to 127.0.0.1. Keep the local web account, Argon2id password hashing,
-HttpOnly/SameSite cookies, Origin/CSRF checks, private storage permissions and
-filesystem path confinement. Do not expose provider credentials in browser
+Bind to 127.0.0.1. Local Android/Linux Agent sessions authenticate automatically
+with a runtime credential delivered only through the native private controller
+bridge and installed as a Secure/HttpOnly/SameSite cookie in the protected Agent
+context. No local account or Authelia enrollment is required. Linux-only Tor
+publishing uses a separate listener with mandatory Authelia two-factor login;
+never bypass remote authentication based on a loopback source address or Host.
+Start Authelia/Valkey only for remote account setup or enabled publishing, retaining
+their durable account/session storage. Android runs Local or connects to remotes;
+it never publishes a Termux backend. Keep Argon2id, Origin/CSRF checks, private
+storage permissions and filesystem path confinement. Do not expose provider credentials in browser
 status, logs or URLs. Disable startup catalog/update traffic and telemetry.
 
 Use Node >=22.19, plus ripgrep and fd. Keep BashKitten-owned test suites,

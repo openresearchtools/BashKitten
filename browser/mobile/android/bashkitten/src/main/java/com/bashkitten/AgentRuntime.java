@@ -39,6 +39,8 @@ public final class AgentRuntime {
     private final Set<String> posted = new LinkedHashSet<>();
     private Runnable remoteAuthorizationCleanup;
     private JSONObject localHostedRecord;
+    private JSONObject localSession;
+    private boolean localSessionPending;
     // Hosted onion authentication has its own cookie context. Keep the local
     // document intact and restore it after authentication or cancellation.
     private GeckoSession hostedReturnSession;
@@ -228,7 +230,40 @@ public final class AgentRuntime {
             JSONObject identity = web.getJSONObject("identity");
             rememberIdentity("local", identity);
             JSONObject auth = web.optJSONObject("auth");
-            state = auth != null && (!auth.optBoolean("initialized") || auth.optBoolean("enrollmentRequired")) ? "enroll" : "on";
+            if (auth != null && auth.optString("mode").equals("native-local")) {
+                String sessionGeneration = auth.getString("generation");
+                if (localSession == null || !localSession.optString("generation").equals(sessionGeneration)) {
+                    if (localSessionPending) return;
+                    localSessionPending = true;
+                    final int requestedOperation = operation;
+                    command("local-session", new JSONObject(), result -> {
+                        localSessionPending = false;
+                        if (requestedOperation != operation || !desired || !selected.equals("local")) return;
+                        try {
+                            JSONObject actualIdentity = result.getJSONObject("identity");
+                            JSONObject cookie = result.getJSONObject("cookie");
+                            String expectedName = "__Host-bashkitten_local_" + identity.getString("instanceId").replace("-", "");
+                            if (!result.getString("url").equals(endpoint) || !result.getString("generation").equals(sessionGeneration)
+                                || !actualIdentity.getString("caSha256").equals(identity.getString("caSha256"))
+                                || !actualIdentity.getString("instanceId").equals(identity.getString("instanceId"))
+                                || !cookie.getString("name").equals(expectedName) || !cookie.getString("value").matches("[a-f0-9]{64}")) {
+                                throw new SecurityException("The local Agent changed while connecting. Turn on to retry.");
+                            }
+                            localSession = result;
+                            reloadOnConnect = true;
+                            acceptStatus(value);
+                        } catch (Exception failure) { fail("Could not verify the local Agent session. Turn on to retry."); }
+                    }, message -> {
+                        localSessionPending = false;
+                        if (requestedOperation == operation && desired) fail(message);
+                    });
+                    return;
+                }
+                state = "on";
+            } else {
+                localSession = null;
+                state = auth != null && (!auth.optBoolean("initialized") || auth.optBoolean("enrollmentRequired")) ? "enroll" : "on";
+            }
             if (isHostedSignIn() && state.equals("on")) {
                 String hostedEndpoint = localHostedRecord.getString("url");
                 if (!connectingHosted && (!hostedEndpoint.equals(url) || remoteAuthorizationCleanup == null)) {
@@ -266,6 +301,7 @@ public final class AgentRuntime {
         final GeckoSession currentSession = next;
         BashKittenController.setHostDelegate(next, (command, args, reply) -> hostCall(currentSession, command, args, reply));
         JSONObject params = new JSONObject().put("url", endpoint).put("identity", identity).put("tor", tor).put("port", port).put("proxySecret", app.tor.proxySecret()).put("agentOrigin", URI.create(endpoint).getScheme() + "://" + URI.create(endpoint).getRawAuthority());
+        if (sessionKey.equals("local") && !tor && localSession != null) params.put("localSession", localSession);
         final GeckoSession target = next;
         final int generation = operation;
         final String previousUrl = url;
@@ -287,7 +323,7 @@ public final class AgentRuntime {
                 changed();
             } catch (Exception exception) { connectionFailed("Could not verify Agent connection: " + exception.getMessage()); }
         }, exception -> { if (generation == operation) connectionFailed("Could not configure the protected Agent connection."); });
-        if (!previousUrl.isEmpty() && !previousUrl.equals(endpoint)) captureDraft(target, connect);
+        if (!previousUrl.isEmpty() && (needsLoad || !previousUrl.equals(endpoint))) captureDraft(target, connect);
         else connect.run();
     }
     private void captureDraft(GeckoSession target, Runnable done) {
@@ -301,6 +337,9 @@ public final class AgentRuntime {
         captureDraft(target, () -> { if (target.isOpen() && (generation == operation || target != session)) { target.stop(); target.loadUri("about:blank"); } });
     }
     private void signIn() {
+        if (selected.equals("local") && !isHostedSignIn() && localSession != null) {
+            localSession = null; reloadOnConnect = true; refresh(); return;
+        }
         app.remoteControl.disconnect();
         GeckoSession target = session;
         clearHosted(target);

@@ -56,7 +56,7 @@ async function readPipe(pipe) {
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "account-create", "account-enroll", "account-totp", "hosting-client", "project-root", "native-file"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "account-create", "account-enroll", "account-totp", "account-cancel", "hosting-client", "local-session", "set_remote_access", "project-root", "native-file"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -429,7 +429,7 @@ class AgentView {
     this.message("Agent off", "Your browser remains open. Turn on to reconnect to your saved chats.");
   }
 
-  async update(status) {
+  async update(status, { reload = false } = {}) {
     if (this.off || this.selection) return;
     const web = status.web || {};
     if (web.error || ["failed", "stopped", "off"].includes(web.status)) {
@@ -453,7 +453,24 @@ class AgentView {
     }
     const connection = this.localConnection;
     this.currentIdentity = web.identity.caSha256;
-    if (web.auth?.enrollmentRequired || web.auth?.initialized === false) {
+    if (web.auth?.mode === "native-local") {
+      if (!web.auth.generation) throw new Error("The local Agent session is unavailable.");
+      if (this.localGeneration !== web.auth.generation) {
+        const local = await control("local-session");
+        if (this.off || this.selection) return;
+        const cookieName = "__Host-bashkitten_local_" + web.identity.instanceId.replaceAll("-", "");
+        if (local.url !== web.url || local.generation !== web.auth.generation ||
+            local.identity?.caSha256 !== web.identity.caSha256 || local.identity?.instanceId !== web.identity.instanceId ||
+            local.cookie?.name !== cookieName || !/^[a-f0-9]{64}$/.test(local.cookie?.value || "")) {
+          throw new Error("The local Agent changed while connecting. Turn on to retry.");
+        }
+        Services.cookies.add("127.0.0.1", "/", cookieName, local.cookie.value, true, true, true,
+          Date.now() + 400 * 86400000, { userContextId: connection.userContextId },
+          Ci.nsICookie.SAMESITE_STRICT, Ci.nsICookie.SCHEME_HTTPS);
+        this.localGeneration = local.generation;
+        reload = true;
+      }
+    } else if (web.auth?.enrollmentRequired || web.auth?.initialized === false) {
       this.message("Set up Agent", "Create your local account and verify a two-factor code to continue.", () => this.enroll());
       this.power.textContent = "Turn off";
       if (!this.enrollmentPrompted) {
@@ -463,10 +480,10 @@ class AgentView {
       return;
     }
     if (ownedViews.get(this.activeBrowser)?.authFor) return;
-    await this.connect(connection, true);
+    await this.connect(connection, true, { reload });
   }
 
-  async connect(connection, local, { authFor = null } = {}) {
+  async connect(connection, local, { authFor = null, reload = false } = {}) {
     if (!connection?.url || !Number.isInteger(connection.userContextId)) throw new Error("The Agent connection is missing its protected browser identity.");
     const origin = new URL(connection.url).origin;
     contexts.set(connection.userContextId, { origin, local });
@@ -514,7 +531,7 @@ class AgentView {
     this.viewBox.hidden = false;
     this.power.textContent = "Turn off";
     this.power.title = local ? "Stop Agent services and Pi processes" : "Disconnect this client";
-    if (browser.getAttribute("data-agent-url") !== connection.url) {
+    if (reload || browser.getAttribute("data-agent-url") !== connection.url) {
       if (browser.hasAttribute("data-agent-url") && !authFor) {
         try {
           const draft = await browser.browsingContext.currentWindowGlobal.getActor("BashKittenAgent").sendQuery("CaptureDraft");
@@ -541,9 +558,8 @@ class AgentView {
   }
   async reconnect() {
     if (this.off || this.remote) return;
-    const previous = this.activeBrowser;
-    previous?.removeAttribute("data-agent-url");
-    await this.update(await control("status"));
+    this.localGeneration = null;
+    await this.update(await control("status"), { reload: true });
   }
   message(title, text, action) {
     this.state.replaceChildren(html(this.doc, "h2", {}, title), html(this.doc, "p", {}, text));
@@ -619,8 +635,9 @@ class AgentView {
   async enroll() {
     if (this.remote) return;
     if (this.enrollmentDialog?.open) return this.enrollmentDialog.focus();
-    const { dialog, content } = this.dialog("Set up your local Agent");
+    const { dialog, content } = this.dialog("Set up remote access");
     this.enrollmentDialog = dialog;
+    content.append(html(this.doc, "p", {}, "Create the account used when connecting remotely. Publishing starts only after you verify your two-factor code."));
     const form = html(this.doc, "form");
     const error = html(this.doc, "p", { role: "alert" });
     const field = (title, type, name) => {
@@ -636,11 +653,13 @@ class AgentView {
     let code;
     let secret;
     let authenticatorURI;
+    let publishing = false;
     dialog.addEventListener("close", () => {
       password.value = "";
       if (code) code.value = "";
       secret = authenticatorURI = null;
       this.enrollmentDialog = null;
+      if (!publishing) control("account-cancel").catch(console.error);
     }, { once: true });
     const create = async command => {
       const result = await control(command, { username: username.value, password: password.value });
@@ -672,7 +691,7 @@ class AgentView {
       code = field("Authenticator code", "text", "code");
       code.inputMode = "numeric"; code.autocomplete = "one-time-code";
       code.pattern = "[0-9]{6}"; code.maxLength = 6;
-      submit.textContent = "Verify and continue";
+      submit.textContent = "Verify and publish";
       form.append(submit, error);
     };
     resume.addEventListener("click", async () => {
@@ -686,7 +705,11 @@ class AgentView {
       try {
         if (setupId) {
           await control("account-totp", { setupId, code: code.value });
-          code.value = ""; dialog.close(); await this.reconnect();
+          code.value = ""; setupId = null; publishing = true;
+          dialog.close();
+          try { await control("set_remote_access", { enabled: true }); }
+          catch (failure) { Services.prompt.alert(this.win, "Remote account created", `Publishing could not start: ${failure.message}. Retry Publish over Tor in Settings.`); }
+          await this.reconnect();
         } else await create("account-create");
       } catch (e) { error.textContent = e.message; }
       finally { submit.disabled = resume.disabled = false; }
@@ -874,6 +897,7 @@ class AgentView {
     const original = this.activeBrowser;
     const entry = ownedViews.get(original);
     if (!entry || entry.authFor) return;
+    if (entry.local && this.localGeneration) return this.reconnect();
     lazy.BrowserControlChannel.close("sign in");
     const origin = new URL(entry.connection.url).origin;
     const returnTo = origin + "/";

@@ -9,8 +9,9 @@ in an ordinary browser. This branch contains the browser migration; integration
 builds and testing are in progress.
 
 Android uses an ordinary Termux installation for the Agent server. Linux packages
-include both the browser and server. Local and optional Tor access use the same
-account with two-factor authentication. Turning Agent off stops its services;
+include both the browser and server. Local connects automatically without an
+account login. Optional Linux publishing and remote connections use Tor and
+an account with two-factor authentication. Turning Agent off stops its services;
 closing the Linux browser also stops its local Agent. Closing the Android
 browser leaves Termux work running until Agent is turned off.
 

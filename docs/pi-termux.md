@@ -60,10 +60,13 @@ replace Pi's extension runtime.
 
 ## Files and authentication
 
-All browse/upload/download/ZIP routes require the web account. State changes check
-Origin and a per-login CSRF token. Cookies are HttpOnly/SameSite=Strict; only hashes
-of session and CSRF tokens are persisted. Local web passwords use Argon2id. Login
-cookies survive web restarts. Files/directories in app storage use 0600/0700.
+All browse/upload/download/ZIP routes require authentication. Native Android/Linux
+Local uses an ephemeral credential from the private controller, installed by
+Gecko as a Secure/HttpOnly/SameSite=Strict cookie in the protected Agent context.
+No local account or factor is required. State changes check Origin and a CSRF
+token. Linux remote publishing has a separate Caddy listener with mandatory
+Authelia two-factor authentication; its durable Valkey sessions and account store
+survive restarts. Termux never publishes. Files/directories use 0600/0700.
 
 Repository navigation resolves real paths within the selected root. Upload names
 must be single filenames and are created exclusively (`wx`), never overwritten.

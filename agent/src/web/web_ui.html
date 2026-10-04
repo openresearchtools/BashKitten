@@ -648,7 +648,7 @@
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
             <button id="tabDownloads" type="button" role="tab" aria-selected="false" aria-controls="settingsDownloads" tabindex="-1" data-settings-tab="downloads">Download models</button>
-            <button id="tabRemote" type="button" role="tab" aria-selected="false" aria-controls="settingsRemote" tabindex="-1" data-settings-tab="remote">Remote access</button>
+            <button id="tabRemote" class="hidden" type="button" role="tab" aria-selected="false" aria-controls="settingsRemote" tabindex="-1" data-settings-tab="remote">Remote access</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
@@ -962,17 +962,19 @@
       $('#app').inert = true;
       $('#app').classList.add('hidden');
       $('#auth').classList.remove('hidden');
-      $('#authHint').textContent = initialized ? 'Sign in again to reconnect. Your draft and attachments are kept here.' : 'Sign in with your account and second factor.';
+      const local = location.hostname === '127.0.0.1';
+      $('#authHint').textContent = local ? 'Reconnect through BashKitten’s Agent view. Your draft and attachments are kept here.' : initialized ? 'Sign in again to reconnect. Your draft and attachments are kept here.' : 'Sign in with your account and second factor.';
+      $('#authLogin').textContent = local ? 'Reconnect Agent' : 'Sign in';
       $('#authLogin').href = loginUrl();
       $('#authLogin').classList.remove('hidden');
-      if (!initialized) location.replace(loginUrl());
+      if (!initialized && !local) location.replace(loginUrl());
     }
     async function responseValue(response) {
       const json = (response.headers.get('content-type') || '').includes('application/json');
       const login = response.redirected && new URL(response.url).pathname.startsWith('/login');
       if (response.status === 401 || login) {
         requireLogin();
-        throw Error('Sign in again to reconnect.');
+        throw Error(location.hostname === '127.0.0.1' ? 'Reconnect Agent to continue.' : 'Sign in again to reconnect.');
       }
       if (!json) throw Error('The server did not return an API response.');
       return response.json();
@@ -1767,6 +1769,8 @@
       const value = await api('/api/settings');
       config = value.config;
       serverPlatform = value.platform;
+      $('#tabRemote').classList.toggle('hidden', serverPlatform !== 'linux');
+      if (serverPlatform !== 'linux' && activeSettingsTab === 'remote') selectSettingsTab('app');
       $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
       $('#managedLlama').classList.toggle('hidden', serverPlatform !== 'linux');
       $('#modelsLlamaDirectoryNote').classList.toggle('hidden', serverPlatform !== 'linux');
@@ -1972,7 +1976,7 @@
       hostingPreview();
     }
     async function refreshHosting() {
-      if (!csrf || document.hidden) return;
+      if (!csrf || document.hidden || serverPlatform !== 'linux') return;
       if (hostingRequest) return hostingRequest.catch(() => {});
       hostingRequest = (async () => { hostingState = await api('/api/hosting?refresh=1'); renderHosting(); })();
       try { await hostingRequest; }
@@ -2182,8 +2186,9 @@
       $('#remoteQrToggle').textContent = 'Show QR';
     }
     async function refreshRemote() {
+      if (serverPlatform !== 'linux') return;
       const value = await control('get_remote_access'); remoteState = value;
-      $('#remoteStatus').textContent = value.enabled ? (value.address ? 'This Agent is published over Tor' : 'Starting Tor…') : 'This Agent is not published';
+      $('#remoteStatus').textContent = value.enabled ? (value.address ? 'This Agent is published over Tor' : 'Starting Tor…') : value.setupRequired ? 'Create your remote account and verify a two-factor code to publish.' : 'This Agent is not published';
       $('#remoteAddress').value = value.address || '';
       $('#remoteToggle').textContent = value.enabled ? 'Stop publishing' : 'Publish over Tor';
       $('#remotePublishing').classList.toggle('hidden', !value.enabled);
@@ -2214,6 +2219,11 @@
       finally { remoteBusy = false; for (const id of ['#remoteToggle','#remoteCreate','#remoteRefresh']) $(id).disabled = false; }
     }
     $('#remoteToggle').onclick = () => remoteAction(async () => {
+      if (!remoteState?.enabled && remoteState?.setupRequired) {
+        if (!nativeLinux) throw Error('Set up remote access in BashKitten on this Linux machine.');
+        await nativeHost.call('setup-remote', {});
+        return;
+      }
       await control('set_remote_access', {enabled:!remoteState?.enabled}); clearRemoteExport();
     });
     $('#remoteRefresh').onclick = () => remoteAction(async () => {});
@@ -2970,6 +2980,7 @@
           return requireLogin();
         }
         csrf = value.csrf;
+        $('#signOut').classList.toggle('hidden', value.local === true);
         authRequired = false;
         $('#auth').classList.add('hidden');
         $('#app').classList.remove('hidden');
@@ -3312,6 +3323,7 @@
       else showChatView();
     };
     function selectSettingsTab(name, focus = false) {
+      if (name === 'remote' && serverPlatform !== 'linux') name = 'app';
       if (activeSettingsTab === 'remote' && name !== 'remote') clearRemoteExport();
       if (name !== 'downloads') { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; }
       activeSettingsTab = name;
@@ -3333,13 +3345,14 @@
     for (const tab of settingsTabs) {
       tab.onclick = () => selectSettingsTab(tab.dataset.settingsTab);
       tab.onkeydown = event => {
-        const index = settingsTabs.indexOf(tab);
+        const visibleTabs = settingsTabs.filter(item => !item.classList.contains('hidden'));
+        const index = visibleTabs.indexOf(tab);
         let next;
-        if (event.key === 'ArrowRight') next = (index + 1) % settingsTabs.length;
-        if (event.key === 'ArrowLeft') next = (index + settingsTabs.length - 1) % settingsTabs.length;
+        if (event.key === 'ArrowRight') next = (index + 1) % visibleTabs.length;
+        if (event.key === 'ArrowLeft') next = (index + visibleTabs.length - 1) % visibleTabs.length;
         if (event.key === 'Home') next = 0;
-        if (event.key === 'End') next = settingsTabs.length - 1;
-        if (next !== undefined) { event.preventDefault(); selectSettingsTab(settingsTabs[next].dataset.settingsTab, true); }
+        if (event.key === 'End') next = visibleTabs.length - 1;
+        if (next !== undefined) { event.preventDefault(); selectSettingsTab(visibleTabs[next].dataset.settingsTab, true); }
       };
     }
     $('#settingsDone').onclick = showChatView;

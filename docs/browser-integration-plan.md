@@ -30,6 +30,29 @@ subtree, retaining BashKitten integration and compact upstream ancestry. Product
 version becomes 153.4. Source merge and provenance checks do not establish
 Android/Linux build or manual acceptance; complete those before publication.
 
+Latest platform clarification, 4 October: remote publishing is Linux-only.
+Android runs its local Termux Agent or connects to an existing remote server;
+it does not publish its local Agent, llama endpoint or hosted websites. Hide
+publishing settings for the Termux backend, reject its publishing commands and
+do not create or start a backend Tor publisher, even with older enabled settings.
+This supersedes the Android publishing requirements below. Android's browser Tor
+client, remote import/login and authorized remote browser control remain available.
+
+Latest authentication clarification, 4 October: Local on Android and Linux opens
+without account creation, password or 2FA. The native private bridge obtains a
+fresh runtime credential, and native Gecko installs a Secure, HttpOnly, SameSite
+session cookie only in the protected local Agent context. Keep pinned HTTPS,
+Origin/CSRF and private file boundaries. No public token endpoint or URL secret.
+A separate Caddy listener handles Tor ingress with existing mandatory Authelia
+2FA, client authorization and hosted-site/llama policies. Never classify traffic
+as local by its source IP: Tor forwards to loopback too. Linux's first Publish
+opens native account/TOTP enrollment; publishing starts only after verification.
+Existing accounts and durable remote sessions remain valid. Authelia/Valkey run
+only for remote setup or enabled publishing and stop when publishing is disabled.
+The local cookie is replaced automatically after a backend restart, preserving
+Pi credentials, history and drafts. These requirements supersede the local
+account/login, startup health and Android publishing requirements below.
+
 ## 1. Product boundary
 
 Make BashKitten a Firefox-based browser on Android and Linux, using the existing
@@ -575,7 +598,7 @@ and wake locks do not disable that system restriction; the app cannot grant it.
    the successful command's launcher callback triggers permission and validation.
    Merely returning from an empty Termux installation must not cause a bridge error.
 4. On the successful return, probe the installed package and start the service
-   automatically, then complete account/2FA setup. No separate Connect or
+   automatically with the native local session. No separate Connect or
    Install packages action is needed.
 
 After installing the package, the command enables the ordinary Termux bridge:

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import { privateDir, readJson, writeJson } from '../common.mjs';
 import { accessDir, binary } from './paths.mjs';
+import { accountStatus } from './accounts.mjs';
 
 const root = path.join(accessDir, 'tor');
 const stateFile = path.join(accessDir, 'remote.json');
@@ -47,6 +48,7 @@ export class RemoteAccess {
   async prepare(stack, port, { reload = false, initialize = false } = {}) {
     this.stack = stack;
     const state = await this.state();
+    if (state.enabled && !(await accountStatus()).initialized) throw Error('Complete remote account setup before publishing');
     if (!state.enabled && (!initialize || await this.hostname('agent'))) return [];
     await privateDir(root); await privateDir(path.join(root, 'data'));
     let text = `DataDirectory ${JSON.stringify(path.join(root, 'data'))}\nSocksPort 0\nAvoidDiskWrites 1\nLog err stderr\n`;
@@ -79,13 +81,14 @@ export class RemoteAccess {
   }
   async status() {
     const state = await this.state();
-    return { enabled: state.enabled, address: state.enabled && await this.hostname('agent') ? 'https://' + await this.hostname('agent') : null,
+    return { enabled: state.enabled, setupRequired: !(await accountStatus()).initialized, address: state.enabled && await this.hostname('agent') ? 'https://' + await this.hostname('agent') : null,
       tlsCaPin: this.stack?.identity?.caSha256 || null, restartRequired: false,
       devices: state.devices.map(({ id, name, createdAt, kind }) => ({ id, name, createdAt, kind })) };
   }
   async setEnabled(enabled) {
     return this.transaction(async () => {
       const state = await this.state();
+      if (enabled && !(await accountStatus()).initialized) throw Error('Create your remote account and verify its two-factor code before publishing');
       if (state.enabled !== Boolean(enabled)) {
         await writeJson(stateFile, { ...state, enabled: Boolean(enabled) });
         await this.stack.reconfigureRemote();
