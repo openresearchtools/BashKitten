@@ -20,7 +20,6 @@ android {
     buildFeatures { aidl true; buildConfig true }
     sourceSets.main.aidl.srcDirs += '../bashkitten-sdk/src/main/aidl'
     sourceSets.main.assets.srcDirs += "$buildDir/generated/notices"
-    sourceSets.main.assets.srcDirs += "${rootProject.projectDir}/../agent/src/server/platform/termux/bootstrap"
     androidResources { noCompress 'ja' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     sourceSets.main.jniLibs.srcDirs += "$buildDir/generated/tor"

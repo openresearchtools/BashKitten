@@ -15,8 +15,10 @@ On Android, install the signed `com.bashkitten` APK from
 [Releases](https://github.com/openresearchtools/bashkitten/releases). Local setup
 offers the official Termux download if needed. Open Termux to complete its
 bootstrap, then paste the single command shown by BashKitten. It first upgrades
-all Termux packages through APT, then installs the verified repository keyring
-and `bashkitten` with its declared dependencies. It enables the external-command bridge and
+all Termux packages through APT, then downloads our
+[setup script](https://github.com/openresearchtools/BashKitten/blob/main/agent/packaging/termux/install.sh).
+The script installs the verified repository keyring and `bashkitten` with its
+declared dependencies. It enables the external-command bridge and
 returns to BashKitten. Allow Android's request to run commands in Termux;
 BashKitten verifies the connection and starts Agent automatically. There is no
 separate Connect or Install packages step. Existing compatible Termux can be

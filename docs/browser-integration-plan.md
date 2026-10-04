@@ -67,7 +67,10 @@ real APT/npm progress, backend controls and Pi stop/kill controls. No applicatio
 is automatically uninstalled, including previously installed suite components.
 
 Keep Waterfox-derived privacy features, private tabs, Tor, ad blocking and normal
-browser functions. Enhanced Tracking Protection keeps Gecko's signed tracking
+browser functions. HTTPS-Only defaults to enabled on Android and Linux, while an
+explicit user Off choice persists. Keep Gecko's onion and loopback exceptions
+(`localhost`, `127.0.0.0/8` and `::1`); ordinary network addresses use HTTPS-Only.
+Enhanced Tracking Protection keeps Gecko's signed tracking
 list updates on both platforms; disabling telemetry and promotional feeds must
 not leave its native controls without current blocking data.
 Remove torrents, qBittorrent/libtorrent, their exclusive
@@ -527,8 +530,12 @@ and wake locks do not disable that system restriction; the app cannot grant it.
 2. Open Termux for its initial bootstrap. Show one copyable command that first
    updates APT indexes and upgrades all existing Termux packages through APT,
    before invoking `curl` or `pkg` (whose mirror checks also depend on curl).
-   Then download and verify our published Open Research Tools Termux keyring
-   package, install it and `x11-repo` through `pkg`, and run
+   Then fetch the repository's `agent/packaging/termux/install.sh` with curl,
+   downloading it completely before execution. Keep repository setup and return
+   handling in that script instead of the copied command; pass the installed
+   APK's actual launcher component. The script downloads and verifies our
+   published Open Research Tools Termux keyring package, installs it and
+   `x11-repo` through `pkg`, and runs
    `pkg install bashkitten`. The `.deb` declares all required Node, Python,
    Git/archive, search/native-library and desktop dependencies, including XFCE,
    LibreOffice and Xvfb. Keep no duplicate dependency installer inside the APK.

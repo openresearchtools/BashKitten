@@ -15,9 +15,6 @@ import android.provider.Settings;
 
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
@@ -73,29 +70,15 @@ public final class TermuxConnection {
             throw new IllegalStateException("BashKitten's launch activity is unavailable.");
         }
         ComponentName destination = launch.getComponent();
-        final String checksum;
-        try { checksum = asset("keyring-sha256.txt").trim(); }
-        catch (Exception error) { throw new IllegalStateException("The repository keyring checksum is unavailable.", error); }
-        if (!checksum.matches("[a-f0-9]{64}")) throw new IllegalStateException("Invalid bundled repository checksum.");
-        // pkg owns dependency resolution. Only repository registration belongs here;
-        // the bashkitten .deb declares every Agent/runtime/desktop dependency.
+        // Repair old bootstrap libraries before invoking curl. Download completely
+        // before running the repository script, retaining its real failure status.
         return "(set -eu; export DEBIAN_FRONTEND=noninteractive; "
-                // Upgrade the complete bootstrap before any download or partial install.
-                // pkg's mirror checks use curl, which may itself need this repair.
                 + "apt-get -o APT::Update::Error-Mode=any update; "
                 + "apt-get full-upgrade -y -o Dpkg::Options::=--force-confold; "
-                + "bashkitten_setup=$(mktemp -d); trap 'rm -rf -- \"$bashkitten_setup\"' EXIT; "
-                + "curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 "
-                + "-o \"$bashkitten_setup/keyring.deb\" https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-termux-keyring_2026.09.19_aarch64.deb; "
-                + "printf '%s  %s\\n' " + shellQuote(checksum) + " \"$bashkitten_setup/keyring.deb\" | sha256sum -c -; "
-                + "pkg install -y -o Dpkg::Options::=--force-confold \"$bashkitten_setup/keyring.deb\" x11-repo; "
-                + "pkg install -y -o Dpkg::Options::=--force-confold bashkitten; "
-                + "mkdir -p ~/.termux; "
-                + "{ if grep -q '^[[:space:]]*allow-external-apps[[:space:]]*=' ~/.termux/termux.properties 2>/dev/null; then "
-                + "sed -i 's/^[[:space:]]*allow-external-apps[[:space:]]*=.*/allow-external-apps=true/' ~/.termux/termux.properties; "
-                + "else printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties; fi; } && "
-                + "termux-reload-settings && am start --user \"$(( $(id -u) / 100000 ))\" -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "
-                + shellQuote(destination.flattenToShortString()) + " --ez " + SETUP_COMPLETE + " true)";
+                + "curl -fL --proto '=https' --proto-redir '=https' "
+                + "https://raw.githubusercontent.com/openresearchtools/BashKitten/main/agent/packaging/termux/install.sh "
+                + "-o \"$TMPDIR/bashkitten-install.sh\"; "
+                + "bash \"$TMPDIR/bashkitten-install.sh\" " + shellQuote(destination.flattenToShortString()) + ")";
     }
 
     public void probe(Consumer<JSONObject> done, Consumer<String> fail) {
@@ -207,17 +190,6 @@ public final class TermuxConnection {
             String error = value.optString("error", "Service command failed.");
             request.fail.accept(error);
         } else request.done.accept(value);
-    }
-
-    private String asset(String name) throws Exception {
-        try (InputStream input = context.getAssets().open(name); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            byte[] buffer = new byte[8192];
-            int count;
-            while ((count = input.read(buffer)) != -1) {
-                output.write(buffer, 0, count);
-            }
-            return new String(output.toByteArray(), StandardCharsets.UTF_8);
-        }
     }
 
     private static String shellQuote(String value) { return "'" + value.replace("'", "'\\''") + "'"; }
