@@ -87,7 +87,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         runtime.attach(engine, this);
         setOnApplyWindowInsetsListener((v, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets i = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                int types = WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout();
+                // Fenix enables edge-to-edge from API 33. Its ordinary browser
+                // fragment handles IME space, but this separate Agent GeckoView
+                // must resize too, including while it shows account/2FA pages.
+                // Older activities retain the framework's adjustResize behavior.
+                if (Build.VERSION.SDK_INT >= 33) types |= WindowInsets.Type.ime();
+                android.graphics.Insets i = insets.getInsets(types);
                 // Fenix pads the content root for browser fragments but forwards
                 // their insets unchanged. Apply only the remaining inset to Agent.
                 View content = activity.findViewById(android.R.id.content);

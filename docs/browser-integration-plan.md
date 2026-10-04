@@ -366,7 +366,11 @@ Agent access button from every ordinary tab, including on phones, which switch
 between full Agent and full website views. Do not replace the permanent desktop
 Agent tab with only an address-bar button. There is never a second application
 window. Preserve chat drafts and scroll position when toggling, rotating or
-folding. Profile creation and switching must be unavailable through menus,
+folding. The protected Agent panel must also reserve the visible keyboard inset
+when the host uses edge-to-edge layout, so chat, account/password and two-factor
+fields stay above the keyboard. Respect parent system-bar padding without
+subtracting it twice, and restore the full page height when the keyboard closes.
+Profile creation and switching must be unavailable through menus,
 internal pages and launch flags; internal Gecko data storage does not provide a
 user-facing multiple-profile feature.
 
