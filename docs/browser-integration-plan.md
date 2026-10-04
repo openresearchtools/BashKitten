@@ -520,9 +520,11 @@ and wake locks do not disable that system restriction; the app cannot grant it.
 1. If `com.termux` is absent, offer **Download Termux** using the current
    official GitHub release's matching APK and the browser's normal download and
    Android installation flow. Do not substitute our old suite build.
-2. Open Termux for its initial bootstrap. Show one copyable command that downloads
-   and verifies our published Open Research Tools Termux keyring package, installs
-   it and `x11-repo` through `pkg`, upgrades the existing Termux packages and runs
+2. Open Termux for its initial bootstrap. Show one copyable command that first
+   updates APT indexes and upgrades all existing Termux packages through APT,
+   before invoking `curl` or `pkg` (whose mirror checks also depend on curl).
+   Then download and verify our published Open Research Tools Termux keyring
+   package, install it and `x11-repo` through `pkg`, and run
    `pkg install bashkitten`. The `.deb` declares all required Node, Python,
    Git/archive, search/native-library and desktop dependencies, including XFCE,
    LibreOffice and Xvfb. Keep no duplicate dependency installer inside the APK.

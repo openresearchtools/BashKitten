@@ -14,13 +14,20 @@ Launch **BashKitten**, select **Agent → Local**, and use **Turn on**.
 On Android, install the signed `com.bashkitten` APK from
 [Releases](https://github.com/openresearchtools/bashkitten/releases). Local setup
 offers the official Termux download if needed. Open Termux to complete its
-bootstrap, then paste the single command shown by BashKitten. It installs the
-verified repository keyring, upgrades Termux packages and installs `bashkitten`
-with its declared dependencies. It enables the external-command bridge and
+bootstrap, then paste the single command shown by BashKitten. It first upgrades
+all Termux packages through APT, then installs the verified repository keyring
+and `bashkitten` with its declared dependencies. It enables the external-command bridge and
 returns to BashKitten. Allow Android's request to run commands in Termux;
 BashKitten verifies the connection and starts Agent automatically. There is no
 separate Connect or Install packages step. Existing compatible Termux can be
 used; no Termux:API, Termux:X11 APK, root or ADB is required.
+
+If an older install command stops with `CANNOT LINK EXECUTABLE` and a missing
+SSL/library symbol, run `apt update && apt full-upgrade` in Termux, then retry
+setup. `pkg` itself uses `curl`, so a broken curl library can prevent its mirror
+checks from working. If APT also fails, retain the exact error for diagnosis;
+do not delete Termux data or disable HTTPS verification.
+See [Termux's library recovery guidance](https://github.com/termux/termux-packages/wiki/Termux-execution-environment#package-dependencies-are-outdated).
 
 Turn on requests missing background battery access for BashKitten and, for Local,
 Termux. Approve Android's dialog to continue. Cancellation leaves a visible retry

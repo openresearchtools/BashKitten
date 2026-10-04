@@ -80,14 +80,15 @@ public final class TermuxConnection {
         // pkg owns dependency resolution. Only repository registration belongs here;
         // the bashkitten .deb declares every Agent/runtime/desktop dependency.
         return "(set -eu; export DEBIAN_FRONTEND=noninteractive; "
+                // Upgrade the complete bootstrap before any download or partial install.
+                // pkg's mirror checks use curl, which may itself need this repair.
+                + "apt-get -o APT::Update::Error-Mode=any update; "
+                + "apt-get full-upgrade -y -o Dpkg::Options::=--force-confold; "
                 + "bashkitten_setup=$(mktemp -d); trap 'rm -rf -- \"$bashkitten_setup\"' EXIT; "
                 + "curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 "
                 + "-o \"$bashkitten_setup/keyring.deb\" https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-termux-keyring_2026.09.19_aarch64.deb; "
                 + "printf '%s  %s\\n' " + shellQuote(checksum) + " \"$bashkitten_setup/keyring.deb\" | sha256sum -c -; "
                 + "pkg install -y -o Dpkg::Options::=--force-confold \"$bashkitten_setup/keyring.deb\" x11-repo; "
-                // The APK bootstrap can be older than the rolling repository ABI.
-                // Upgrade it before installing current desktop/runtime dependencies.
-                + "pkg upgrade -y -o Dpkg::Options::=--force-confold; "
                 + "pkg install -y -o Dpkg::Options::=--force-confold bashkitten; "
                 + "mkdir -p ~/.termux; "
                 + "{ if grep -q '^[[:space:]]*allow-external-apps[[:space:]]*=' ~/.termux/termux.properties 2>/dev/null; then "
