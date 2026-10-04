@@ -3504,8 +3504,7 @@ mozilla::ipc::IPCResult ContentParent::RecvGetClipboardDataSnapshot(
     mozilla::NotNull<nsIPrincipal*> aRequestingPrincipal,
     GetClipboardDataSnapshotResolver&& aResolver) {
   if (!ValidatePrincipal(aRequestingPrincipal,
-                         {ValidatePrincipalOptions::AllowSystem,
-                          ValidatePrincipalOptions::AllowExpanded})) {
+                         {ValidatePrincipalOptions::AllowExpanded})) {
     return PrincipalValidationIpcFail(aRequestingPrincipal, this, __func__);
   }
 
@@ -5599,6 +5598,16 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindow(
   RefPtr<BrowserParent> newTab = BrowserParent::GetFrom(aNewTab);
   MOZ_ASSERT(newTab);
 
+  // We're about to hand the new tab to the frontend to be embedded, so it must
+  // be a freshly created actor which isn't already embedded somewhere else.
+  // Being destroyed means it has already been embedded and torn down, because
+  // we only destroy a BrowserParent via its embedder or via a prior failed
+  // CreateWindow.
+  if (newTab->IsEmbedded() || newTab->IsDestroyed() ||
+      newTab->CreatingWindow()) {
+    return IPC_FAIL(this, "New tab is not a fresh unembedded PBrowser");
+  }
+
   auto destroyNewTabOnError = MakeScopeExit([&] {
     // We always expect to open a new window here. If we don't, it's an error.
     if (!cwi.windowOpened() || NS_FAILED(rv)) {
@@ -5619,6 +5628,13 @@ mozilla::ipc::IPCResult ContentParent::RecvCreateWindow(
   RefPtr<BrowsingContext> newBC = newTab->GetBrowsingContext();
   if (!newBC) {
     return IPC_FAIL(this, "Missing BrowsingContext for new tab");
+  }
+
+  // The frontend must not embed a discarded BrowsingContext. The parent can
+  // discard it on its own, so don't blame the child for this one.
+  if (NS_WARN_IF(newBC->IsDiscarded())) {
+    rv = NS_ERROR_FAILURE;
+    return IPC_OK();
   }
 
   uint64_t newBCOpenerId = newBC->GetOpenerId();
@@ -6870,10 +6886,10 @@ mozilla::ipc::IPCResult ContentParent::RecvAddOrRemovePageAwakeRequest(
 
 #if defined(XP_WIN)
 mozilla::ipc::IPCResult ContentParent::RecvGetModulesTrust(
-    ModulePaths&& aModPaths, bool aRunAtNormalPriority,
+    ModuleIdentifiers&& aModIdents, bool aRunAtNormalPriority,
     GetModulesTrustResolver&& aResolver) {
   RefPtr<DllServices> dllSvc(DllServices::Get());
-  dllSvc->GetModulesTrust(std::move(aModPaths), aRunAtNormalPriority)
+  dllSvc->GetModulesTrust(std::move(aModIdents), aRunAtNormalPriority)
       ->Then(
           GetMainThreadSerialEventTarget(), __func__,
           [aResolver](ModulesMapResult&& aResult) {
@@ -7795,6 +7811,9 @@ mozilla::ipc::IPCResult ContentParent::RecvSetActiveSessionHistoryEntry(
     const MaybeDiscarded<BrowsingContext>& aContext,
     const Maybe<nsPoint>& aPreviousScrollPos, SessionHistoryInfo&& aInfo,
     uint32_t aLoadType, uint32_t aUpdatedCacheKey, const nsID& aChangeID) {
+  if (aInfo.GetOriginalURI() || aInfo.GetResultPrincipalURI()) {
+    return IPC_FAIL(this, "Should not be set by content");
+  }
   if (!aContext.IsNullOrDiscarded()) {
     aContext.get_canonical()->SetActiveSessionHistoryEntry(
         aPreviousScrollPos, &aInfo, aLoadType, aUpdatedCacheKey, aChangeID);
@@ -7805,6 +7824,9 @@ mozilla::ipc::IPCResult ContentParent::RecvSetActiveSessionHistoryEntry(
 mozilla::ipc::IPCResult ContentParent::RecvReplaceActiveSessionHistoryEntry(
     const MaybeDiscarded<BrowsingContext>& aContext,
     SessionHistoryInfo&& aInfo) {
+  if (aInfo.GetOriginalURI() || aInfo.GetResultPrincipalURI()) {
+    return IPC_FAIL(this, "Should not be set by content");
+  }
   if (!aContext.IsNullOrDiscarded()) {
     aContext.get_canonical()->ReplaceActiveSessionHistoryEntry(&aInfo);
   }

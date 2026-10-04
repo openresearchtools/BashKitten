@@ -24,6 +24,12 @@ requested exact product commit and exposes its installable artifact in Actions;
 the main workflow collects it immediately after upload. Builders never publish
 releases. See `agent/packaging/README.md` for the workflow and secret arrangement.
 
+Latest engine update, 4 October: incorporate the exact Firefox 153.4.0esr
+release (`508788b6f8314edb3c33905f6d56c3fe6b087670`) into the shared browser
+subtree, retaining BashKitten integration and compact upstream ancestry. Product
+version becomes 153.4. Source merge and provenance checks do not establish
+Android/Linux build or manual acceptance; complete those before publication.
+
 ## 1. Product boundary
 
 Make BashKitten a Firefox-based browser on Android and Linux, using the existing

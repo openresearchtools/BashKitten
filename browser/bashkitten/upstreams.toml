@@ -4,11 +4,11 @@ schema = 1
 
 [firefox]
 remote = "https://github.com/mozilla-firefox/firefox.git"
-ref = "FIREFOX_153_3_0esr_RELEASE"
-commit = "861fdeb0d32fe1bd101fea886687e680f612d735"
-source_commit = "8e1b5f434c8bf668c05939ee5ad7e06b1b523572"
-source_tree = "eabc51dfebcb0400ae405a58c990a809115706c2"
-version = "153.3.0esr"
+ref = "FIREFOX_153_4_0esr_RELEASE"
+commit = "508788b6f8314edb3c33905f6d56c3fe6b087670"
+source_commit = "90c5ec695a1d067173dd142dc731b369bf45dbb9"
+source_tree = "30d6c5ace5a2fc4dd3760f8ba9a6c38f744f4787"
+version = "153.4.0esr"
 initial_release_ref = "FIREFOX_153_0esr_RELEASE"
 initial_release_commit = "c754d4f2d60ffacfa3aaab1134fed75ed4c9d3ef"
 initial_source_commit = "a0b5e11f860df84897adbdb51138c67bc39d4059"
