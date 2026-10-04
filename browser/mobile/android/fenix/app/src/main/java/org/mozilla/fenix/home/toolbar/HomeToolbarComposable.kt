@@ -15,11 +15,16 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTag
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -42,6 +47,7 @@ import mozilla.components.compose.browser.toolbar.store.ToolbarGravity.Top
 import mozilla.components.compose.browser.toolbar.ui.BrowserToolbarQuery
 import mozilla.components.lib.state.ext.observeAsComposableState
 import org.mozilla.fenix.R
+import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.browser.browsingmode.BrowsingModeManager
 import org.mozilla.fenix.components.AppStore
@@ -156,27 +162,34 @@ internal class HomeToolbarComposable(
                 searchSuggestionsContent(Modifier.weight(1f))
             }
 
-            Box {
-                if (settings.enableHomepageSearchBar) {
-                    BrowserSimpleToolbar(toolbarStore, appStore)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (context is HomeActivity) {
+                    TextButton(onClick = { context.showBashKittenAgent() }) {
+                        Text(stringResource(R.string.bashkitten_agent))
+                    }
                 }
+                Box(modifier = Modifier.weight(1f)) {
+                    if (settings.enableHomepageSearchBar) {
+                        BrowserSimpleToolbar(toolbarStore, appStore)
+                    }
 
-                this@Column.AnimatedVisibility(
-                    visible = isAddressBarVisible.value || appStore.state.searchState.isSearchActive,
-                    enter = fadeIn(
-                        animationSpec = tween(
-                            durationMillis = 250,
-                            easing = Easing { fraction -> fraction * fraction },
+                    this@Column.AnimatedVisibility(
+                        visible = isAddressBarVisible.value || appStore.state.searchState.isSearchActive,
+                        enter = fadeIn(
+                            animationSpec = tween(
+                                durationMillis = 250,
+                                easing = Easing { fraction -> fraction * fraction },
+                            ),
                         ),
-                    ),
-                    exit = fadeOut(
-                        animationSpec = tween(
-                            durationMillis = 250,
-                            easing = Easing { fraction -> 1f - (1f - fraction) * (1f - fraction) },
+                        exit = fadeOut(
+                            animationSpec = tween(
+                                durationMillis = 250,
+                                easing = Easing { fraction -> 1f - (1f - fraction) * (1f - fraction) },
+                            ),
                         ),
-                    ),
-                ) {
-                    BrowserToolbar(store = toolbarStore)
+                    ) {
+                        BrowserToolbar(store = toolbarStore)
+                    }
                 }
             }
 
