@@ -4,10 +4,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { dataDir, privateDir, safeName } from '../common.mjs';
 import { platform, projectLocations } from '../platform/index.mjs';
 
-const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json', '.html': 'text/html', '.js': 'text/plain', '.ts': 'text/plain', '.css': 'text/plain', '.csv': 'text/csv', '.zip': 'application/zip', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
+const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.bmp': 'image/bmp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json', '.html': 'text/html', '.js': 'text/plain', '.ts': 'text/plain', '.css': 'text/plain', '.csv': 'text/csv', '.zip': 'application/zip', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
 export const mimeType = filename => types[path.extname(filename).toLowerCase()] || 'application/octet-stream';
 export const disposition = (name, download) => `${download ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(name).replace(/'/g, '%27')}`;
 export const containsPath = (root, target) => target === root || target.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
@@ -36,6 +37,15 @@ export async function filePath(root, relative = '') {
   const target = canonicalPath(await fs.realpath(path.join(directory.path, relativePath(relative))));
   if (!containsPath(directory.scopeRoot, target)) throw Object.assign(Error('Path leaves the available files'), { status: 403 });
   return target;
+}
+export async function sessionImage(meta, reference) {
+  if (typeof reference !== 'string' || !reference || reference.includes('\0')) throw Object.assign(Error('Choose an image path'), { status: 400 });
+  let requested = reference.startsWith('file:') ? fileURLToPath(reference) : reference;
+  if (requested.startsWith('~/')) requested = path.join(os.homedir(), requested.slice(2));
+  const absolute = path.resolve(meta.cwd, requested);
+  const file = await filePath(path.dirname(absolute), path.basename(absolute));
+  if (!mimeType(file).startsWith('image/')) throw Object.assign(Error('This file is not a supported image'), { status: 415 });
+  return file;
 }
 export async function listFiles(root, relative = '') {
   const location = await fileDirectory(root);

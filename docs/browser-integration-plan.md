@@ -55,6 +55,11 @@ package, newer managed Pi versions and independently selected external runtimes.
 Use the browser's rounded control and panel styling throughout the Agent web UI.
 Every formatted code block has a small Copy button that copies only its code,
 preserving whitespace and showing success or failure beside that block.
+Chat Markdown images resolve absolute, home-relative and project-relative paths
+on the connected Pi server through authenticated file streaming. Android and
+remote clients show the preview, zoom and download without accessing that path
+on the client. Preserve the existing filesystem scope and native Pi inline
+image results; show a visible error for an unavailable image.
 The chat `/login` command opens Providers, like `/providers`. Native fork/clone
 operations add and select their new chat in the existing sidebar.
 Provider API-key prompts, OAuth links/device codes, pending status, cancellation

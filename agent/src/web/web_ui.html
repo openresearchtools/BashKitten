@@ -291,8 +291,12 @@
     .markdown .code-block pre { margin: 0; border: 0; border-radius: 0; }
     .markdown pre code { padding: 0; border-radius: 0; background: transparent; font: inherit; }
     .message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
-    .inline-image { position: relative; display: inline-flex; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--activity); }
-    .message-images img { display: block; max-width: 300px; max-height: 240px; cursor: zoom-in; object-fit: contain; }
+    .inline-image { position: relative; display: inline-flex; max-width: 100%; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--activity); }
+    .inline-image img { display: block; max-width: 100%; max-height: 240px; cursor: zoom-in; object-fit: contain; }
+    .message-images img, .markdown .inline-image img { width: auto; max-width: min(300px, 100%); }
+    .image-error { display: none; padding: 12px; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .inline-image.failed img, .inline-image.failed .image-download { display: none; }
+    .inline-image.failed .image-error { display: block; }
     .image-download { position: absolute; right: 5px; bottom: 5px; display: grid; width: 25px; height: 25px; place-items: center; border: 1px solid #fff4; border-radius: 50%; background: #111c; color: #fff; text-decoration: none; }
     .image-download:hover { background: #111; }
     .tool-body .message-images { margin: 0; padding: 10px 12px; border-top: 1px solid var(--line-soft); }
@@ -808,7 +812,7 @@
           <button id="viewerIn" class="icon-button" type="button" title="Zoom in" aria-label="Zoom in">+</button>
           <button id="viewerClose" class="icon-button" type="button" title="Close image" aria-label="Close image">×</button>
         </div>
-        <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""></div></div>
+        <div id="imageViewport"><div id="imageStage"><img id="viewerImage" alt=""><span id="viewerError" class="hidden" role="status"></span></div></div>
       </section>
     </main>
     <aside id="filePanel" class="hidden" aria-label="Project files and changes">
@@ -1001,11 +1005,44 @@
 
 
 
+    function serverImageUrl(reference, download = false) {
+      if (!current?.id || typeof reference !== 'string' || !reference || /[\x00-\x1f]/.test(reference)) return null;
+      // Paths belong to Pi's machine, including when this page is a remote client.
+      // Never send the browser to file:// or reinterpret a server path as a web URL.
+      if (/^[a-z][a-z0-9+.-]*:/i.test(reference) && !reference.startsWith('file:')) return null;
+      return `/api/sessions/${encodeURIComponent(current.id)}/image?path=${encodeURIComponent(reference)}${download ? '&download=true' : ''}`;
+    }
+
+    function imageMarkup(source, title, download = source, filename = 'image') {
+      return `<span class="inline-image"><img src="${escapeHtml(source)}" alt="${escapeHtml(title)}" tabindex="0" role="button"><a class="image-download" href="${escapeHtml(download)}" download="${escapeHtml(filename)}" title="Download image" aria-label="Download image">↓</a><span class="image-error" role="status">${escapeHtml(title)} — image unavailable. The file may have moved or you may need to sign in again.</span></span>`;
+    }
+
     function inlineMarkdown(value) {
-      return escapeHtml(value)
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+      // Tokenize before escaping so code stays literal and labels/URLs cannot inject HTML.
+      // Destinations support angle brackets for spaces and parentheses in filenames.
+      const tokens = /`([^`]+)`|(!?)\[([^\]\n]*)\]\(\s*(<[^>\n]+>|(?:\\.|[^\\\s()]|\((?:\\.|[^\\\s()])*\))+)(?:\s+"[^"\n]*")?\s*\)|\*\*([^*]+)\*\*/g;
+      const text = String(value ?? '');
+      let html = '', end = 0;
+      for (const match of text.matchAll(tokens)) {
+        html += escapeHtml(text.slice(end, match.index));
+        end = match.index + match[0].length;
+        const [, code, image, label, destination, bold] = match;
+        if (code !== undefined) { html += `<code>${escapeHtml(code)}</code>`; continue; }
+        if (bold !== undefined) { html += `<strong>${escapeHtml(bold)}</strong>`; continue; }
+        const target = destination.replace(/^<|>$/g, '').replace(/\\([\\()])/g, '$1');
+        if (image) {
+          let reference = target;
+          if (!reference.startsWith('file:')) { try { reference = decodeURIComponent(reference); } catch {} }
+          const source = serverImageUrl(reference);
+          if (source) {
+            html += imageMarkup(source, label || reference.split('/').pop() || 'Image', serverImageUrl(reference, true), reference.split('/').pop() || 'image');
+            continue;
+          }
+        }
+        if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noreferrer">${escapeHtml(label || target)}</a>`;
+        else html += escapeHtml(match[0]);
+      }
+      return html + escapeHtml(text.slice(end));
     }
 
     function markdown(value) {
@@ -1074,29 +1111,7 @@
         const download = attachmentUrl(block, true);
         if (!source || !download) continue;
         if (String(block.mimeType || '').startsWith('image/')) {
-          const wrapper = document.createElement('span');
-          wrapper.className = 'inline-image';
-          const image = document.createElement('img');
-          image.src = source;
-          image.alt = block.name || 'Attached image';
-          image.tabIndex = 0;
-          image.setAttribute('role', 'button');
-          image.onclick = () => openImageViewer(source, image.alt);
-          image.onkeydown = event => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              openImageViewer(source, image.alt);
-            }
-          };
-          const save = document.createElement('a');
-          save.className = 'image-download';
-          save.href = download;
-          save.download = block.name || 'image';
-          save.title = `${nativeLinux ? 'Open' : 'Download'} ${block.name || 'image'}`;
-          save.setAttribute('aria-label', save.title);
-          save.textContent = nativeLinux ? '↗' : '↓';
-          wrapper.append(image, save);
-          holder.append(wrapper);
+          holder.insertAdjacentHTML('beforeend', imageMarkup(source, block.name || 'Attached image', download, block.name || 'image'));
         } else {
           const save = document.createElement('a');
           save.className = 'sent-file';
@@ -1166,11 +1181,21 @@
     }
 
     $('#chatInner').addEventListener('click', event => {
+      const image = event.target.closest('.inline-image img');
+      if (image) { openImageViewer(image.src, image.alt); return; }
       const button = event.target.closest('.code-copy');
       if (!button) return;
       const code = button.closest('.code-block')?.querySelector('pre code');
       if (code) copyText(code.textContent, button);
     });
+    $('#chatInner').addEventListener('keydown', event => {
+      if (!event.target.matches('.inline-image img') || !['Enter', ' '].includes(event.key)) return;
+      event.preventDefault();
+      openImageViewer(event.target.src, event.target.alt);
+    });
+    $('#chatInner').addEventListener('error', event => {
+      if (event.target.matches('.inline-image img')) event.target.closest('.inline-image').classList.add('failed');
+    }, true);
 
     function addMessageActions(body, message, entryId) {
       const actions = document.createElement('div');
@@ -1319,6 +1344,13 @@
       const image = $('#viewerImage');
       $('#viewerTitle').textContent = title || 'Image';
       image.alt = title || 'Image';
+      image.classList.remove('hidden');
+      $('#viewerError').classList.add('hidden');
+      image.onerror = () => {
+        image.classList.add('hidden');
+        $('#viewerError').textContent = 'Image unavailable. The file may have moved or you may need to sign in again.';
+        $('#viewerError').classList.remove('hidden');
+      };
       image.onload = fitViewerImage;
       image.src = src;
       viewer.classList.remove('hidden');
@@ -1330,6 +1362,7 @@
       $('#imageViewer').classList.add('hidden');
       const image = $('#viewerImage');
       image.onload = null;
+      image.onerror = null;
       image.removeAttribute('src');
     }
 
@@ -1339,29 +1372,12 @@
       const holder = document.createElement('div');
       holder.className = 'message-images';
       images.forEach((block, index) => {
-        const wrapper = document.createElement('span');
-        wrapper.className = 'inline-image';
-        const image = document.createElement('img');
-        image.alt = label;
-        image.src = `data:${block.mimeType};base64,${block.data}`;
-        image.tabIndex = 0;
-        image.setAttribute('role', 'button');
-        image.onclick = () => openImageViewer(image.src, image.alt);
-        image.onkeydown = event => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openImageViewer(image.src, image.alt);
-          }
-        };
-        const save = document.createElement('a');
-        save.className = 'image-download';
-        save.href = image.src;
-        save.download = `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'image'}-${index + 1}.${String(block.mimeType || '').split('/')[1] || 'png'}`;
-        save.title = 'Download image';
-        save.setAttribute('aria-label', 'Download image');
-        save.textContent = '↓';
-        wrapper.append(image, save);
-        holder.append(wrapper);
+        const reference = block.path || block.url;
+        const inline = typeof block.data === 'string' && /^image\/[a-z0-9.+-]+$/i.test(block.mimeType || '');
+        const source = inline ? `data:${block.mimeType};base64,${block.data}` : serverImageUrl(reference);
+        if (!source) return;
+        const filename = inline ? `image-${index + 1}.${block.mimeType.split('/')[1]}` : reference.split('/').pop();
+        holder.insertAdjacentHTML('beforeend', imageMarkup(source, label, inline ? source : serverImageUrl(reference, true), filename));
       });
       body.insertBefore(holder, before);
       return holder;

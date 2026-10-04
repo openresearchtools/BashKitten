@@ -15,7 +15,7 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { fileDirectory, filePath, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
+import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs } from '../files/jobs.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
@@ -359,6 +359,10 @@ async function handler(req, res) {
     const match = route.match(/^\/api\/sessions\/([a-f0-9-]{36})(?:\/(.*))?$/);
     if (!match) throw Object.assign(Error('Not found'), { status: 404 });
     const [, id, action = ''] = match; let meta = await readMeta(id);
+    if (action === 'image') {
+      requireMethod(req, ['GET']);
+      return await sendFile(req, res, await sessionImage(meta, url.searchParams.get('path')), url.searchParams.get('download') === 'true');
+    }
     if (action === 'events') {
       requireMethod(req, ['GET']);
       const upstream = http.get({ socketPath: socketPath(id), path: '/events' }, stream => {
