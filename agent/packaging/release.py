@@ -134,7 +134,9 @@ def main():
     notes = (banner + '\n\n> [!WARNING]\n> **Testing release only. Not ready for production. Coming soon.**\n\n'
              f'BashKitten {version} · Firefox ESR {engine}.\n\n'
              '- **Android:** install the ARM64 APK, open Agent and follow the Termux setup command.\n'
-             '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n\n'
+             '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
+             '- **Updating Android:** update both the APK and the BashKitten package in Termux. Provider logins and chat history are retained.\n\n'
+             'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
              'Checksums and corresponding source archives are attached.\n')
     (args.output / 'release-notes.md').write_text(notes)
     result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True,
