@@ -583,6 +583,9 @@ not grant an Android permission; the foreground BashKitten activity requests
 the normal system dialog. The return intent accepts no arbitrary command to run.
 This follows Termux's [RUN_COMMAND interface](https://github.com/termux/termux-app/wiki/RUN_COMMAND-Intent).
 
+Show the command directly under Copy command in a rounded, theme-matched code
+block with four visible lines and vertical scrolling; keep Open Termux below it.
+Copy command always copies the complete original command, including offscreen text.
 Keep the normal setup screen to the Termux button, one visible copyable command
 and the existing Turn on/off control. The Start action drives this sequence. Request the normal Android permission
 when it is needed, then probe the real Termux connection. Missing packages show

@@ -409,17 +409,32 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             TextView command = text();
             command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12);
             command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true);
-            command.setPadding(0, dp(12), 0, dp(12));
+            command.setPadding(dp(12), dp(12), dp(12), dp(12));
             action("Copy command", () -> {
                 ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Set up BashKitten", runtime.termux.setupCommand()));
                 Toast.makeText(activity, "Command copied", Toast.LENGTH_SHORT).show();
             });
+            ScrollView commandScroll = new ScrollView(activity);
+            commandScroll.setNestedScrollingEnabled(true);
+            commandScroll.setVerticalScrollBarEnabled(true);
+            commandScroll.setFadeScrollBars(false);
+            commandScroll.setClipToOutline(true);
+            TypedArray colors = activity.obtainStyledAttributes(new int[]{android.R.attr.colorBackground});
+            int background;
+            try { background = colors.getColor(0, 0); } finally { colors.recycle(); }
+            android.graphics.drawable.GradientDrawable block = new android.graphics.drawable.GradientDrawable();
+            block.setCornerRadius(dp(12));
+            block.setColor(com.google.android.material.color.MaterialColors.layer(background, command.getCurrentTextColor(), .06f));
+            block.setStroke(dp(1), com.google.android.material.color.MaterialColors.layer(background, command.getCurrentTextColor(), .16f));
+            commandScroll.setBackground(block);
+            commandScroll.addView(command);
+            LayoutParams commandLayout = new LayoutParams(-1, command.getLineHeight() * 4 + dp(24));
+            commandLayout.setMargins(0, dp(4), 0, dp(8));
+            actions.addView(commandScroll, commandLayout);
             action("Open Termux", () -> {
                 app.policies.edit().putBoolean("agent.termuxSetupPending", true).apply();
                 runtime.termux.openTermux();
             });
-            ScrollView commandScroll = new ScrollView(activity); commandScroll.setNestedScrollingEnabled(true);
-            commandScroll.addView(command); actions.addView(commandScroll, new LayoutParams(-1, dp(180)));
         } else {
             action("Retry start", runtime::turnOn);
         }
