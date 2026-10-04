@@ -284,6 +284,12 @@
     .markdown h1 { font-size: 20px; } .markdown h2 { font-size: 17px; } .markdown h3 { font-size: 15px; }
     .markdown code { padding: 2px 5px; border-radius: var(--radius-small); background: var(--code); color: var(--text); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
     .markdown pre, .tool-body pre { margin: 6px 0 0; padding: 9px 10px; overflow: auto; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--code); color: var(--text); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; }
+    .code-block { margin: 6px 0 10px; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--code); }
+    .code-block-toolbar { display: flex; justify-content: flex-end; padding: 4px 6px 0; }
+    .code-copy { min-height: 28px; padding: 3px 9px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; }
+    .code-copy:hover, .code-copy:focus-visible { border-color: var(--line); background: var(--surface-2); color: var(--text); }
+    .markdown .code-block pre { margin: 0; border: 0; border-radius: 0; }
+    .markdown pre code { padding: 0; border-radius: 0; background: transparent; font: inherit; }
     .message-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 9px; }
     .inline-image { position: relative; display: inline-flex; overflow: hidden; border: 1px solid var(--line-soft); border-radius: var(--radius-control); background: var(--activity); }
     .message-images img { display: block; max-width: 300px; max-height: 240px; cursor: zoom-in; object-fit: contain; }
@@ -1006,7 +1012,7 @@
       return pieces.map((piece, index) => {
         if (index % 2) {
           const body = piece.replace(/^[^\n]*\n/, '');
-          return `<pre><code>${escapeHtml(body)}</code></pre>`;
+          return `<div class="code-block"><div class="code-block-toolbar"><button type="button" class="code-copy" aria-label="Copy code" aria-live="polite" title="Copy code">Copy</button></div><pre><code>${escapeHtml(body)}</code></pre></div>`;
         }
         const lines = piece.split('\n');
         let html = '';
@@ -1123,22 +1129,47 @@
     }
 
     async function copyText(value, button) {
-      try {
-        await navigator.clipboard.writeText(value);
-      } catch {
-        const field = document.createElement('textarea');
-        field.value = value;
-        field.style.position = 'fixed';
-        field.style.opacity = '0';
-        document.body.append(field);
-        field.select();
-        document.execCommand('copy');
-        field.remove();
-      }
+      if (button.disabled) return;
       const label = button.textContent;
-      button.textContent = 'Copied';
-      setTimeout(() => { button.textContent = label; }, 900);
+      const accessibleLabel = button.getAttribute('aria-label');
+      button.disabled = true;
+      try {
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {
+          const focused = document.activeElement;
+          const field = document.createElement('textarea');
+          field.value = value;
+          field.readOnly = true;
+          field.style.position = 'fixed';
+          field.style.opacity = '0';
+          document.body.append(field);
+          try {
+            field.select();
+            if (!document.execCommand('copy')) throw Error('Copy failed');
+          } finally {
+            field.remove();
+            focused?.focus({preventScroll:true});
+          }
+        }
+        button.textContent = 'Copied';
+      } catch {
+        button.textContent = 'Copy failed';
+      }
+      if (accessibleLabel) button.setAttribute('aria-label', button.textContent);
+      setTimeout(() => {
+        button.textContent = label;
+        if (accessibleLabel) button.setAttribute('aria-label', accessibleLabel);
+        button.disabled = false;
+      }, 1200);
     }
+
+    $('#chatInner').addEventListener('click', event => {
+      const button = event.target.closest('.code-copy');
+      if (!button) return;
+      const code = button.closest('.code-block')?.querySelector('pre code');
+      if (code) copyText(code.textContent, button);
+    });
 
     function addMessageActions(body, message, entryId) {
       const actions = document.createElement('div');

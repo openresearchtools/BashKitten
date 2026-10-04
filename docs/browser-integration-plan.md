@@ -53,6 +53,8 @@ Product package upgrades adopt the newly bundled managed Pi at an idle/restart
 boundary, preserving credentials and sessions, explicit rollback for the current
 package, newer managed Pi versions and independently selected external runtimes.
 Use the browser's rounded control and panel styling throughout the Agent web UI.
+Every formatted code block has a small Copy button that copies only its code,
+preserving whitespace and showing success or failure beside that block.
 The chat `/login` command opens Providers, like `/providers`. Native fork/clone
 operations add and select their new chat in the existing sidebar.
 Provider API-key prompts, OAuth links/device codes, pending status, cancellation
