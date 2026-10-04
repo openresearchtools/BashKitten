@@ -1695,7 +1695,10 @@
     }
 
     function renderEntry(entry) {
-      if (entry.type === 'message') renderMessage(entry.message, entry.id);
+      // Pi saves the entry when the message finishes; message.timestamp marks
+      // generation start and would make restored answers say "Worked for 1s".
+      if (entry.type === 'message') renderMessage({ ...entry.message,
+        timestamp: Date.parse(entry.timestamp) || entry.message.timestamp }, entry.id);
       else if (entry.type === 'compaction') {
         if (entry.id && renderedEntries.has(entry.id)) return;
         if (entry.id) renderedEntries.add(entry.id);
