@@ -48,8 +48,10 @@ using namespace mozilla::dom;
 // Global reference to the URI fixup service.
 static mozilla::StaticRefPtr<nsIURIFixup> sURIFixup;
 
-static bool ContentTriggeredURILoadIsAllowed(
-    nsIURI* aURI, const nsACString& aEffectiveRemoteType) {
+namespace mozilla::dom {
+
+bool ContentTriggeredURILoadIsAllowed(nsIURI* aURI,
+                                      const nsACString& aEffectiveRemoteType) {
   MOZ_ASSERT(aEffectiveRemoteType != NOT_REMOTE_TYPE);
   MOZ_ASSERT(!aURI->SchemeIs("javascript"), "Should have been blocked already");
 
@@ -106,6 +108,8 @@ static bool ContentTriggeredURILoadIsAllowed(
   return ValidatePrincipalCouldPotentiallyBeLoadedBy(principal,
                                                      aEffectiveRemoteType, {});
 }
+
+}  // namespace mozilla::dom
 
 nsDocShellLoadState::nsDocShellLoadState(nsIURI* aURI)
     : nsDocShellLoadState(aURI, nsContentUtils::GenerateLoadIdentifier()) {}
@@ -269,6 +273,33 @@ nsDocShellLoadState::nsDocShellLoadState(
             {ValidatePrincipalOptions::AllowNullPtr})) {
       aActor->FatalError("nsDocShellLoadState with invalid principalToInherit");
       return;
+    }
+
+    if (effectiveRemoteType != NOT_REMOTE_TYPE) {
+      // Result and Original URI are mostly used by channels to track redirect
+      // information, which gets stored in session history.
+      // Content uses them rarely for meta-refresh or session history and
+      // should pass these checks.
+      if (mResultPrincipalURI) {
+        bool equal = false;
+        if (!mResultPrincipalURIIsSome ||
+            NS_FAILED(mResultPrincipalURI->Equals(mURI, &equal)) || !equal) {
+          CrashReporter::AppendAppNotesToCrashReport(
+              "nsDocShellLoadState with invalid mResultPrincipalURI"_ns);
+          *aReadSuccess = false;
+          return;
+        }
+      }
+
+      if (mOriginalURI && !mResultPrincipalURI) {
+        bool equal = false;
+        if (NS_FAILED(mOriginalURI->Equals(mURI, &equal)) || !equal) {
+          CrashReporter::AppendAppNotesToCrashReport(
+              "nsDocShellLoadState with invalid mOriginalURI"_ns);
+          *aReadSuccess = false;
+          return;
+        }
+      }
     }
   }
 

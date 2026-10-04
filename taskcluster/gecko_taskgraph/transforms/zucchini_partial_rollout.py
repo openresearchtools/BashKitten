@@ -5,7 +5,8 @@
 from taskgraph.transforms.base import TransformSequence
 from taskgraph.util.dependencies import get_primary_dependency
 
-transforms = TransformSequence()
+zucchini_transforms = TransformSequence()
+partials_transforms = TransformSequence()
 
 # Projects that will use the legacy "partials" implementation as upstream.
 # These stable release channels continue using the proven implementation while
@@ -14,14 +15,25 @@ transforms = TransformSequence()
 # hold it in beta for a few cycles, or let it ride the train to release.
 # If holding in beta, we'll need to uplift a patch to remove the release entry.
 # TODO: update taskcluster/docs/partials.rst once we are fully rolled out
-LEGACY_PARTIALS_PROJECTS = {
-    "mozilla-release",
-    "mozilla-esr115",
-    "mozilla-esr140",
+ZUCCHINI_PARTIALS_PROJECTS = {
+    "mozilla-central",
 }
 
 
-@transforms.add
+@partials_transforms.add
+def filter_legacy_partials_by_project(config, tasks):
+    """Only generate legacy "partials" tasks on legacy release channels.
+
+    partials-zucchini is used on every other project, so on non-legacy projects
+    we skip generating the legacy "partials" tasks entirely. This is the inverse
+    of the filtering applied by the zucchini_transforms below.
+    """
+    if config.params["project"] in ZUCCHINI_PARTIALS_PROJECTS:
+        return
+    yield from tasks
+
+
+@zucchini_transforms.add
 def filter_partials_by_project(config, tasks):
     """Control the rollout of partials-zucchini across release channels.
 
@@ -48,13 +60,13 @@ def filter_partials_by_project(config, tasks):
 
         if (
             primary_dep.kind == "partials"
-            and config.params["project"] not in LEGACY_PARTIALS_PROJECTS
+            and config.params["project"] in ZUCCHINI_PARTIALS_PROJECTS
         ):
             continue
 
         if (
             primary_dep.kind in ("partials-zucchini", "partials-zucchini-l10n")
-            and config.params["project"] in LEGACY_PARTIALS_PROJECTS
+            and config.params["project"] not in ZUCCHINI_PARTIALS_PROJECTS
         ):
             continue
 

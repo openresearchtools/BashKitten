@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <utility>
+
 #include "AsyncDBus.h"
 #include "nsGtkUtils.h"
 #include "nsIFileURL.h"
@@ -665,7 +667,7 @@ void nsFilePicker::DonePortal(GVariant* aResult) {
   }
 
   ClearPortalState();
-  DoneCommon(result);
+  DoneCommon(result, std::move(mCallback));
 }
 #endif
 
@@ -805,6 +807,11 @@ already_AddRefed<nsIFile> nsFilePicker::GetDefaultPath() {
   } else if (sPrevDisplayDirectory) {
     sPrevDisplayDirectory->Clone(getter_AddRefs(defaultPath));
   }
+
+  if (!defaultPath || !IsReadableDirectory(*defaultPath)) {
+    return nullptr;
+  }
+
   return defaultPath.forget();
 }
 
@@ -879,6 +886,12 @@ void nsFilePicker::DoneNonPortal(GtkWidget* file_chooser, gint response) {
     return;
   }
 
+  // A null callback means a re-entrant call; the outer one owns the teardown.
+  nsCOMPtr<nsIFilePickerShownCallback> callback = std::move(mCallback);
+  if (!callback) {
+    return;
+  }
+
   mFileChooser = nullptr;
 
   nsIFilePicker::ResultCode result;
@@ -928,11 +941,12 @@ void nsFilePicker::DoneNonPortal(GtkWidget* file_chooser, gint response) {
     mFileChooserDelegate = nullptr;
   }
 
-  DoneCommon(result);
+  DoneCommon(result, std::move(callback));
   NS_RELEASE_THIS();
 }
 
-void nsFilePicker::DoneCommon(ResultCode aResult) {
+void nsFilePicker::DoneCommon(ResultCode aResult,
+                              nsCOMPtr<nsIFilePickerShownCallback> aCallback) {
   if (aResult == ResultCode::returnOK) {
     if (mMode == nsIFilePicker::modeSave) {
       nsCOMPtr<nsIFile> file;
@@ -962,9 +976,8 @@ void nsFilePicker::DoneCommon(ResultCode aResult) {
     }
   }
 
-  if (mCallback) {
-    mCallback->Done(aResult);
-    mCallback = nullptr;
+  if (aCallback) {
+    aCallback->Done(aResult);
   }
 }
 

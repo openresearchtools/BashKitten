@@ -3072,7 +3072,7 @@ static ReturnAbortOnError ShowProfileDialog(
       }
       nsCOMPtr<mozIDOMWindowProxy> newWindow;
       rv = windowWatcher->OpenWindow(nullptr, nsDependentCString(aDialogURL),
-                                     "_blank"_ns, features, ioParamBlock,
+                                     u"_blank"_ns, features, ioParamBlock,
                                      getter_AddRefs(newWindow));
 
       NS_ENSURE_SUCCESS_LOG(rv, rv);
@@ -3580,7 +3580,7 @@ static ReturnAbortOnError HandleDetectedDowngrade(
       }
       nsCOMPtr<mozIDOMWindowProxy> newWindow;
       rv = windowWatcher->OpenWindow(
-          nullptr, nsDependentCString(kProfileDowngradeURL), "_blank"_ns,
+          nullptr, nsDependentCString(kProfileDowngradeURL), u"_blank"_ns,
           features, paramBlock, getter_AddRefs(newWindow));
       NS_ENSURE_SUCCESS(rv, rv);
 
@@ -6185,13 +6185,6 @@ nsresult XREMain::XRE_mainRun() {
         tempArgv[i] = strdup(gArgv[i]);
       }
       CommandLineServiceMac::SetupMacCommandLine(gArgc, tempArgv, false);
-
-      // All startup URLs have been consumed by SetupMacCommandLine. From this
-      // point, any URLs received via Apple Events (application:openURLs:) will
-      // be handled immediately by nsICommandLineRunner instead of being
-      // buffered. See bug 2036237.
-      StartupURLCollectionComplete();
-
       rv = cmdLine->Init(gArgc, tempArgv, workingDir,
                          nsICommandLine::STATE_INITIAL_LAUNCH);
       free(tempArgv);
