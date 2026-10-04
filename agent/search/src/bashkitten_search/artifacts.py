@@ -104,8 +104,12 @@ def write_markdown(title: str, markdown: str, output_directory: Path | None = No
     return path
 
 
-def preview(content: str) -> str:
+def preview(
+    content: str,
+    *,
+    continuation: str = "read fullMarkdownPath for the complete extraction",
+) -> str:
     if len(content) <= MAX_PAGE_CHARS:
         return content
-    marker = f"\n\n… ({len(content)} characters; read fullMarkdownPath for the complete extraction)"
+    marker = f"\n\n… ({len(content)} characters; {continuation})"
     return content[:MAX_PAGE_CHARS - len(marker)] + marker

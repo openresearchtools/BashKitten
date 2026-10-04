@@ -77,7 +77,7 @@ def _search(request: dict[str, Any]) -> dict[str, Any]:
         if len(results) >= request["maxResults"]:
             break
     content = "\n\n".join(f"Title: {item['title']}\nURL: {item['url']}\nSnippet: {item['snippet']}" for item in results)
-    return {"ok": True, "query": request["query"], "content": preview(content or "No results found."), "results": results}
+    return {"ok": True, "query": request["query"], "content": preview(content or "No results found.", continuation="inspect results for the complete returned search entries"), "results": results}
 
 
 def _read(request: dict[str, Any]) -> dict[str, Any]:
