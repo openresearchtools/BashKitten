@@ -1193,3 +1193,39 @@ Local re-enrollment/clean-Termux-reinstall and fully authenticated remote checks
 remain unfinished. Include browser-skill package-lookup fix
 `9bebe11479c8d530268df0ffe1ddf8e6cf226832` and finish those regressions as part of
 the eventual release, rather than losing them during migration.
+
+## 13. Implementation evidence, 5 October
+
+The full plan remains incomplete. These records identify finished source/build
+slices and their limits; they do not replace the manual acceptance table.
+
+- `b9c922ee01`: recorded the requested scope/minimal-code/no-fallback constraints
+  before implementation.
+- `b1a42ff038`: complete pillama 0.2.1 source, lock and build metadata imported;
+  source tree matches upstream `7c17c7208812828bf007b576b62b9ceb17b34632`.
+  Packaging reads its declared runtime files and leaves upstream development/tests
+  in source releases only. Installed-package/Pi acceptance remains pending.
+- `4088b4f8dd`: pristine Chisel 1.12.0 and age 1.3.2 imported, Caddy updated to
+  2.11.7, with exact archive hashes and source-tree matches. Native access-stack
+  [run 37257679830](https://github.com/openresearchtools/BashKitten/actions/runs/37257679830)
+  passed Linux amd64/arm64 and Termux aarch64 builds, assembly and notices.
+  Downloaded Chisel uses `/system/bin/linker64` and 16 KB ELF load alignment.
+  **No Chisel source patches.** Device/tunnel operation remains pending.
+- `af56d0cbbb`: complete pinned barcode/gozxing source imported and verified
+  against the donor's exact upstream source trees.
+- `fa945a089e`: shared tunnel adapter and `TK2:` age/gzip/encrypted QR codec,
+  with host adapter excluded from the Android client build. Native core
+  [run 37258757560](https://github.com/openresearchtools/BashKitten/actions/runs/37258757560)
+  compiled Linux amd64/arm64 and Android arm64 client packages. This is library
+  compilation, not a JNI/APK integration or authentication acceptance result.
+- `0f5bdf12c8`: Android navigation uses the existing kitten logo; Local setup
+  offers Connect to remote and remembers the previous remote for Back to remote.
+  [APK candidate run 37258390184](https://github.com/openresearchtools/BashKitten/actions/runs/37258390184)
+  was dispatched with the successful native stack. APK/manual UI acceptance is
+  pending; this candidate does not contain the new tunnel architecture.
+
+Next: wire the core into the existing private host controller and native client,
+prove the protected Agent/Authelia one-login path, then implement Share Local
+and remove its shared-web management routes. Continue all remaining gates,
+including service/file-manager boundaries, Tor routing, lifetime, Display,
+LocalAI/dictation, migration and the complete verified release.
