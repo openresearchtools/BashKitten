@@ -141,8 +141,9 @@ void BashKittenTray::WatcherAppeared(const char* aOwner) {
             self->UpdateAvailable();
           }
         }), self.get());
+        auto* cancel = self->mCancel;
         g_dbus_proxy_call(proxy, "RegisterStatusNotifierItem",
-            g_variant_new("(s)", kPath), G_DBUS_CALL_FLAGS_NONE, -1, self->mCancel,
+            g_variant_new("(s)", kPath), G_DBUS_CALL_FLAGS_NONE, -1, cancel,
             [](GObject* source, GAsyncResult* result, gpointer data) {
               RefPtr<BashKittenTray> self = dont_AddRef(static_cast<BashKittenTray*>(data));
               GError* error = nullptr;
