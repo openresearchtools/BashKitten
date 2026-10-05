@@ -82,7 +82,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
         setup = new ScrollView(activity); setup.setFillViewport(true);
         LinearLayout setupBody = new LinearLayout(activity); setupBody.setPadding(dp(24), dp(28), dp(24), dp(24)); setupBody.setOrientation(VERTICAL); setup.addView(setupBody);
-        TextView title = text(); title.setText("BashKitten"); title.setTextSize(28); setupBody.addView(title);
+        ImageView logo = new ImageView(activity); logo.setImageResource(agentIcon);
+        logo.setContentDescription("BashKitten"); logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        setupBody.addView(logo, new LayoutParams(dp(32), dp(32)));
         message = text(); message.setTextSize(16); message.setPadding(0, dp(12), 0, dp(20)); setupBody.addView(message);
         actions = new LinearLayout(activity); actions.setOrientation(VERTICAL); setupBody.addView(actions);
         log = text(); log.setTextSize(12); log.setTypeface(android.graphics.Typeface.MONOSPACE); log.setTextIsSelectable(true);
@@ -194,7 +196,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         view.setVisibility(online && connectionError.isEmpty() ? VISIBLE : GONE);
         setup.setVisibility(online && connectionError.isEmpty() ? GONE : VISIBLE);
         if (!online) connectionStatus.setVisibility(GONE);
-        String setupState = runtime.selected + runtime.state + runtime.setupStep + runtime.error;
+        String setupState = runtime.selected + runtime.state + runtime.setupStep + runtime.error
+            + runtime.remoteConnected(app.policies.getString("agent.lastRemote", ""));
         if (!renderedState.equals(setupState)) { renderedState = setupState; renderSetup(); }
         if (online && !connectionError.isEmpty()) {
             message.setText(connectionError); actions.removeAllViews();
@@ -408,7 +411,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         message.setText(runtime.error.isEmpty() ? description : runtime.error);
         if (runtime.selected.equals("local") && (state.equals("setup") || state.equals("off") || state.equals("failed"))) {
             String previous = app.policies.getString("agent.lastRemote", "");
-            if (!previous.isEmpty()) action("Back to remote", () -> runtime.select(previous));
+            if (runtime.remoteConnected(previous)) action("Back to remote", () -> runtime.select(previous));
             action("Connect to remote", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class)));
         }
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) return;
