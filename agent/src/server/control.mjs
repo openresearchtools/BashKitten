@@ -24,6 +24,7 @@ import { acquireWake, releaseWake } from './access/wake.mjs';
 import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
 import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
 import { TermuxDisplay } from './platform/termux/display.mjs';
+import { importRemoteProvider } from './rpc/managed-provider.mjs';
 
 export const controlSocket = paths.control;
 const stateFile = path.join(dataDir, 'control.json');
@@ -265,6 +266,7 @@ async function serve() {
         cookie: { name: stack.localCookieName, value: stack.localToken } };
     }
     // Private native IPC only; none of these commands is forwarded by the web API.
+    if (command === 'remote-pi-import') return importRemoteProvider(value);
     if (command.startsWith('display-')) {
       if (!display) throw Error('Display is available only in local Termux');
       if (command === 'display-status') return display.status();

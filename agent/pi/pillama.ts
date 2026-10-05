@@ -8,7 +8,8 @@ import pillama from './vendor/pillama/index.ts';
 export default function extension(pi: ExtensionAPI) {
   let provider = 'llama.cpp';
   const selectProvider = (_event: unknown, ctx: ExtensionContext) => {
-    provider = ctx.model?.provider === 'bashkitten-llama' ? 'bashkitten-llama' : 'llama.cpp';
+    const selected = ctx.model?.provider;
+    provider = selected === 'bashkitten-llama' || selected?.startsWith('bashkitten-remote-') ? selected : 'llama.cpp';
   };
   pi.on('session_start', selectProvider);
   pi.on('model_select', selectProvider);
