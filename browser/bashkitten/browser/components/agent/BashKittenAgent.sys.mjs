@@ -823,7 +823,7 @@ class AgentView {
   }
 
   async remotes() {
-    if (this.connectionsPanel) { this.connectionsPanel.querySelector("button").focus(); return; }
+    this.closeConnections();
     const { panel, content } = this.connectionPanel("Browser connections");
     const error = html(this.doc, "p", { role: "alert" }), saved = html(this.doc, "div");
     const report = async task => { try { error.textContent = ""; await task(); } catch (e) { error.textContent = e.message; } };
