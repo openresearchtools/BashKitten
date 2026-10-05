@@ -23,6 +23,14 @@ publishing, existing native security boundaries and mandatory remote Authelia
 authentication. The new document specifies source updates, minimal upstream
 patches, migration, builds and manual acceptance; it does not claim completion.
 
+Additional Tor clarification, 5 October: every network request from a Tor tab,
+including HTTP/HTTPS assets on public domains, redirects, downloads and DNS,
+must use Tor or be blocked, with no direct fallback. Ordinary unenrolled onion
+links enter the private Tor context before loading. Native authenticated tunnel
+APIs/local mapped service sockets retain their separate scoped route; do not
+create a blanket localhost exception for Tor pages. The detailed requirements
+and manual acceptance cases are in the remote tunnel plan.
+
 Latest clarification, 23 September: remove unrequested hard size/count/time
 quotas in file transfers, ZIP operations, browser tools, search extraction and
 model downloads. Keep ordinary backend/browser behavior, user cancellation and

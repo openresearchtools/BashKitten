@@ -30,8 +30,12 @@ and Linux window-close requirements: encrypted QR using the chosen Authelia
 password, native Chisel service mappings on both clients, remote host service
 controls, identity reissue, close-to-tray and explicit Quit. Preserve Local Pi's
 access to enabled remote localhost mappings. These are planned requirements,
-not a claim that the new transport or tray is already implemented. The migration
-keeps one product repository: `/agent` for the existing shared app, `/browser` for the
+not a claim that the new transport or tray is already implemented. Tor tabs must
+route all network requests, including public HTTP/HTTPS assets and DNS, through
+Tor or block them. Ordinary unenrolled onion URLs enter private Tor before any
+request. Native mapped-service/Agent routes stay separately scoped; never give
+Tor pages a blanket localhost bypass. The migration keeps one product repository:
+`/agent` for the existing shared app, `/browser` for the
 Gecko subtree and `/auth` for tracked Authelia/Caddy/Tor source and isolated
 Termux build patches. Any installed `com.termux` must be able to request native
 browser approval, regardless of signer; already authorized calls run directly.

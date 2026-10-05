@@ -22,6 +22,7 @@ this plan, building a helper or dispatching CI does not complete that deliverabl
 | Remote login | Decrypt the QR, verify the server, authenticate with Authelia/TOTP and connect; no separately chosen tunnel password or pasted keys |
 | Connected remote | List Agent and every published service, actual host state, local URL/port, Open/Copy, mapping control and host Start/Stop/Reload |
 | Android localhost | Services bind an available port automatically or a user-selected port; Termux Pi and ordinary local applications can use them |
+| Tor browsing on both platforms | Every network request from a Tor tab uses Tor or is blocked; ordinary unenrolled `.onion` navigation always enters the private Tor context |
 | Linux host services | Explicit target and launch command/configuration, including llama.cpp router mode, with Start/Stop/Reload and Launch on startup |
 | Reissue identity | Close old access, replace the remote account and all remote keys, enroll fresh TOTP, issue the new password-encrypted QR |
 | Linux lifetime | Close hides to a functioning tray with BashKitten icon; Quit stops owned services and exits; Start on login is configurable |
@@ -136,6 +137,49 @@ controller, tunnel keys or Authelia credentials. Different localhost ports do
 not isolate cookies: use separate browser storage contexts for service tabs.
 A web app may need its own base URL/origin configured for localhost; present
 that real configuration requirement rather than silently rewriting its stream.
+
+### Strict Tor tabs and ordinary onion links
+
+Additional requirement, 5 October: **Tor routing belongs to the tab's browsing
+context, not just to destinations ending in `.onion`.** On Android and Linux,
+every network request initiated by a Tor tab must use Tor or fail closed. This
+includes the document, HTTP/HTTPS assets on ordinary public domains, scripts,
+styles, images, fonts, media, frames, fetch/XHR, SSE, WebSockets, downloads,
+redirects and worker requests where supported. Keep normal TLS verification,
+mixed-content restrictions and other browser security checks; Tor routing does
+not make otherwise blocked content safe to load.
+
+Carry the private Tor context across navigations, redirects, new-tab links,
+popups, downloads and process changes. An onion page redirecting to an ordinary
+HTTPS site stays on Tor. Resolve destination names through Tor, including public
+asset hosts; no system DNS, direct DoH, speculative DNS/preconnect or auxiliary
+page-triggered lookup may reveal those destinations outside Tor. Prevent direct
+socket paths such as WebRTC/STUN or unsupported UDP/QUIC/WebTransport from
+bypassing the proxy: use a supported Tor transport or block that capability in
+the Tor context. A starting, stopped or failed Tor client produces a clear
+waiting/error state; it never retries directly or inherits a system proxy's
+direct/localhost bypass rules.
+
+An ordinary `.onion` address with no imported connection/client key is normal
+Tor browsing, not an Agent enrollment attempt. Typed/pasted URLs, clicked links,
+OS URL opens, redirects and automation-created ordinary tabs must select the
+**private Tor tab/context before making the onion request**. Preserve the
+single-window product design; “private” here does not require another desktop
+window. Do not ask users to import a key for a public onion site, attach a saved
+Agent identity/session, or fall back to a normal/direct tab when a site is
+unavailable or actually requires client authorization. Tor tabs keep private
+storage isolated from ordinary browsing and protected Agent connections.
+
+The native authenticated tunnel path remains distinct. A registered service
+exposed at `127.0.0.1:<mapped-port>` is already the local end of the enrolled
+Chisel-over-Tor connection; Pi and the native client must use that local socket
+without sending it through Tor again. Service links deliberately opened from
+the connected-remote UI use their scoped service context, not an ordinary Tor
+tab. This exception is selected by trusted native connection/context ownership,
+never by a blanket `localhost`/`127.*` URL exemption. An arbitrary Tor page
+cannot gain direct loopback/LAN access or the native API exception by requesting
+such a URL. Enforce this in native network routing on both platforms, not only
+in address-bar navigation or JavaScript fetch helpers.
 
 ## 4. Publisher setup and encrypted image
 
@@ -386,6 +430,7 @@ during the current runtime.
 | Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` | Remote-first onboarding/back, encrypted image import, service actions/mappings and foreground ownership |
 | Android `TorManager.java`, `TorGateway.java`, `SecretStore.java` | Reuse native Tor, scoped trust and protected credentials; add native tunnel client without Termux |
 | Desktop `components/{agent,tor}` | Equivalent UI, protected Agent transport and storage; replace `LlamaRelay` with common native mapping core |
+| Android/desktop native tab and network routing | Private Tor context before onion navigation; Tor-only subresources, DNS, redirects and downloads; block unsupported direct transports; keep native mapped-service routing separately scoped |
 | Desktop native GTK/lifetime integration | Tray, hide/reopen, autostart and real Quit |
 | `auth`, packaging/workflows/notices | Full source imports, native builds, minimal staged patches, provenance/source/license bundles and four artifacts |
 
@@ -413,7 +458,7 @@ stack is one PID. Document exact process ownership and private IPC.
 | 2. Host/tunnel | Actual Tor/Caddy/Authelia/Chisel, chosen account, verified TOTP, encrypted image and approved-service mapping; reject invalid identity/auth/target |
 | 3. One-login UI | Protected Agent/OAuth integration, no-Termux Android onboarding, camera/image import, stored secrets, Back to remote and remembered restart; desktop parity |
 | 4. Services/localhost | Host command/config/startup UI, real remote actions, automatic/chosen ports, concurrent remotes and Local Pi using an enabled remote mapping |
-| 5. Real applications | Multi-model llama router, bearer/no-bearer, byte-offset replay, pillama status, web application uploads/downloads/cookies/WebSockets |
+| 5. Real applications | Multi-model llama router, bearer/no-bearer, byte-offset replay, pillama status, web application uploads/downloads/cookies/WebSockets; strict Tor-tab routing and ordinary private onion navigation |
 | 6. Reset/lifetime | Complete and interrupted identity rotation; old exports/sessions fail; tray/hide/reopen/autostart/Quit and owned-group cleanup |
 | 7. Delivery | Existing-data migration, four complete artifacts, offline notices/source, manual platform acceptance, release/APT publication with testing warning |
 
@@ -459,6 +504,8 @@ except where an explicit restart case requires otherwise.
 | Local ports | Actual auto/chosen/conflicting ports, two remotes with same service name, retained mapping while using Local, recovery after process death |
 | Pi/browser tools | Real Pi turn using phone-local remote llama; browser controls ordinary service tabs but excludes Agent/auth/QR; approved Termux calls run without repeated prompts |
 | Web apps | Real navigation/login if app requires it, file upload/download and WebSockets; service contexts receive no Agent cookies or native privileges |
+| Tor tab network boundary | On Android/Linux manually browse real onion and public pages in Tor tabs with HTTP/HTTPS assets, frames, requests, redirects, downloads and WebSockets; inspect external network evidence for no direct destination/DNS or WebRTC/UDP escape; stop Tor during loading and confirm failure without direct fallback |
+| Onion entry and tunnel exception | Typed/clicked/OS-opened/redirected/automation-opened public onion URLs enter private Tor without import prompts; linked public hosts stay on Tor; native mapped APIs still work locally; Tor-page loopback/LAN requests cannot use the native exception; storage stays separate |
 | llama/router | Two actual models, bearer and token-free modes, concurrent streams, pillama status, network interruption and exact native byte-offset replay |
 | Access removal | Disconnect/logout/revoke/reset during streaming closes access; old QR/session fails; service removal/target change closes old carriers |
 | Identity reset | New user/password/TOTP/onion/client grant/CA/Chisel key; old account removed; interrupted rotation closed; local chats/provider logins/models/service definitions preserved |
