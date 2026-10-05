@@ -227,6 +227,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         microphone = microphonePermission;
         session.setPermissionDelegate(microphonePermission);
         final String[] currentLocation = {""};
+        final boolean[] oauthCallbackLoad = {false};
         session.setNavigationDelegate(new GeckoSession.NavigationDelegate() {
             @Override public void onLocationChange(GeckoSession s, String address, List<GeckoSession.PermissionDelegate.ContentPermission> permissions, Boolean hasUserGesture) {
                 microphonePermission.navigated();
@@ -234,7 +235,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             }
             @Override public GeckoResult<AllowOrDeny> onLoadRequest(GeckoSession s, LoadRequest request) {
                 if (request.uri.equals("about:blank")) return GeckoResult.fromValue(AllowOrDeny.ALLOW);
-                if (runtime.remoteCallback(s, request.uri)) return GeckoResult.fromValue(AllowOrDeny.DENY);
+                if (runtime.isRemoteCallback(request.uri)) {
+                    // Let only the pending protected login reach Gecko's POST
+                    // interceptor; that observer cancels it before any network I/O.
+                    boolean pending = request.target == TARGET_WINDOW_CURRENT && !request.isDownload &&
+                        !request.isDirectNavigation && runtime.pendingRemoteCallback(s, request.uri, request.triggerUri);
+                    oauthCallbackLoad[0] = pending;
+                    return GeckoResult.fromValue(pending ? AllowOrDeny.ALLOW : AllowOrDeny.DENY);
+                }
                 try {
                     URI target = URI.create(request.uri), own = URI.create(runtime.url);
                     if ("blob".equals(target.getScheme())) {
@@ -268,6 +276,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 return GeckoResult.fromValue(AllowOrDeny.DENY);
             }
             @Override public GeckoResult<String> onLoadError(GeckoSession s, String uri, WebRequestError error) {
+                if (oauthCallbackLoad[0] && AgentRuntime.OAUTH_CALLBACK.equals(uri)) return null;
                 if (s == runtime.session && runtime.isOnRequested()) {
                     connectionError = "Agent connection failed (" + error.code + "). Reconnect checks its current address and saved certificate.";
                     connectionStatus.setVisibility(GONE); changed();
@@ -278,12 +287,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         session.setProgressDelegate(new GeckoSession.ProgressDelegate() {
             @Override public void onPageStart(GeckoSession s, String uri) {
                 microphonePermission.navigated();
+                if (!AgentRuntime.OAUTH_CALLBACK.equals(uri)) oauthCallbackLoad[0] = false;
                 if (s != runtime.session || !runtime.isOnRequested() || "about:blank".equals(uri)) return;
                 connectionError = ""; connectionStatus.setVisibility(VISIBLE); changed();
             }
             @Override public void onPageStop(GeckoSession s, boolean success) {
                 if (s != runtime.session || !runtime.isOnRequested() || "about:blank".equals(currentLocation[0])) return;
                 connectionStatus.setVisibility(GONE);
+                if (oauthCallbackLoad[0]) return; // The private interceptor intentionally cancels this navigation.
                 if (!success && connectionError.isEmpty()) connectionError = "Agent could not finish loading. Reconnect to try again.";
                 changed();
                 if (success) runtime.agentPageReady(s, currentLocation[0]);

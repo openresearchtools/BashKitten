@@ -10,6 +10,7 @@ const certificates = Cc["@mozilla.org/security/certoverride;1"].getService(Ci.ns
 const certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB);
 const contextPrefix = value => "gvctx" + Array.from(new TextEncoder().encode(value), byte => byte.toString(16).padStart(2, "0")).join("");
 const protectedContext = value => String(value).startsWith(contextPrefix("bashkitten-agent-ui-"));
+const OAUTH_CALLBACK = "http://127.0.0.1/oauth/callback";
 
 const commands = new Set(["snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "diagnostics"]);
 
@@ -20,12 +21,14 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     this.agentRequests = new Set();
     this.context = this.settings.sessionContextId;
     this.browserId = this.browser.browsingContext.browserId;
+    if (protectedContext(this.context)) Services.obs.addObserver(this, "http-on-modify-request");
     BashKittenAndroid.register(this.context, this.browserId);
     this.registerListener(["BashKitten:Request"]);
     this.ready = BashKittenAndroid.init();
   }
   onDestroy() {
     this.destroyed = true;
+    if (protectedContext(this.context)) Services.obs.removeObserver(this, "http-on-modify-request");
     BashKittenHost.close(this.browser);
     for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
     this.agentRequests.clear();
@@ -51,6 +54,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     if (method.startsWith("agent.")) {
       if (!protectedContext(this.context)) throw new Error("Protected Agent context required");
       if (method === "agent.cancel") {
+        this.agentLogin = false;
         for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
         this.agentRequests.clear();
         return true;
@@ -60,6 +64,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (method === "agent.configure") return this.configureAgent(params);
       if (method === "agent.firstFactor") return this.firstFactor(params);
       if (method === "agent.disconnect") {
+        this.agentLogin = false;
         if (this.agentHost?.endsWith(".onion")) {
           certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
           this.agentUsesClientCertificate = false;
@@ -220,9 +225,48 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
     this.agentHost = endpoint.hostname;
     this.agentOrigin = endpoint.origin;
+    this.agentLogin = onion && this.agentUsesClientCertificate && params.login === true;
     this.agentIdentity = { caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
     BashKittenHost.configure(this.browser, this.context, this.agentOrigin);
     return { ready: true };
+  }
+  observe(subject, topic) {
+    if (topic !== "http-on-modify-request") return;
+    const channel = subject.QueryInterface(Ci.nsIHttpChannel);
+    const info = channel.loadInfo;
+    if (info.originAttributes.geckoViewSessionContextId !== this.context ||
+        channel.URI.scheme !== "http" || channel.URI.host !== "127.0.0.1" ||
+        !channel.URI.pathQueryRef.startsWith("/oauth/callback")) return;
+    // This endpoint is handled only in native code. Never open a loopback socket
+    // or commit a callback document, even for a stale or invalid response.
+    channel.cancel(Cr.NS_BINDING_ABORTED);
+    const top = this.browser.browsingContext;
+    const source = info.triggeringPrincipal;
+    const current = top.currentWindowGlobal?.documentPrincipal;
+    if (this.destroyed || !this.agentLogin || channel.URI.spec !== OAUTH_CALLBACK ||
+        info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT ||
+        info.browsingContext !== top || source?.isSystemPrincipal || current?.isSystemPrincipal ||
+        source?.originNoSuffix !== this.agentOrigin || current?.originNoSuffix !== this.agentOrigin ||
+        source?.originAttributes.geckoViewSessionContextId !== this.context ||
+        current?.originAttributes.geckoViewSessionContextId !== this.context) return;
+    this.agentLogin = false;
+    let form = null;
+    try {
+      if (channel.requestMethod !== "POST" ||
+          channel.getRequestHeader("Content-Type").split(";", 1)[0].trim().toLowerCase() !== "application/x-www-form-urlencoded") {
+        throw new Error("Invalid sign-in response");
+      }
+      const upload = channel.QueryInterface(Ci.nsIUploadChannel2);
+      if (upload.uploadStreamHasHeaders) throw new Error("Invalid sign-in response");
+      const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
+      stream.QueryInterface(Ci.nsISeekableStream).seek(Ci.nsISeekableStream.NS_SEEK_SET, 0);
+      const length = channel.getRequestHeader("Content-Length");
+      if (!/^\d+$/.test(length) || stream.available() !== Number(length)) throw new Error("Incomplete sign-in response");
+      const body = NetUtil.readInputStreamToString(stream, Number(length));
+      if (body.length !== Number(length) || /[^\x00-\x7f]/.test(body)) throw new Error("Invalid sign-in response");
+      form = body;
+    } catch (_) { /* Only a generic failure crosses the private native event. */ }
+    this.eventDispatcher.sendRequest("BashKitten:OAuthCallback", { uri: OAUTH_CALLBACK, form });
   }
   async agentRequest({ origin, path, body, csrf }) {
     const endpoint = this.agentEndpoint(origin);

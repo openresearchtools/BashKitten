@@ -1745,3 +1745,11 @@ listener or authorization code in a URL is introduced. Android uses its protecte
 native event path for the same contract. Native compilation and JavaScript syntax
 checks pass; integrated builds and actual TOTP/consent/tunnel acceptance are still
 required. The failed setup did not establish a working remote connection.
+
+Android's URI delegate admits only the exact pending issuer-origin callback to
+the protected native POST interceptor; stale callbacks remain blocked. The form
+uses a private Gecko/native event outside the page host-call allowlist. Runtime
+selection and pending-login checks precede the native two-argument completion.
+Only that callback's intentional cancellation is excluded from the generic load
+error UI. JavaScript syntax and five Java parse-only checks passed; fresh generated
+binding/APK type compilation and manual sign-in acceptance remain pending.

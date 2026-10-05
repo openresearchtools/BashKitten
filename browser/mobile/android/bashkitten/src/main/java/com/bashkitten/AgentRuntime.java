@@ -16,6 +16,7 @@ import org.mozilla.geckoview.*;
 
 /** One application-owned Agent session. It is deliberately absent from the browser tab store. */
 public final class AgentRuntime {
+    static final String OAUTH_CALLBACK = "http://127.0.0.1/oauth/callback";
     public interface Listener { void changed(); }
     final BrowserApp app;
     public final TermuxConnection termux;
@@ -354,17 +355,19 @@ public final class AgentRuntime {
         if (next == null) {
             next = new GeckoSession(new GeckoSessionSettings.Builder().contextId("bashkitten-agent-ui-" + sessionKey).build());
             sessions.put(sessionKey, next); next.open(engine);
-            final GeckoSession hostSession = next;
-            BashKittenController.setHostDelegate(next, (command, args, reply) -> hostCall(hostSession, command, args, reply));
         }
         session = next;
         if (!next.isOpen()) next.open(engine);
         final GeckoSession currentSession = next;
-        BashKittenController.setHostDelegate(next, (command, args, reply) -> hostCall(currentSession, command, args, reply));
+        BashKittenController.setHostDelegate(next, new BashKittenController.HostDelegate() {
+            @Override public void call(String command, String args, Consumer<String> reply) { hostCall(currentSession, command, args, reply); }
+            @Override public void oauthCallback(String address, String form) { completeRemoteLogin(currentSession, address, form); }
+        });
         JSONObject params = new JSONObject().put("url", endpoint).put("identity", identity).put("tor", tor).put("port", port)
             .put("proxySecret", remote == null ? app.tor.proxySecret() : remote.route.secret)
             .put("agentOrigin", URI.create(endpoint).getScheme() + "://" + URI.create(endpoint).getRawAuthority());
-        if (remote != null) params.put("clientCertificate", remote.identity.getJSONObject("clientCertificate"));
+        if (remote != null) params.put("clientCertificate", remote.identity.getJSONObject("clientCertificate"))
+            .put("login", remote.awaitingCallback);
         if (sessionKey.equals("local") && !tor && localSession != null) params.put("localSession", localSession);
         final GeckoSession target = next;
         final int generation = operation;
@@ -685,21 +688,31 @@ public final class AgentRuntime {
                 });
         } catch (Exception error) { remoteFailed(connection, "Could not configure the protected remote sign-in."); }
     }
-    /** Consume the native OAuth callback before Gecko loads or records it. */
-    boolean remoteCallback(GeckoSession source, String address) {
+    /** Reserved callback URLs never become ordinary browser tabs. */
+    boolean isRemoteCallback(String address) {
         URI callback;
         try { callback = URI.create(address); } catch (Exception error) { return false; }
-        if (!"http".equals(callback.getScheme()) || !"127.0.0.1".equals(callback.getHost())
-            || !"/oauth/callback".equals(callback.getPath())) return false;
-        // Always block this reserved callback in Agent, including stale/invalid
-        // responses. Only the selected protected login may deliver it to Go.
+        return "http".equals(callback.getScheme()) && "127.0.0.1".equals(callback.getHost())
+            && callback.getPath() != null && callback.getPath().startsWith("/oauth/callback");
+    }
+    boolean pendingRemoteCallback(GeckoSession source, String address, String trigger) {
         RemoteAgentConnection connection = remoteConnections.get(selected);
-        if (connection == null || !selectedRemote(connection) || source != session || !connection.awaitingCallback) return true;
-        // The native flow checks the exact callback, issuer and single-use
-        // state. Gecko's triggerUri can be absent for an HTTP redirect.
+        if (!OAUTH_CALLBACK.equals(address) || connection == null ||
+            !selectedRemote(connection) || source != session || !state.equals("login") || !connection.awaitingCallback) return false;
+        try {
+            URI issuer = URI.create(trigger);
+            return "https".equals(issuer.getScheme()) && connection.host.equals(issuer.getHost())
+                && issuer.getPort() == -1 && issuer.getRawUserInfo() == null;
+        } catch (Exception error) { return false; }
+    }
+    private void completeRemoteLogin(GeckoSession source, String address, String form) {
+        RemoteAgentConnection connection = remoteConnections.get(selected);
+        if (connection == null || !selectedRemote(connection) || source != session || !state.equals("login") ||
+            !connection.awaitingCallback || !OAUTH_CALLBACK.equals(address)) return;
+        if (form == null) { remoteFailed(connection, "The remote sign-in response could not be read."); return; }
+        // The native OAuth flow validates the original form's issuer/state and PKCE.
         busy = true; state = "starting"; changed();
-        connection.complete(address);
-        return true;
+        connection.complete(address, form);
     }
     private void connectRemote() {
         final int generation = ++operation;

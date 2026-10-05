@@ -109,14 +109,14 @@ final class RemoteAgentConnection implements AutoCloseable {
         });
     }
 
-    void complete(String callback) {
+    void complete(String callback, String form) {
         if (!awaitingCallback || isClosed()) return;
         awaitingCallback = false;
         io.execute(() -> {
             try {
                 NativeRemote current;
                 synchronized (this) { if (closed) throw new IllegalStateException("Remote connection closed."); current = client; }
-                current.completeLogin(callback);
+                current.completeLogin(callback, form);
                 activate(current, current.browserIdentity());
             } catch (Exception error) { failed(error); }
         });

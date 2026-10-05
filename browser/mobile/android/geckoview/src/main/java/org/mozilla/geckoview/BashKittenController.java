@@ -16,11 +16,14 @@ import org.mozilla.gecko.util.ThreadUtils;
 /** Product-private bridge to the session's privileged browser module. */
 public final class BashKittenController {
     private static final String HOST_EVENT = "BashKitten:HostCall";
+    private static final String OAUTH_EVENT = "BashKitten:OAuthCallback";
     private static final WeakHashMap<GeckoSession, HostListener> HOSTS = new WeakHashMap<>();
 
     /** Narrow native UI actions for the enrolled Agent document. */
     public interface HostDelegate {
         void call(@NonNull String command, @NonNull String args, @NonNull Consumer<String> reply);
+        /** Privileged request interception only; unavailable to the page's host bridge. */
+        default void oauthCallback(@NonNull String uri, @Nullable String form) {}
     }
 
     private BashKittenController() {}
@@ -31,7 +34,7 @@ public final class BashKittenController {
         HostListener previous = HOSTS.remove(session);
         if (previous != null) {
             previous.active = false;
-            session.getEventDispatcher().unregisterUiThreadListener(previous, HOST_EVENT);
+            session.getEventDispatcher().unregisterUiThreadListener(previous, HOST_EVENT, OAUTH_EVENT);
         }
         if (delegate == null) return;
         String context = session.getSettings().getContextId();
@@ -40,7 +43,7 @@ public final class BashKittenController {
         }
         HostListener listener = new HostListener(session, delegate);
         HOSTS.put(session, listener);
-        session.getEventDispatcher().registerUiThreadListener(listener, HOST_EVENT);
+        session.getEventDispatcher().registerUiThreadListener(listener, HOST_EVENT, OAUTH_EVENT);
     }
 
     private static final class HostListener implements BundleEventListener {
@@ -55,9 +58,15 @@ public final class BashKittenController {
 
         @Override
         public void handleMessage(String event, GeckoBundle message, EventCallback callback) {
+            GeckoSession current = session.get();
+            if (OAUTH_EVENT.equals(event)) {
+                if (active && current != null && HOSTS.get(current) == this) {
+                    delegate.oauthCallback(message.getString("uri", ""), message.getString("form"));
+                }
+                return;
+            }
             String command = message.getString("command", "");
             String args = message.getString("args", "{}");
-            GeckoSession current = session.get();
             if (!active || current == null || HOSTS.get(current) != this || args.length() > 200000 ||
                     !("notification-settings".equals(command) || "notify-turn".equals(command) ||
                       "import-remote".equals(command) || "sign-in".equals(command) || "open-hosted".equals(command))) {
