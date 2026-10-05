@@ -143,7 +143,12 @@ gboolean moz_container_wayland_map_event(GtkWidget* widget,
     return false;
   }
 
-  return moz_container_wayland_ensure_surface(container);
+  // An unchanged allocation may skip size_allocate after hide/show. Preserve
+  // its offset so the recreated surface stays aligned with GTK input.
+  GtkAllocation allocation;
+  gtk_widget_get_allocation(widget, &allocation);
+  auto pos = DesktopIntPoint(allocation.x, allocation.y);
+  return moz_container_wayland_ensure_surface(container, &pos);
 }
 
 void moz_container_wayland_size_allocate(GtkWidget* widget,
