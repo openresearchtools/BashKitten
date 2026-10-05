@@ -43,6 +43,7 @@ static constexpr char kDescription[] = R"xml(
  <signal name="NewToolTip"/>
 </interface></node>)xml";
 
+BashKittenTray::BashKittenTray() = default;
 BashKittenTray::~BashKittenTray() { Close(); }
 
 NS_IMETHODIMP BashKittenTray::Init(mozIDOMWindowProxy* aWindow,

@@ -1707,6 +1707,12 @@ an ambiguous D-Bus menu callback type. The source uses a named raw-string delimi
 and the existing `mozilla::widget` type explicitly. These are compiler corrections;
 a successful rebuilt package and installed tray acceptance remain pending.
 
+Linux ARM64 `37334285351` at `c08317bc96` compiled the corrected tray source,
+then exposed an incomplete `nsWindow` type from its inline constructor in the
+static component factory. The default constructor now lives beside the destructor
+in the source file that includes `nsWindow.h`. Native factory compilation and
+installed tray acceptance still require a corrected candidate.
+
 ### 5 October obsolete enrollment exception removed
 
 The old `setAgentOnionEnrollment` API, its temporary CA-less verifier state and

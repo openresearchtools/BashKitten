@@ -16,7 +16,7 @@ class BashKittenTray final : public nsIBashKittenTray {
  public:
   NS_DECL_ISUPPORTS
   NS_DECL_NSIBASHKITTENTRAY
-  BashKittenTray() = default;
+  BashKittenTray();
 
  private:
   ~BashKittenTray();
