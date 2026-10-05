@@ -44,10 +44,11 @@ export async function filePath(root, relative = '') {
 export async function sessionImage(meta, reference, view) {
   if (typeof reference !== 'string' || !reference || reference.includes('\0')) throw Object.assign(Error('Choose an image path'), { status: 400 });
   // The chat route is not a second arbitrary-path file manager. Authorize only
-  // image destinations actually present in this session's native messages.
+  // image destinations returned by Pi. A client-authored Markdown link must
+  // not grant itself access to an arbitrary host image through this route.
   const messages = [...(view.entries || []).filter(e => e.type === 'message').map(e => e.message),
     ...(view.events || []).filter(e => e.type === 'message').map(e => e.message)];
-  const texts = messages.map(message => typeof message.content === 'string' ? message.content
+  const texts = messages.filter(message => ['assistant', 'toolResult'].includes(message?.role)).map(message => typeof message.content === 'string' ? message.content
     : (message.content || []).filter(block => block.type === 'text').map(block => block.text || '').join('\n'));
   let partial = '';
   for (const event of view.events || []) {

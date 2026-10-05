@@ -19,6 +19,10 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
     if (!Array.isArray(models) || !models.length || models.some(model => typeof model.id !== 'string' || !model.id)) throw Error('No routable models are available');
     if (apiKeyFile && (!path.isAbsolute(apiKeyFile) || apiKey !== undefined)) throw Error('Choose a key or its absolute file path');
     if (apiKey !== undefined && (typeof apiKey !== 'string' || /[\r\n\0]/.test(apiKey))) throw Error('Invalid application API key');
+    if (apiKeyFile) {
+      apiKey = (await fs.readFile(apiKeyFile, 'utf8')).split(/\r?\n/).map(line => line.trim()).find(line => line && !line.startsWith('#'));
+      if (!apiKey || /[\r\n\0]/.test(apiKey)) throw Error('The API key file contains no usable application key');
+    }
     const { pi: { getAgentDir } } = await loadPi();
     const file = path.join(getAgentDir(), 'models.json');
     const before = await fs.readFile(file, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
@@ -30,13 +34,13 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
     if (!previous && id === 'bashkitten-llama') previous = await readJson(path.join(dataDir, 'llama/pi-provider.json'), null);
     const existing = value.providers[id];
     if (existing && !same(existing, previous?.provider) && !same(existing, previous?.pending)) throw Error(`Pi provider ${id} was edited independently; preserve or rename it before importing`);
-    const keyPath = apiKeyFile || (apiKey ? path.join(accessDir, 'managed-providers', id + '.key') : null);
+    const keyPath = apiKey ? path.join(accessDir, 'managed-providers', id + '.key') : null;
     const provider = { name, baseUrl, api: 'openai-completions', authHeader: Boolean(keyPath),
       // Stock Pi's llama provider uses this sentinel for a token-free server.
       // Application requests still pass through the tunnel unchanged.
       apiKey: keyPath ? '!cat ' + quote(keyPath) : 'local', models };
     const keyChanged = Boolean(apiKey && await fs.readFile(keyPath, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; }) !== apiKey);
-    const keyDigest = keyPath ? digest(apiKeyFile ? (await fs.readFile(apiKeyFile, 'utf8')).trim() : apiKey) : null;
+    const keyDigest = keyPath ? digest(apiKey) : null;
     const changed = !same(existing, provider) || keyChanged || previous?.keyDigest !== keyDigest || Boolean(previous?.pending);
     if (changed) {
       if (await fs.readFile(file, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; }) !== before) throw Error('Pi model configuration changed; save again');
