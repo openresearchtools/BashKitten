@@ -1730,3 +1730,18 @@ origin checks and ordinary mapped-service routing remain in place.
 
 Both modules passed JavaScript syntax and whitespace checks. No scripted product
 test was added or run; native builds and manual routing acceptance remain pending.
+
+### 5 October actual Share Local enrollment failure
+
+Installed candidate `d773ea374f` reached native Share Local but Authelia rejected
+the OAuth registration: its bearer authorization scope requires `form_post`.
+Changing only that response mode in a private copy of the generated configuration
+passes the installed upstream validator. Native registration/PAR now use that
+mode, with the original issuer, state, PKCE and single-use checks preserved.
+Desktop captures the exact callback's form POST in its current protected login
+context, checks its source principal and complete body, and cancels the channel
+before network access. It passes the form through private native IPC; no callback
+listener or authorization code in a URL is introduced. Android uses its protected
+native event path for the same contract. Native compilation and JavaScript syntax
+checks pass; integrated builds and actual TOTP/consent/tunnel acceptance are still
+required. The failed setup did not establish a working remote connection.

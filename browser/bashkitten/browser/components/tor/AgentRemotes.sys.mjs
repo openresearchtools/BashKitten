@@ -452,11 +452,11 @@ class AgentRemoteStore {
     if (!owner || owner.state !== "login") throw new Error("Remote sign-in is no longer active.");
     owner.callback = callback;
   }
-  async complete(entry, owner, url) {
+  async complete(entry, owner, url, form) {
     this.current(entry, owner);
     owner.state = "connecting";
     try {
-      await owner.helper.call("complete-login", { callback: url }); await this.ready(entry, owner);
+      await owner.helper.call("complete-login", { callback: url, form }); await this.ready(entry, owner);
       this.current(entry, owner);
     } catch (error) {
       await this.failed(entry, owner, error);
@@ -527,11 +527,29 @@ class AgentRemoteStore {
     const channel = subject.QueryInterface(Ci.nsIHttpChannel), context = channel.loadInfo.originAttributes.userContextId;
     if (context < CONTEXT_MIN || context > CONTEXT_MAX) return;
     if (channel.URI.scheme === "http" && channel.URI.host === "127.0.0.1" && channel.URI.pathQueryRef.startsWith("/oauth/callback")) {
-      channel.cancel(Cr.NS_BINDING_ABORTED);
       const entry = this.entries?.get(this.activeId), owner = this.clients.get(this.activeId);
-      if (entry?.userContextId === context && owner?.state === "login" &&
-          channel.loadInfo.externalContentPolicyType === Ci.nsIContentPolicy.TYPE_DOCUMENT && !channel.loadInfo.browsingContext?.parent) {
-        this.complete(entry, owner, channel.URI.spec).catch(() => {});
+      try {
+        if (entry?.userContextId !== context || owner?.state !== "login") return;
+        const info = channel.loadInfo, browsing = info.browsingContext;
+        const browser = browsing?.embedderElement, host = browser?.ownerGlobal?.BashKittenAgent;
+        const principal = info.triggeringPrincipal;
+        if (info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT || !browsing || browsing !== browsing.top ||
+            host?.activeBrowser !== browser || host.off || host.selection !== entry.id ||
+            browser.getAttribute("bashkitten-protected") !== "true" || !principal?.isContentPrincipal ||
+            principal.originNoSuffix !== new URL(entry.url).origin || principal.originAttributes.userContextId !== context) return;
+        if (channel.URI.spec !== "http://127.0.0.1/oauth/callback" || channel.requestMethod !== "POST" ||
+            channel.getRequestHeader("Content-Type").split(";", 1)[0].trim().toLowerCase() !== "application/x-www-form-urlencoded" ||
+            channel.QueryInterface(Ci.nsIUploadChannel2).uploadStreamHasHeaders) throw new Error("Invalid Authelia sign-in response.");
+        const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
+        stream.QueryInterface(Ci.nsISeekableStream).seek(0, 0);
+        const form = NetUtil.readInputStreamToString(stream, stream.available());
+        if (form.length !== Number(channel.getRequestHeader("Content-Length"))) throw new Error("Incomplete Authelia sign-in response.");
+        this.complete(entry, owner, channel.URI.spec, form).catch(() => {});
+      } catch {
+        this.failed(entry, owner, new Error("Could not read the Authelia sign-in response.")).catch(() => {});
+      } finally {
+        // Consume only the protected form; no localhost request or code URL.
+        channel.cancel(Cr.NS_BINDING_ABORTED);
       }
       return;
     }
