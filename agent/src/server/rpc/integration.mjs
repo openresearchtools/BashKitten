@@ -41,14 +41,20 @@ async function register() {
     return path.resolve(agentDir, source.startsWith('~/') ? path.join(os.homedir(), source.slice(2)) : source) === directory;
   };
   let current = settings();
+  const baseSkills = [`skills/browser-${platform === 'termux' ? 'android' : 'linux'}/SKILL.md`, 'skills/web-search/SKILL.md'];
+  const skills = [...baseSkills, ...(platform === 'termux' ? ['skills/termux-display/SKILL.md'] : [])];
   const installed = current.getPackages().find(item => matches(item, integrationRoot));
   if (!installed) {
     await packageCommand(runtime.cli, 'install', integrationRoot);
     current = settings();
     current.setPackages(current.getPackages().map(item => matches(item, integrationRoot) ? {
       source: sourceOf(item),
-      skills: [`skills/browser-${platform === 'termux' ? 'android' : 'linux'}/SKILL.md`, 'skills/web-search/SKILL.md'],
+      skills,
     } : item));
+    await current.flush();
+  } else if (platform === 'termux' && JSON.stringify(installed.skills) === JSON.stringify(baseSkills)) {
+    // Upgrade only our original managed selection; preserve user skill filters.
+    current.setPackages(current.getPackages().map(item => item === installed ? { ...item, skills } : item));
     await current.flush();
   }
   // Remove only our obsolete managed donor wrapper, not an independently

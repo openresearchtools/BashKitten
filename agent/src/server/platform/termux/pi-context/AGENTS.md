@@ -13,7 +13,11 @@
   task applies, then any needed references; do not preload every skill body.
 - Package help: https://wiki.termux.com/wiki/Package_Management
   Available package recipes: https://github.com/termux/termux-packages
-- For a desktop program, choose an unused display and start your own
+- For a visible desktop, read `termux-display`. The native Display panel and
+  `{{PREFIX}}/bin/bashkitten-display` share `{{DISPLAY_COMMAND}}`. Read the
+  launcher's status for the actual DISPLAY before opening GUI applications.
+  Save command changes through the launcher; do not edit the installed skill.
+- For explicitly headless work, choose an unused display and start your own
   `Xvfb :N -screen 0 1280x800x24 -nolisten tcp`, then use `DISPLAY=:N`.
   Track its PID and stop that display when finished. `xdotool` can control
   programs on it. No Termux:X11 APK, root, proot or desktop session is required.

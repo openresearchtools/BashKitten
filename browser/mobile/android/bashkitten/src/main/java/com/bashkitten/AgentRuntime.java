@@ -66,6 +66,7 @@ public final class AgentRuntime {
         if (!launched) { launched = true; turnOn(); }
         else listener.changed();
     }
+    public void observe(Listener listener) { listeners.add(listener); }
     public void detach(Listener listener) { listeners.remove(listener); }
     void changed() { for (Listener listener : new ArrayList<>(listeners)) listener.changed(); }
     public void refresh() {

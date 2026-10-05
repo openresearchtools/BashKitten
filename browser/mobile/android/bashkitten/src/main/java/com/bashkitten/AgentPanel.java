@@ -28,7 +28,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button power, location, hideAgent, hostedBack;
+    private final Button power, location, hideAgent, hostedBack, display;
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
@@ -63,6 +63,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
         location = barButton("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
+        display = barButton("Display", () -> {
+            if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
+                ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-display");
+        });
+        bar.addView(display, new LayoutParams(dp(72), -1));
         power = barButton("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
         Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
@@ -174,6 +179,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
         power.setEnabled(!runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
+        display.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
         hostedBack.setVisibility(runtime.isHostedSignIn() ? VISIBLE : GONE);
         connectionStatus.setText(runtime.isHostedSignIn() ? "Connecting to hosted-site sign-in…" : "Connecting to Agent…");
         boolean online = runtime.state.equals("on") || runtime.state.equals("login");

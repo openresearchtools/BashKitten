@@ -23,6 +23,7 @@ import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake } from './access/wake.mjs';
 import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
 import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
+import { TermuxDisplay } from './platform/termux/display.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
 const stateFile = path.join(dataDir, 'control.json');
@@ -125,6 +126,7 @@ async function serve() {
   const stack = new AccessStack({
     fatal: error => { lastError = error.message; serial = serial.then(() => turnOff(error.message)).catch(error => { lastError = error.message; }); },
   });
+  const display = platform === 'termux' ? new TermuxDisplay() : null;
   stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
     'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
@@ -207,10 +209,12 @@ async function serve() {
     // Complete the rest of group cleanup even if a worker needs the guard's
     // final descendant cleanup.
     const workerError = await stopWorkers().then(() => null, error => error);
+    const displayError = display ? await display.stop().then(() => null, error => error) : null;
     if (platform === 'linux') await stopManagedLlama();
     await stack.stop();
     await releaseWake();
     if (workerError) throw workerError;
+    if (displayError) throw displayError;
   }
   async function turnOff(error = null) {
     state.web = false; stopping = true;
@@ -258,6 +262,15 @@ async function serve() {
         cookie: { name: stack.localCookieName, value: stack.localToken } };
     }
     // Private native IPC only; none of these commands is forwarded by the web API.
+    if (command.startsWith('display-')) {
+      if (!display) throw Error('Display is available only in local Termux');
+      if (command === 'display-status') return display.status();
+      if (command === 'display-save') return display.save(value);
+      if (command === 'display-stop') return display.stop();
+      if (command !== 'display-start') throw Error('Unknown display action');
+      if (!stack.ready || stopping) throw Error('Turn on the local Agent before starting Display');
+      return display.start();
+    }
     if (command === 'share-status') return remote.status();
     if (command === 'share-setup') return remote.begin(value);
     if (command === 'share-reissue') return remote.begin(value, { reissue: true });

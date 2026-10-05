@@ -278,6 +278,8 @@ def assemble(args):
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
             executable(bin_dir / name, f'#!{shell}\nexec {node} {installed_app}/src/server/{script} {extra} "$@"\n')
+        if termux:
+            executable(bin_dir / 'bashkitten-display', f'#!{shell}\nexec {node} {installed_app}/src/server/platform/termux/display.mjs "$@"\n')
         executable(bin_dir / 'bashkitten-manager', f'#!{shell}\nexport BASHKITTEN_ATTACHED_MANAGER=1\n'
                    f'while :; do\n  {node} {installed_app}/src/server/control.mjs serve\n  code=$?\n'
                    '  [ "$code" -eq 75 ] || exit "$code"\n  sleep 1\ndone\n')
@@ -318,7 +320,7 @@ fi
             profile.write_text('export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1\n'
                                'export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1\n')
         base_deps = (['nodejs-lts (>= 22.19)', 'python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar',
-                      'x11-repo', 'xorg-server-xvfb', 'xdotool', 'xfce4', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
+                      'x11-repo', 'termux-x11-nightly', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
                      ['nodejs (>= 22.19)', 'npm', 'python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
                       'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1'])
         depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'])

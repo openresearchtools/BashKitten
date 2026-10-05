@@ -9,6 +9,6 @@
   "peerDependencies": { "typebox": "*" },
   "pi": {
     "extensions": ["./extension.mjs", "./pillama.ts"],
-    "skills": ["./skills/browser-android", "./skills/browser-linux", "./skills/web-search"]
+    "skills": ["./skills/browser-android", "./skills/browser-linux", "./skills/web-search", "./skills/termux-display"]
   }
 }

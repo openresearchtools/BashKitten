@@ -60,6 +60,13 @@ Complete the corresponding build and manual checks before claiming a feature
 works. Continue through all delivery gates; a partial implementation is not the
 completed plan.
 
+Latest execution clarification, 5 October: implement the remaining features in
+focused source changes before dispatching another complete application build.
+Then build and manually check the full feature set, fixing any failures before
+release. Existing in-flight candidates can supply available manual evidence;
+they are not feature-complete deliverables. Syntax/source checks during coding
+do not replace that final acceptance. Keep the minimal-code/no-fallback rules.
+
 ## 1. Required user experience
 
 | Where | Required result |
@@ -1437,6 +1444,21 @@ slices and their limits; they do not replace the manual acceptance table.
   this download/integrity check did not install or accept that package.
 
 Additional observed evidence, 5 October:
+
+- Android Local now has a native Display dialog wired to the private Termux
+  controller, with compatible official X11 downloads, command Copy/Edit/Save,
+  explicit default restore, Start/Stop/Open X11 and Copy prompt. Remote selection
+  hides/dismisses it and is checked before dispatch. Its ViewModel retains an
+  unfinished command/action across rotation. One packaged `bashkitten-display`
+  launcher and durable script serve the panel, terminal user and local Pi;
+  the existing process guard owns GUI descendants and whole-Agent shutdown.
+  Saving validates syntax without executing or interrupting the current desktop.
+  Status checks X/window-manager readiness and reports unrelated display sockets.
+  Native Termux dependencies include X11, xprop and Mesa. Stock Pi registers the
+  local-only `termux-display` skill (1,316 o200k_base / 1,313 cl100k_base tokens).
+  Changed JavaScript/Python parse and diff checks pass. Android compilation,
+  installer/XFCE operation, edit/conflict/lifecycle and real GPU/manual acceptance
+  remain pending; no full application build was dispatched for this source slice.
 
 - Android builder `37272351099` at `50fc9bc287` completed in 63m19s. Gecko took
   15m15s; APK assembly took 40m12s. Final sccache reported 4,960 hits, 3 misses
