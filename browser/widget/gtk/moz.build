@@ -207,6 +207,9 @@ if CONFIG["MOZ_WAYLAND"]:
     CFLAGS += CONFIG["MOZ_WAYLAND_CFLAGS"]
     CXXFLAGS += CONFIG["MOZ_WAYLAND_CFLAGS"]
 
+if CONFIG["MOZ_ENABLE_DBUS"] and CONFIG["MOZ_BASHKITTEN"]:
+    SOURCES += ["BashKittenTray.cpp"]
+
 if CONFIG["MOZ_ENABLE_DBUS"]:
     EXPORTS.mozilla.widget += [
         "AsyncDBus.h",

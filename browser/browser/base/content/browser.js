@@ -3671,6 +3671,9 @@ function CanCloseWindow() {
 }
 
 function WindowIsClosing(event) {
+  if (!Services.startup.shuttingDown && window.BashKittenLifetime?.hide()) {
+    return false;
+  }
   let source;
   if (event) {
     let target = event.sourceEvent?.target;
@@ -3702,6 +3705,10 @@ function WindowIsClosing(event) {
     // It's only needed to make tests pass, since they detect the
     // prompt even when it's not actually shown.
     window.skipNextCanClose = true;
+    if (window.BashKittenLifetime && !Services.startup.shuttingDown) {
+      window.BashKittenLifetime.quit();
+      return false;
+    }
     return true;
   }
 

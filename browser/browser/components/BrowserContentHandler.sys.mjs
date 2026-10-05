@@ -487,6 +487,20 @@ nsBrowserContentHandler.prototype = {
   /* nsICommandLineHandler */
   handle: function bch_handle(cmdLine) {
     if (
+      AppConstants.MOZ_APP_NAME === "bashkitten" &&
+      AppConstants.platform === "linux"
+    ) {
+      const { DesktopLifetime } = ChromeUtils.importESModule(
+        "resource:///modules/DesktopLifetime.sys.mjs"
+      );
+      const tray = cmdLine.handleFlag("start-in-tray", false);
+      if (cmdLine.state === Ci.nsICommandLine.STATE_INITIAL_LAUNCH) {
+        DesktopLifetime.autostart = tray;
+      } else {
+        DesktopLifetime.reveal();
+      }
+    }
+    if (
       cmdLine.handleFlag("kiosk", false) ||
       cmdLine.handleFlagWithParam("kiosk-monitor", false)
     ) {

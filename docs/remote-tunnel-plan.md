@@ -1482,6 +1482,21 @@ slices and their limits; they do not replace the manual acceptance table.
   native UI compilation, real process/target/lifecycle checks and remote service
   mapping cards/Pi import are pending. No full application build was dispatched.
 
+- Desktop lifetime source now uses a GTK StatusNotifier item with the packaged
+  BashKitten icon and Gecko's existing DBusMenu integration. Hiding requires a
+  registered tray host; losing that host reveals the same native window. Open,
+  selected Agent state/connected-remote count and Quit are available in the tray.
+  Native General settings have opt-in per-user XDG login startup and the requested
+  default-on close-to-tray choice. Another invocation reveals the existing window.
+  Normal Quit blocks new local work, drains pending private operations, closes
+  client mappings/control channels and requests exact-owner shutdown until active
+  package work finishes safely, showing its actual phase/output. No new process
+  supervisor was added; browser death still uses the existing guard and independent
+  CLI groups remain unowned. JavaScript parsing, XPIDL header generation and source
+  diff checks pass. Full GTK compilation, X11/Wayland tray/host-loss/reopen/autostart,
+  package-drain and owned-service cleanup acceptance remain pending. No full app
+  build or scripted product test was dispatched for this source slice.
+
 Additional observed evidence, 5 October:
 
 - Android Local now has a native Display dialog wired to the private Termux

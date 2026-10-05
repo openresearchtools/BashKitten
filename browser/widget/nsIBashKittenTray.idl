@@ -1,0 +1,15 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+#include "nsISupports.idl"
+interface mozIDOMWindowProxy;
+interface nsIObserver;
+
+/** Parent-only GTK status notifier. Losing its host always reveals the window. */
+[scriptable, uuid(09280665-e177-4a5c-9a09-c6ee64746231)]
+interface nsIBashKittenTray : nsISupports {
+  void init(in mozIDOMWindowProxy window, in nsIObserver observer);
+  readonly attribute boolean available;
+  boolean hide();
+  void reveal();
+  void setStatus(in AUTF8String status);
+  void close();
+};

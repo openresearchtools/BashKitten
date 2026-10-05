@@ -848,6 +848,14 @@ var gMainPane = {
     initSettingGroup("performance");
     initSettingGroup("defaultBrowser");
     initSettingGroup("startup");
+    if (
+      AppConstants.MOZ_APP_NAME === "bashkitten" &&
+      AppConstants.platform === "linux"
+    ) {
+      ChromeUtils.importESModule(
+        "resource:///modules/DesktopLifetime.sys.mjs"
+      ).DesktopLifetime.settings(document);
+    }
     initSettingGroup("importBrowserData");
     initSettingGroup("tabs");
     if (AppConstants.MOZ_APP_NAME != "bashkitten") {

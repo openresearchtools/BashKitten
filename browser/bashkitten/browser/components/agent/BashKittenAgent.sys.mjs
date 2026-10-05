@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 
+import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { serviceSettings } from "resource:///modules/ServiceSettings.sys.mjs";
@@ -15,6 +16,36 @@ const ownedViews = new WeakMap();
 let actorRegistered = false;
 let browserOwner;
 let adoptedLocal = false;
+let closingLocal = false;
+const localOperations = new Set();
+
+let shuttingDown;
+function shutdown() {
+  if (!shuttingDown) {
+    closingLocal = true;
+    shuttingDown = stopOwnedRuntime().finally(() => { closingLocal = false; shuttingDown = null; });
+  }
+  return shuttingDown;
+}
+async function stopOwnedRuntime() {
+  await Promise.allSettled([...localOperations]);
+  await lazy.BrowserControlChannel.close("browser quitting");
+  await AgentRemotes.deactivate();
+  if (!browserOwner || !adoptedLocal) return;
+  const owner = await browserOwner;
+  let status;
+  do {
+    status = await localControl("browser-shutdown", { browserOwner: owner });
+    DesktopLifetime.shutdownStatus(status);
+    if (status.web?.status === "stopping" || status.web?.status === "running") {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } else break;
+  } while (true);
+  if (status.web?.status !== "stopped" && status.web?.status !== "off") {
+    throw new Error(status.web?.error || "Owned services have not stopped.");
+  }
+}
+
 
 async function localBrowserOwner() {
   if (!browserOwner) {
@@ -26,7 +57,7 @@ async function localBrowserOwner() {
       if (!/^[1-9][0-9]*$/.test(started)) throw new Error("Could not identify the browser process.");
       const owner = { pid, started };
       AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: stop owned local Agent", async () => {
-        try { await control("browser-shutdown", { browserOwner: owner }); }
+        try { await shutdown(); }
         catch (error) { console.error("BashKitten Agent shutdown failed", error); }
       });
       return owner;
@@ -56,7 +87,14 @@ async function readPipe(pipe) {
 }
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
-async function control(command, data = {}) {
+function control(command, data = {}) {
+  if (closingLocal || DesktopLifetime.quitting) return Promise.reject(new Error("BashKitten is quitting."));
+  const operation = localControl(command, data);
+  localOperations.add(operation);
+  operation.then(() => localOperations.delete(operation), () => localOperations.delete(operation));
+  return operation;
+}
+async function localControl(command, data = {}) {
   if (!["start", "status", "stop", "browser-shutdown", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
@@ -189,19 +227,21 @@ class AgentView {
           ((event.altKey || accel) && /^[1-9]$/.test(event.key))) this.browse();
     };
     this.win.addEventListener("keydown", this.tabKey, true);
+    DesktopLifetime.attach(this, shutdown);
     this.show();
     await this.refreshRemotes();
     const selected = Services.prefs.getStringPref("bashkitten.agent.selectedRemote", "");
     if (selected && [...this.choice.options].some(option => option.value === selected)) await this.choose(selected);
     else await this.start();
+    DesktopLifetime.started();
   }
 
   async run(operation) {
-    if (this.busy) return;
+    if (this.busy || DesktopLifetime.quitting) return;
     this.busy = true;
     this.power.disabled = true;
     try { await operation(); } catch (error) { this.failure(error); }
-    finally { this.busy = false; this.power.disabled = false; }
+    finally { this.busy = false; this.power.disabled = DesktopLifetime.quitting; }
   }
 
   show() {
@@ -524,6 +564,7 @@ class AgentView {
     }
   }
   failure(error) {
+    if (DesktopLifetime.quitting) return;
     clearTimeout(this.timer);
     // A failed stop remains a retryable stop, never a falsely confirmed Off.
     const stopping = this.off && this.power?.textContent === "Stopping…";
@@ -882,7 +923,7 @@ class AgentView {
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);
     Services.obs.removeObserver(this.observer, "bashkitten-agent-remote-changed");
-    // Closing the browser does not stop the independent Agent service group.
+    // Native window hiding never unloads this view; actual Quit stops ownership.
     for (const browser of this.views.values()) ownedViews.delete(browser);
   }
 }
