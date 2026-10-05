@@ -640,6 +640,7 @@ class AgentView {
     let allowed = false;
     try {
       const current = () => protectedAgentView(actor)?.host === this && actor.browsingContext.embedderElement === browser &&
+        actor.manager === browser.browsingContext.currentWindowGlobal && request.windowID === actor.manager.outerWindowId &&
         !this.pane.hidden && !browser.hidden && !new URL(request.documentURI).pathname.startsWith("/login");
       const device = request.audioInputDevices?.[0];
       if (!current() || !request.secure || request.requestTypes?.length !== 1 || request.requestTypes[0] !== "Microphone" ||
