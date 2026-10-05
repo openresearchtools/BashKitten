@@ -2187,7 +2187,7 @@ space-alert-under-5gb-message2 = <strong>{ -brand-short-name } is running out of
 
 httpsonly-group =
     .label = HTTPS-Only Mode
-    .description = Only allows secure connections to websites. { -brand-short-name } will ask before connecting insecurely.
+    .description = Only allows secure connections to websites. { -brand-short-name } will ask before connecting insecurely. Excludes Tor, localhost and loopback addresses (127.0.0.1, ::1).
 
 httpsonly-label2 =
     .aria-label = { httpsonly-group.label }

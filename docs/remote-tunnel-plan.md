@@ -1816,3 +1816,17 @@ policy. This uses Gecko's existing Save As behavior without a new transport or
 certificate exception. The updated Request/Headers compile against the Android
 API; changed Kotlin/Java parse and whitespace checks pass. Full Android compilation
 and the installed Save image, retry and Tor-download checks remain required.
+
+### 5 October HTTPS-Only exclusions
+
+HTTPS-Only and HTTPS-First no longer force HTTP upgrades in ordinary Tor tab
+contexts on Android or Linux. The shared Gecko decision uses the existing Tor
+origin attributes, excluding protected Agent contexts. Existing onion, localhost,
+IPv4 loopback and IPv6 loopback exceptions remain; normal-site HTTPS-Only defaults
+and saved user choices are unchanged. Both native settings screens now name these
+exclusions. Tor routing, mixed-content checks, TLS verification and the native
+Agent tunnel's mandatory HTTPS/mTLS are unchanged.
+
+Kotlin syntax, Android XML, desktop Fluent and whitespace checks passed. Full
+native builds and manual HTTP/Tor/loopback/settings acceptance remain required;
+no scripted product test or installed runtime change was made for this slice.
