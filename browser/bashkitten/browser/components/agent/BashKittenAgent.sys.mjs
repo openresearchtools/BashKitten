@@ -3,7 +3,6 @@
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
-import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const HTML = "http://www.w3.org/1999/xhtml";
@@ -124,7 +123,6 @@ class AgentView {
     this.currentIdentity = null;
     this.layout = "full";
     this.browseWithAgent = Services.prefs.getBoolPref("bashkitten.agent.splitBrowsing", true);
-    this.pendingHosted = null;
   }
 
   async init() {
@@ -249,7 +247,7 @@ class AgentView {
 
   async resolveLocalFile(browser, value) {
     const entry = ownedViews.get(browser);
-    if (!entry?.local || entry.authFor || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to open this file.");
+    if (!entry?.local || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to open this file.");
     const url = new URL(value);
     if (url.origin !== new URL(entry.connection.url).origin || url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password ||
         !/^\/api\/(?:files\/content|sessions\/[a-f0-9-]{36}\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) throw new Error("Only local Agent files can be opened.");
@@ -259,16 +257,16 @@ class AgentView {
     const response = await AgentRemotes.request(entry.connection, "/api/bootstrap");
     if (response.status !== 200 || !response.data?.authenticated) throw new Error("Sign in again to open this file.");
     let current = ownedViews.get(browser);
-    if (this.off || this.activeBrowser !== browser || !current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    if (this.off || this.activeBrowser !== browser || !current?.local || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
     const file = await control("native-file", { url: url.href });
     current = ownedViews.get(browser);
-    if (this.off || this.activeBrowser !== browser || !current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    if (this.off || this.activeBrowser !== browser || !current?.local || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
     return file;
   }
 
   async chooseFolder(browser, { title, path } = {}) {
     const entry = ownedViews.get(browser);
-    if (!entry?.local || entry.authFor || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to choose a folder.");
+    if (!entry?.local || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to choose a folder.");
     const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
     picker.init(this.win.browsingContext, typeof title === "string" ? title.slice(0, 200) : "Choose a folder", Ci.nsIFilePicker.modeGetFolder);
     if (typeof path === "string" && PathUtils.isAbsolute(path) && !path.includes("\0")) {
@@ -281,95 +279,52 @@ class AgentView {
     const selected = await new Promise(resolve => picker.open(resolve));
     if (selected !== Ci.nsIFilePicker.returnOK) return null;
     const current = ownedViews.get(browser);
-    if (this.off || this.activeBrowser !== browser || !current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    if (this.off || this.activeBrowser !== browser || !current?.local || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
     return control("project-root", { path: picker.file.path });
-  }
-
-  async openHosted(browser, url, { tab = null, forceSignIn = false } = {}) {
-    const entry = ownedViews.get(browser);
-    if (!entry || entry.authFor || this.off || this.activeBrowser !== browser) throw new Error("Select the Agent that hosts this site.");
-    let prepared = await AgentRemotes.prepareHosted(entry.connection, url);
-    if (prepared.needsLocalEnrollment) {
-      const record = await control("hosting-client");
-      prepared = await AgentRemotes.prepareHosted(entry.connection, url, { localRecord: record });
-    }
-    if (this.off || this.activeBrowser !== browser) throw new Error("The selected Agent changed.");
-    if (!prepared.ready || forceSignIn) {
-      this.pendingHosted = { browser, url, tab };
-      const connection = prepared.authentication;
-      const origin = new URL(connection.url).origin;
-      await this.connect({ ...connection, url: origin + "/login?rd=" + encodeURIComponent(origin + "/") }, entry.local, { authFor: browser });
-      this.show();
-      return;
-    }
-    const uri = Services.io.newURI(prepared.site.url);
-    if (!tab || tab.closing || !tab.isConnected || tab.userContextId != TorRouting.userContextId) {
-      tab = await TorRouting.createTab(this.win, { uri });
-    }
-    this.win.gBrowser.selectedTab = tab;
-    tab.linkedBrowser.loadURI(uri, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
-    this.browse();
-  }
-
-  routeHostedLink(browser, value) {
-    const entry = ownedViews.get(browser);
-    let target;
-    try { target = new URL(value); } catch { return false; }
-    if (!entry || this.off || this.activeBrowser !== browser || target.protocol != "https:" ||
-        !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.[a-z2-7]{56}\.onion$/.test(target.hostname)) return false;
-    // Native context-menu and middle-click tab opening take this same path as
-    // the web bookmark bridge; no protected opener or cookie context escapes.
-    (async () => {
-      const response = await AgentRemotes.request(entry.connection, "/api/hosting");
-      if (response.status == 200 && response.data?.services?.some(site => site.enabled && site.url == target.href)) {
-        await this.openHosted(browser, target.href);
-      } else {
-        this.win.openTrustedLinkIn(target.href, "tab");
-      }
-    })().catch(error => Services.prompt.alert(this.win, "Could not open hosted website", error.message || String(error)));
-    return true;
-  }
-
-  async hostedSignIn(ownerId, url, tab) {
-    if (this.pendingHosted) return;
-    const selected = ownedViews.get(this.activeBrowser)?.connection.id;
-    if (selected != ownerId) await this.choose(ownerId == "local" ? "" : ownerId);
-    await this.openHosted(this.activeBrowser, url, { tab, forceSignIn: true });
   }
 
   async refreshRemotes() {
     const remotes = await AgentRemotes.list();
     this.choice.replaceChildren(html(this.doc, "option", { value: "" }, "Local"));
     for (const remote of remotes) {
-      if (remote.kind === "llama") continue;
       this.choice.append(html(this.doc, "option", { value: remote.id }, remote.name));
     }
     this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"), html(this.doc, "option", { value: "share-local" }, "Share Local"));
     this.choice.value = this.selection;
   }
 
-  async choose(id) {
+  async choose(id, password = "") {
     this.closeConnections();
-    this.pendingHosted = null;
     this.selection = id;
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("remote switch");
-    await AgentRemotes.deactivate();
+    await AgentRemotes.deactivate(false);
     this.remote = null;
     this.activeBrowser = null;
     for (const browser of this.views.values()) browser.hidden = true;
     Services.prefs.setStringPref("bashkitten.agent.selectedRemote", id);
     if (!id) return this.local();
     const connection = await AgentRemotes.activate(id);
-    await this.selectRemote(connection || await AgentRemotes.connection(id));
+    await this.selectRemote(connection || await AgentRemotes.connection(id), password);
   }
 
-  async selectRemote(connection) {
+  async selectRemote(connection, password = "", forceLogin = false) {
     this.selection = connection.id;
     this.remote = connection;
     this.off = false;
     this.choice.value = connection.id;
-    await this.connect(connection, false);
+    this.message("Connecting to remote", "Opening the enrolled Tor connection…");
+    const result = await AgentRemotes.connect(connection.id, password, forceLogin);
+    password = "";
+    if (this.selection !== connection.id || this.off) return;
+    this.remote = result.connection;
+    if (result.loginURL) AgentRemotes.onLogin(connection.id, (error, ready) => {
+      if (this.selection !== connection.id || this.off) return;
+      if (error) { this.failure(error); return; }
+      this.remote = ready;
+      this.run(() => this.connect(ready, false, { reload: true }));
+    });
+    await this.connect(result.connection, false, { reload: Boolean(result.loginURL), navigateTo: result.loginURL });
   }
 
   async local() {
@@ -398,7 +353,6 @@ class AgentView {
 
   async stop() {
     this.closeConnections();
-    this.pendingHosted = null;
     clearTimeout(this.timer);
     this.off = true;
     await lazy.BrowserControlChannel.close("Agent turned off");
@@ -476,17 +430,16 @@ class AgentView {
         reload = true;
       }
     } else throw new Error("Update the local BashKitten package to use native Local authentication.");
-    if (ownedViews.get(this.activeBrowser)?.authFor) return;
     await this.connect(connection, true, { reload });
   }
 
-  async connect(connection, local, { authFor = null, reload = false } = {}) {
+  async connect(connection, local, { reload = false, navigateTo = null } = {}) {
     if (!connection?.url || !Number.isInteger(connection.userContextId)) throw new Error("The Agent connection is missing its protected browser identity.");
     const origin = new URL(connection.url).origin;
     contexts.set(connection.userContextId, { origin, local });
     Services.ppmm.sharedData.set("BashKittenAgentContexts", [...contexts]);
     Services.ppmm.sharedData.flush();
-    const key = (connection.id || connection.identity?.instanceId || `local:${connection.userContextId}`) + (authFor ? ":auth" : "");
+    const key = connection.id || connection.identity?.instanceId || `local:${connection.userContextId}`;
     let browser = this.views.get(key);
     if (!browser) {
       browser = xul(this.doc, "browser", {
@@ -506,9 +459,10 @@ class AgentView {
           if (!expected) return;
           let uri;
           try { uri = new URL(location.spec); } catch { return; }
+          if (uri.protocol === "http:" && uri.hostname === "127.0.0.1" && uri.pathname === "/oauth/callback") { browser.stop(); return; }
           if (uri.origin !== new URL(expected.url).origin) {
             browser.stop();
-            if (["https:", "http:"].includes(uri.protocol) && !host.routeHostedLink(browser, uri.href)) host.win.openTrustedLinkIn(uri.href, "tab");
+            if (["https:", "http:"].includes(uri.protocol)) host.win.openTrustedLinkIn(uri.href, "tab");
             browser.loadURI(Services.io.newURI(expected.url), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
           } else if (uri.pathname.startsWith("/login")) {
             lazy.BrowserControlChannel.close("authentication required");
@@ -521,7 +475,7 @@ class AgentView {
       });
     }
     connection.requestContext = browser.browsingContext;
-    ownedViews.set(browser, { host: this, connection, local, key, authFor });
+    ownedViews.set(browser, { host: this, connection, local, key });
     for (const item of this.views.values()) item.hidden = item !== browser;
     this.activeBrowser = browser;
     this.state.hidden = true;
@@ -529,17 +483,17 @@ class AgentView {
     this.power.textContent = "Turn off";
     this.power.title = local ? "Stop Agent services and Pi processes" : "Disconnect this client";
     if (reload || browser.getAttribute("data-agent-url") !== connection.url) {
-      if (browser.hasAttribute("data-agent-url") && !authFor) {
+      if (browser.hasAttribute("data-agent-url")) {
         try {
           const draft = await browser.browsingContext.currentWindowGlobal.getActor("BashKittenAgent").sendQuery("CaptureDraft");
           if (draft) this.drafts.set(key, draft);
         } catch (error) { console.warn("Could not retain Agent draft after a content crash", error); }
       }
       browser.setAttribute("data-agent-url", connection.url);
-      const target = new URL(connection.url);
+      const target = new URL(navigateTo || connection.url);
       const draftSession = this.drafts.get(key)?.sessionId;
       const savedHash = draftSession ? `#session=${draftSession}` : this.drafts.get(key)?.sessionHash;
-      if (!authFor && typeof savedHash === "string" && /^#session=[a-f0-9-]{36}$/.test(savedHash)) target.hash = savedHash;
+      if (!navigateTo && typeof savedHash === "string" && /^#session=[a-f0-9-]{36}$/.test(savedHash)) target.hash = savedHash;
       browser.loadURI(Services.io.newURI(target.href), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
     }
     return browser;
@@ -771,110 +725,90 @@ class AgentView {
   async remotes() {
     if (this.connectionsPanel) { this.connectionsPanel.querySelector("button").focus(); return; }
     const { panel, content } = this.connectionPanel("Browser connections");
-    content.append(html(this.doc, "p", {}, "Saved in this browser. Choose Local or a saved server from the Agent selector."));
-    const error = html(this.doc, "p", { role: "alert" });
-    const saved = html(this.doc, "div");
+    const error = html(this.doc, "p", { role: "alert" }), saved = html(this.doc, "div");
     const report = async task => { try { error.textContent = ""; await task(); } catch (e) { error.textContent = e.message; } };
     const button = (title, action) => {
       const node = html(this.doc, "button", { type: "button" }, title);
-      node.addEventListener("click", async () => { node.disabled = true; await report(action); node.disabled = false; });
-      return node;
+      node.addEventListener("click", async () => { node.disabled = true; await report(action); node.disabled = false; }); return node;
     };
     const refresh = async () => {
       saved.replaceChildren();
       for (const record of await AgentRemotes.list()) {
-        const item = html(this.doc, "section", { style: "padding:12px 0;border-bottom:1px solid var(--border-color,ThreeDShadow)" });
-        item.append(html(this.doc, "strong", {}, record.name), html(this.doc, "p", {}, record.url));
-        if (record.kind === "llama") {
-          item.append(html(this.doc, "p", {}, `${record.health}${record.port ? ` · http://127.0.0.1:${record.port}` : ""}`));
-          item.append(button(record.running ? "Stop relay" : "Start relay", async () => {
-            if (record.running) await AgentRemotes.stopRelay(record.id); else await AgentRemotes.startRelay(record.id);
+        const item = html(this.doc, "section", { class: "connection-card" });
+        item.append(html(this.doc, "strong", {}, record.name), html(this.doc, "p", {}, record.url),
+          html(this.doc, "p", {}, record.migrationRequired ? "Import a new encrypted QR from this host’s Share Local setup." : record.state));
+        if (record.error) item.append(html(this.doc, "p", { role: "alert" }, record.error));
+        if (!record.migrationRequired) item.append(button("Connect", () => this.choose(record.id)),
+          button("Disconnect", async () => {
+            Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", record.id);
+            await AgentRemotes.disconnect(record.id);
+            if (this.remote?.id === record.id) {
+              this.off = true; this.power.textContent = "Turn on";
+              this.message("Remote disconnected", "Turn on to reconnect, or choose Local or another remote.");
+            }
             await refresh();
-          }), button("Check connection", async () => { await AgentRemotes.checkRelay(record.id); await refresh(); }), button("Use another port", async () => {
-            await AgentRemotes.stopRelay(record.id); await AgentRemotes.startRelay(record.id, { port: 0 }); await refresh();
-          }));
-        } else {
-          item.append(button("Connect", async () => { await this.choose(record.id); }));
-          item.append(button("Allow browser control", async () => {
+          }),
+          button("Allow browser control", async () => {
             lazy.BrowserControlChannel.allowAgain(record.id);
             if (this.remote?.id !== record.id) await this.choose(record.id);
+            if ((await AgentRemotes.connection(record.id)).state !== "ready") throw new Error("Finish remote sign-in first.");
             await lazy.BrowserControlChannel.start(this.remote, { window: this.win });
           }), button("Revoke browser control", () => lazy.BrowserControlChannel.revoke(record.id)));
-        }
-        item.append(button("Save connection", async () => {
-          const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-          picker.init(this.win.browsingContext, "Save connection", Ci.nsIFilePicker.modeSave);
-          picker.defaultString = "bashkitten-connection.json";
-          picker.appendFilter("Connection file", "*.json");
-          const selected = await new Promise(resolve => picker.open(resolve));
-          if (selected !== Ci.nsIFilePicker.returnOK && selected !== Ci.nsIFilePicker.returnReplace) return;
-          await IOUtils.writeUTF8(picker.file.path, await AgentRemotes.exportConnection(record.id));
-          await IOUtils.setPermissions(picker.file.path, 0o600);
-        }), button("Remove", async () => {
+        item.append(button("Remove", async () => {
           if (!Services.prompt.confirm(this.win, "Remove connection?", `Remove “${record.name}” and its saved login from this browser?`)) return;
-          if (this.remote?.id === record.id) { await this.stop(); this.remote = null; }
-          await AgentRemotes.remove(record.id); await refresh(); await this.refreshRemotes();
+          await AgentRemotes.remove(record.id);
+          if (this.remote?.id === record.id) { this.off = true; this.power.textContent = "Turn on"; this.message("Remote removed", "Choose Local or another saved remote."); }
+          await refresh(); await this.refreshRemotes();
         }));
         saved.append(item);
       }
     };
     const form = html(this.doc, "form");
-    const kind = html(this.doc, "select", { "aria-label": "Connection type" });
-    kind.append(html(this.doc, "option", { value: "agent" }, "Agent"), html(this.doc, "option", { value: "llama" }, "llama.cpp relay"));
-    form.append(kind);
-    const field = (title, type, placeholder = "") => {
-      const label = html(this.doc, "label", {}, title);
-      const input = html(this.doc, "input", { type, placeholder }); label.append(input); form.append(label); return input;
+    const passwordLabel = html(this.doc, "label", {}, "Connection password");
+    const password = html(this.doc, "input", { type: "password", autocomplete: "off", required: "" });
+    passwordLabel.append(password);
+    const image = html(this.doc, "input", { type: "file", accept: "image/*", "aria-label": "Upload encrypted connection QR image" });
+    const selected = html(this.doc, "p", { role: "status" });
+    const add = html(this.doc, "button", { type: "submit", disabled: "" }, "Connect");
+    let source = "", stopCamera = () => {};
+    const accept = text => {
+      if (!text.startsWith("TK2:")) throw new Error("Use the encrypted Connection QR from Share Local.");
+      source = text; selected.textContent = "Connection image ready. Enter its password."; add.disabled = false; password.focus();
     };
-    const name = field("Name", "text", "My server");
-    const url = field("Onion address", "url", "https://…onion/");
-    const key = field("Client authorization key", "password");
-    const token = field("llama.cpp bearer token", "password");
-    token.parentNode.hidden = true;
-    kind.addEventListener("change", () => { token.parentNode.hidden = kind.value !== "llama"; });
-    const reveal = html(this.doc, "input", { type: "checkbox" });
-    const revealLabel = html(this.doc, "label", {}, "Show entered keys"); revealLabel.prepend(reveal);
-    reveal.addEventListener("change", () => { key.type = token.type = reveal.checked ? "text" : "password"; });
-    form.append(revealLabel);
-    const add = html(this.doc, "button", { type: "submit" }, "Add connection");
-    form.append(add);
-    const enroll = async record => { await AgentRemotes.enroll(record); await refresh(); await this.refreshRemotes(); };
-    form.addEventListener("submit", async event => {
-      event.preventDefault(); add.disabled = true;
-      await report(async () => { await enroll({ version: 1, kind: kind.value, name: name.value, url: url.value, clientAuthorization: key.value, ...(kind.value === "llama" ? { bearerToken: token.value } : {}) }); key.value = token.value = ""; });
-      add.disabled = false;
-    });
-    const file = html(this.doc, "input", { type: "file", accept: ".json,application/json,image/*", "aria-label": "Import connection file or QR image" });
-    file.addEventListener("change", () => report(async () => {
-      const selected = file.files[0]; if (!selected) return;
-      const source = selected.type.startsWith("image/") ? await this.decodeQR(await this.win.createImageBitmap(selected)) : await selected.text();
-      await enroll(JSON.parse(source)); file.value = "";
+    image.addEventListener("change", () => report(async () => {
+      if (image.files[0]) accept(await this.decodeQR(await this.win.createImageBitmap(image.files[0])));
     }));
-    const input = html(this.doc, "textarea", { rows: "3", placeholder: "Paste connection JSON", "aria-label": "Connection JSON" });
-    panel.addEventListener("close", () => { key.value = token.value = input.value = file.value = ""; }, { once: true });
-    const paste = button("Import pasted connection", async () => { await enroll(JSON.parse(input.value)); input.value = ""; });
-    const camera = button("Scan QR with camera", async () => {
-      const video = html(this.doc, "video", { autoplay: "", muted: "", style: "width:100%;max-height:260px" });
+    const camera = button("Scan QR", async () => {
+      stopCamera();
       const stream = await this.win.navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
       if (this.connectionsPanel !== panel) { stream.getTracks().forEach(track => track.stop()); return; }
-      video.srcObject = stream; content.append(video);
-      let timer;
-      const stop = () => { clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); video.remove(); };
-      panel.addEventListener("close", stop, { once: true });
+      const video = html(this.doc, "video", { autoplay: "", muted: "", style: "width:100%;max-height:260px" });
+      let timer, stopped = false;
+      const cancel = button("Cancel scan", () => stopCamera());
+      stopCamera = () => { stopped = true; clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); video.remove(); cancel.remove(); };
+      video.srcObject = stream; form.append(video, cancel);
       const scan = async () => {
-        if (this.connectionsPanel !== panel) return stop();
+        if (stopped || this.connectionsPanel !== panel) return stopCamera();
         try {
-          if (video.readyState >= 2) {
-            const source = await this.decodeQR(video);
-            if (this.connectionsPanel !== panel) return stop();
-            await enroll(JSON.parse(source)); stop(); return;
-          }
-        } catch (e) { if (e.message !== "No connection QR code was found.") { error.textContent = e.message; stop(); return; } }
+          if (video.readyState >= 2) { const text = await this.decodeQR(video); if (stopped) return; accept(text); stopCamera(); return; }
+        } catch (e) { if (e.message !== "No connection QR code was found.") { error.textContent = e.message; stopCamera(); return; } }
         timer = setTimeout(scan, 250);
       };
-      await video.play(); scan();
+      try { await video.play(); scan(); } catch (e) { stopCamera(); throw e; }
     });
-    content.append(saved, html(this.doc, "h3", {}, "Add connection"), form, html(this.doc, "h3", {}, "Import"), html(this.doc, "p", {}, "Import a connection file, scan its QR, or paste its JSON. Your account password and two-factor code are never included."), file, camera, input, paste, error);
+    form.append(image, camera, selected, passwordLabel, add);
+    form.addEventListener("submit", event => {
+      event.preventDefault(); add.disabled = true;
+      report(async () => {
+        const secret = password.value; password.value = "";
+        const record = await AgentRemotes.enroll(source, secret);
+        if (this.connectionsPanel !== panel) return;
+        source = ""; await this.refreshRemotes(); await this.choose(record.id, secret);
+      }).finally(() => { add.disabled = !source; });
+    });
+    panel.addEventListener("close", () => { source = password.value = image.value = ""; stopCamera(); }, { once: true });
+    content.append(saved, html(this.doc, "h3", {}, "Connect to remote"),
+      html(this.doc, "p", {}, "Scan or upload its Connection QR. Use the password chosen in Share Local, then your authenticator code to sign in."), form, error);
     await report(refresh);
   }
 
@@ -900,22 +834,7 @@ class AgentView {
       lazy.BrowserControlChannel.close("authentication required");
       return;
     }
-    if (entry.authFor) {
-      const authBrowser = this.activeBrowser;
-      const original = entry.authFor;
-      const originalEntry = ownedViews.get(original);
-      this.activeBrowser = original;
-      original.hidden = false;
-      authBrowser.remove();
-      this.views.delete(entry.key);
-      ownedViews.delete(authBrowser);
-      original.browsingContext.currentWindowGlobal.getActor("BashKittenAgent").sendAsyncMessage("Authenticated");
-      if (originalEntry) this.contentReady(originalEntry, null);
-      const pending = this.pendingHosted;
-      this.pendingHosted = null;
-      if (pending?.browser == original) await this.openHosted(original, pending.url, { tab: pending.tab });
-      return;
-    }
+    if (!entry.local && (await AgentRemotes.connection(entry.connection.id)).state !== "ready") return;
     if (draftReady && actor && this.drafts.has(entry.key)) {
       await actor.sendQuery("RestoreDraft", this.drafts.get(entry.key));
       this.drafts.delete(entry.key);
@@ -924,15 +843,11 @@ class AgentView {
   }
 
   async signIn() {
-    if (!this.activeBrowser) return;
-    const original = this.activeBrowser;
-    const entry = ownedViews.get(original);
-    if (!entry || entry.authFor) return;
-    if (entry.local && this.localGeneration) return this.reconnect();
-    lazy.BrowserControlChannel.close("sign in");
-    const origin = new URL(entry.connection.url).origin;
-    const returnTo = origin + "/";
-    await this.connect({ ...entry.connection, url: origin + "/login?rd=" + encodeURIComponent(returnTo) }, entry.local, { authFor: original });
+    const entry = ownedViews.get(this.activeBrowser);
+    if (!entry) return;
+    if (entry.local) return this.reconnect();
+    await lazy.BrowserControlChannel.close("sign in");
+    return this.selectRemote(entry.connection, "", true);
   }
 
   async licenses() {

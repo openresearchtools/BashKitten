@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	filippo.io/age v1.3.2
+	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
 	github.com/boombuler/barcode v1.1.0
 	github.com/go-crypt/crypt v0.14.15
 	github.com/gorilla/websocket v1.5.3
@@ -15,7 +16,6 @@ require (
 
 require (
 	filippo.io/hpke v0.4.0 // indirect
-	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/go-crypt/x v0.4.16 // indirect
 	github.com/jpillora/sizestr v1.0.0 // indirect

@@ -69,7 +69,6 @@ export const TorRouting = {
   _busyCount: 0,
   _lastError: "",
   _agentContexts: new Map(),
-  _hostedSites: new Map(),
   container: null,
   persistentContainer: null,
 
@@ -158,11 +157,6 @@ export const TorRouting = {
   },
 
   contextIdForURI(uri) {
-    // Registered Agent sites always use the existing ordinary private Tor
-    // container, even if the parent onion has a persistent-tab preference.
-    const host = this.isOnionURI(uri) ? uri.host : "";
-    if (this._hostedSites.has(host) || [...this._hostedSites.values()]
-      .some(site => host == site.address + ".onion")) return this.userContextId;
     const address = this.serviceAddress(uri);
     if (address && !OnionAuthStore.usesPrivateMode(address)) {
       this.persistentContainer ??= this._ensureContainer(
@@ -750,36 +744,6 @@ export const TorRouting = {
     for (const { address, key } of this._agentContexts.values()) {
       await this._control.send(`ONION_CLIENT_AUTH_ADD ${address} x25519:${key}`);
     }
-    for (const { address, key } of this._hostedSites.values()) {
-      await this._control.send(`ONION_CLIENT_AUTH_ADD ${address} x25519:${key}`);
-    }
-  },
-
-  async registerHostedSite(host, parentHost, key) {
-    this.init();
-    const address = onionAddress(parentHost);
-    if (!new RegExp(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.${address}\\.onion$`).test(host)) {
-      throw new Error("Invalid hosted onion site");
-    }
-    const entry = { address, key: onionPrivateKey(key) };
-    await this._queueAuthorization(async () => {
-      this._hostedSites.set(host, entry);
-      await this.ensureProxy();
-      await this._control.send(`ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${entry.key}`);
-    });
-  },
-
-  async unregisterHostedSite(host) {
-    await this._queueAuthorization(async () => {
-      const entry = this._hostedSites.get(host);
-      this._hostedSites.delete(host);
-      if (!entry || [...this._hostedSites.values(), ...this._agentContexts.values()]
-        .some(item => item.address == entry.address)) return;
-      const ordinary = (await OnionAuthStore.load()).get(entry.address);
-      if (this._control) await this._control.send(ordinary?.key
-        ? `ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${ordinary.key}`
-        : `ONION_CLIENT_AUTH_REMOVE ${entry.address}`);
-    });
   },
 
   async registerAgentContext(id, host, key) {
@@ -799,12 +763,24 @@ export const TorRouting = {
     await this._queueAuthorization(async () => {
       const entry = this._agentContexts.get(id);
       this._agentContexts.delete(id);
-      if (!entry || [...this._agentContexts.values(), ...this._hostedSites.values()].some(item => item.address == entry.address)) return;
+      if (!entry || [...this._agentContexts.values()].some(item => item.address == entry.address)) return;
       const ordinary = (await OnionAuthStore.load()).get(entry.address);
       if (this._control) await this._control.send(ordinary?.key
         ? `ONION_CLIENT_AUTH_ADD ${entry.address} x25519:${ordinary.key}`
         : `ONION_CLIENT_AUTH_REMOVE ${entry.address}`);
     });
+  },
+
+  setAgentTunnel(id, route) {
+    const entry = this._agentContexts.get(id);
+    if (!entry && route === null) return;
+    if (!entry) throw new Error("The protected remote context is not enrolled.");
+    if (route && (!Number.isInteger(route.port) || route.port < 1 || route.port > 65535 ||
+        route.username !== "agent" || !/^[a-f0-9]{64}$/.test(route.password))) throw new Error("Invalid native Agent route.");
+    // An explicit null blocks the closed/failed tunnel. Only an explicit new
+    // enrollment/register operation may select Tor login transport again.
+    entry.tunnel = route;
+    Services.obs.notifyObservers(null, "net:prune-all-connections");
   },
 
   _queueAuthorization(operation) {
@@ -899,6 +875,17 @@ export const TorRouting = {
   applyFilter(channel, proxyInfo, callback) {
     if (!this.isTorContext(channel.loadInfo?.originAttributes.userContextId)) {
       callback.onProxyFilterResult(proxyInfo);
+      return;
+    }
+    const agent = this._agentContexts.get(channel.loadInfo?.originAttributes.userContextId);
+    if (agent && Object.hasOwn(agent, "tunnel")) {
+      const route = agent.tunnel;
+      const permitted = ["https", "wss"].includes(channel.URI.scheme) && channel.URI.host === agent.address + ".onion" &&
+        (channel.URI.port === -1 || channel.URI.port === 443);
+      callback.onProxyFilterResult(lazy.ProxyService.newProxyInfoWithAuth(
+        "socks", "127.0.0.1", permitted && route ? route.port : DEAD_PROXY_PORT,
+        route?.username || "blocked", route?.password || "blocked", "", `agent-${channel.loadInfo.originAttributes.userContextId}`,
+        Ci.nsIProxyInfo.TRANSPARENT_PROXY_RESOLVES_HOST, PROXY_TIMEOUT_SECONDS, null));
       return;
     }
     const applyTorProxy = () => {

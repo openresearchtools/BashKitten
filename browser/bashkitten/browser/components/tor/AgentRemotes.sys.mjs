@@ -2,8 +2,8 @@
 
 import { NetUtil } from "resource://gre/modules/NetUtil.sys.mjs";
 import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
-import { onionAddress, onionPrivateKey } from "resource:///modules/OnionAuthStore.sys.mjs";
-import { LlamaRelay, remoteChannel } from "resource:///modules/LlamaRelay.sys.mjs";
+import { onionPrivateKey } from "resource:///modules/OnionAuthStore.sys.mjs";
+import { NativeRemote } from "resource:///modules/NativeRemote.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const CONTEXT_MIN = 0xB4500000;
@@ -95,86 +95,65 @@ function readResponse(channel, { body, signal, limit = Infinity, timeout = 35000
 class AgentRemoteStore {
   entries = null;
   activeId = null;
+  selection = 0;
   queue = Promise.resolve();
+  writes = Promise.resolve();
   contexts = new Map();
-  relays = new Map();
-  relayHealth = new Map();
-  hostedSites = new Map();
-  hostedQueue = Promise.resolve();
-  hostingGeneration = 0;
+  clients = new Map();
 
-  get crypto() {
-    return Cc["@mozilla.org/login-manager/crypto/SDR;1"].getService(Ci.nsILoginManagerCrypto);
+  get crypto() { return Cc["@mozilla.org/login-manager/crypto/SDR;1"].getService(Ci.nsILoginManagerCrypto); }
+  get trust() { return Cc["@mozilla.org/security/certoverride;1"].getService(Ci.nsICertOverrideService); }
+
+  load() {
+    this.loading ??= this.read().catch(error => { this.loading = null; throw error; });
+    return this.loading;
   }
 
-  get trust() {
-    return Cc["@mozilla.org/security/certoverride;1"].getService(Ci.nsICertOverrideService);
-  }
-
-  async load() {
-    if (this.entries) return this.entries;
+  async read() {
     let entries = [];
     if (await IOUtils.exists(FILE)) {
       const saved = await IOUtils.readJSON(FILE);
-      if (saved.version != 1 || typeof saved.encrypted != "string") {
-        throw new Error("The saved remote connections could not be read.");
-      }
+      if (saved.version !== 1 || typeof saved.encrypted !== "string") throw new Error("The saved remote connections could not be read.");
       entries = JSON.parse(this.crypto.decrypt(saved.encrypted));
       if (!Array.isArray(entries)) throw new Error("Invalid remote connections.");
     }
     const ids = new Set();
     for (const entry of entries) {
       if (!Number.isInteger(entry.userContextId) || entry.userContextId < CONTEXT_MIN ||
-          entry.userContextId > CONTEXT_MAX || ids.has(entry.userContextId)) {
-        throw new Error("Invalid isolated remote context.");
-      }
-      entry.url = validateURL(entry.url, entry.id == "local");
-      certificate(entry.caPem, entry.caSha256);
-      ids.add(entry.userContextId);
+          entry.userContextId > CONTEXT_MAX || ids.has(entry.userContextId)) throw new Error("Invalid isolated remote context.");
+      entry.url = validateURL(entry.url, entry.id === "local");
+      certificate(entry.caPem, entry.caSha256); ids.add(entry.userContextId);
     }
     this.entries = new Map(entries.map(entry => [entry.id, entry]));
     Services.obs.addObserver(this, "http-on-modify-request");
     return this.entries;
   }
 
-  async save() {
-    const encrypted = this.crypto.encrypt(JSON.stringify([...this.entries.values()]));
-    await IOUtils.writeJSON(FILE, { version: 1, encrypted }, { tmpPath: FILE + ".tmp", permissions: 0o600 });
-    await IOUtils.setPermissions(FILE, 0o600);
+  save() {
+    const pending = this.writes.then(async () => {
+      const encrypted = this.crypto.encrypt(JSON.stringify([...this.entries.values()]));
+      await IOUtils.writeJSON(FILE, { version: 1, encrypted }, { tmpPath: FILE + ".tmp", permissions: 0o600 });
+      await IOUtils.setPermissions(FILE, 0o600);
+    });
+    this.writes = pending.catch(() => {}); return pending;
   }
 
   serialized(operation) {
-    const task = this.queue.then(operation);
-    this.queue = task.catch(() => {});
-    return task;
+    const task = this.queue.then(operation); this.queue = task.catch(() => {}); return task;
   }
-
-  serializedHosting(operation) {
-    const task = this.hostedQueue.then(operation);
-    this.hostedQueue = task.catch(() => {});
-    return task;
-  }
-
   allocateContext() {
     const ids = new Set([...this.entries.values()].map(entry => entry.userContextId));
-    for (let id = CONTEXT_MIN; id <= CONTEXT_MAX; id++) {
-      if (!ids.has(id)) return id;
-    }
-    throw new Error("Too many saved connections.");
+    for (let id = CONTEXT_MIN; id <= CONTEXT_MAX; id++) if (!ids.has(id)) return id;
+    throw new Error("No isolated remote context is available.");
   }
-
   info(entry) {
-    return {
-      id: entry.id, name: entry.name, kind: entry.kind, url: entry.url,
+    const owner = this.clients.get(entry.id);
+    return { id: entry.id, name: entry.name, kind: "agent", url: entry.url,
       userContextId: entry.userContextId, identity: entry.caSha256,
-      active: entry.id == this.activeId,
-      port: this.relays.get(entry.id)?.port || entry.port || 0,
-      running: this.relays.has(entry.id), health: this.relayHealth.get(entry.id) || "stopped",
-    };
+      active: entry.id === this.activeId, state: owner?.state || "disconnected",
+      error: owner?.error || "", migrationRequired: entry.id !== "local" && !entry.bundle };
   }
-
-  async list() { return [...(await this.load()).values()].filter(entry => entry.id != "local" && entry.id != "local-hosting").map(entry => this.info(entry)); }
-
+  async list() { return [...(await this.load()).values()].filter(entry => !["local", "local-hosting"].includes(entry.id)).map(entry => this.info(entry)); }
   async connection(id) {
     const entry = (await this.load()).get(id);
     if (!entry) throw new Error("The connection no longer exists.");
@@ -183,369 +162,221 @@ class AgentRemoteStore {
 
   trustLocal({ url, caPem, caSha256, instanceId }) {
     return this.serialized(async () => {
-      await this.load();
-      url = validateURL(url, true);
-      if (typeof instanceId != "string" || !instanceId) throw new Error("Missing local server identity.");
-      const { identity } = certificate(caPem, caSha256);
-      const previous = this.entries.get("local");
-      if (previous && (previous.instanceId != instanceId || previous.caSha256 != identity)) {
+      await this.load(); url = validateURL(url, true);
+      if (typeof instanceId !== "string" || !instanceId) throw new Error("Missing local server identity.");
+      const { identity } = certificate(caPem, caSha256), previous = this.entries.get("local");
+      if (previous && (previous.instanceId !== instanceId || previous.caSha256 !== identity)) {
         throw Object.assign(new Error("The local server identity changed. Check the service before trusting its replacement."), { code: "local_identity_changed" });
       }
       const entry = { id: "local", kind: "agent", name: "Local", url, caPem, caSha256: identity, instanceId,
         userContextId: previous?.userContextId ?? this.allocateContext() };
-      this.entries.set("local", entry);
-      await this.save();
-      await this.prepare(entry);
-      return this.info(entry);
+      this.entries.set("local", entry); await this.save(); await this.prepare(entry); return this.info(entry);
     });
   }
 
-  enroll(record) {
+  enroll(text, password) {
     return this.serialized(async () => {
       await this.load();
-      if (typeof record == "string") record = JSON.parse(record);
-      if (record?.version != 1 || !["agent", "llama"].includes(record.kind)) throw new Error("Unsupported connection file.");
-      const url = validateURL(record.url);
-      const name = String(record.name || new URL(url).hostname).trim();
-      const key = onionPrivateKey(record.clientAuthorization);
-      const previous = [...this.entries.values()].find(entry => entry.id != "local" && entry.id != "local-hosting" && entry.kind == record.kind && entry.url == url);
-      const entry = {
-        id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1),
-        kind: record.kind, name, url, clientAuthorization: key,
-        userContextId: previous?.userContextId ?? this.allocateContext(),
-        caPem: record.caPem, caSha256: record.caSha256,
-        instanceId: String(record.instanceId || previous?.instanceId || ""),
-        bearerToken: record.kind == "llama" ? String(record.bearerToken || "") : undefined,
-        port: previous?.port || 0,
-      };
-      if (entry.kind == "llama" && (!entry.bearerToken || /[\x00-\x20\x7f]/.test(entry.bearerToken))) {
-        throw new Error("Enter the llama.cpp bearer token.");
-      }
-      if (!entry.caPem) await this.enrollCertificate(entry);
-      const { identity } = certificate(entry.caPem, entry.caSha256);
-      if (previous && previous.caSha256 != identity) {
-        throw new Error("This server's certificate identity changed. Remove its previous enrollment before adding the replacement.");
-      }
-      entry.caSha256 = identity;
-      this.entries.set(entry.id, entry);
-      await this.save();
-      this.notify();
-      return this.info(entry);
+      const helper = await NativeRemote.open(async () => { throw new Error("Import cannot save a login token."); });
+      try {
+        const bundle = await helper.call("decrypt", { text, password });
+        const browser = await helper.call("identity", { enrollment: bundle });
+        const url = validateURL(browser.url), { identity } = certificate(browser.identity.caPem, browser.identity.caSha256);
+        const previous = [...this.entries.values()].find(item => item.url === url && item.id !== "local-hosting");
+        if (previous && (previous.caSha256 !== identity || previous.bundle && previous.bundle.id !== bundle.id)) {
+          throw new Error("This server's identity changed. Remove its previous enrollment before adding the replacement.");
+        }
+        const entry = { id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1), kind: "agent",
+          name: bundle.name, url, bundle, caPem: browser.identity.caPem, caSha256: identity, instanceId: bundle.id,
+          clientAuthorization: onionPrivateKey(bundle.tor_private),
+          userContextId: previous?.userContextId ?? this.allocateContext(), mappings: previous?.mappings || {}, token: previous?.token || null };
+        this.entries.set(entry.id, entry); await this.save(); this.notify(); return this.info(entry);
+      } finally { password = ""; await helper.close(); }
     });
   }
 
   async prepare(entry) {
-    const { cert } = certificate(entry.caPem, entry.caSha256);
-    const host = new URL(entry.url).hostname;
+    const { cert } = certificate(entry.caPem, entry.caSha256), host = new URL(entry.url).hostname;
     this.contexts.set(entry.userContextId, entry.url);
-    if (entry.id != "local") {
-      await TorRouting.registerAgentContext(entry.userContextId, host, entry.clientAuthorization);
-    }
+    if (entry.id !== "local" && !this.clients.has(entry.id)) await TorRouting.registerAgentContext(entry.userContextId, host, entry.clientAuthorization);
     this.trust.setAgentCA(host, { userContextId: entry.userContextId }, cert);
   }
 
   async activate(id) {
+    const selection = ++this.selection;
     const entry = (await this.load()).get(id);
-    if (!entry || entry.kind != "agent") throw new Error("Select an Agent server.");
-    if (this.activeId != id) await this.deactivate(false);
-    await this.prepare(entry);
+    if (!entry) throw new Error("Select an Agent server.");
+    if (id !== "local" && !entry.bundle) throw new Error("Import a new encrypted Connection QR from this host's Share Local setup.");
+    if (selection !== this.selection) throw new Error("The Agent selection changed.");
     this.activeId = id;
-    this.notify();
-    return this.info(entry);
-  }
-
-  async deactivate(stopRelays = true) {
-    this.hostingGeneration++;
-    const previous = this.activeId;
-    this.disconnect(stopRelays);
-    await this.serializedHosting(() => this.clearHostedSites(previous));
-  }
-
-  disconnect(stopRelays = true) {
-    const previous = this.activeId;
-    this.activeId = null;
-    if (previous) Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", previous);
-    if (stopRelays) {
-      for (const id of [...this.relays.keys()]) this.stopRelay(id);
+    await this.serialized(() => this.prepare(entry));
+    if (selection !== this.selection) {
+      if (id !== "local" && !this.clients.has(id)) this.block(entry);
+      throw new Error("The Agent selection changed.");
     }
-    this.notify();
+    this.notify(); return this.info(entry);
   }
 
+  current(entry, owner) {
+    if (this.entries.get(entry.id) !== entry || this.clients.get(entry.id) !== owner || owner.abort.signal.aborted) {
+      throw new Error("Remote connection closed.");
+    }
+  }
+
+  async failed(entry, owner, error) {
+    if (this.clients.get(entry.id) !== owner) return;
+    owner.abort.abort(); this.block(entry);
+    owner.state = "failed"; owner.error = error.message;
+    this.notify(); await owner.helper?.close();
+  }
+
+  async connect(id, password = "", forceLogin = false) {
+    const entry = (await this.load()).get(id);
+    if (!entry?.bundle || this.activeId !== id) throw new Error("Select an enrolled remote Agent.");
+    let owner = this.clients.get(id);
+    if (owner?.state === "ready" && !forceLogin) return { connection: this.info(entry) };
+    if (owner) await this.disconnect(id);
+    if (this.activeId !== id) throw new Error("The Agent selection changed.");
+    owner = { state: "connecting", error: "", helper: null, callback: null, abort: new AbortController() };
+    this.clients.set(id, owner);
+    try {
+      await this.serialized(async () => {
+        this.current(entry, owner);
+        await TorRouting.registerAgentContext(entry.userContextId, new URL(entry.url).hostname, entry.clientAuthorization);
+        this.current(entry, owner);
+        await this.prepare(entry);
+      });
+      this.current(entry, owner);
+      const helper = await NativeRemote.open(async token => {
+        this.current(entry, owner);
+        entry.token = token; await this.save();
+        this.current(entry, owner);
+      }, message => this.failed(entry, owner, new Error(message)).catch(console.error));
+      owner.helper = helper;
+      try { this.current(entry, owner); } catch (error) { await helper.close(); throw error; }
+      const browser = await helper.call("identity", { enrollment: entry.bundle });
+      this.current(entry, owner);
+      const cert = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB)
+        .constructX509FromBase64(browser.clientCertificate.certificate);
+      const key = Uint8Array.from(atob(browser.clientCertificate.pkcs8), char => char.charCodeAt(0));
+      try { this.trust.setAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId }, cert, key); }
+      finally { key.fill(0); delete browser.clientCertificate; }
+      await helper.call("open", { enrollment: entry.bundle, token: entry.token,
+        socksAddress: `127.0.0.1:${await TorRouting.ensureProxy()}` });
+      this.current(entry, owner);
+      if (!forceLogin && await helper.call("authorize")) { await this.ready(entry, owner); return { connection: this.info(entry) }; }
+      const loginURL = await helper.call("begin-login");
+      this.current(entry, owner);
+      if (password) await this.firstFactor(entry, password, owner.abort.signal);
+      this.current(entry, owner);
+      owner.state = "login"; this.notify(); return { connection: this.info(entry), loginURL };
+    } catch (error) {
+      if (!this.clients.has(id)) this.block(entry);
+      await this.failed(entry, owner, error); throw error;
+    } finally { password = ""; }
+  }
+
+  async firstFactor(entry, password, signal) {
+    const origin = new URL(entry.url).origin;
+    const principal = Services.scriptSecurityManager.createContentPrincipal(Services.io.newURI(origin), { userContextId: entry.userContextId });
+    const channel = NetUtil.newChannel({ uri: origin + "/login/api/firstfactor", loadingPrincipal: principal,
+      securityFlags: Ci.nsILoadInfo.SEC_REQUIRE_SAME_ORIGIN_DATA_IS_BLOCKED | Ci.nsILoadInfo.SEC_COOKIES_INCLUDE,
+      contentPolicyType: Ci.nsIContentPolicy.TYPE_FETCH }).QueryInterface(Ci.nsIHttpChannel);
+    channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE | Ci.nsIRequest.INHIBIT_CACHING;
+    channel.requestMethod = "POST"; channel.setRequestHeader("Origin", origin, false);
+    const response = await readResponse(channel, { body: { username: entry.bundle.owner, password, keepMeLoggedIn: true }, signal, timeout: 120000 });
+    if (response.status !== 200 || response.data?.status !== "OK") throw new Error("Authelia did not accept this sign-in.");
+  }
+
+  async ready(entry, owner) {
+    this.current(entry, owner);
+    const route = await owner.helper.call("agent-route");
+    this.current(entry, owner);
+    TorRouting.setAgentTunnel(entry.userContextId, route);
+    for (const [id, mapping] of Object.entries(entry.mappings || {})) if (mapping.enabled) await owner.helper.call("map", { id, port: mapping.port });
+    this.current(entry, owner);
+    owner.state = "ready"; this.notify();
+  }
+  onLogin(id, callback) {
+    const owner = this.clients.get(id);
+    if (!owner || owner.state !== "login") throw new Error("Remote sign-in is no longer active.");
+    owner.callback = callback;
+  }
+  async complete(entry, owner, url) {
+    owner.state = "connecting";
+    try {
+      await owner.helper.call("complete-login", { callback: url }); await this.ready(entry, owner);
+      owner.callback?.(null, this.info(entry));
+    } catch (error) {
+      await this.failed(entry, owner, error); owner.callback?.(error);
+    } finally { owner.callback = null; }
+  }
+  block(entry) {
+    TorRouting.setAgentTunnel(entry.userContextId, null);
+    this.trust.clearAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId });
+  }
+  async disconnect(id) {
+    const owner = this.clients.get(id), entry = this.entries?.get(id);
+    if (!owner) return;
+    this.clients.delete(id); owner.abort.abort(); owner.callback = null;
+    this.block(entry); await owner.helper?.close(); this.notify();
+  }
+  async deactivate(closeClients = true) {
+    ++this.selection;
+    const previous = this.activeId; this.activeId = null;
+    if (previous) Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", previous);
+    if (closeClients) await Promise.all([...this.clients.keys()].map(id => this.disconnect(id)));
+    else for (const [id, owner] of this.clients) if (owner.state !== "ready") await this.disconnect(id);
+    this.notify();
+  }
   async remove(id) {
-    this.hostingGeneration++;
-    return this.serialized(() => this.serializedHosting(async () => {
+    return this.serialized(async () => {
       const entry = (await this.load()).get(id);
       if (!entry) return;
-      if (this.activeId == id) this.disconnect();
-      this.stopRelay(id);
-      await this.discardEntry(entry);
-      await this.save();
-      this.notify();
-    }));
-  }
-
-  async discardEntry(entry) {
-    await this.clearHostedSites(entry.id);
-    this.contexts.set(entry.userContextId, null);
-    this.trust.clearAgentCA(new URL(entry.url).hostname, { userContextId: entry.userContextId });
-    await TorRouting.unregisterAgentContext(entry.userContextId);
-    await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern(
-      { userContextId: entry.userContextId }, { onDataDeleted: resolve }
-    ));
-    this.entries.delete(entry.id);
-  }
-
-  async localHosting(record) {
-    await this.load();
-    const local = this.entries.get("local");
-    const url = validateURL(record?.url);
-    const { identity } = certificate(record.caPem, record.caSha256);
-    if (!local || local.caSha256 != identity || local.instanceId != record.instanceId) {
-      throw new Error("The hosted service does not match the local Agent identity.");
-    }
-    const previous = this.entries.get("local-hosting");
-    if (previous && (previous.url != url || previous.caSha256 != identity)) {
-      await this.discardEntry(previous);
-    }
-    const entry = { id: "local-hosting", kind: "agent", name: "Local hosting", url,
-      caPem: record.caPem, caSha256: identity, instanceId: record.instanceId,
-      clientAuthorization: onionPrivateKey(record.clientAuthorization),
-      userContextId: this.entries.get("local-hosting")?.userContextId ?? this.allocateContext() };
-    this.entries.set(entry.id, entry);
-    await this.save();
-    await this.prepare(entry);
-    return entry;
-  }
-
-  async hostedCatalog(connection, value) {
-    const target = new URL(value);
-    if (target.protocol != "https:" || target.username || target.password || target.port ||
-        target.hash || target.search || target.pathname != "/") throw new Error("Invalid hosted site address.");
-    const response = await this.request(connection, "/api/hosting");
-    const catalog = response.data;
-    const parentHost = String(catalog?.onion || "").replace(/^https:\/\//, "").replace(/\/$/, "");
-    if (response.status != 200 || !catalog?.enabled || !/^[a-z2-7]{56}\.onion$/.test(parentHost) ||
-        !Array.isArray(catalog.services) || !catalog.services.some(site => site.enabled && site.url === target.href)) {
-      throw new Error("This site is no longer registered with the selected Agent.");
-    }
-    const label = target.hostname.slice(0, -(parentHost.length + 1));
-    if (target.hostname !== label + "." + parentHost || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) {
-      throw new Error("The hosted site is outside this Agent's onion identity.");
-    }
-    if (connection.id != "local" && new URL(connection.url).hostname != parentHost) {
-      throw new Error("The hosted site is outside the enrolled Agent identity.");
-    }
-    return { target, parentHost };
-  }
-
-  prepareHosted(connection, value, options = {}) {
-    const generation = this.hostingGeneration;
-    return this.serializedHosting(() => this.prepareHostedSite(connection, value, options, generation));
-  }
-
-  async prepareHostedSite(connection, value, { localRecord }, generation) {
-    const check = () => {
-      const selected = this.entries?.get(connection.id);
-      if (generation != this.hostingGeneration || this.activeId != connection.id ||
-          !selected || selected.url != connection.url || selected.caSha256 != connection.identity) {
-        throw new Error("The selected Agent changed.");
-      }
-    };
-    const { target, parentHost } = await this.hostedCatalog(connection, value);
-    check();
-    const entry = connection.id == "local"
-      ? (localRecord ? await this.localHosting(localRecord) : this.entries.get("local-hosting"))
-      : this.entries.get(connection.id);
-    if (!entry) return { needsLocalEnrollment: true };
-    check();
-    if (new URL(entry.url).hostname != parentHost) throw new Error("The hosting onion identity changed. Reconnect from Agent.");
-    await this.prepare(entry);
-    check();
-    const attrs = { userContextId: TorRouting.userContextId };
-    const { cert } = certificate(entry.caPem, entry.caSha256);
-    const site = { ownerId: connection.id, authId: entry.id, parentHost, url: target.href, attrs };
-    this.hostedSites.set(target.hostname, site);
-    try {
-      await TorRouting.registerHostedSite(target.hostname, parentHost, entry.clientAuthorization);
-      check();
-      this.trust.setAgentHostedCA(parentHost, target.hostname, attrs, cert);
-    } catch (error) {
-      await this.clearHostedSites(connection.id);
-      throw error;
-    }
-    const cookies = Services.cookies.getCookiesFromHost(parentHost, { userContextId: entry.userContextId });
-    const candidates = cookies.filter(cookie => cookie.rawHost == parentHost && cookie.path == "/" &&
-      cookie.isSecure && cookie.isHttpOnly && cookie.expiry > Date.now() &&
-      (entry.instanceId ? cookie.name == "bashkitten_" + entry.instanceId.slice(0, 16) : /^bashkitten_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{2}$/.test(cookie.name)));
-    if (candidates.length != 1) return { site, authentication: this.info(entry) };
-    const cookie = candidates[0];
-    // Preserve Authelia's onion-domain session identity while limiting the
-    // browser cookie to this exact ordinary site. Agent's cookie jar stays private.
-    Services.cookies.add(target.hostname, "/", cookie.name, cookie.value, true, true, true,
-      cookie.expiry, attrs, cookie.sameSite, cookie.schemeMap);
-    return { site, authentication: this.info(entry), ready: true };
-  }
-
-  async clearHostedSites(ownerId) {
-    for (const [host, site] of this.hostedSites) {
-      if (site.ownerId != ownerId && site.authId != ownerId) continue;
-      this.hostedSites.delete(host);
-      this.trust.clearAgentHostedCA(site.parentHost, host, site.attrs);
-      Services.cookies.removeCookiesFromExactHost(host, JSON.stringify(site.attrs));
-      await TorRouting.unregisterHostedSite(host);
-    }
-  }
-
-  async exportConnection(id) {
-    const entry = (await this.load()).get(id);
-    if (!entry || id == "local") throw new Error("Select a remote to export.");
-    return JSON.stringify({ version: 1, kind: entry.kind, name: entry.name, url: entry.url,
-      clientAuthorization: entry.clientAuthorization, caPem: entry.caPem, caSha256: entry.caSha256,
-      ...(entry.instanceId ? { instanceId: entry.instanceId } : {}),
-      ...(entry.kind == "llama" ? { bearerToken: entry.bearerToken } : {}) });
+      if (this.activeId === id) { ++this.selection; this.activeId = null; }
+      await this.disconnect(id);
+      this.contexts.set(entry.userContextId, null);
+      this.trust.clearAgentCA(new URL(entry.url).hostname, { userContextId: entry.userContextId });
+      if (id !== "local") await TorRouting.unregisterAgentContext(entry.userContextId);
+      await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern({ userContextId: entry.userContextId }, { onDataDeleted: resolve }));
+      this.entries.delete(id); await this.save(); this.notify();
+    });
   }
 
   async request(connection, path, { method = "GET", body, signal, csrf } = {}) {
     const entry = (await this.load()).get(connection.id);
-    if (!entry || entry.id != this.activeId || entry.url != connection.url || entry.caSha256 != connection.identity) {
-      throw new Error("The Agent connection changed.");
-    }
+    if (!entry || entry.id !== this.activeId || entry.url !== connection.url || entry.caSha256 !== connection.identity) throw new Error("The Agent connection changed.");
     if (!path.startsWith("/") || path.startsWith("//") || /[\x00-\x20\x7f#\\]/.test(path)) throw new Error("Invalid Agent path.");
-    const uri = Services.io.newURI(entry.url.slice(0, -1) + path);
-    const context = connection.requestContext;
-    const global = context?.currentWindowGlobal;
-    const principal = global?.documentPrincipal;
-    if (!context || context !== context.top || !principal?.isContentPrincipal ||
-        principal.originNoSuffix !== new URL(entry.url).origin ||
-        principal.originAttributes.userContextId !== entry.userContextId || !global.cookieJarSettings) {
-      throw new Error("The protected Agent document is not ready.");
-    }
-    const channel = NetUtil.newChannel({ uri, loadingPrincipal: principal,
+    const context = connection.requestContext, global = context?.currentWindowGlobal, principal = global?.documentPrincipal;
+    if (!context || context !== context.top || !principal?.isContentPrincipal || principal.originNoSuffix !== new URL(entry.url).origin ||
+        principal.originAttributes.userContextId !== entry.userContextId || !global.cookieJarSettings) throw new Error("The protected Agent document is not ready.");
+    const channel = NetUtil.newChannel({ uri: entry.url.slice(0, -1) + path, loadingPrincipal: principal,
       securityFlags: Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
-      contentPolicyType: Ci.nsIContentPolicy.TYPE_OTHER,
-    }).QueryInterface(Ci.nsIHttpChannel);
-    // A native TYPE_OTHER channel has a blocking cookie jar by default. Use
-    // this protected document's policy and full principal, like its own fetch.
-    channel.loadInfo.cookieJarSettings = global.cookieJarSettings;
-    channel.requestMethod = method;
-    channel.setRequestHeader("Accept", "application/json", false);
-    channel.setRequestHeader("Origin", new URL(entry.url).origin, false);
+      contentPolicyType: Ci.nsIContentPolicy.TYPE_OTHER }).QueryInterface(Ci.nsIHttpChannel);
+    channel.loadInfo.cookieJarSettings = global.cookieJarSettings; channel.requestMethod = method;
+    channel.setRequestHeader("Accept", "application/json", false); channel.setRequestHeader("Origin", new URL(entry.url).origin, false);
     if (csrf) channel.setRequestHeader("X-Bashkitten-Csrf", csrf, false);
     const response = await readResponse(channel, { body, signal });
-    if (response.status == 401 || response.status == 403 ||
-        (response.status >= 300 && response.status < 400)) {
-      Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", entry.id);
-    }
+    if ([401, 403].includes(response.status) || response.status >= 300 && response.status < 400) Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", entry.id);
     return response;
   }
 
-  async startRelay(id, { port } = {}) {
-    const entry = (await this.load()).get(id);
-    if (!entry || entry.kind != "llama") throw new Error("Select a llama.cpp connection.");
-    if (this.relays.has(id)) return this.info(entry);
-    await this.prepare(entry);
-    const relay = new LlamaRelay(entry);
-    // A remembered occupied port is an error, never an invitation to attach to
-    // the process that happens to answer it. An explicit port:0 chooses a new one.
-    entry.port = relay.start(port ?? entry.port ?? 0);
-    this.relays.set(id, relay);
-    this.relayHealth.set(id, "checking");
-    await this.save();
-    this.notify();
-    this.checkRelay(id).catch(() => {});
-    return this.info(entry);
-  }
-
-  stopRelay(id) {
-    this.relays.get(id)?.stop();
-    this.relays.delete(id);
-    this.relayHealth.set(id, "stopped");
-    this.notify();
-  }
-
-  async checkRelay(id) {
-    const entry = (await this.load()).get(id);
-    if (!entry || !this.relays.has(id)) throw new Error("The relay is stopped.");
-    try {
-      const health = await readResponse(remoteChannel(entry, "/health"), { timeout: 10000 });
-      const models = await readResponse(remoteChannel(entry, "/v1/models"), { timeout: 10000 });
-      if (health.status != 200 || models.status != 200 || !Array.isArray(models.data?.data)) throw new Error("Not ready");
-      this.relayHealth.set(id, "ready");
-    } catch {
-      this.relayHealth.set(id, "unavailable");
-    }
-    this.notify();
-    return this.info(entry);
-  }
-
-  async enrollCertificate(entry) {
-    // No document or Agent cookies exist in this transient context. The exact
-    // authenticated v3 onion proves the endpoint while we retrieve its public
-    // CA. Once saved, all real requests require that CA through normal NSS.
-    let userContextId = CONTEXT_MAX;
-    const used = new Set([...this.entries.values()].map(item => item.userContextId));
-    while (used.has(userContextId) || this.contexts.has(userContextId)) userContextId--;
-    if (userContextId <= CONTEXT_MIN) throw new Error("No enrollment context is available.");
-    const host = new URL(entry.url).hostname;
-    const attributes = { userContextId };
-    let temporaryTrust = false;
-    this.contexts.set(userContextId, entry.url);
-    try {
-      await TorRouting.registerAgentContext(userContextId, host, entry.clientAuthorization);
-      this.trust.setAgentOnionEnrollment(host, attributes, true);
-      temporaryTrust = true;
-      const uri = Services.io.newURI(entry.url + ".well-known/bashkitten-ca");
-      const principal = Services.scriptSecurityManager.createContentPrincipal(uri, attributes);
-      const channel = NetUtil.newChannel({ uri, loadingPrincipal: principal,
-        securityFlags: Ci.nsILoadInfo.SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
-        contentPolicyType: Ci.nsIContentPolicy.TYPE_OTHER,
-      }).QueryInterface(Ci.nsIHttpChannel);
-      channel.loadFlags |= Ci.nsIRequest.LOAD_ANONYMOUS | Ci.nsIRequest.LOAD_BYPASS_CACHE;
-      const response = await readResponse(channel, { timeout: 60000 });
-      if (response.status != 200) throw new Error("The server did not provide its CA certificate.");
-      const { identity } = certificate(response.data?.caPem, entry.caSha256);
-      if (response.data.caSha256 && response.data.caSha256.toLowerCase() != identity) {
-        throw new Error("The server returned an inconsistent CA identity.");
-      }
-      entry.caPem = response.data.caPem;
-      entry.caSha256 = identity;
-      entry.instanceId = response.data.instanceId;
-    } finally {
-      if (temporaryTrust) this.trust.setAgentOnionEnrollment(host, attributes, false);
-      this.contexts.set(userContextId, null);
-      await TorRouting.unregisterAgentContext(userContextId);
-      await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern(
-        attributes, { onDataDeleted: resolve }
-      ));
-      this.contexts.delete(userContextId);
-    }
-  }
-
   observe(subject, topic) {
-    if (topic != "http-on-modify-request") return;
-    const channel = subject.QueryInterface(Ci.nsIHttpChannel);
-    const context = channel.loadInfo.originAttributes.userContextId;
-    if (TorRouting.isTorContext(context) && (context < CONTEXT_MIN || context > CONTEXT_MAX)) {
-      // Authentication and the root Agent never enter an automatable site tab.
-      // Redirects go back through the browser-owned protected sign-in view.
-      const site = [...this.hostedSites.values()].find(item => item.parentHost == channel.URI.host);
-      if (site) {
-        const { tab, win, topLevel } = TorRouting._navigationTarget(channel.loadInfo);
-        channel.cancel(Cr.NS_BINDING_ABORTED);
-        if (tab && topLevel) {
-          let destination;
-          try { destination = new URL(new URL(channel.URI.spec).searchParams.get("rd")); } catch {}
-          const matched = this.hostedSites.get(destination?.hostname);
-          win.BashKittenAgent.hostedSignIn(site.ownerId, matched?.ownerId == site.ownerId ? matched.url : site.url, tab).catch(console.error);
-        }
-        return;
-      }
-    }
+    if (topic !== "http-on-modify-request") return;
+    const channel = subject.QueryInterface(Ci.nsIHttpChannel), context = channel.loadInfo.originAttributes.userContextId;
     if (context < CONTEXT_MIN || context > CONTEXT_MAX) return;
+    if (channel.URI.scheme === "http" && channel.URI.host === "127.0.0.1" && channel.URI.pathQueryRef.startsWith("/oauth/callback")) {
+      channel.cancel(Cr.NS_BINDING_ABORTED);
+      const entry = this.entries?.get(this.activeId), owner = this.clients.get(this.activeId);
+      if (entry?.userContextId === context && owner?.state === "login" &&
+          channel.loadInfo.externalContentPolicyType === Ci.nsIContentPolicy.TYPE_DOCUMENT && !channel.loadInfo.browsingContext?.parent) {
+        this.complete(entry, owner, channel.URI.spec).catch(() => {});
+      }
+      return;
+    }
     const allowed = this.contexts.get(context);
-    if (!allowed || channel.URI.prePath != new URL(allowed).origin) channel.cancel(Cr.NS_BINDING_ABORTED);
+    if (!allowed || channel.URI.prePath !== new URL(allowed).origin) channel.cancel(Cr.NS_BINDING_ABORTED);
   }
-
   notify() { Services.obs.notifyObservers(null, TOPIC, this.activeId || ""); }
 }
 

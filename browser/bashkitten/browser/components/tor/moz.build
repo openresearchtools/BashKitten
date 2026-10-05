@@ -4,12 +4,11 @@
 
 EXTRA_JS_MODULES += [
     "AgentRemotes.sys.mjs",
-    "LlamaRelay.sys.mjs",
+    "NativeRemote.sys.mjs",
     "OnionAuthStore.sys.mjs",
     "TorControl.sys.mjs",
     "TorRouting.sys.mjs",
 ]
 
 JAR_MANIFESTS += ["jar.mn"]
-
 

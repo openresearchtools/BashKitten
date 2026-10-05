@@ -1443,6 +1443,23 @@ slices and their limits; they do not replace the manual acceptance table.
   notices. The currently running browser and Cuttlefish guest were left intact;
   this download/integrity check did not install or accept that package.
 
+- Desktop remote connections now use the shared native client via private child
+  pipes, encrypted QR import, NSS-acknowledged token persistence and protected
+  Authelia/PKCE navigation. A credentialed, exact-origin SOCKS bridge carries the
+  protected Agent TLS connection through its native mapping without HTTP/header
+  rewriting. Switching to Local retains ready owners; Disconnect/Turn off close
+  them and late callbacks cannot restore a closed route. The old desktop
+  `LlamaRelay`, hosted subdomain login and plaintext export paths are removed;
+  old saved enrollments require a new encrypted QR. Source compilation passed
+  for the local Linux architecture and Android client boundary, module integrity
+  and changed JavaScript parsing/diff checks. Actual desktop QR/TOTP/certificate,
+  remembered login, tunnel and lifecycle acceptance are still pending. Native
+  service cards/configuration and the remaining plan features are still required;
+  no full application build was dispatched for this slice.
+- Existing Android builder `37275735339` completed successfully at 08:05 UTC
+  with the `a29c5d70ff` candidate. It predates Display and desktop migration;
+  completion of that build is not manual or full-feature acceptance.
+
 Additional observed evidence, 5 October:
 
 - Android Local now has a native Display dialog wired to the private Termux

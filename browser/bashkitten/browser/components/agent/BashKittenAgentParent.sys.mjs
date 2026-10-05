@@ -16,7 +16,6 @@ export class BashKittenAgentParent extends JSWindowActorParent {
     if (!entry) throw new Error("This document is not an active Agent view.");
     if (name === "Ready" || name === "DraftReady") { await entry.host.contentReady(entry, this, name === "DraftReady"); return; }
     if (name === "SignIn") { await entry.host.signIn(); return { ok: true }; }
-    if (name === "OpenHosted") { await entry.host.openHosted(this.browsingContext.embedderElement, data.url); return { ok: true }; }
     if (!entry.local) throw new Error("This action is available only in the local Agent view.");
     if (name === "ChooseFolder") return entry.host.chooseFolder(this.browsingContext.embedderElement, data);
     if (name === "OpenFolder") {
@@ -30,7 +29,7 @@ export class BashKittenAgentParent extends JSWindowActorParent {
     if (typeof file.path !== "string" || !PathUtils.isAbsolute(file.path) || file.path.includes("\0")) throw new Error("Invalid local file path.");
     if ((await IOUtils.stat(file.path)).type !== "regular") throw new Error("This file no longer exists.");
     const current = protectedAgentView(this);
-    if (!current?.local || current.authFor || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
+    if (!current?.local || current.connection !== entry.connection) throw new Error("The selected Agent changed.");
     return openPath(file.path);
   }
 }

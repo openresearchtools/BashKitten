@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-crypt/crypt/algorithm/argon2"
 	"github.com/openresearchtools/bashkitten/remote/bundle"
+	"github.com/openresearchtools/bashkitten/remote/desktop"
 	"github.com/openresearchtools/bashkitten/remote/host"
 	"github.com/openresearchtools/bashkitten/remote/oauth"
 	"github.com/openresearchtools/bashkitten/remote/tunnel"
@@ -45,6 +46,13 @@ func decode(data []byte, out any) error {
 }
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == "--client" {
+		if err := desktop.Run(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) != 1 {
 		fmt.Fprintln(os.Stderr, "Use the private controller pipe; command arguments are not accepted.")
 		os.Exit(2)

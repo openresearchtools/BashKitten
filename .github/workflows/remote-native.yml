@@ -71,7 +71,7 @@ jobs:
           go mod verify
           go build -mod=readonly -trimpath -tags "$BUILD_TAGS" ./...
           go list -mod=readonly -deps -tags "$BUILD_TAGS" ./... > "$RUNNER_TEMP/remote-packages.txt"
-          test -z "$(gofmt -l bundle tunnel host cmd oauth client mobile)"
+          test -z "$(gofmt -l bundle tunnel host cmd oauth client mobile desktop)"
       - uses: actions/upload-artifact@v4
         with:
           name: remote-package-inventory-${{ matrix.target }}
