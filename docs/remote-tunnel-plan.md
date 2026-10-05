@@ -1295,6 +1295,17 @@ slices and their limits; they do not replace the manual acceptance table.
   function, retaining the same key-usage and public-key matching checks without
   modifying upstream NSS exports. The replacement full browser builds must pass
   before claiming the API is available in an installed product.
+- Android's native `NativeRemote` adapter uses the generated Java binding and
+  existing Keystore/AtomicFile store for synchronous refresh-token rotation.
+  Tokens are separate from the connection catalogue and keyed by the validated
+  bundle identity. Normal Close retains them; Logout invokes native revocation.
+  Transient byte arrays are cleared. The protected Gecko configuration accepts
+  the corresponding client certificate/PKCS#8 data only for its enrolled
+  onion:443, excludes it from ordinary routing and refuses credential omission
+  after enrollment. Its NSS copy is cleared with the existing scoped CA/session
+  lifetime. Generated-binding Java compilation, APK/device operation and the
+  new connection-screen/controller activation are pending; this is not yet the
+  one-login user flow.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

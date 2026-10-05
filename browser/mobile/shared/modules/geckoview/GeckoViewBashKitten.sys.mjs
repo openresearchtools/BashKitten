@@ -190,7 +190,13 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
     // The native credential stays in the protected cookie jar; it is never
     // passed to page script or to the ordinary-tab routing configuration.
-    const { localSession, ...routing } = params;
+    const { localSession, clientCertificate, ...routing } = params;
+    if (clientCertificate && (!onion || endpoint.port || localSession)) {
+      throw new Error("Client credentials require the enrolled onion origin");
+    }
+    if (this.agentUsesClientCertificate && !clientCertificate) {
+      throw new Error("The remote client credential is required");
+    }
     if (localSession) {
       const expectedName = "__Host-bashkitten_local_" + String(identity.instanceId).replaceAll("-", "");
       if (this.context !== contextPrefix("bashkitten-agent-ui-local") || onion ||
@@ -206,6 +212,22 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     BashKittenAndroid.configure(this.context, this.browserId, { ...routing, identities: [] });
     if (this.agentHost && this.agentHost !== endpoint.hostname) certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
     certificates.setAgentCA(endpoint.hostname, { geckoViewSessionContextId: this.context }, cert);
+    if (clientCertificate) {
+      let key;
+      try {
+        if (typeof clientCertificate.certificate !== "string" || typeof clientCertificate.pkcs8 !== "string") {
+          throw new Error("Invalid native client credential");
+        }
+        const leaf = certDB.constructX509FromBase64(clientCertificate.certificate);
+        key = Uint8Array.from(atob(clientCertificate.pkcs8), character => character.charCodeAt(0));
+        certificates.setAgentClientCertificate(endpoint.hostname,
+          { geckoViewSessionContextId: this.context }, leaf, key);
+        this.agentUsesClientCertificate = true;
+      } catch (_) {
+        certificates.clearAgentCA(endpoint.hostname, { geckoViewSessionContextId: this.context });
+        throw new Error("Could not enroll the remote client credential");
+      } finally { key?.fill(0); }
+    }
     this.agentHost = endpoint.hostname;
     this.agentOrigin = endpoint.origin;
     this.agentIdentity = { caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
