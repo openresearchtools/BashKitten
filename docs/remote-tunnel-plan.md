@@ -1276,14 +1276,25 @@ slices and their limits; they do not replace the manual acceptance table.
   compiled Linux amd64/arm64 and the Android arm64 client source boundary.
   This has not yet been wired to native platform storage/UI or accepted through
   a real tunnel.
-- The complete pristine Go mobile binding source at
+- `ea52747b9f`: the complete pristine Go mobile binding source at
   `8b95e45f8d3e224183cc3d760609cef9896e498c` is pinned under `auth/mobile`;
   its staged Git tree matches upstream `ab655246bc7a4398102f04d3b4ac393a0d6fd53a`.
   The native Java binding wraps the shared client, uses the native encrypted-store
   callback and produces private Gecko certificate enrollment data. Android build
   integration adds the ARM64 AAR, complete linked notices and Go/generated-Java
-  source to the candidate, with ABI/16 KB and library-hash checks. Native build
-  and device loading are pending; this does not yet activate new remote UI/login.
+  source to the candidate, with ABI/16 KB and library-hash checks. Native
+  [run 37265727085](https://github.com/openresearchtools/BashKitten/actions/runs/37265727085)
+  passed the ARM64 JNI library and all three source compilation targets. The
+  downloaded artifact checksums, generated Java classes and AArch64 16 KB ELF
+  load alignment match its manifest. Host packages are excluded and full linked
+  dependency/Go source plus original license/patent/attribution files are present.
+  APK integration/device loading and new remote UI/login remain pending.
+- Android browser build 37264655266 at `0a7bc4f027` reached linking and found
+  two unavailable NSS symbols in the client-certificate integration. Use NSS's
+  already-decoded digital-signature usage bit and its exported item-equality
+  function, retaining the same key-usage and public-key matching checks without
+  modifying upstream NSS exports. The replacement full browser builds must pass
+  before claiming the API is available in an installed product.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

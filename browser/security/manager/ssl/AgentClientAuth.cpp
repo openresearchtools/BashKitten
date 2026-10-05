@@ -57,7 +57,7 @@ UniqueCERTCertificate DecodeAgentCertificate(const nsTArray<uint8_t>& bytes) {
 bool UsableAgentCertificate(CERTCertificate* cert) {
   return cert && !CERT_IsCACert(cert, nullptr) &&
          CERT_CheckCertValidTimes(cert, PR_Now(), false) == secCertTimeValid &&
-         CERT_CheckKeyUsage(cert, KU_DIGITAL_SIGNATURE) == SECSuccess &&
+         (cert->keyUsage & KU_DIGITAL_SIGNATURE) &&
          (cert->nsCertType & NS_CERT_TYPE_SSL_CLIENT);
 }
 
@@ -100,7 +100,7 @@ nsresult SetAgentClientAuth(const nsACString& host,
   UniqueSECItem keySPKI(SECKEY_EncodeDERSubjectPublicKeyInfo(publicKey.get()));
   UniqueSECItem certSPKI(SECKEY_EncodeDERSubjectPublicKeyInfo(certificateKey.get()));
   if (!keySPKI || !certSPKI ||
-      SECITEM_CompareItem(keySPKI.get(), certSPKI.get()) != SECEqual) {
+      !SECITEM_ItemsAreEqual(keySPKI.get(), certSPKI.get())) {
     return NS_ERROR_INVALID_ARG;
   }
 

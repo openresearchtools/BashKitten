@@ -59,8 +59,11 @@ It provides no HTTP server, shell/host management or replacement Tor owner.
 Run network/encryption calls on the native app's existing background executor;
 token persistence must complete synchronously before its callback returns.
 
-This is integration source, not a completed remote feature. Native library
-compilation/device loading, private controller activation, protected browser login and UI integration are
+The ARM64 JNI library and Linux/Android client sources compiled in native-core
+run 37265727085 at `ea52747b9f`. Its downloaded artifact hashes, native Java
+bindings, client-only package boundary and 16 KB ELF alignment are verified.
+This is integration source, not a completed remote feature. Device loading,
+private controller activation, protected browser login and UI integration are
 still pending; client lifecycle source has not passed real authentication and
 device acceptance. Compilation does
 not establish working Tor, authentication, camera import or device acceptance.
