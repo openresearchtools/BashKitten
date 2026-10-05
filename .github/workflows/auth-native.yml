@@ -5,7 +5,7 @@ on:
   workflow_call:
   push:
     branches: [main]
-    paths: ['auth/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml']
+    paths: ['auth/**', 'agent/native/remote/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml']
 
 permissions:
   contents: read
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [authelia, caddy, tor, valkey, chisel]
+        component: [authelia, caddy, tor, valkey, chisel, remote]
         target: [linux-amd64, linux-arm64, termux-aarch64]
         include:
           - target: linux-amd64
@@ -61,12 +61,13 @@ jobs:
         with:
           sparse-checkout: |
             auth
+            agent/native/remote
             agent/src/server/access
       - uses: actions/setup-go@v6
-        if: matrix.component == 'authelia' || matrix.component == 'caddy' || matrix.component == 'chisel'
+        if: matrix.component == 'authelia' || matrix.component == 'caddy' || matrix.component == 'chisel' || matrix.component == 'remote'
         with:
           go-version: '1.27.1'
-          cache-dependency-path: auth/${{ matrix.component }}/go.sum
+          cache-dependency-path: ${{ matrix.component == 'remote' && 'agent/native/remote/go.sum' || format('auth/{0}/go.sum', matrix.component) }}
       - uses: actions/setup-node@v4
         if: matrix.component == 'authelia'
         with:
@@ -89,7 +90,7 @@ jobs:
         id: payload
         with:
           path: ${{ runner.temp }}/payload
-          key: auth-payload-${{ matrix.runner }}-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles(format('auth/{0}/**', matrix.component), 'auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml') }}
+          key: auth-payload-${{ matrix.runner }}-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles(format('auth/{0}/**', matrix.component), format('agent/native/{0}/**', matrix.component), 'auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml') }}
       - name: Build tracked source for the target ABI
         if: steps.payload.outputs.cache-hit != 'true'
         env:
@@ -113,6 +114,7 @@ jobs:
         run: |
           executable="$COMPONENT"
           if [[ "$COMPONENT" == valkey ]]; then executable=valkey-server; fi
+          if [[ "$COMPONENT" == remote ]]; then executable=bashkitten-remote; fi
           readelf -h "$RUNNER_TEMP/payload/bin/$executable"
           readelf -lW "$RUNNER_TEMP/payload/bin/$executable"
           if [[ "$TARGET" == termux-aarch64 ]]; then
@@ -160,6 +162,7 @@ jobs:
         with:
           sparse-checkout: |
             auth
+            agent/native/remote
             agent/src/server/access
       - uses: actions/download-artifact@v4
         with:

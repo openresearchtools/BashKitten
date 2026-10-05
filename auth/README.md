@@ -18,6 +18,13 @@ its older imported Termux recipe remains pristine, with the version override
 in our separate recipe. The complete age 1.3.2 source is pinned for the remote
 connection bundle integration; it is not a separate installed CLI.
 
+`build/remote.sh` builds the small shared adapter under `agent/native/remote/`
+as private `bashkitten-remote` for Linux and Termux. It is assembled and licensed
+with this payload. The existing controller owns its private pipes and process;
+it does not replace Chisel with a second transport or expose a management port.
+The APK client is built separately with host code excluded. Native Share Local,
+browser callbacks and the new remote lifecycle are still being integrated.
+
 The private `valkey-server` stores Authelia's sessions so remembered logins
 survive full service restarts. It listens only on the controller's private Unix
 socket and is owned by the same service group. It does not install a system

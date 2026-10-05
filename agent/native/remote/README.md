@@ -45,3 +45,7 @@ This is integration source, not a completed remote feature. APK JNI entry points
 private controller wiring, complete logout/refresh lifecycle,
 protected browser login and UI integration are still pending. Compilation does
 not establish working Tor, authentication, camera import or device acceptance.
+`access/tunnel.mjs` now provides the private pipe adapter through the existing
+AccessStack process owner; Share Local has not yet activated it. The auth-native
+workflow builds/packages the host alongside the other native components, while
+remote-native compiles both host and APK-client source boundaries.

@@ -141,12 +141,12 @@ export class AccessStack {
     if (this.info) { this.info.children = this.identities(); await writeJson(serverFile, this.info); }
   }
   identities() { return this.children.map(({ name, pid, started, file }) => ({ name, pid, started, file })); }
-  async launch(name, file, args, env) {
+  async launch(name, file, args, env, { pipe = false } = {}) {
     const logFile = path.join(dataDir, name + '.log');
     const stat = await fs.stat(logFile).catch(() => null);
     if (stat?.size > 256000) { const text = await fs.readFile(logFile, 'utf8'); await fs.writeFile(logFile, text.slice(-128000), { mode: 0o600 }); }
     const log = openSync(logFile, 'a', 0o600);
-    const child = spawn(file, args, { stdio: ['ignore', log, log], env }); closeSync(log);
+    const child = spawn(file, args, { stdio: pipe ? ['pipe', 'pipe', log] : ['ignore', log, log], env }); closeSync(log);
     await new Promise((resolve, reject) => { child.once('spawn', resolve); child.once('error', reject); });
     const record = { name, file, pid: child.pid, started: await processStart(child.pid), child };
     this.children.push(record); await writeJson(paths.group, { manager: process.pid, managerStarted: await processStart(process.pid), children: this.identities() });
@@ -154,6 +154,7 @@ export class AccessStack {
       record.exit = `${signal || code}`;
       if (this.ready && !this.stopping && !record.stopping) { this.ready = false; this.fatal?.(Error(`${name} stopped (${signal || code})`)); }
     });
+    return record;
   }
   async waitUntil(probe, name) {
     const until = Date.now() + 25000;

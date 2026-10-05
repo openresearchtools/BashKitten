@@ -26,7 +26,9 @@ func PNG(text string) ([]byte, error) {
 	}
 	code, err := qr.Encode(text, qr.M, qr.Auto)
 	if err != nil {
-		return nil, err
+		// The upstream Auto encoder embeds the complete input in its error.
+		// Enrollment ciphertext belongs only in the requested image/export.
+		return nil, errors.New("could not encode the complete connection QR")
 	}
 	const scale = 4
 	symbol, err := barcode.Scale(code, code.Bounds().Dx()*scale, code.Bounds().Dy()*scale)

@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tarfile
 
@@ -13,12 +14,14 @@ artifacts.mkdir(parents=True, exist_ok=True)
 metadata = stage / 'share/metadata'
 metadata.mkdir(parents=True, exist_ok=True)
 components = []
-for component in ('authelia', 'caddy', 'tor', 'valkey', 'chisel'):
-    binary = stage / 'bin' / ('valkey-server' if component == 'valkey' else component)
+for component in ('authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote'):
+    binary = stage / 'bin' / {'valkey': 'valkey-server', 'remote': 'bashkitten-remote'}.get(component, component)
     if not binary.is_file():
         raise SystemExit(f'Missing binary: {binary}')
     record = root / 'auth/upstreams.lock.json'
-    details = json.loads(record.read_text())[component]
+    details = ({'version': '1', 'repository': 'https://github.com/openresearchtools/BashKitten',
+                'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()}
+               if component == 'remote' else json.loads(record.read_text())[component])
     components.append(dict(name=component, version=details['version'], source=details['repository'], commit=details['commit'], sha256=hashlib.sha256(binary.read_bytes()).hexdigest()))
 dependencies = set()
 for path in metadata.glob('*.dependencies'):
@@ -48,6 +51,7 @@ source_file = artifacts / f'auth-{target}-source.tar.gz'
 with tarfile.open(source_file, 'w:gz') as archive:
     archive.add(root / 'auth', arcname='auth')
     archive.add(root / 'agent/src/server/access/runtime-guard.c', arcname='agent/src/server/access/runtime-guard.c')
+    archive.add(root / 'agent/native/remote', arcname='agent/native/remote')
     archive.add(root / 'LICENSE', arcname='LICENSE')
     dependencies_source = stage / 'share/source'
     if dependencies_source.exists():
