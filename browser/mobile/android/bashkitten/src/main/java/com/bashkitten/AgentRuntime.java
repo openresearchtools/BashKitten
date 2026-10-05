@@ -416,6 +416,7 @@ public final class AgentRuntime {
         suspendHostedSignIns();
         app.remoteControl.disconnect();
         localHostedRecord = null; pendingHostedUrl = "";
+        if (!selected.equals("local")) app.policies.edit().putString("agent.lastRemote", selected).apply();
         selected = id; url = ""; session = null;
         app.policies.edit().putString("agent.selected", id).apply();
         turnOn();
@@ -512,6 +513,7 @@ public final class AgentRuntime {
         if (remote != null && remote.isOpen()) { clearHosted(remote); remote.stop(); remote.close(); }
         if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-" + id);
         saved.remove(id); store.write(saved);
+        if (id.equals(app.policies.getString("agent.lastRemote", ""))) app.policies.edit().remove("agent.lastRemote").apply();
         JSONObject remembered = identities.read(); remembered.remove(id); identities.write(remembered);
         // The Tor client may also serve an independently enrolled ordinary private site. Removing
         // Agent never deletes that site's saved credential or stops its tabs.

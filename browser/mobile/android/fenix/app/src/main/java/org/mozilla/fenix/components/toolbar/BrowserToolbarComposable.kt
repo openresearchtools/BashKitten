@@ -334,9 +334,7 @@ class BrowserToolbarComposable(
     ) {
         androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (activity is org.mozilla.fenix.HomeActivity) {
-                androidx.compose.material3.TextButton(onClick = { activity.showBashKittenAgent() }) {
-                    androidx.compose.material3.Text("Agent")
-                }
+                org.mozilla.fenix.bashkitten.AgentButton { activity.showBashKittenAgent() }
             }
             androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
                 NativeBrowserToolbar(store, cfr, useMinimalBottomToolbarWhenEnteringText)

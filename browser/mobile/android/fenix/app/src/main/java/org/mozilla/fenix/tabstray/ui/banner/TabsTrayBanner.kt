@@ -325,7 +325,7 @@ private fun TabPageBannerTabs(
         contentDescription = stringResource(R.string.bashkitten_open_agent),
         onClick = onOpenAgentClick,
     ) {
-        Text(stringResource(R.string.bashkitten_agent), style = FirefoxTheme.typography.body2)
+        org.mozilla.fenix.bashkitten.AgentLogo()
     }
 
     BannerTab(

@@ -47,7 +47,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     private String setupId;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
-    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, Runnable openBrowserMenu) {
+    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, Runnable openBrowserMenu) {
         super(activity); this.activity = activity; this.browser = browser;
         app = BrowserApp.get(activity); runtime = app.agent;
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
@@ -59,7 +59,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         bar = new LinearLayout(activity); bar.setGravity(Gravity.CENTER_VERTICAL); agent.addView(bar, new LayoutParams(-1, dp(48)));
         TypedArray barTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.colorBackground});
         try { bar.setBackgroundColor(barTheme.getColor(0, 0)); } finally { barTheme.recycle(); }
-        Button toggle = barButton("Agent", this::toggle); bar.addView(toggle, new LayoutParams(dp(72), -1));
+        androidx.appcompat.widget.AppCompatImageButton toggle = new androidx.appcompat.widget.AppCompatImageButton(activity);
+        toggle.setImageResource(agentIcon); toggle.setContentDescription("Agent");
+        toggle.setScaleType(ImageView.ScaleType.FIT_CENTER); toggle.setPadding(dp(10), dp(10), dp(10), dp(10));
+        TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
+        try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
+        toggle.setOnClickListener(v -> toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
         location = barButton("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
         power = barButton("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
@@ -186,7 +191,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         view.setVisibility(online && connectionError.isEmpty() ? VISIBLE : GONE);
         setup.setVisibility(online && connectionError.isEmpty() ? GONE : VISIBLE);
         if (!online) connectionStatus.setVisibility(GONE);
-        if (!renderedState.equals(runtime.state + runtime.error)) { renderedState = runtime.state + runtime.error; renderSetup(); }
+        String setupState = runtime.selected + runtime.state + runtime.setupStep + runtime.error;
+        if (!renderedState.equals(setupState)) { renderedState = setupState; renderSetup(); }
         if (online && !connectionError.isEmpty()) {
             message.setText(connectionError); actions.removeAllViews();
             action("Reconnect", runtime::recoverSession);
@@ -376,6 +382,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         else if (state.equals("stopping")) description = "Stopping your Agent…";
         else if (state.equals("enroll")) description = "Create your local account and enable two-factor authentication.";
         message.setText(runtime.error.isEmpty() ? description : runtime.error);
+        if (runtime.selected.equals("local") && (state.equals("setup") || state.equals("off") || state.equals("failed"))) {
+            String previous = app.policies.getString("agent.lastRemote", "");
+            if (!previous.isEmpty()) action("Back to remote", () -> runtime.select(previous));
+            action("Connect to remote", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class)));
+        }
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) return;
         if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
