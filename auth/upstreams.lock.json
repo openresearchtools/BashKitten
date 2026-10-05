@@ -86,5 +86,25 @@
     "repository": "https://github.com/openresearchtools/torkitten",
     "commit": "2fd0f48358aa37e6c23336cd550f52ab00bbe7e3",
     "license": "Apache-2.0"
+  },
+  "barcode": {
+    "repository": "https://github.com/boombuler/barcode.git",
+    "version": "1.1.0",
+    "tag": "v1.1.0",
+    "commit": "11e32e438ffcc2af3d65aa3547c065972a743d70",
+    "tree": "49cb5502d77d950804276cc6cdf2571ddb101ddc",
+    "archive": "https://codeload.github.com/boombuler/barcode/tar.gz/11e32e438ffcc2af3d65aa3547c065972a743d70",
+    "sha256": "17132f605530bca9e706686f4a1f674b95bd3ddaee8a3b83268c70e4415db03e",
+    "license": "barcode/LICENSE"
+  },
+  "gozxing": {
+    "repository": "https://github.com/makiuchi-d/gozxing.git",
+    "version": "0.1.1",
+    "tag": "v0.1.1",
+    "commit": "3d941b5e72ac36566873214086fb204e7d76333c",
+    "tree": "2be96e768c2cc3381afdec978a51e20a8268bd9d",
+    "archive": "https://codeload.github.com/makiuchi-d/gozxing/tar.gz/3d941b5e72ac36566873214086fb204e7d76333c",
+    "sha256": "9b6d3a0f71f9d205c56f24ac62c4f9c80e38386d88eaf329e4a67b18068aecf4",
+    "license": "gozxing/LICENSE"
   }
 }
