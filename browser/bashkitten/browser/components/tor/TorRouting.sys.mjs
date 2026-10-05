@@ -35,7 +35,6 @@ const CONTAINER_ID_PREF = "bashkitten.tor.containerId";
 const PERSISTENT_CONTAINER_ID_PREF = "bashkitten.tor.persistentContainerId";
 const STATE_EVENT = "BashKittenTorStateChange";
 const BINARY_PREF = "bashkitten.tor.binary.path";
-const TEST_PORT_PREF = "bashkitten.tor.test.socksPort";
 const DEAD_PROXY_PORT = 9;
 const PROXY_TIMEOUT_SECONDS = 10;
 const START_ATTEMPTS = 120;
@@ -541,11 +540,6 @@ export const TorRouting = {
   async ensureProxy() {
     if (this._stopping) {
       throw new Error("Tor is shutting down");
-    }
-    const testPort = Services.prefs.getIntPref(TEST_PORT_PREF, 0);
-    if (testPort > 0) {
-      this._port = testPort;
-      return testPort;
     }
     if (this._port > 0 && this._process) {
       return this._port;
