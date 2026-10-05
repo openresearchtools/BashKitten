@@ -39,17 +39,11 @@ public final class AgentRuntime {
     private final Set<String> posted = new LinkedHashSet<>();
     private Runnable remoteAuthorizationCleanup;
     private final Map<String, RemoteAgentConnection> remoteConnections = new HashMap<>();
+    private final Map<String, JSONObject> serviceSnapshots = new HashMap<>();
     private char[] remotePassword;
     private String remotePasswordHost = "";
-    private JSONObject localHostedRecord;
     private JSONObject localSession;
     private boolean localSessionPending;
-    // Hosted onion authentication has its own cookie context. Keep the local
-    // document intact and restore it after authentication or cancellation.
-    private GeckoSession hostedReturnSession;
-    private String hostedReturnUrl = "";
-    private String pendingHostedUrl = "";
-    private boolean openingHosted, connectingHosted;
     private boolean reloadOnConnect;
 
     AgentRuntime(BrowserApp app) {
@@ -159,11 +153,11 @@ public final class AgentRuntime {
     private void resetLocalConnection(Runnable done) {
         try {
             JSONObject remembered = identities.read(); remembered.remove("local"); identities.write(remembered);
-            restoreLocalAgent(); suspendHostedSignIns();
+
             app.remoteControl.disconnect();
             GeckoSession local = sessions.remove("local");
             if (session == local) { session = null; url = ""; }
-            if (local != null && local.isOpen()) { clearHosted(local); local.stop(); local.close(); }
+            if (local != null && local.isOpen()) { local.stop(); local.close(); }
             localSession = null; localSessionPending = false; status = new JSONObject();
             if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-local");
             done.run();
@@ -212,9 +206,8 @@ public final class AgentRuntime {
         boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
         closeRemoteConnections();
-        restoreLocalAgent();
         releaseRemoteAuthorization();
-        suspendHostedSignIns();
+
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
@@ -262,15 +255,11 @@ public final class AgentRuntime {
     private void setup(String message) { setup("retry", message); }
     private void setup(String step, String message) { busy = false; state = "setup"; setupStep = step; error = message; changed(); }
     private void fail(String message) {
-        restoreLocalAgent(); clearHosted(session); releaseRemoteAuthorization(); app.remoteControl.disconnect();
+        releaseRemoteAuthorization(); app.remoteControl.disconnect();
         // A failed Local startup must not take away another enrollment's
         // service ports while Local Pi/setup is selected.
         if (selected.equals("local") && !remoteConnections.isEmpty()) { setup("retry", message); return; }
         busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed();
-    }
-    private void connectionFailed(String message) {
-        if (isHostedSignIn()) { cancelHostedSignIn(); app.message(message); }
-        else fail(message);
     }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
         try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
@@ -346,12 +335,7 @@ public final class AgentRuntime {
                 localSession = null;
                 throw new IllegalStateException("Update BashKitten packages in Termux to use account-free Local.");
             }
-            if (isHostedSignIn() && state.equals("on")) {
-                String hostedEndpoint = localHostedRecord.getString("url");
-                if (!connectingHosted && (!hostedEndpoint.equals(url) || remoteAuthorizationCleanup == null)) {
-                    connectLocalHosted(localHostedRecord, ignored -> {}, this::connectionFailed);
-                }
-            } else configure(endpoint, identity, false, 0);
+            configure(endpoint, identity, false, 0);
             busy = false; changed();
         } catch (Exception exception) { fail(exception.getMessage() == null ? "The service identity could not be verified." : exception.getMessage()); }
     }
@@ -373,8 +357,7 @@ public final class AgentRuntime {
     private void configure(String endpoint, JSONObject identity, boolean tor, int port,
             RemoteAgentConnection remote, Runnable configured) throws Exception {
         if (engine == null) throw new IllegalStateException("Browser engine is not ready.");
-        String sessionKey = isHostedSignIn()
-            ? "local-hosted-" + URI.create(localHostedRecord.getString("url")).getHost() : selected;
+        String sessionKey = selected;
         GeckoSession next = sessions.get(sessionKey);
         if (next == null) {
             next = new GeckoSession(new GeckoSessionSettings.Builder().contextId("bashkitten-agent-ui-" + sessionKey).build());
@@ -413,12 +396,12 @@ public final class AgentRuntime {
                 changed();
             } catch (Exception exception) {
                 if (remote != null) remoteFailed(remote, "Could not verify Agent connection: " + exception.getMessage());
-                else connectionFailed("Could not verify Agent connection: " + exception.getMessage());
+                else fail("Could not verify Agent connection: " + exception.getMessage());
             }
         }, exception -> {
             if (generation != operation) return;
             if (remote != null) remoteFailed(remote, "Could not configure the protected Agent connection.");
-            else connectionFailed("Could not configure the protected Agent connection.");
+            else fail("Could not configure the protected Agent connection.");
         });
         if (!previousUrl.isEmpty() && (needsLoad || !previousUrl.equals(endpoint))) captureDraft(target, connect);
         else connect.run();
@@ -429,7 +412,6 @@ public final class AgentRuntime {
     }
     private void suspendSession(GeckoSession target) {
         BashKittenController.request(target, "{\"method\":\"agent.cancel\"}").accept(ignored -> {}, ignored -> {});
-        clearHosted(target);
         BashKittenController.setHostDelegate(target, null);
         final int generation = operation;
         captureDraft(target, () -> {
@@ -439,22 +421,12 @@ public final class AgentRuntime {
         });
     }
     private void signIn() {
-        if (selected.equals("local") && !isHostedSignIn() && localSession != null) {
+        if (selected.equals("local") && localSession != null) {
             localSession = null; reloadOnConnect = true; refresh(); return;
         }
         app.remoteControl.disconnect();
         GeckoSession target = session;
-        clearHosted(target);
         captureDraft(target, () -> { if (target == session && desired) target.loadUri(url + "/login"); });
-    }
-    void clearHosted(GeckoSession source) {
-        if (source == null) return;
-        if (source == sessions.get("local")) {
-            for (Map.Entry<String, GeckoSession> entry : sessions.entrySet())
-                if (entry.getKey().startsWith("local-hosted-")) clearHosted(entry.getValue());
-        }
-        app.revokeHosted(source);
-        BashKittenController.request(source, "{\"method\":\"agent.hostedClear\"}").accept(ignored -> {}, ignored -> {});
     }
     public void recoverSession() {
         if (!desired) return;
@@ -463,12 +435,12 @@ public final class AgentRuntime {
         if (selected.equals("local")) refresh();
         else {
             RemoteAgentConnection connection = remoteConnections.remove(selected);
+            app.closeServiceRoutes(selected); serviceSnapshots.remove(selected);
             if (connection != null) connection.close();
             busy = false; turnOn();
         }
     }
     public void select(String id) {
-        if (isHostedSignIn()) cancelHostedSignIn();
         RemoteAgentConnection previousRemote = remoteConnections.get(selected);
         if (previousRemote != null && !previousRemote.ready) {
             remoteConnections.remove(selected); previousRemote.close();
@@ -481,9 +453,8 @@ public final class AgentRuntime {
         operation++; busy = false;
         releaseRemoteAuthorization();
         if (session != null) { suspendSession(session); session.setActive(false); }
-        suspendHostedSignIns();
+
         app.remoteControl.disconnect();
-        localHostedRecord = null; pendingHostedUrl = "";
         if (!selected.equals("local")) app.policies.edit().putString("agent.lastRemote", selected).apply();
         selected = id; url = ""; session = null;
         app.policies.edit().putString("agent.selected", id).apply();
@@ -498,8 +469,11 @@ public final class AgentRuntime {
         JSONObject record = new JSONObject().put("version", 2).put("kind", "agent")
             .put("name", bundle.getString("name")).put("bundle", bundle);
         SecretStore store = new SecretStore(app, "agent-remotes");
-        JSONObject saved = store.read(); saved.put(id, record); store.write(saved);
+        JSONObject saved = store.read(), old = saved.optJSONObject(id);
+        if (old != null && old.has("mappings")) record.put("mappings", old.getJSONObject("mappings"));
+        saved.put(id, record); store.write(saved);
         RemoteAgentConnection previous = remoteConnections.remove(id);
+        app.closeServiceRoutes(id); serviceSnapshots.remove(id);
         if (previous != null) previous.close();
         clearRemotePassword(); remotePassword = password.toCharArray(); remotePasswordHost = id;
         select(id);
@@ -510,8 +484,128 @@ public final class AgentRuntime {
     }
     private void closeRemoteConnections() {
         clearRemotePassword();
-        for (RemoteAgentConnection connection : remoteConnections.values()) connection.close();
+        for (RemoteAgentConnection connection : remoteConnections.values()) { app.closeServiceRoutes(connection.host); connection.close(); }
         remoteConnections.clear();
+        serviceSnapshots.clear();
+    }
+    public boolean remoteConnected(String id) {
+        RemoteAgentConnection connection = remoteConnections.get(id);
+        return connection != null && connection.ready && !connection.isClosed();
+    }
+    public void disconnectRemote(String id) {
+        RemoteAgentConnection connection = remoteConnections.remove(id);
+        app.closeServiceRoutes(id); serviceSnapshots.remove(id);
+        if (connection != null) connection.close();
+        if (selected.equals(id)) {
+            operation++; busy = false; app.remoteControl.disconnect();
+            if (session != null) suspendSession(session);
+            state = "off"; error = ""; desired = false;
+        }
+        changed();
+    }
+    public void remoteServices(String id, Consumer<JSONObject> done, Consumer<String> failure) {
+        RemoteAgentConnection connection = remoteConnections.get(id);
+        if (!remoteConnected(id)) { failure.accept("Connect and finish sign-in to view services."); return; }
+        connection.request(NativeRemote::services, catalogue -> {
+            if (remoteConnections.get(id) != connection) { failure.accept("Remote connection changed. Refresh services."); return; }
+            try {
+                SecretStore store = new SecretStore(app, "agent-remotes");
+                JSONObject saved = store.read(), record = saved.getJSONObject(id);
+                JSONObject choices = record.optJSONObject("mappings");
+                if (choices == null) { choices = new JSONObject(); record.put("mappings", choices); }
+                JSONArray services = catalogue.getJSONArray("services");
+                for (int i = 0; i < services.length(); i++) {
+                    String serviceId = services.getJSONObject(i).getString("id");
+                    if (!serviceId.equals("agent") && !choices.has(serviceId)) choices.put(serviceId, new JSONObject()
+                        .put("enabled", true).put("port", 0).put("context", "bashkitten-service-" + UUID.randomUUID()));
+                }
+                store.write(saved);
+                final JSONObject mappingChoices = new JSONObject(choices.toString());
+                connection.request(client -> connection.mapServices(client, catalogue, mappingChoices), result -> {
+                    if (remoteConnections.get(id) != connection) { failure.accept("Remote connection changed. Refresh services."); return; }
+                    try {
+                        app.serviceRoutes(id, result);
+                        serviceSnapshots.put(id, result); importRemotePi(id, connection, result, 0, done, failure);
+                    } catch (Exception error) { failure.accept(error.getMessage()); }
+                }, failure);
+            } catch (Exception error) { failure.accept(error.getMessage()); }
+        }, failure);
+    }
+    public void saveRemoteMapping(String id, String serviceId, boolean enabled, int port, boolean importToPi, String apiKey,
+            Consumer<JSONObject> done, Consumer<String> failure) {
+        try {
+            if (!remoteConnected(id)) throw new IllegalStateException("Connect first.");
+            if (port < 0 || port > 65535 || serviceId.equals("agent")) throw new IllegalArgumentException("Choose Automatic or a port from 1 to 65535.");
+            SecretStore store = new SecretStore(app, "agent-remotes");
+            JSONObject saved = store.read(), choice = saved.getJSONObject(id).getJSONObject("mappings").getJSONObject(serviceId);
+            if (apiKey.indexOf('\n') >= 0 || apiKey.indexOf('\r') >= 0 || apiKey.indexOf('\0') >= 0) throw new IllegalArgumentException("Invalid service API key.");
+            choice.put("enabled", enabled).put("port", port).put("importToPi", importToPi).put("apiKey", apiKey); store.write(saved);
+            remoteServices(id, done, failure);
+        } catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+    private void importRemotePi(String id, RemoteAgentConnection connection, JSONObject result, int index,
+            Consumer<JSONObject> done, Consumer<String> failure) {
+        if (remoteConnections.get(id) != connection || connection.isClosed()) { failure.accept("Remote connection closed."); return; }
+        try {
+            JSONArray services = result.getJSONArray("services");
+            if (index >= services.length()) { done.accept(result); return; }
+            JSONObject service = services.getJSONObject(index), choice = service.optJSONObject("choice");
+            Runnable next = () -> importRemotePi(id, connection, result, index + 1, done, failure);
+            if (!service.optString("kind").equals("llama") || choice == null || !choice.optBoolean("importToPi")) { next.run(); return; }
+            if (!choice.optBoolean("enabled") || !service.has("mapping") || !service.optBoolean("reachable") ||
+                    !service.optString("mappingError").isEmpty() || !service.getJSONObject("mapping").optString("error").isEmpty()) {
+                service.put("importState", "Pi import pending: local access and the host service must be working."); next.run(); return;
+            }
+            if (!termuxSetupAttempted || !termux.permissionGranted() || !termux.installationId().equals(app.policies.getString("agent.termuxInstallation", ""))) {
+                service.put("importState", "Set up Local Pi first. Remote access remains connected."); next.run(); return;
+            }
+            JSONObject record = remotes().getJSONObject(id);
+            JSONObject currentChoice = record.getJSONObject("mappings").getJSONObject(service.getString("id"));
+            if (!currentChoice.optBoolean("importToPi")) { next.run(); return; }
+            if (!currentChoice.optBoolean("enabled") || currentChoice.optInt("port") != choice.optInt("port") ||
+                    !currentChoice.optString("apiKey").equals(choice.optString("apiKey"))) {
+                service.put("importState", "Settings changed. Refresh services to import the saved configuration."); next.run(); return;
+            }
+            String endpoint = service.getString("scheme") + "://127.0.0.1:" + service.getJSONObject("mapping").getInt("port") + "/v1";
+            JSONObject request = new JSONObject().put("enabled", true).put("bundle", record.getJSONObject("bundle").getString("id"))
+                .put("service", service.getString("id")).put("name", record.getString("name") + " · " + service.getString("name"))
+                .put("baseUrl", endpoint).put("apiKey", choice.optString("apiKey"));
+            Consumer<String> finish = message -> {
+                try { service.put("importState", message); next.run(); }
+                catch (Exception error) { failure.accept(error.getMessage()); }
+            };
+            command("remote-pi-import", request, value -> {
+                String message = value.optString("message");
+                if (message.isEmpty() || !Arrays.asList("imported", "pending").contains(value.optString("state")))
+                    finish.accept("Pi import returned an invalid result. Refresh services to retry.");
+                else finish.accept(message);
+            }, message -> finish.accept("Pi import failed: " + message));
+        } catch (Exception error) { failure.accept(error.getMessage()); }
+    }
+    public void remoteServiceAction(String id, String serviceId, String action, Consumer<JSONObject> done, Consumer<String> failure) {
+        RemoteAgentConnection connection = remoteConnections.get(id);
+        if (!remoteConnected(id)) { failure.accept("Connect first."); return; }
+        connection.request(client -> client.serviceAction(serviceId, action), ignored -> {
+            if (remoteConnections.get(id) != connection) { failure.accept("Remote connection changed. Refresh services."); return; }
+            remoteServices(id, done, failure);
+        }, failure);
+    }
+    public void openRemoteService(String id, String serviceId, Runnable done, Consumer<String> failure) {
+        try {
+            if (!remoteConnected(id)) throw new IllegalStateException("Connect first.");
+            if (serviceId.equals("agent")) { select(id); app.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true)); done.run(); return; }
+            JSONObject snapshot = serviceSnapshots.get(id);
+            if (snapshot == null) throw new IllegalStateException("Refresh services first.");
+            JSONArray services = snapshot.getJSONArray("services");
+            for (int i = 0; i < services.length(); i++) {
+                JSONObject service = services.getJSONObject(i);
+                if (!service.getString("id").equals(serviceId)) continue;
+                if (!service.has("mapping")) throw new IllegalStateException("Enable local access first.");
+                app.createService(service.getJSONObject("choice").getString("context"), service.getString("url"), done, failure);
+                return;
+            }
+            throw new IllegalStateException("Refresh services first.");
+        } catch (Exception error) { failure.accept(error.getMessage()); }
     }
     public void removeRemote(String id) throws Exception {
         if (id.equals("local")) throw new IllegalArgumentException("Local Agent cannot be removed.");
@@ -519,14 +613,21 @@ public final class AgentRuntime {
         JSONObject saved = store.read();
         if (!saved.has(id)) return;
         RemoteAgentConnection connection = remoteConnections.remove(id);
+        app.closeServiceRoutes(id); serviceSnapshots.remove(id);
         if (connection != null) connection.forget();
         JSONObject bundle = saved.getJSONObject(id).optJSONObject("bundle");
         if (bundle != null) NativeRemote.forgetSaved(app, bundle.getString("id"));
         if (id.equals(remotePasswordHost)) clearRemotePassword();
         boolean wasSelected = selected.equals(id);
         GeckoSession remote = sessions.remove(id);
-        if (remote != null && remote.isOpen()) { clearHosted(remote); remote.stop(); remote.close(); }
-        if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-" + id);
+        if (remote != null && remote.isOpen()) { remote.stop(); remote.close(); }
+        if (engine != null) {
+            engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-" + id);
+            JSONObject mappings = saved.getJSONObject(id).optJSONObject("mappings");
+            if (mappings != null) for (java.util.Iterator<String> keys = mappings.keys(); keys.hasNext();) {
+                engine.getStorageController().clearDataForSessionContext(mappings.getJSONObject(keys.next()).getString("context"));
+            }
+        }
         saved.remove(id); store.write(saved);
         JSONObject remembered = identities.read(); remembered.remove(id); identities.write(remembered);
         // The Tor client may also serve an independently enrolled ordinary private site. Removing
@@ -543,7 +644,7 @@ public final class AgentRuntime {
     }
     private void remoteFailed(RemoteAgentConnection connection, String message) {
         if (remoteConnections.get(connection.host) != connection) return;
-        remoteConnections.remove(connection.host); connection.close();
+        remoteConnections.remove(connection.host); app.closeServiceRoutes(connection.host); serviceSnapshots.remove(connection.host); connection.close();
         if (!selected.equals(connection.host)) return;
         clearRemotePassword();
         if (session != null) suspendSession(session);
@@ -551,6 +652,7 @@ public final class AgentRuntime {
         setup("remote", message);
     }
     private void remoteReady(RemoteAgentConnection connection) {
+        remoteServices(connection.host, ignored -> {}, message -> app.message("Services: " + message));
         if (!selectedRemote(connection)) return;
         clearRemotePassword();
         try {
@@ -613,7 +715,7 @@ public final class AgentRuntime {
         final int generation = ++operation;
         RemoteAgentConnection active = remoteConnections.get(selected);
         if (active != null && active.ready && !active.isClosed()) { remoteReady(active); return; }
-        if (active != null) { remoteConnections.remove(selected); active.close(); }
+        if (active != null) { remoteConnections.remove(selected); app.closeServiceRoutes(selected); serviceSnapshots.remove(selected); active.close(); }
         try {
             JSONObject record = remotes().getJSONObject(selected);
             if (record.optInt("version") != 2 || !record.optString("kind").equals("agent")) {
@@ -668,11 +770,6 @@ public final class AgentRuntime {
         if (source != session || !desired || !state.equals("on")) { reply.accept("{\"error\":\"Agent connection is not active.\"}"); return; }
         try {
             JSONObject args = new JSONObject(json);
-            if (command.equals("open-hosted")) {
-                openHosted(source, args.getString("url"), value -> reply.accept("{\"result\":true}"),
-                    error -> { try { reply.accept(new JSONObject().put("error", error).toString()); } catch (JSONException ignored) {} });
-                return;
-            }
             if (command.equals("notify-turn")) { reply.accept(new JSONObject().put("result", notifyTurn(args)).toString()); return; }
             if (command.equals("sign-in")) { signIn(); reply.accept("{\"result\":true}"); return; }
             if (!command.equals("notification-settings")) throw new SecurityException("Unsupported browser action.");
@@ -690,120 +787,13 @@ public final class AgentRuntime {
             reply.accept(new JSONObject().put("result", result).toString());
         } catch (Exception exception) { try { reply.accept(new JSONObject().put("error", exception.getMessage()).toString()); } catch (JSONException ignored) {} }
     }
-    private void openHosted(GeckoSession source, String address, Consumer<Boolean> done, Consumer<String> failure) {
-        if (source != session || !desired || !state.equals("on")) { failure.accept("Agent connection is not active"); return; }
-        final int generation = operation;
-        try {
-            JSONObject request = new JSONObject().put("method", "agent.hostedValidate").put("params", new JSONObject().put("url", address));
-            BashKittenController.request(source, request.toString()).accept(value -> {
-                try {
-                    if (generation != operation || source != session || !desired) throw new IllegalStateException("Agent selection changed");
-                    JSONObject response = new JSONObject(value);
-                    if (response.has("error")) throw new IllegalStateException(response.getString("error"));
-                    JSONObject result = response.getJSONObject("result");
-                    String target = result.getString("url"), parent = result.getString("parentHost");
-                    Consumer<JSONObject> open = record -> {
-                        try {
-                            if (generation != operation || source != session || !desired) throw new IllegalStateException("Agent selection changed");
-                            if (!parent.equals(URI.create(record.getString("url")).getHost())) throw new SecurityException("Website does not belong to the enrolled Agent");
-                            app.createHosted(target, record, source, tab -> {
-                                pendingHostedUrl = ""; restoreLocalAgent(); app.show(tab); done.accept(true);
-                            }, failure);
-                        } catch (Exception error) { failure.accept(error.getMessage()); }
-                    };
-                    if (!selected.equals("local")) open.accept(remotes().getJSONObject(selected));
-                    else if (isHostedSignIn()) open.accept(localHostedRecord);
-                    else if (localHostedRecord != null) {
-                        pendingHostedUrl = target;
-                        connectLocalHosted(localHostedRecord, ignored -> { showProtectedAgent(); done.accept(true); }, failure);
-                    }
-                    else command("hosting-client", new JSONObject(), record -> {
-                        try {
-                            if (generation != operation || source != session || !desired) throw new IllegalStateException("Agent selection changed");
-                            if (!parent.equals(URI.create(record.getString("url")).getHost())) throw new SecurityException("Website does not belong to the local Agent");
-                            JSONObject local = identities.read().getJSONObject("local");
-                            if (!local.getString("caSha256").equalsIgnoreCase(record.getString("caSha256"))) throw new SecurityException("Local Agent certificate changed");
-                            rememberIdentity("local-hosted-" + parent, record);
-                            pendingHostedUrl = target;
-                            connectLocalHosted(record, ignored -> { showProtectedAgent(); done.accept(true); }, failure);
-                        } catch (Exception error) { failure.accept(error.getMessage()); }
-                    }, failure);
-                } catch (Exception error) { failure.accept(error.getMessage()); }
-            }, error -> failure.accept("Could not verify the registered hosted website"));
-        } catch (Exception error) { failure.accept("Choose a registered hosted website"); }
-    }
-    private void connectLocalHosted(JSONObject record, Consumer<Boolean> done, Consumer<String> failure) {
-        if (connectingHosted) { failure.accept("The hosted-site connection is starting"); return; }
-        final int generation = operation;
-        try {
-            URI endpoint = URI.create(record.getString("url"));
-            if (!"https".equals(endpoint.getScheme()) || endpoint.getHost() == null || !endpoint.getHost().matches("[a-z2-7]{56}\\.onion") || endpoint.getUserInfo() != null) throw new SecurityException();
-            connectingHosted = true;
-            app.tor.authorizeTemporarily(new OnionKey(endpoint.getHost(), record.getString("clientAuthorization")), (port, cleanup) -> {
-                connectingHosted = false;
-                if (generation != operation || !desired || !selected.equals("local")) { cleanup.run(); return; }
-                try {
-                    releaseRemoteAuthorization(); remoteAuthorizationCleanup = cleanup;
-                    localHostedRecord = record;
-                    if (!isHostedSignIn()) {
-                        hostedReturnSession = session; hostedReturnUrl = url;
-                        if (session != null) session.setActive(false);
-                    }
-                    configure(record.getString("url"), record, true, port);
-                    done.accept(true);
-                } catch (Exception error) { cleanup.run(); remoteAuthorizationCleanup = null; restoreLocalAgent(); failure.accept("Could not open the protected hosted-site sign-in"); }
-            }, error -> { connectingHosted = false; failure.accept(error); });
-        } catch (Exception error) { connectingHosted = false; failure.accept("Invalid local hosted-site identity"); }
-    }
-    private void showProtectedAgent() {
-        app.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true));
-    }
-    public boolean isHostedSignIn() { return hostedReturnSession != null; }
-    private void restoreLocalAgent() {
-        if (!isHostedSignIn()) return;
-        if (session != null && session != hostedReturnSession) session.setActive(false);
-        session = hostedReturnSession; url = hostedReturnUrl;
-        hostedReturnSession = null; hostedReturnUrl = ""; pendingHostedUrl = "";
-        openingHosted = false; connectingHosted = false;
-        changed();
-    }
-    private void suspendHostedSignIns() {
-        for (Map.Entry<String, GeckoSession> entry : sessions.entrySet())
-            if (entry.getKey().startsWith("local-hosted-") && entry.getValue() != session) suspendSession(entry.getValue());
-    }
-    public void cancelHostedSignIn() {
-        if (!isHostedSignIn()) return;
-        operation++;
-        GeckoSession authentication = session;
-        restoreLocalAgent();
-        if (authentication != null) suspendSession(authentication);
-        releaseRemoteAuthorization();
-    }
-    void showHostedSignIn(String address) {
-        if (session != null && desired && state.equals("on")) {
-            if (selected.equals("local") && !isHostedSignIn()) {
-                openHosted(session, address, ignored -> {}, app::message);
-            } else { pendingHostedUrl = address; signIn(); showProtectedAgent(); }
-        }
-        else app.message("Turn on Agent and sign in to reopen this website");
-    }
-    void hostedPageReady(GeckoSession source, String address) {
-        if (source == session && desired && state.equals("on") && selected.equals("local") && !isHostedSignIn()) {
+    void agentPageReady(GeckoSession source, String address) {
+        if (source == session && desired && state.equals("on") && selected.equals("local")) {
             try {
                 if ("/".equals(URI.create(address).getPath()))
                     app.remoteControl.connectLocal(activity.get(), source, url, false);
             } catch (IllegalArgumentException ignored) { }
         }
-        if (pendingHostedUrl.isEmpty() || openingHosted || source != session || !desired) return;
-        try {
-            URI document = URI.create(address), endpoint = URI.create(url);
-            if (!Objects.equals(document.getHost(), endpoint.getHost()) || !"/".equals(document.getPath())) return;
-        } catch (Exception error) { return; }
-        openingHosted = true;
-        openHosted(source, pendingHostedUrl, ignored -> openingHosted = false, error -> {
-            openingHosted = false;
-            app.message(error == null ? "Sign in to Agent to open this website" : error);
-        });
     }
     public boolean notifyTurn(JSONObject value) {
         if (!app.policies.getBoolean("agent.notifications", false)) return false;

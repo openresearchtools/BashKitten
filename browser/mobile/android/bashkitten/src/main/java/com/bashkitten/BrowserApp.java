@@ -66,10 +66,6 @@ public final class BrowserApp extends ContextWrapper {
         public boolean loading, desktop, tor, ready, preparing, adblock = true;
         String pendingUrl;
         int port;
-        JSONObject hostedIdentity;
-        String hostedParent, hostedSourceContext, hostedUrl;
-        GeckoSession hostedConfiguredSession;
-        Runnable hostedCleanup;
         public Tab(String id, String owner, GeckoSession session) { this.id = id; this.owner = owner; this.session = session; }
         JSONObject json() throws JSONException {
             return new JSONObject().put("id", id).put("url", url).put("title", title)
@@ -107,7 +103,7 @@ public final class BrowserApp extends ContextWrapper {
         return uri.toASCIIString();
     }
     public static boolean onion(String url) {
-        try { String h = URI.create(url).getHost(); return h != null && h.toLowerCase(Locale.ROOT).endsWith(".onion"); }
+        try { String h = URI.create(url).getHost(); return h != null && h.toLowerCase(Locale.ROOT).replaceFirst("\\.$", "").endsWith(".onion"); }
         catch (Exception error) { return false; }
     }
     public Tab track(Tab tab) { return track(tab, null); }
@@ -129,14 +125,6 @@ public final class BrowserApp extends ContextWrapper {
             .putBoolean(tab.id + ".adblock", tab.adblock).apply();
     }
     public boolean prepareNavigation(Tab tab, String url) {
-        if (tab.hostedParent != null) {
-            try {
-                if (tab.hostedParent.equals(URI.create(url).getHost())) {
-                    agent.showHostedSignIn(tab.hostedUrl);
-                    return true;
-                }
-            } catch (IllegalArgumentException ignored) {}
-        }
         if (tab.ready && (!onion(url) || tab.tor)) return false;
         tab.pendingUrl = url;
         if (tab.preparing) return true;
@@ -155,7 +143,6 @@ public final class BrowserApp extends ContextWrapper {
     void refresh() {
         tabs.values().removeIf(tab -> {
             if (host.refresh(tab)) return false;
-            if (tab.hostedCleanup != null) { tab.hostedCleanup.run(); tab.hostedCleanup = null; }
             return true;
         });
         for (Tab tab : host.list()) track(tab, tab.parentId);
@@ -241,56 +228,50 @@ public final class BrowserApp extends ContextWrapper {
             tab.port = port; configure(tab, tor.identities(), result -> { tab.preparing = false; tab.session.loadUri(tab.pendingUrl); }, failed);
         }, failed), failed);
     }
+    private final Map<String, JSONObject> serviceRoutes = new HashMap<>();
+    private final Map<String, String> serviceHosts = new HashMap<>();
+    void serviceRoutes(String hostId, JSONObject catalogue) throws Exception {
+        Set<String> updated = new HashSet<>();
+        JSONArray services = catalogue.getJSONArray("services");
+        for (int i = 0; i < services.length(); i++) {
+            JSONObject service = services.getJSONObject(i), choice = service.optJSONObject("choice");
+            if (choice == null) continue;
+            String context = choice.getString("context"); updated.add(context); serviceHosts.put(context, hostId);
+            JSONObject mapping = service.optJSONObject("mapping");
+            if (mapping == null) serviceRoutes.remove(context);
+            else serviceRoutes.put(context, new JSONObject().put("mappedPort", mapping.getInt("port")));
+        }
+        for (String context : serviceHosts.keySet()) if (serviceHosts.get(context).equals(hostId) && !updated.contains(context)) serviceRoutes.remove(context);
+        refreshServiceTabs(hostId);
+    }
+    void closeServiceRoutes(String hostId) {
+        for (String context : serviceHosts.keySet()) if (serviceHosts.get(context).equals(hostId)) serviceRoutes.remove(context);
+        refreshServiceTabs(hostId);
+    }
+    private void refreshServiceTabs(String hostId) {
+        refresh();
+        for (Tab tab : tabs.values()) if (tab.session != null && Objects.equals(serviceHosts.get(tab.session.getSettings().getContextId()), hostId)) {
+            if (tab.session.isOpen()) configure(tab, Collections.emptyList(), ignored -> {}, this::message);
+        }
+    }
+    void createService(String context, String url, Runnable done, Consumer<String> fail) {
+        if (!serviceRoutes.containsKey(context)) { fail.accept("Enable this service’s local access first."); return; }
+        Tab tab = host.create(USER, context); tabs.put(tab.id, tab);
+        configure(tab, Collections.emptyList(), ignored -> { tab.session.loadUri(url); show(tab); done.run(); }, error -> { close(tab); fail.accept(error); });
+    }
     void configure(Tab tab, List<String> identities, Consumer<JSONObject> done, Consumer<String> fail) {
         try {
             JSONObject params = new JSONObject().put("tor", tab.tor).put("port", tab.port)
-                .put("proxySecret", tor.proxySecret()).put("identities", new JSONArray(tab.hostedParent == null ? identities : Collections.emptyList())).put("adblock", tab.adblock);
-            if (tab.hostedParent != null) params.put("blockedParentHost", tab.hostedParent);
+                .put("proxySecret", tor.proxySecret()).put("identities", new JSONArray(identities)).put("adblock", tab.adblock);
+            String context = tab.session.getSettings().getContextId();
+            if (context != null && context.startsWith("bashkitten-service-")) {
+                params.put("serviceRoute", serviceRoutes.containsKey(context) ? serviceRoutes.get(context) : JSONObject.NULL)
+                    .put("tor", false).put("port", 0).put("proxySecret", "")
+                    .put("identities", new JSONArray());
+            }
             save(tab);
-            page(tab, "configure", params, value -> {
-                if (tab.hostedIdentity == null || tab.hostedConfiguredSession == tab.session) {
-                    tab.ready = !tab.tor || tab.port != 0; done.accept(value); return;
-                }
-                try {
-                    JSONObject hosted = new JSONObject(params.toString()).put("url", tab.hostedUrl)
-                        .put("parentHost", tab.hostedParent).put("identity", tab.hostedIdentity)
-                        .put("sourceContextId", tab.hostedSourceContext);
-                    page(tab, "hosted.configure", hosted, configured -> {
-                        tab.hostedConfiguredSession = tab.session; tab.ready = tab.port != 0; done.accept(configured);
-                    }, fail);
-                } catch (JSONException error) { fail.accept("Could not configure hosted website"); }
-            }, fail);
+            page(tab, "configure", params, value -> { tab.ready = !tab.tor || tab.port != 0; done.accept(value); }, fail);
         } catch (Exception error) { fail.accept("Could not configure tab"); }
-    }
-    void createHosted(String address, JSONObject identity, GeckoSession source, Consumer<Tab> done, Consumer<String> fail) {
-        refresh();
-        try {
-            String parent = URI.create(identity.getString("url")).getHost();
-            OnionKey key = new OnionKey(parent, identity.getString("clientAuthorization"));
-            tor.authorizeTemporarily(key, (port, cleanup) -> {
-                if (agent.session != source || !agent.isOnRequested()) { cleanup.run(); fail.accept("Agent selection changed"); return; }
-                final Tab tab;
-                try {
-                    tab = host.create(USER, "bashkitten-tor-hosted-" + UUID.randomUUID());
-                    tab.tor = true; tab.port = port; tab.hostedIdentity = identity;
-                    tab.hostedParent = parent; tab.hostedSourceContext = source.getSettings().getContextId();
-                    tab.hostedUrl = address; tab.hostedCleanup = cleanup;
-                    tabs.put(tab.id, tab);
-                } catch (Exception error) { cleanup.run(); fail.accept("Could not open hosted website"); return; }
-                configure(tab, Collections.emptyList(), result -> {
-                    if (agent.session != source || !agent.isOnRequested()) { close(tab); fail.accept("Agent selection changed"); return; }
-                    tab.session.loadUri(address); done.accept(tab);
-                }, error -> { close(tab); fail.accept(error); });
-            }, fail);
-        } catch (Exception error) { fail.accept("The hosted website has no enrolled Agent connection"); }
-    }
-    void revokeHosted(GeckoSession source) {
-        String context = source.getSettings().getContextId();
-        for (Tab tab : tabs.values()) if (Objects.equals(context, tab.hostedSourceContext)) {
-            if (tab.hostedCleanup != null) { tab.hostedCleanup.run(); tab.hostedCleanup = null; }
-            tab.hostedIdentity = null; tab.hostedConfiguredSession = null;
-            if (tab.session != null && tab.session.isOpen()) tab.session.stop();
-        }
     }
     public void setAdblock(Tab tab, boolean enabled, Consumer<JSONObject> done, Consumer<String> fail) {
         tab.adblock = enabled;
@@ -365,7 +346,6 @@ public final class BrowserApp extends ContextWrapper {
     }
     void close(Tab tab) {
         tabs.remove(tab.id);
-        if (tab.hostedCleanup != null) { tab.hostedCleanup.run(); tab.hostedCleanup = null; }
         // Fenix can restore a closed tab with its original ID and session context.
         save(tab);
         host.close(tab.id);

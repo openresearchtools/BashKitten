@@ -1582,3 +1582,26 @@ Node module syntax, whitespace and the upstream XPIDL parser passed for this
 source slice. Native compilation and manual Android/Linux Tor, service,
 download/retry and ordinary-browsing checks remain required; this entry is not
 an end-to-end acceptance result.
+
+### 5 October Android remote service controls (source complete, manual checks pending)
+
+The native connections screen now lists authenticated host services, host
+Start/Stop/Reload actions, automatic or chosen local ports, actual localhost
+links and Copy/Open controls. Mappings keep separate ordinary browser cookie
+contexts and remain available while Local Pi is selected. The former hosted
+subdomain/sign-in UI is removed; service tabs do not use an additional SOCKS
+proxy or Tor-only browser policy.
+
+Llama service cards have Add to Pi, a saved import checkbox and an optional
+application key stored with the encrypted native connection settings. Import
+uses the actual mapped `/v1` endpoint and the existing private Termux control
+command. Missing Local setup, failed mappings and backend pending/error results
+are shown on the card without starting setup or disrupting remote access.
+Unsaved checkbox/key edits do not enable import, and saved opt-out is rechecked
+before dispatch. Replaced/closed connections complete pending UI requests with
+an error instead of leaving the screen busy indefinitely.
+
+All six changed Java files passed JDK parse-only validation and whitespace
+checks. Android/Gecko/native-binding type compilation, APK build and visible
+manual connection, mapping, host controls and Pi-import flows remain pending.
+No scripted product test or device/debugging command was used for this slice.

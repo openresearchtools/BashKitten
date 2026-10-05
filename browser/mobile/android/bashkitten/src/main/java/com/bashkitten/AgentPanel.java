@@ -28,7 +28,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button power, location, hideAgent, hostedBack, display;
+    private final Button power, location, hideAgent, display;
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
@@ -75,8 +75,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
-        hostedBack = barButton("← Back to local Agent", runtime::cancelHostedSignIn);
-        hostedBack.setVisibility(GONE); body.addView(hostedBack, new LayoutParams(-1, dp(48)));
         connectionStatus = text();
         connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
         connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
@@ -165,7 +163,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         app.showPendingApproval(activity);
         if (runtime.state.equals("on")) {
             runtime.refresh();
-            runtime.hostedPageReady(runtime.session, runtime.url);
+            runtime.agentPageReady(runtime.session, runtime.url);
         }
         else if (runtime.state.equals("setup") && runtime.isOnRequested()) {
             boolean returnedFromTermux = app.policies.getBoolean("agent.termuxSetupPending", false);
@@ -183,8 +181,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         power.setEnabled(!runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
         display.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
-        hostedBack.setVisibility(runtime.isHostedSignIn() ? VISIBLE : GONE);
-        connectionStatus.setText(runtime.isHostedSignIn() ? "Connecting to hosted-site sign-in…" : "Connecting to Agent…");
+        connectionStatus.setText("Connecting to Agent…");
         boolean online = runtime.state.equals("on") || runtime.state.equals("login");
         if (runtime.session != null && runtime.session != attached) {
             connectionError = "";
@@ -262,7 +259,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                                 return GeckoResult.fromValue(AllowOrDeny.DENY);
                             }
                         }
-                        if (target.getPath().startsWith("/login")) { app.remoteControl.disconnect(); runtime.clearHosted(s); }
+                        if (target.getPath().startsWith("/login")) { app.remoteControl.disconnect(); }
                         if (request.target == TARGET_WINDOW_NEW) { s.loadUri(request.uri); return GeckoResult.fromValue(AllowOrDeny.DENY); }
                         return GeckoResult.fromValue(AllowOrDeny.ALLOW);
                     }
@@ -289,7 +286,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 connectionStatus.setVisibility(GONE);
                 if (!success && connectionError.isEmpty()) connectionError = "Agent could not finish loading. Reconnect to try again.";
                 changed();
-                if (success) runtime.hostedPageReady(s, currentLocation[0]);
+                if (success) runtime.agentPageReady(s, currentLocation[0]);
             }
         });
         session.setContentDelegate(new GeckoSession.ContentDelegate() {
@@ -490,7 +487,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         },"termux-release").start();
     }
     public void browserControl() {
-        if (runtime.selected.equals("local") && !runtime.isHostedSignIn()) {
+        if (runtime.selected.equals("local")) {
             app.remoteControl.connectLocal(activity, runtime.session, runtime.url, true);
             return;
         }
