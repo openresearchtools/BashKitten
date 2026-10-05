@@ -25,6 +25,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import org.json.JSONObject;
 
@@ -40,9 +41,11 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
     @Override public Dialog onCreateDialog(Bundle saved) {
         state = new ViewModelProvider(this).get(DisplayState.class);
         if (state.runtime == null) state.runtime = BrowserApp.get(requireContext()).agent;
-        body = column(); body.setPadding(dp(20), 0, dp(20), dp(8));
-        ScrollView scroll = new ScrollView(requireContext()); scroll.addView(body);
-        Dialog dialog = new MaterialAlertDialogBuilder(requireContext()).setTitle("Display")
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(requireContext());
+        body = new LinearLayout(builder.getContext()); body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(20), 0, dp(20), dp(8));
+        ScrollView scroll = new ScrollView(body.getContext()); scroll.addView(body);
+        Dialog dialog = builder.setTitle("Display")
             .setView(scroll).setNegativeButton("Close", null).create();
         state.changes.observe(this, ignored -> render());
         render(); return dialog;
@@ -93,7 +96,8 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
             text(body, "Other X display sockets: " + String.join(", ", displays) + ". These are not managed here.");
         }
         if (state.editing) {
-            EditText editor = new EditText(requireContext()); editor.setTypeface(Typeface.MONOSPACE); editor.setTextSize(13);
+            EditText editor = new EditText(body.getContext()); editor.setTypeface(Typeface.MONOSPACE); editor.setTextSize(13);
+            editor.setTextColor(MaterialColors.getColor(editor, com.google.android.material.R.attr.colorOnSurface));
             editor.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
             editor.setMinLines(3); editor.setMaxLines(4); editor.setText(state.draft); editor.setEnabled(!state.busy);
             editor.setSaveEnabled(false); body.addView(editor);
@@ -156,22 +160,23 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
         Toast.makeText(requireContext(), feedback, Toast.LENGTH_SHORT).show();
     }
     private int dp(int n) { return Math.round(n * getResources().getDisplayMetrics().density); }
-    private LinearLayout column() { LinearLayout view = new LinearLayout(requireContext()); view.setOrientation(LinearLayout.VERTICAL); return view; }
-    private LinearLayout row() { LinearLayout view = new LinearLayout(requireContext()); body.addView(view); return view; }
+    private LinearLayout row() { LinearLayout view = new LinearLayout(body.getContext()); body.addView(view); return view; }
     private TextView text(LinearLayout parent, String value) {
-        TextView view = new TextView(requireContext()); view.setText(value); view.setTextSize(14); view.setPadding(0, dp(6), 0, dp(6)); parent.addView(view); return view;
+        TextView view = new TextView(parent.getContext()); view.setText(value); view.setTextSize(14); view.setPadding(0, dp(6), 0, dp(6));
+        view.setTextColor(MaterialColors.getColor(view, com.google.android.material.R.attr.colorOnSurface)); parent.addView(view); return view;
     }
     private void code(String value, int lines) {
-        TextView view = new TextView(requireContext()); view.setText(value); view.setTypeface(Typeface.MONOSPACE); view.setTextSize(12);
+        TextView view = new TextView(body.getContext()); view.setText(value); view.setTypeface(Typeface.MONOSPACE); view.setTextSize(12);
+        view.setTextColor(MaterialColors.getColor(view, com.google.android.material.R.attr.colorOnSurface));
         view.setTextIsSelectable(true); view.setPadding(dp(10), dp(8), dp(10), dp(8));
-        ScrollView scroll = new ScrollView(requireContext()); scroll.setNestedScrollingEnabled(true); scroll.setClipToOutline(true); scroll.addView(view);
+        ScrollView scroll = new ScrollView(body.getContext()); scroll.setNestedScrollingEnabled(true); scroll.setClipToOutline(true); scroll.addView(view);
         GradientDrawable background = new GradientDrawable(); background.setCornerRadius(dp(12));
-        background.setColor(com.google.android.material.color.MaterialColors.getColor(body, com.google.android.material.R.attr.colorSurface));
+        background.setColor(MaterialColors.getColor(body, com.google.android.material.R.attr.colorSurface));
         background.setStroke(dp(1), view.getCurrentTextColor()); scroll.setBackground(background);
         body.addView(scroll, new LinearLayout.LayoutParams(-1, view.getLineHeight() * lines + dp(16)));
     }
     private void button(LinearLayout parent, String label, Runnable action) {
-        MaterialButton view = new MaterialButton(requireContext()); view.setText(label); view.setAllCaps(false); view.setCornerRadius(dp(24));
+        MaterialButton view = new MaterialButton(parent.getContext()); view.setText(label); view.setAllCaps(false); view.setCornerRadius(dp(24));
         view.setEnabled(!state.busy); view.setOnClickListener(ignored -> { if (local() && !state.busy) action.run(); });
         parent.addView(view, new LinearLayout.LayoutParams(parent.getOrientation() == LinearLayout.HORIZONTAL ? 0 : -1, -2, parent.getOrientation() == LinearLayout.HORIZONTAL ? 1 : 0));
     }
