@@ -2,13 +2,6 @@
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 
 const KEEP = "bashkitten.desktop.keepInTray";
-const AUTOSTART = "[Desktop Entry]\nType=Application\nName=BashKitten\nExec=/usr/bin/bashkitten --start-in-tray\nTryExec=/usr/bin/bashkitten\nIcon=com.bashkitten\nTerminal=false\nStartupNotify=false\n";
-
-function startupFile() {
-  const xdg = Services.env.get("XDG_CONFIG_HOME");
-  const home = Services.dirsvc.get("Home", Ci.nsIFile).path;
-  return PathUtils.join(xdg && PathUtils.isAbsolute(xdg) ? xdg : PathUtils.join(home, ".config"), "autostart", "com.bashkitten.desktop");
-}
 
 export const DesktopLifetime = {
   autostart: false,
@@ -106,47 +99,5 @@ export const DesktopLifetime = {
       details.append(label, output); view.state.append(details);
     }
     output.textContent = job.log;
-  },
-  settings(doc) {
-    const section = doc.getElementById("bashkittenDesktopSettings");
-    if (!section) return;
-    const startup = doc.getElementById("bashkittenStartOnLogin");
-    const keep = doc.getElementById("bashkittenKeepInTray");
-    const status = doc.getElementById("bashkittenTrayStatus");
-    const error = doc.getElementById("bashkittenStartupError");
-    const refresh = () => {
-      keep.checked = Services.prefs.getBoolPref(KEEP, true);
-      status.textContent = !keep.checked ? "Closing the window quits BashKitten and stops its owned services." : this.tray?.available ? "Closing hides this window. Use the tray icon to reopen it or Quit to stop owned services." : "No system tray is available. The window stays reachable; closing it quits BashKitten.";
-    };
-    const observer = { observe: refresh };
-    Services.obs.addObserver(observer, "bashkitten-tray-changed");
-    doc.defaultView.addEventListener("unload", () => Services.obs.removeObserver(observer, "bashkitten-tray-changed"), { once: true });
-    refresh();
-    keep.addEventListener("command", () => {
-      Services.prefs.setBoolPref(KEEP, keep.checked);
-      if (!keep.checked) this.reveal();
-      refresh();
-    });
-    const read = async () => {
-      const file = startupFile();
-      if (!await IOUtils.exists(file)) return false;
-      if (await IOUtils.readUTF8(file) !== AUTOSTART) throw new Error("The BashKitten autostart file was edited outside the browser. Update or remove it there first.");
-      return true;
-    };
-    startup.disabled = true;
-    read().then(enabled => { startup.checked = enabled; startup.disabled = false; }).catch(value => { error.textContent = value.message; });
-    startup.addEventListener("command", async () => {
-      const enabled = startup.checked;
-      startup.disabled = true; error.textContent = "";
-      try {
-        await read();
-        const file = startupFile();
-        if (enabled) {
-          await IOUtils.makeDirectory(PathUtils.parent(file), { permissions: 0o700, ignoreExisting: true });
-          await IOUtils.writeUTF8(file, AUTOSTART, { tmpPath: file + ".tmp", flush: true });
-        } else await IOUtils.remove(file, { ignoreAbsent: true });
-      } catch (value) { error.textContent = value.message; startup.checked = !enabled; }
-      finally { startup.disabled = false; }
-    });
   },
 };

@@ -3,6 +3,14 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { SettingPaneManager } from "chrome://browser/content/preferences/config/SettingPaneManager.mjs";
+import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
+
+if (AppConstants.platform === "linux") {
+  ChromeUtils.importESModule(
+    "chrome://browser/content/bashkitten/settings/bashkittenDesktop.mjs",
+    { global: "current" }
+  );
+}
 
 if (Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)) {
   // The appearance and tabs panes already have Mozilla modules in their
@@ -34,6 +42,9 @@ if (Services.prefs.getBoolPref("browser.settings-redesign.enabled", false)) {
 
   // The local import group is registered by main.js, independently of Sync.
   const homePane = SettingPaneManager.get("home");
+  if (AppConstants.platform === "linux") {
+    homePane.groupIds.splice(2, 0, "bashkittenDesktop");
+  }
   homePane.groupIds.push("importBrowserData");
 
   // The Home pane's groups are registered by AboutPreferences.observe(); the

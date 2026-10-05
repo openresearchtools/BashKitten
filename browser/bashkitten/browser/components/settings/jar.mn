@@ -4,6 +4,7 @@ browser.jar:
     content/browser/bashkitten/settings/bashkittenAppearance.mjs             (bashkittenAppearance.mjs)
     content/browser/bashkitten/settings/bashkittenAppearance.css             (bashkittenAppearance.css)
     content/browser/bashkitten/settings/bashkittenDataCollection.mjs         (bashkittenDataCollection.mjs)
+    content/browser/bashkitten/settings/bashkittenDesktop.mjs                (bashkittenDesktop.mjs)
     content/browser/bashkitten/settings/bashkittenHome.mjs                   (bashkittenHome.mjs)
     content/browser/bashkitten/settings/bashkittenPrivacy.mjs                (bashkittenPrivacy.mjs)
     content/browser/bashkitten/settings/bashkittenSearch.mjs                 (bashkittenSearch.mjs)

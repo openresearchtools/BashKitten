@@ -852,9 +852,7 @@ var gMainPane = {
       AppConstants.MOZ_APP_NAME === "bashkitten" &&
       AppConstants.platform === "linux"
     ) {
-      ChromeUtils.importESModule(
-        "resource:///modules/DesktopLifetime.sys.mjs"
-      ).DesktopLifetime.settings(document);
+      initSettingGroup("bashkittenDesktop");
     }
     initSettingGroup("importBrowserData");
     initSettingGroup("tabs");

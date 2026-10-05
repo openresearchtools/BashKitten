@@ -29,13 +29,7 @@
 
 #ifdef MOZ_BASHKITTEN
 #ifdef MOZ_WIDGET_GTK
-<groupbox id="bashkittenDesktopSettings" data-category="paneGeneral" hidden="true">
-  <label><html:h2>BashKitten desktop</html:h2></label>
-  <checkbox id="bashkittenStartOnLogin" label="Start BashKitten when I log in"/>
-  <checkbox id="bashkittenKeepInTray" label="Keep running in the tray when the window closes"/>
-  <description id="bashkittenTrayStatus"/>
-  <description id="bashkittenStartupError" role="alert"/>
-</groupbox>
+<html:setting-group groupid="bashkittenDesktop" data-category="paneGeneral" hidden="true"/>
 #endif
 #endif
 

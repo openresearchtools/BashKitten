@@ -1862,3 +1862,24 @@ Manual checks must use Whisper tiny and Qwen 0.6B on this machine as requested.
 
 JavaScript syntax and whitespace checks passed; installed desktop/Android manual
 checks of the new controls and both saved choices remain pending.
+
+### 5 October desktop tray reopening and settings visibility
+
+Installed desktop `9f676e8cc4` stayed alive when closed to its tray and reopened
+the same window, but Wayland painted it about 22–23 pixels away from its pointer
+targets. Clicking at the old input position opened the visibly displaced menu.
+GTK recreated the child surface at zero after remapping; an unchanged allocation
+could skip the later size-allocation callback. The map callback now supplies the
+current GTK allocation when recreating the surface, preserving its input offset.
+No offset is hardcoded and tray lifetime behavior is unchanged.
+
+The same installed version showed no desktop startup/tray controls in Home and
+startup. Their markup and initialization existed only in the skipped legacy
+General pane. The existing two controls now use one native setting group in the
+redesigned Home pane, and the same group in legacy General. XDG autostart file
+validation and writes, default-off login startup, default-on close-to-tray and
+actual tray-availability text are preserved; replaced legacy handlers are removed.
+
+Source tracing and whitespace checks passed; settings JavaScript and Fluent
+syntax checks passed. Rebuilt GTK compilation, actual reopened-window pointer
+alignment and visible settings/save/reopen/autostart acceptance remain pending.

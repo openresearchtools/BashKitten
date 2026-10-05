@@ -47,3 +47,10 @@ bashkitten-spelling-enabled =
 
 bashkitten-restore-tabs =
     .label = Open previous tabs
+
+bashkitten-desktop-heading =
+    .label = BashKitten desktop
+bashkitten-start-on-login =
+    .label = Start BashKitten when I log in
+bashkitten-keep-in-tray =
+    .label = Keep running in the tray when the window closes
