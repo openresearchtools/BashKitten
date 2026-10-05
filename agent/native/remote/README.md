@@ -50,8 +50,17 @@ public-client configuration; it does not register clients remotely.
 The controller must configure that endpoint and reconcile its owned processes;
 the helper neither starts daemons nor removes existing sockets.
 
-This is integration source, not a completed remote feature. APK JNI entry points,
-private controller activation, protected browser login and UI integration are
+`mobile` is the small native Java binding. It accepts private enrollment bytes,
+the existing Tor SOCKS endpoint and an encrypted `TokenStore` callback. Its
+PKCS#8 enrollment output belongs only to the privileged Gecko call, never web
+content or Android KeyChain. Build it with `auth/build/remote-android.sh`; the
+separate Android build module pins pristine Go mobile tools and dependencies.
+It provides no HTTP server, shell/host management or replacement Tor owner.
+Run network/encryption calls on the native app's existing background executor;
+token persistence must complete synchronously before its callback returns.
+
+This is integration source, not a completed remote feature. Native library
+compilation/device loading, private controller activation, protected browser login and UI integration are
 still pending; client lifecycle source has not passed real authentication and
 device acceptance. Compilation does
 not establish working Tor, authentication, camera import or device acceptance.

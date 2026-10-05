@@ -1276,6 +1276,14 @@ slices and their limits; they do not replace the manual acceptance table.
   compiled Linux amd64/arm64 and the Android arm64 client source boundary.
   This has not yet been wired to native platform storage/UI or accepted through
   a real tunnel.
+- The complete pristine Go mobile binding source at
+  `8b95e45f8d3e224183cc3d760609cef9896e498c` is pinned under `auth/mobile`;
+  its staged Git tree matches upstream `ab655246bc7a4398102f04d3b4ac393a0d6fd53a`.
+  The native Java binding wraps the shared client, uses the native encrypted-store
+  callback and produces private Gecko certificate enrollment data. Android build
+  integration adds the ARM64 AAR, complete linked notices and Go/generated-Java
+  source to the candidate, with ABI/16 KB and library-hash checks. Native build
+  and device loading are pending; this does not yet activate new remote UI/login.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

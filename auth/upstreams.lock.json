@@ -106,5 +106,14 @@
     "archive": "https://codeload.github.com/makiuchi-d/gozxing/tar.gz/3d941b5e72ac36566873214086fb204e7d76333c",
     "sha256": "9b6d3a0f71f9d205c56f24ac62c4f9c80e38386d88eaf329e4a67b18068aecf4",
     "license": "gozxing/LICENSE"
+  },
+  "mobile": {
+    "repository": "https://github.com/golang/mobile.git",
+    "commit": "8b95e45f8d3e224183cc3d760609cef9896e498c",
+    "tree": "ab655246bc7a4398102f04d3b4ac393a0d6fd53a",
+    "version": "v0.0.0-20260908204917-8b95e45f8d3e",
+    "archive": "https://codeload.github.com/golang/mobile/tar.gz/8b95e45f8d3e224183cc3d760609cef9896e498c",
+    "sha256": "35342b2b409b9b9447b9c2acba0ed3ade56d05fd90c434be83d8b578b4b281a0",
+    "license": "mobile/LICENSE"
   }
 }

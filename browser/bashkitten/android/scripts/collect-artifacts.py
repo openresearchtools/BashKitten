@@ -62,6 +62,8 @@ with zipfile.ZipFile(destination) as apk:
             raise SystemExit('Missing offline license notice: ' + notice)
     if 'lib/arm64-v8a/libtor.so' not in files:
         raise SystemExit('Browser Tor client is missing')
+    if 'lib/arm64-v8a/libgojni.so' not in files:
+        raise SystemExit('Native remote client is missing')
     metadata = apk.read('assets/raw/third_party_license_metadata')
     licenses = apk.read('assets/raw/third_party_licenses')
     if b'Debug License Info' in metadata or len(metadata.splitlines()) < 10:
@@ -104,6 +106,16 @@ manifest['browser_input_sha256'] = subprocess.check_output(
     text=True).strip()
 manifest['build_repository'] = os.environ.get('GITHUB_REPOSITORY', '')
 manifest['build_run'] = os.environ.get('GITHUB_RUN_ID', '')
+remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
+remote_manifest = json.loads((remote / 'build-manifest.json').read_text())
+if remote_manifest['source'] != revision or remote_manifest['architecture'] != 'arm64-v8a':
+    raise SystemExit('Native remote client source/architecture does not match the APK')
+with zipfile.ZipFile(destination) as apk:
+    if hashlib.sha256(apk.read('lib/arm64-v8a/libgojni.so')).hexdigest() != remote_manifest['library_sha256']:
+        raise SystemExit('APK remote client differs from its built library')
+manifest['remote_client'] = remote_manifest
+shutil.copy2(remote / 'share/source/remote-client-go.tar.gz', OUT / 'bashkitten-remote-client-source.tar.gz')
+shutil.copy2(remote / 'bashkitten-remote-sources.jar', OUT / 'bashkitten-remote-client-java-source.jar')
 source_inventories = list((OBJ / 'gradle/build/mobile/android/fenix').rglob('generated/bashkitten-sources/sources.json'))
 if len(source_inventories) != 1:
     raise SystemExit('Expected exactly one resolved Android dependency source inventory, found ' + str(len(source_inventories)))

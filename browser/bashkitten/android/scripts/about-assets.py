@@ -18,6 +18,22 @@ companion = Path(os.environ['BASHKITTEN_COMPANION_LICENSES'])
 records = json.loads(companion.read_text())
 if not isinstance(records, list) or not records:
     raise SystemExit('The companion package license inventory is empty')
+remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
+remote_licenses = remote / 'share/licenses/remote-client'
+remote_modules = json.loads((remote / 'share/metadata/remote-client-go-modules.json').read_text())
+if not remote_modules:
+    raise SystemExit('The native remote client license inventory is empty')
+for dependency in remote_modules:
+    text = '\n\n'.join((remote_licenses / name).read_text() for name in dependency['licenses'])
+    if not text.strip():
+        raise SystemExit('Missing remote client license: ' + dependency['name'])
+    records.append({'name': 'Native remote client: ' + dependency['name'], 'version': dependency['version'],
+                    'license': 'See full license text', 'text': text})
+# Include separate NOTICE/PATENTS/provenance files as well as the license text.
+extra_notices = '\n\n'.join(str(path.relative_to(remote_licenses)) + '\n' + path.read_text()
+                            for path in sorted(remote_licenses.rglob('*')) if path.is_file())
+records.append({'name': 'Native remote client attribution and Go runtime', 'version': '',
+                'license': 'See individual component licenses', 'text': extra_notices})
 apk_licenses = Path(os.environ['BASHKITTEN_APK_LICENSES'])
 metadata = sorted(apk_licenses.rglob('third_party_license_metadata'))
 if not metadata:

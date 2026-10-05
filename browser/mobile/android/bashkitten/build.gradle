@@ -34,6 +34,7 @@ repositories {
 }
 
 dependencies {
+    implementation files("${System.getenv('BASHKITTEN_REMOTE_CLIENT_DIR')}/bashkitten-remote.aar")
     implementation project(':geckoview')
     implementation project(':components:support-utils')
     implementation libs.androidx.appcompat
@@ -42,6 +43,16 @@ dependencies {
     implementation 'info.guardianproject:jtorctl:0.4.5.7'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }
+
+tasks.register('checkRemoteClient') {
+    doLast {
+        def directory = System.getenv('BASHKITTEN_REMOTE_CLIENT_DIR')
+        if (!directory || !file("$directory/bashkitten-remote.aar").isFile()) {
+            throw new GradleException('Build the native remote client with auth/build/remote-android.sh first')
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'checkRemoteClient' }
 
 tasks.register('stageNotices', Exec) {
     commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/notices.py", "$buildDir/generated/notices"

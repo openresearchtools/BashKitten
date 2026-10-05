@@ -25,6 +25,14 @@ it does not replace Chisel with a second transport or expose a management port.
 The APK client is built separately with host code excluded. Native Share Local,
 browser callbacks and the new remote lifecycle are still being integrated.
 
+`mobile/` is the complete pristine Go Android binding source pinned in the lock,
+including its BSD license and patent grant. `build/remote-android.sh` builds its
+tools from that tree, then creates an ARM64 Java/JNI AAR with NDK r29/API 31.
+It does not use `gomobile init`, which would fetch a moving tool version.
+The APK bundles the client library and its actual linked notices; Actions and
+APK candidates include corresponding Go dependency and generated Java sources.
+No upstream Chisel or Go mobile source patch is applied.
+
 The private `valkey-server` stores Authelia's sessions so remembered logins
 survive full service restarts. It listens only on the controller's private Unix
 socket and is owned by the same service group. It does not install a system

@@ -105,6 +105,23 @@ jobs:
       working-directory: browser
       run: python3 bashkitten/scripts/render-branding.py
       if: (success()) && steps.component.outputs.hit != 'true'
+    - uses: actions/setup-go@v6
+      with:
+        go-version: '1.27.1'
+        cache-dependency-path: agent/native/remote/android/go.sum
+      if: (success()) && steps.component.outputs.hit != 'true'
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+      if: (success()) && steps.component.outputs.hit != 'true'
+    - name: Build the native remote client
+      run: |
+        export ANDROID_HOME="$MOZBUILD_STATE_PATH/android-sdk-linux"
+        "$ANDROID_HOME/cmdline-tools/20.0/bin/sdkmanager" 'platforms;android-31'
+        bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
+        echo "BASHKITTEN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
+      if: (success()) && steps.component.outputs.hit != 'true'
     - name: Build Gecko for ARM64
       working-directory: browser
       run: set -o pipefail; ./mach build 2>&1 | tee ../artifacts/gecko-build.log

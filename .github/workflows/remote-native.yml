@@ -10,6 +10,7 @@ on:
       - 'auth/age/**'
       - 'auth/barcode/**'
       - 'auth/gozxing/**'
+      - 'auth/mobile/**'
       - 'auth/build/**'
       - 'auth/remote-termux/**'
       - '.github/workflows/remote-native.yml'
@@ -66,9 +67,44 @@ jobs:
           go mod verify
           go build -mod=readonly -trimpath -tags "$BUILD_TAGS" ./...
           go list -mod=readonly -deps -tags "$BUILD_TAGS" ./... > "$RUNNER_TEMP/remote-packages.txt"
-          test -z "$(gofmt -l bundle tunnel host cmd oauth client)"
+          test -z "$(gofmt -l bundle tunnel host cmd oauth client mobile)"
       - uses: actions/upload-artifact@v4
         with:
           name: remote-package-inventory-${{ matrix.target }}
           path: ${{ runner.temp }}/remote-packages.txt
+          if-no-files-found: error
+  android-library:
+    runs-on: ubuntu-24.04
+    env:
+      GOTELEMETRY: 'off'
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            agent/native/remote
+            auth/chisel
+            auth/age
+            auth/barcode
+            auth/gozxing
+            auth/mobile
+            auth/build
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: agent/native/remote/android/go.sum
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install the pinned Android build toolchain
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;29.0.14206865' 'platforms;android-31'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+      - name: Build native Java client, source and notices
+        run: bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-client-android-arm64
+          path: ${{ runner.temp }}/remote-android
           if-no-files-found: error

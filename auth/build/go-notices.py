@@ -11,7 +11,10 @@ import tempfile
 
 source, output, component = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
 command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.'],
-           'remote': ['./cmd/bashkitten-remote']}[component]
+           'remote': ['./cmd/bashkitten-remote'],
+           'remote-client': ['github.com/openresearchtools/bashkitten/remote/mobile',
+                             'golang.org/x/mobile/bind/seq',
+                             'golang.org/x/mobile/internal/mobileinit']}[component]
 raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-deps', '-json', *command], cwd=source, text=True)
 decoder, offset, modules = json.JSONDecoder(), 0, {}
 while offset < len(raw):
@@ -41,7 +44,7 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-go-source-') as temporary:
         directory = Path(module['Dir'])
         destination = name.replace('/', '__')
         files = [p for p in directory.iterdir() if p.is_file() and
-                 (p.name.lower().startswith(('license', 'licence', 'notice', 'copying', 'copyright', 'authors'))
+                 (p.name.lower().startswith(('license', 'licence', 'notice', 'copying', 'copyright', 'authors', 'patents'))
                   or p.name.lower().endswith('-license'))]
         license_files = [p for p in files if p.name.lower().startswith(('license', 'licence', 'copying'))]
         if not license_files:
