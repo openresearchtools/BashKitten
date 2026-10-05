@@ -1,0 +1,72 @@
+name: Native remote core
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/native/remote/**'
+      - 'auth/chisel/**'
+      - 'auth/age/**'
+      - 'auth/barcode/**'
+      - 'auth/gozxing/**'
+      - '.github/workflows/remote-native.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-amd64
+            runner: ubuntu-24.04
+            os: linux
+            arch: amd64
+            tags: ''
+          - target: linux-arm64
+            runner: ubuntu-24.04-arm
+            os: linux
+            arch: arm64
+            tags: ''
+          - target: android-arm64-client
+            runner: ubuntu-24.04
+            os: android
+            arch: arm64
+            tags: bashkitten_client
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOTELEMETRY: 'off'
+      GOTOOLCHAIN: local
+      GOOS: ${{ matrix.os }}
+      GOARCH: ${{ matrix.arch }}
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            agent/native/remote
+            auth/chisel
+            auth/age
+            auth/barcode
+            auth/gozxing
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: agent/native/remote/go.sum
+      - name: Compile the shared source and verify module integrity
+        working-directory: agent/native/remote
+        env:
+          BUILD_TAGS: ${{ matrix.tags }}
+        run: |
+          go mod verify
+          go build -mod=readonly -trimpath -tags "$BUILD_TAGS" ./...
+          go list -mod=readonly -deps -tags "$BUILD_TAGS" ./... > "$RUNNER_TEMP/remote-packages.txt"
+          test -z "$(gofmt -l bundle tunnel)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-package-inventory-${{ matrix.target }}
+          path: ${{ runner.temp }}/remote-packages.txt
+          if-no-files-found: error

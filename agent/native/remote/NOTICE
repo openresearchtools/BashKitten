@@ -1,0 +1,16 @@
+BashKitten remote integration — AGPL-3.0-only for BashKitten modifications.
+
+The service-ID tunnel adapter and encrypted connection bundle are adapted from
+TorKitten v2, Copyright 2026 The Torkitten Authors, Apache-2.0.
+Source: https://github.com/openresearchtools/torkitten
+Commit: 2fd0f48358aa37e6c23336cd550f52ab00bbe7e3
+Original files: internal/tunnel/{client,common,server}.go,
+internal/app/{identity,client,types,api}.go.
+The complete Apache-2.0 text is in TORKITTEN-LICENSE.
+
+5 October 2026 adaptations: isolate the connection codec from the donor's
+application, filesystem and account managers; validate BashKitten's existing
+username syntax; add the QR quiet zone; exclude host code from client builds.
+Retain TK2/version 2 field meanings, upstream age scrypt and Chisel wire/pipe
+behavior. Dependency versions, complete pristine source and licenses are under
+../../../auth and its upstreams.lock.json. No Chisel or age source patches.
