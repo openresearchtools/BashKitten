@@ -11,6 +11,9 @@
         <item name="android:colorControlNormal">@color/bashkitten_secondary</item>
         <item name="android:colorControlActivated">@color/bashkitten_secondary</item>
         <item name="android:colorButtonNormal">@color/bashkitten_button</item>
+        <!-- MaterialButton uses this pair, not AppCompat's colorButtonNormal. -->
+        <item name="colorPrimary">@color/bashkitten_secondary</item>
+        <item name="colorOnPrimary">@color/bashkitten_surface</item>
         <item name="colorAccent">@color/bashkitten_secondary</item>
         <item name="colorControlNormal">@color/bashkitten_secondary</item>
         <item name="colorControlActivated">@color/bashkitten_secondary</item>

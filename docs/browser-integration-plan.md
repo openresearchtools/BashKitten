@@ -1492,3 +1492,10 @@ tab-switch focus restoration when that tab was already selected behind Agent.
 The existing selection/window-focus checks remain. JavaScript syntax and source
 whitespace checks passed; the installed-browser reproduction still needs a
 candidate containing this change and manual verification.
+
+5 October Android native contrast correction: the product theme now supplies
+MaterialButton's paired primary/background and on-primary/text colors from its
+existing day/night palette. Agent connections and Share Local used Material
+buttons while their AppCompat theme defined only `colorButtonNormal`. Display
+already inherits Fenix's correctly paired Material theme. XML and Java parse-only
+checks passed; the light/dark screens still require manual candidate verification.
