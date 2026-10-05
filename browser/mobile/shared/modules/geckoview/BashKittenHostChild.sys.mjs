@@ -6,7 +6,16 @@ export class BashKittenHostChild extends JSWindowActorChild {
         event.target !== this.contentWindow) return;
     if (event.type === "BashKittenDraftReady") {
       this.draftReady = true;
-      this.sendQuery("DraftReady").catch(() => {});
+      this.draftChanged = false;
+      this.draftStarting = this.sendQuery("DraftReady").then(() => {
+        this.draftStarting = null;
+        return this.sendQuery("DraftChanged");
+      }).catch(error => { this.draftStarting = null; this.draftError(error); });
+      return;
+    }
+    if (event.type === "BashKittenDraftChanged") {
+      this.draftChanged = true;
+      if (!this.draftStarting) this.sendQuery("DraftChanged").catch(error => this.draftError(error));
       return;
     }
     if (this.installed || this.installing) return;
@@ -45,6 +54,11 @@ export class BashKittenHostChild extends JSWindowActorChild {
     }
   }
 
+  draftError(error) {
+    const win = this.contentWindow;
+    win?.dispatchEvent(new win.CustomEvent("BashKittenDraftError", { detail: error.message }));
+  }
+
   async receiveMessage({ name, data }) {
     if (this.browsingContext !== this.browsingContext.top) throw new Error("Protected top document required");
     await this.sendQuery("Ready");
@@ -58,7 +72,7 @@ export class BashKittenHostChild extends JSWindowActorChild {
         ? Cu.cloneInto(await draft.capture(), {}, { wrapReflectors: true }) : null;
     }
     if (name === "RestoreDraft") {
-      if (!this.draftReady || typeof draft?.restore !== "function") return false;
+      if (this.draftChanged || !this.draftReady || typeof draft?.restore !== "function") return false;
       await draft.restore(Cu.cloneInto(data, window, { wrapReflectors: true }));
       return true;
     }

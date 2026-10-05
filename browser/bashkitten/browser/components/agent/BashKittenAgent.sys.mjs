@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 
+import { BashKittenDrafts } from "resource:///modules/BashKittenDrafts.sys.mjs";
 import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
@@ -30,6 +31,8 @@ function shutdown() {
   return shuttingDown;
 }
 async function stopOwnedRuntime() {
+  try { await DesktopLifetime.view?.saveCurrentDraft(); }
+  catch (error) { console.error("Could not save the Agent draft before Quit", error); }
   await Promise.allSettled([...localOperations]);
   await lazy.BrowserControlChannel.close("browser quitting");
   await AgentRemotes.deactivate();
@@ -120,12 +123,12 @@ async function localControl(command, data = {}) {
 }
 
 /** Parent actors must verify the actual protected browser, not just its URL. */
-export function protectedAgentView(actor) {
+export function protectedAgentView(actor, allowQuitting = false) {
   const context = actor.browsingContext;
   if (!context || context !== context.top) return null;
   const browser = context.embedderElement;
   const entry = ownedViews.get(browser);
-  if (!entry || entry.host.off || entry.host.activeBrowser !== browser) return null;
+  if (!entry || (entry.host.off && !(allowQuitting && DesktopLifetime.quitting)) || entry.host.activeBrowser !== browser) return null;
   const principal = actor.manager.documentPrincipal;
   if (!principal?.isContentPrincipal || principal.originNoSuffix !== new URL(entry.connection.url).origin) return null;
   if (principal.originAttributes.userContextId !== entry.connection.userContextId) return null;
@@ -138,7 +141,7 @@ export const BashKittenAgent = {
     if (!actorRegistered) {
       ChromeUtils.registerWindowActor("BashKittenAgent", {
         parent: { esModuleURI: "resource:///modules/BashKittenAgentParent.sys.mjs" },
-        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { capture: true, wantUntrusted: true } } },
+        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { capture: true, wantUntrusted: true }, BashKittenDraftChanged: { capture: true, wantUntrusted: true } } },
         allFrames: false,
         messageManagerGroups: ["bashkitten-agent"],
         matches: ["https://*/*"],
@@ -491,6 +494,7 @@ class AgentView {
     Services.ppmm.sharedData.set("BashKittenAgentContexts", [...contexts]);
     Services.ppmm.sharedData.flush();
     const key = connection.id || connection.identity?.instanceId || `local:${connection.userContextId}`;
+    const draftKey = `${key}:${connection.identity}`;
     let browser = this.views.get(key);
     if (!browser) {
       browser = xul(this.doc, "browser", {
@@ -527,7 +531,10 @@ class AgentView {
       });
     }
     connection.requestContext = browser.browsingContext;
-    ownedViews.set(browser, { host: this, connection, local, key });
+    const previousEntry = ownedViews.get(browser);
+    if (previousEntry?.draftKey === draftKey && previousEntry.connection.url === connection.url) {
+      previousEntry.connection = connection;
+    } else ownedViews.set(browser, { host: this, connection, local, key, draftKey });
     for (const item of this.views.values()) item.hidden = item !== browser;
     this.activeBrowser = browser;
     this.state.hidden = true;
@@ -535,16 +542,16 @@ class AgentView {
     this.power.textContent = "Turn off";
     this.power.title = local ? "Stop Agent services and Pi processes" : "Disconnect this client";
     if (reload || browser.getAttribute("data-agent-url") !== connection.url) {
-      if (browser.hasAttribute("data-agent-url")) {
+      if (browser.hasAttribute("data-agent-url") && previousEntry?.draftKey === draftKey) {
         try {
           const draft = await browser.browsingContext.currentWindowGlobal.getActor("BashKittenAgent").sendQuery("CaptureDraft");
-          if (draft) this.drafts.set(key, draft);
+          if (draft) this.drafts.set(draftKey, draft);
         } catch (error) { console.warn("Could not retain Agent draft after a content crash", error); }
       }
       browser.setAttribute("data-agent-url", connection.url);
       const target = new URL(navigateTo || connection.url);
-      const draftSession = this.drafts.get(key)?.sessionId;
-      const savedHash = draftSession ? `#session=${draftSession}` : this.drafts.get(key)?.sessionHash;
+      const draftSession = this.drafts.get(draftKey)?.sessionId;
+      const savedHash = draftSession ? `#session=${draftSession}` : this.drafts.get(draftKey)?.sessionHash;
       if (!navigateTo && typeof savedHash === "string" && /^#session=[a-f0-9-]{36}$/.test(savedHash)) target.hash = savedHash;
       browser.loadURI(Services.io.newURI(target.href), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
     }
@@ -626,6 +633,7 @@ class AgentView {
         try {
           await lazy.BrowserControlChannel.close("local identity replaced");
           await AgentRemotes.remove("local");
+          this.drafts.delete(`local:${saved?.identity}`);
           const browser = this.views.get("local");
           if (browser) { ownedViews.delete(browser); browser.remove(); this.views.delete("local"); }
           this.currentIdentity = null; this.localConnection = null;
@@ -857,6 +865,7 @@ class AgentView {
         item.append(button("Remove", async () => {
           if (!Services.prompt.confirm(this.win, "Remove connection?", `Remove “${record.name}” and its saved login from this browser?`)) return;
           await AgentRemotes.remove(record.id);
+          this.drafts.delete(`${record.id}:${record.identity}`);
           if (this.remote?.id === record.id) { this.off = true; this.power.textContent = "Turn on"; this.message("Remote removed", "Choose Local or another saved remote."); }
           await refresh(); await this.refreshRemotes();
         }));
@@ -935,6 +944,44 @@ class AgentView {
     return result.data;
   }
 
+  async draftEnrollment(entry, actor) {
+    if (protectedAgentView(actor, true) !== entry || actor.manager !== actor.browsingContext.currentWindowGlobal) {
+      throw new Error("The selected Agent changed.");
+    }
+    const current = await AgentRemotes.connection(entry.connection.id);
+    if (protectedAgentView(actor, true) !== entry || actor.manager !== actor.browsingContext.currentWindowGlobal ||
+        current.identity !== entry.connection.identity || current.userContextId !== entry.connection.userContextId ||
+        !AgentRemotes.contexts.get(current.userContextId)) {
+      throw new Error("The Agent enrollment changed.");
+    }
+    return { identity: current.identity, attributes: { userContextId: current.userContextId } };
+  }
+
+  saveDraft(entry, actor) {
+    actor.draftDirty = true;
+    if (!actor.saving) actor.saving = Promise.resolve().then(async () => {
+      try {
+        do {
+          actor.draftDirty = false;
+          await this.draftEnrollment(entry, actor);
+          const draft = await actor.sendQuery("CaptureDraft");
+          if (!draft) return;
+          await BashKittenDrafts.save(() => this.draftEnrollment(entry, actor), draft);
+          this.drafts.set(entry.draftKey, draft);
+        } while (actor.draftDirty);
+      } finally { actor.saving = null; }
+    });
+    return actor.saving;
+  }
+
+  async saveCurrentDraft() {
+    const browser = this.activeBrowser;
+    const global = browser?.browsingContext.currentWindowGlobal;
+    if ((!this.off || DesktopLifetime.quitting) && global && new URL(browser.currentURI.spec).pathname === "/") {
+      await this.saveDraft(ownedViews.get(browser), global.getActor("BashKittenAgent"));
+    }
+  }
+
   async contentReady(entry, actor, draftReady = false) {
     const location = this.activeBrowser?.currentURI;
     if (!location || location.pathQueryRef.startsWith("/login")) {
@@ -942,9 +989,12 @@ class AgentView {
       return;
     }
     if (!entry.local && (await AgentRemotes.connection(entry.connection.id)).state !== "ready") return;
-    if (draftReady && actor && this.drafts.has(entry.key)) {
-      await actor.sendQuery("RestoreDraft", this.drafts.get(entry.key));
-      this.drafts.delete(entry.key);
+    if (draftReady && actor && !actor.draftInitialized) {
+      const draft = this.drafts.get(entry.draftKey) || await BashKittenDrafts.load(() => this.draftEnrollment(entry, actor));
+      await this.draftEnrollment(entry, actor);
+      if (draft) await actor.sendQuery("RestoreDraft", draft);
+      this.drafts.delete(entry.draftKey);
+      actor.draftInitialized = true;
     }
     lazy.BrowserControlChannel.start(entry.connection, { local: entry.local, window: this.win }).catch(error => console.error("Browser control connection failed", error));
   }

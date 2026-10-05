@@ -1883,3 +1883,25 @@ actual tray-availability text are preserved; replaced legacy handlers are remove
 Source tracing and whitespace checks passed; settings JavaScript and Fluent
 syntax checks passed. Rebuilt GTK compilation, actual reopened-window pointer
 alignment and visible settings/save/reopen/autostart acceptance remain pending.
+
+### 5 October protected composer restart persistence
+
+A normal desktop Quit/package upgrade preserved the selected chat history but
+lost its unsent composer: the native draft snapshots existed only in memory.
+Android and desktop now checkpoint that existing snapshot, including selected
+File attachments, through one parent-only IndexedDB helper. Its fixed reserved
+storage origin uses the protected connection's existing origin attributes and
+an enrolled-CA key, independent of the Local port. The native host revalidates
+its actual document, context and enrollment before storage access. Existing
+connection removal/re-enrollment clears that context's IndexedDB through Gecko's
+normal clear-data path; unrelated connections keep their data.
+
+Edits, attachment changes and send/clear update the snapshot, with one in-flight
+save coalescing later edits. Desktop Quit awaits its final capture before service
+teardown; a failed save is reported and cannot skip cleanup. Restoration retains
+the existing one-composer-per-connection behavior and selected-chat lookup, and
+does not replace text entered while its initial lookup was pending. Audio capture
+buffers remain outside the snapshot; no server queue/store or new public API was
+added. JavaScript/inline UI syntax, both platform packaging declarations and
+whitespace checks passed. Rebuilt desktop/Android manual text/file restoration,
+consumed-draft, port-change and removal checks remain required.

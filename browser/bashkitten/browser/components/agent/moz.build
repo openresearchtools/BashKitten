@@ -3,6 +3,7 @@ EXTRA_JS_MODULES += [
     "BashKittenAgent.sys.mjs",
     "BashKittenAgentChild.sys.mjs",
     "BashKittenAgentParent.sys.mjs",
+    "BashKittenDrafts.sys.mjs",
     "DesktopLifetime.sys.mjs",
     "LocalAI.sys.mjs",
     "RemoteServices.sys.mjs",

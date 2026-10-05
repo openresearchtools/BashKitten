@@ -783,6 +783,18 @@
   <script>
     let csrf = '';
     let initialized = false, authRequired = false;
+    let draftRestoring = false, draftChangeQueued = false;
+    function draftChanged() {
+      if (!initialized || draftRestoring || draftChangeQueued) return;
+      draftChangeQueued = true;
+      queueMicrotask(() => {
+        draftChangeQueued = false;
+        if (!draftRestoring) window.dispatchEvent(new Event('BashKittenDraftChanged'));
+      });
+    }
+    window.addEventListener('BashKittenDraftError', event => {
+      $('#composerHint').textContent = 'Draft could not be saved or restored: ' + event.detail;
+    });
     let models = [];
     let current = null;
     let source = null;
@@ -790,7 +802,7 @@
     let pendingCwd = '';
     let pendingFiles = [];
     let goalDraft = false;
-    function renderGoalChip(){ $('#goalChip').classList.toggle('hidden',!goalDraft); setRunButton(queueState.busy || Boolean(current?.running)); }
+    function renderGoalChip(){ draftChanged(); $('#goalChip').classList.toggle('hidden',!goalDraft); setRunButton(queueState.busy || Boolean(current?.running)); }
     let pendingRetainedAttachments = [];
     let folderView = {path: '', parent: null}, folderSelection = null, folderGeneration = 0;
     let activeSettingsTab = 'app';
@@ -2375,6 +2387,7 @@
     }
 
     function renderAttachments() {
+      draftChanged();
       const tray = $('#attachmentTray');
       tray.innerHTML = '';
       const retained = editingQueueId ? (editingQueueSnapshot?.attachments || []) : pendingRetainedAttachments.map(path => path.split('/').pop());
@@ -2602,6 +2615,7 @@
     $('#folderDialog').addEventListener('close', () => { ++folderGeneration; folderSelection = null; });
     $('#folderBtn').onclick = () => !current && openFolderPicker('Working folder', pendingCwd, path => {
       pendingCwd = path;
+      draftChanged();
       $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
     });
     $('#defaultCwdBrowse').onclick = () => openFolderPicker('Default working folder', $('#defaultCwd').value, path => { $('#defaultCwd').value = displayFolder(path); });
@@ -2671,7 +2685,7 @@
     composeBox.addEventListener('dragover', event => { event.preventDefault(); composeBox.classList.add('dragging'); });
     composeBox.addEventListener('dragleave', event => { if (!event.relatedTarget || !composeBox.contains(event.relatedTarget)) composeBox.classList.remove('dragging'); });
     composeBox.addEventListener('drop', event => { event.preventDefault(); composeBox.classList.remove('dragging'); addAttachments(event.dataTransfer.files); });
-    $('#prompt').addEventListener('input', event => { event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 190)}px`; setRunButton(queueState.busy || Boolean(current?.running)); const match = /^\/([a-z]*)$/.exec(event.target.value); if (match && !editingQueueId && !pendingFiles.length && !pendingRetainedAttachments.length) { slashMenu=true; showComposerActions(match[1]); } else if (slashMenu) closeComposerActions(); });
+    $('#prompt').addEventListener('input', event => { draftChanged(); event.target.style.height = 'auto'; event.target.style.height = `${Math.min(event.target.scrollHeight, 190)}px`; setRunButton(queueState.busy || Boolean(current?.running)); const match = /^\/([a-z]*)$/.exec(event.target.value); if (match && !editingQueueId && !pendingFiles.length && !pendingRetainedAttachments.length) { slashMenu=true; showComposerActions(match[1]); } else if (slashMenu) closeComposerActions(); });
     $('#prompt').addEventListener('keydown', event => {
       if (event.key === 'ArrowDown' && slashMenu) { event.preventDefault(); commandButtons.find(button=>!button.disabled&&!button.classList.contains('hidden'))?.focus(); }
       else if (event.key === 'Escape' && slashMenu) { event.preventDefault(); closeComposerActions(); }
@@ -2679,8 +2693,8 @@
       else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('#composer').requestSubmit(); }
     });
 
-    $('#model').onchange = async () => { setThinking($('#model')); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
-    $('#thinking').onchange = async () => { try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
+    $('#model').onchange = async () => { setThinking($('#model')); draftChanged(); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
+    $('#thinking').onchange = async () => { draftChanged(); try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
     function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|login|providers|settings|attach)$/.test(text); }
@@ -2793,7 +2807,7 @@
         pendingRetainedAttachments = [...new Set([...retained, ...pendingRetainedAttachments])];
         renderAttachments();
         $('#composerHint').textContent = error.message + ' · Draft kept';
-      } finally { $('#sendBtn').disabled = false; }
+      } finally { $('#sendBtn').disabled = false; draftChanged(); }
     };
 
     // Capture belongs to this protected document and the original chat only.
@@ -3544,35 +3558,41 @@
     $('#piDialogCancel').onclick=()=>answerPi(true);
     $('#piDialog').oncancel=event=>{event.preventDefault();answerPi(true);};
 
-    // The enrolled native browser keeps drafts in memory while changing the
-    // discovered origin. These hooks never send or queue a message.
+    // The enrolled native browser retains this visible composer across origin
+    // changes and restarts. These hooks never send or queue a message or audio.
     window.bashkittenDraft = {
       capture() {
+        if (!initialized || draftRestoring) return null;
         return {sessionId:current?.id || null,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null};
       },
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
-        if (value.sessionId && /^[a-f0-9-]{36}$/.test(value.sessionId)) {
-          history.replaceState(null, '', '#session=' + value.sessionId);
-          const session = await linkedSession(await loadSessions());
-          if (!session) return;
-          if (current?.id !== session.id) await openSession(session);
-        } else if (current) await beginNewSession();
-        $('#prompt').value = value.text;
-        pendingFiles = (value.files || []).filter(file => file instanceof File);
-        pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
-        goalDraft = Boolean(value.goal);
-        if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
-        for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
-        if (value.edit && current?.id === value.sessionId) {
-          editingQueueId = value.edit.id; editingQueueToken = value.edit.token; editingQueueSnapshot = value.edit.snapshot;
-          renderQueueState(queueState);
-        }
-        renderAttachments(); renderGoalChip();
-        $('#prompt').dispatchEvent(new Event('input'));
-        if (Array.isArray(value.selection)) $('#prompt').setSelectionRange(...value.selection.slice(0,2));
-        $('#chat').scrollTop = Number(value.scroll) || 0;
-        $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
+        draftRestoring = true;
+        const wasInert = $('#composer').inert;
+        $('#composer').inert = true;
+        try {
+          if (value.sessionId && /^[a-f0-9-]{36}$/.test(value.sessionId)) {
+            history.replaceState(null, '', '#session=' + value.sessionId);
+            const session = await linkedSession(await loadSessions());
+            if (!session) return;
+            if (current?.id !== session.id) await openSession(session);
+          } else if (current) await beginNewSession();
+          $('#prompt').value = value.text;
+          pendingFiles = (value.files || []).filter(file => file instanceof File);
+          pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
+          goalDraft = Boolean(value.goal);
+          if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
+          for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
+          if (value.edit && current?.id === value.sessionId) {
+            editingQueueId = value.edit.id; editingQueueToken = value.edit.token; editingQueueSnapshot = value.edit.snapshot;
+            renderQueueState(queueState);
+          }
+          renderAttachments(); renderGoalChip();
+          $('#prompt').dispatchEvent(new Event('input'));
+          if (Array.isArray(value.selection)) $('#prompt').setSelectionRange(...value.selection.slice(0,2));
+          $('#chat').scrollTop = Number(value.scroll) || 0;
+          $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
+        } finally { draftRestoring = false; $('#composer').inert = wasInert; }
       }
     };
     boot();

@@ -2,10 +2,20 @@
 
 export class BashKittenAgentChild extends JSWindowActorChild {
   handleEvent(event) {
-    if (event.type === "DOMContentLoaded" || event.type === "BashKittenDraftReady") {
-      this.sendAsyncMessage(event.type === "BashKittenDraftReady" ? "DraftReady" : "Ready");
+    if (event.type === "BashKittenDraftReady") {
+      this.draftChanged = false;
+      this.draftStarting = this.sendQuery("DraftReady").then(() => {
+        this.draftStarting = null;
+        return this.sendQuery("DraftChanged");
+      }).catch(error => { this.draftStarting = null; this.draftError(error); });
       return;
     }
+    if (event.type === "BashKittenDraftChanged") {
+      this.draftChanged = true;
+      if (!this.draftStarting) this.sendQuery("DraftChanged").catch(error => this.draftError(error));
+      return;
+    }
+    if (event.type === "DOMContentLoaded") { this.sendAsyncMessage("Ready"); return; }
     const principal = this.document.nodePrincipal;
     const entry = new Map(Services.cpmm.sharedData.get("BashKittenAgentContexts") || []).get(principal.originAttributes.userContextId);
     if (!entry || principal.originNoSuffix !== entry.origin || this.browsingContext !== this.browsingContext.top) return;
@@ -20,10 +30,16 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     win.wrappedJSObject.bashkittenHost = host;
   }
 
+  draftError(error) {
+    const win = this.contentWindow;
+    win?.dispatchEvent(new win.CustomEvent("BashKittenDraftError", { detail: error.message }));
+  }
+
   async receiveMessage({ name, data }) {
     const api = this.contentWindow.wrappedJSObject.bashkittenDraft;
     if (name === "CaptureDraft") return api ? Cu.cloneInto(await api.capture(), {}, { wrapReflectors: true }) : null;
     if (name === "RestoreDraft") {
+      if (this.draftChanged) return false;
       if (!api) throw new Error("The Agent document is not ready to restore its draft.");
       await api.restore(Cu.cloneInto(data, this.contentWindow, { wrapReflectors: true }));
       return { ok: true };

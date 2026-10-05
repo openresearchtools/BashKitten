@@ -227,7 +227,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     this.agentOrigin = endpoint.origin;
     this.agentLogin = onion && this.agentUsesClientCertificate && params.login === true;
     this.agentIdentity = { caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
-    BashKittenHost.configure(this.browser, this.context, this.agentOrigin);
+    BashKittenHost.configure(this.browser, this.context, this.agentOrigin, this.agentIdentity.caSha256);
     return { ready: true };
   }
   observe(subject, topic) {

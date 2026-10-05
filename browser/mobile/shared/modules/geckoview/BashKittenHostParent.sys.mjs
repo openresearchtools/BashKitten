@@ -8,6 +8,7 @@ export class BashKittenHostParent extends GeckoViewActorParent {
   async receiveMessage({ name, data }) {
     const enrollment = BashKittenHost.require(this.manager);
     if (name === "Ready") return true;
+    if (name === "DraftChanged") return BashKittenHost.captureDraft(this.browser);
     if (name === "DraftReady") return BashKittenHost.restoreDraft(this.browser);
     if (name !== "Call" || !commands.has(data?.command) ||
         typeof data.args !== "string" || data.args.length > 200000) {
