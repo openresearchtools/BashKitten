@@ -1497,6 +1497,17 @@ slices and their limits; they do not replace the manual acceptance table.
   package-drain and owned-service cleanup acceptance remain pending. No full app
   build or scripted product test was dispatched for this source slice.
 
+- Android's protected Agent now has an audio-only Gecko permission delegate for
+  Whisper dictation. It uses the existing Android RECORD_AUDIO permission and a
+  native site prompt identifying the selected Agent; there is no automatic or
+  persistent site grant. Requests must match the current protected HTTPS origin,
+  session and selected connection. Navigation, hiding/switching Agent and activity
+  destruction reject pending requests, as do camera requests and dialog failures.
+  Java 8 syntax parsing and source diff checks pass. The actual GeckoView/Android
+  integration still needs the final APK compilation and normal visible microphone
+  permission, denial, recording/cancellation and dictation acceptance checks.
+  No full app build or scripted product test was run for this source slice.
+
 Additional observed evidence, 5 October:
 
 - Android Local now has a native Display dialog wired to the private Termux

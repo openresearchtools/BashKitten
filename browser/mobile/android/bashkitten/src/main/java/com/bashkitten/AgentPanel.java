@@ -35,6 +35,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final TextView message, log, connectionStatus;
     private final LinearLayout actions;
     private GeckoSession attached;
+    private AgentMicrophone microphone;
     private String renderedState = "";
     private String connectionError = "";
     private boolean shown = true;
@@ -157,6 +158,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
         browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
         runtime.visible = agentVisible;
+        if (microphone != null) microphone.changed();
         if (runtime.session != null) runtime.session.setActive(agentVisible);
     }
     public void resume() {
@@ -173,9 +175,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         }
         layoutPanels();
     }
-    public void destroy() { destroyed = true; runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
+    public void destroy() { destroyed = true; if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override public void changed() {
+        if (microphone != null) microphone.changed();
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
         power.setEnabled(!runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
@@ -222,9 +225,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         layoutPanels();
     }
     private void bindSession(GeckoSession session) {
+        if (microphone != null) microphone.close();
+        final AgentMicrophone microphonePermission = new AgentMicrophone(activity, runtime, session);
+        microphone = microphonePermission;
+        session.setPermissionDelegate(microphonePermission);
         final String[] currentLocation = {""};
         session.setNavigationDelegate(new GeckoSession.NavigationDelegate() {
             @Override public void onLocationChange(GeckoSession s, String address, List<GeckoSession.PermissionDelegate.ContentPermission> permissions, Boolean hasUserGesture) {
+                microphonePermission.navigated();
                 currentLocation[0] = address == null ? "" : address;
             }
             @Override public GeckoResult<AllowOrDeny> onLoadRequest(GeckoSession s, LoadRequest request) {
@@ -272,6 +280,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         });
         session.setProgressDelegate(new GeckoSession.ProgressDelegate() {
             @Override public void onPageStart(GeckoSession s, String uri) {
+                microphonePermission.navigated();
                 if (s != runtime.session || !runtime.isOnRequested() || "about:blank".equals(uri)) return;
                 connectionError = ""; connectionStatus.setVisibility(VISIBLE); changed();
             }
@@ -343,6 +352,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         return true;
     }
     public void permissionResult(int request) {
+        if (request == AgentMicrophone.REQUEST) {
+            if (microphone != null) microphone.permissionResult();
+            return;
+        }
         if (request != TERMUX_PERMISSION) return;
         runtime.permissionRequestInFlight = false;
         if (runtime.termux.permissionGranted()) { if (runtime.isOnRequested()) runtime.turnOn(); }
