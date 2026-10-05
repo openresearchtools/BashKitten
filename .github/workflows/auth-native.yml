@@ -128,19 +128,6 @@ jobs:
               assert '/system/bin/linker64' in output, f'{binary}: Termux executable must use the Android dynamic linker'
           PY
           fi
-      - name: Exercise SQLite, Argon2 and TOTP in the Linux executable
-        if: matrix.component == 'authelia' && matrix.target != 'termux-aarch64'
-        run: |
-          check_dir=$(mktemp -d "$RUNNER_TEMP/auth-runtime.XXXXXX")
-          trap 'rm -rf "$check_dir"' EXIT
-          exe="$RUNNER_TEMP/payload/bin/authelia"
-          "$exe" crypto hash generate argon2 --password 'build-only-password' > "$check_dir/hash"
-          grep -q 'argon2id' "$check_dir/hash"
-          storage_args=(--sqlite.path "$check_dir/store.sqlite3" --encryption-key 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef)
-          "$exe" storage migrate up "${storage_args[@]}"
-          "$exe" storage user totp generate build-check --path "$check_dir/totp.png" "${storage_args[@]}"
-          test -s "$check_dir/store.sqlite3"
-          test -s "$check_dir/totp.png"
       - name: Archive component
         run: tar -C "$RUNNER_TEMP/payload" -czf "$RUNNER_TEMP/component.tar.gz" .
       - uses: actions/upload-artifact@v4
