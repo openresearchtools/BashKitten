@@ -210,7 +210,6 @@ jobs:
         name: android-gradle-outputs
         path: ${{ runner.temp }}/gradle-outputs.tar.zst
         compression-level: 0
-        retention-days: 3
         if-no-files-found: error
     - name: Upload Gradle timing report
       if: always() && steps.component.outputs.hit != 'true'
