@@ -294,7 +294,7 @@ async function handler(req, res) {
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
     }
     if (route === '/api/dictation/capability') {
-      requireMethod(req, ['GET']); return json(res, await controlRequest('whisper-capability'));
+      requireMethod(req, ['GET']); return json(res, await controlRequest('whisper-capability', {}));
     }
     if (route === '/api/dictation') {
       requireMethod(req, ['POST']);

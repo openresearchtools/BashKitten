@@ -1775,3 +1775,17 @@ Whitespace and the existing member/call-path source checks passed. Native
 compilation and manual verification of this correction remain pending. The
 guest-wide capture's UDP traffic to `8.8.8.8:443` is not attributed to BashKitten
 or this path; no runtime leak claim is made from that capture.
+
+### 5 October dictation capability request correction
+
+Installed desktop `d773ea374f` saved the real Whisper model successfully, but the
+chat microphone stayed hidden, including after Agent Off/On. The HTTP capability
+handler omitted the private controller request body, causing a GET; that controller
+requires POST for every operation except status. Passing the empty command body
+uses its existing protocol. The public capability endpoint remains authenticated
+and read-only. JavaScript syntax and whitespace checks pass; installed microphone
+and transcription acceptance still require the rebuilt package.
+
+The shipped pristine Whisper `927cfce34f31707e17f2bff35c349632fb9e2c3a` source sets
+server `no_context` to true and passes it into inference, which clears both prior
+prompt buffers. No upstream patch or extra request flag is needed for that contract.
