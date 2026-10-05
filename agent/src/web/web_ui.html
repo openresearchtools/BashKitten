@@ -223,40 +223,15 @@
     .folder-field { display: flex; gap: 6px; align-items: center; }
     .folder-field input { min-width: 0; flex: 1; }
     .folder-field button { flex: 0 0 auto; margin-top: 5px; }
-    .model-folder-row, .local-model-row { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
-    .model-folder-row > span, .local-model-description { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-    .local-model-description strong { font-size: 12px; font-weight: 500; }
-    .local-model-description .meta { margin: 3px 0 0; font-size: 11px; }
-    .local-model-row button, .model-folder-row button { flex: 0 0 auto; }
-    .model-list { max-height: 380px; overflow: auto; }
-    #modelRepository, #modelSearchResults { scroll-margin-top: 64px; }
     .settings-section { padding: 18px 0; border-top: 1px solid var(--line-soft); margin-top: 18px; }
     .settings-section > summary { font-weight: 500; }
     .settings-page label { display: block; margin: 11px 0; color: var(--muted); font-size: 12px; }
     .settings-page input, .settings-page select, .settings-page textarea { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); background: var(--surface); }
     .settings-page .check-label { display: flex; align-items: center; gap: 7px; }
     .settings-page .check-label input { width: auto; margin: 0; }
-    .model-download { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
-    .model-download strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
-    .model-download p { margin: 5px 0; overflow-wrap: anywhere; }
-    .model-search-row { display: flex; gap: 7px; align-items: center; }
-    .model-search-row input { min-width: 0; flex: 1; margin: 0; }
-    .model-search-row button { flex-shrink: 0; }
-    #modelSearchResults { margin-top: 12px; }
-    .settings-page .model-result { display: block; width: 100%; text-align: left; margin: 4px 0; background: transparent !important; }
-    .model-result strong, .model-result span { display: block; overflow-wrap: anywhere; }
-    .model-result span { color: var(--muted); font-size: 11px; margin-top: 4px; }
-    .model-file { display: flex !important; gap: 9px; align-items: center; margin: 0 !important; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
-    .model-file input { width: auto; margin: 0; flex-shrink: 0; }
-    .model-file > span { flex: 1; min-width: 0; color: var(--text); overflow-wrap: anywhere; }
-    .model-file small { display: block; margin-top: 4px; color: var(--muted); }
-    .model-download progress { display: block; width: 100%; height: 6px; margin: 8px 0; accent-color: var(--muted); }
     progress { border-radius: var(--radius-small); overflow: hidden; }
     progress::-moz-progress-bar { border-radius: inherit; }
     progress::-webkit-progress-bar, progress::-webkit-progress-value { border-radius: inherit; }
-    .model-download details { margin: 8px 0; color: var(--muted); font-size: 11px; }
-    .model-download details p { margin: 4px 0; }
-    #modelRepositoryTitle { overflow-wrap: anywhere; }
     .chat-inner { width: min(790px, calc(100% - 44px)); min-height: 100%; margin: 0 auto; padding: 24px 0 28px; }
     .welcome { display: grid; min-height: calc(100dvh - 260px); place-content: center; color: var(--muted); text-align: center; }
     .welcome .cat { width: 64px; height: 64px; margin: 0 auto 12px; background: url('/logo.png') center / contain no-repeat; font-size: 0; }
@@ -591,8 +566,6 @@
       #folderLabel { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       #model { width:145px; }
       .settings-grid { grid-template-columns:1fr; }
-      .model-search-row { flex-wrap: wrap; }
-      .model-search-row input { flex-basis: 100%; }
       #composerWrap { padding-bottom:max(8px,env(safe-area-inset-bottom)); }
       .chat-inner { width:calc(100% - 24px); }
     }
@@ -881,8 +854,7 @@
     function requireLogin() {
       authRequired = true;
       csrf = '';
-      clearTimeout(modelDownloadTimer);
-      $('#modelToken').value = '';
+      void cancelDictation();
       source?.close(); source = null;
       filePolicyEvents?.close(); filePolicyEvents = null;
       applyFilePermission(false);
@@ -2193,8 +2165,6 @@
 
     function showChatView() {
       if(diffPath)closeFileDiff();
-      clearTimeout(modelDownloadTimer);
-      $('#modelToken').value = '';
       $('#settingsView').classList.add('hidden');
       $('#chat').classList.remove('hidden');
       $('#composerWrap').classList.remove('hidden');
