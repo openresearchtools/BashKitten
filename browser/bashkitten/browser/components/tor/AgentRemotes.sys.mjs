@@ -100,6 +100,7 @@ class AgentRemoteStore {
   writes = Promise.resolve();
   contexts = new Map();
   clients = new Map();
+  importToPi = null;
 
   get crypto() { return Cc["@mozilla.org/login-manager/crypto/SDR;1"].getService(Ci.nsILoginManagerCrypto); }
   get trust() { return Cc["@mozilla.org/security/certoverride;1"].getService(Ci.nsICertOverrideService); }
@@ -123,6 +124,19 @@ class AgentRemoteStore {
           entry.userContextId > CONTEXT_MAX || ids.has(entry.userContextId)) throw new Error("Invalid isolated remote context.");
       entry.url = validateURL(entry.url, entry.id === "local");
       certificate(entry.caPem, entry.caSha256); ids.add(entry.userContextId);
+      if (entry.mappings !== undefined && (!entry.mappings || typeof entry.mappings !== "object" || Array.isArray(entry.mappings))) {
+        throw new Error("Invalid saved service mappings.");
+      }
+      for (const [id, choice] of Object.entries(entry.mappings || {})) {
+        if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id) || id === "agent" || !choice ||
+            typeof choice.enabled !== "boolean" || !Number.isInteger(choice.port) || choice.port < 0 || choice.port > 65535 ||
+            choice.context !== undefined && (!TorRouting.isServiceContext(choice.context) || ids.has(choice.context)) ||
+            choice.importToPi !== undefined && typeof choice.importToPi !== "boolean" ||
+            choice.apiKey !== undefined && (typeof choice.apiKey !== "string" || /[\r\n\0]/.test(choice.apiKey))) {
+          throw new Error("Invalid saved service mapping.");
+        }
+        if (choice.context !== undefined) ids.add(choice.context);
+      }
     }
     this.entries = new Map(entries.map(entry => [entry.id, entry]));
     Services.obs.addObserver(this, "http-on-modify-request");
@@ -151,7 +165,7 @@ class AgentRemoteStore {
     return { id: entry.id, name: entry.name, kind: "agent", url: entry.url,
       userContextId: entry.userContextId, identity: entry.caSha256,
       active: entry.id === this.activeId, state: owner?.state || "disconnected",
-      error: owner?.error || "", migrationRequired: entry.id !== "local" && !entry.bundle };
+      error: owner?.error || owner?.servicesError || "", migrationRequired: entry.id !== "local" && !entry.bundle };
   }
   async list() { return [...(await this.load()).values()].filter(entry => !["local", "local-hosting"].includes(entry.id)).map(entry => this.info(entry)); }
   async connection(id) {
@@ -186,6 +200,7 @@ class AgentRemoteStore {
         if (previous && (previous.caSha256 !== identity || previous.bundle && previous.bundle.id !== bundle.id)) {
           throw new Error("This server's identity changed. Remove its previous enrollment before adding the replacement.");
         }
+        if (previous) await this.disconnect(previous.id);
         const entry = { id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1), kind: "agent",
           name: bundle.name, url, bundle, caPem: browser.identity.caPem, caSha256: identity, instanceId: bundle.id,
           clientAuthorization: onionPrivateKey(bundle.tor_private),
@@ -211,7 +226,7 @@ class AgentRemoteStore {
     this.activeId = id;
     await this.serialized(() => this.prepare(entry));
     if (selection !== this.selection) {
-      if (id !== "local" && !this.clients.has(id)) this.block(entry);
+      if (id !== "local" && this.entries.get(id) === entry && !this.clients.has(id)) this.block(entry);
       throw new Error("The Agent selection changed.");
     }
     this.notify(); return this.info(entry);
@@ -224,10 +239,17 @@ class AgentRemoteStore {
   }
 
   async failed(entry, owner, error) {
-    if (this.clients.get(entry.id) !== owner) return;
-    owner.abort.abort(); this.block(entry);
+    if (this.clients.get(entry.id) !== owner || owner.abort.signal.aborted) return;
+    owner.abort.abort();
     owner.state = "failed"; owner.error = error.message;
-    this.notify(); await owner.helper?.close();
+    try {
+      try { this.block(entry); } finally { await owner.helper?.close(); }
+    }
+    finally {
+      this.notify();
+      const callback = owner.callback; owner.callback = null;
+      if (this.clients.get(entry.id) === owner) callback?.(error);
+    }
   }
 
   async connect(id, password = "", forceLogin = false) {
@@ -271,7 +293,6 @@ class AgentRemoteStore {
       this.current(entry, owner);
       owner.state = "login"; this.notify(); return { connection: this.info(entry), loginURL };
     } catch (error) {
-      if (!this.clients.has(id)) this.block(entry);
       await this.failed(entry, owner, error); throw error;
     } finally { password = ""; }
   }
@@ -293,9 +314,138 @@ class AgentRemoteStore {
     const route = await owner.helper.call("agent-route");
     this.current(entry, owner);
     TorRouting.setAgentTunnel(entry.userContextId, route);
-    for (const [id, mapping] of Object.entries(entry.mappings || {})) if (mapping.enabled) await owner.helper.call("map", { id, port: mapping.port });
-    this.current(entry, owner);
     owner.state = "ready"; this.notify();
+    // A conflicting service port must not prevent the protected Agent opening.
+    try { await this.services(entry.id); }
+    catch (error) { owner.servicesError = error.message; }
+    this.current(entry, owner);
+  }
+
+  serviceOwner(id) {
+    const entry = this.entries?.get(id), owner = this.clients.get(id);
+    if (!entry || owner?.state !== "ready") throw new Error("Connect and finish sign-in to view services.");
+    this.current(entry, owner); return { entry, owner };
+  }
+
+  services(id) {
+    return this.serialized(async () => {
+      const { entry, owner } = this.serviceOwner(id);
+      const result = await owner.helper.call("services"); this.current(entry, owner);
+      if (!Array.isArray(result.services)) throw new Error("Invalid service catalogue.");
+      const offered = new Set();
+      for (const service of result.services) {
+        if (!service || typeof service.id !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(service.id) || offered.has(service.id) ||
+            typeof service.name !== "string" || typeof service.state !== "string" || typeof service.reachable !== "boolean" ||
+            !["agent", "web", "llama"].includes(service.kind) || !["http", "https"].includes(service.scheme) ||
+            typeof service.openPath !== "string" || !service.openPath.startsWith("/") || service.openPath.startsWith("//") || /[\x00-\x20\x7f\\]/.test(service.openPath) ||
+            !Array.isArray(service.actions) || service.actions.some(action => !["start", "stop", "reload"].includes(action))) {
+          throw new Error("Invalid service catalogue.");
+        }
+        offered.add(service.id);
+      }
+      owner.services = result.services; owner.servicesError = "";
+      entry.mappings ||= {};
+      for (const [id, choice] of Object.entries(entry.mappings)) {
+        if (!offered.has(id) || !choice.enabled) TorRouting.setServiceRoute(choice.context, null);
+      }
+      const mappings = await owner.helper.call("mappings"); this.current(entry, owner);
+      for (const mapped of mappings) if (mapped.id !== "agent" && (!offered.has(mapped.id) || !entry.mappings[mapped.id]?.enabled)) {
+        this.current(entry, owner);
+        TorRouting.setServiceRoute(entry.mappings[mapped.id]?.context, null);
+        await owner.helper.call("unmap", { id: mapped.id });
+      }
+      for (const service of result.services) {
+        this.current(entry, owner);
+        if (service.id === "agent") continue;
+        if (!Object.hasOwn(entry.mappings, service.id)) entry.mappings[service.id] = { enabled: true, port: 0 };
+        const choice = entry.mappings[service.id];
+        choice.context ??= TorRouting.allocateServiceContext();
+        try {
+          if (choice.enabled) {
+            const mapped = await owner.helper.call("map", { id: service.id, port: choice.port });
+            this.current(entry, owner); TorRouting.setServiceRoute(choice.context, mapped.port);
+          }
+          choice.error = "";
+        } catch (error) { this.current(entry, owner); choice.error = error.message; }
+      }
+      this.current(entry, owner); await this.save();
+      return this.serviceInfo(entry, owner, true);
+    });
+  }
+
+  async serviceInfo(entry, owner, applyImport = false) {
+    const mappings = await owner.helper.call("mappings"); this.current(entry, owner);
+    const services = [];
+    for (const service of owner.services || []) {
+      const choice = entry.mappings?.[service.id];
+      const mapped = (service.id === "agent" || choice?.enabled) ? mappings.find(item => item.id === service.id) : null;
+      if (choice) {
+        TorRouting.setServiceRoute(choice.context, mapped?.port || null);
+      }
+      if (applyImport && service.kind === "llama" && choice) {
+        choice.importState = "";
+        if (choice.importToPi) {
+          if (!mapped || !choice.enabled || !service.reachable) choice.importState = "Pi import pending: enable local access and start the service on its host.";
+          else try {
+            this.current(entry, owner);
+            const result = await this.importToPi({ enabled: true, bundle: entry.bundle.id, service: service.id,
+              name: `${entry.name} · ${service.name}`, baseUrl: `${service.scheme}://127.0.0.1:${mapped.port}/v1`, apiKey: choice.apiKey || "" });
+            this.current(entry, owner);
+            choice.importState = `${result.message} ${result.provider || ""} ${result.baseUrl || ""}`.trim();
+          } catch (error) { this.current(entry, owner); choice.importState = error.message; }
+        }
+      }
+      services.push({ ...service, choice, mapping: mapped,
+        url: service.id === "agent" ? entry.url : mapped ? `${service.scheme}://127.0.0.1:${mapped.port}${service.openPath}` : "" });
+    }
+    return { services };
+  }
+
+  saveMapping(id, serviceId, { enabled, port, importToPi = false, apiKey = "" }) {
+    return this.serialized(async () => {
+      const { entry, owner } = this.serviceOwner(id), previous = entry.mappings?.[serviceId];
+      if (!previous || serviceId === "agent" || !owner.services?.some(service => service.id === serviceId)) throw new Error("Refresh the published services first.");
+      if (typeof enabled !== "boolean" || !Number.isInteger(port) || port < 0 || port > 65535) throw new Error("Choose Automatic or a port from 1 to 65535.");
+      // Record the user's choice even when binding fails. The native client
+      // retains the existing listener; status shows both choice and actual port.
+      if (typeof importToPi !== "boolean" || typeof apiKey !== "string" || /[\r\n\0]/.test(apiKey)) throw new Error("Invalid coding-agent import settings.");
+      if (importToPi && !owner.services.some(service => service.id === serviceId && service.kind === "llama")) throw new Error("Pi import needs an inference service.");
+      const choice = { ...previous, enabled, port, importToPi, apiKey, error: "" };
+      entry.mappings[serviceId] = choice;
+      try { await this.save(); }
+      catch (error) { entry.mappings[serviceId] = previous; throw error; }
+      this.current(entry, owner);
+      try {
+        if (enabled) {
+          const mapped = await owner.helper.call("map", { id: serviceId, port });
+          this.current(entry, owner); TorRouting.setServiceRoute(choice.context, mapped.port);
+        } else {
+          TorRouting.setServiceRoute(choice.context, null);
+          await owner.helper.call("unmap", { id: serviceId });
+        }
+      } catch (error) { this.current(entry, owner); choice.error = error.message; }
+      return this.serviceInfo(entry, owner, true);
+    });
+  }
+
+  async serviceAction(id, serviceId, action) {
+    const { entry, owner } = this.serviceOwner(id);
+    if (serviceId === "agent" || !owner.services?.find(service => service.id === serviceId)?.actions.includes(action)) {
+      throw new Error("This service does not support that host action.");
+    }
+    await owner.helper.call("service-action", { id: serviceId, action }); this.current(entry, owner);
+    return this.services(id);
+  }
+
+  async openService(id, serviceId, win) {
+    const { entry, owner } = this.serviceOwner(id);
+    const info = (await this.serviceInfo(entry, owner)).services.find(service => service.id === serviceId);
+    this.current(entry, owner);
+    if (!info?.mapping || !info.choice?.enabled || serviceId === "agent") throw new Error("Enable this service's local access first.");
+    const tab = win.gBrowser.addTrustedTab(info.url, { userContextId: info.choice.context });
+    win.gBrowser.selectedTab = tab;
+    win.BashKittenAgent?.closeConnections();
+    win.BashKittenAgent?.browse();
   }
   onLogin(id, callback) {
     const owner = this.clients.get(id);
@@ -303,23 +453,32 @@ class AgentRemoteStore {
     owner.callback = callback;
   }
   async complete(entry, owner, url) {
+    this.current(entry, owner);
     owner.state = "connecting";
     try {
       await owner.helper.call("complete-login", { callback: url }); await this.ready(entry, owner);
-      owner.callback?.(null, this.info(entry));
+      this.current(entry, owner);
     } catch (error) {
-      await this.failed(entry, owner, error); owner.callback?.(error);
-    } finally { owner.callback = null; }
+      await this.failed(entry, owner, error);
+      return;
+    }
+    const callback = owner.callback; owner.callback = null;
+    callback?.(null, this.info(entry));
   }
   block(entry) {
+    for (const choice of Object.values(entry.mappings || {})) TorRouting.setServiceRoute(choice.context, null);
     TorRouting.setAgentTunnel(entry.userContextId, null);
     this.trust.clearAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId });
   }
   async disconnect(id) {
     const owner = this.clients.get(id), entry = this.entries?.get(id);
-    if (!owner) return;
-    this.clients.delete(id); owner.abort.abort(); owner.callback = null;
-    this.block(entry); await owner.helper?.close(); this.notify();
+    if (!owner) { if (entry) this.block(entry); return; }
+    owner.abort.abort(); owner.callback = null;
+    try {
+      try { this.block(entry); } finally { await owner.helper?.close(); }
+      if (this.clients.get(id) === owner) this.clients.delete(id);
+    } catch (error) { owner.state = "failed"; owner.error = error.message; throw error; }
+    finally { this.notify(); }
   }
   async deactivate(closeClients = true) {
     ++this.selection;
@@ -338,7 +497,9 @@ class AgentRemoteStore {
       this.contexts.set(entry.userContextId, null);
       this.trust.clearAgentCA(new URL(entry.url).hostname, { userContextId: entry.userContextId });
       if (id !== "local") await TorRouting.unregisterAgentContext(entry.userContextId);
-      await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern({ userContextId: entry.userContextId }, { onDataDeleted: resolve }));
+      for (const userContextId of [entry.userContextId, ...Object.values(entry.mappings || {}).map(choice => choice.context).filter(context => TorRouting.isServiceContext(context))]) {
+        await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern({ userContextId }, { onDataDeleted: resolve }));
+      }
       this.entries.delete(id); await this.save(); this.notify();
     });
   }

@@ -5,5 +5,6 @@ EXTRA_JS_MODULES += [
     "BashKittenAgentChild.sys.mjs",
     "BashKittenAgentParent.sys.mjs",
     "ServiceSettings.sys.mjs",
+    "RemoteServices.sys.mjs",
 ]
 JAR_MANIFESTS += ["jar.mn"]

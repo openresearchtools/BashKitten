@@ -4,6 +4,7 @@ import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { serviceSettings } from "resource:///modules/ServiceSettings.sys.mjs";
+import { remoteServices } from "resource:///modules/RemoteServices.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
@@ -95,7 +96,7 @@ function control(command, data = {}) {
   return operation;
 }
 async function localControl(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -165,6 +166,7 @@ class AgentView {
   }
 
   async init() {
+    AgentRemotes.importToPi = value => control("remote-pi-import", value);
     const doc = this.doc;
     this.win.windowUtils.loadSheetUsingURIString("chrome://browser/content/bashkitten/agent/agent.css", Ci.nsIStyleSheetService.AUTHOR_SHEET);
     this.pane = xul(doc, "vbox", { id: "bashkitten-agent-pane" });
@@ -808,6 +810,13 @@ class AgentView {
           await refresh(); await this.refreshRemotes();
         }));
         saved.append(item);
+        if (record.state === "ready") {
+          const services = html(this.doc, "details"), serviceBody = html(this.doc, "div");
+          services.append(html(this.doc, "summary", {}, "Services"), serviceBody); item.append(services);
+          services.addEventListener("toggle", () => {
+            if (services.open && !serviceBody.childElementCount) remoteServices(serviceBody, record.id, this.win, () => this.choose(record.id));
+          });
+        }
       }
     };
     const form = html(this.doc, "form");
