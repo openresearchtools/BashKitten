@@ -1460,6 +1460,28 @@ slices and their limits; they do not replace the manual acceptance table.
   with the `a29c5d70ff` candidate. It predates Display and desktop migration;
   completion of that build is not manual or full-feature acceptance.
 
+- Host services now have one private catalogue and native Share Local editors on
+  Android/Linux: loopback TCP/Unix target, name/type/web path, explicit executable
+  argument array/environment/working directory, remote availability, startup and
+  Start/Stop/Reload. External targets have no process controls. Definitions remain
+  outside remote file-manager access, and old HTTP-route definitions remain
+  unexposed until explicitly saved. Definition changes remove prior carriers
+  before persistence; failures remain errors without restoring another route.
+  Linux uses systemd **user scope units** so commands retain the existing native
+  guard's process ancestry (detached service units would escape that owner on
+  controller death). Termux uses the same guard with native direct execution.
+  This follows systemd's documented scope execution model; actual unit/guard
+  cleanup still needs manual verification.
+- The native service catalogue/action endpoint verifies Authelia Bearer access,
+  forwards only fixed service IDs/actions over the existing private controller
+  socket, and includes the host generation chosen at startup. Reissued or disabled
+  generations cannot execute queued requests. No client target, command, arbitrary
+  path, headers or body reaches host configuration. Shared client/mobile bindings
+  expose catalogue and action calls. Linux native and Android client source
+  compilation, changed JavaScript parsing and diff checks pass. Android/desktop
+  native UI compilation, real process/target/lifecycle checks and remote service
+  mapping cards/Pi import are pending. No full application build was dispatched.
+
 Additional observed evidence, 5 October:
 
 - Android Local now has a native Display dialog wired to the private Termux

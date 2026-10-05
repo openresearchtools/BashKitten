@@ -24,6 +24,7 @@ import androidx.lifecycle.ViewModelProvider;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import org.json.JSONObject;
+import org.json.JSONArray;
 
 import java.io.OutputStream;
 import java.util.Arrays;
@@ -71,6 +72,8 @@ public final class AgentShareActivity extends ProductActivity {
             });
             return;
         }
+        if (state.screen.equals("services")) { services(); return; }
+        if (state.screen.equals("service-edit")) { serviceEdit(); return; }
         if (state.screen.equals("account")) { account(); return; }
         if (state.screen.equals("factor")) { factor(); return; }
         JSONObject value = state.value;
@@ -96,7 +99,73 @@ public final class AgentShareActivity extends ProductActivity {
             qr.setOnClickListener(view -> saveQr()); qr.setEnabled(!state.busy);
             button("Download QR image", this::saveQr);
         }
+        button("Services", state::loadServices);
         button("Reissue identity", () -> begin(true));
+    }
+
+    private void services() {
+        button("Back to Share Local", () -> { state.screen = "status"; render(); });
+        JSONArray entries = state.services == null ? new JSONArray() : state.services.optJSONArray("services");
+        if (entries != null) for (int i = 0; i < entries.length(); i++) {
+            JSONObject service = entries.optJSONObject(i);
+            if (service == null) continue;
+            body.addView(text(service.optString("name"), 18));
+            body.addView(text(service.optString("state") + " · " + (service.optBoolean("reachable") ? "Target reachable" : "Target unavailable"), 14));
+            if (!service.optString("error").isEmpty()) body.addView(text(service.optString("error"), 14));
+            if (service.optBoolean("savedForNextStart")) body.addView(text("Saved command applies on Reload.", 14));
+            JSONArray actions = service.optJSONArray("actions");
+            if (actions != null) for (int j = 0; j < actions.length(); j++) {
+                String action = actions.optString(j);
+                button(action.equals("start") ? "Start" : action.equals("stop") ? "Stop" : "Reload", () -> {
+                    Runnable send = () -> state.serviceAction(service.optString("id"), action);
+                    if (action.equals("reload")) new MaterialAlertDialogBuilder(this).setTitle("Reload service?")
+                        .setMessage("Restart with the saved command? Active streams will end.").setNegativeButton("Cancel", null)
+                        .setPositiveButton("Reload", (dialog, which) -> send.run()).show();
+                    else send.run();
+                });
+            }
+            button("Edit", () -> { state.editService(service); render(); });
+            button("Remove", () -> new MaterialAlertDialogBuilder(this).setTitle("Remove service?")
+                .setMessage("Stop and remove this service? Its files are kept.").setNegativeButton("Cancel", null)
+                .setPositiveButton("Remove", (dialog, which) -> state.removeService(service.optString("id"))).show());
+            if (!service.optString("output").isEmpty()) button("Output", () -> new MaterialAlertDialogBuilder(this)
+                .setTitle(service.optString("name")).setMessage(service.optString("output")).setPositiveButton("Close", null).show());
+        }
+        button("Add service", () -> { state.editService(new JSONObject()); render(); });
+        button("Refresh", state::loadServices);
+    }
+
+    private void serviceEdit() {
+        serviceField("Name", "name", false);
+        serviceField("Target — loopback address:port or /absolute/socket", "target", false);
+        serviceField("Web scheme: http or https", "scheme", false);
+        serviceField("Opening path", "openPath", false);
+        serviceField("Type: web or llama", "kind", false);
+        serviceCheck("Available remotely", "enabled");
+        body.addView(text("An external service needs no launch command. For an owned service, enter an absolute executable and arguments as a JSON array. Shell syntax needs an explicit Termux shell command.", 14));
+        serviceField("Launch command (JSON array)", "argv", true);
+        serviceField("Working directory", "cwd", false);
+        serviceField("Environment (JSON object)", "env", true);
+        serviceCheck("Launch on startup", "startup");
+        button("Save changes", state::saveService);
+        button("Cancel", () -> { state.draft = null; state.screen = "services"; render(); });
+    }
+    private void serviceField(String label, String key, boolean multiline) {
+        EditText input = new EditText(this); input.setHint(label); input.setText(state.draft.optString(key));
+        input.setSaveEnabled(false); input.setFreezesText(false); input.setEnabled(!state.busy);
+        input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        if (multiline) { input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE); input.setMaxLines(4); }
+        else input.setSingleLine();
+        body.addView(input);
+        input.addTextChangedListener(new TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+            public void onTextChanged(CharSequence s, int start, int before, int count) { state.draftValue(key, s.toString()); }
+            public void afterTextChanged(Editable value) {}
+        });
+    }
+    private void serviceCheck(String label, String key) {
+        CheckBox input = new CheckBox(this); input.setText(label); input.setChecked(state.draft.optBoolean(key)); input.setEnabled(!state.busy);
+        input.setOnCheckedChangeListener((button, checked) -> state.draftValue(key, checked)); body.addView(input);
     }
 
     private void begin(boolean reissue) {
@@ -218,7 +287,7 @@ public final class AgentShareActivity extends ProductActivity {
     public static final class ShareState extends ViewModel {
         final MutableLiveData<Integer> changes = new MutableLiveData<>(0);
         AgentRuntime runtime;
-        JSONObject value;
+        JSONObject value, services, draft;
         String screen = "status", error = "", progress = "", username = "", password = "", confirmation = "", code = "", export;
         boolean loaded, busy, reissue, allowFiles, closed, missingPackages;
         void notifyChanged() { if (!closed) changes.setValue(changes.getValue() + 1); }
@@ -233,6 +302,44 @@ public final class AgentShareActivity extends ProductActivity {
             }, this::failed);
         }
         void status(JSONObject result) { value = result; loaded = true; screen = "status"; code = ""; }
+        void loadServices() { run("service-status", new JSONObject(), false, this::serviceStatus); }
+        void serviceStatus(JSONObject result) { services = result; draft = null; screen = "services"; }
+        void editService(JSONObject service) {
+            try {
+                JSONObject command = service.optJSONObject("command"), target = service.optJSONObject("target");
+                draft = new JSONObject().put("id", service.optString("id")).put("name", service.optString("name"))
+                    .put("target", target == null ? "" : target.optString("address"))
+                    .put("scheme", service.optString("scheme", "http")).put("openPath", service.optString("openPath", "/"))
+                    .put("kind", service.optString("kind", "web")).put("enabled", service.optBoolean("enabled", true))
+                    .put("startup", service.optBoolean("startup")).put("argv", command == null ? "" : command.getJSONArray("argv").toString())
+                    .put("cwd", command == null ? "" : command.optString("cwd"))
+                    .put("env", command == null ? "{}" : command.optJSONObject("env").toString());
+                screen = "service-edit"; error = "";
+            } catch (Exception failure) { failed("The service definition could not be opened."); }
+        }
+        void draftValue(String key, Object value) {
+            try { if (draft != null) draft.put(key, value); } catch (Exception failure) { failed("The edit could not be retained."); }
+        }
+        void saveService() {
+            try {
+                JSONObject service = new JSONObject(draft.toString());
+                String address = service.getString("target"), argv = service.getString("argv");
+                service.put("target", new JSONObject().put("network", address.startsWith("/") ? "unix" : "tcp").put("address", address));
+                if (service.optString("id").isEmpty()) service.remove("id");
+                service.put("command", argv.trim().isEmpty() ? JSONObject.NULL : new JSONObject().put("argv", new JSONArray(argv))
+                    .put("cwd", service.getString("cwd")).put("env", new JSONObject(service.getString("env"))));
+                service.remove("argv"); service.remove("cwd"); service.remove("env");
+                run("service-save", new JSONObject().put("service", service).put("revision", services.getString("revision")), false, this::serviceStatus);
+            } catch (Exception failure) { failed("Use a JSON array for the command and a JSON object for its environment."); }
+        }
+        void removeService(String id) {
+            try { run("service-remove", new JSONObject().put("id", id).put("revision", services.getString("revision")), false, this::serviceStatus); }
+            catch (Exception failure) { failed("Refresh services before removing this entry."); }
+        }
+        void serviceAction(String id, String action) {
+            try { run("service-action", new JSONObject().put("id", id).put("action", action), !action.equals("stop"), this::serviceStatus); }
+            catch (Exception failure) { failed("The service action could not be prepared."); }
+        }
         void begin() {
             if (!password.equals(confirmation)) { error = "The passwords do not match."; notifyChanged(); return; }
             try {
@@ -278,7 +385,7 @@ public final class AgentShareActivity extends ProductActivity {
         }
         @Override protected void onCleared() {
             closed = true; cancel(value);
-            password = confirmation = code = username = ""; value = null; export = null;
+            password = confirmation = code = username = ""; value = services = draft = null; export = null;
         }
     }
 }

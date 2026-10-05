@@ -133,5 +133,9 @@ func (c *Connection) Mappings() (string, error) {
 	data, err := json.Marshal(c.client.Mappings())
 	return string(data), err
 }
+func (c *Connection) Services() ([]byte, error) { return c.client.Services(context.Background()) }
+func (c *Connection) ServiceAction(id, action string) ([]byte, error) {
+	return c.client.ServiceAction(context.Background(), id, action)
+}
 func (c *Connection) Close()        { c.client.Close() }
 func (c *Connection) Logout() error { return c.client.Logout(context.Background()) }

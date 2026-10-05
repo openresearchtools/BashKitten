@@ -157,6 +157,7 @@ func (p *pipe) action(r request) (any, error) {
 		Callback     string          `json:"callback"`
 		ID           string          `json:"id"`
 		Port         int             `json:"port"`
+		Action       string          `json:"action"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(r.Params))
 	decoder.DisallowUnknownFields()
@@ -213,6 +214,12 @@ func (p *pipe) action(r request) (any, error) {
 		return true, nil
 	case "mappings":
 		data, err := c.Mappings()
+		return json.RawMessage(data), err
+	case "services":
+		data, err := c.Services()
+		return json.RawMessage(data), err
+	case "service-action":
+		data, err := c.ServiceAction(value.ID, value.Action)
 		return json.RawMessage(data), err
 	case "agent-route":
 		if p.gateway != nil {

@@ -13,6 +13,7 @@ import { accessDir, runDir, paths, binary } from './paths.mjs';
 import { authEnvironment, renderAuthelia, accountStatus, authCall } from './accounts.mjs';
 import { unixRequest, command } from './io.mjs';
 import { NativeTunnel } from './tunnel.mjs';
+import { HostedServices } from './hosting.mjs';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const backendScript = fileURLToPath(new URL('../http/server.mjs', import.meta.url));
@@ -21,7 +22,7 @@ const untrusted = ['Remote-User', 'Remote-Groups', 'Remote-Email', 'Remote-Name'
 function proxyHeaders() { return 'header_up X-Forwarded-For 127.0.0.1\nheader_up X-Forwarded-Host {http.request.hostport}\nheader_up X-Forwarded-Proto https'; }
 
 export class AccessStack {
-  constructor({ fatal } = {}) { this.fatal = fatal; this.children = []; this.info = null; this.stopping = false; this.ready = false; }
+  constructor({ fatal } = {}) { this.fatal = fatal; this.children = []; this.info = null; this.stopping = false; this.ready = false; this.services = new HostedServices(this); }
   async start() {
     if (this.ready) return this.info;
     this.stopping = false;
@@ -231,7 +232,7 @@ reverse_proxy ${quote('unix/' + paths.auth)} {
 ${proxyHeaders()}
 }
 }
-@carrier path /tunnel/*
+@carrier path /tunnel/* /services /services/*
 handle @carrier {
 route {
 request_header -Cookie

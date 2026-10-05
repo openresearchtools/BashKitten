@@ -25,7 +25,7 @@ import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManag
 import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
 import { TermuxDisplay } from './platform/termux/display.mjs';
 
-export const controlSocket = path.join(dataDir, 'run/control.sock');
+export const controlSocket = paths.control;
 const stateFile = path.join(dataDir, 'control.json');
 const script = fileURLToPath(import.meta.url);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -192,6 +192,7 @@ async function serve() {
     try {
       await acquireWake();
       await stack.start();
+      await stack.services.startup();
       if (platform === 'linux') await startManagedLlama();
     } catch (error) {
       lastError = error.message; state.web = false;
@@ -210,11 +211,13 @@ async function serve() {
     // final descendant cleanup.
     const workerError = await stopWorkers().then(() => null, error => error);
     const displayError = display ? await display.stop().then(() => null, error => error) : null;
+    const serviceError = await stack.services.stopAll().then(() => null, error => error);
     if (platform === 'linux') await stopManagedLlama();
     await stack.stop();
     await releaseWake();
     if (workerError) throw workerError;
     if (displayError) throw displayError;
+    if (serviceError) throw serviceError;
   }
   async function turnOff(error = null) {
     state.web = false; stopping = true;
@@ -278,6 +281,18 @@ async function serve() {
     if (command === 'share-cancel') return remote.cancelSetup(value);
     if (command === 'share-publish') return remote.setEnabled(value.enabled);
     if (command === 'share-files') return remote.setFileManager(value.allowed);
+    if (command === 'service-status') return stack.services.status();
+    if (command === 'service-save') return stack.services.save(value);
+    if (command === 'service-remove') return stack.services.remove(value);
+    if (command === 'service-action') {
+      if (!stack.ready || stopping) throw Error('Turn on Local before controlling a service');
+      return stack.services.action(value);
+    }
+    if (command === 'remote-services' || command === 'remote-service-action') {
+      const published = await remote.state();
+      if (!stack.ready || stopping || !stack.tunnelStarted || !published.enabled || published.id !== value.generation) throw Error('Remote services are not available');
+      return command === 'remote-services' ? stack.services.status({ remote: true }) : stack.services.action(value, { remote: true });
+    }
     if (command === 'package-inventory') return packageInventory();
     if (command === 'notifications') return { notifications: await pendingNotifications() };
     if (command === 'notification-settings') return notificationSettings(value.settings);
@@ -340,7 +355,10 @@ async function serve() {
         await syncManagedLlamaProvider(current);
         return json(res, { ...current, state: 'ready', model: connection.model, url: connection.url });
       }
-      const operation = serial.then(() => action(req.url.slice(1), value)); serial = operation.catch(() => {});
+      const operation = serial.then(() => {
+        if (res.destroyed) throw Error('Native request cancelled');
+        return action(req.url.slice(1), value);
+      }); serial = operation.catch(() => {});
       json(res, await operation);
     } catch (error) { json(res, { error: error.message, code: error.code }, 400); }
   });

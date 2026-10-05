@@ -75,11 +75,12 @@ export class RemoteAccess {
     if (!(await this.state()).enabled) return;
     if (this.stack.tunnelStarted) return;
     const keys = await this.identity(), host = await this.hostname();
-    const result = await this.stack.tunnel.call('start', { socket: paths.tunnel, auth_socket: paths.auth, onion: host, key: keys.host_key });
+    const result = await this.stack.tunnel.call('start', { socket: paths.tunnel, auth_socket: paths.auth, control_socket: paths.control, generation: keys.id, onion: host, key: keys.host_key });
     if (result.fingerprint !== keys.fingerprint) throw Error('The Chisel host identity changed');
     // Agent still reaches the remote authenticated TLS listener, never Local.
     await this.stack.tunnel.call('service-set', { id: 'agent', network: 'tcp', address: '127.0.0.1:' + this.stack.remotePort });
     this.stack.tunnelStarted = true;
+    await this.stack.services.publish();
   }
   cancelPending() {
     if (this.pending) { clearTimeout(this.pending.timer); this.pending.password.fill(0); this.pending = null; }

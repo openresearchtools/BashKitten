@@ -25,26 +25,29 @@ import (
 )
 
 type Config struct {
-	Socket     string `json:"socket"`
-	AuthSocket string `json:"auth_socket"`
-	Onion      string `json:"onion"`
-	Key        string `json:"key"`
+	Socket        string `json:"socket"`
+	AuthSocket    string `json:"auth_socket"`
+	ControlSocket string `json:"control_socket"`
+	Generation    string `json:"generation"`
+	Onion         string `json:"onion"`
+	Key           string `json:"key"`
 }
 
 type Host struct {
-	Tunnel *tunnel.Server
-	server *http.Server
-	auth   *http.Transport
-	done   chan error
+	Tunnel  *tunnel.Server
+	server  *http.Server
+	auth    *http.Transport
+	control *http.Transport
+	done    chan error
 }
 
 // Start never deletes an existing listener or chooses another socket. The
 // controller must reconcile its previously owned process before starting us.
 func Start(c Config) (*Host, error) {
-	if !regexp.MustCompile(`^[a-z2-7]{56}\.onion$`).MatchString(c.Onion) {
+	if !regexp.MustCompile(`^[a-z2-7]{56}\.onion$`).MatchString(c.Onion) || !regexp.MustCompile(`^[a-f0-9]{48}$`).MatchString(c.Generation) {
 		return nil, errors.New("an exact v3 onion is required")
 	}
-	for _, socket := range []string{c.Socket, c.AuthSocket} {
+	for _, socket := range []string{c.Socket, c.AuthSocket, c.ControlSocket} {
 		if !filepath.IsAbs(socket) || filepath.Clean(socket) != socket || strings.ContainsRune(socket, 0) {
 			return nil, errors.New("an absolute private socket path is required")
 		}
@@ -108,8 +111,15 @@ func Start(c Config) (*Host, error) {
 		listener.Close()
 		return nil, errors.New("cannot protect the private tunnel socket")
 	}
-	h := &Host{Tunnel: relay, auth: transport, done: make(chan error, 1), server: &http.Server{
-		Handler: relay, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
+	control := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", c.ControlSocket)
+	}}
+	mux := http.NewServeMux()
+	mux.Handle("/tunnel/", relay)
+	mux.Handle("/services", serviceControl(authorize, control, c.Generation))
+	mux.Handle("/services/", serviceControl(authorize, control, c.Generation))
+	h := &Host{Tunnel: relay, auth: transport, control: control, done: make(chan error, 1), server: &http.Server{
+		Handler: mux, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
 	}}
 	go func() { h.done <- h.server.Serve(listener) }()
 	return h, nil
@@ -122,4 +132,5 @@ func (h *Host) Close() {
 	h.Tunnel.Close()
 	h.server.Close()
 	h.auth.CloseIdleConnections()
+	h.control.CloseIdleConnections()
 }

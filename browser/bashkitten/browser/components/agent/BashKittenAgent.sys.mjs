@@ -2,6 +2,7 @@
 
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
+import { serviceSettings } from "resource:///modules/ServiceSettings.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
@@ -56,7 +57,7 @@ async function readPipe(pipe) {
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "local-session", "project-root", "native-file"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -647,6 +648,11 @@ class AgentView {
       const save = button("", download); save.setAttribute("aria-label", "Download QR image"); save.append(qr);
       body.append(save, button("Download QR image", download));
       body.append(button("Reissue identity", () => account(true)));
+      const services = html(this.doc, "details"); services.append(html(this.doc, "summary", {}, "Services"));
+      const serviceBody = html(this.doc, "div"); services.append(serviceBody); body.append(services);
+      services.addEventListener("toggle", () => {
+        if (services.open && !serviceBody.hasChildNodes()) serviceSettings(serviceBody, control, this.win).catch(failure => { error.textContent = failure.message; });
+      });
     };
     const account = reissue => {
       if (reissue && !Services.prompt.confirm(this.win, "Reissue identity?", "Disconnect all old clients and replace the remote account, authenticator and connection keys? Local chats and provider logins are kept.")) return;

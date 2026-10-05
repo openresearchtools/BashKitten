@@ -9,6 +9,7 @@ export const runDir = path.join(dataDir, 'run');
 export const authBin = process.env.BASHKITTEN_AUTH_BIN || path.join(bundledRoot, 'auth/bin');
 export const binary = name => path.join(authBin, name);
 export const paths = {
+  control: path.join(runDir, 'control.sock'),
   users: path.join(remoteDir, 'users.yml'), config: path.join(remoteDir, 'authelia.yml'),
   database: path.join(remoteDir, 'authelia.sqlite3'), pending: path.join(remoteDir, 'enrollment.json'),
   complete: path.join(remoteDir, 'initialized.json'), qr: path.join(remoteDir, 'totp.png'),
