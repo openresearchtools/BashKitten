@@ -1367,6 +1367,21 @@ slices and their limits; they do not replace the manual acceptance table.
   workflow was synced in `a35f3cf406`; replacement parent `37272154905` / child
   `37272351099` is building `50fc9bc287` with the newer native host helper.
   These failed candidates produced no complete installable app acceptance.
+- Android now has a non-exported native Share Local page beside Local/remotes,
+  using the private Termux controller for chosen credentials, authenticator
+  verification, encrypted QR display/save, publishing, file-manager permission
+  and confirmed identity reissue. Pending credentials/factor stay only in a
+  lifecycle ViewModel across rotation; the normal Android document picker saves
+  the encrypted image. Missing Local setup uses the existing permission/battery
+  flow and Back to remote. A ready Local host can start while the selected remote
+  document remains selected, retaining whole-Agent shutdown ownership. Removed
+  the obsolete Android Local account/enrollment UI; older backend authentication
+  modes now ask for a package update instead of invoking removed commands.
+  Cancellation on both platforms is tied to the actual setup ID. Native bridge
+  timeouts now cover the controller's three-minute Share Local operations.
+  Changed JavaScript parses and the source diff is clean. Android compilation,
+  real enrollment/publishing, rotation/keyboard, file save and lifecycle checks
+  are pending; this source change is not a working-release claim.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

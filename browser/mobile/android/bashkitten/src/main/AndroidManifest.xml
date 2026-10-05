@@ -16,6 +16,7 @@
         android:allowBackup="false"
         android:usesCleartextTraffic="true" android:supportsRtl="true">
         <activity android:name="com.bashkitten.AgentRemotesActivity" android:exported="false" />
+        <activity android:name="com.bashkitten.AgentShareActivity" android:exported="false" />
         <receiver android:name="com.bashkitten.TermuxResultReceiver" android:exported="false" />
         <activity android:name="com.bashkitten.AgentAccessActivity" android:exported="false" />
         <activity android:name="com.bashkitten.TabOptionsActivity" android:exported="false" />

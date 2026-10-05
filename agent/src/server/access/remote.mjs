@@ -181,8 +181,14 @@ export class RemoteAccess {
       }
     });
   }
-  async cancelSetup() {
-    return this.transaction(async () => { this.cancelPending(); if (!(await this.state()).enabled) await this.stack.stopAuthentication(); return this.status(); });
+  async cancelSetup({ setupId } = {}) {
+    return this.transaction(async () => {
+      if (this.pending && this.pending.setupId === setupId) {
+        this.cancelPending();
+        if (!(await this.state()).enabled) await this.stack.stopAuthentication();
+      }
+      return this.status();
+    });
   }
   async setEnabled(enabled) {
     return this.transaction(async () => {

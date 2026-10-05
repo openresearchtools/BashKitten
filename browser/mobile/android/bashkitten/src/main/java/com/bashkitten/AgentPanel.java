@@ -6,12 +6,10 @@ import android.app.Activity;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.content.res.TypedArray;
-import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.*;
 import android.provider.MediaStore;
 import android.provider.Settings;
-import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.widget.AppCompatButton;
@@ -45,7 +43,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private boolean destroyed;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
-    private String setupId;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
     public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, Runnable openBrowserMenu) {
         super(activity); this.activity = activity; this.browser = browser;
@@ -380,7 +377,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         String description = "Starting your Agent…";
         if (state.equals("off")) description = "Agent off. Your chats and projects are saved.";
         else if (state.equals("stopping")) description = "Stopping your Agent…";
-        else if (state.equals("enroll")) description = "Create your local account and enable two-factor authentication.";
         message.setText(runtime.error.isEmpty() ? description : runtime.error);
         if (runtime.selected.equals("local") && (state.equals("setup") || state.equals("off") || state.equals("failed"))) {
             String previous = app.policies.getString("agent.lastRemote", "");
@@ -388,7 +384,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             action("Connect to remote", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class)));
         }
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) return;
-        if (state.equals("enroll")) { account(); return; }
         if (!state.equals("setup")) return;
         if (runtime.setupStep.equals("battery")) {
             if (!runtime.batteryPromptPending && runtime.batteryRequestInFlight.isEmpty()) {
@@ -455,42 +450,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         log.setText(text);
         logScroll.setVisibility(text.isEmpty() ? GONE : VISIBLE);
         if (follow && !text.isEmpty()) logScroll.post(() -> logScroll.fullScroll(View.FOCUS_DOWN));
-    }
-    private void account() {
-        EditText username = field("Username", false); EditText password = field("Password", true); actions.addView(username); actions.addView(password);
-        action("Create account", () -> {
-            try { runtime.command("account-create", new JSONObject().put("username", username.getText().toString()).put("password", password.getText().toString()), this::showFactor, this::error); password.setText(""); }
-            catch (JSONException ignored) {}
-        });
-        action("Continue enrollment", () -> {
-            try { runtime.command("account-enroll", new JSONObject().put("username", username.getText().toString()).put("password", password.getText().toString()), this::showFactor, this::error); password.setText(""); }
-            catch (JSONException ignored) {}
-        });
-    }
-    private EditText field(String hint, boolean secret) { EditText field = new EditText(activity); field.setHint(hint); field.setSingleLine(); if (secret) { field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD); field.setImportantForAutofill(IMPORTANT_FOR_AUTOFILL_NO); } return field; }
-    private void showFactor(JSONObject value) {
-        setupId = value.optString("setupId"); actions.removeAllViews();
-        String qr = value.optString("qrDataUrl");
-        try { byte[] data = android.util.Base64.decode(qr.substring(qr.indexOf(',')+1), android.util.Base64.DEFAULT); ImageView image = new ImageView(activity); image.setImageBitmap(BitmapFactory.decodeByteArray(data,0,data.length)); actions.addView(image,new LayoutParams(-1,dp(240))); } catch(Exception ignored) {}
-        TextView guide = text(); guide.setText("Add BashKitten to your authenticator, then paste or enter its six-digit code."); actions.addView(guide);
-        String secret = value.optString("secret"), otpauth = value.optString("otpauthUrl");
-        if (!secret.isEmpty()) {
-            TextView key = text(); key.setText(secret); key.setTypeface(android.graphics.Typeface.MONOSPACE); key.setTextIsSelectable(true); key.setPadding(0, dp(12), 0, dp(8)); actions.addView(key);
-            action("Copy setup key", () -> {
-                ClipData clip = ClipData.newPlainText("BashKitten authenticator setup key", secret);
-                PersistableBundle sensitive = new PersistableBundle(); sensitive.putBoolean("android.content.extra.IS_SENSITIVE", true); clip.getDescription().setExtras(sensitive);
-                ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(clip);
-                Toast.makeText(activity, "Setup key copied", Toast.LENGTH_SHORT).show();
-            });
-        }
-        Uri authenticator = Uri.parse(otpauth);
-        if ("otpauth".equals(authenticator.getScheme()) && "totp".equals(authenticator.getHost()))
-            action("Open authenticator", () -> {
-                try { activity.startActivity(new Intent(Intent.ACTION_VIEW, authenticator)); }
-                catch (ActivityNotFoundException error) { error("No authenticator app is installed. Add this account in an authenticator using the setup key or QR code."); }
-            });
-        EditText code = field("Authenticator code", false); code.setInputType(InputType.TYPE_CLASS_NUMBER); actions.addView(code);
-        action("Verify and continue", () -> { try { runtime.command("account-totp", new JSONObject().put("setupId",setupId).put("code",code.getText().toString()), result -> runtime.refresh(),this::error); } catch(JSONException ignored) {} });
     }
     private void downloadTermux() {
         message.setText("Finding the official Termux release…");

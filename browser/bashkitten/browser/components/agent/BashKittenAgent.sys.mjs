@@ -724,7 +724,7 @@ class AgentView {
           const request = control(reissue ? "share-reissue" : "share-setup", { username: username.value, password: password.value, allowFileManager: allow.checked });
           password.value = confirmation.value = "";
           const setup = await request;
-          if (!current()) return;
+          if (!current()) { await control("share-cancel", { setupId: setup.setupId }); return; }
           setupId = setup.setupId; form.replaceChildren();
           form.append(html(this.doc, "p", {}, "Add this account to your authenticator, then enter its six-digit code."), image(setup.qrDataUrl, "Authenticator setup QR"));
           if (setup.otpauthUrl?.startsWith("otpauth://totp/")) form.append(button("Open authenticator", async () => {
@@ -740,7 +740,8 @@ class AgentView {
       username.focus();
     };
     panel.addEventListener("close", () => {
-      body.replaceChildren(); control("share-cancel").catch(console.error);
+      body.replaceChildren();
+      if (setupId) control("share-cancel", { setupId }).catch(console.error);
     }, { once: true });
     await run(async () => render(await control("share-status")));
   }

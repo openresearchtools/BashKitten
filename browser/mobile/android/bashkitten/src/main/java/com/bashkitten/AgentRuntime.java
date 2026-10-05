@@ -264,6 +264,32 @@ public final class AgentRuntime {
         try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
         catch (Exception exception) { fail.accept("Unable to send service command."); }
     }
+    boolean shareNeedsSetup() {
+        if (!desired || !termuxSetupAttempted || !termux.permissionGranted()
+            || !termux.installationId().equals(app.policies.getString("agent.termuxInstallation", ""))) return true;
+        for (String name : new String[]{app.getPackageName(), TermuxConnection.PACKAGE}) {
+            if (!batteryDeferred.contains(name) && !batteryExempt(name)) return true;
+        }
+        return false;
+    }
+    // Native Share Local can adopt this phone's host without switching an active
+    // remote document. Missing permissions/setup use the existing Local flow.
+    void startShareLocal(Runnable done, Consumer<String> failure) {
+        if (shareNeedsSetup()) { failure.accept("Complete Local setup before publishing this device."); return; }
+        final int generation = operation;
+        recordLocalControl(true);
+        command("start", new JSONObject(), result -> {
+            if (generation != operation || !desired) { failure.accept("Agent changed while starting Share Local. Retry from its current state."); return; }
+            try {
+                JSONObject web = result.getJSONObject("web");
+                if (!web.getJSONObject("auth").optString("mode").equals("native-local"))
+                    throw new IllegalStateException("Update BashKitten packages in Termux to use account-free Local and Share Local.");
+                rememberIdentity("local", web.getJSONObject("identity"));
+                if (selected.equals("local")) { acceptStatus(result); poll(); }
+                done.run();
+            } catch (Exception error) { failure.accept(error.getMessage()); }
+        }, failure);
+    }
     private void acceptStatus(JSONObject value) {
         try {
             status = value;
@@ -306,7 +332,7 @@ public final class AgentRuntime {
                 state = "on";
             } else {
                 localSession = null;
-                state = auth != null && (!auth.optBoolean("initialized") || auth.optBoolean("enrollmentRequired")) ? "enroll" : "on";
+                throw new IllegalStateException("Update BashKitten packages in Termux to use account-free Local.");
             }
             if (isHostedSignIn() && state.equals("on")) {
                 String hostedEndpoint = localHostedRecord.getString("url");

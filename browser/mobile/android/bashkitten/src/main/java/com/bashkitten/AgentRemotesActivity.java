@@ -32,6 +32,7 @@ import java.util.Locale;
 /** Native enrollment: connection keys are never navigated to or exposed to the tab dispatcher. */
 public final class AgentRemotesActivity extends ProductActivity {
     private static final int OPEN_CONNECTION = 42;
+    private static final int SHARE_LOCAL = 43;
     private BrowserApp app;
     private LinearLayout connections, manual;
     private EditText name, address, secret;
@@ -48,6 +49,7 @@ public final class AgentRemotesActivity extends ProductActivity {
         TextView description = text("Use Agent on this device or connect privately through Tor. Remote sign-in still requires your password and second factor.", 15);
         root.addView(description);
         connections = column(); root.addView(connections);
+        button(root, "Share Local", () -> startActivityForResult(new Intent(this, AgentShareActivity.class), SHARE_LOCAL));
         TextView addTitle = text("Add a remote Agent", 20); addTitle.setPadding(0, dp(24), 0, dp(8)); root.addView(addTitle);
         button(root, "Scan QR code", () -> new IntentIntegrator(this).setCaptureActivity(OnionCaptureActivity.class)
                 .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setPrompt("Scan an Agent connection QR code")
@@ -197,6 +199,10 @@ public final class AgentRemotesActivity extends ProductActivity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == SHARE_LOCAL) {
+            if (result == RESULT_FIRST_USER) finish();
+            return;
+        }
         if (request == OPEN_CONNECTION) {
             if (result != RESULT_OK || data == null || data.getData() == null) return;
             android.net.Uri file = data.getData();

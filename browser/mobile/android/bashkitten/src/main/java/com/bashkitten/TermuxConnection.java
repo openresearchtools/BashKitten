@@ -112,7 +112,7 @@ public final class TermuxConnection {
         String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
                 + "exec '" + PREFIX + "/bin/bashkittenctl' \"$1\" --stdin; else "
                 + "printf '{\"error\":\"BashKitten packages are not installed yet.\"}' >&2; exit 1; fi";
-        long timeout = command.equals("start") || command.equals("restart") || command.equals("status") ? 120000 : 60000;
+        long timeout = command.equals("start") || command.equals("restart") || command.startsWith("share-") ? 180000 : command.equals("status") ? 120000 : 60000;
         execute(script, new String[] { command }, input, timeout, done, fail);
     }
 

@@ -262,7 +262,7 @@ async function serve() {
     if (command === 'share-setup') return remote.begin(value);
     if (command === 'share-reissue') return remote.begin(value, { reissue: true });
     if (command === 'share-confirm') return remote.confirm(value);
-    if (command === 'share-cancel') return remote.cancelSetup();
+    if (command === 'share-cancel') return remote.cancelSetup(value);
     if (command === 'share-publish') return remote.setEnabled(value.enabled);
     if (command === 'share-files') return remote.setFileManager(value.allowed);
     if (command === 'package-inventory') return packageInventory();

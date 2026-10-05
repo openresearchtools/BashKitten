@@ -38,6 +38,8 @@ dependencies {
     implementation project(':geckoview')
     implementation project(':components:support-utils')
     implementation libs.androidx.appcompat
+    implementation libs.androidx.lifecycle.viewmodel
+    implementation libs.androidx.lifecycle.livedata
     implementation libs.google.material
     implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
     implementation 'info.guardianproject:jtorctl:0.4.5.7'
