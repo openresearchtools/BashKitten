@@ -991,6 +991,21 @@
   mirror: once
 
 #---------------------------------------------------------------------------
+# Prefs starting with "bashkitten."
+#---------------------------------------------------------------------------
+
+# Native context IDs shared by Tor channel routing and direct-transport guards.
+- name: bashkitten.tor.containerId
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+- name: bashkitten.tor.persistentContainerId
+  type: RelaxedAtomicUint32
+  value: 0
+  mirror: always
+
+#---------------------------------------------------------------------------
 # Prefs starting with "beacon."
 #---------------------------------------------------------------------------
 

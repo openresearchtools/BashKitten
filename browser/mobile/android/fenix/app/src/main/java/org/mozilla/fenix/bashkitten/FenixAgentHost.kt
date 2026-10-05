@@ -68,7 +68,7 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
     }
 
     override fun create(owner: String, contextId: String): BrowserApp.Tab {
-        val privateTab = contextId.startsWith("bashkitten-tor-hosted-")
+        val privateTab = contextId.startsWith("bashkitten-tor-")
         val engine = components.core.engine.createSession(private = privateTab, contextId = contextId) as GeckoEngineSession
         val id = components.useCases.tabsUseCases.addTab(
             url = "about:blank", selectTab = false, startLoading = false,

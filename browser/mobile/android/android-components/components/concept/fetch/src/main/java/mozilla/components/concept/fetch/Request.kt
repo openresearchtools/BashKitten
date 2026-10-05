@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit
  * The feature is not support in all [Client]s, check support before using.
  * @property useOhttp Whether the request should be performed using the OHTTP library, defaults to false.
  * Currently only GeckoViewFetchClient supports it.
+ * @property contextId The GeckoView session storage and network context for the request.
  * @see [Headers.Names]
  * @see [Headers.Values]
  */
@@ -52,6 +53,7 @@ data class Request(
     val useCaches: Boolean = true,
     val private: Boolean = false,
     val useOhttp: Boolean = false,
+    var contextId: String? = null,
 ) {
     var referrerUrl: String? = null
     var conservative: Boolean = false

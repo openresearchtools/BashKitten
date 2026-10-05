@@ -465,6 +465,15 @@ nsresult WebExecutorSupport::CreateStreamLoader(
     NS_ENSURE_SUCCESS(rv, rv);
   }
 
+  if (const auto context = req->ContextId()) {
+    // Preserve the originating native tab's storage/proxy identity on resumed
+    // downloads. It is neither an HTTP header nor a page-controlled credential.
+    nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
+    auto attrs = loadInfo->GetOriginAttributes();
+    attrs.mGeckoViewSessionContextId = context->ToString();
+    loadInfo->SetOriginAttributes(attrs);
+  }
+
   if (aFlags & java::GeckoWebExecutor::FETCH_FLAGS_ANONYMOUS) {
     channel->SetLoadFlags(nsIRequest::LOAD_ANONYMOUS);
   }

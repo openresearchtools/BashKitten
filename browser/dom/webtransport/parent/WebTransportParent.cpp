@@ -59,6 +59,14 @@ void WebTransportParent::Create(
     return;
   }
 
+  if (!aPrincipal ||
+      aPrincipal->OriginAttributesRef().IsBashKittenNetworkIsolated()) {
+    aResolver(ResolveType(
+        NS_ERROR_DOM_NOT_ALLOWED_ERR,
+        static_cast<uint8_t>(WebTransportReliabilityMode::Pending)));
+    return;
+  }
+
   MOZ_DIAGNOSTIC_ASSERT(mozilla::net::gIOService);
   nsresult rv =
       mozilla::net::gIOService->NewWebTransport(getter_AddRefs(mWebTransport));

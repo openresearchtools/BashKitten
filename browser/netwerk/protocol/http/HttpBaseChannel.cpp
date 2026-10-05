@@ -6697,6 +6697,9 @@ void HttpBaseChannel::MaybeFlushConsoleReports() {
 void HttpBaseChannel::DoDiagnosticAssertWhenOnStopNotCalledOnDestroy() {}
 
 bool HttpBaseChannel::Http3Allowed() const {
+  if (mLoadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated()) {
+    return false;
+  }
   bool allowedProxyInfo =
       mProxyInfo ? (static_cast<nsProxyInfo*>(mProxyInfo.get())->IsDirect() ||
                     static_cast<nsProxyInfo*>(mProxyInfo.get())->IsHttp3Proxy())

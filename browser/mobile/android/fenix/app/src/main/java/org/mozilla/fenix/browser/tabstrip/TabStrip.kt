@@ -133,7 +133,7 @@ fun TabStrip(
     val context = LocalContext.current
     val addTabForCurrentRoute: () -> Unit = {
         val tab = browserStore.state.selectedTab
-        if (tab?.content?.private == false && tab.contextId?.startsWith("bashkitten-tor-") == true) {
+        if (tab?.contextId?.startsWith("bashkitten-tor-") == true) {
             com.bashkitten.BrowserApp.get(context).openTorTab("") {
                 android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
             }

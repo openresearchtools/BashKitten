@@ -123,7 +123,7 @@ fun createTab(
         id = id,
         content = ContentState(
             url,
-            private,
+            private || (contextId ?: parent?.contextId)?.startsWith("bashkitten-tor-") == true,
             title = title,
             securityInfo = securityInfo,
             webAppManifest = webAppManifest,

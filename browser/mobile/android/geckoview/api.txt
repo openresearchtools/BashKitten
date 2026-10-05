@@ -3306,6 +3306,7 @@ package org.mozilla.geckoview {
     field public final boolean beConservative;
     field @Nullable public final ByteBuffer body;
     field public final int cacheMode;
+    field @Nullable public final String contextId;
     field @NonNull public final String method;
     field @Nullable public final String referrer;
   }
@@ -3317,6 +3318,7 @@ package org.mozilla.geckoview {
     method @NonNull public WebRequest.Builder body(@Nullable String);
     method @NonNull public WebRequest build();
     method @NonNull public WebRequest.Builder cacheMode(int);
+    method @NonNull public WebRequest.Builder contextId(@Nullable String);
     method @NonNull public WebRequest.Builder method(@NonNull String);
     method @NonNull public WebRequest.Builder referrer(@Nullable String);
   }

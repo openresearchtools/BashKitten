@@ -40,6 +40,10 @@ const DEAD_PROXY_PORT = 9;
 const PROXY_TIMEOUT_SECONDS = 10;
 const START_ATTEMPTS = 120;
 const START_INTERVAL_MS = 250;
+const localHost = host => host === "localhost" || host.endsWith(".localhost") ||
+  host.endsWith(".local") || /^(?:127|10|0)\./.test(host) || /^169\.254\./.test(host) ||
+  /^192\.168\./.test(host) || /^172\.(?:1[6-9]|2\d|3[01])\./.test(host) ||
+  /^\[?(?:::|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i.test(host);
 
 async function readAll(pipe) {
   let output = "";
@@ -69,6 +73,7 @@ export const TorRouting = {
   _busyCount: 0,
   _lastError: "",
   _agentContexts: new Map(),
+  _serviceRoutes: new Map(),
   container: null,
   persistentContainer: null,
 
@@ -783,6 +788,28 @@ export const TorRouting = {
     Services.obs.notifyObservers(null, "net:prune-all-connections");
   },
 
+  allocateServiceContext() {
+    const id = Number(Services.prefs.getStringPref("bashkitten.remote.nextServiceContext", String(0xB4510000)));
+    if (!this.isServiceContext(id)) throw new Error("No isolated service context is available.");
+    Services.prefs.setStringPref("bashkitten.remote.nextServiceContext", String(id + 1));
+    return id;
+  },
+
+  isServiceContext(id) { return Number.isInteger(id) && id >= 0xB4510000 && id <= 0xB451FFFF; },
+
+  setServiceRoute(id, mappedPort) {
+    if (id === undefined && mappedPort === null) return;
+    if (!this.isServiceContext(id) || mappedPort !== null &&
+        (!Number.isInteger(mappedPort) || mappedPort < 1 || mappedPort > 65535)) {
+      throw new Error("Invalid service mapping.");
+    }
+    this.init();
+    if (this._serviceRoutes.get(id) !== mappedPort) {
+      this._serviceRoutes.set(id, mappedPort);
+      Services.obs.notifyObservers(null, "net:prune-all-connections");
+    }
+  },
+
   _queueAuthorization(operation) {
     const task = this._authorizationUpdates.then(operation);
     this._authorizationUpdates = task.catch(() => {});
@@ -873,7 +900,17 @@ export const TorRouting = {
   },
 
   applyFilter(channel, proxyInfo, callback) {
-    if (!this.isTorContext(channel.loadInfo?.originAttributes.userContextId)) {
+    const context = channel.loadInfo?.originAttributes.userContextId;
+    const service = this.isServiceContext(context);
+    let host = "";
+    try { host = channel.URI.asciiHost.toLowerCase().replace(/\.$/, ""); } catch {}
+    if (service && !this._serviceRoutes.get(context)) {
+      channel.cancel(Cr.NS_ERROR_CONNECTION_REFUSED);
+      callback.onProxyFilterResult(proxyInfo);
+      return;
+    }
+    const tor = this.isTorContext(context);
+    if (!tor && !host.endsWith(".onion")) {
       callback.onProxyFilterResult(proxyInfo);
       return;
     }
@@ -888,12 +925,14 @@ export const TorRouting = {
         Ci.nsIProxyInfo.TRANSPARENT_PROXY_RESOLVES_HOST, PROXY_TIMEOUT_SECONDS, null));
       return;
     }
+    const protectedHost = !agent && [...this._agentContexts.values()].some(entry =>
+      host === `${entry.address}.onion` || host.endsWith(`.${entry.address}.onion`));
     const applyTorProxy = () => {
       const isolationKey = this._isolationKey(channel);
       const torProxy = lazy.ProxyService.newProxyInfoWithAuth(
         "socks",
         "127.0.0.1",
-        this._port || DEAD_PROXY_PORT,
+        tor && !localHost(host) && !protectedHost ? this._port || DEAD_PROXY_PORT : DEAD_PROXY_PORT,
         `bashkitten-${isolationKey}`,
         isolationKey,
         "",
@@ -971,21 +1010,13 @@ export const TorRouting = {
     }
     if (topic == "http-on-modify-request") {
       const channel = subject.QueryInterface(Ci.nsIHttpChannel);
-      const torContext = this.isTorContext(
-        channel.loadInfo?.originAttributes.userContextId
-      );
-      if (!torContext && !this.isOnionURI(channel.URI)) {
-        return;
-      }
+      // Public navigations keep their Tor route. An unenrolled onion must
+      // still move from an explicitly persistent identity into private Tor.
+      if (!this.isOnionURI(channel.URI)) return;
+      const torContext = this.isTorContext(channel.loadInfo?.originAttributes.userContextId);
       const { tab, topLevel, win } = this._navigationTarget(channel.loadInfo);
-      if (
-        torContext &&
-        (!topLevel ||
-          !tab ||
-          tab.userContextId == this.contextIdForURI(channel.URI))
-      ) {
-        return;
-      }
+      if (torContext && (!topLevel || !tab ||
+          tab.userContextId == this.contextIdForURI(channel.URI))) return;
       if (tab && topLevel) {
         this.routeOnion(win, tab, channel.URI.spec, { reloadIfSame: true });
       }

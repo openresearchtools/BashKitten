@@ -1479,3 +1479,9 @@ The current delivery also includes real authenticated hosted-site browsing and
 model search/download/resume/shared-folder checks on Linux and Termux, plus the
 native Android/Linux client integration. Do not resume unrelated browser or
 performance audits; finish these features and the complete working packages.
+
+5 October routing implementation note: the Tor/service distinction and download
+context changes are recorded under “Tor routing source completion” in
+`remote-tunnel-plan.md`. Mapped services remain ordinary localhost browser tabs;
+strict Tor transport policy applies to Tor/protected Agent contexts. Native
+compilation and manual acceptance of this source slice are still pending.

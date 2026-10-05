@@ -18,7 +18,7 @@ import mozilla.components.browser.state.state.content.DownloadState
 /**
  * Internal database for saving downloads.
  */
-@Database(entities = [DownloadEntity::class], version = 6)
+@Database(entities = [DownloadEntity::class], version = 7)
 @TypeConverters(StatusConverter::class)
 internal abstract class DownloadsDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
@@ -41,6 +41,7 @@ internal abstract class DownloadsDatabase : RoomDatabase() {
                 Migrations.migration_3_4,
                 Migrations.migration_4_5,
                 Migrations.migration_5_6,
+                Migrations.migration_6_7,
             ).build().also {
                 instance = it
             }
@@ -50,6 +51,14 @@ internal abstract class DownloadsDatabase : RoomDatabase() {
 
 @Suppress("MaxLineLength", "MagicNumber")
 internal object Migrations {
+    val migration_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE downloads ADD COLUMN context_id TEXT")
+            // Older records did not retain their route. A retry must not guess
+            // DIRECT for a download which could have originated in Tor.
+            db.execSQL("UPDATE downloads SET context_id = 'bashkitten-tor-unavailable'")
+        }
+    }
     val migration_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL(

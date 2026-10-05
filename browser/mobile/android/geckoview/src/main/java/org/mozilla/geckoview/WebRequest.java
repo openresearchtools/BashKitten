@@ -44,6 +44,9 @@ public class WebRequest extends WebMessage {
    */
   public final boolean beConservative;
 
+  /** Encoded storage context used by native downloads and their resumed requests. */
+  public final @Nullable String contextId;
+
   /** The value of the Referer header for this request. */
   public final @Nullable String referrer;
 
@@ -109,6 +112,7 @@ public class WebRequest extends WebMessage {
     cacheMode = builder.mCacheMode;
     referrer = builder.mReferrer;
     beConservative = builder.mBeConservative;
+    contextId = StorageController.createSafeSessionContextId(builder.mContextId);
 
     if (builder.mBody != null) {
       body = builder.mBody.asReadOnlyBuffer();
@@ -125,6 +129,7 @@ public class WebRequest extends WebMessage {
     /* package */ int mCacheMode = CACHE_MODE_DEFAULT;
     /* package */ String mReferrer;
     /* package */ boolean mBeConservative;
+    /* package */ String mContextId;
 
     /**
      * Construct a Builder instance with the specified URI.
@@ -220,6 +225,12 @@ public class WebRequest extends WebMessage {
      */
     public @NonNull Builder referrer(final @Nullable String referrer) {
       mReferrer = referrer;
+      return this;
+    }
+
+    /** Set the native originating session's storage context for this request. */
+    public @NonNull Builder contextId(final @Nullable String contextId) {
+      mContextId = contextId;
       return this;
     }
 

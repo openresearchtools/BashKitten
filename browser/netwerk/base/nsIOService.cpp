@@ -2194,6 +2194,11 @@ nsresult nsIOService::SpeculativeConnectInternal(
     nsIInterfaceRequestor* aCallbacks, bool aAnonymous) {
   NS_ENSURE_ARG(aURI);
 
+  if ((aPrincipal &&
+       aPrincipal->OriginAttributesRef().IsBashKittenNetworkIsolated()) ||
+      (aOriginAttributes && aOriginAttributes.ref().IsBashKittenNetworkIsolated())) {
+    return NS_OK;
+  }
   if (!SchemeIsHttpOrHttps(aURI)) {
     // We don't speculatively connect to non-HTTP[S] URIs.
     return NS_OK;

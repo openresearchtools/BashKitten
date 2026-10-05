@@ -461,6 +461,12 @@ nsresult PeerConnectionImpl::Initialize(PeerConnectionObserver& aObserver,
 
   MOZ_ASSERT(NS_IsMainThread());
 
+  if (aWindow && aWindow->GetExtantDoc() &&
+      aWindow->GetExtantDoc()->NodePrincipal()->OriginAttributesRef()
+          .IsBashKittenNetworkIsolated()) {
+    return NS_ERROR_DOM_NOT_ALLOWED_ERR;
+  }
+
   mPCObserver = &aObserver;
 
   // Find the STS thread

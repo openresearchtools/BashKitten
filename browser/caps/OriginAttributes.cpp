@@ -5,6 +5,7 @@
 #include "mozilla/OriginAttributes.h"
 #include "mozilla/Assertions.h"
 #include "mozilla/Preferences.h"
+#include "mozilla/StaticPrefs_bashkitten.h"
 #include "mozilla/dom/BlobURLProtocolHandler.h"
 #include "mozilla/dom/quota/QuotaManager.h"
 #include "nsIEffectiveTLDService.h"
@@ -18,6 +19,22 @@ static const char kSourceChar = ':';
 static const char kSanitizedChar = '+';
 
 namespace mozilla {
+
+bool OriginAttributes::IsBashKittenNetworkIsolated(bool aIncludeAgent) const {
+  if (mUserContextId &&
+      (mUserContextId == StaticPrefs::bashkitten_tor_containerId() ||
+       mUserContextId == StaticPrefs::bashkitten_tor_persistentContainerId() ||
+       (aIncludeAgent && mUserContextId >= 0xB4500000 &&
+        mUserContextId <= 0xB450FFFF))) {
+    return true;
+  }
+  // GeckoView encodes native context IDs as gvctx + UTF-8 hexadecimal.
+  return StringBeginsWith(mGeckoViewSessionContextId,
+                          u"gvctx626173686b697474656e2d746f722d"_ns) ||
+         (aIncludeAgent &&
+          StringBeginsWith(mGeckoViewSessionContextId,
+                          u"gvctx626173686b697474656e2d6167656e742d75692d"_ns));
+}
 
 static void MakeTopLevelInfo(const nsACString& aScheme, const nsACString& aHost,
                              bool aForeignByAncestorContext, bool aUseSite,

@@ -33,6 +33,8 @@ internal data class DownloadEntity(
     var createdAt: Long,
     @ColumnInfo(name = "etag")
     val etag: String?,
+    @ColumnInfo(name = "context_id")
+    val contextId: String? = null,
 ) {
 
     internal fun toDownloadState(): DownloadState {
@@ -51,6 +53,7 @@ internal data class DownloadEntity(
             sessionId = null,
             createdTime = createdAt,
             etag = etag,
+            contextId = contextId,
         )
     }
 }
@@ -78,5 +81,6 @@ internal fun DownloadState.toDownloadEntity(): DownloadEntity {
         directoryPath = directoryPath,
         createdAt = createdTime,
         etag = etag,
+        contextId = contextId,
     )
 }

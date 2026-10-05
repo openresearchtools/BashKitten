@@ -1555,3 +1555,30 @@ enrollment and protected Agent/Authelia one-login path, and complete the editor
 and manager boundary's manual acceptance. Continue all remaining gates,
 including service/file-manager boundaries, Tor routing, lifetime, Display,
 LocalAI/dictation, migration and the complete verified release.
+
+### 5 October Tor routing source completion (manual verification pending)
+
+Tor contexts now keep their route for public HTTP/HTTPS assets and navigation;
+unenrolled onions move to private Tor, including from a persistent onion context.
+The shared Gecko changes prevent direct DNS/speculative connections and disable
+WebRTC, WebTransport and HTTP/3 in Tor/protected Agent contexts only. Proxy
+resolution errors cannot silently become direct requests, and Tor's rejected
+localhost routes cannot be converted into direct connections by Gecko's normal
+loopback-proxy exception. Ordinary browser/service tabs retain normal transports.
+
+Mapped-service tabs open their actual localhost endpoint in a separate cookie
+context. They have no additional browser SOCKS layer, Tor public-asset policy or
+service-only transport restrictions. Native mapping removal invalidates their
+context. The old hosted onion-subdomain trust/cookie-copy path is removed.
+
+Android uses genuine private Gecko sessions for Tor and preserves Tor when
+opening another tab. Native downloads carry the originating context through
+permission prompts, retries, database storage and GeckoView fetches. Older
+stored downloads did not record this context; their network retries fail closed
+instead of guessing a direct route. Completed files remain available, and a new
+download can be started from its original page.
+
+Node module syntax, whitespace and the upstream XPIDL parser passed for this
+source slice. Native compilation and manual Android/Linux Tor, service,
+download/retry and ordinary-browsing checks remain required; this entry is not
+an end-to-end acceptance result.

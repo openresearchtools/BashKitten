@@ -245,6 +245,7 @@ internal class EngineObserver(
             openInApp = openInApp,
             response = response,
             etag = response?.headers?.get(E_TAG),
+            contextId = store.state.findTabOrCustomTab(tabId)?.contextId,
         )
 
         dispatchAsync(

@@ -10,7 +10,6 @@ const certificates = Cc["@mozilla.org/security/certoverride;1"].getService(Ci.ns
 const certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB);
 const contextPrefix = value => "gvctx" + Array.from(new TextEncoder().encode(value), byte => byte.toString(16).padStart(2, "0")).join("");
 const protectedContext = value => String(value).startsWith(contextPrefix("bashkitten-agent-ui-"));
-const agentSources = new Map();
 
 const commands = new Set(["snapshot", "act", "read", "evaluate", "wait", "console", "clearConsole", "viewport", "diagnostics"]);
 
@@ -19,8 +18,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     BashKittenHost.register();
     this.references = new Map();
     this.agentRequests = new Set();
-    this.hostedTargets = new Set();
-    this.hostedGeneration = 0;
     this.context = this.settings.sessionContextId;
     this.browserId = this.browser.browsingContext.browserId;
     BashKittenAndroid.register(this.context, this.browserId);
@@ -29,9 +26,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
   }
   onDestroy() {
     this.destroyed = true;
-    this.clearHosted();
-    this.clearHostedTargets();
-    if (agentSources.get(this.context) === this) agentSources.delete(this.context);
     BashKittenHost.close(this.browser);
     for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
     this.agentRequests.clear();
@@ -51,8 +45,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
   }
   async request({ method, params = {} }) {
     if (method === "configure") {
-      BashKittenAndroid.configure(this.context, this.browserId, this.hostedParentHost
-        ? { ...params, identities: [], blockedParentHost: this.hostedParentHost } : params);
+      BashKittenAndroid.configure(this.context, this.browserId, params);
       return { ready: true };
     }
     if (method.startsWith("agent.")) {
@@ -68,7 +61,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (method === "agent.firstFactor") return this.firstFactor(params);
       if (method === "agent.disconnect") {
         if (this.agentHost?.endsWith(".onion")) {
-          this.clearHostedTargets();
           certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
           this.agentUsesClientCertificate = false;
           this.agentIdentity = null;
@@ -78,16 +70,10 @@ export class GeckoViewBashKitten extends GeckoViewModule {
         }
         return true;
       }
-      if (method === "agent.hostedValidate") return this.validateHosted(params);
-      if (method === "agent.hostedClear") {
-        this.clearHostedTargets();
-        return true;
-      }
       if (method !== "agent.request") throw new Error("Unsupported Agent method");
       return this.agentRequest(params);
     }
     if (protectedContext(this.context)) throw new Error("Agent views cannot be controlled");
-    if (method === "hosted.configure") return this.configureHosted(params);
     if (!commands.has(method)) throw new Error("Unsupported page method");
     const top = this.browser.browsingContext;
     let context = top;
@@ -97,10 +83,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
     const windowGlobal = context.currentWindowGlobal;
     const principal = windowGlobal?.documentPrincipal;
-    if (this.hostedParentHost && /^https?$/.test(principal?.URI?.scheme) &&
-        principal.URI.asciiHost.toLowerCase().replace(/\.$/, "") === this.hostedParentHost) {
-      throw new Error("Agent views cannot be controlled");
-    }
     const documentURI = windowGlobal?.documentURI;
     const ordinaryDocument = ["http", "https", "file", "blob", "data"].includes(documentURI?.scheme) ||
       documentURI?.spec === "about:blank";
@@ -196,10 +178,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     const cert = this.agentCertificate(identity);
     const onion = endpoint.hostname.endsWith(".onion");
     if (onion !== Boolean(params.tor)) throw new Error("Agent route does not match its enrolled endpoint");
-    if (this.agentOrigin !== endpoint.origin || this.agentIdentity?.caSha256 !== identity.caSha256 ||
-        this.agentIdentity?.instanceId !== identity.instanceId) {
-      this.clearHostedTargets();
-    }
     // The native credential stays in the protected cookie jar; it is never
     // passed to page script or to the ordinary-tab routing configuration.
     const { localSession, clientCertificate, ...routing } = params;
@@ -221,7 +199,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
         Date.now() + 400 * 86400000, { geckoViewSessionContextId: this.context },
         Ci.nsICookie.SAMESITE_STRICT, Ci.nsICookie.SCHEME_HTTPS);
     }
-    BashKittenAndroid.configure(this.context, this.browserId, { ...routing, identities: [] });
+    BashKittenAndroid.configure(this.context, this.browserId, { ...routing, identities: [], agentHost: onion ? endpoint.hostname : "" });
     if (this.agentHost && this.agentHost !== endpoint.hostname) certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
     certificates.setAgentCA(endpoint.hostname, { geckoViewSessionContextId: this.context }, cert);
     if (clientCertificate) {
@@ -243,117 +221,8 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     this.agentHost = endpoint.hostname;
     this.agentOrigin = endpoint.origin;
     this.agentIdentity = { caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
-    agentSources.set(this.context, this);
     BashKittenHost.configure(this.browser, this.context, this.agentOrigin);
     return { ready: true };
-  }
-  async validateHosted({ url }) {
-    const enrollment = BashKittenHost.require(this.browser.browsingContext.currentWindowGlobal);
-    const generation = this.hostedGeneration;
-    const target = new URL(url);
-    if (target.protocol !== "https:" || target.username || target.password || target.port ||
-        target.hash || target.search || target.pathname !== "/") throw new Error("Invalid hosted website address");
-    const current = this.browser.browsingContext.currentWindowGlobal;
-    let catalog;
-    try {
-      catalog = await this.agentFetch(this.agentOrigin, "/api/hosting?refresh=1",
-        current.documentPrincipal, current.cookieJarSettings, null, null, true);
-    } catch (error) {
-      if (/^Agent channel HTTP (401|403)$/.test(error.message)) {
-        throw new Error("Sign in to Agent to open this website");
-      }
-      throw error;
-    }
-    if (this.destroyed || this.hostedGeneration !== generation ||
-        BashKittenHost.require(this.browser.browsingContext.currentWindowGlobal) !== enrollment) {
-      throw new Error("The selected Agent changed");
-    }
-    const parentHost = catalog?.onion;
-    const label = typeof parentHost === "string" ? target.hostname.slice(0, -(parentHost.length + 1)) : "";
-    if (!catalog?.enabled || !/^[a-z2-7]{56}\.onion$/.test(parentHost) ||
-        !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) ||
-        target.hostname !== label + "." + parentHost ||
-        (this.agentHost !== "127.0.0.1" && this.agentHost !== parentHost) ||
-        !Array.isArray(catalog.services) || !catalog.services.some(site => {
-          if (!site.enabled || site.status !== "online") return false;
-          try { return new URL(site.url).href === target.href; } catch (_) { return false; }
-        })) {
-      throw new Error("This website is not enabled and reachable on the selected Agent");
-    }
-    return { url: target.href, parentHost };
-  }
-  async configureHosted(params) {
-    if (!this.browser.browsingContext.usePrivateBrowsing ||
-        typeof params.sourceContextId !== "string" || !params.sourceContextId.startsWith("bashkitten-agent-ui-") ||
-        !params.tor || !Number.isInteger(params.port) || params.port < 1 || params.port > 65535) {
-      throw new Error("A private Tor tab and protected onion Agent are required");
-    }
-    const source = agentSources.get(contextPrefix(params.sourceContextId));
-    if (!source || source.destroyed || source.agentHost !== params.parentHost ||
-        !/^[a-z2-7]{56}\.onion$/.test(params.parentHost) ||
-        source.agentIdentity?.caSha256 !== params.identity?.caSha256 ||
-        !source.agentIdentity?.instanceId || source.agentIdentity.instanceId !== params.identity?.instanceId) {
-      throw new Error("The hosted website does not match its enrolled Agent");
-    }
-    let enrollment;
-    const generation = source.hostedGeneration;
-    try { enrollment = BashKittenHost.require(source.browser.browsingContext.currentWindowGlobal); }
-    catch (_) { throw new Error("Sign in to Agent to open this website"); }
-    const validated = await source.validateHosted(params);
-    if (this.destroyed || source.destroyed || source.hostedGeneration !== generation ||
-        agentSources.get(source.context) !== source ||
-        BashKittenHost.require(source.browser.browsingContext.currentWindowGlobal) !== enrollment) {
-      throw new Error("The selected Agent changed");
-    }
-    const target = new URL(validated.url);
-    if (validated.parentHost !== params.parentHost ||
-        (this.hostedHost && this.hostedHost !== target.hostname)) throw new Error("The hosted website changed");
-    const sourceAttrs = source.browser.browsingContext.originAttributes;
-    const attrs = this.browser.browsingContext.originAttributes;
-    if (attrs.privateBrowsingId !== 1 || attrs.geckoViewSessionContextId !== this.context ||
-        sourceAttrs.geckoViewSessionContextId !== source.context) throw new Error("Hosted session isolation changed");
-    const name = "bashkitten_" + source.agentIdentity.instanceId.slice(0, 16);
-    const candidates = Services.cookies.getCookiesFromHost(params.parentHost, sourceAttrs).filter(cookie =>
-      cookie.rawHost === params.parentHost && cookie.path === "/" && cookie.name === name &&
-      cookie.isSecure && cookie.isHttpOnly && cookie.expiry > Date.now() && !cookie.isPartitioned);
-    if (candidates.length !== 1) throw new Error("Sign in to Agent to open this website");
-    const cookie = candidates[0];
-    // Trust comes from the protected session's enrolled identity, never content
-    // or a generic authenticated-onion certificate exception.
-    const cert = source.agentCertificate(source.agentIdentity);
-    this.clearHosted();
-    this.hostedParentHost = params.parentHost;
-    this.hostedHost = target.hostname;
-    this.hosted = { source, parentHost: params.parentHost, host: target.hostname, attrs };
-    source.hostedTargets.add(this);
-    try {
-      BashKittenAndroid.configure(this.context, this.browserId,
-        { ...params, identities: [], blockedParentHost: params.parentHost });
-      certificates.setAgentHostedCA(params.parentHost, target.hostname, attrs, cert);
-      // A host-only copy keeps the protected parent cookie jar inaccessible to
-      // the hosted application. Never copy a loopback cookie to an onion host.
-      const validation = Services.cookies.add(target.hostname, "/", cookie.name, cookie.value, true, true, true,
-        cookie.expiry, attrs, cookie.sameSite, cookie.schemeMap, false);
-      if (validation.result !== Ci.nsICookieValidation.eOK) throw new Error("Unable to create the hosted website session");
-    } catch (error) {
-      this.clearHosted();
-      throw error;
-    }
-    return { ready: true, url: target.href };
-  }
-  clearHosted() {
-    const site = this.hosted;
-    if (!site) return;
-    this.hosted = null;
-    site.source.hostedTargets.delete(this);
-    BashKittenAndroid.configure(this.context, this.browserId,
-      { tor: true, port: 0, identities: [], blockedParentHost: site.parentHost });
-    certificates.clearAgentHostedCA(site.parentHost, site.host, site.attrs);
-    Services.cookies.removeCookiesFromExactHost(site.host, JSON.stringify(site.attrs));
-  }
-  clearHostedTargets() {
-    this.hostedGeneration++;
-    for (const target of [...this.hostedTargets]) target.clearHosted();
   }
   async agentRequest({ origin, path, body, csrf }) {
     const endpoint = this.agentEndpoint(origin);

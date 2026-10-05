@@ -247,13 +247,21 @@ class DownloadsFeature(
      * Notifies the [DownloadManager] that a new download must be processed.
      */
     @VisibleForTesting
-    internal fun processDownload(tab: SessionState, download: DownloadState): Boolean =
-        processDownloadRequest(tab, if (shouldSkipConfirmation(tab.id)) download.copy(skipConfirmation = true, openInApp = false) else download)
+    internal fun processDownload(tab: SessionState, download: DownloadState): Boolean {
+        val isolated = download.copy(contextId = tab.contextId)
+        return processDownloadRequest(
+            tab,
+            if (shouldSkipConfirmation(tab.id)) isolated.copy(skipConfirmation = true, openInApp = false) else isolated,
+        )
+    }
 
     private fun processDownloadRequest(tab: SessionState, download: DownloadState): Boolean {
         val apps = getDownloaderApps(applicationContext, download)
         // We only show the dialog If we have multiple apps that can handle the download.
-        val shouldShowAppDownloaderDialog = !shouldSkipConfirmation(tab.id) && shouldForwardToThirdParties() && apps.size > 1
+        val shouldShowAppDownloaderDialog = !shouldSkipConfirmation(tab.id) &&
+            !tab.contextId.orEmpty().startsWith("bashkitten-tor-") &&
+            !tab.contextId.orEmpty().startsWith("bashkitten-agent-ui-") &&
+            shouldForwardToThirdParties() && apps.size > 1
 
         return if (shouldShowAppDownloaderDialog) {
             when (customThirdPartyDownloadDialog) {
@@ -376,7 +384,7 @@ class DownloadsFeature(
         withActiveDownload { (tab, download) ->
             if (applicationContext.isPermissionGranted(downloadManager.permissions.asIterable())) {
                 if (shouldForwardToThirdParties()) {
-                    startDownload(download)
+                    startDownload(download.copy(contextId = tab.contextId))
                     useCases.consumeDownload(tab.id, download.id)
                 } else {
                     val updatedDownloadState = download.copy(

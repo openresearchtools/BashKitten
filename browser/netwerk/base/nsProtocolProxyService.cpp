@@ -126,9 +126,26 @@ void nsProtocolProxyService::CallOnProxyAvailableCallback(
     aChannel->GetURI(getter_AddRefs(channelURI));
   }
 
-  // This check makes sure that we don't accidentally proxy loopback URLs if
-  // one of the proxy filters allows it.
-  if (aProxyInfo && channelURI) {
+  nsCOMPtr<nsILoadInfo> loadInfo;
+  if (aChannel) {
+    loadInfo = aChannel->LoadInfo();
+  }
+  const bool isolated =
+      loadInfo && loadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated(false);
+  const bool scoped =
+      loadInfo && loadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated();
+  if (isolated) {
+    nsCOMPtr<nsProxyInfo> proxy = do_QueryInterface(aProxyInfo);
+    if (!proxy || proxy->IsDirect() || NS_FAILED(aStatus)) {
+      aStatus = NS_ERROR_PROXY_CONNECTION_REFUSED;
+      // HTTP treats a proxy-resolution error as DIRECT unless the channel itself
+      // is cancelled. A native closed route must never enter that fallback.
+      aChannel->Cancel(aStatus);
+    }
+  }
+  // A native Tor/Agent proxy is deliberately mandatory for loopback too.
+  // Converting its blocked/scoped SOCKS route into DIRECT would bypass isolation.
+  if (aProxyInfo && channelURI && !scoped) {
     nsProtocolInfo info;
     rv = aService->GetProtocolInfo(channelURI, &info);
 
@@ -2146,6 +2163,13 @@ nsresult nsProtocolProxyService::Resolve_Internal(nsIChannel* channel,
 
   if (!(info.flags & nsIProtocolHandler::ALLOWS_PROXY)) {
     return NS_OK;  // Can't proxy this (filters may not override)
+  }
+
+  // Native scoped routes are chosen by channel filters, never by a system PAC
+  // script which could resolve or transmit the destination before those filters.
+  nsCOMPtr<nsILoadInfo> loadInfo = channel->LoadInfo();
+  if (loadInfo->GetOriginAttributes().IsBashKittenNetworkIsolated()) {
+    return NS_OK;
   }
 
   nsCOMPtr<nsIURI> uri;
