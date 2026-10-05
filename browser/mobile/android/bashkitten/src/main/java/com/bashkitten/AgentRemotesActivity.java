@@ -110,8 +110,12 @@ public final class AgentRemotesActivity extends ProductActivity {
                 .setTitle("Remove " + title + "?")
                 .setMessage("Close this device’s connection and forget its saved keys and sign-in session.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Remove", (dialog, which) -> {
-                    try { app.agent.removeRemote(id); render(); }
-                    catch (Exception error) { status.setText("The connection could not be removed. Retry."); }
+                    state.begin("Removing connection…");
+                    try {
+                        app.agent.removeRemote(id, () -> {
+                            if (!state.closed) { state.busy = false; state.changed(); }
+                        }, state::failed);
+                    } catch (Exception error) { state.failed("The connection could not be removed. Retry."); }
                 }).show());
             remove.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
             if (app.agent.remoteConnected(id)) {

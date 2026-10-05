@@ -275,26 +275,29 @@ func (c *Client) closeMappings() {
 	}
 }
 
-// Close is normal disconnection/shutdown: it preserves remembered credentials.
-// The native owner also removes this enrollment's scoped Gecko credential.
+// Close cancels work and waits for token persistence to finish before returning.
+// Native owners run it off the UI thread and remove the scoped Gecko credential.
 func (c *Client) Close() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.closed {
-		return
+	if !c.closed {
+		c.closed = true
+		c.cancel()
+		if c.loginCancel != nil {
+			c.loginCancel()
+			c.loginCancel = nil
+		}
+		if c.login != nil {
+			c.login.Cancel()
+			c.login = nil
+		}
+		c.closeMappings()
+		c.http.CloseIdleConnections()
 	}
-	c.closed = true
-	c.cancel()
-	if c.loginCancel != nil {
-		c.loginCancel()
-		c.loginCancel = nil
-	}
-	if c.login != nil {
-		c.login.Cancel()
-		c.login = nil
-	}
-	c.closeMappings()
-	c.http.CloseIdleConnections()
+	c.mu.Unlock()
+	// A cancelled refresh can still need mu to clear mappings before saving its
+	// final token state. Never hold mu while waiting for that operation to drain.
+	c.authMu.Lock()
+	c.authMu.Unlock()
 }
 
 // Logout first closes local access, then revokes with Authelia and erases the

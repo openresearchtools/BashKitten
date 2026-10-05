@@ -5,6 +5,7 @@ import android.content.Context;
 import android.os.Handler;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CompletableFuture;
 import org.json.JSONObject;
 import org.json.JSONArray;
 import java.util.HashSet;
@@ -28,6 +29,8 @@ final class RemoteAgentConnection implements AutoCloseable {
     private final Runnable releaseKey;
     private final Listener listener;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final CompletableFuture<Void> previousClosed;
+    private final CompletableFuture<Void> nativeClosed = new CompletableFuture<>();
     private NativeRemote client;
     private boolean closed;
 
@@ -79,10 +82,12 @@ final class RemoteAgentConnection implements AutoCloseable {
     }
 
     RemoteAgentConnection(Handler main, JSONObject bundle,
-            int proxyPort, TorGateway.AgentRoute route, Runnable releaseKey, Listener listener) throws Exception {
+            int proxyPort, TorGateway.AgentRoute route, Runnable releaseKey, Listener listener,
+            RemoteAgentConnection previous) throws Exception {
         this.host = bundle.getString("onion"); this.owner = bundle.getString("owner");
         this.main = main; this.proxyPort = proxyPort; this.route = route;
         this.releaseKey = releaseKey; this.listener = listener;
+        this.previousClosed = previous == null ? null : previous.nativeClosed;
         // The caller registers this owner before invoking start; callbacks are
         // delivered only through main, never during construction.
     }
@@ -90,11 +95,17 @@ final class RemoteAgentConnection implements AutoCloseable {
     void start(Context context, JSONObject bundle, String socket) {
         io.execute(() -> {
             try {
+                if (previousClosed != null) previousClosed.join();
+                if (isClosed()) return;
                 NativeRemote opened = new NativeRemote(context, bundle, socket);
+                boolean cancelled;
                 synchronized (this) {
-                    if (closed) { opened.close(); return; }
-                    client = opened;
+                    cancelled = closed;
+                    if (!cancelled) client = opened;
                 }
+                // UI callers also take this monitor to inspect/close the owner.
+                // Do not hold it while the native client shuts down TLS.
+                if (cancelled) { opened.close(); return; }
                 JSONObject enrollment = opened.browserIdentity();
                 if (opened.authorize()) activate(opened, enrollment);
                 else {
@@ -144,26 +155,42 @@ final class RemoteAgentConnection implements AutoCloseable {
 
     synchronized boolean isClosed() { return closed; }
 
-    void forget() throws Exception {
-        NativeRemote current;
-        synchronized (this) { current = client; }
-        close();
-        if (current != null) current.forget();
-    }
+    /** Completion runs on the close worker so token deletion can finish there. */
+    void forget(Runnable done, Consumer<String> failure) { close(true, done, failure); }
 
-    @Override public void close() {
+    @Override public void close() { close(false, null, null); }
+
+    private void close(boolean forget, Runnable done, Consumer<String> failure) {
         NativeRemote current;
         synchronized (this) {
-            if (closed) return;
+            if (closed) {
+                if (forget) new Thread(() -> {
+                    nativeClosed.join(); done.run();
+                }, "agent-remote-forget").start();
+                return;
+            }
             closed = true; current = client; client = null;
         }
         // Close the browser route before releasing its port, so a later local
         // listener cannot receive an old protected Agent connection.
         route.close();
-        if (current != null) current.close();
-        releaseKey.run();
+        identity = null; ready = false; awaitingCallback = false;
+        // Go's TLS close can write close_notify. It must not block Android's
+        // main thread or queue behind the request that shutdown must cancel.
+        new Thread(() -> {
+            try {
+                if (previousClosed != null) previousClosed.join();
+                if (forget) {
+                    try { if (current != null) current.forget(); }
+                    catch (Exception error) {
+                        main.post(() -> failure.accept("The connection could not be forgotten. Retry removal."));
+                        return;
+                    }
+                } else if (current != null) current.close();
+            } finally { releaseKey.run(); nativeClosed.complete(null); }
+            if (done != null) done.run();
+        }, "agent-remote-close").start();
         // Drain queued requests so each caller receives its closed-connection error.
         io.shutdown();
-        identity = null; ready = false; awaitingCallback = false;
     }
 }

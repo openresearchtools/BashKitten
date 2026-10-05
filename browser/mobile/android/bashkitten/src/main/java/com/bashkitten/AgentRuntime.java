@@ -38,7 +38,9 @@ public final class AgentRuntime {
     java.lang.ref.WeakReference<Activity> activity = new java.lang.ref.WeakReference<>(null);
     private final Map<String, GeckoSession> sessions = new HashMap<>();
     private final Set<String> posted = new LinkedHashSet<>();
+    // Retain a closed owner until replacement/removal so its token writes finish first.
     private final Map<String, RemoteAgentConnection> remoteConnections = new HashMap<>();
+    private final Set<String> removingRemotes = new HashSet<>();
     private final Map<String, JSONObject> serviceSnapshots = new HashMap<>();
     private char[] remotePassword;
     private String remotePasswordHost = "";
@@ -92,7 +94,7 @@ public final class AgentRuntime {
         if (!busy && (!desired || state.equals("setup"))) turnOn();
     }
     public void turnOn() {
-        if (busy) return;
+        if (busy || removingRemotes.contains(selected)) return;
         if (!desired) batteryDeferred.clear();
         // Turn off suspends the protected document at about:blank. Its saved
         // endpoint can stay unchanged when the verified service starts again.
@@ -251,7 +253,9 @@ public final class AgentRuntime {
         app.remoteControl.disconnect();
         // A failed Local startup must not take away another enrollment's
         // service ports while Local Pi/setup is selected.
-        if (selected.equals("local") && !remoteConnections.isEmpty()) { setup("retry", message); return; }
+        if (selected.equals("local") && remoteConnections.values().stream().anyMatch(connection -> !connection.isClosed())) {
+            setup("retry", message); return;
+        }
         busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed();
     }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
@@ -429,16 +433,17 @@ public final class AgentRuntime {
         if (session != null && !session.isOpen() && engine != null) session.open(engine);
         if (selected.equals("local")) refresh();
         else {
-            RemoteAgentConnection connection = remoteConnections.remove(selected);
+            RemoteAgentConnection connection = remoteConnections.get(selected);
             app.closeServiceRoutes(selected); serviceSnapshots.remove(selected);
             if (connection != null) connection.close();
             busy = false; turnOn();
         }
     }
     public void select(String id) {
+        if (removingRemotes.contains(id)) { app.message("This connection is being removed."); return; }
         RemoteAgentConnection previousRemote = remoteConnections.get(selected);
         if (previousRemote != null && !previousRemote.ready) {
-            remoteConnections.remove(selected); previousRemote.close();
+            previousRemote.close();
         }
         if (!id.equals(remotePasswordHost)) clearRemotePassword();
         if (selected.equals(id)) {
@@ -457,8 +462,9 @@ public final class AgentRuntime {
     public JSONObject remotes() throws Exception { return new SecretStore(app, "agent-remotes").read(); }
     /** Called only after native TK2 decryption; no plaintext/legacy enrollment fallback. */
     public void importRemote(JSONObject bundle, String password) throws Exception {
-        JSONObject enrollment = NativeRemote.browserIdentity(app, bundle);
         String id = bundle.getString("onion");
+        if (removingRemotes.contains(id)) throw new IllegalStateException("This connection is being removed.");
+        JSONObject enrollment = NativeRemote.browserIdentity(app, bundle);
         rememberIdentity(id, enrollment.getJSONObject("identity"));
         JSONObject record = new JSONObject().put("version", 2).put("kind", "agent")
             .put("name", bundle.getString("name")).put("bundle", bundle);
@@ -466,7 +472,7 @@ public final class AgentRuntime {
         JSONObject saved = store.read(), old = saved.optJSONObject(id);
         if (old != null && old.has("mappings")) record.put("mappings", old.getJSONObject("mappings"));
         saved.put(id, record); store.write(saved);
-        RemoteAgentConnection previous = remoteConnections.remove(id);
+        RemoteAgentConnection previous = remoteConnections.get(id);
         app.closeServiceRoutes(id); serviceSnapshots.remove(id);
         if (previous != null) previous.close();
         clearRemotePassword(); remotePassword = password.toCharArray(); remotePasswordHost = id;
@@ -479,7 +485,6 @@ public final class AgentRuntime {
     private void closeRemoteConnections() {
         clearRemotePassword();
         for (RemoteAgentConnection connection : remoteConnections.values()) { app.closeServiceRoutes(connection.host); connection.close(); }
-        remoteConnections.clear();
         serviceSnapshots.clear();
     }
     public boolean remoteConnected(String id) {
@@ -487,7 +492,7 @@ public final class AgentRuntime {
         return connection != null && connection.ready && !connection.isClosed();
     }
     public void disconnectRemote(String id) {
-        RemoteAgentConnection connection = remoteConnections.remove(id);
+        RemoteAgentConnection connection = remoteConnections.get(id);
         app.closeServiceRoutes(id); serviceSnapshots.remove(id);
         if (connection != null) connection.close();
         if (selected.equals(id)) {
@@ -601,44 +606,67 @@ public final class AgentRuntime {
             throw new IllegalStateException("Refresh services first.");
         } catch (Exception error) { failure.accept(error.getMessage()); }
     }
-    public void removeRemote(String id) throws Exception {
+    public void removeRemote(String id, Runnable done, Consumer<String> failure) throws Exception {
         if (id.equals("local")) throw new IllegalArgumentException("Local Agent cannot be removed.");
         SecretStore store = new SecretStore(app, "agent-remotes");
         JSONObject saved = store.read();
-        if (!saved.has(id)) return;
-        RemoteAgentConnection connection = remoteConnections.remove(id);
-        app.closeServiceRoutes(id); serviceSnapshots.remove(id);
-        if (connection != null) connection.forget();
-        JSONObject bundle = saved.getJSONObject(id).optJSONObject("bundle");
-        if (bundle != null) NativeRemote.forgetSaved(app, bundle.getString("id"));
-        if (id.equals(remotePasswordHost)) clearRemotePassword();
-        boolean wasSelected = selected.equals(id);
-        GeckoSession remote = sessions.remove(id);
-        if (remote != null && remote.isOpen()) { remote.stop(); remote.close(); }
-        if (engine != null) {
-            engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-" + id);
-            JSONObject mappings = saved.getJSONObject(id).optJSONObject("mappings");
-            if (mappings != null) for (java.util.Iterator<String> keys = mappings.keys(); keys.hasNext();) {
-                engine.getStorageController().clearDataForSessionContext(mappings.getJSONObject(keys.next()).getString("context"));
-            }
+        if (!saved.has(id)) { done.run(); return; }
+        JSONObject record = saved.getJSONObject(id), bundle = record.optJSONObject("bundle");
+        String enrollment = bundle == null ? "" : bundle.getString("id");
+        List<String> contexts = new ArrayList<>();
+        contexts.add("bashkitten-agent-ui-" + id);
+        JSONObject mappings = record.optJSONObject("mappings");
+        if (mappings != null) for (Iterator<String> keys = mappings.keys(); keys.hasNext();) {
+            contexts.add(mappings.getJSONObject(keys.next()).getString("context"));
         }
-        saved.remove(id); store.write(saved);
-        JSONObject remembered = identities.read(); remembered.remove(id); identities.write(remembered);
-        // The Tor client may also serve an independently enrolled ordinary private site. Removing
-        // Agent never deletes that site's saved credential or stops its tabs.
-        if (id.equals(app.policies.getString("agent.lastRemote", ""))) app.policies.edit().remove("agent.lastRemote").apply();
-        if (wasSelected) {
-            app.remoteControl.disconnect(); session = null; url = ""; selected = "local"; busy = false;
-            app.policies.edit().putString("agent.selected", "local").apply();
-            turnOn();
-        } else changed();
+        if (!removingRemotes.add(id)) throw new IllegalStateException("This connection is being removed.");
+        RemoteAgentConnection connection = remoteConnections.get(id);
+        try {
+            app.closeServiceRoutes(id); serviceSnapshots.remove(id);
+            if (id.equals(remotePasswordHost)) clearRemotePassword();
+            GeckoSession remote = sessions.remove(id);
+            if (remote != null && remote.isOpen()) { remote.stop(); remote.close(); }
+            if (selected.equals(id)) {
+                operation++; desired = false; busy = false; state = "off"; error = "";
+                app.remoteControl.disconnect(); session = null; url = ""; changed();
+            }
+            if (engine != null) for (String context : contexts) engine.getStorageController().clearDataForSessionContext(context);
+            Consumer<String> failed = message -> { removingRemotes.remove(id); failure.accept(message); };
+            Runnable removeSaved = () -> {
+                try { if (!enrollment.isEmpty()) NativeRemote.forgetSaved(app, enrollment); }
+                catch (Exception error) { app.main.post(() -> failed.accept("The saved sign-in could not be removed. Retry.")); return; }
+                app.main.post(() -> {
+                    try {
+                        // Catalogue changes remain serialized on main with imports and mapping edits.
+                        JSONObject remembered = identities.read(); remembered.remove(id); identities.write(remembered);
+                        JSONObject current = store.read(); current.remove(id); store.write(current);
+                        remoteConnections.remove(id);
+                        // An ordinary private site may independently use the same Tor identity.
+                        if (id.equals(app.policies.getString("agent.lastRemote", ""))) app.policies.edit().remove("agent.lastRemote").apply();
+                        removingRemotes.remove(id);
+                        if (selected.equals(id)) {
+                            selected = "local";
+                            app.policies.edit().putString("agent.selected", "local").apply();
+                            turnOn();
+                        } else changed();
+                        done.run();
+                    } catch (Exception error) { failed.accept("The connection could not be removed. Retry."); }
+                });
+            };
+            if (connection != null) connection.forget(removeSaved, failed);
+            else new Thread(removeSaved, "agent-remote-forget").start();
+        } catch (Exception error) {
+            removingRemotes.remove(id);
+            if (connection != null) connection.close();
+            throw error;
+        }
     }
     private boolean selectedRemote(RemoteAgentConnection connection) {
         return desired && selected.equals(connection.host) && remoteConnections.get(connection.host) == connection && !connection.isClosed();
     }
     private void remoteFailed(RemoteAgentConnection connection, String message) {
         if (remoteConnections.get(connection.host) != connection) return;
-        remoteConnections.remove(connection.host); app.closeServiceRoutes(connection.host); serviceSnapshots.remove(connection.host); connection.close();
+        app.closeServiceRoutes(connection.host); serviceSnapshots.remove(connection.host); connection.close();
         if (!selected.equals(connection.host)) return;
         clearRemotePassword();
         if (session != null) suspendSession(session);
@@ -718,7 +746,7 @@ public final class AgentRuntime {
         final int generation = ++operation;
         RemoteAgentConnection active = remoteConnections.get(selected);
         if (active != null && active.ready && !active.isClosed()) { remoteReady(active); return; }
-        if (active != null) { remoteConnections.remove(selected); app.closeServiceRoutes(selected); serviceSnapshots.remove(selected); active.close(); }
+        if (active != null) { app.closeServiceRoutes(selected); serviceSnapshots.remove(selected); active.close(); }
         try {
             JSONObject record = remotes().getJSONObject(selected);
             if (record.optInt("version") != 2 || !record.optString("kind").equals("agent")) {
@@ -739,7 +767,7 @@ public final class AgentRuntime {
                             @Override public void login(RemoteAgentConnection value, String address) { remoteLogin(value, address); }
                             @Override public void ready(RemoteAgentConnection value) { remoteReady(value); }
                             @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
-                        });
+                        }, active);
                     remoteConnections.put(host, connection);
                     connection.start(app, bundle, socket);
                 } catch (Exception error) {
