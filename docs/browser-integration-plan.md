@@ -2,6 +2,10 @@
 
 Proposed architecture, 22 September 2026. This records the new requested
 direction; it does not claim that the migration is implemented or tested.
+The 5 October implementation constraints in `remote-tunnel-plan.md` apply:
+requested features only, minimal clear code and upstream patches, no added
+fallback implementations, and feature-by-feature builds/manual verification
+through the full release deliverable.
 For the migration, this plan supersedes the older Android/Termux suite plan
 where they differ. Existing releases continue working until their replacements
 pass the checks below. No donor repository, branch or release is deleted as part

@@ -43,6 +43,23 @@ The deliverable is working Linux amd64/arm64 packages, the Android APK and match
 Termux package, source and notices, after builds and manual acceptance. Writing
 this plan, building a helper or dispatching CI does not complete that deliverable.
 
+### Implementation constraints, 5 October
+
+Implement this plan end to end, feature by feature. Add only the functions,
+buttons and options needed for the requested behavior; do not expand the product
+scope. Prefer the smallest clear implementation, reuse the existing controllers
+and upstream APIs, and remove replaced paths instead of maintaining duplicates.
+Do not add fallback implementations or silently substitute another transport,
+authentication path, runtime or configuration after failure. Report the actual
+failure and preserve the user's saved choice. This instruction supersedes earlier
+automatic-fallback wording; explicitly selected CPU/software modes remain valid.
+Keep Tor, Caddy, Authelia and Chisel integration thin, preserving upstream
+behavior. Build Chisel unchanged first; apply only demonstrated Android build
+fixes as minimal staged patches, never speculative portability changes.
+Complete the corresponding build and manual checks before claiming a feature
+works. Continue through all delivery gates; a partial implementation is not the
+completed plan.
+
 ## 1. Required user experience
 
 | Where | Required result |

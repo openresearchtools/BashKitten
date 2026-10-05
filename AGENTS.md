@@ -17,6 +17,13 @@ revert. Run the relevant checks before committing, push to the current branch's
 remote, and report the commit IDs and push result.
 Stage only files belonging to the task; preserve unrelated work and never commit
 credentials, signing keys or personal runtime data.
+Implement only the requested plan features, with minimal clear code and no added
+functions, buttons or options beyond what they require. Reuse existing controllers
+and upstream APIs; remove replaced paths. Do not add fallback implementations or
+silently substitute transports/authentication/runtimes after failure. Preserve the
+saved choice and show the actual error. Build pristine Chisel first and keep only
+proven necessary Android build patches outside its source tree. These 5 October
+constraints supersede older automatic-fallback wording in the plans.
 Read `docs/browser-integration-plan.md` in full before browser-migration work and
 after compaction. It records the requested replacement of the native wrappers
 and Termux suite with one Android/Linux browser, Caddy/Authelia authentication
