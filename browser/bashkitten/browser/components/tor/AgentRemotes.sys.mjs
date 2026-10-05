@@ -533,17 +533,20 @@ class AgentRemoteStore {
         const info = channel.loadInfo, browsing = info.browsingContext;
         const browser = browsing?.embedderElement, host = browser?.ownerGlobal?.BashKittenAgent;
         const principal = info.triggeringPrincipal;
+        const current = browsing?.currentWindowGlobal?.documentPrincipal;
         if (info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT || !browsing || browsing !== browsing.top ||
             host?.activeBrowser !== browser || host.off || host.selection !== entry.id ||
             browser.getAttribute("bashkitten-protected") !== "true" || !principal?.isContentPrincipal ||
-            principal.originNoSuffix !== new URL(entry.url).origin || principal.originAttributes.userContextId !== context) return;
+            principal.originNoSuffix !== new URL(entry.url).origin || principal.originAttributes.userContextId !== context ||
+            !current?.isContentPrincipal || current.originNoSuffix !== principal.originNoSuffix ||
+            current.originAttributes.userContextId !== context) return;
         if (channel.URI.spec !== "http://127.0.0.1/oauth/callback" || channel.requestMethod !== "POST" ||
             channel.getRequestHeader("Content-Type").split(";", 1)[0].trim().toLowerCase() !== "application/x-www-form-urlencoded" ||
             channel.QueryInterface(Ci.nsIUploadChannel2).uploadStreamHasHeaders) throw new Error("Invalid Authelia sign-in response.");
         const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
         stream.QueryInterface(Ci.nsISeekableStream).seek(0, 0);
         const form = NetUtil.readInputStreamToString(stream, stream.available());
-        if (form.length !== Number(channel.getRequestHeader("Content-Length"))) throw new Error("Incomplete Authelia sign-in response.");
+        if (form.length !== Number(channel.getRequestHeader("Content-Length")) || /[^\x00-\x7f]/.test(form)) throw new Error("Incomplete Authelia sign-in response.");
         this.complete(entry, owner, channel.URI.spec, form).catch(() => {});
       } catch {
         this.failed(entry, owner, new Error("Could not read the Authelia sign-in response.")).catch(() => {});
