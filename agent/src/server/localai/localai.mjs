@@ -13,13 +13,17 @@ const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
-  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : { model: '', keepRunning: false }) });
+  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : { model: '', keepRunning: false, autoSend: true }) });
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
-// Pi import does not change the running inference command.
-const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined }) === JSON.stringify({ ...b, importToPi: undefined });
+// Pi import and voice-message sending do not change the inference command.
+const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined });
 async function readConfiguration() {
   const saved = await readJson(configFile, null);
-  if (saved) { if (saved.version !== 1) throw Error('Unsupported LocalAI configuration'); return saved; }
+  if (saved) {
+    if (saved.version !== 1) throw Error('Unsupported LocalAI configuration');
+    if (saved.whisper.autoSend === undefined) saved.whisper.autoSend = true;
+    return saved;
+  }
   // Preserve a prior explicitly enabled setup as Custom. Never install over it.
   const legacy = await readJson(path.join(dataDir, 'llama/config.json'), null);
   const llama = defaults('llama');
@@ -41,7 +45,7 @@ function configuration(engine, value) {
   if (engine === 'llama') {
     if (!cleanText(result.preset) || !path.isAbsolute(result.preset) || typeof result.startup !== 'boolean' || typeof result.importToPi !== 'boolean' || !cleanText(result.keyFile) || result.keyFile && !path.isAbsolute(result.keyFile)) throw Error('Choose a router INI, startup and coding-agent import options');
   } else {
-    if (typeof result.keepRunning !== 'boolean' || !cleanText(result.model) || result.model && !path.isAbsolute(result.model)) throw Error('Choose a whisper.cpp model');
+    if (typeof result.keepRunning !== 'boolean' || typeof result.autoSend !== 'boolean' || !cleanText(result.model) || result.model && !path.isAbsolute(result.model)) throw Error('Choose a whisper.cpp model and valid voice-message options');
     if (result.mode !== 'managed') throw Error('Whisper uses the verified managed runtime');
     if (Object.keys(result.env).length) throw Error('Whisper does not accept environment overrides that can retain audio');
   }
@@ -291,7 +295,7 @@ export class LocalAI {
   async speechCapability() {
     const config = (await this.config()).whisper;
     if (!config.model || !(await runtimeInfo('whisper'))?.binary) return { available: false };
-    try { await this.command('whisper', config, config.port || 1); return { available: true, host: os.hostname() }; }
+    try { await this.command('whisper', config, config.port || 1); return { available: true, host: os.hostname(), autoSend: config.autoSend }; }
     catch { return { available: false }; }
   }
   async acquireSpeech(id) {
@@ -303,7 +307,7 @@ export class LocalAI {
     operation.start = this.exclusive(async () => {
       check(); const config = (await this.config()).whisper; check();
       operation.keepRunning = config.keepRunning;
-      if (this.services.running.get(ids.whisper)?.child && JSON.stringify(this.runningConfig.get('whisper')) !== JSON.stringify(config)) await this.services.stop(ids.whisper);
+      if (this.services.running.get(ids.whisper)?.child && !sameRuntimeConfig(this.runningConfig.get('whisper'), config)) await this.services.stop(ids.whisper);
       check(); await this.configureService('whisper', { runtimeRequired: true }); check();
       await this.services.action({ id: ids.whisper, action: 'start' }); check();
       this.runningConfig.set('whisper', structuredClone(config));

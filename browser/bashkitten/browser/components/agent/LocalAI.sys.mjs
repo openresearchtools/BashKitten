@@ -80,7 +80,7 @@ export async function localAISettings(parent, control, win, isLocal) {
       if (current.service?.command) { const command = node('pre', JSON.stringify(current.service.command.argv, null, 2)); command.style.cssText = 'max-height:6em;overflow:auto;white-space:pre-wrap'; section.append(command); }
       const cwd = pickerField(section, 'Working directory', config.cwd, 'folder');
       const env = engine === 'llama' ? field(section, 'Environment — JSON object', JSON.stringify(config.env), true) : null;
-      let preset, startup, imported, keyFile, model, keepRunning;
+      let preset, startup, imported, keyFile, model, keepRunning, autoSend;
       if (engine === 'llama') {
         preset = pickerField(section, 'Router INI', config.preset);
         section.append(button('Edit router INI', () => editINI(preset.value, path => { preset.value = path; })));
@@ -92,12 +92,13 @@ export async function localAISettings(parent, control, win, isLocal) {
       } else {
         model = pickerField(section, 'whisper.cpp model (ggml-*.bin)', config.model);
         keepRunning = check(section, 'Keep Whisper running after transcription', config.keepRunning);
+        autoSend = check(section, 'Automatically send voice messages', config.autoSend);
       }
       section.append(button('Save changes', async () => {
         const next = { ...config, mode: mode.value, binary: mode.value === 'custom' ? binary.value : '', backend: backend.value, port: Number(port.value),
           argv: argv.value.trim() ? JSON.parse(argv.value) : [], cwd: cwd.value, env: env ? JSON.parse(env.value) : {} };
         if (engine === 'llama') Object.assign(next, { preset: preset.value, startup: startup.checked, importToPi: imported.checked, keyFile: keyFile.value });
-        else Object.assign(next, { model: model.value, keepRunning: keepRunning.checked });
+        else Object.assign(next, { model: model.value, keepRunning: keepRunning.checked, autoSend: autoSend.checked });
         draw(await call('localai-save', { engine, config: next, revision: state.revision })); message.textContent = 'Saved. Reload applies command changes to a running engine.';
       }));
       for (const action of ['start', 'stop', 'reload']) section.append(button(action === 'start' ? 'Start' : action === 'stop' ? 'Stop' : 'Reload', async () => {
