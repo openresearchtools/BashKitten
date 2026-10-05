@@ -19,6 +19,7 @@ this plan, building a helper or dispatching CI does not complete that deliverabl
 | Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current BashKitten logo, retaining accessible naming, touch target and behavior |
 | Unconfigured Local | Show the short-command setup and **Back to remote**, retaining the previous remote, login and draft |
 | Linux Enable remote | Choose one username/password, scan the authenticator QR, verify a TOTP, then display the encrypted connection QR |
+| Remote file-manager permission | Host setup has **Allow remote file manager**, off by default; the server gates Files/Changes browsing, editing, diffs and manager transfers while chat attachments/image previews and Pi tools continue working |
 | Connection QR | One image contains all client connection material, encrypted with that same Authelia password; display, click to download, camera scan and image upload work |
 | Remote login | Decrypt the QR, verify the server, authenticate with Authelia/TOTP and connect; no separately chosen tunnel password or pasted keys |
 | Connected remote | List Agent and every published service, actual host state, local URL/port, Open/Copy, mapping control and host Start/Stop/Reload |
@@ -202,6 +203,8 @@ in address-bar navigation or JavaScript fetch helpers.
    confirmation. Use Authelia's own Argon2 hashing and TOTP storage. Validate the
    password against both account and QR requirements before creating anything;
    retain v2's encryption work factor and check real mobile decrypt performance.
+   Include the unchecked **Allow remote file manager** option described below;
+   its authority is stored/enforced on the host, not in the imported QR or client.
 2. Generate the remote generation directory, onion identity/client grant, private
    server CA, client certificate/key, Chisel host key, OAuth registration/signing
    material and session secrets. No extra user key fields.
@@ -267,6 +270,81 @@ launch Termux, request RUN_COMMAND, install packages or ask for Termux's battery
 exemption. Unconfigured Local shows its normal short-command setup plus Back to
 remote. Cancelling restores the last remote. Termux removal/reinstall affects
 Local only; preserve dynamic-port discovery and native Local trust recovery.
+
+### Optional remote file manager: server-enforced permission
+
+Additional requirement, 5 October: the publishing host's Remote setup and Remote
+access settings include **Allow remote file manager**, **off by default**. Only
+the host-local trusted setup/control path can change it. A remote client cannot
+enable it through its own settings, QR fields, cached capability response,
+Authelia login alone or a generic remote control request. Apply it to every
+remote client of this published host. Keep the existing native Local file access
+separate; never classify a tunneled request as Local because its source is
+loopback or it supplied a trusted-looking header.
+
+When enabled, Android and Linux remote clients get the existing Termux-style
+**Files / Changes** sidecar operating on the host's filesystem: directory
+navigation, file preview/open, text editing/saving, Git status/diffs, upload,
+download, ZIP export and existing copy/create/delete actions. Use the existing
+UI and server operations; implement any missing editor/save path behind the
+same permission instead of assuming current file previews already allow edits.
+Retain filesystem scope/OS permissions, path and symlink confinement, deletion
+confirmation, atomic saves and edit-conflict handling. Remote paths refer to the
+host, never the phone or desktop client's filesystem.
+
+Enforce one deny-by-default file-manager capability in the server's trusted
+remote request context, checked before manager file lookup, directory enumeration,
+Git invocation, manager upload parsing/staging or manager job creation. The UI
+consumes that capability to show sidebar controls, but hiding UI is not enforcement.
+Missing, false,
+invalid, unreadable or legacy permission state means **denied**, including after
+upgrade/restart; errors never enable a fallback. Return a consistent permission
+error to authenticated denied clients without leaking file existence/content.
+Authorization remains mandatory even for previously issued URLs or known job IDs.
+
+Inventory and guard every file-manager entry point and shared operation, including:
+
+- `/api/folders`, `/api/files`, file content/edit/write endpoints and all methods,
+  including HEAD/range downloads, archives and copy/delete/create operations.
+- `/api/files/jobs` creation, listing/status and result downloads; job ownership
+  and permission are checked on every access, not just when the job starts.
+- `/api/git/changes` and `/api/git/diff`, file metadata, previews and alternate
+  exports that could disclose the same filesystem information.
+- File-manager previews and alternate manager exports. Keep these distinct from
+  the authorized chat's attachment/image operations; sharing a low-level file
+  streaming helper must not make all chat file access depend on this checkbox.
+- Legacy/compatibility routes and the tunneled Agent entry. Use the same server
+  authorization through every transport; no direct-backend/Local fallback or
+  helper that retries a denied request under a more privileged identity.
+
+Turning the option off must durably revoke manager access before reporting success:
+reject new manager operations, close active remote manager file streams, cancel
+owned manager jobs/transfers and prevent pending manager writes from committing
+after revocation. Do not cancel chat uploads/downloads, image previews or Pi work.
+Leave already committed files intact; clean temporary upload/archive material
+safely. Serialize permission changes with write commits to avoid a check/use race.
+Notify connected clients to close/clear the file sidebar and its previews/diffs;
+do not clear images or attachments from chat. Stale manager UI cannot authorize
+another manager read/write. Manager responses use private/no-store handling, and
+revocation invalidates manager URLs/cached capabilities. Previously downloaded
+bytes cannot be erased from another device. Local and chat jobs are unaffected.
+
+Re-enabling requires an explicit host choice and refreshes available controls;
+do not replay cancelled uploads/edits automatically. Ordinary restarts retain an
+explicit saved choice. New/reissued remote identities start with the checkbox
+off until the owner explicitly enables it in setup. QR possession never grants
+this permission independently of the host's current policy.
+
+**Chat file uploads, attachment downloads,
+image previews and Pi's own file/shell tools remain available with the checkbox
+off**. This is permission for the file manager itself, not a general remote file
+ban or an OS sandbox. Preserve existing chat authentication, session ownership,
+artifact/path confinement and native Pi behavior. Chat endpoints operate on that
+authorized session's attachments and referenced images/artifacts, not arbitrary
+client-supplied file paths or directory listings masquerading as chat requests.
+Keep this operation distinction server-owned, never a client-supplied bypass flag.
+Do not automatically retry a denied file-manager operation through chat, Pi or
+another service. Independently published applications retain their own policies.
 
 ## 6. Host services and client localhost mappings
 
@@ -442,6 +520,7 @@ during the current runtime.
 | `agent/src/server/control.mjs`, runtime ownership/guard | Remote reset/lifecycle, owned service units, safe Quit and reconciliation |
 | `agent/src/server/platform/linux/{llama,llama-provider}.mjs` | Command/config service ownership; remove duplicate HTTP token-injecting relay behavior |
 | Existing `agent/src/web` settings | Publishing flow/image, service command/startup controls and real state/errors; no web-side crypto/auth implementation |
+| `agent/src/server/http/server.mjs`, shared `files/` operations/jobs and web Files/Changes UI | Host-owned remote file-manager capability, complete route/transport enforcement, editor parity and live revocation without a privileged fallback |
 | Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Remote-first onboarding/back, encrypted image import, service actions/mappings, foreground ownership and logo-based Agent navigation |
 | Android `TorManager.java`, `TorGateway.java`, `SecretStore.java` | Reuse native Tor, scoped trust and protected credentials; add native tunnel client without Termux |
 | Desktop `components/{agent,tor}` | Equivalent UI, protected Agent transport and storage; replace `LlamaRelay` with common native mapping core |
@@ -472,7 +551,7 @@ stack is one PID. Document exact process ownership and private IPC.
 | 1. Sources/native boundary | Pin/import complete Chisel/crypto/QR and donor provenance; update Caddy; build Linux and Android core without host-only client dependencies; verify ABI, licenses and 16 KB alignment |
 | 2. Host/tunnel | Actual Tor/Caddy/Authelia/Chisel, chosen account, verified TOTP, encrypted image and approved-service mapping; reject invalid identity/auth/target |
 | 3. One-login UI | Protected Agent/OAuth integration, no-Termux Android onboarding, camera/image import, stored secrets, Back to remote and remembered restart; desktop parity |
-| 4. Services/localhost | Host command/config/startup UI, real remote actions, automatic/chosen ports, concurrent remotes and Local Pi using an enabled remote mapping |
+| 4. Services/localhost/files | Host command/config/startup UI, real remote actions, automatic/chosen ports, concurrent remotes and Local Pi using an enabled remote mapping; host-controlled file-manager permission and complete Files/Changes/edit/transfer enforcement |
 | 5. Real applications | Multi-model llama router, bearer/no-bearer, byte-offset replay, pillama status, web application uploads/downloads/cookies/WebSockets; strict Tor-tab routing and ordinary private onion navigation |
 | 6. Reset/lifetime | Complete and interrupted identity rotation; old exports/sessions fail; tray/hide/reopen/autostart/Quit and owned-group cleanup |
 | 7. Delivery | Existing-data migration, four complete artifacts, offline notices/source, manual platform acceptance, release/APT publication with testing warning |
@@ -519,6 +598,10 @@ except where an explicit restart case requires otherwise.
 | Local ports | Actual auto/chosen/conflicting ports, two remotes with same service name, retained mapping while using Local, recovery after process death |
 | Pi/browser tools | Real Pi turn using phone-local remote llama; browser controls ordinary service tabs but excludes Agent/auth/QR; approved Termux calls run without repeated prompts |
 | Web apps | Real navigation/login if app requires it, file upload/download and WebSockets; service contexts receive no Agent cookies or native privileges |
+| File manager enabled | Explicit host opt-in exposes remote Files/Changes on Android/Linux; navigate real host subdirectories, edit/save, view Git diffs, upload/download/ZIP and perform existing file actions with normal scope/permission checks |
+| File manager denied | Fresh/legacy/missing/invalid permission state rejects manager file/folder/diff/preview/job APIs, stale manager URLs, alternate transports and spoofed Local markers; no manager metadata/content/writes or client self-grant; native Local access remains unchanged |
+| Chat files with manager off | Real Pi chat upload, attachment download and image preview still work on Android/Linux; active chat transfers survive manager revocation; chat artifact authorization does not become an arbitrary-path/directory-listing fallback |
+| File-manager revocation | Switch off during real manager upload/download/ZIP/edit: manager streams/jobs stop, pending manager writes cannot commit, stale manager clients/links remain denied; restart retains Off and reissue defaults Off; re-enable does not replay cancelled work |
 | Tor tab network boundary | On Android/Linux manually browse real onion and public pages in Tor tabs with HTTP/HTTPS assets, frames, requests, redirects, downloads and WebSockets; inspect external network evidence for no direct destination/DNS or WebRTC/UDP escape; stop Tor during loading and confirm failure without direct fallback |
 | Onion entry and tunnel exception | Typed/clicked/OS-opened/redirected/automation-opened public onion URLs enter private Tor without import prompts; linked public hosts stay on Tor; native mapped APIs still work locally; Tor-page loopback/LAN requests cannot use the native exception; storage stays separate |
 | llama/router | Two actual models, bearer and token-free modes, concurrent streams, pillama status, network interruption and exact native byte-offset replay |

@@ -34,7 +34,12 @@ not a claim that the new transport or tray is already implemented. Tor tabs must
 route all network requests, including public HTTP/HTTPS assets and DNS, through
 Tor or block them. Ordinary unenrolled onion URLs enter private Tor before any
 request. Native mapped-service/Agent routes stay separately scoped; never give
-Tor pages a blanket localhost bypass. The migration keeps one product repository:
+Tor pages a blanket localhost bypass. Remote file-manager access requires the
+host's explicit, default-off permission and server-side checks on manager file,
+diff, preview, archive and job routes, with live revocation and no fallback.
+Chat attachments/uploads/downloads, image previews and stock Pi filesystem tools
+remain available with the manager off; preserve their own authorization boundaries.
+The migration keeps one product repository:
 `/agent` for the existing shared app, `/browser` for the
 Gecko subtree and `/auth` for tracked Authelia/Caddy/Tor source and isolated
 Termux build patches. Any installed `com.termux` must be able to request native

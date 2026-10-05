@@ -31,6 +31,18 @@ APIs/local mapped service sockets retain their separate scoped route; do not
 create a blanket localhost exception for Tor pages. The detailed requirements
 and manual acceptance cases are in the remote tunnel plan.
 
+Additional file-access clarification, 5 October: Linux remote setup/settings has
+**Allow remote file manager**, off by default and controlled by the host. When
+enabled, remote Android/Linux clients receive the Termux-style Files/Changes
+sidecar with host file browsing, editing, diffs, uploads and downloads. Enforce
+the permission server-side across manager file, folder, Git, preview, archive
+and job routes, with live revocation and no Local/legacy fallback. Chat uploads,
+attachment downloads and image previews remain available when the manager is
+off, with their existing session/artifact authorization. This replaces
+the unconditional remote file-browsing requirements below. Native Local access
+stays separate. The remote tunnel plan defines the complete permission and its
+scope; Pi's file/shell tools remain unchanged.
+
 Latest clarification, 23 September: remove unrequested hard size/count/time
 quotas in file transfers, ZIP operations, browser tools, search extraction and
 model downloads. Keep ordinary backend/browser behavior, user cancellation and
