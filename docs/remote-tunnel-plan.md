@@ -1605,3 +1605,44 @@ All six changed Java files passed JDK parse-only validation and whitespace
 checks. Android/Gecko/native-binding type compilation, APK build and visible
 manual connection, mapping, host controls and Pi-import flows remain pending.
 No scripted product test or device/debugging command was used for this slice.
+
+### 5 October LocalAI and dictation source integration (acceptance pending)
+
+Desktop Local now owns the LocalAI panel, both engine commands, Managed/Custom
+llama selection, GPU/CPU selection, runtime jobs, native model pickers/downloader,
+router INI editing and the saved default-on Pi-import choice. Shared Agent HTML
+and its HTTP forwarding no longer expose model/runtime management. The existing
+HostedServices owner runs both engines; the prior ManagedLlama supervisor is
+removed. Saving configuration/INI leaves running inference intact until explicit
+Reload. Custom binaries are left in place, managed activation waits for the
+chosen runtime to stop, and actual initialization errors do not select another
+runtime. File-manager exclusions cover the configured binary/INI/key and actual
+library files without banning their arbitrary parent folders.
+
+The protected composer obtains normal microphone permission, records until
+Stop/Cancel, converts mono PCM WAV in memory, and calls only its selected host's
+authenticated dictation operation. Whisper starts on demand and uses its upstream
+in-memory inference endpoint without conversion/dump flags. Cancellation drains
+pending startup before stopping the same owned process; output is discarded and
+owned worker core dumps are disabled. Successful text is submitted once through
+the existing chat queue, preserving independent drafts/attachments. Remote clients
+need no local inference binary or Termux for host-side dictation. These statements
+describe source behavior; actual device permission, audio privacy and queue/lifecycle
+acceptance remain pending.
+
+The requested [bashkitten-localai](https://github.com/openresearchtools/bashkitten-localai)
+builder is created. It pins pristine llama.cpp v0.5.0 at
+`7fe450e19305b828c199d602c23a8337aaa1f03b` and whisper.cpp v1.9.4 at
+`927cfce34f31707e17f2bff35c349632fb9e2c3a`. Each engine has native amd64/arm64
+CPU/Vulkan/CUDA builds with immediate Actions artifacts, matching full source,
+build records, offline notices, checksums and a testing-only release manifest.
+The first runtime compile identified GCC 13's missing ARM SME support; the
+builder uses GCC 14 without patching upstream. Component builds are in progress;
+full app builds were not dispatched for this source slice.
+
+Changed JavaScript, inline browser script and Python parse checks, native guard
+C syntax and source whitespace checks passed. Still required: successful runtime
+matrices, native desktop/app compilation, real managed/custom GPU and CPU starts,
+INI/download/import interaction, unchanged mapped llama streaming, and manual
+Linux/Android dictation permission, cancellation, exactly-once submission and
+no-retained-audio checks. No scripted product test was added or run.

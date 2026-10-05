@@ -24,8 +24,7 @@ import { visibleSession } from '../rpc/notifications.mjs';
 import { claimInstance, processStart, probeBackend } from '../instance.mjs';
 import { paths } from '../access/paths.mjs';
 import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
-import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, setDownloadCompleteHandler } from '../models/downloads.mjs';
-import { saveModelSettings } from '../models/settings.mjs';
+import { transcribe } from '../localai/dictation.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -53,7 +52,6 @@ if (!ownership) {
 const instanceToken = process.env.BASHKITTEN_INSTANCE_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(instanceToken || '')) throw Error('Private controller token required');
 const started = await processStart(process.pid);
-if (platform === 'linux') setDownloadCompleteHandler(() => controlRequest('llama-refresh', { onlyIfRunning: true }));
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const scheme = 'https';
@@ -290,27 +288,18 @@ async function handler(req, res) {
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings', 'llama-options', 'llama-configure', 'llama-start', 'llama-stop', 'llama-probe', 'llama-refresh'].includes(value.command)) throw Error('Unknown control action');
+      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings'].includes(value.command)) throw Error('Unknown control action');
+      if (value.command === 'package-job' && (value.kind === 'localai-runtime' || value.retry && (await controlRequest('status')).packages?.job?.kind === 'localai-runtime')) throw Error('Manage LocalAI in the native desktop panel');
+      if (value.command === 'package-cancel' && (await controlRequest('status')).packages?.job?.kind === 'localai-runtime') throw Error('Manage LocalAI in the native desktop panel');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
     }
-    if (route === '/api/models/downloads') {
-      requireMethod(req, ['GET', 'POST']);
-      return json(res, mutation ? await startDownload(await jsonBody(req)) : await downloadsStatus(), mutation ? 202 : 200);
+    if (route === '/api/dictation/capability') {
+      requireMethod(req, ['GET']); return json(res, await controlRequest('whisper-capability'));
     }
-    if (route === '/api/models/settings') {
+    if (route === '/api/dictation') {
       requireMethod(req, ['POST']);
-      const input = await jsonBody(req), saved = await saveModelSettings(input);
-      if (Object.hasOwn(input, 'directory') && platform === 'linux') await controlRequest('llama-refresh', { onlyIfRunning: true });
-      return json(res, saved);
-    }
-    if (route === '/api/models/search' || route === '/api/models/repository') {
-      requireMethod(req, ['POST']);
-      return json(res, await (route.endsWith('/search') ? searchModels : modelRepository)(await jsonBody(req)));
-    }
-    const modelDownloadRoute = route.match(/^\/api\/models\/downloads\/([a-f0-9-]{36})\/(pause|resume|cancel)$/);
-    if (modelDownloadRoute) {
-      requireMethod(req, ['POST']);
-      return json(res, await controlDownload(modelDownloadRoute[1], modelDownloadRoute[2]));
+      res.setHeader('Cache-Control', 'no-store');
+      return json(res, await transcribe(req, res, cancel => auth.watch(record, cancel)));
     }
     if (route === '/api/settings') {
       requireMethod(req, ['GET', 'POST']);
@@ -455,4 +444,4 @@ for (const meta of await allMeta()) if (await running(meta.id)) {
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
 console.log('BashKitten private Pi RPC backend ready');
-process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs(), shutdownDownloads()]).finally(() => process.exit(0)); });
+process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs()]).finally(() => process.exit(0)); });

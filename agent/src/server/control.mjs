@@ -21,8 +21,9 @@ import { AccessStack } from './access/stack.mjs';
 import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake } from './access/wake.mjs';
-import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
-import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
+import { LocalAI } from './localai/localai.mjs';
+import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
+import { saveModelSettings } from './models/settings.mjs';
 import { TermuxDisplay } from './platform/termux/display.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
 
@@ -33,7 +34,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function controlRequest(command, value) {
   const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
-    try { return await socketRequest(controlSocket, '/' + command, value, command === 'start' || command === 'restart' || command.startsWith('share-') ? 180000 : 30000); }
+    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command.startsWith('share-') ? 180000 : 30000); }
     catch (error) {
       // A fresh launch can reach the old controller after its status reply but
       // before shutdown finishes. Retry rejected starts or failed connections,
@@ -128,17 +129,17 @@ async function serve() {
     fatal: error => { lastError = error.message; serial = serial.then(() => turnOff(error.message)).catch(error => { lastError = error.message; }); },
   });
   const display = platform === 'termux' ? new TermuxDisplay() : null;
+  const localAI = platform === 'linux' ? new LocalAI(stack.services) : null;
+  if (localAI) await localAI.initialize();
+  setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
     'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
     'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages,
-    ...(platform === 'linux' ? { 'llama-runtime': installLlamaRuntime } : {}),
+    ...(localAI ? { 'localai-runtime': (job, input) => localAI.install(job, input) } : {}),
   });
   await jobs.init();
   await ensureIntegration();
-  if (platform === 'linux') subscribeManagedLlama(current => {
-    serial = serial.then(async () => { await syncManagedLlamaProvider(current); await stack.reload(); }).catch(error => { lastError = error.message; });
-  });
   async function persist() { await writeJson(stateFile, { ...state, error: lastError }); }
   async function adoptBrowser(value) {
     if (platform !== 'linux') throw Error('Browser-owned Agent is only available on Linux');
@@ -192,9 +193,10 @@ async function serve() {
     starting = true; lastError = null;
     try {
       await acquireWake();
+      resumeDownloads();
       await stack.start();
       await stack.services.startup();
-      if (platform === 'linux') await startManagedLlama();
+      if (localAI) { await localAI.startup(); await localAI.importProvider(); }
     } catch (error) {
       lastError = error.message; state.web = false;
       await stopGroup().catch(failure => { lastError += '; ' + failure.message; });
@@ -212,12 +214,14 @@ async function serve() {
     // final descendant cleanup.
     const workerError = await stopWorkers().then(() => null, error => error);
     const displayError = display ? await display.stop().then(() => null, error => error) : null;
+    const speechError = await localAI?.shutdown().then(() => null, error => error);
     const serviceError = await stack.services.stopAll().then(() => null, error => error);
-    if (platform === 'linux') await stopManagedLlama();
+    await shutdownDownloads();
     await stack.stop();
     await releaseWake();
     if (workerError) throw workerError;
     if (displayError) throw displayError;
+    if (speechError) throw speechError;
     if (serviceError) throw serviceError;
   }
   async function turnOff(error = null) {
@@ -242,7 +246,7 @@ async function serve() {
       packages: { ...await updateStatus(), job: await jobs.status() },
       web: { status: stopping ? 'stopping' : starting || stack.reconfiguring ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
         desired: state.web, url: stack.ready || stack.reconfiguring ? stack.origin : undefined, error: lastError, ...await stack.status() },
-      ...(platform === 'linux' ? { llama: managedLlamaStatus() } : {}), sessions };
+      sessions };
   }
   async function reloadServices(job) {
     if (platform === 'termux') await apt(job, ['check']);
@@ -276,6 +280,34 @@ async function serve() {
       if (!stack.ready || stopping) throw Error('Turn on the local Agent before starting Display');
       return display.start();
     }
+    if (command.startsWith('localai-')) {
+      if (!localAI) throw Error('LocalAI is available only on this Linux host');
+      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: job?.kind === 'localai-runtime' ? job : null }; }
+      if (command === 'localai-save') return localAI.save(value);
+      if (command === 'localai-ini') return localAI.ini(value);
+      if (command === 'localai-check') return localAI.check(value.engine);
+      if (command === 'localai-install') { if (stopping) throw Error('Agent is stopping'); return jobs.start('localai-runtime', { engine: value.engine }); }
+      if (command === 'localai-cancel') { if ((await jobs.status())?.kind !== 'localai-runtime') throw Error('No LocalAI download is active'); await jobs.cancel(); return jobs.status(); }
+      if (command === 'localai-share') return localAI.share(value.enabled);
+      if (command === 'localai-action') {
+        if (!stack.ready || stopping) throw Error('Turn on Local before starting an engine');
+        return localAI.action(value.engine, value.action);
+      }
+      if (command === 'localai-refresh') { await localAI.importProvider(); return localAI.status(); }
+      throw Error('Unknown LocalAI action');
+    }
+    if (command.startsWith('native-models-')) {
+      if (!localAI) throw Error('Open LocalAI on a Linux host to manage models');
+      if (command === 'native-models-status') return downloadsStatus();
+      if (command === 'native-models-settings') return saveModelSettings(value);
+      if (command === 'native-models-search') return searchModels(value);
+      if (command === 'native-models-repository') return modelRepository(value);
+      if (command === 'native-models-download') return startDownload(value);
+      if (command === 'native-models-action') return controlDownload(value.id, value.action);
+      throw Error('Unknown model action');
+    }
+    if (command === 'whisper-capability') return localAI ? localAI.speechCapability() : { available: false };
+    if (command === 'whisper-release') { await localAI?.releaseSpeech(value.id, value.completed === true); return { ok: true }; }
     if (command === 'share-status') return remote.status();
     if (command === 'share-setup') return remote.begin(value);
     if (command === 'share-reissue') return remote.begin(value, { reissue: true });
@@ -288,12 +320,18 @@ async function serve() {
     if (command === 'service-remove') return stack.services.remove(value);
     if (command === 'service-action') {
       if (!stack.ready || stopping) throw Error('Turn on Local before controlling a service');
+      if (localAI && value.id === 'localai-llama') { await localAI.action('llama', value.action); return stack.services.status(); }
       return stack.services.action(value);
     }
     if (command === 'remote-services' || command === 'remote-service-action') {
       const published = await remote.state();
       if (!stack.ready || stopping || !stack.tunnelStarted || !published.enabled || published.id !== value.generation) throw Error('Remote services are not available');
-      return command === 'remote-services' ? stack.services.status({ remote: true }) : stack.services.action(value, { remote: true });
+      if (command === 'remote-services') return stack.services.status({ remote: true });
+      if (localAI && value.id === 'localai-llama') {
+        if (!(await stack.services.entries()).some(entry => entry.id === value.id && entry.enabled)) throw Error('Service is not available');
+        await localAI.action('llama', value.action); return stack.services.status({ remote: true });
+      }
+      return stack.services.action(value, { remote: true });
     }
     if (command === 'package-inventory') return packageInventory();
     if (command === 'notifications') return { notifications: await pendingNotifications() };
@@ -318,19 +356,6 @@ async function serve() {
       await socketRequest(socketPath(value.id), '/stop', {}, 10000);
     } else if (command === 'pi-stop' || command === 'pi-kill') {
       for (const id of value.id ? [value.id] : (await allMeta()).map(meta => meta.id)) await stopPi(id, command === 'pi-kill');
-    } else if (command.startsWith('llama-')) {
-      if (platform !== 'linux') throw Error('Managed llama.cpp is available on Linux');
-      if (command === 'llama-options') return llamaRuntimeOptions();
-      if (command === 'llama-probe') return probeLlamaEndpoint(value);
-      if (command === 'llama-refresh') {
-        if (!value.onlyIfRunning || managedLlamaStatus().desired) await refreshManagedLlama();
-        return status();
-      }
-      if (command === 'llama-configure') await configureManagedLlama(value.config || value);
-      else if (command === 'llama-start' || command === 'llama-stop') await configureManagedLlama({ enabled: command === 'llama-start' });
-      else throw Error('Unknown llama.cpp control');
-      if (command === 'llama-stop') await stopManagedLlama();
-      else if (stack.ready) await startManagedLlama();
     } else if (command === 'native-file') {
       if (platform !== 'linux') throw Error('Native file opening is only available on Linux');
       return nativeFile(value);
@@ -350,12 +375,15 @@ async function serve() {
       if (req.url === '/status') return json(res, await status());
       if (req.method !== 'POST') throw Error('Use POST for control actions');
       const value = await jsonBody(req);
-      if (req.url === '/llama-wait') {
-        if (platform !== 'linux' || !state.web || stopping) throw Error('Local llama.cpp is unavailable while Agent is off');
-        const connection = await waitForManagedLlamaReady({ model: value.model, timeout: 15 * 60 * 1000 });
-        const current = managedLlamaStatus();
-        await syncManagedLlamaProvider(current);
-        return json(res, { ...current, state: 'ready', model: connection.model, url: connection.url });
+      if (req.url === '/llama-wait' || req.url === '/whisper-acquire') {
+        if (!localAI || !state.web || stopping) throw Error('LocalAI is unavailable while Agent is off');
+        const cancelled = new AbortController();
+        const cancel = () => { cancelled.abort(); if (req.url === '/whisper-acquire') void localAI.releaseSpeech(value.id).catch(() => {}); };
+        res.once('close', cancel);
+        try {
+          const result = req.url === '/llama-wait' ? await localAI.waitReady(value.model, cancelled.signal) : await localAI.acquireSpeech(value.id);
+          res.off('close', cancel); return json(res, result);
+        } finally { res.off('close', cancel); }
       }
       const operation = serial.then(() => {
         if (res.destroyed) throw Error('Native request cancelled');
@@ -391,6 +419,7 @@ async function serve() {
         if (state.web) await startWeb();
         restartPending = false;
       }
+      if (localAI && stack.ready && localAI.importState.state === 'pending') await localAI.importProvider();
       const next = (await readJson(packageFile, null))?.revision;
       if ((next && next !== revision) || initialNode !== (await fs.stat(process.execPath)).ino) {
         // The next explicit launch loads the updated controller too; reload children now.
@@ -415,7 +444,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   } else {
     try {
       const input = process.argv[3];
-      const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin, 65536)).toString() || '{}') : input ? JSON.parse(input) : {};
+      const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin)).toString() || '{}') : input ? JSON.parse(input) : {};
       if (command !== 'browser-shutdown') await ensureManager();
       const result = await controlRequest(command, command === 'status' ? undefined : value).catch(error => {
         if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };

@@ -1,0 +1,333 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import net from 'node:net';
+import { randomUUID } from 'node:crypto';
+import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
+import { getModelsDirectory } from '../models/settings.mjs';
+import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
+import { localAIDir, requireDesktop, runtimeInfo, checkRuntime, installRuntime, validateBinary } from './runtimes.mjs';
+
+const configFile = path.join(localAIDir, 'config.json');
+const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+const defaults = engine => ({ mode: 'managed', binary: '', backend: 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
+  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : { model: '', keepRunning: false }) });
+const cleanText = value => typeof value === 'string' && !value.includes('\0');
+async function readConfiguration() {
+  const saved = await readJson(configFile, null);
+  if (saved) { if (saved.version !== 1) throw Error('Unsupported LocalAI configuration'); return saved; }
+  // Preserve a prior explicitly enabled setup as Custom. Never install over it.
+  const legacy = await readJson(path.join(dataDir, 'llama/config.json'), null);
+  const llama = defaults('llama');
+  if (legacy) {
+    llama.mode = 'custom'; llama.binary = '/usr/bin/llama-server'; llama.backend = legacy.backend || 'auto'; llama.startup = Boolean(legacy.enabled);
+    llama.keyFile = path.join(dataDir, 'llama/api-key');
+    if (path.isAbsolute(legacy.model || '')) llama.argv = ['/usr/bin/llama-server', '--model', legacy.model, '--alias', legacy.alias || 'bashkitten-local', '--host', '127.0.0.1', '--port', '{port}', '--api-key-file', llama.keyFile,
+      '--ctx-size', String(legacy.contextSize ?? 8192), '--gpu-layers', String(legacy.backend === 'cpu' ? 0 : legacy.gpuLayers ?? 'auto'), '--offline', '--jinja', ...(legacy.threads ? ['--threads', String(legacy.threads)] : [])];
+  }
+  return { version: 1, llama, whisper: defaults('whisper') };
+}
+function configuration(engine, value) {
+  if (!ids[engine] || !value || !['managed', 'custom'].includes(value.mode) || !['auto', 'cuda', 'vulkan', 'cpu'].includes(value.backend)) throw Error('Invalid LocalAI configuration');
+  const result = { ...defaults(engine), ...value };
+  if (!Number.isInteger(result.port) || result.port < 0 || result.port > 65535) throw Error('Use Automatic (0) or a valid loopback port');
+  if (!cleanText(result.binary) || !path.isAbsolute(result.cwd || '') || !cleanText(result.cwd)) throw Error('Choose an executable and absolute working directory');
+  if (!Array.isArray(result.argv) || !result.argv.every(cleanText)) throw Error('Launch command must be a JSON array of arguments');
+  if (!result.env || typeof result.env !== 'object' || Array.isArray(result.env) || Object.entries(result.env).some(([key, value]) => !/^[A-Za-z_][A-Za-z_0-9]*$/.test(key) || !cleanText(value))) throw Error('Invalid command environment');
+  if (engine === 'llama') {
+    if (!cleanText(result.preset) || !path.isAbsolute(result.preset) || typeof result.startup !== 'boolean' || typeof result.importToPi !== 'boolean' || !cleanText(result.keyFile) || result.keyFile && !path.isAbsolute(result.keyFile)) throw Error('Choose a router INI, startup and coding-agent import options');
+  } else {
+    if (typeof result.keepRunning !== 'boolean' || !cleanText(result.model) || result.model && !path.isAbsolute(result.model)) throw Error('Choose a whisper.cpp model');
+    if (result.mode !== 'managed') throw Error('Whisper uses the verified managed runtime');
+    if (Object.keys(result.env).length) throw Error('Whisper does not accept environment overrides that can retain audio');
+  }
+  return result;
+}
+function argument(argv, name) {
+  const indices = argv.flatMap((value, index) => value === name || value.startsWith(name + '=') ? [index] : []);
+  if (indices.length > 1) throw Error('Specify ' + name + ' once');
+  if (!indices.length) return null;
+  const index = indices[0]; return argv[index] === name ? argv[index + 1] : argv[index].slice(name.length + 1);
+}
+async function allocatePort() {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
+}
+async function jsonRequest(url, { key, signal, data } = {}) {
+  const response = await fetch(url, { redirect: 'error', signal: signal || AbortSignal.timeout(10000), method: data ? 'POST' : 'GET',
+    headers: { ...(key ? { Authorization: 'Bearer ' + key } : {}), ...(data ? { 'Content-Type': 'application/json' } : {}) }, body: data ? JSON.stringify(data) : undefined });
+  if (!response.ok) { await response.body?.cancel(); throw Object.assign(Error(`LocalAI returned HTTP ${response.status}`), { loading: response.status === 503 }); }
+  return response.json();
+}
+function validateINI(content) {
+  if (typeof content !== 'string' || content.includes('\0')) throw Error('Invalid router INI');
+  let section = false;
+  for (const [index, raw] of content.split(/\r?\n/).entries()) {
+    const line = raw.trim(); if (!line || /^[;#]/.test(line)) continue;
+    if (/^\[[^\]\r\n]+\]\s*(?:[;#].*)?$/.test(line)) { section = true; continue; }
+    if (!section || !/^[^=\r\n]+\s*=/.test(line)) throw Error(`Invalid router INI syntax at line ${index + 1}`);
+  }
+}
+export class LocalAI {
+  constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); }
+  exclusive(action) { const result = this.serial.then(action); this.serial = result.catch(() => {}); return result; }
+  async initialize() {
+    requireDesktop(); await privateDir(localAIDir);
+    const config = await readConfiguration();
+    if (!await fs.stat(config.llama.preset).catch(() => null) && config.llama.preset === defaults('llama').preset) {
+      await fs.writeFile(config.llama.preset, '# llama.cpp router presets. Model sections use their real paths.\n[*]\nctx-size = 8192\n', { mode: 0o600, flag: 'wx' });
+    }
+    await writeJson(configFile, config);
+  }
+  async config() { requireDesktop(); return readConfiguration(); }
+  async status() {
+    const config = await this.config(), host = await this.services.status();
+    const engines = {};
+    for (const engine of Object.keys(ids)) {
+      const runtime = await runtimeInfo(engine), service = host.services.find(item => item.id === ids[engine]);
+      engines[engine] = { config: config[engine], runtime, service, url: service ? 'http://' + service.target.address : null,
+        savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && JSON.stringify(this.runningConfig.get(engine)) !== JSON.stringify(config[engine])), error: this.errors.get(engine) || '' };
+    }
+    return { ...engines, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
+  }
+  async save(value) { return this.exclusive(() => this.saveConfiguration(value)); }
+  async saveConfiguration({ engine, config: input, revision }) {
+    const saved = await this.config();
+    if (revision !== digest(JSON.stringify(saved))) throw Error('LocalAI changed. Refresh before saving.');
+    const config = configuration(engine, input);
+    if (config.mode === 'custom') {
+      const verified = await validateBinary(engine, config.binary, config.backend, config.env); config.binary = verified.binary; config.libraries = verified.libraries;
+    }
+    if (engine === 'whisper' && config.model) await this.model(config.model);
+    // Validate the effective command before saving whenever the runtime exists.
+    if (config.mode === 'custom' || (await runtimeInfo(engine))?.binary) await this.command(engine, config, config.port || 1);
+    saved[engine] = config; await writeJson(configFile, saved);
+    if (!this.services.running.get(ids[engine])?.child) await this.configureService(engine);
+    if (engine === 'llama') await this.importProvider();
+    return this.status();
+  }
+  async binary(engine, config) {
+    const runtime = await runtimeInfo(engine);
+    const file = config.mode === 'custom' ? config.binary : runtime?.binary;
+    if (!file) throw Error(`Download the ${engine} runtime first`);
+    return validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, config.env);
+  }
+  async command(engine, config, port) {
+    const runtime = await this.binary(engine, config);
+    let argv = config.argv.length ? config.argv.map(value => value === '{port}' ? String(port) : value) : [runtime.binary, '--host', '127.0.0.1', '--port', String(port)];
+    if (!config.argv.length) {
+      if (engine === 'llama') {
+        argv.push('--models-dir', await getModelsDirectory({ create: true }), '--models-preset', config.preset, '--offline', '--jinja');
+        if (config.keyFile) argv.push('--api-key-file', config.keyFile);
+        const device = runtime.devices.find(item => item.backend === runtime.backend);
+        argv.push('--device', device?.id || 'none', '--gpu-layers', runtime.backend === 'cpu' ? '0' : 'auto');
+      } else { argv.push('--model', config.model, '--language', 'auto', '--no-timestamps'); if (runtime.backend === 'cpu') argv.push('--no-gpu'); else argv.push('--device', runtime.devices.find(item => item.backend === runtime.backend).id); }
+    }
+    if (await fs.realpath(argv[0]) !== runtime.binary || argument(argv, '--host') !== '127.0.0.1' || argument(argv, '--port') !== String(port)) throw Error('The command must use the selected binary, --host 127.0.0.1 and --port {port}');
+    if (engine === 'whisper') {
+      // Only the upstream server's non-persisting options are accepted. In
+      // particular --convert/debug/dump/prompt/context/output paths stay absent.
+      const flags = new Set(['--no-gpu', '--no-timestamps', '--no-flash-attn', '--flash-attn', '--suppress-nst']);
+      const valued = new Set(['--host', '--port', '--model', '--language', '--threads', '--processors', '--device', '--beam-size', '--best-of', '--no-speech-thold']);
+      for (let index = 1; index < argv.length; index++) {
+        if (flags.has(argv[index])) continue;
+        if (!valued.has(argv[index]) || ++index >= argv.length) throw Error('Whisper command contains an option incompatible with private in-memory dictation');
+      }
+      if (argument(argv, '--model') !== config.model) throw Error('Whisper command must use the selected model');
+      if (runtime.backend === 'cpu' && !argv.includes('--no-gpu')) throw Error('The selected CPU command needs --no-gpu');
+      if (runtime.backend !== 'cpu' && (argv.includes('--no-gpu') || !runtime.devices.some(device => device.backend === runtime.backend && device.id === (argument(argv, '--device') || '0')))) throw Error('The Whisper command must use the selected, available GPU device');
+      await this.model(config.model);
+    } else {
+      const preset = argument(argv, '--models-preset') || config.env.LLAMA_ARG_MODELS_PRESET;
+      if (preset && preset !== config.preset) throw Error('The command must use the selected router INI');
+      if (argument(argv, '--api-key') !== null && (config.keyFile || argument(argv, '--api-key-file'))) throw Error('Choose the direct application key or its key file, not both');
+      if ((argument(argv, '--api-key-file') || config.env.LLAMA_ARG_API_KEY_FILE || '') !== config.keyFile) throw Error('The command and Pi import must use the same selected key file');
+    }
+    return { argv, cwd: config.cwd, env: config.env };
+  }
+  async configureService(engine, { runtimeRequired = false } = {}) {
+    const config = (await this.config())[engine], status = await this.services.status();
+    const existing = status.services.find(item => item.id === ids[engine]);
+    const runtime = config.mode === 'custom' ? config.binary : (await runtimeInfo(engine))?.binary;
+    if (!runtime || engine === 'whisper' && !config.model) { if (runtimeRequired) throw Error(`Configure ${engine} in LocalAI first`); return; }
+    const port = config.port || (existing ? Number(existing.target.address.split(':').at(-1)) : await allocatePort());
+    const command = await this.command(engine, config, port);
+    await this.services.save({ internal: true, revision: status.revision, service: { id: ids[engine], name: engine === 'llama' ? 'llama.cpp' : 'Whisper',
+      target: { network: 'tcp', address: '127.0.0.1:' + port }, scheme: 'http', openPath: '/', kind: engine === 'llama' ? 'llama' : 'web',
+      enabled: engine === 'llama' && Boolean(existing?.enabled), startup: engine === 'llama' && config.startup, command } });
+  }
+  async action(engine, action) { return this.exclusive(() => this.performAction(engine, action)); }
+  async performAction(engine, action) {
+    if (!ids[engine] || !['start', 'stop', 'reload'].includes(action)) throw Error('Unknown LocalAI action');
+    if (engine === 'whisper' && this.speech) throw Error('Finish or cancel dictation before changing Whisper');
+    if (action === 'start' && this.services.running.get(ids[engine])?.child) return this.status();
+    if (action === 'reload') await this.services.action({ id: ids[engine], action: 'stop' });
+    if (action !== 'stop') await this.configureService(engine, { runtimeRequired: true });
+    await this.services.action({ id: ids[engine], action: action === 'reload' ? 'start' : action });
+    if (action !== 'stop') this.runningConfig.set(engine, structuredClone((await this.config())[engine]));
+    if (engine === 'llama') await this.importProvider();
+    return this.status();
+  }
+  async share(enabled) {
+    if (typeof enabled !== 'boolean') throw Error('Choose whether to share llama.cpp');
+    if (!this.services.running.get(ids.llama)?.child) await this.configureService('llama', { runtimeRequired: enabled });
+    const state = await this.services.status(), entry = state.services.find(item => item.id === ids.llama);
+    if (!entry) throw Error('Configure llama.cpp in LocalAI first');
+    await this.services.save({ internal: true, revision: state.revision, service: { ...entry, enabled } });
+    return this.status();
+  }
+  async key(config) {
+    if (config.keyFile) {
+      const key = (await fs.readFile(config.keyFile, 'utf8')).split(/\r?\n/).map(line => line.trim()).find(line => line && !line.startsWith('#'));
+      if (!key) throw Error('The selected application key file has no key to import');
+      return key;
+    }
+    const csv = argument(config.argv, '--api-key') || config.env.LLAMA_API_KEY || '';
+    if (!csv.startsWith('"')) return csv.split(',')[0];
+    const value = /^"((?:[^"]|"")*)"(?:,|$)/.exec(csv);
+    if (!value) throw Error('Invalid application key CSV');
+    return value[1].replaceAll('""', '"');
+  }
+  async catalogue() {
+    const service = (await this.services.entries()).find(entry => entry.id === ids.llama);
+    if (!service || !this.services.running.get(ids.llama)?.child) throw Error('Local llama.cpp is stopped');
+    const url = 'http://' + service.target.address;
+    const health = await jsonRequest(url + '/health');
+    if (health.status !== 'ok') throw Object.assign(Error('Local llama.cpp is loading'), { loading: true });
+    const config = this.runningConfig.get('llama') || (await this.config()).llama;
+    const result = await jsonRequest(url + '/models', { key: await this.key(config) });
+    if (!Array.isArray(result.data) || !result.data.length || result.data.some(model => typeof model.id !== 'string' || !model.id)) throw Error('No router models are available yet');
+    return { url, config, models: result.data };
+  }
+  async importProvider() {
+    const config = (await this.config()).llama;
+    if (!config.importToPi) { this.importState = { state: 'off' }; return; }
+    try {
+      const info = await this.catalogue();
+      if (JSON.stringify(config) !== JSON.stringify(info.config)) throw Error('Saved changes are pending Reload; the running service and existing Pi provider are unchanged');
+      // Recheck after network/model discovery so opting out cancels pending work.
+      if (!(await this.config()).llama.importToPi) return;
+      const key = await this.key(info.config);
+      const models = await discoverManagedModels(info.url + '/v1', key, 'Local llama.cpp');
+      if (JSON.stringify((await this.config()).llama) !== JSON.stringify(config)) return;
+      const result = await syncManagedProvider({ id: 'bashkitten-llama', name: 'Local llama.cpp', baseUrl: info.url + '/v1',
+        ...(info.config.keyFile ? { apiKeyFile: info.config.keyFile } : key ? { apiKey: key } : {}), models });
+      this.importState = { state: result?.state === 'pending' ? 'pending' : 'ready', provider: 'bashkitten-llama', endpoint: info.url + '/v1' };
+    } catch (error) { this.importState = { state: 'pending', error: error.message }; }
+  }
+  async waitReady(model, signal) {
+    let requested = false;
+    for (;;) {
+      signal?.throwIfAborted();
+      let info;
+      try { info = await this.catalogue(); } catch (error) { if (!error.loading && !['ECONNREFUSED', 'ECONNRESET'].includes(error.cause?.code)) throw error; await pause(250); continue; }
+      const entry = info.models.find(item => item.id === model);
+      if (!entry) throw Error('The selected model is no longer in the llama.cpp router');
+      if (entry.status?.failed) throw Error('llama.cpp could not load the selected model');
+      if (!entry.status || ['loaded', 'sleeping'].includes(entry.status.value)) { await this.importProvider(); return { state: 'ready', model, url: info.url }; }
+      if (entry.status.value === 'unloaded' && !requested) { requested = true; await jsonRequest(info.url + '/models/load', { key: await this.key(info.config), data: { model } }); }
+      await pause(250);
+    }
+  }
+  async ini({ file, content, revision, create = false }) {
+    if (!cleanText(file) || !path.isAbsolute(file)) throw Error('Choose an absolute router INI path');
+    file = await fs.realpath(file).catch(async error => { if (error.code !== 'ENOENT') throw error; return path.join(await fs.realpath(path.dirname(file)), path.basename(file)); });
+    const before = await fs.readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+    if (content === undefined) return { file, content: before || '', revision: before === null ? null : digest(before) };
+    if (before !== null && (create || revision !== digest(before)) || before === null && revision !== null) throw Error('The router INI changed outside this editor. Reopen it before saving.');
+    validateINI(content);
+    const temporary = path.join(path.dirname(file), '.' + path.basename(file) + '-' + randomUUID());
+    try {
+      const mode = before === null ? 0o600 : (await fs.stat(file)).mode & 0o777;
+      const output = await fs.open(temporary, 'wx', mode);
+      try { await output.writeFile(content); await output.sync(); } finally { await output.close(); }
+      const latest = await fs.readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+      if (latest !== before) throw Error('The router INI changed while saving');
+      if (before === null) { await fs.link(temporary, file); await fs.unlink(temporary); } else await fs.rename(temporary, file);
+      const directory = await fs.open(path.dirname(file), 'r'); try { await directory.sync(); } finally { await directory.close(); }
+    } finally { await fs.rm(temporary, { force: true }); }
+    return { file, content, revision: digest(content) };
+  }
+  async model(file) {
+    if (!file || !path.isAbsolute(file)) throw Error('Choose a whisper.cpp ggml model');
+    const handle = await fs.open(file, 'r');
+    try { const bytes = Buffer.alloc(4); await handle.read(bytes, 0, 4, 0); if (bytes.readUInt32LE() !== 0x67676d6c) throw Error('This is not a whisper.cpp ggml model'); }
+    finally { await handle.close(); }
+  }
+  async check(engine) { return checkRuntime(engine, (await this.config())[engine]); }
+  async install(job, { engine }) {
+    const before = (await this.config())[engine];
+    return installRuntime(job, { engine, config: before }, async (runtime, activate) => {
+      await job.phase('Waiting for this runtime to stop before activating the update', 'waiting');
+      while (this.services.running.get(ids[engine])?.child || engine === 'whisper' && this.speech) {
+        job.checkCancellation();
+        if (JSON.stringify((await this.config())[engine]) !== JSON.stringify(before)) throw Error('Runtime selection changed; update was not activated');
+        await pause(250);
+      }
+      await this.exclusive(async () => {
+        const config = await this.config(); job.checkCancellation();
+        if (JSON.stringify(config[engine]) !== JSON.stringify(before) || config[engine].mode !== 'managed') throw Error('Runtime selection changed; update was not activated');
+        if (this.services.running.get(ids[engine])?.child) throw Error('The runtime started before update activation; retry after stopping it');
+        await job.phase('Activating verified runtime'); await activate();
+      });
+    });
+  }
+  async startup() {
+    this.stopping = false;
+    const config = await this.config();
+    if (!config.llama.startup) return;
+    try { await this.action('llama', 'start'); this.errors.delete('llama'); }
+    catch (error) { this.errors.set('llama', error.message); }
+  }
+
+  async speechCapability() {
+    const config = (await this.config()).whisper;
+    if (!config.model || !(await runtimeInfo('whisper'))?.binary) return { available: false };
+    try { await this.command('whisper', config, config.port || 1); return { available: true, host: os.hostname() }; }
+    catch { return { available: false }; }
+  }
+  async acquireSpeech(id) {
+    if (this.stopping || this.speech) throw Error('Whisper is busy; finish the current dictation first');
+    if (!/^[a-f0-9-]{36}$/.test(id)) throw Error('Invalid dictation request');
+    const operation = { id, controller: new AbortController(), keepRunning: false };
+    this.speech = operation;
+    const check = () => { operation.controller.signal.throwIfAborted(); if (this.stopping || this.speech !== operation) throw Error('Dictation cancelled'); };
+    operation.start = this.exclusive(async () => {
+      check(); const config = (await this.config()).whisper; check();
+      operation.keepRunning = config.keepRunning;
+      if (this.services.running.get(ids.whisper)?.child && JSON.stringify(this.runningConfig.get('whisper')) !== JSON.stringify(config)) await this.services.stop(ids.whisper);
+      check(); await this.configureService('whisper', { runtimeRequired: true }); check();
+      await this.services.action({ id: ids.whisper, action: 'start' }); check();
+      this.runningConfig.set('whisper', structuredClone(config));
+      return (await this.status()).whisper;
+    });
+    try {
+      const whisper = await operation.start;
+      for (;;) {
+        check();
+        if (!this.services.running.get(ids.whisper)?.child) throw Error('Whisper stopped while loading');
+        try { await jsonRequest(whisper.url + '/health', { signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(3000)]) }); break; }
+        catch (error) { check(); if (!error.loading && !['ECONNREFUSED', 'ECONNRESET'].includes(error.cause?.code) && error.name !== 'TimeoutError') throw error; await pause(250); }
+      }
+      check();
+      return { url: whisper.url, id };
+    } catch (error) { await this.releaseSpeech(id); throw error; }
+  }
+  async releaseSpeech(id, completed = false) {
+    const operation = this.speech;
+    if (operation?.id !== id) return;
+    operation.controller.abort();
+    operation.release ||= (async () => {
+      // Cancellation can arrive during configure/start. Drain it before Stop so
+      // a late spawn cannot outlive the recording or whole-Agent shutdown.
+      await operation.start.catch(() => {});
+      if (!completed || !operation.keepRunning || this.stopping) await this.services.stop(ids.whisper);
+      if (this.speech === operation) this.speech = null;
+    })();
+    return operation.release;
+  }
+  async shutdown() { this.stopping = true; if (this.speech) await this.releaseSpeech(this.speech.id); }
+}

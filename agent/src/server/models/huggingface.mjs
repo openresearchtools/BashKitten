@@ -83,9 +83,10 @@ async function jsonRequest(route, signal) {
     return { value, headers: request.response.headers };
   } finally { request.close(); }
 }
-export async function searchModels({ query } = {}) {
+export async function searchModels({ query, type = 'llama' } = {}) {
   if (typeof query !== 'string' || !query.trim()) throw modelError('Enter a model name to search');
-  const parameters = new URLSearchParams({ search: query.trim(), filter: 'gguf', sort: 'downloads', direction: '-1' });
+  if (!['llama', 'whisper'].includes(type)) throw modelError('Choose llama.cpp or whisper.cpp models');
+  const parameters = new URLSearchParams({ search: type === 'whisper' ? query.trim() + ' whisper.cpp' : query.trim(), ...(type === 'llama' ? { filter: 'gguf' } : {}), sort: 'downloads', direction: '-1' });
   const { value } = await jsonRequest('/api/models?' + parameters);
   if (!Array.isArray(value)) throw modelError('Hugging Face returned invalid search results');
   return { models: value.filter(x => typeof x.id === 'string').map(x => ({ id: x.id, downloads: Number(x.downloads) || 0, likes: Number(x.likes) || 0 })) };
@@ -109,7 +110,7 @@ export async function repositoryFiles(id, requestedRevision, signal) {
       if (!Number.isSafeInteger(size) || size < 0) throw modelError('Hugging Face did not report a valid file size');
       const hash = item.lfs?.oid || item.oid;
       if (typeof hash !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(hash)) throw modelError('Hugging Face did not report a valid file identity');
-      files.set(path, { path, size, gguf: /\.gguf$/i.test(path), hash });
+      files.set(path, { path, size, gguf: /\.gguf$/i.test(path), whisper: /(?:^|\/)ggml-[^/]+\.bin$/i.test(path), hash });
     }
     next = null;
     for (const link of (headers.get('link') || '').split(',')) {

@@ -23,7 +23,7 @@ export async function serviceSettings(parent, control, win) {
   const draw = result => {
     if (!parent.isConnected) return;
     state = result; body.replaceChildren();
-    for (const service of state.services) {
+    for (const service of state.services.filter(service => !service.id.startsWith("localai-"))) {
       const card = node("section"); card.className = "connection-card";
       card.append(node("strong", service.name), node("p", `${service.state} · ${service.reachable ? "Target reachable" : "Target unavailable"}`));
       if (service.error) card.append(node("p", service.error));

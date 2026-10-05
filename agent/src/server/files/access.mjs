@@ -90,7 +90,10 @@ export async function authorizeManagerPath(filename, { tree = false } = {}) {
   access?.signal.throwIfAborted();
   if (!access?.remote) return;
   const target = await resolved(filename);
-  for (const entry of privatePaths) {
+  const localAI = await readJson(path.join(dataDir, 'localai/config.json'), null);
+  const configured = [localAI?.llama?.preset, localAI?.llama?.keyFile,
+    ...(localAI?.llama?.mode === 'custom' ? [localAI.llama.binary, ...(localAI.llama.libraries || [])] : [])].filter(value => typeof value === 'string' && path.isAbsolute(value));
+  for (const entry of [...privatePaths, ...configured]) {
     const root = await resolved(entry);
     if (contains(root, target) || (tree && contains(target, root))) {
       throw Object.assign(Error('This path contains private host configuration'), { status: 403 });

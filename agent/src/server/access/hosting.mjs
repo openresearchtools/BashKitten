@@ -15,6 +15,7 @@ const stateFile = path.join(accessDir, 'hosting.json');
 const runningDir = path.join(accessDir, 'services');
 const script = fileURLToPath(import.meta.url), exec = promisify(execFile);
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+const localAI = id => ['localai-llama', 'localai-whisper'].includes(id);
 const unit = id => `bashkitten-service-${id}.scope`;
 const text = value => typeof value === 'string' && !value.includes('\0');
 
@@ -97,15 +98,19 @@ export class HostedServices {
   async save(value) {
     const entries = await this.entries();
     if (value.revision !== digest(JSON.stringify(entries))) throw Error('Services changed. Refresh before saving.');
+    if (localAI(value.service?.id) && !value.internal) throw Error('Configure this service in LocalAI');
     const entry = definition({ ...value.service, id: value.service?.id || randomUUID() });
+    if (entry.id === 'localai-whisper' && entry.enabled) throw Error('Whisper is available only through authenticated dictation');
     const index = entries.findIndex(item => item.id === entry.id);
-    await this.unpublish(entry.id);
+    if (index >= 0 && JSON.stringify(entries[index]) === JSON.stringify(entry)) return this.status();
+    if (index >= 0 && (!entry.enabled || JSON.stringify(entries[index].target) !== JSON.stringify(entry.target) || JSON.stringify(entries[index].command) !== JSON.stringify(entry.command))) await this.unpublish(entry.id);
     if (index === -1) entries.push(entry); else entries[index] = entry;
     await writeJson(stateFile, { version: 2, services: entries });
     await this.publish(); return this.status();
   }
   async remove(value) {
     const entries = await this.entries();
+    if (localAI(value.id)) throw Error('Configure this service in LocalAI');
     if (value.revision !== digest(JSON.stringify(entries))) throw Error('Services changed. Refresh before removing.');
     if (!entries.some(entry => entry.id === value.id)) throw Error('Service no longer exists');
     await this.unpublish(value.id); await this.stop(value.id);
@@ -135,9 +140,17 @@ export class HostedServices {
     const owner = { child, state: 'starting', error: '', output: '', revision: digest(JSON.stringify(entry)), stopping: false };
     this.running.set(entry.id, owner);
     const secrets = Object.entries(entry.command.env).filter(([name]) => /key|token|password|secret/i.test(name)).map(([, value]) => value).filter(Boolean);
+    const keyAt = entry.command.argv.indexOf('--api-key');
+    if (keyAt >= 0 && entry.command.argv[keyAt + 1]) secrets.push(entry.command.argv[keyAt + 1]);
+    for (const value of entry.command.argv) if (value.startsWith('--api-key=')) secrets.push(value.slice('--api-key='.length));
     for (const stream of [child.stdout, child.stderr]) stream.on('data', bytes => {
-      let text = bytes.toString(); for (const secret of secrets) text = text.replaceAll(secret, '[redacted]');
-      owner.output = (owner.output + text).slice(-65536);
+      if (entry.id === 'localai-whisper') return; // Inference output never enters retained logs.
+      owner.rawOutput = (owner.rawOutput || '') + bytes.toString();
+      owner.rawOutput = owner.rawOutput.slice(-65536);
+      let text = owner.rawOutput; for (const secret of secrets) text = text.replaceAll(secret, '[redacted]');
+      // Withhold a possible partial secret until the next chunk completes it.
+      for (const secret of secrets) for (let n = 1; n < secret.length; n++) if (text.endsWith(secret.slice(0, n))) text = text.slice(0, -n);
+      owner.output = text;
     });
     owner.done = new Promise(resolve => {
       child.once('error', error => { owner.error = error.message; });
@@ -168,7 +181,7 @@ export class HostedServices {
     if (failure && owner.child) throw failure;
   }
   async startup() {
-    for (const entry of await this.entries()) if (entry.startup) {
+    for (const entry of await this.entries()) if (entry.startup && !localAI(entry.id)) {
       try { await this.start(entry); }
       catch (error) { this.running.set(entry.id, { state: 'failed', error: error.message }); }
     }

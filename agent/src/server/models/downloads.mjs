@@ -361,3 +361,5 @@ export async function shutdownDownloads() {
   }
   await Promise.all(pending);
 }
+
+export function resumeDownloads() { closing = false; }

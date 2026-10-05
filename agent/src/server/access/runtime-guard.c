@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/prctl.h>
+#include <sys/resource.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -199,6 +200,8 @@ static bool release_wake_lock(void) {
 }
 
 int main(int argc, char **argv) {
+    const struct rlimit no_core = {0, 0};
+    if (setrlimit(RLIMIT_CORE, &no_core) != 0) { perror("runtime-guard: disable core dumps"); return 125; }
     if (argc == 4 && strcmp(argv[1], "wait-owner") == 0)
         return wait_owner(argv[2], argv[3]);
     if (argc < 4 || strcmp(argv[argc - 1], "serve") != 0) {

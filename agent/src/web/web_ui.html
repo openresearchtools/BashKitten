@@ -653,7 +653,6 @@
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
-            <button id="tabDownloads" type="button" role="tab" aria-selected="false" aria-controls="settingsDownloads" tabindex="-1" data-settings-tab="downloads">Download models</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
@@ -683,21 +682,6 @@
           </div>
           </section>
           <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
-            <details id="managedLlama" class="settings-section hidden">
-              <summary>Local llama.cpp</summary>
-              <p id="llamaStatus" class="meta" role="status"></p>
-              <div class="settings-grid">
-                <label>Runtime<select id="llamaBackend"><option value="auto">Automatic</option><option value="cuda">CUDA</option><option value="vulkan">Vulkan</option><option value="cpu">CPU</option></select></label>
-                <label>Model<select id="llamaModel"><option value="">First available model</option></select></label>
-                <label>Context size<input id="llamaContext" type="number" min="512" step="1" value="8192"></label>
-                <label>GPU layers<input id="llamaGpuLayers" value="auto" placeholder="auto, all, or a number"></label>
-                <label>CPU threads<input id="llamaThreads" type="number" min="0" step="1" value="0"></label>
-              </div>
-              <p id="llamaModelsDirectory" class="meta"></p>
-              <p class="meta">Models come from the directory in Download models. Zero threads chooses automatically. Existing external providers keep their own lifecycle.</p>
-              <div class="subscription-actions"><button id="llamaInstall" type="button">Install runtime</button><button id="llamaStart" type="button">Save and start</button><button id="llamaStop" type="button">Stop</button><button id="llamaRefresh" type="button">Refresh models</button><button id="llamaDownloads" type="button">Download models</button></div>
-              <p id="llamaNotice" class="meta" role="status"></p>
-            </details>
             <h3>Pi providers</h3>
             <p class="meta">Connect using Pi’s own browser login or API key setup. Credentials are shared with Pi on this server.</p>
             <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a provider" aria-label="Find a provider"><button id="refreshServices" type="button">Refresh</button></div>
@@ -706,37 +690,6 @@
             <p class="meta">Custom models use Pi’s native ~/.pi/agent/models.json. Existing Pi configuration is loaded automatically.</p>
             <div class="subscription-actions"><button id="importPiSessions" type="button">Open an existing Pi session</button></div>
             <div id="piSessions"></div>
-          </section>
-          <section id="settingsDownloads" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabDownloads">
-            <h3>Download models</h3>
-            <p class="meta">Find models on Hugging Face and download their files to this server. Downloads continue when you close this page.</p>
-            <label>Models directory<span class="folder-field"><input id="modelsDirectory" autocomplete="off" spellcheck="false"><button id="modelsDirectoryBrowse" type="button">Browse…</button><button id="modelsDirectorySave" type="button">Save</button></span></label>
-            <p id="modelsDirectoryNotice" class="meta" role="status"></p>
-            <p id="modelsLlamaDirectoryNote" class="meta hidden">Local llama.cpp uses this same directory.</p>
-            <details class="settings-section"><summary>Hugging Face token</summary>
-              <p id="modelTokenStatus" class="meta" role="status"></p>
-              <label>Access token<input id="modelToken" type="password" placeholder="hf_…" autocomplete="new-password" spellcheck="false"></label>
-              <p class="meta">Saved privately on this server for downloads, including when no browser is open. Gated models also require access to be granted on Hugging Face.</p>
-              <div class="subscription-actions"><button id="modelTokenSave" type="button">Save token</button><button id="modelTokenRemove" type="button">Remove token</button></div>
-              <p id="modelTokenNotice" class="meta" role="status"></p>
-            </details>
-            <div class="settings-section">
-              <label for="modelSearch">Search Hugging Face or enter an owner/repository</label>
-              <div class="model-search-row"><input id="modelSearch" placeholder="Search models" autocomplete="off"><button id="modelSearchButton" type="button">Search</button><button id="modelRepositoryOpen" type="button">Open repository</button></div>
-              <p id="modelSearchNotice" class="meta" role="status"></p>
-              <div id="modelSearchResults" class="model-list" aria-label="Model search results"></div>
-              <section id="modelRepository" class="hidden settings-section" aria-labelledby="modelRepositoryTitle">
-                <button id="modelSearchBack" type="button" class="hidden">Back to search results</button>
-                <h3 id="modelRepositoryTitle"></h3><p id="modelRepositoryInfo" class="meta"></p>
-                <label class="check-label"><input id="modelGgufOnly" type="checkbox" checked> GGUF files only</label>
-                <div class="subscription-actions"><button id="modelFilesAll" type="button">Select shown</button><button id="modelFilesNone" type="button">Clear selection</button></div>
-                <div id="modelRepositoryFiles" class="model-list"></div>
-                <p id="modelSelection" class="meta"></p><button id="modelDownload" type="button" disabled>Download selected files</button>
-                <p id="modelDownloadNotice" class="meta" role="status"></p>
-              </section>
-            </div>
-            <div class="settings-section"><div class="settings-heading"><h3>Downloads</h3><button id="modelDownloadsRefresh" type="button">Refresh</button></div><div id="modelDownloads"></div></div>
-            <p id="modelDownloadsNotice" class="meta" role="status"></p>
           </section>
           <div class="settings-section"><button id="signOut" type="button">Sign out</button></div>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
@@ -767,9 +720,11 @@
               <select id="model" title="Model"></select>
               <select id="thinking" title="Thinking level"></select>
               <span class="toolbar-spacer"></span>
+              <button id="dictationButton" class="icon-button hidden" type="button" title="Dictate a message" aria-label="Dictate a message">🎙</button>
               <button id="sendBtn" class="primary" type="button" data-mode="play" title="Send" aria-label="Send">▶</button>
             </div>
           </div>
+          <div id="dictationStatus" class="hidden" role="status"><span></span> <button id="dictationStop" type="button">Stop</button> <button id="dictationCancel" type="button">Cancel</button></div>
           <div id="composerHint"></div>
         </form>
       </div>
@@ -1743,14 +1698,12 @@
       config = value.config;
       serverPlatform = value.platform;
       $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
-      $('#managedLlama').classList.toggle('hidden', serverPlatform !== 'linux');
-      $('#modelsLlamaDirectoryNote').classList.toggle('hidden', serverPlatform !== 'linux');
       await loadNotifications();
+      await refreshDictation();
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
       $('#defaultCwd').value = displayFolder(config.default_cwd);
       if (activeSettingsTab === 'services') await refreshServices();
-      if (modelDownloadsVisible()) await refreshModelDownloads();
     }
     async function loadNotifications() {
       $('#termuxNotifications').classList.toggle('hidden', nativeHost?.platform !== 'android');
@@ -1775,7 +1728,6 @@
         const status = await api('/api/control'), packages = status.packages;
         const pi = packages.sources.pi, apt = packages.sources.apt, npm = packages.sources.npm, job = packages.job;
         $('#packageSummary').textContent = ['Pi ' + packages.runtime.version, packages.search ? 'Packaged DDGS ' + packages.search.ddgs : 'Search runtime not installed', pi?.error ? 'Pi: ' + pi.error : pi ? 'Latest Pi ' + pi.latest + (pi.reason ? ' · ' + pi.reason : '') : 'Updates have not been checked', apt?.error ? 'APT: ' + apt.error : apt ? apt.available + ' APT updates' : '', npm?.error ? 'npm: ' + npm.error : npm ? npm.available + ' npm updates' : ''].filter(Boolean).join(' · ');
-        if (status.llama) renderLlama(status.llama);
         renderPiProcesses(status.sessions || []);
         const active = job && ['running', 'waiting'].includes(job.status);
         document.querySelectorAll('[data-package-job]').forEach(button => { button.disabled = Boolean(active); });
@@ -1823,7 +1775,6 @@
     $('#cancelPackageJob').onclick = async () => { try { await api('/api/control', {method:'POST', body:JSON.stringify({command:'package-cancel'})}); await refreshPackages(); } catch (error) { $('#packagePhase').textContent = error.message; } };
     setInterval(refreshPackages, 3000);
 
-    let llamaLoaded = false, llamaBusy = false, lastLlamaState = '';
     async function control(command, value = {}) {
       return api('/api/control', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...value,command})});
     }
@@ -1852,217 +1803,6 @@
       }
       if (!running.length) root.textContent = 'No running Pi processes.';
     }
-    function renderLlama(value) {
-      $('#llamaStatus').textContent = [value.state, value.backend, value.model, value.url, value.error].filter(Boolean).join(' · ');
-      $('#llamaModelsDirectory').textContent = value.modelsDirectory ? `Models directory: ${displayFolder(value.modelsDirectory)}` : '';
-      const selected = llamaLoaded ? $('#llamaModel').value : value.config?.model || '';
-      const choices = [{id:'', state:''}, ...(value.models || [])];
-      if (selected && !choices.some(model => model.id === selected)) choices.push({id:selected,state:''});
-      const signature = JSON.stringify(choices.map(model => [model.id, model.state]));
-      if ($('#llamaModel').dataset.models !== signature) {
-        $('#llamaModel').replaceChildren(...choices.map(model => new Option(model.id ? model.id + (model.state ? ` · ${model.state}` : '') : 'First available model', model.id)));
-        $('#llamaModel').value = selected; $('#llamaModel').dataset.models = signature;
-      }
-      if (!llamaLoaded && value.config) {
-        const config = value.config;
-        $('#llamaBackend').value = config.backend;
-        $('#llamaModel').value = config.model;
-        $('#llamaContext').value = config.contextSize;
-        $('#llamaGpuLayers').value = config.gpuLayers;
-        $('#llamaThreads').value = config.threads;
-        llamaLoaded = true;
-      }
-      $('#llamaStop').disabled = llamaBusy || !value.desired;
-      if (value.state === 'ready' && lastLlamaState !== 'ready') loadModels().catch(() => {});
-      lastLlamaState = value.state;
-    }
-    async function llamaAction(operation) {
-      if (llamaBusy) return;
-      llamaBusy = true;
-      for (const id of ['#llamaStart','#llamaStop','#llamaInstall','#llamaRefresh']) $(id).disabled = true;
-      $('#llamaNotice').textContent = '';
-      try { await operation(); await refreshPackages(); }
-      catch (error) { $('#llamaNotice').textContent = error.message; }
-      finally { llamaBusy = false; for (const id of ['#llamaStart','#llamaStop','#llamaInstall','#llamaRefresh']) $(id).disabled = false; }
-    }
-    $('#llamaStart').onclick = () => llamaAction(async () => {
-      const gpuLayers = $('#llamaGpuLayers').value.trim();
-      await control('llama-configure', {config:{enabled:true,backend:$('#llamaBackend').value,model:$('#llamaModel').value,contextSize:Number($('#llamaContext').value),gpuLayers:['auto','all'].includes(gpuLayers)?gpuLayers:Number(gpuLayers),threads:Number($('#llamaThreads').value)}});
-      await control('llama-start');
-    });
-    $('#llamaStop').onclick = () => llamaAction(() => control('llama-stop'));
-    $('#llamaRefresh').onclick = () => llamaAction(async () => { renderLlama(await control('llama-refresh')); await loadModels(); });
-    $('#llamaDownloads').onclick = () => selectSettingsTab('downloads');
-    $('#llamaInstall').onclick = () => llamaAction(async () => {
-      await control('package-job',{kind:'llama-runtime',input:{backend:$('#llamaBackend').value}});
-      selectSettingsTab('app');
-      $('#packageOutput').closest('details').open = true;
-    });
-
-    let modelDownloadsState = null, modelDownloadsRequest = null, modelDownloadTimer = null, modelsDirectoryDirty = false, modelsDirectoryRevision = 0, modelSettingsBusy = false;
-    let modelRepository = null, modelSelectedFiles = new Set(), modelCatalogGeneration = 0, modelDownloadStarting = false;
-    const modelJobActions = new Set(), modelJobRows = new Map();
-    function modelBytes(value) {
-      if (!Number.isFinite(value) || value < 0) return 'Size unknown';
-      const units = ['B','KiB','MiB','GiB','TiB']; let index = 0;
-      while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
-      return `${value.toLocaleString(undefined, {maximumFractionDigits:index ? 1 : 0})} ${units[index]}`;
-    }
-    function modelDownloadsVisible() { return Boolean(csrf) && !document.hidden && !$('#app').classList.contains('hidden') && !$('#settingsView').classList.contains('hidden') && activeSettingsTab === 'downloads'; }
-    function scheduleModelDownloads() {
-      clearTimeout(modelDownloadTimer);
-      if (modelDownloadsVisible() && modelDownloadsState?.jobs?.some(job => ['queued','downloading'].includes(job.status))) modelDownloadTimer = setTimeout(() => refreshModelDownloads(), 2000);
-    }
-    function renderModelDownloads(value) {
-      modelDownloadsState = value;
-      if (!modelsDirectoryDirty && document.activeElement !== $('#modelsDirectory')) $('#modelsDirectory').value = value.directory || '';
-      $('#modelTokenStatus').textContent = value.hasToken ? 'A token is saved on this server.' : 'No token saved. Public models can be downloaded without one.';
-      $('#modelTokenRemove').disabled = modelSettingsBusy || !value.hasToken;
-      const root = $('#modelDownloads'), jobs = value.jobs || [], ids = new Set(jobs.map(job => job.id));
-      for (const [id,row] of modelJobRows) if (!ids.has(id)) { row.remove(); modelJobRows.delete(id); }
-      root.querySelector('.model-download-empty')?.remove();
-      if (!jobs.length) { const empty = document.createElement('p'); empty.className = 'meta model-download-empty'; empty.textContent = 'No downloads yet.'; root.append(empty); }
-      for (const job of jobs) {
-        let row = modelJobRows.get(job.id);
-        if (!row) {
-          row = document.createElement('article'); row.className = 'model-download';
-          row.innerHTML = '<strong></strong><p class="meta model-download-state"></p><progress></progress><p class="meta model-download-path"></p><details><summary>Files</summary><div></div></details><div class="subscription-actions"></div>';
-          for (const [action,label] of [['pause','Pause'],['resume','Resume'],['cancel','Cancel']]) {
-            const button = document.createElement('button'); button.type = 'button'; button.dataset.action = action; button.textContent = label; button.onclick = () => modelJobAction(job.id, action); row.querySelector('.subscription-actions').append(button);
-          }
-          modelJobRows.set(job.id, row); root.append(row);
-        }
-        row.querySelector('strong').textContent = job.repository;
-        const status = job.status === 'interrupted' ? 'Interrupted · Resume to continue' : job.status;
-        row.querySelector('.model-download-state').textContent = `${status} · ${modelBytes(job.downloaded || 0)}${job.total > 0 ? ' / ' + modelBytes(job.total) : ''}${job.error ? ' · ' + job.error : ''}`;
-        row.querySelector('.model-download-path').textContent = job.directory;
-        const progress = row.querySelector('progress'); progress.setAttribute('aria-label', `${job.repository} download progress`);
-        if (job.total > 0) { progress.max = job.total; progress.value = Math.min(job.downloaded || 0, job.total); } else progress.removeAttribute('value');
-        progress.classList.toggle('hidden', !job.total && !['queued','downloading'].includes(job.status));
-        const files = row.querySelector('details > div'); files.replaceChildren();
-        for (const file of job.files || []) { const item = document.createElement('p'); item.textContent = `${file.outputPath || file.path} · ${file.status} · ${modelBytes(file.downloaded || 0)}${file.size > 0 ? ' / ' + modelBytes(file.size) : ''}`; files.append(item); }
-        for (const button of row.querySelectorAll('[data-action]')) {
-          const action = button.dataset.action;
-          button.classList.toggle('hidden', action === 'pause' ? !['queued','downloading'].includes(job.status) : action === 'resume' ? !['paused','error','interrupted'].includes(job.status) : ['complete','cancelled'].includes(job.status));
-          button.disabled = modelJobActions.has(job.id);
-        }
-      }
-    }
-    async function refreshModelDownloads() {
-      clearTimeout(modelDownloadTimer);
-      if (!csrf || document.hidden) return;
-      if (modelDownloadsRequest) return modelDownloadsRequest.catch(() => {});
-      modelDownloadsRequest = (async () => { const value = await api('/api/models/downloads'); renderModelDownloads(value); })();
-      let refreshed = false;
-      try { await modelDownloadsRequest; refreshed = true; }
-      catch (error) { $('#modelDownloadsNotice').textContent = error.message; }
-      finally { modelDownloadsRequest = null; if (refreshed) scheduleModelDownloads(); }
-    }
-    async function modelJobAction(id, action) {
-      if (modelJobActions.has(id)) return;
-      modelJobActions.add(id); $('#modelDownloadsNotice').textContent = '';
-      for (const button of modelJobRows.get(id)?.querySelectorAll('button') || []) button.disabled = true;
-      try { await api(`/api/models/downloads/${encodeURIComponent(id)}/${action}`, {method:'POST'}); await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); }
-      catch (error) { $('#modelDownloadsNotice').textContent = error.message; }
-      finally { modelJobActions.delete(id); for (const button of modelJobRows.get(id)?.querySelectorAll('button') || []) button.disabled = false; }
-    }
-    async function saveModelSettings(settings, button) {
-      if (modelSettingsBusy) return;
-      const directoryRevision = modelsDirectoryRevision;
-      const notice = 'token' in settings ? $('#modelTokenNotice') : $('#modelsDirectoryNotice');
-      modelSettingsBusy = true;
-      for (const id of ['#modelsDirectorySave','#modelTokenSave','#modelTokenRemove']) $(id).disabled = true;
-      notice.textContent = 'Saving…';
-      try { await api('/api/models/settings', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify(settings)}); if ('directory' in settings && directoryRevision === modelsDirectoryRevision) modelsDirectoryDirty = false; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); notice.textContent = 'token' in settings ? (settings.token ? 'Token saved.' : 'Token removed.') : 'Models directory saved.'; }
-      catch (error) { notice.textContent = error.message; }
-      finally { modelSettingsBusy = false; for (const id of ['#modelsDirectorySave','#modelTokenSave']) $(id).disabled = false; $('#modelTokenRemove').disabled = !modelDownloadsState?.hasToken; }
-    }
-    $('#modelsDirectory').oninput = () => { modelsDirectoryDirty = true; modelsDirectoryRevision++; };
-    $('#modelsDirectoryBrowse').onclick = () => openFolderPicker('Models directory', $('#modelsDirectory').value, path => { $('#modelsDirectory').value = path; modelsDirectoryDirty = true; modelsDirectoryRevision++; });
-    $('#modelsDirectorySave').onclick = () => saveModelSettings({directory:$('#modelsDirectory').value.trim()}, $('#modelsDirectorySave'));
-    $('#modelsDirectory').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#modelsDirectorySave').click(); } };
-    $('#modelTokenSave').onclick = () => { const token = $('#modelToken').value.trim(); $('#modelToken').value = ''; if (!token) { $('#modelTokenNotice').textContent = 'Enter a token to save, or use Remove token.'; return; } saveModelSettings({token}, $('#modelTokenSave')); };
-    $('#modelTokenRemove').onclick = () => { $('#modelToken').value = ''; saveModelSettings({token:''}, $('#modelTokenRemove')); };
-    $('#modelToken').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#modelTokenSave').click(); } };
-    $('#modelDownloadsRefresh').onclick = async () => { $('#modelDownloadsNotice').textContent = ''; $('#modelDownloadsRefresh').disabled = true; try { await refreshModelDownloads(); } finally { $('#modelDownloadsRefresh').disabled = false; } };
-    function shownModelFiles() { return (modelRepository?.files || []).filter(file => !$('#modelGgufOnly').checked || file.gguf); }
-    function updateModelSelection() {
-      const selected = (modelRepository?.files || []).filter(file => modelSelectedFiles.has(file.path));
-      const total = selected.reduce((sum,file) => sum + (file.size || 0), 0);
-      $('#modelSelection').textContent = `${selected.length} file${selected.length === 1 ? '' : 's'} selected${selected.length ? ' · ' + modelBytes(total) + (selected.some(file => file.size == null) ? ' + unknown sizes' : '') : ''}`;
-      $('#modelDownload').disabled = !selected.length || modelDownloadStarting;
-    }
-    function renderModelFiles() {
-      const root = $('#modelRepositoryFiles'); root.replaceChildren();
-      for (const file of shownModelFiles()) {
-        const label = document.createElement('label'); label.className = 'model-file';
-        const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = modelSelectedFiles.has(file.path); checkbox.onchange = () => { checkbox.checked ? modelSelectedFiles.add(file.path) : modelSelectedFiles.delete(file.path); updateModelSelection(); };
-        const name = document.createElement('span'); name.textContent = file.path;
-        const size = document.createElement('small'); size.textContent = `${file.gguf ? 'GGUF · ' : ''}${modelBytes(file.size)}`; name.append(size); label.append(checkbox, name); root.append(label);
-      }
-      if (!root.children.length) root.textContent = $('#modelGgufOnly').checked ? 'No GGUF files in this repository. Turn off the filter to browse all files.' : 'No downloadable files in this repository.';
-      updateModelSelection();
-    }
-    async function browseModelRepository(id) {
-      id = id.trim(); if (!id) { $('#modelSearchNotice').textContent = 'Enter an owner/repository or choose a search result.'; return; }
-      const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = '';
-      modelRepository = null; modelSelectedFiles.clear();
-      $('#modelDownloadNotice').textContent = '';
-      $('#modelSearchResults').classList.add('hidden');
-      $('#modelSearchBack').classList.toggle('hidden', !$('#modelSearchResults').children.length);
-      $('#modelRepositoryTitle').textContent = id; $('#modelRepositoryInfo').textContent = 'Loading repository…';
-      $('#modelRepositoryFiles').replaceChildren(); updateModelSelection();
-      $('#modelRepository').classList.remove('hidden');
-      $('#modelRepository').scrollIntoView({block:'start'});
-      try {
-        const value = await api('/api/models/repository', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id})});
-        if (generation !== modelCatalogGeneration) return;
-        modelRepository = value; $('#modelRepositoryTitle').textContent = value.id;
-        $('#modelRepositoryInfo').textContent = [value.gated ? 'Gated model · A saved token and Hugging Face access are required.' : '', `${value.files.length} files`, value.revision ? `Revision ${value.revision.slice(0,12)}` : ''].filter(Boolean).join(' · ');
-        $('#modelRepository').classList.remove('hidden'); renderModelFiles(); $('#modelSearchNotice').textContent = '';
-      } catch (error) { if (generation === modelCatalogGeneration) $('#modelRepositoryInfo').textContent = error.message; }
-    }
-    $('#modelSearchBack').onclick = () => {
-      modelCatalogGeneration++; modelRepository = null; modelSelectedFiles.clear();
-      $('#modelRepository').classList.add('hidden'); $('#modelSearchResults').classList.remove('hidden');
-      $('#modelSearchResults').scrollIntoView({block:'start'});
-    };
-    async function searchDownloadModels() {
-      const query = $('#modelSearch').value.trim(); if (!query) { $('#modelSearchNotice').textContent = 'Enter a model name or an owner/repository.'; return; }
-      const generation = ++modelCatalogGeneration; $('#modelSearchNotice').textContent = 'Searching Hugging Face…'; $('#modelSearchResults').replaceChildren();
-      $('#modelSearchResults').classList.remove('hidden');
-      $('#modelRepository').classList.add('hidden'); modelRepository = null; modelSelectedFiles.clear();
-      try {
-        const value = await api('/api/models/search', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({query})});
-        if (generation !== modelCatalogGeneration) return;
-        const root = $('#modelSearchResults');
-        for (const model of value.models || []) {
-          const button = document.createElement('button'); button.type = 'button'; button.className = 'model-result';
-          const name = document.createElement('strong'); name.textContent = model.id;
-          const detail = document.createElement('span'); detail.textContent = `${Number(model.downloads || 0).toLocaleString()} downloads · ${Number(model.likes || 0).toLocaleString()} likes`;
-          button.append(name, detail); button.onclick = () => browseModelRepository(model.id); root.append(button);
-        }
-        $('#modelSearchNotice').textContent = root.children.length ? '' : 'No models found.';
-      } catch (error) { if (generation === modelCatalogGeneration) $('#modelSearchNotice').textContent = error.message; }
-    }
-    $('#modelSearchButton').onclick = searchDownloadModels;
-    $('#modelRepositoryOpen').onclick = () => browseModelRepository($('#modelSearch').value);
-    $('#modelSearch').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); searchDownloadModels(); } };
-    $('#modelGgufOnly').onchange = renderModelFiles;
-    $('#modelFilesAll').onclick = () => { for (const file of shownModelFiles()) modelSelectedFiles.add(file.path); renderModelFiles(); };
-    $('#modelFilesNone').onclick = () => { modelSelectedFiles.clear(); renderModelFiles(); };
-    $('#modelDownload').onclick = async () => {
-      if (modelDownloadStarting || !modelRepository || !modelSelectedFiles.size) return;
-      if (modelSettingsBusy) { $('#modelDownloadNotice').textContent = 'Wait for model settings to finish saving.'; return; }
-      if (modelsDirectoryDirty) { $('#modelDownloadNotice').textContent = 'Save the models directory before starting a download.'; return; }
-      modelDownloadStarting = true; updateModelSelection(); $('#modelDownloadNotice').textContent = 'Starting download…';
-      try { await api('/api/models/downloads', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({id:modelRepository.id,revision:modelRepository.revision,files:[...modelSelectedFiles]})}); $('#modelDownloadNotice').textContent = 'Download added.'; await modelDownloadsRequest?.catch(() => {}); await refreshModelDownloads(); }
-      catch (error) { $('#modelDownloadNotice').textContent = error.message; }
-      finally { modelDownloadStarting = false; updateModelSelection(); }
-    };
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; } else if (csrf) { if (modelDownloadsVisible()) refreshModelDownloads(); } });
-    window.addEventListener('focus', () => { if (csrf && !document.hidden) { if (modelDownloadsVisible()) refreshModelDownloads(); } });
-
     let displayedGoal = null;
     function renderGoal(goal){displayedGoal=goal;const row=$('#goalStatus');row.classList.toggle('hidden',!goal);row.textContent=goal?'Goal '+goal.status+': '+goal.objective+(goal.summary?' · '+goal.summary:''):'';}
 
@@ -2543,6 +2283,7 @@
 
     async function openSession(session, reconnect = false) {
       if (!session) return;
+      void cancelDictation();
       const view = ++sessionView;
       $('#composer').inert = true;
       try {
@@ -2593,6 +2334,7 @@
     }
 
     async function beginNewSession() {
+      void cancelDictation();
       const view = ++sessionView;
       if (editingQueueId) await cancelQueueEdit();
       if (sessionView !== view) return;
@@ -2871,7 +2613,7 @@
           return;
         }
         catch (error) {
-          $(title === 'Models directory' ? '#modelDownloadsNotice' : title === 'Default working folder' ? '#settingsNotice' : '#composerHint').textContent = error.message;
+          $(title === 'Default working folder' ? '#settingsNotice' : '#composerHint').textContent = error.message;
           return;
         }
       }
@@ -3082,6 +2824,127 @@
       } finally { $('#sendBtn').disabled = false; }
     };
 
+    // Capture belongs to this protected document and the original chat only.
+    let dictation = null, dictationCapability = null;
+    const dictationDestination = () => `${sessionView}:${current?.id || 'new'}`;
+    async function refreshDictation() {
+      try { dictationCapability = await api('/api/dictation/capability'); }
+      catch { dictationCapability = null; }
+      $('#dictationButton').classList.toggle('hidden', !dictationCapability?.available);
+    }
+    async function releaseCapture(capture) {
+      capture.processor?.disconnect(); capture.input?.disconnect(); capture.gain?.disconnect();
+      capture.stream?.getTracks().forEach(track => track.stop()); capture.stream = null;
+      await capture.context?.close().catch(() => {}); capture.context = null;
+    }
+    async function cancelDictation(message = '') {
+      const capture = dictation; if (!capture) return;
+      dictation = null; clearInterval(capture.timer); capture.abort.abort();
+      await releaseCapture(capture);
+      for (const chunk of capture.chunks) chunk.fill(0); capture.chunks.length = 0;
+      capture.wav?.fill(0); capture.wav = null;
+      $('#dictationStatus').classList.add('hidden'); $('#dictationButton').disabled = false;
+      if (message) $('#composerHint').textContent = message;
+    }
+    function wavRecording(capture) {
+      const length = capture.chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const count = Math.floor(length * 16000 / capture.sampleRate);
+      if (count * 2 > 0xffffffff - 36) throw Error('The recording exceeds the WAV format; record a shorter message.');
+      const samples = new Float32Array(length); let offset = 0, peak = 0;
+      for (const chunk of capture.chunks) { samples.set(chunk, offset); offset += chunk.length; chunk.fill(0); }
+      capture.chunks.length = 0;
+      const bytes = new Uint8Array(44 + count * 2), view = new DataView(bytes.buffer);
+      const ascii = (at, value) => { for (let i = 0; i < value.length; i++) bytes[at + i] = value.charCodeAt(i); };
+      ascii(0, 'RIFF'); view.setUint32(4, bytes.length - 8, true); ascii(8, 'WAVE'); ascii(12, 'fmt ');
+      view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+      view.setUint32(24, 16000, true); view.setUint32(28, 32000, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+      ascii(36, 'data'); view.setUint32(40, count * 2, true);
+      for (let index = 0; index < count; index++) {
+        const start = Math.floor(index * capture.sampleRate / 16000), end = Math.max(start + 1, Math.floor((index + 1) * capture.sampleRate / 16000));
+        let value = 0; for (let at = start; at < Math.min(end, length); at++) value += samples[at];
+        value = Math.max(-1, Math.min(1, value / (end - start))); peak = Math.max(peak, Math.abs(value));
+        view.setInt16(44 + index * 2, Math.round(value * (value < 0 ? 32768 : 32767)), true);
+      }
+      samples.fill(0);
+      if (!count || peak < 0.0001) { bytes.fill(0); throw Error('No speech was recorded.'); }
+      return bytes;
+    }
+    async function submitDictation(text, capture) {
+      if (dictation !== capture || dictationDestination() !== capture.destination) return;
+      let destination = current;
+      // Keep the composer's independent draft/attachments untouched throughout.
+      if (!destination) {
+        const form = new FormData(); form.append('prompt', text); form.append('cwd', pendingCwd);
+        form.append('model', $('#model').value); form.append('thinking', $('#thinking').value);
+        const result = await api('/api/sessions', { method: 'POST', body: form, signal: capture.abort.signal });
+        if (dictation !== capture || dictationDestination() !== capture.destination) return;
+        destination = { id: result.id, title: text, cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value };
+        current = destination; capture.destination = dictationDestination();
+        history.replaceState(null, '', '#session=' + destination.id);
+        renderSessionSidebar(await loadSessions());
+        $('#folderLabel').textContent = displayFolder(destination.cwd); $('#folderBtn').disabled = true;
+      }
+      await api(`/api/sessions/${destination.id}/resume`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ start: true }), signal: capture.abort.signal });
+      if (dictation !== capture || dictationDestination() !== capture.destination) return;
+      await connectSession(destination.id);
+      if (dictation !== capture || dictationDestination() !== capture.destination) return;
+      const form = new FormData(); form.append('content', text); form.append('delivery', 'queue');
+      // One submission attempt. A lost response is never automatically replayed.
+      const result = await api(`/api/sessions/${destination.id}/messages`, { method: 'POST', body: form, signal: capture.abort.signal });
+      if (dictation === capture && dictationDestination() === capture.destination) { renderQueueState(result.data); current.running = true; setRunButton(true); }
+    }
+    $('#dictationButton').onclick = async () => {
+      if (dictation || !dictationCapability?.available) return;
+      const capture = { destination: dictationDestination(), chunks: [], abort: new AbortController(), started: Date.now() };
+      dictation = capture; $('#dictationButton').disabled = true;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (dictation !== capture || dictationDestination() !== capture.destination) { stream.getTracks().forEach(track => track.stop()); return; }
+        capture.stream = stream; capture.context = new AudioContext(); capture.sampleRate = capture.context.sampleRate;
+        capture.input = capture.context.createMediaStreamSource(stream); capture.processor = capture.context.createScriptProcessor(4096, 1, 1);
+        capture.gain = capture.context.createGain(); capture.gain.gain.value = 0;
+        capture.processor.onaudioprocess = event => {
+          if (dictation !== capture || capture.processing) return;
+          try { capture.chunks.push(new Float32Array(event.inputBuffer.getChannelData(0))); }
+          catch { void cancelDictation('There is not enough memory for this recording.'); }
+        };
+        capture.input.connect(capture.processor); capture.processor.connect(capture.gain); capture.gain.connect(capture.context.destination);
+        await capture.context.resume();
+        $('#dictationStatus').classList.remove('hidden'); $('#dictationStop').disabled = false;
+        const update = () => {
+          if (dictationDestination() !== capture.destination) { void cancelDictation(); return; }
+          if (!capture.processing) $('#dictationStatus span').textContent = `Recording · ${Math.floor((Date.now() - capture.started) / 1000)}s · Transcribes on ${dictationCapability.host}`;
+        };
+        update(); capture.timer = setInterval(update, 250);
+      } catch (error) { await cancelDictation(error.message); }
+    };
+    $('#dictationStop').onclick = async () => {
+      const capture = dictation; if (!capture || capture.processing) return;
+      capture.processing = true; $('#dictationStop').disabled = true;
+      let transcript = '';
+      try {
+        await releaseCapture(capture);
+        if (dictation !== capture) return;
+        capture.wav = wavRecording(capture);
+        $('#dictationStatus span').textContent = `Loading / transcribing on ${dictationCapability.host}…`;
+        const result = await api('/api/dictation', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: capture.wav, signal: capture.abort.signal });
+        capture.wav.fill(0); capture.wav = null;
+        if (dictation !== capture || dictationDestination() !== capture.destination) return;
+        transcript = result.text?.trim() || '';
+        if (!transcript) throw Error('No speech was recognized.');
+        $('#dictationStatus span').textContent = 'Sending text…';
+        await submitDictation(transcript, capture);
+      } catch (error) {
+        if (dictation === capture && dictationDestination() === capture.destination && !capture.abort.signal.aborted) {
+          if (transcript) { $('#prompt').value = [$('#prompt').value, transcript].filter(Boolean).join('\n\n'); $('#prompt').dispatchEvent(new Event('input')); }
+          $('#composerHint').textContent = error.message + (transcript ? ' · Text kept in this chat’s draft' : '');
+        }
+      } finally { transcript = ''; if (dictation === capture) await cancelDictation(); }
+    };
+    $('#dictationCancel').onclick = () => cancelDictation();
+    window.addEventListener('pagehide', () => { void cancelDictation(); });
+    window.addEventListener('focus', () => { if (csrf && !dictation) void refreshDictation(); });
+
     async function stopCurrentRun() {
       if (!current) return;
       const fallback = queuedItems();
@@ -3120,7 +2983,6 @@
       else showChatView();
     };
     function selectSettingsTab(name, focus = false) {
-      if (name !== 'downloads') { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; }
       activeSettingsTab = name;
       $('#settingsView').scrollTop = 0;
       for (const tab of document.querySelectorAll('[data-settings-tab]')) {
@@ -3133,7 +2995,6 @@
       $('#settingsSaveRow').classList.toggle('hidden', name !== 'app');
       $('#settingsNotice').textContent = '';
       if (name === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
-      if (name === 'downloads') refreshModelDownloads();
     }
     const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
     for (const tab of settingsTabs) {
@@ -3213,7 +3074,7 @@
       fileManagerAllowed = allowed;
       $('#filesToggle').classList.toggle('hidden', !allowed);
       for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
-      for (const id of ['folderBtn', 'defaultCwdBrowse', 'modelsDirectoryBrowse']) $('#'+id).disabled = !allowed;
+      for (const id of ['folderBtn', 'defaultCwdBrowse']) $('#'+id).disabled = !allowed;
       if (allowed) return;
       closeFiles(); closeFileDiff();
       ++fileGeneration; ++changesGeneration; ++folderGeneration;
