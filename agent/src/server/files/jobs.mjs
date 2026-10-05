@@ -4,6 +4,7 @@ import { fork } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { dataDir, privateDir } from '../common.mjs';
 import { fileDirectory, relativePath, sendFile } from './files.mjs';
+import { managerContext, authorizeManagerPath } from './access.mjs';
 
 const scratch = path.join(dataDir, 'run', 'file-jobs');
 const jobs = new Map();
@@ -31,16 +32,20 @@ async function init() {
 }
 function find(id) {
   const job = jobs.get(id);
-  if (!job) throw Object.assign(Error('This file operation has expired'), { status: 404 });
+  if (!job || job.owner !== managerContext()?.owner) throw Object.assign(Error('This file operation has expired'), { status: 404 });
   return job;
 }
 export function fileJob(id) { return visible(find(id)); }
 export async function startFileJob(input, { whole = false } = {}) {
+  const access = managerContext();
+  if (!access) throw Error('File-manager request required');
+  access.signal.throwIfAborted();
   if (stopping) throw Object.assign(Error('The file service is stopping'), { status: 503 });
   if (!['copy', 'delete', 'archive'].includes(input.operation)) throw Error('Choose copy, delete or archive');
   if (!Array.isArray(input.paths) || !input.paths.length) throw Error('Select files or folders');
   const location = await fileDirectory(input.root);
   const paths = [...new Set(input.paths.map(value => relativePath(value, whole && input.operation === 'archive')))];
+  for (const relative of paths) await authorizeManagerPath(path.join(location.path, relative), { tree: true });
   const selections = new Set(paths);
   const selected = paths.filter(value => {
     let parent = value;
@@ -56,8 +61,9 @@ export async function startFileJob(input, { whole = false } = {}) {
   await init(); await prune();
   const id = randomUUID(), directory = path.join(scratch, id), output = path.join(directory, 'archive.zip');
   await privateDir(directory);
-  if (stopping) { await fs.rm(directory, { recursive: true, force: true }); throw Error('The file service is stopping'); }
+  if (stopping || access.signal.aborted) { await fs.rm(directory, { recursive: true, force: true }); throw Error('The file operation was stopped'); }
   const job = { id, operation: input.operation, status: 'running', completed: 0, current: '', directory, output, downloads: 0,
+    owner: access.owner, remote: access.remote,
     filename: (whole ? path.basename(location.path) || 'repository' : 'selected-files') + '.zip' };
   jobs.set(id, job);
   let child;
@@ -79,33 +85,37 @@ export async function startFileJob(input, { whole = false } = {}) {
   });
   child.once('error', error => { outcome = { status: 'failed', error: error.message }; });
   child.once('exit', code => { void finish(outcome?.status || 'failed', outcome?.error || (code ? 'File worker stopped before completing' : undefined)); });
-  child.send({ ...input, ...location, root: location.path, paths: selected, destination: destination?.path, destinationScope: destination?.scopeRoot, scratch, output }, error => {
+  child.send({ ...input, ...location, root: location.path, paths: selected, destination: destination?.path, destinationScope: destination?.scopeRoot, remote: job.remote, scratch, output }, error => {
     if (error) { outcome = { status: 'failed', error: error.message }; child.kill(); }
   });
   return visible(job);
 }
 export function cancelFileJob(id) {
   const job = find(id);
+  stopJob(job);
+  return visible(job);
+}
+function stopJob(job) {
   if (job.status === 'running' && !job.cancelRequested) {
     job.cancelRequested = true; job.child.kill('SIGTERM');
     job.killTimer = setTimeout(() => job.child.kill('SIGKILL'), 3000).unref();
   }
-  return visible(job);
 }
 export async function downloadFileJob(req, res, id) {
   const job = find(id);
   if (job.operation !== 'archive' || job.status !== 'done') throw Error('The archive is not ready');
   job.downloads++; job.finished = Date.now();
-  try { await sendFile(req, res, job.output, true, job.filename); }
+  try { await sendFile(req, res, job.output, true, job.filename, { artifact: true }); }
   finally { job.downloads--; }
 }
 export async function sendZip(req, res, root) {
   const { id } = await startFileJob({ operation: 'archive', root, paths: [''] }, { whole: true });
-  const closed = () => { if (!res.writableFinished) cancelFileJob(id); };
+  const job = find(id);
+  const closed = () => { if (!res.writableFinished) stopJob(job); };
   res.once('close', closed);
-  if (res.destroyed) cancelFileJob(id);
+  if (res.destroyed) stopJob(job);
   try {
-    const job = find(id); await job.finishedPromise;
+    await job.finishedPromise;
     if (res.destroyed) return;
     if (job.status !== 'done') throw Error(job.error || 'Archive cancelled');
     await downloadFileJob(req, res, id);
@@ -114,7 +124,13 @@ export async function sendZip(req, res, root) {
 export async function closeFileJobs() {
   stopping = true;
   clearInterval(cleanupTimer);
-  for (const job of jobs.values()) if (job.status === 'running') cancelFileJob(job.id);
+  for (const job of jobs.values()) stopJob(job);
   await Promise.all([...jobs.values()].map(job => job.finishedPromise));
   await fs.rm(scratch, { recursive: true, force: true });
+}
+export async function revokeRemoteFileJobs() {
+  const remote = [...jobs.values()].filter(job => job.remote);
+  for (const job of remote) stopJob(job);
+  await Promise.all(remote.map(job => job.finishedPromise));
+  for (const job of remote) await remove(job);
 }

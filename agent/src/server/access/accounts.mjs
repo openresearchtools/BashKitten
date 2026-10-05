@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { privateDir, readJson, writeJson, randomToken } from '../common.mjs';
-import { accessDir, paths, binary } from './paths.mjs';
+import { remoteDir, paths, binary } from './paths.mjs';
 import { unixRequest, command } from './io.mjs';
 
 const flows = new Map();
@@ -14,17 +14,22 @@ export async function accountStatus() {
 }
 export async function authEnvironment() {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('AUTHELIA_')));
-  for (const [name, key] of Object.entries({ session: 'SESSION_SECRET', storage: 'STORAGE_ENCRYPTION_KEY', jwt: 'IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET' })) {
-    const file = path.join(accessDir, name + '.secret');
-    try { await fs.writeFile(file, randomToken() + randomToken(), { mode: 0o600, flag: 'wx' }); }
-    catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const initialized = (await accountStatus()).initialized;
+  for (const [name, key] of Object.entries({ session: 'SESSION_SECRET', storage: 'STORAGE_ENCRYPTION_KEY', jwt: 'IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET', hmac: 'IDENTITY_PROVIDERS_OIDC_HMAC_SECRET' })) {
+    const file = path.join(remoteDir, name + '.secret');
+    if (initialized) {
+      if (!(await fs.readFile(file, 'utf8')).trim()) throw Error('Remote authentication secret is missing; reissue the identity');
+    } else {
+      try { await fs.writeFile(file, randomToken() + randomToken(), { mode: 0o600, flag: 'wx' }); }
+      catch (error) { if (error.code !== 'EEXIST') throw error; }
+    }
     env['AUTHELIA_' + key + '_FILE'] = file;
   }
   env.AUTHELIA_TELEMETRY_METRICS_ENABLED = 'false';
   return env;
 }
-export async function renderAuthelia(origins, instanceId, native) {
-  await privateDir(accessDir);
+export async function renderAuthelia(origin, instanceId, native, oidc) {
+  await privateDir(remoteDir);
   // Authelia rejects an empty file store. This disabled, unprivileged entry has
   // a discarded random password and is replaced by the local owner at setup.
   try {
@@ -34,35 +39,33 @@ export async function renderAuthelia(origins, instanceId, native) {
     const password = await native.call('hash-password', { password: randomToken() });
     await fs.writeFile(paths.users, JSON.stringify({ users: { __bashkitten_setup: { disabled: true, displayname: 'Setup pending', password, groups: [] } } }), { mode: 0o600, flag: 'wx' });
   }
-  // One parent cookie provider supplies SSO to registered hosted routes. Caddy
-  // only serves exact enabled hostnames, while this policy stays stable as the
-  // owner edits mappings without interrupting their Authelia sessions.
-  const domains = origins.flatMap(origin => {
-    const host = new URL(origin).hostname;
-    return /^[a-z2-7]{56}\.onion$/.test(host) ? [host, '*.' + host] : [host];
-  });
+  const host = new URL(origin).hostname;
+  if (!/^[a-z2-7]{56}\.onion$/.test(host)) throw Error('Remote authentication requires its enrolled onion');
   const config = {
     theme: 'auto',
     server: { address: `unix://${paths.auth}?umask=0077&path=login`, disable_healthcheck: true,
       asset_path: fileURLToPath(new URL('../../web/', import.meta.url)),
       endpoints: { enable_pprof: false, enable_expvars: false,
-        authz: { 'forward-auth': { implementation: 'ForwardAuth', authn_strategies: [{ name: 'CookieSession' }] } } } },
+        authz: { 'forward-auth': { implementation: 'ForwardAuth', authn_strategies: [{ name: 'CookieSession' }] },
+          tunnel: { implementation: 'ForwardAuth', authn_strategies: [{ name: 'HeaderAuthorization', schemes: ['Bearer'] }] } } } },
     log: { level: 'warn', format: 'json' },
     totp: { issuer: 'BashKitten', algorithm: 'sha1', digits: 6, period: 30, skew: 1, secret_size: 32, disable_reuse_security_policy: false },
     webauthn: { disable: true },
-    authentication_backend: { password_reset: { disable: true }, password_change: { disable: false },
+    authentication_backend: { password_reset: { disable: true }, password_change: { disable: true },
       file: { path: paths.users, watch: true, search: { email: false, case_insensitive: false } } },
-    access_control: { default_policy: 'deny', rules: [{ domain: domains, subject: 'group:owner', policy: 'two_factor' }] },
+    access_control: { default_policy: 'deny', rules: [{ domain: host, subject: 'group:owner', policy: 'two_factor' }] },
     session: { name: 'bashkitten_' + instanceId.slice(0, 16), same_site: 'lax', inactivity: '1h', expiration: '12h', remember_me: '30d',
       redis: { host: paths.sessionSocket, port: 0 },
-      cookies: origins.map(origin => ({ domain: new URL(origin).hostname, authelia_url: origin + '/login', default_redirection_url: origin + '/' })) },
+      cookies: [{ domain: host, authelia_url: origin + '/login', default_redirection_url: origin + '/' }] },
     regulation: { modes: ['user'], max_retries: 3, find_time: '2m', ban_time: '5m' },
     storage: { local: { path: paths.database } },
-    notifier: { filesystem: { filename: path.join(accessDir, 'notifications.txt') } },
+    notifier: { filesystem: { filename: path.join(remoteDir, 'notifications.txt') } },
+    identity_providers: { oidc },
     ntp: { disable_startup_check: true }, telemetry: { metrics: { enabled: false } },
   };
   await writeJson(paths.config, config);
 }
+export function cancelAccountSetup() { flows.clear(); }
 export async function authCall(origin, route, input, cookies = '', timeout = 15000) {
   const target = new URL(origin);
   const result = await unixRequest(paths.auth, '/login' + route, {

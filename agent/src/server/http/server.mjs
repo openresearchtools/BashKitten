@@ -16,7 +16,8 @@ import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
 import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
-import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs } from '../files/jobs.mjs';
+import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
+import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
 import { visibleSession } from '../rpc/notifications.mjs';
@@ -166,6 +167,57 @@ const html = (await fs.readFile(path.join(here, '../../web/web_ui.html'), 'utf8'
   .replaceAll('/__bashkitten_license__', `${sourceRoot}/blob/${sourceRef}/LICENSE`);
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
+async function fileRequest(req, res, url) {
+  const route = url.pathname, mutation = !['GET', 'HEAD'].includes(req.method);
+  if (route === '/api/folders') {
+    requireMethod(req, ['GET', 'POST']);
+    if (mutation) { const input = await jsonBody(req); const parent = (await pickerDirectory(input.parent)).path; const folder = path.join(parent, safeName(input.name)); await authorizeManagerPath(folder); await fs.mkdir(folder, { mode: 0o700 }); return json(res, { path: folder }); }
+    return json(res, await listFolders(url.searchParams.get('path') || config.default_cwd, url.searchParams.get('nearest') === 'true'));
+  }
+  if (route === '/api/files/jobs') {
+    requireMethod(req, ['POST']); return json(res, await startFileJob(await jsonBody(req)), 202);
+  }
+  if (route === '/api/files/archive' && req.method === 'POST') {
+    const { root } = await jsonBody(req);
+    return json(res, await startFileJob({ operation: 'archive', root, paths: [''] }, { whole: true }), 202);
+  }
+  const fileJobRoute = route.match(/^\/api\/files\/jobs\/([a-f0-9-]{36})(?:\/(cancel|download))?$/);
+  if (fileJobRoute) {
+    const [, id, action] = fileJobRoute;
+    requireMethod(req, action === 'cancel' ? ['POST'] : ['GET']);
+    if (action === 'cancel') return json(res, cancelFileJob(id));
+    if (action === 'download') return await downloadFileJob(req, res, id);
+    return json(res, fileJob(id));
+  }
+  if (route === '/api/files' || route === '/api/files/content' || route === '/api/files/archive') {
+    requireMethod(req, route === '/api/files' ? ['GET', 'POST'] : ['GET', 'HEAD']);
+    const root = (await fileDirectory(url.searchParams.get('root'))).path;
+    const relative = url.searchParams.get('path') || '';
+    if (route.endsWith('/content')) return await sendFile(req, res, await filePath(root, relative), url.searchParams.get('download') === 'true');
+    if (route.endsWith('/archive')) return await sendZip(req, res, root);
+    if (mutation) {
+      const form = await formBody(req);
+      try { return json(res, { saved: await uploadFiles(root, relative, form.getAll('file')) }); }
+      finally { await form.cleanup(); }
+    }
+    return json(res, await listFiles(root, relative));
+  }
+  if (route === '/api/git/changes' || route === '/api/git/diff') {
+    requireMethod(req, ['GET']);
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    res.once('close', cancel);
+    try {
+      const root = (await fileDirectory(url.searchParams.get('root') || config.default_cwd)).path;
+      const options = { signal: AbortSignal.any([controller.signal, managerContext().signal]), authorizeRoot: async root => { await authorizeManagerPath(root, { tree: true }); return fileDirectory(root); } };
+      const result = route.endsWith('/diff')
+        ? await gitDiff(root, url.searchParams.get('path'), options)
+        : await gitChanges(root, options);
+      return json(res, result);
+    } finally { res.off('close', cancel); }
+  }
+  throw Object.assign(Error('Not found'), { status: 404 });
+}
 let activeServer;
 async function handler(req, res) {
   try {
@@ -179,6 +231,13 @@ async function handler(req, res) {
       if (req.method !== 'GET' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       return json(res, { pid: process.pid, instance: instanceToken });
     }
+    if (route === '/api/instance/file-manager') {
+      if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
+      const { block } = await jsonBody(req);
+      if (typeof block !== 'boolean') throw Error('Choose file-manager policy transition');
+      await refreshManagerPolicy(revokeRemoteFileJobs, block);
+      return json(res, { ok: true });
+    }
     auth.origin(req);
     if (route === '/.well-known/bashkitten-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
@@ -191,9 +250,26 @@ async function handler(req, res) {
     const mutation = !['GET', 'HEAD'].includes(req.method);
     if (mutation) auth.checkOrigin(req);
     const record = await auth.login(req);
-    if (route === '/api/bootstrap') { requireMethod(req, ['GET']); return json(res, await auth.bootstrap(record)); }
+    if (route === '/api/bootstrap') { requireMethod(req, ['GET']); return json(res, { ...await auth.bootstrap(record), fileManager: await managerAllowed(record) }); }
     if (!record) throw Object.assign(Error('Sign in to BashKitten'), { status: 401 });
     if (mutation) auth.checkCsrf(req, record);
+    if (/^\/api\/(?:files|folders|git)(?:\/|$)/.test(route)) {
+      const stopWatching = auth.watch(record, () => { req.destroy(); res.destroy(); });
+      try { return await runManagerRequest(req, res, record, () => fileRequest(req, res, url)); }
+      finally { stopWatching(); }
+    }
+    if (route === '/api/file-manager/events') {
+      requireMethod(req, ['GET']);
+      res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+      const notify = async () => {
+        const allowed = await managerAllowed(record);
+        if (!res.destroyed) res.write('data: ' + JSON.stringify({ fileManager: allowed }) + '\n\n');
+      };
+      const stopPolicy = watchManagerPolicy(() => { void notify(); });
+      const stopAuth = auth.watch(record, () => res.end());
+      res.once('close', () => { stopPolicy(); stopAuth(); });
+      await notify(); return;
+    }
     if (route === '/api/logout') { requireMethod(req, ['POST']); await auth.logout(record, res); closeBrowserChannels(record.key); return json(res, { ok: true, loginUrl: '/login' }); }
     if (route === '/api/browser-channel/poll') {
       const stopWatching = auth.watch(record, () => { closeBrowserChannels(record.key); res.end(); });
@@ -209,21 +285,8 @@ async function handler(req, res) {
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings', 'llama-options', 'llama-configure', 'llama-start', 'llama-stop', 'llama-probe', 'llama-refresh', 'get_remote_access', 'set_remote_access', 'create_remote_connection', 'revoke_remote_connection'].includes(value.command)) throw Error('Unknown control action');
+      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings', 'llama-options', 'llama-configure', 'llama-start', 'llama-stop', 'llama-probe', 'llama-refresh'].includes(value.command)) throw Error('Unknown control action');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
-    }
-    if (route === '/api/hosting') {
-      requireMethod(req, ['GET']);
-      return json(res, await controlRequest('get_hosted_services', { refresh: url.searchParams.get('refresh') === '1' }));
-    }
-    if (route === '/api/hosting/services') {
-      requireMethod(req, ['POST']);
-      return json(res, await controlRequest('save_hosted_service', await jsonBody(req)));
-    }
-    const hostedServiceRoute = route.match(/^\/api\/hosting\/services\/([^/]+)$/);
-    if (hostedServiceRoute) {
-      requireMethod(req, ['DELETE']);
-      return json(res, await controlRequest('delete_hosted_service', { name: decodeURIComponent(hostedServiceRoute[1]) }));
     }
     if (route === '/api/models/downloads') {
       requireMethod(req, ['GET', 'POST']);
@@ -274,53 +337,6 @@ async function handler(req, res) {
       else throw Error('Unknown service action');
       return json(res, { login: services.state() });
     }
-    if (route === '/api/folders') {
-      requireMethod(req, ['GET', 'POST']);
-      if (mutation) { const input = await jsonBody(req); const parent = (await pickerDirectory(input.parent)).path; const folder = path.join(parent, safeName(input.name)); await fs.mkdir(folder, { mode: 0o700 }); return json(res, { path: folder }); }
-      return json(res, await listFolders(url.searchParams.get('path') || config.default_cwd, url.searchParams.get('nearest') === 'true'));
-    }
-    if (route === '/api/files/jobs') {
-      requireMethod(req, ['POST']); return json(res, await startFileJob(await jsonBody(req)), 202);
-    }
-    if (route === '/api/files/archive' && req.method === 'POST') {
-      const { root } = await jsonBody(req);
-      return json(res, await startFileJob({ operation: 'archive', root, paths: [''] }, { whole: true }), 202);
-    }
-    const fileJobRoute = route.match(/^\/api\/files\/jobs\/([a-f0-9-]{36})(?:\/(cancel|download))?$/);
-    if (fileJobRoute) {
-      const [, id, action] = fileJobRoute;
-      requireMethod(req, action === 'cancel' ? ['POST'] : ['GET']);
-      if (action === 'cancel') return json(res, cancelFileJob(id));
-      if (action === 'download') return await downloadFileJob(req, res, id);
-      return json(res, fileJob(id));
-    }
-    if (route === '/api/files' || route === '/api/files/content' || route === '/api/files/archive') {
-      requireMethod(req, route === '/api/files' ? ['GET', 'POST'] : ['GET']);
-      const root = (await fileDirectory(url.searchParams.get('root'))).path;
-      const relative = url.searchParams.get('path') || '';
-      if (route.endsWith('/content')) return await sendFile(req, res, await filePath(root, relative), url.searchParams.get('download') === 'true');
-      if (route.endsWith('/archive')) return await sendZip(req, res, root);
-      if (mutation) {
-        const form = await formBody(req);
-        try { return json(res, { saved: await uploadFiles(root, relative, form.getAll('file')) }); }
-        finally { await form.cleanup(); }
-      }
-      return json(res, await listFiles(root, relative));
-    }
-    if (route === '/api/git/changes' || route === '/api/git/diff') {
-      requireMethod(req, ['GET']);
-      const controller = new AbortController();
-      const cancel = () => controller.abort();
-      res.once('close', cancel);
-      try {
-        const root = (await fileDirectory(url.searchParams.get('root') || config.default_cwd)).path;
-        const options = { signal: controller.signal, authorizeRoot: fileDirectory };
-        const result = route.endsWith('/diff')
-          ? await gitDiff(root, url.searchParams.get('path'), options)
-          : await gitChanges(root, options);
-        return json(res, result);
-      } finally { res.off('close', cancel); }
-    }
     if (route === '/api/pi-sessions') {
       const { pi: { SessionManager } } = await loadPi();
       requireMethod(req, ['GET']);
@@ -361,7 +377,8 @@ async function handler(req, res) {
     const [, id, action = ''] = match; let meta = await readMeta(id);
     if (action === 'image') {
       requireMethod(req, ['GET']);
-      return await sendFile(req, res, await sessionImage(meta, url.searchParams.get('path')), url.searchParams.get('download') === 'true');
+      const view = await running(id) ? await workerRequest(id, '/view') : await savedView(meta);
+      return await sendFile(req, res, await sessionImage(meta, url.searchParams.get('path'), view), url.searchParams.get('download') === 'true');
     }
     if (action === 'events') {
       requireMethod(req, ['GET']);
@@ -418,7 +435,7 @@ async function handler(req, res) {
     return json(res, await workerRequest(id, '/' + action, input));
   } catch (error) {
     if (res.headersSent) { res.destroy(); return; }
-    json(res, { error: error.message }, error.status || (error.code === 'ENOENT' ? 404 : 400));
+    json(res, { error: error.message, ...(error.code === 'FILE_MANAGER_DENIED' ? { code: error.code } : {}) }, error.status || (error.code === 'ENOENT' ? 404 : 400));
   }
 }
 activeServer = http.createServer(handler);

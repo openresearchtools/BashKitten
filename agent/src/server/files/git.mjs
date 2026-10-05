@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { authorizeManagerPath, managerContext } from './access.mjs';
 
 const DIFF_OPTIONS = ['--no-ext-diff', '--no-textconv', '--no-color', '--find-renames=50%', '--submodule=short'];
 const inside = (root, file) => { const rel = path.relative(root, file); return rel !== '..' && !rel.startsWith('../') && !path.isAbsolute(rel); };
@@ -37,6 +38,7 @@ function checked(result) {
 
 async function repository(input, options) {
   const requested = await fs.realpath(input);
+  await options.authorizeRoot?.(requested);
   const result = await git(requested, ['rev-parse', '--show-toplevel'], options);
   if (result.code !== 0 && /not a git repository|must be run in a work tree/i.test(result.stderr)) return null;
   const root = await fs.realpath(checked(result).replace(/\n$/, ''));
@@ -82,6 +84,7 @@ function relativePath(value) {
 // not read their targets; reject paths whose parent traverses an outside link.
 async function fileInfo(root, relative) {
   const file = path.join(root, relative), parent = await fs.realpath(path.dirname(file));
+  await authorizeManagerPath(file);
   if (!inside(root, parent)) throw Error('File path leaves this repository');
   return { file, stat: await fs.lstat(file) };
 }
@@ -119,6 +122,7 @@ export async function gitChanges(input, { signal, authorizeRoot } = {}) {
   const context = await repository(input, { signal, authorizeRoot });
   if (!context) return { repository: false };
   const { root, base, unborn } = context;
+  await authorizeFiles(root, signal);
   const [tracked, status] = await Promise.all([
     git(root, ['diff', ...DIFF_OPTIONS, '--raw', '--numstat', '-z', base, '--'], { signal }),
     git(root, ['status', '--porcelain=v1', '--untracked-files=all', '-z'], { signal }),
@@ -146,6 +150,7 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
   const relative = relativePath(value), context = await repository(input, { signal, authorizeRoot });
   if (!context) return { repository: false };
   const { root, base } = context;
+  await authorizeFiles(root, signal);
   // Resolve rename pairs from Git's combined HEAD→worktree comparison, not the
   // index alone, so staged and unstaged edits appear in one truthful view.
   const names = checked(await git(root, ['diff', ...DIFF_OPTIONS, '--name-status', '-z', base, '--'], { signal }));
@@ -181,4 +186,10 @@ export async function gitDiff(input, value, { signal, authorizeRoot } = {}) {
   if (!result.truncated && result.code !== 0 && result.code !== 1) checked(result);
   return { repository: true, root, path: relative, ...(oldPath ? { oldPath } : {}),
     ...(comparison ? { comparison } : {}), diff: result.output, binary: /(?:^|\n)Binary files .+ differ(?:\n|$)/.test(result.output), truncated: result.truncated };
+}
+
+async function authorizeFiles(root, signal) {
+  if (!managerContext()?.remote) return;
+  const names = checked(await git(root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { signal }));
+  for (const name of names.split('\0')) if (name) await authorizeManagerPath(path.join(root, name));
 }

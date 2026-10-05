@@ -14,6 +14,7 @@ const contexts = new Map();
 const ownedViews = new WeakMap();
 let actorRegistered = false;
 let browserOwner;
+let adoptedLocal = false;
 
 async function localBrowserOwner() {
   if (!browserOwner) {
@@ -56,7 +57,7 @@ async function readPipe(pipe) {
 
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 async function control(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "account-create", "account-enroll", "account-totp", "account-cancel", "hosting-client", "local-session", "set_remote_access", "project-root", "native-file"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "local-session", "project-root", "native-file"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -73,6 +74,8 @@ async function control(command, data = {}) {
   let response;
   try { response = JSON.parse(stdout || stderr); } catch { throw new Error("The local Agent controller did not return a valid response."); }
   if (result.exitCode || response.error) throw new Error(response.error || stderr.slice(-2000) || "The local Agent operation failed.");
+  if (command === "start") adoptedLocal = true;
+  if ((command === "stop" || command === "browser-shutdown") && response.web?.status === "stopped") adoptedLocal = false;
   return response;
 }
 
@@ -121,7 +124,6 @@ class AgentView {
     this.currentIdentity = null;
     this.layout = "full";
     this.browseWithAgent = Services.prefs.getBoolPref("bashkitten.agent.splitBrowsing", true);
-    this.enrollmentPrompted = false;
     this.pendingHosted = null;
   }
 
@@ -136,6 +138,10 @@ class AgentView {
       if (this.choice.value === "connect-remote") {
         this.choice.value = this.remote?.id || "";
         return this.remotes();
+      }
+      if (this.choice.value === "share-local") {
+        this.choice.value = this.remote?.id || "";
+        return this.shareLocal();
       }
       return this.choose(this.choice.value);
     }));
@@ -338,7 +344,7 @@ class AgentView {
       if (remote.kind === "llama") continue;
       this.choice.append(html(this.doc, "option", { value: remote.id }, remote.name));
     }
-    this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"));
+    this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"), html(this.doc, "option", { value: "share-local" }, "Share Local"));
     this.choice.value = this.selection;
   }
 
@@ -400,8 +406,7 @@ class AgentView {
     this.localConnection = null;
     this.power.textContent = "Stopping…";
     this.message("Stopping Agent", "Waiting for owned services to stop safely…");
-    if (this.remote) {
-      await AgentRemotes.deactivate();
+    if (this.remote && !adoptedLocal) {
       this.stopped();
       return;
     }
@@ -470,15 +475,7 @@ class AgentView {
         this.localGeneration = local.generation;
         reload = true;
       }
-    } else if (web.auth?.enrollmentRequired || web.auth?.initialized === false) {
-      this.message("Set up Agent", "Create your local account and verify a two-factor code to continue.", () => this.enroll());
-      this.power.textContent = "Turn off";
-      if (!this.enrollmentPrompted) {
-        this.enrollmentPrompted = true;
-        await this.enroll();
-      }
-      return;
-    }
+    } else throw new Error("Update the local BashKitten package to use native Local authentication.");
     if (ownedViews.get(this.activeBrowser)?.authFor) return;
     await this.connect(connection, true, { reload });
   }
@@ -632,89 +629,132 @@ class AgentView {
     } catch (error) { message.textContent = error.message; }
   }
 
-  async enroll() {
-    if (this.remote) return;
-    if (this.enrollmentDialog?.open) return this.enrollmentDialog.focus();
-    const { dialog, content } = this.dialog("Set up remote access");
-    this.enrollmentDialog = dialog;
-    content.append(html(this.doc, "p", {}, "Create the account used when connecting remotely. Publishing starts only after you verify your two-factor code."));
-    const form = html(this.doc, "form");
+  async shareLocal() {
+    this.closeConnections();
+    const { panel, content } = this.connectionPanel("Share Local");
+    const description = html(this.doc, "p", {}, "Publish this device’s Local Agent through Tor. Other devices use your password and authenticator code.");
+    const body = html(this.doc, "div");
     const error = html(this.doc, "p", { role: "alert" });
-    const field = (title, type, name) => {
-      const label = html(this.doc, "label", {}, title);
-      const input = html(this.doc, "input", { type, name, required: "", autocomplete: type === "password" ? "new-password" : "username" });
-      label.append(input); form.append(label); return input;
+    content.append(description, body, error);
+    let busy = false, setupId = null;
+    const current = () => this.connectionsPanel === panel;
+    const ensureLocal = async () => {
+      const status = await control("start");
+      if (!this.remote) { this.off = false; await this.update(status); this.schedule(); }
     };
-    const username = field("Username", "text", "username");
-    const password = field("Password", "password", "password");
-    const submit = html(this.doc, "button", { type: "submit" }, "Create account");
-    const resume = html(this.doc, "button", { type: "button" }, "Continue existing setup");
-    let setupId;
-    let code;
-    let secret;
-    let authenticatorURI;
-    let publishing = false;
-    dialog.addEventListener("close", () => {
-      password.value = "";
-      if (code) code.value = "";
-      secret = authenticatorURI = null;
-      this.enrollmentDialog = null;
-      if (!publishing) control("account-cancel").catch(console.error);
+    const run = async action => {
+      if (busy || !current()) return;
+      busy = true; error.textContent = "";
+      for (const button of body.querySelectorAll("button")) button.disabled = true;
+      try { await action(); } catch (failure) { if (current()) error.textContent = failure.message; }
+      finally { busy = false; for (const button of body.querySelectorAll("button")) button.disabled = false; }
+    };
+    const button = (title, action) => {
+      const node = html(this.doc, "button", { type: "button" }, title);
+      node.addEventListener("click", () => run(action)); return node;
+    };
+    const image = (url, title) => {
+      if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(url || "")) throw new Error("The controller did not supply a valid QR image.");
+      return html(this.doc, "img", { src: url, alt: title, style: "display:block;width:min(100%,320px);height:auto;margin-block:16px" });
+    };
+    const render = state => {
+      if (!current()) return;
+      setupId = null; body.replaceChildren();
+      if (state.phase !== "ready") {
+        if (state.migrationRequired) body.append(html(this.doc, "p", {}, "Replace the previous remote identity to use encrypted connections. Previously exported connections will stop working."));
+        body.append(button(state.migrationRequired ? "Reissue identity" : "Turn on", () => account(state.migrationRequired)));
+        return;
+      }
+      body.append(html(this.doc, "p", { role: "status" }, state.enabled ? (state.running ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off"));
+      body.append(button(state.enabled ? "Turn off" : "Turn on", async () => {
+        if (!state.enabled) await ensureLocal();
+        render(await control("share-publish", { enabled: !state.enabled }));
+      }));
+      const allow = html(this.doc, "input", { type: "checkbox" });
+      allow.checked = state.allowFileManager;
+      const permission = html(this.doc, "label", {}, "Allow remote file manager"); permission.prepend(allow);
+      allow.addEventListener("change", () => {
+        const allowed = allow.checked; allow.checked = state.allowFileManager;
+        run(async () => render(await control("share-files", { allowed })));
+      });
+      body.append(permission);
+      body.append(html(this.doc, "p", {}, state.address));
+      body.append(html(this.doc, "p", {}, "Connection QR — encrypted with your account password."));
+      const download = async () => {
+        const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+        picker.init(this.win.browsingContext, "Download QR image", Ci.nsIFilePicker.modeSave);
+        picker.defaultString = "bashkitten-connection.png"; picker.appendFilter("PNG image", "*.png");
+        const result = await new Promise(resolve => picker.open(resolve));
+        if (result !== Ci.nsIFilePicker.returnOK && result !== Ci.nsIFilePicker.returnReplace) return;
+        const bytes = Uint8Array.from(this.win.atob(state.qrDataUrl.split(",")[1]), char => char.charCodeAt(0));
+        await IOUtils.write(picker.file.path, bytes, { permissions: 0o600 });
+      };
+      const qr = image(state.qrDataUrl, "Encrypted connection QR");
+      const save = button("", download); save.setAttribute("aria-label", "Download QR image"); save.append(qr);
+      body.append(save, button("Download QR image", download));
+      body.append(button("Reissue identity", () => account(true)));
+    };
+    const account = reissue => {
+      if (reissue && !Services.prompt.confirm(this.win, "Reissue identity?", "Disconnect all old clients and replace the remote account, authenticator and connection keys? Local chats and provider logins are kept.")) return;
+      body.replaceChildren();
+      const form = html(this.doc, "form");
+      const field = (title, type, autocomplete) => {
+        const label = html(this.doc, "label", {}, title), input = html(this.doc, "input", { type, required: "", autocomplete });
+        label.append(input); form.append(label); return input;
+      };
+      const username = field("Username", "text", "username");
+      const password = field("Password", "password", "new-password");
+      const confirmation = field("Confirm password", "password", "new-password");
+      const allow = html(this.doc, "input", { type: "checkbox" });
+      const permission = html(this.doc, "label", {}, "Allow remote file manager"); permission.prepend(allow); form.append(permission);
+      const submit = html(this.doc, "button", { type: "submit" }, "Set up authenticator");
+      let code;
+      form.append(submit); body.append(form);
+      panel.addEventListener("close", () => { password.value = confirmation.value = ""; }, { once: true });
+      form.addEventListener("submit", event => {
+        event.preventDefault();
+        run(async () => {
+          if (setupId) {
+            const result = await control("share-confirm", { setupId, code: code.value });
+            code.value = ""; render(result); return;
+          }
+          if (password.value !== confirmation.value) throw new Error("The passwords do not match.");
+          await ensureLocal();
+          if (!current()) return;
+          const request = control(reissue ? "share-reissue" : "share-setup", { username: username.value, password: password.value, allowFileManager: allow.checked });
+          password.value = confirmation.value = "";
+          const setup = await request;
+          if (!current()) return;
+          setupId = setup.setupId; form.replaceChildren();
+          form.append(html(this.doc, "p", {}, "Add this account to your authenticator, then enter its six-digit code."), image(setup.qrDataUrl, "Authenticator setup QR"));
+          if (setup.otpauthUrl?.startsWith("otpauth://totp/")) form.append(button("Open authenticator", async () => {
+            Cc["@mozilla.org/uriloader/external-protocol-service;1"].getService(Ci.nsIExternalProtocolService).loadURI(
+              Services.io.newURI(setup.otpauthUrl), Services.scriptSecurityManager.getSystemPrincipal(), null, this.win.browsingContext, false, true);
+          }));
+          code = field("Authenticator code", "text", "one-time-code"); code.inputMode = "numeric"; code.pattern = "[0-9]{6}"; code.maxLength = 6;
+          panel.addEventListener("close", () => { code.value = ""; }, { once: true });
+          submit.textContent = "Verify and publish"; form.append(submit);
+          code.focus();
+        });
+      });
+      username.focus();
+    };
+    panel.addEventListener("close", () => {
+      body.replaceChildren(); control("share-cancel").catch(console.error);
     }, { once: true });
-    const create = async command => {
-      const result = await control(command, { username: username.value, password: password.value });
-      password.value = "";
-      setupId = result.setupId;
-      if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(result.qrDataUrl || "")) throw new Error("The controller did not supply an enrollment QR code.");
-      form.replaceChildren(html(this.doc, "p", {}, "Scan this code in your authenticator, then enter its current six-digit code."));
-      form.append(html(this.doc, "img", { src: result.qrDataUrl, alt: "Two-factor enrollment QR code" }));
-      if (/^[A-Z2-7]+=*$/i.test(result.secret || "")) {
-        secret = result.secret;
-        const copy = html(this.doc, "button", { type: "button" }, "Copy setup key");
-        copy.addEventListener("click", () => {
-          Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(secret);
-          copy.textContent = "Key copied";
-        });
-        form.append(copy);
-      }
-      if (result.otpauthUrl?.startsWith("otpauth://totp/")) {
-        authenticatorURI = Services.io.newURI(result.otpauthUrl);
-        const open = html(this.doc, "button", { type: "button" }, "Open authenticator app");
-        open.addEventListener("click", () => {
-          Cc["@mozilla.org/uriloader/external-protocol-service;1"].getService(Ci.nsIExternalProtocolService).loadURI(
-            authenticatorURI, Services.scriptSecurityManager.getSystemPrincipal(), null,
-            this.win.browsingContext, false, true
-          );
-        });
-        form.append(open);
-      }
-      code = field("Authenticator code", "text", "code");
-      code.inputMode = "numeric"; code.autocomplete = "one-time-code";
-      code.pattern = "[0-9]{6}"; code.maxLength = 6;
-      submit.textContent = "Verify and publish";
-      form.append(submit, error);
-    };
-    resume.addEventListener("click", async () => {
-      if (!form.reportValidity()) return;
-      submit.disabled = resume.disabled = true;
-      try { await create("account-enroll"); } catch (e) { error.textContent = e.message; }
-      finally { submit.disabled = resume.disabled = false; }
-    });
-    form.addEventListener("submit", async event => {
-      event.preventDefault(); submit.disabled = resume.disabled = true; error.textContent = "";
-      try {
-        if (setupId) {
-          await control("account-totp", { setupId, code: code.value });
-          code.value = ""; setupId = null; publishing = true;
-          dialog.close();
-          try { await control("set_remote_access", { enabled: true }); }
-          catch (failure) { Services.prompt.alert(this.win, "Remote account created", `Publishing could not start: ${failure.message}. Retry Publish over Tor in Settings.`); }
-          await this.reconnect();
-        } else await create("account-create");
-      } catch (e) { error.textContent = e.message; }
-      finally { submit.disabled = resume.disabled = false; }
-    });
-    form.append(submit, resume, error); content.append(form);
+    await run(async () => render(await control("share-status")));
+  }
+
+  connectionPanel(title) {
+    const panel = html(this.doc, "section", { id: "bashkitten-agent-connections", "aria-labelledby": "bashkitten-connections-title" });
+    const content = html(this.doc, "div", { class: "connections-content" });
+    const heading = html(this.doc, "div", { class: "connections-heading" });
+    const back = html(this.doc, "button", { type: "button" }, "Back to Agent");
+    back.addEventListener("click", () => this.closeConnections());
+    heading.append(back, html(this.doc, "h2", { id: "bashkitten-connections-title" }, title));
+    content.append(heading); panel.append(content);
+    this.connectionsPanel = panel; this.pane.append(panel); this.pane.setAttribute("data-connections", "true");
+    back.focus(); return { panel, content };
   }
 
   closeConnections() {
@@ -729,17 +769,7 @@ class AgentView {
 
   async remotes() {
     if (this.connectionsPanel) { this.connectionsPanel.querySelector("button").focus(); return; }
-    const panel = html(this.doc, "section", { id: "bashkitten-agent-connections", "aria-labelledby": "bashkitten-connections-title" });
-    const content = html(this.doc, "div", { class: "connections-content" });
-    const heading = html(this.doc, "div", { class: "connections-heading" });
-    const back = html(this.doc, "button", { type: "button" }, "Back to Agent");
-    back.addEventListener("click", () => this.closeConnections());
-    heading.append(back, html(this.doc, "h2", { id: "bashkitten-connections-title" }, "Browser connections"));
-    content.append(heading); panel.append(content);
-    this.connectionsPanel = panel;
-    this.pane.append(panel);
-    this.pane.setAttribute("data-connections", "true");
-    back.focus();
+    const { panel, content } = this.connectionPanel("Browser connections");
     content.append(html(this.doc, "p", {}, "Saved in this browser. Choose Local or a saved server from the Agent selector."));
     const error = html(this.doc, "p", { role: "alert" });
     const saved = html(this.doc, "div");

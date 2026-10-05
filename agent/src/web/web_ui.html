@@ -179,12 +179,6 @@
     #workspace { position: relative; display: grid; min-width: 0; min-height: 0; height: 100%; overflow: hidden; grid-template-rows: auto minmax(0, 1fr) auto; }
     .workspace-heading { min-width: 0; }
     .topbar { display: flex; min-height: 58px; min-width: 0; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--line-soft); }
-    .hosted-bookmarks { display: flex; align-items: center; gap: 5px; padding: 4px 10px; border-bottom: 1px solid var(--line-soft); min-width: 0; }
-    .hosted-bookmarks > span { color: var(--muted); font-size: 11px; }
-    #hostedLinks { display: flex; flex: 1; gap: 4px; min-width: 0; overflow-x: auto; }
-    #hostedLinks a { display: block; max-width: 180px; flex-shrink: 0; padding: 4px 7px; border-radius: var(--radius-control); color: var(--text); font-size: 12px; text-decoration: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    #hostedLinks a:hover { background: var(--surface-2); }
-    .hosted-bookmarks .icon-button { width: 26px; height: 26px; flex-shrink: 0; }
     .chat-heading { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; }
     #title { max-width: min(48vw, 540px); overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
     #folderBtn {
@@ -242,11 +236,9 @@
     .settings-page input, .settings-page select, .settings-page textarea { display: block; width: 100%; margin-top: 5px; padding: 9px 10px; border: 1px solid var(--line); background: var(--surface); }
     .settings-page .check-label { display: flex; align-items: center; gap: 7px; }
     .settings-page .check-label input { width: auto; margin: 0; }
-    .hosted-service, .model-download { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
-    .hosted-service strong, .model-download strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
-    .hosted-service p, .model-download p { margin: 5px 0; overflow-wrap: anywhere; }
-    .hosted-service a { color: var(--text); overflow-wrap: anywhere; }
-    #hostingPreview { overflow-wrap: anywhere; }
+    .model-download { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+    .model-download strong { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+    .model-download p { margin: 5px 0; overflow-wrap: anywhere; }
     .model-search-row { display: flex; gap: 7px; align-items: center; }
     .model-search-row input { min-width: 0; flex: 1; margin: 0; }
     .model-search-row button { flex-shrink: 0; }
@@ -573,7 +565,6 @@
     #serviceLogin label { display:block; margin-top:12px; }
     #serviceLogin button { margin:10px 8px 0 0; }
     .service-notice { margin:8px 0; overflow-wrap:anywhere; }
-    #remoteQr { border-radius:var(--radius-control); }
     #serviceLogin input, #serviceLogin select, #piDialogInput input, #piDialogInput textarea, #piDialogInput select { width:100%; padding:9px; border:1px solid var(--line); background:var(--bg); }
     @media (max-width:1100px) and (min-width:701px) {
       #app { grid-template-columns:220px minmax(0,1fr); }
@@ -651,7 +642,6 @@
         </div>
         <div id="usage"><span id="usageSummary"></span><span id="pillamaStatus" class="hidden" tabindex="0" aria-label="llama.cpp performance"></span></div><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
-      <nav id="hostedBookmarks" class="hosted-bookmarks hidden" aria-label="Hosted services"><span>Services</span><div id="hostedLinks"></div><button id="hostedRefresh" class="icon-button" type="button" title="Check hosted services" aria-label="Check hosted services">↻</button></nav>
       </div>
       <div id="chat"><div id="chatInner" class="chat-inner"></div></div>
       <section id="diffView" class="hidden" aria-labelledby="diffTitle"><header class="diff-heading"><div><strong id="diffTitle"></strong><p id="diffNotice" class="meta" role="status"></p></div><button id="closeDiff" type="button" title="Close diff"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>Close diff</span></button></header><div id="fileDiff" tabindex="0" aria-label="File changes"></div></section>
@@ -662,7 +652,6 @@
             <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
             <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
             <button id="tabDownloads" type="button" role="tab" aria-selected="false" aria-controls="settingsDownloads" tabindex="-1" data-settings-tab="downloads">Download models</button>
-            <button id="tabRemote" class="hidden" type="button" role="tab" aria-selected="false" aria-controls="settingsRemote" tabindex="-1" data-settings-tab="remote">Remote access</button>
           </nav>
           <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
           <div class="settings-grid">
@@ -746,42 +735,6 @@
             </div>
             <div class="settings-section"><div class="settings-heading"><h3>Downloads</h3><button id="modelDownloadsRefresh" type="button">Refresh</button></div><div id="modelDownloads"></div></div>
             <p id="modelDownloadsNotice" class="meta" role="status"></p>
-          </section>
-          <section id="settingsRemote" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabRemote">
-            <h3>Remote access</h3>
-            <p class="meta">Let other devices connect to this Agent through Tor. They use the same account and second factor. Local stays connected directly.</p>
-            <p id="remoteStatus" class="meta" role="status"></p>
-            <div class="subscription-actions"><button id="remoteToggle" type="button">Publish over Tor</button><button id="remoteRefresh" type="button">Refresh</button></div>
-            <label>Address<input id="remoteAddress" readonly autocomplete="off"></label>
-            <div id="remotePublishing" class="hidden settings-section">
-              <h3>Add a device</h3>
-              <p class="meta">Create a connection for another device, then scan its QR code or save the connection file.</p>
-              <label>Device name<input id="remoteDeviceName" placeholder="My laptop" autocomplete="off"></label>
-              <label id="remoteKindLabel" class="hidden">Connection<select id="remoteKind"><option value="agent">Agent</option><option value="llama">llama.cpp API</option></select></label>
-              <button id="remoteCreate" type="button">Create connection</button>
-              <div id="remoteExport" class="hidden settings-section">
-                <p class="meta">Save this private connection for the device. Revoke it below to remove access.</p>
-                <textarea id="remoteConnection" readonly autocomplete="off" rows="4" spellcheck="false" aria-label="Private connection record"></textarea>
-                <div class="subscription-actions"><button id="remoteReveal" type="button">Reveal</button><button id="remoteCopy" type="button">Copy</button><button id="remoteSave" type="button">Save file</button><button id="remoteQrToggle" type="button">Show QR</button><button id="remoteClear" type="button">Hide connection</button></div>
-                <img id="remoteQr" class="hidden" alt="Private connection QR code" style="width:min(100%,280px);height:auto;margin-top:12px;background:white;padding:12px">
-              </div>
-              <h4>Authorized devices</h4>
-              <div id="remoteDevices"></div>
-            </div>
-            <section class="settings-section" aria-labelledby="hostedTitle">
-              <div class="settings-heading"><h3 id="hostedTitle">Hosted web services</h3><button id="hostingRefresh" type="button">Check services</button></div>
-              <p class="meta">Publish a local web service under this Agent’s onion address. Visitors use the same account and second factor.</p>
-              <p id="hostingStatus" class="meta" role="status"></p>
-              <div id="hostedServices"></div>
-              <h4 id="hostingEditorTitle">Add a service</h4>
-              <label>Name<input id="hostingName" maxlength="63" placeholder="notes" autocomplete="off" spellcheck="false"></label>
-              <label>Local web address<input id="hostingTarget" inputmode="url" placeholder="http://127.0.0.1:3000" autocomplete="off" spellcheck="false"></label>
-              <p id="hostingPreview" class="meta"></p>
-              <label class="check-label"><input id="hostingEnabled" type="checkbox" checked> Publish this service</label>
-              <div class="subscription-actions"><button id="hostingSave" type="button">Add service</button><button id="hostingCancel" class="hidden" type="button">Cancel edit</button></div>
-              <p id="hostingNotice" class="meta" role="status"></p>
-            </section>
-            <p id="remoteNotice" class="meta" role="status"></p>
           </section>
           <div class="settings-section"><button id="signOut" type="button">Sign out</button></div>
           <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
@@ -931,6 +884,7 @@
     let nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
     const visibilityClient = crypto.randomUUID();
     let serverPlatform = '';
+    let fileManagerAllowed = false, filePolicyEvents = null;
     function sendVisibility() {
       if (serverPlatform === 'termux' && csrf) api('/api/visibility', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({client:visibilityClient, id:current?.id, visible:!document.hidden && document.hasFocus()})}).catch(()=>{});
     }
@@ -941,6 +895,7 @@
     function configureNativeHost() {
       nativeHost = window.bashkittenHost || null;
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
+      $('#filesToggle').classList.toggle('hidden', !fileManagerAllowed);
       $('#filesToggle').textContent = nativeLinux ? '±' : '▤';
       $('#filesToggle').title = nativeLinux ? 'Changes' : 'Files and changes';
       $('#filesToggle').setAttribute('aria-label', nativeLinux ? 'Show project changes' : 'Browse project files and changes');
@@ -968,11 +923,11 @@
     function requireLogin() {
       authRequired = true;
       csrf = '';
-      clearRemoteExport();
       clearTimeout(modelDownloadTimer);
       $('#modelToken').value = '';
-      $('#hostedBookmarks').classList.add('hidden');
       source?.close(); source = null;
+      filePolicyEvents?.close(); filePolicyEvents = null;
+      applyFilePermission(false);
       $('#app').inert = true;
       $('#app').classList.add('hidden');
       $('#auth').classList.remove('hidden');
@@ -1011,6 +966,7 @@
           value = await responseValue(response);
         }
       }
+      if (value.code === 'FILE_MANAGER_DENIED') applyFilePermission(false);
       if (!response.ok) throw Object.assign(new Error(value.error || response.statusText), {status:response.status});
       return value;
     }
@@ -1783,8 +1739,6 @@
       const value = await api('/api/settings');
       config = value.config;
       serverPlatform = value.platform;
-      $('#tabRemote').classList.toggle('hidden', serverPlatform !== 'linux');
-      if (serverPlatform !== 'linux' && activeSettingsTab === 'remote') selectSettingsTab('app');
       $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
       $('#managedLlama').classList.toggle('hidden', serverPlatform !== 'linux');
       $('#modelsLlamaDirectoryNote').classList.toggle('hidden', serverPlatform !== 'linux');
@@ -1793,10 +1747,6 @@
       pendingCwd = config.default_cwd;
       $('#defaultCwd').value = displayFolder(config.default_cwd);
       if (activeSettingsTab === 'services') await refreshServices();
-      if (activeSettingsTab === 'remote') {
-        await refreshRemote();
-        $('#remoteNotice').textContent = '';
-      }
       if (modelDownloadsVisible()) await refreshModelDownloads();
     }
     async function loadNotifications() {
@@ -1945,85 +1895,6 @@
       selectSettingsTab('app');
       $('#packageOutput').closest('details').open = true;
     });
-
-    let hostingState = null, hostingRequest = null, hostingBusy = false, hostingPreviousName = '';
-    function hostedUrl(service) {
-      try {
-        const url = new URL(service.url), onion = String(hostingState?.onion || '').replace(/\.onion$/, '');
-        return url.protocol === 'https:' && url.hostname === `${service.name}.${onion}.onion` && !url.username && !url.password && !url.port ? url.href : '';
-      } catch { return ''; }
-    }
-    function hostingPreview() {
-      const onion = String(hostingState?.onion || '').replace(/\.onion$/, '');
-      const name = $('#hostingName').value.trim().toLowerCase();
-      $('#hostingPreview').textContent = name && onion ? `https://${name}.${onion}.onion` : 'Use one name, such as notes. The web address must be on this server’s loopback interface.';
-    }
-    function clearHostingEditor() {
-      hostingPreviousName = ''; $('#hostingName').value = ''; $('#hostingTarget').value = ''; $('#hostingEnabled').checked = true;
-      $('#hostingEditorTitle').textContent = 'Add a service'; $('#hostingSave').textContent = 'Add service'; $('#hostingCancel').classList.add('hidden'); hostingPreview();
-    }
-    function renderHosting() {
-      const value = hostingState, links = $('#hostedLinks'), list = $('#hostedServices');
-      links.replaceChildren(); list.replaceChildren();
-      for (const service of value.services || []) {
-        const url = hostedUrl(service);
-        if (value.enabled && service.enabled && service.status === 'online' && url) {
-          const link = document.createElement('a'); link.textContent = service.name; link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.title = `${service.name} · ${url}`; link.dataset.hostedService = 'true'; links.append(link);
-        }
-        const row = document.createElement('div'); row.className = 'hosted-service';
-        const name = document.createElement('strong'); name.textContent = service.name;
-        const target = document.createElement('p'); target.className = 'meta'; target.textContent = service.target;
-        const state = document.createElement('p'); state.className = 'meta';
-        state.textContent = [!service.enabled ? 'Disabled' : !value.enabled ? 'Remote access is off' : service.status === 'online' ? 'Online' : service.status || 'Not checked', service.error, service.checkedAt ? `Checked ${new Date(service.checkedAt).toLocaleTimeString()}` : ''].filter(Boolean).join(' · ');
-        row.append(name, target, state);
-        if (url && value.enabled && service.enabled) { const link = document.createElement('a'); link.href = url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.className = 'meta'; link.textContent = url; link.dataset.hostedService = 'true'; row.append(link); }
-        const actions = document.createElement('div'); actions.className = 'subscription-actions';
-        const edit = document.createElement('button'); edit.type = 'button'; edit.textContent = 'Edit'; edit.disabled = hostingBusy;
-        edit.onclick = () => { hostingPreviousName = service.name; $('#hostingName').value = service.name; $('#hostingTarget').value = service.target; $('#hostingEnabled').checked = service.enabled; $('#hostingEditorTitle').textContent = 'Edit service'; $('#hostingSave').textContent = 'Save service'; $('#hostingCancel').classList.remove('hidden'); hostingPreview(); $('#hostingName').focus(); };
-        const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = 'Remove'; remove.disabled = hostingBusy;
-        remove.onclick = () => hostingAction(async () => { await api(`/api/hosting/services/${encodeURIComponent(service.name)}`, {method:'DELETE'}); if (hostingPreviousName === service.name) clearHostingEditor(); });
-        actions.append(edit, remove); row.append(actions); list.append(row);
-      }
-      if (!value.services?.length) list.textContent = 'No web services added.';
-      $('#hostedBookmarks').classList.toggle('hidden', !links.children.length);
-      $('#hostingStatus').textContent = value.enabled ? 'Live services also appear above your chat.' : 'Enable remote access to publish these services.';
-      hostingPreview();
-    }
-    async function refreshHosting() {
-      if (!csrf || document.hidden || serverPlatform !== 'linux') return;
-      if (hostingRequest) return hostingRequest.catch(() => {});
-      hostingRequest = (async () => { hostingState = await api('/api/hosting?refresh=1'); renderHosting(); })();
-      try { await hostingRequest; }
-      catch (error) { $('#hostingNotice').textContent = error.message; $('#hostedBookmarks').classList.add('hidden'); }
-      finally { hostingRequest = null; }
-    }
-    async function hostingAction(operation) {
-      if (hostingBusy) return;
-      hostingBusy = true; $('#hostingSave').disabled = true; $('#hostingNotice').textContent = '';
-      for (const button of $('#hostedServices').querySelectorAll('button')) button.disabled = true;
-      try { await operation(); await hostingRequest?.catch(() => {}); await refreshHosting(); }
-      catch (error) { $('#hostingNotice').textContent = error.message; }
-      finally { hostingBusy = false; $('#hostingSave').disabled = false; for (const button of $('#hostedServices').querySelectorAll('button')) button.disabled = false; }
-    }
-    $('#hostingName').oninput = hostingPreview;
-    $('#hostingCancel').onclick = clearHostingEditor;
-    $('#hostingSave').onclick = () => hostingAction(async () => {
-      const name = $('#hostingName').value.trim().toLowerCase(), target = $('#hostingTarget').value.trim();
-      if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) throw Error('Use a single name with letters, numbers or hyphens, starting and ending with a letter or number.');
-      if (!target) throw Error('Enter the local web address.');
-      await api('/api/hosting/services', {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({name,target,enabled:$('#hostingEnabled').checked,...(hostingPreviousName ? {previousName:hostingPreviousName} : {})})}); clearHostingEditor();
-    });
-    for (const id of ['#hostingRefresh','#hostedRefresh']) $(id).onclick = async () => { $(id).disabled = true; $('#hostingNotice').textContent = ''; try { await refreshHosting(); } finally { $(id).disabled = false; } };
-    for (const id of ['#hostingName','#hostingTarget']) $(id).onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('#hostingSave').click(); } };
-    function openHostedLink(event) {
-      const link = event.target.closest('a[data-hosted-service]');
-      if (!link || !event.isTrusted || !['linux','android'].includes(nativeHost?.platform)) return;
-      if (event.type === 'auxclick' && event.button !== 1) return;
-      event.preventDefault();
-      nativeHost.call('open-hosted', {url:link.href}).catch(error => { $('#hostingNotice').textContent = error.message; $('#composerHint').textContent = error.message; link.title = error.message; });
-    }
-    document.addEventListener('click', openHostedLink);
-    document.addEventListener('auxclick', openHostedLink);
 
     let modelDownloadsState = null, modelDownloadsRequest = null, modelDownloadTimer = null, modelsDirectoryDirty = false, modelsDirectoryRevision = 0, modelSettingsBusy = false;
     let modelRepository = null, modelSelectedFiles = new Set(), modelCatalogGeneration = 0, modelDownloadStarting = false;
@@ -2186,105 +2057,8 @@
       catch (error) { $('#modelDownloadNotice').textContent = error.message; }
       finally { modelDownloadStarting = false; updateModelSelection(); }
     };
-    document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; } else if (csrf) { refreshHosting(); if (modelDownloadsVisible()) refreshModelDownloads(); } });
-    window.addEventListener('focus', () => { if (csrf && !document.hidden) { refreshHosting(); if (modelDownloadsVisible()) refreshModelDownloads(); } });
-
-    let remoteState = null, remoteExport = null, remoteBusy = false;
-    function clearRemoteExport() {
-      remoteExport = null;
-      $('#remoteConnection').value = '';
-      $('#remoteQr').removeAttribute('src');
-      $('#remoteQr').classList.add('hidden');
-      $('#remoteExport').classList.add('hidden');
-      $('#remoteReveal').textContent = 'Reveal';
-      $('#remoteQrToggle').textContent = 'Show QR';
-    }
-    async function refreshRemote() {
-      if (serverPlatform !== 'linux') return;
-      const value = await control('get_remote_access'); remoteState = value;
-      $('#remoteStatus').textContent = value.enabled ? (value.address ? 'This Agent is published over Tor' : 'Starting Tor…') : value.setupRequired ? 'Create your remote account and verify a two-factor code to publish.' : 'This Agent is not published';
-      $('#remoteAddress').value = value.address || '';
-      $('#remoteToggle').textContent = value.enabled ? 'Stop publishing' : 'Publish over Tor';
-      $('#remotePublishing').classList.toggle('hidden', !value.enabled);
-      $('#remoteKindLabel').classList.toggle('hidden', serverPlatform !== 'linux');
-      if (serverPlatform !== 'linux') $('#remoteKind').value = 'agent';
-      const root = $('#remoteDevices'); root.replaceChildren();
-      for (const device of value.devices || []) {
-        const row = document.createElement('div'); row.className = 'service-row';
-        const label = document.createElement('span'); label.textContent = device.name + (device.kind === 'llama' ? ' · llama.cpp' : '');
-        const button = document.createElement('button'); button.type = 'button'; button.textContent = 'Revoke';
-        button.onclick = () => remoteAction(async () => {
-          button.disabled = true;
-          try { await control('revoke_remote_connection', {id:device.id}); clearRemoteExport(); }
-          finally { button.disabled = false; }
-        });
-        row.append(label, button); root.append(row);
-      }
-      if (!value.devices?.length) root.textContent = 'No authorized devices.';
-      await hostingRequest?.catch(() => {}); await refreshHosting();
-    }
-    async function remoteAction(operation) {
-      if (remoteBusy) return;
-      remoteBusy = true;
-      for (const id of ['#remoteToggle','#remoteCreate','#remoteRefresh']) $(id).disabled = true;
-      $('#remoteNotice').textContent = '';
-      try { await operation(); await refreshRemote(); }
-      catch (error) { $('#remoteNotice').textContent = error.message; }
-      finally { remoteBusy = false; for (const id of ['#remoteToggle','#remoteCreate','#remoteRefresh']) $(id).disabled = false; }
-    }
-    $('#remoteToggle').onclick = () => remoteAction(async () => {
-      if (!remoteState?.enabled && remoteState?.setupRequired) {
-        if (!nativeLinux) throw Error('Set up remote access in BashKitten on this Linux machine.');
-        await nativeHost.call('setup-remote', {});
-        return;
-      }
-      await control('set_remote_access', {enabled:!remoteState?.enabled}); clearRemoteExport();
-    });
-    $('#remoteRefresh').onclick = () => remoteAction(async () => {});
-    $('#remoteCreate').onclick = () => remoteAction(async () => {
-      const name = $('#remoteDeviceName').value.trim();
-      if (!name) throw Error('Enter a device name.');
-      const value = await control('create_remote_connection', {name,kind:$('#remoteKind').value});
-      clearRemoteExport();
-      remoteExport = value;
-      $('#remoteConnection').value = '••••••••  Private connection';
-      $('#remoteExport').classList.remove('hidden');
-      $('#remoteDeviceName').value = '';
-    });
-    $('#remoteReveal').onclick = () => {
-      if (!remoteExport) return;
-      const reveal = $('#remoteReveal').textContent === 'Reveal';
-      $('#remoteConnection').value = reveal ? JSON.stringify(remoteExport.connection, null, 2) : '••••••••  Private connection';
-      $('#remoteReveal').textContent = reveal ? 'Hide' : 'Reveal';
-    };
-    $('#remoteCopy').onclick = async () => {
-      if (!remoteExport) return;
-      try { await navigator.clipboard.writeText(JSON.stringify(remoteExport.connection)); $('#remoteNotice').textContent = 'Private connection copied.'; }
-      catch { $('#remoteNotice').textContent = 'Clipboard access was denied. Reveal the connection to copy it or save the file.'; }
-    };
-    $('#remoteSave').onclick = () => {
-      if (!remoteExport) return;
-      const url = URL.createObjectURL(new Blob([JSON.stringify(remoteExport.connection, null, 2)], {type:'application/json'}));
-      const link = document.createElement('a'); link.href = url; link.download = 'bashkitten-connection.json'; link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    };
-    $('#remoteQrToggle').onclick = () => {
-      if (!remoteExport) return;
-      const qr = $('#remoteQr'), reveal = qr.classList.contains('hidden');
-      if (reveal) {
-        if (!/^data:image\/(?:png|svg\+xml);base64,/.test(remoteExport.qrDataUrl || '')) { $('#remoteNotice').textContent = 'No QR code was returned. Save or copy the connection instead.'; return; }
-        qr.src = remoteExport.qrDataUrl;
-      } else qr.removeAttribute('src');
-      qr.classList.toggle('hidden', !reveal); $('#remoteQrToggle').textContent = reveal ? 'Hide QR' : 'Show QR';
-    };
-    $('#remoteClear').onclick = clearRemoteExport;
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        $('#remoteConnection').value = remoteExport ? '••••••••  Private connection' : '';
-        $('#remoteReveal').textContent = 'Reveal';
-        $('#remoteQr').removeAttribute('src'); $('#remoteQr').classList.add('hidden'); $('#remoteQrToggle').textContent = 'Show QR';
-      }
-    });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; } else if (csrf) { if (modelDownloadsVisible()) refreshModelDownloads(); } });
+    window.addEventListener('focus', () => { if (csrf && !document.hidden) { if (modelDownloadsVisible()) refreshModelDownloads(); } });
 
     let displayedGoal = null;
     function renderGoal(goal){displayedGoal=goal;const row=$('#goalStatus');row.classList.toggle('hidden',!goal);row.textContent=goal?'Goal '+goal.status+': '+goal.objective+(goal.summary?' · '+goal.summary:''):'';}
@@ -2496,7 +2270,7 @@
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
-        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent=nativeLinux?'±':'▤'; browse.title=nativeLinux?'Show project changes':'Browse project files'; browse.setAttribute('aria-label',(nativeLinux?'Show changes in ':'Browse files in ')+folder); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
+        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent=nativeLinux?'±':'▤'; browse.title=nativeLinux?'Show project changes':'Browse project files'; browse.setAttribute('aria-label',(nativeLinux?'Show changes in ':'Browse files in ')+folder); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
 
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
@@ -2676,7 +2450,6 @@
 
     function showChatView() {
       if(diffPath)closeFileDiff();
-      clearRemoteExport();
       clearTimeout(modelDownloadTimer);
       $('#modelToken').value = '';
       $('#settingsView').classList.add('hidden');
@@ -2994,12 +2767,18 @@
           return requireLogin();
         }
         csrf = value.csrf;
+        applyFilePermission(value.fileManager === true);
+        filePolicyEvents?.close();
+        filePolicyEvents = new EventSource('/api/file-manager/events');
+        filePolicyEvents.onmessage = event => {
+          try { applyFilePermission(JSON.parse(event.data).fileManager === true); } catch { applyFilePermission(false); }
+        };
+        filePolicyEvents.onerror = () => applyFilePermission(false);
         $('#signOut').classList.toggle('hidden', value.local === true);
         authRequired = false;
         $('#auth').classList.add('hidden');
         $('#app').classList.remove('hidden');
         await loadSettings();
-        refreshHosting();
         await loadModels();
         const sessions = await loadSessions();
         if (initialized) {
@@ -3078,6 +2857,7 @@
     }
 
     async function openFolderPicker(title, path, onSelect) {
+      if (!fileManagerAllowed) return;
       if (nativeLinux) {
         try {
           const selected = await nativeHost.call('choose-folder', {title, path});
@@ -3337,8 +3117,6 @@
       else showChatView();
     };
     function selectSettingsTab(name, focus = false) {
-      if (name === 'remote' && serverPlatform !== 'linux') name = 'app';
-      if (activeSettingsTab === 'remote' && name !== 'remote') clearRemoteExport();
       if (name !== 'downloads') { clearTimeout(modelDownloadTimer); $('#modelToken').value = ''; }
       activeSettingsTab = name;
       $('#settingsView').scrollTop = 0;
@@ -3352,7 +3130,6 @@
       $('#settingsSaveRow').classList.toggle('hidden', name !== 'app');
       $('#settingsNotice').textContent = '';
       if (name === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
-      if (name === 'remote') { refreshRemote().catch(error => { $('#remoteNotice').textContent = error.message; }); refreshHosting(); }
       if (name === 'downloads') refreshModelDownloads();
     }
     const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
@@ -3428,6 +3205,23 @@
     }
     function updateBackdrop() {
       $('#drawerBackdrop').classList.toggle('hidden', !matchMedia('(max-width:700px)').matches || (!$('#app').classList.contains('sidebar-open') && !$('#app').classList.contains('files-open')));
+    }
+    function applyFilePermission(allowed) {
+      fileManagerAllowed = allowed;
+      $('#filesToggle').classList.toggle('hidden', !allowed);
+      for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
+      for (const id of ['folderBtn', 'defaultCwdBrowse', 'modelsDirectoryBrowse']) $('#'+id).disabled = !allowed;
+      if (allowed) return;
+      closeFiles(); closeFileDiff();
+      ++fileGeneration; ++changesGeneration; ++folderGeneration;
+      diffAbort?.abort();
+      for (const id of ['fileTree', 'changesList', 'changesCounts', 'fileNotice']) $('#'+id).replaceChildren();
+      for (const id of ['folderDialog', 'fileActionDialog']) if ($('#'+id)?.open) $('#'+id).close();
+      fileRoot = fileFolder = projectRoot = changesRoot = ''; selectedFiles.clear();
+      pendingFileAction = null; fileJob = null;
+      $('#fileJob').classList.add('hidden'); $('#fileJobText').textContent = '';
+      $('#downloadFileJob').removeAttribute('href');
+      sessionStorage.removeItem('bashkitten.fileJob');
     }
     function projectPanelVisible() { return !document.hidden && !$('#filePanel').classList.contains('hidden') && !$('#app').classList.contains('hidden'); }
     function closeFiles() {
@@ -3537,7 +3331,7 @@
       if(fileJob)renderFileJob();
     }
     async function openFiles(root) {
-      if(!root)return;
+      if(!root || !fileManagerAllowed)return;
       const changed=projectRoot!==root; projectRoot=root;
       $('#filePanel').classList.remove('hidden');$('#app').classList.add('files-open');$('#filesToggle').setAttribute('aria-expanded','true');
       $('#fileRootLabel').textContent=folderDisplayName(root);$('#fileRootLabel').title=displayFolder(root);

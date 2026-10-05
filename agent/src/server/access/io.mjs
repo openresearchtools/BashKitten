@@ -16,12 +16,13 @@ export function unixRequest(socketPath, route, { method = 'GET', headers = {}, b
 }
 
 // Commands handling enrollment secrets never inherit the public log stream.
-export function command(file, args, { env = process.env, timeout = 30000 } = {}) {
+export function command(file, args, { env = process.env, timeout = 30000, stdoutOnly = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', failed = false;
     const timer = setTimeout(() => { failed = true; child.kill('SIGKILL'); }, timeout);
-    for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { output += chunk; });
+    child.stdout.on('data', chunk => { output += chunk; });
+    child.stderr.on('data', chunk => { if (!stdoutOnly) output += chunk; });
     child.on('error', error => { clearTimeout(timer); reject(error); });
     child.on('close', code => { clearTimeout(timer); if (code || failed) reject(Error(`${file.split('/').pop()} command failed (${code ?? 'timeout'})`)); else resolve(output); });
   });

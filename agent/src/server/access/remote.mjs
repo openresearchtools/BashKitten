@@ -1,142 +1,221 @@
-// Tor v3 client authorization; no passwords or TOTP seeds enter connection exports.
+// Remote enrollment follows TorKitten v2 (Apache-2.0); see NOTICE.
+// BashKitten native controller/lifecycle integration: AGPL-3.0-only.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { privateDir, readJson, writeJson } from '../common.mjs';
-import { accessDir, binary } from './paths.mjs';
-import { accountStatus } from './accounts.mjs';
+import { X509Certificate } from 'node:crypto';
+import { privateDir, readJson, writeJson, writePrivate } from '../common.mjs';
+import { accessDir, remoteDir, paths, binary } from './paths.mjs';
+import { accountStatus, validateAccountCredentials, enrollAccount, completeAccount, cancelAccountSetup } from './accounts.mjs';
 
-const root = path.join(accessDir, 'tor');
-const stateFile = path.join(accessDir, 'remote.json');
-const hostingClientFile = path.join(accessDir, 'hosting-client.json');
+const torRoot = path.join(remoteDir, 'tor');
 const onion = /^[a-z2-7]{56}\.onion$/;
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-function base32(bytes) {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits = 0, value = 0, out = '';
-  for (const byte of bytes) { value = (value << 8) | byte; bits += 8; while (bits >= 5) { out += alphabet[(value >>> (bits - 5)) & 31]; bits -= 5; } }
-  if (bits) out += alphabet[(value << (5 - bits)) & 31];
-  return out;
-}
-function deviceKey() {
-  const pair = generateKeyPairSync('x25519');
-  return { publicKey: base32(pair.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)),
-    privateKey: base32(pair.privateKey.export({ type: 'pkcs8', format: 'der' }).subarray(-32)) };
-}
+
 export class RemoteAccess {
-  constructor({ llama = () => null } = {}) { this.llama = llama; this.stack = null; this.operations = Promise.resolve(); }
+  constructor({ schedule }) { this.schedule = schedule; this.stack = null; this.operations = Promise.resolve(); this.pending = null; }
   transaction(fn) { const work = this.operations.then(fn); this.operations = work.catch(() => {}); return work; }
-  async state() { return readJson(stateFile, { enabled: false, devices: [] }); }
-  async hostingKey() {
-    let key = await readJson(hostingClientFile, null);
-    if (!key) { key = deviceKey(); await writeJson(hostingClientFile, key); }
-    if (!/^[A-Z2-7]{52}$/.test(key.publicKey || '') || !/^[A-Z2-7]{52}$/.test(key.privateKey || '')) throw Error('Invalid local hosting client identity');
-    return key;
+  async state() {
+    const state = await readJson(paths.share, null);
+    if (!state) return { version: 2, phase: 'new', enabled: false, allowFileManager: false };
+    if (state.version !== 2 || !['replacing', 'setup', 'ready'].includes(state.phase) || typeof state.enabled !== 'boolean' || typeof state.allowFileManager !== 'boolean' ||
+        (state.phase !== 'replacing' && (!/^[a-f0-9]{48}$/.test(state.id || '') || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(state.owner || ''))) ||
+        (state.phase === 'ready' && (!onion.test(state.onion || '') || !/^[a-f0-9]{64}$/.test(state.caSha256 || ''))) ||
+        (state.enabled && state.phase !== 'ready')) throw Error('Invalid Share Local state; remote access stays closed');
+    return state;
   }
-  // Trusted native bridge only: never expose this record through the web API.
-  async hostingClient() {
-    if (!this.stack?.ready || !(await this.state()).enabled) throw Error('Turn on Agent and enable remote access first');
-    const host = await this.hostname('agent'), identity = this.stack.identity;
-    if (!host || !identity?.caPem || !identity?.caSha256) throw Error('The remote endpoint is not ready');
-    const key = await this.hostingKey();
-    return { version: 1, name: 'Local hosted websites', kind: 'agent', url: 'https://' + host,
-      clientAuthorization: key.privateKey, caPem: identity.caPem, caSha256: identity.caSha256, instanceId: identity.instanceId };
+  async identity() {
+    const state = await this.state();
+    if (!state.id || state.phase === 'replacing') return null;
+    const keys = await readJson(paths.remoteKeys);
+    if (keys.id !== state.id || !/^[A-Z2-7]{52}$/.test(keys.tor_public || '') || !keys.certificate || !keys.host_key || !keys.oidc_key || !keys.fingerprint) throw Error('Remote identity is incomplete; reissue it in Share Local');
+    return keys;
   }
-  async hostname(kind) {
-    const value = (await fs.readFile(path.join(root, kind, 'hostname'), 'utf8').catch(() => '')).trim();
-    return onion.test(value) ? value : null;
+  async hostname() {
+    try {
+      const host = (await fs.readFile(path.join(torRoot, 'onion', 'hostname'), 'utf8')).trim();
+      if (!onion.test(host)) throw Error('Invalid remote onion identity');
+      return host;
+    } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
   }
-  async prepare(stack, port, { reload = false, initialize = false } = {}) {
+  async prepare(stack) {
     this.stack = stack;
     const state = await this.state();
-    if (state.enabled && !(await accountStatus()).initialized) throw Error('Complete remote account setup before publishing');
-    if (!state.enabled && (!initialize || await this.hostname('agent'))) return [];
-    await privateDir(root); await privateDir(path.join(root, 'data'));
-    let text = `DataDirectory ${JSON.stringify(path.join(root, 'data'))}\nSocksPort 0\nAvoidDiskWrites 1\nLog err stderr\n`;
-    // Tor creates its persistent service identity without connecting or publishing.
-    // Auth can then keep the same cookie scopes when publishing is later enabled.
-    if (!state.enabled) text += 'DisableNetwork 1\n';
-    const kinds = ['agent', ...(state.enabled && (state.devices.some(device => device.kind === 'llama') || await this.llama()) ? ['llama'] : [])];
-    for (const kind of kinds) {
-      const service = path.join(root, kind), authorized = path.join(service, 'authorized_clients');
-      await privateDir(service); await privateDir(authorized);
-      for (const file of await fs.readdir(authorized)) if (file.endsWith('.auth')) await fs.rm(path.join(authorized, file));
-      const devices = state.devices.filter(device => device.kind === kind);
-      if (kind === 'agent') devices.push({ id: 'local-hosting', publicKey: (await this.hostingKey()).publicKey });
-      // An empty authorization directory means public access in Tor. A discarded
-      // private key keeps the service private before its first enrollment/after revoke.
-      const keys = devices.length ? devices : [{ id: 'closed', publicKey: deviceKey().publicKey }];
-      for (const key of keys) await fs.writeFile(path.join(authorized, key.id + '.auth'), `descriptor:x25519:${key.publicKey}\n`, { mode: 0o600 });
-      text += `HiddenServiceDir ${JSON.stringify(service)}\nHiddenServiceVersion 3\nHiddenServicePort 443 127.0.0.1:${port}\n`;
+    if (!state.enabled) return [];
+    await this.identity();
+    if (!(await accountStatus()).initialized || await this.hostname() !== state.onion) throw Error('Remote account setup is incomplete or its onion identity changed');
+    for (const file of [paths.users, paths.database, paths.remoteCertificate, paths.connectionQr,
+      path.join(torRoot, 'onion/hs_ed25519_secret_key'), path.join(torRoot, 'onion/hs_ed25519_public_key')]) {
+      if (!(await fs.stat(file)).isFile()) throw Error('Remote identity is incomplete');
     }
-    const config = path.join(root, 'torrc'); await fs.writeFile(config, text, { mode: 0o600 });
-    if (reload) await stack.reloadPublisher();
-    else await stack.launch('tor', binary('tor'), ['-f', config], process.env);
-    for (let attempt = 0; attempt < 150; attempt++) {
-      const names = await Promise.all(kinds.map(kind => this.hostname(kind)));
-      if (names.every(Boolean)) return state.enabled ? ['https://' + names[0]] : [];
-      if (stack.children.find(child => child.name === 'tor')?.exit !== undefined) throw Error('Tor could not start; see tor.log');
-      await wait(100);
-    }
-    throw Error('Tor did not create its private onion service');
+    return ['https://' + await this.hostname()];
   }
-  async status() {
-    const state = await this.state();
-    return { enabled: state.enabled, setupRequired: !(await accountStatus()).initialized, address: state.enabled && await this.hostname('agent') ? 'https://' + await this.hostname('agent') : null,
-      tlsCaPin: this.stack?.identity?.caSha256 || null, restartRequired: false,
-      devices: state.devices.map(({ id, name, createdAt, kind }) => ({ id, name, createdAt, kind })) };
+  async torConfig(publish) {
+    const keys = await this.identity();
+    if (!keys) throw Error('Remote identity is not configured');
+    const service = path.join(torRoot, 'onion'), authorized = path.join(service, 'authorized_clients');
+    await privateDir(path.join(torRoot, 'data')); await privateDir(authorized);
+    for (const file of await fs.readdir(authorized)) {
+      if (file.endsWith('.auth') && file !== keys.id + '.auth') throw Error('Unexpected Tor authorization; reissue the remote identity');
+    }
+    await writePrivate(path.join(authorized, keys.id + '.auth'), `descriptor:x25519:${keys.tor_public}\n`);
+    const file = path.join(torRoot, 'torrc');
+    await writePrivate(file, `DataDirectory ${JSON.stringify(path.join(torRoot, 'data'))}\nSocksPort 0\nAvoidDiskWrites 1\nLog err stderr\n${publish ? '' : 'DisableNetwork 1\n'}HiddenServiceDir ${JSON.stringify(service)}\nHiddenServiceVersion 3\nHiddenServicePort 443 127.0.0.1:${this.stack.remotePort}\n`);
+    return file;
+  }
+  async publish() {
+    if (!(await this.state()).enabled) return;
+    await this.stack.launch('tor', binary('tor'), ['-f', await this.torConfig(true)], process.env);
+  }
+  async authentication() {
+    const keys = await this.identity(), host = await this.hostname();
+    if (!keys || !host) throw Error('Set up the remote identity first');
+    const registration = await this.stack.tunnel.call('oauth-registration', { client_id: 'bashkitten-' + keys.id, onion: host });
+    return { jwks: [{ key: keys.oidc_key, algorithm: 'RS256', use: 'sig' }], clients: [registration] };
+  }
+  async startTunnel() {
+    if (!(await this.state()).enabled) return;
+    if (this.stack.tunnelStarted) return;
+    const keys = await this.identity(), host = await this.hostname();
+    const result = await this.stack.tunnel.call('start', { socket: paths.tunnel, auth_socket: paths.auth, onion: host, key: keys.host_key });
+    if (result.fingerprint !== keys.fingerprint) throw Error('The Chisel host identity changed');
+    // Agent still reaches the remote authenticated TLS listener, never Local.
+    await this.stack.tunnel.call('service-set', { id: 'agent', network: 'tcp', address: '127.0.0.1:' + this.stack.remotePort });
+    this.stack.tunnelStarted = true;
+  }
+  cancelPending() {
+    if (this.pending) { clearTimeout(this.pending.timer); this.pending.password.fill(0); this.pending = null; }
+    cancelAccountSetup();
+  }
+  async begin(value, { reissue = false } = {}) {
+    return this.transaction(async () => {
+      if (!this.stack?.ready || this.stack.stopping) throw Error('Turn on Local before Share Local setup');
+      validateAccountCredentials(value, { create: true });
+      if (typeof value.allowFileManager !== 'boolean') throw Error('Choose whether to allow the remote file manager');
+      const state = await this.state();
+      const legacy = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
+      if ((state.phase === 'ready' || legacy) && !reissue) throw Error('Confirm Reissue identity to replace the previous remote account and disconnect its clients');
+      // Drain writes before committing the new policy. Admission stays blocked
+      // until the durable state is saved, including if a save fails.
+      await this.stack.refreshFileManager(true);
+      await writeJson(paths.share, { version: 2, phase: 'replacing', enabled: false, allowFileManager: false });
+      await this.stack.refreshFileManager();
+      this.stack.reconfiguring = true; this.stack.ready = false;
+      this.cancelPending();
+      try {
+        await this.stack.stopNamed('tor');
+        await this.stack.stopAuthentication();
+        await this.stack.stopNamed('caddy');
+        this.stack.remoteOrigins = []; this.stack.remoteAuthOrigin = null;
+        await fs.rm(remoteDir, { recursive: true, force: true });
+        // Confirmed migration removes old remote authority. Its shared Local CA
+        // and the saved service definitions are deliberately kept in place.
+        for (const name of ['remote.json', 'hosting-client.json', 'tor', 'users.yml', 'authelia.yml',
+          'authelia.sqlite3', 'authelia.sqlite3-wal', 'authelia.sqlite3-shm', 'enrollment.json',
+          'initialized.json', 'totp.png', 'valkey.conf', 'sessions', 'notifications.txt',
+          'session.secret', 'storage.secret', 'jwt.secret']) {
+          await fs.rm(path.join(accessDir, name), { recursive: true, force: true });
+        }
+        await privateDir(remoteDir);
+        await this.stack.startNative();
+        const keys = await this.stack.tunnel.call('enrollment-keys');
+        await writeJson(paths.remoteKeys, keys);
+        await writePrivate(paths.remoteCertificate, keys.certificate);
+        await writeJson(paths.share, { version: 2, id: keys.id, phase: 'setup', enabled: false, allowFileManager: value.allowFileManager, owner: value.username });
+        await this.stack.launch('tor', binary('tor'), ['-f', await this.torConfig(false)], process.env);
+        await this.stack.waitUntil(() => this.hostname(), 'Tor identity');
+        await this.stack.stopNamed('tor');
+        this.stack.remoteAuthOrigin = 'https://' + await this.hostname();
+        await this.stack.startCaddy();
+        await this.stack.startAuthentication();
+        const setup = await enrollAccount(this.stack.remoteAuthOrigin, value, { create: true, native: this.stack.tunnel });
+        const pending = { setupId: setup.setupId, password: Buffer.from(value.password, 'utf8') };
+        this.pending = pending;
+        pending.timer = setTimeout(() => {
+          this.schedule(async () => {
+            if (this.pending !== pending) return;
+            this.cancelPending();
+            await this.stack.stopAuthentication();
+          }).catch(error => this.stack.fatal?.(error));
+        }, 10 * 60000).unref();
+        this.stack.ready = true;
+        return setup;
+      } catch (error) {
+        this.cancelPending();
+        await this.stack.stopNamed('tor');
+        await this.stack.stopAuthentication();
+        // Restore the unchanged Local listener after failed identity setup.
+        if (!this.stack.children.some(child => child.name === 'caddy')) {
+          try { await this.stack.startCaddy(); } catch (restore) { this.stack.fatal?.(restore); }
+        }
+        this.stack.ready = await this.stack.localReady();
+        if (!this.stack.ready) this.stack.fatal?.(error);
+        throw error;
+      } finally { this.stack.reconfiguring = false; }
+    });
+  }
+  async confirm(value) {
+    return this.transaction(async () => {
+      const pending = this.pending;
+      if (!pending || pending.setupId !== value.setupId) throw Error('Setup expired; start Share Local setup again');
+      await completeAccount(value);
+      try {
+        const state = await this.state(), keys = await this.identity();
+        const bundle = { version: 2, id: keys.id, name: 'BashKitten · ' + state.owner, owner: state.owner, onion: await this.hostname(),
+          tor_private: keys.tor_private, root_ca: await this.stack.remoteRoot(), certificate: keys.certificate,
+          private_key: keys.private_key, fingerprint: keys.fingerprint };
+        const encoded = await this.stack.tunnel.call('encrypt', { bundle, password: pending.password.toString('utf8') });
+        await writePrivate(paths.connectionQr, Buffer.from(encoded, 'base64'));
+        delete keys.tor_private; delete keys.private_key;
+        await writeJson(paths.remoteKeys, keys);
+        const caSha256 = new X509Certificate(bundle.root_ca).fingerprint256.replaceAll(':', '').toLowerCase();
+        await writeJson(paths.share, { ...state, phase: 'ready', enabled: true, onion: bundle.onion, caSha256 });
+        this.cancelPending();
+        await this.stack.reconfigureRemote();
+        return this.status();
+      } catch (error) {
+        this.cancelPending();
+        const state = await this.state();
+        await writeJson(paths.share, { ...state, enabled: false });
+        if (this.stack.ready) await this.stack.reconfigureRemote();
+        else { await this.stack.stopNamed('tor'); await this.stack.stopAuthentication(); }
+        throw error;
+      }
+    });
+  }
+  async cancelSetup() {
+    return this.transaction(async () => { this.cancelPending(); if (!(await this.state()).enabled) await this.stack.stopAuthentication(); return this.status(); });
   }
   async setEnabled(enabled) {
     return this.transaction(async () => {
+      if (typeof enabled !== 'boolean') throw Error('Publishing must be on or off');
       const state = await this.state();
-      if (enabled && !(await accountStatus()).initialized) throw Error('Create your remote account and verify its two-factor code before publishing');
-      if (state.enabled !== Boolean(enabled)) {
-        await writeJson(stateFile, { ...state, enabled: Boolean(enabled) });
-        await this.stack.reconfigureRemote();
-      }
+      if (state.phase !== 'ready') throw Error('Complete Share Local account and authenticator setup first');
+      if (enabled && (!this.stack.ready || this.stack.stopping)) throw Error('Turn on Local before publishing');
+      if (state.enabled === enabled) return this.status();
+      await this.stack.refreshFileManager(true);
+      await writeJson(paths.share, { ...state, enabled });
+      await this.stack.refreshFileManager();
+      if (this.stack.ready) await this.stack.reconfigureRemote();
       return this.status();
     });
   }
-  async create({ name, kind = 'agent' }) {
+  async setFileManager(allowed) {
     return this.transaction(async () => {
+      if (typeof allowed !== 'boolean') throw Error('Choose whether to allow the remote file manager');
       const state = await this.state();
-      if (!state.enabled) throw Error('Enable remote access first');
-      if (!['agent', 'llama'].includes(kind)) throw Error('Unknown remote kind');
-      const runtime = kind === 'llama' ? await this.llama() : null;
-      if (kind === 'llama' && (!runtime?.bearerToken || !runtime?.upstream)) throw Error('Start the managed llama provider first');
-      const title = String(name || '').trim();
-      if (!title) throw Error('Name this connection');
-      const key = deviceKey(), id = randomUUID();
-      const device = { id, name: title, kind, publicKey: key.publicKey, createdAt: new Date().toISOString() };
-      await writeJson(stateFile, { ...state, devices: [...state.devices, device] });
-      // Adding an authorization only needs Tor's native config reload. Restarting
-      // the publisher here cuts an onion caller's request before its one-time
-      // connection key can be delivered. Revocation still closes old circuits.
-      await this.stack.reconfigureRemote({ restartTor: false });
-      const host = await this.hostname(kind);
-      if (!host || !this.stack.identity?.caSha256) throw Error('The remote endpoint is not ready');
-      const connection = { version: 1, name: title, kind, url: 'https://' + host, clientAuthorization: key.privateKey,
-        caSha256: this.stack.identity.caSha256, instanceId: this.stack.identity.instanceId,
-        ...(kind === 'llama' ? { bearerToken: runtime.bearerToken } : {}) };
-      const { default: QRCode } = await import('qrcode');
-      // A connection can exceed a QR code's capacity and still be saved as a file.
-      const qrDataUrl = await QRCode.toDataURL(JSON.stringify(connection), { errorCorrectionLevel: 'M', margin: 2, width: 384 }).catch(() => null);
-      return { connection, qrDataUrl };
-    });
-  }
-  async revoke(id) {
-    return this.transaction(async () => {
-      const state = await this.state();
-      if (!state.devices.some(device => device.id === id)) throw Error('Unknown connection');
-      await writeJson(stateFile, { ...state, devices: state.devices.filter(device => device.id !== id) });
-      // Restarting our Tor publisher closes existing circuits as well as revoking
-      // future descriptor access. No browser Tor client or unrelated daemon is touched.
-      await this.stack.reconfigureRemote();
+      if (state.phase !== 'ready') throw Error('Complete Share Local setup first');
+      await this.stack.refreshFileManager(true);
+      await writeJson(paths.share, { ...state, allowFileManager: allowed });
+      await this.stack.refreshFileManager();
       return this.status();
     });
   }
-  async llamaProxy() {
-    if (!(await this.state()).enabled) return null;
-    const runtime = await this.llama(), host = await this.hostname('llama');
-    return runtime?.upstream && host ? { host, upstream: runtime.upstream } : null;
+  // Native private IPC only. The encrypted image is never a remote HTTP result.
+  async status() {
+    const state = await this.state();
+    const migrationRequired = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
+    const running = Boolean(state.enabled && this.stack?.ready && this.stack.tunnelStarted && this.stack.children.some(child => child.name === 'tor' && child.exit === undefined));
+    return { phase: state.phase, enabled: state.enabled, running, allowFileManager: state.allowFileManager, migrationRequired,
+      address: state.phase === 'ready' ? 'https://' + await this.hostname() : null,
+      qrDataUrl: state.phase === 'ready' ? 'data:image/png;base64,' + (await fs.readFile(paths.connectionQr)).toString('base64') : null };
   }
 }

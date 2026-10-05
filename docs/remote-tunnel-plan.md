@@ -1328,6 +1328,29 @@ slices and their limits; they do not replace the manual acceptance table.
   mismatch while collecting companion notices. Correct the executable lookup,
   retaining the mandatory component and full license checks. No complete package
   or Android browser-build acceptance is claimed from these failed runs.
+- `56826130cc`: native enrollment keys use the host-only helper and upstream
+  crypto libraries. Native compilation `37269656504` and complete access-stack
+  assembly `37269656471` passed, including Android JNI/AAR/Java and native Termux
+  host targets. This does not establish account enrollment or tunnel operation.
+- Host setup now has private Share Local commands and desktop browser-owned
+  username/password/TOTP/encrypted-image controls. Remote account/session/Tor/CA
+  keys live separately from Local trust; initialized missing keys fail rather
+  than being silently replaced. Publishing and old service-definition controls
+  and routes were removed from the shared web UI. Android Share Local and the
+  new native client connection flow remain unfinished.
+- File-manager requests now pass a host-owned, default-deny capability check
+  before route lookup/body parsing. Jobs belong to the authenticated session.
+  Private policy changes block admission, drain remote requests/workers, then
+  persist the choice before releasing admission and notifying clients. Local
+  jobs and chat transfers are separate. Manager paths/archives/copies/Git checks
+  exclude host policy, keys, sockets and launch configuration, including canonical
+  aliases and hard links; chat image requests must reference that session's
+  actual message content. These are source changes only. Editor/save parity,
+  complete path/concurrency review and real enabled/denied/revocation/manual
+  acceptance remain pending; do not publish this as a completed security gate.
+  Changed JavaScript and the extracted shared UI script parse; backend module
+  imports resolve against pinned dependencies in external staging. No scripted
+  product tests or manual acceptance claim accompanies these checks.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously
@@ -1337,8 +1360,8 @@ the system UI, followed by an ordinary lock-screen swipe. No browser/VM restart,
 ADB, root, app-data clearing or scripted product test was used. This is emulator
 coverage, not a physical Pixel or a complete application acceptance result.
 
-Next: activate the core through native host setup and implement the native client,
-prove the protected Agent/Authelia one-login path, then implement Share Local
-and remove its shared-web management routes. Continue all remaining gates,
+Next: finish Android Share Local and the native clients, prove the actual host
+enrollment and protected Agent/Authelia one-login path, and complete file editing
+and the manager boundary's manual acceptance. Continue all remaining gates,
 including service/file-manager boundaries, Tor routing, lifetime, Display,
 LocalAI/dictation, migration and the complete verified release.

@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { existingDirectory } from '../common.mjs';
+import { authorizeManagerPath } from './access.mjs';
 import { projectLocations } from '../platform/index.mjs';
 
 const contains = (root, target) => { const relative = path.relative(root, target); return relative !== '..' && !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative); };
@@ -11,9 +12,9 @@ export async function pickerDirectory(input, nearest = false) {
   let requested = input || '~';
   let folder;
   for (;;) {
-    try { folder = await existingDirectory(requested); await fs.readdir(folder); await fs.access(folder, constants.R_OK | constants.W_OK | constants.X_OK); break; }
+    try { folder = await existingDirectory(requested); await authorizeManagerPath(folder); await fs.readdir(folder); await fs.access(folder, constants.R_OK | constants.W_OK | constants.X_OK); break; }
     catch (error) {
-      if (!nearest) throw error;
+      if (!nearest || error.status === 403) throw error;
       if (!path.isAbsolute(requested) || requested === path.dirname(requested)) { folder = locations[0].path; break; }
       requested = path.dirname(requested);
     }
@@ -31,6 +32,7 @@ export async function listFolders(input, nearest) {
   for (const entry of await fs.readdir(result.path, { withFileTypes: true })) {
     try {
       const target = path.join(result.path, entry.name), real = await fs.realpath(target);
+      await authorizeManagerPath(real);
       if (!result.locations.some(l => contains(l.path, real))) continue;
       if (!(await fs.stat(real)).isDirectory()) continue;
       await fs.access(real, constants.R_OK | constants.W_OK | constants.X_OK);

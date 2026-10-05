@@ -21,8 +21,7 @@ import { AccessStack } from './access/stack.mjs';
 import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake } from './access/wake.mjs';
-import { enrollAccount, completeAccount, validateAccountCredentials } from './access/accounts.mjs';
-import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, readManagedLlamaConnection, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
+import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
 import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
 
 export const controlSocket = path.join(dataDir, 'run/control.sock');
@@ -32,7 +31,7 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function controlRequest(command, value) {
   const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
-    try { return await socketRequest(controlSocket, '/' + command, value, command === 'start' || command === 'restart' ? 120000 : 30000); }
+    try { return await socketRequest(controlSocket, '/' + command, value, command === 'start' || command === 'restart' || command.startsWith('share-') ? 180000 : 30000); }
     catch (error) {
       // A fresh launch can reach the old controller after its status reply but
       // before shutdown finishes. Retry rejected starts or failed connections,
@@ -120,16 +119,13 @@ async function serve() {
   const packageFile = (await readJson(manifestFile, null))?.installationStamp || manifestFile;
   const revision = (await readJson(packageFile, null))?.revision;
   const initialNode = (await fs.stat(process.execPath)).ino;
-  const remote = platform === 'linux' ? new RemoteAccess({ llama: async () => {
-    if (managedLlamaStatus().state !== 'ready') return null;
-    const value = await readManagedLlamaConnection();
-    return { upstream: new URL(value.url).host, bearerToken: value.apiKey };
-  } }) : null;
+  const remote = new RemoteAccess({ schedule: operation => {
+    const pending = serial.then(operation); serial = pending.catch(() => {}); return pending;
+  } });
   const stack = new AccessStack({
     fatal: error => { lastError = error.message; serial = serial.then(() => turnOff(error.message)).catch(error => { lastError = error.message; }); },
-    llamaProxy: () => remote?.llamaProxy(),
   });
-  stack.remote = remote; if (remote) remote.stack = stack;
+  stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
     'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
     'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages,
@@ -261,37 +257,18 @@ async function serve() {
       return { url: stack.origin, identity: stack.identity, generation: stack.localGeneration,
         cookie: { name: stack.localCookieName, value: stack.localToken } };
     }
-    if (!remote && ['get_remote_access', 'set_remote_access', 'create_remote_connection', 'revoke_remote_connection',
-      'get_hosted_services', 'save_hosted_service', 'delete_hosted_service', 'hosting-client'].includes(command)) {
-      throw Error('Remote publishing is available on Linux only');
-    }
-    if (command === 'get_remote_access') return remote.status();
-    if (command === 'set_remote_access') return remote.setEnabled(value.enabled);
-    if (command === 'create_remote_connection') return remote.create(value);
-    if (command === 'revoke_remote_connection') return remote.revoke(value.id);
-    if (command === 'get_hosted_services') return stack.hosting.status({ refresh: value.refresh === true });
-    if (command === 'save_hosted_service') return stack.hosting.save(value);
-    if (command === 'delete_hosted_service') return stack.hosting.remove(value);
-    if (command === 'hosting-client') return remote.hostingClient();
+    // Private native IPC only; none of these commands is forwarded by the web API.
+    if (command === 'share-status') return remote.status();
+    if (command === 'share-setup') return remote.begin(value);
+    if (command === 'share-reissue') return remote.begin(value, { reissue: true });
+    if (command === 'share-confirm') return remote.confirm(value);
+    if (command === 'share-cancel') return remote.cancelSetup();
+    if (command === 'share-publish') return remote.setEnabled(value.enabled);
+    if (command === 'share-files') return remote.setFileManager(value.allowed);
     if (command === 'package-inventory') return packageInventory();
     if (command === 'notifications') return { notifications: await pendingNotifications() };
     if (command === 'notification-settings') return notificationSettings(value.settings);
     if (command === 'notifications-ack') { await acknowledgeNotifications(value.keys); return { ok: true }; }
-    if (command === 'account-cancel') {
-      if (remote && !(await remote.state()).enabled) await stack.stopAuthentication();
-      return { ok: true };
-    }
-    if (command === 'account-totp') {
-      if (!remote || !stack.ready || !stack.authStarted) throw Error('Start remote account setup on Linux first');
-      return completeAccount(value);
-    }
-    if (['account-create', 'account-enroll', 'account-reset-totp'].includes(command)) {
-      if (!stack.ready) throw Error('Turn on Agent before account setup');
-      if (!remote) throw Error('Remote account setup is available on Linux only');
-      validateAccountCredentials(value, { create: command === 'account-create' });
-      await stack.startAuthentication();
-      return enrollAccount(stack.origin, value, { create: command === 'account-create', reset: command === 'account-reset-totp', native: stack.tunnel });
-    }
     if (command === 'package-cancel') { await jobs.cancel(); return status(); }
     if (command === 'package-job') {
       if (stopping) throw Error('Agent is stopping');

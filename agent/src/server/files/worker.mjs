@@ -4,6 +4,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import yazl from 'yazl';
+import { authorizeManagerPath, withManagerContext } from './access.mjs';
 
 process.umask(0o077);
 const abort = new AbortController();
@@ -27,6 +28,7 @@ async function openDirectory(filename, scope) {
   const handle = await fs.open(filename, directoryFlags);
   try {
     const real = canonicalPath(await fs.realpath(fdPath(handle)));
+    await authorizeManagerPath(fdPath(handle));
     if (!contains(scope, real)) throw Error('Path leaves the available files');
     return handle;
   } catch (error) { await handle.close(); throw error; }
@@ -40,6 +42,7 @@ async function entries(handle) { check(); return fs.readdir(fdPath(handle)); }
 async function removeNode(parent, name, display, scope) {
   check(); progress(display, false);
   const target = path.join(fdPath(parent), name), stat = await fs.lstat(target);
+  await authorizeManagerPath(target, { tree: true });
   if (stat.isDirectory()) {
     const dir = await openDirectory(target, scope);
     try { for (const child of await entries(dir)) await removeNode(dir, child, path.join(display, child), scope); }
@@ -51,6 +54,8 @@ async function removeNode(parent, name, display, scope) {
 async function copyNode(source, name, destination, display, scope, destinationScope, created = () => {}) {
   check(); progress(display, false);
   const from = path.join(fdPath(source), name), to = path.join(fdPath(destination), name), stat = await fs.lstat(from);
+  await authorizeManagerPath(from, { tree: stat.isDirectory() });
+  await authorizeManagerPath(to);
   if (stat.isSymbolicLink()) {
     await fs.symlink(await fs.readlink(from), to);
     created(await fs.lstat(to));
@@ -68,8 +73,10 @@ async function copyNode(source, name, destination, display, scope, destinationSc
     const input = await fs.open(from, constants.O_RDONLY | constants.O_NOFOLLOW);
     let output;
     try {
+      await authorizeManagerPath(fdPath(input));
       if (!(await input.stat()).isFile()) throw Error('File changed while copying');
       output = await fs.open(to, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, stat.mode & 0o777);
+      await authorizeManagerPath(fdPath(output));
       created(await output.stat());
       await pipeline(input.createReadStream(), output.createWriteStream(), { signal: abort.signal });
     } finally { await input.close(); await output?.close(); }
@@ -105,6 +112,7 @@ async function archiveFiles(job) {
     check(); if (archiveError) throw archiveError;
     if (relative.includes('\\') || relative.split('/').includes('..')) throw Error('This filename cannot be safely stored in a ZIP');
     const full = path.join(fdPath(parent), name), stat = await fs.lstat(full);
+    await authorizeManagerPath(full, { tree: stat.isDirectory() });
     progress(relative, false);
     if (stat.isSymbolicLink()) {
       const link = await fs.readlink(full);
@@ -122,6 +130,7 @@ async function archiveFiles(job) {
     } else if (stat.isFile()) {
       const file = await fs.open(full, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
+        await authorizeManagerPath(fdPath(file));
         const stable = await file.stat();
         if (!stable.isFile()) throw Error('File changed while archiving');
         check();
@@ -201,7 +210,7 @@ async function run(job) {
 }
 process.once('message', async job => {
   let result;
-  try { await run(job); progress(current, false, true); result = { type: 'result', status: 'done' }; }
+  try { await withManagerContext({ remote: job.remote === true, signal: abort.signal }, () => run(job)); progress(current, false, true); result = { type: 'result', status: 'done' }; }
   catch (error) {
     const cancelled = abort.signal.aborted;
     result = { type: 'result', status: cancelled ? 'cancelled' : 'failed', error: cancelled ? 'Cancelled. Already completed changes remain.' : String(error.message).slice(0, 1000) };
