@@ -1418,10 +1418,23 @@ slices and their limits; they do not replace the manual acceptance table.
   compilation and actual QR/password/TOTP/consent, draft, cancellation and tunnel
   acceptance remain pending; service cards and desktop client migration remain
   unfinished.
+  Native [run 37275524625](https://github.com/openresearchtools/BashKitten/actions/runs/37275524625)
+  at `a29c5d70ff` subsequently passed all three source targets, JNI/AAR and Java
+  compilation, including `RemoteAgentConnection`. APK parent `37275535857` /
+  child `37275735339` is building this integration with auth `37273991841`.
+  A follow-up preserves active remote owners after a failed Local startup and
+  avoids leaving a forgotten connection as Back to remote. These paths still
+  require actual device lifecycle checks.
 - Linux candidates `37272904289` (arm64) and `37272890571` (amd64) at
   `fc4ef81966` completed successfully after the helper-license path correction.
   Their package assembly is verified by the workflows, not an installation or
   complete runtime/manual acceptance result.
+  The downloaded ARM64 package reports the exact `fc4ef81966` source, version
+  153.4 and arm64 architecture. Its SHA-256 matches its accompanying metadata
+  (`142c0e360c505fb6c0346fc58dde86d00791fb43b7f791c034939f65913aadc3`),
+  and the payload includes `auth/bin/bashkitten-remote` plus full helper/dependency
+  notices. The currently running browser and Cuttlefish guest were left intact;
+  this download/integrity check did not install or accept that package.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

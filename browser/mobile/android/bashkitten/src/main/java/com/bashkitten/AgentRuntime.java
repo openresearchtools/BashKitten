@@ -260,7 +260,13 @@ public final class AgentRuntime {
     }
     private void setup(String message) { setup("retry", message); }
     private void setup(String step, String message) { busy = false; state = "setup"; setupStep = step; error = message; changed(); }
-    private void fail(String message) { restoreLocalAgent(); clearHosted(session); releaseRemoteAuthorization(); app.remoteControl.disconnect(); busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed(); }
+    private void fail(String message) {
+        restoreLocalAgent(); clearHosted(session); releaseRemoteAuthorization(); app.remoteControl.disconnect();
+        // A failed Local startup must not take away another enrollment's
+        // service ports while Local Pi/setup is selected.
+        if (selected.equals("local") && !remoteConnections.isEmpty()) { setup("retry", message); return; }
+        busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed();
+    }
     private void connectionFailed(String message) {
         if (isHostedSignIn()) { cancelHostedSignIn(); app.message(message); }
         else fail(message);
@@ -524,9 +530,12 @@ public final class AgentRuntime {
         JSONObject remembered = identities.read(); remembered.remove(id); identities.write(remembered);
         // The Tor client may also serve an independently enrolled ordinary private site. Removing
         // Agent never deletes that site's saved credential or stops its tabs.
-        if (wasSelected) { session = null; select("local"); }
-        else changed();
         if (id.equals(app.policies.getString("agent.lastRemote", ""))) app.policies.edit().remove("agent.lastRemote").apply();
+        if (wasSelected) {
+            app.remoteControl.disconnect(); session = null; url = ""; selected = "local"; busy = false;
+            app.policies.edit().putString("agent.selected", "local").apply();
+            turnOn();
+        } else changed();
     }
     private boolean selectedRemote(RemoteAgentConnection connection) {
         return desired && selected.equals(connection.host) && remoteConnections.get(connection.host) == connection && !connection.isClosed();
@@ -617,6 +626,7 @@ public final class AgentRuntime {
                 if (generation != operation || !desired) { cleanup.run(); return; }
                 TorGateway.AgentRoute route = null;
                 try {
+                    String socket = app.tor.socksPath();
                     route = app.tor.agentRoute(host);
                     RemoteAgentConnection connection = new RemoteAgentConnection(app.main, bundle, port, route, cleanup,
                         new RemoteAgentConnection.Listener() {
@@ -625,7 +635,7 @@ public final class AgentRuntime {
                             @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
                         });
                     remoteConnections.put(host, connection);
-                    connection.start(app, bundle, app.tor.socksPath());
+                    connection.start(app, bundle, socket);
                 } catch (Exception error) {
                     if (route != null) route.close(); cleanup.run(); clearRemotePassword();
                     setup("remote", "Could not start the native remote connection.");
