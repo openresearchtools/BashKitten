@@ -17,7 +17,7 @@ static constexpr char kWatcher[] = "org.kde.StatusNotifierWatcher";
 static constexpr char kPath[] = "/StatusNotifierItem";
 static constexpr char kInterface[] = "org.kde.StatusNotifierItem";
 static constexpr char kMenu[] = "/org/bashkitten/TrayMenu";
-static constexpr char kDescription[] = R"(
+static constexpr char kDescription[] = R"xml(
 <node><interface name="org.kde.StatusNotifierItem">
  <property name="Category" type="s" access="read"/>
  <property name="Id" type="s" access="read"/>
@@ -41,7 +41,7 @@ static constexpr char kDescription[] = R"(
  <method name="ContextMenu"><arg type="i" direction="in"/><arg type="i" direction="in"/></method>
  <method name="Scroll"><arg type="i" direction="in"/><arg type="s" direction="in"/></method>
  <signal name="NewToolTip"/>
-</interface></node>)";
+</interface></node>)xml";
 
 BashKittenTray::~BashKittenTray() { Close(); }
 
@@ -85,7 +85,7 @@ NS_IMETHODIMP BashKittenTray::Init(mozIDOMWindowProxy* aWindow,
           } else {
             dbusmenu_menuitem_property_set_bool(item, "enabled", true);
             g_signal_connect(item, "item-activated", G_CALLBACK(+[](
-                DbusmenuMenuitem* item, guint timestamp, gpointer data) {
+                mozilla::widget::DbusmenuMenuitem* item, guint timestamp, gpointer data) {
               nsGTKToolkit::GetToolkit()->SetFocusTimestamp(timestamp);
               auto* self = static_cast<BashKittenTray*>(data);
               bool quit = !strcmp(dbusmenu_menuitem_property_get(item, "label"), "Quit");

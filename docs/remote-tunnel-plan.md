@@ -1701,6 +1701,12 @@ fixes those build gates. Build-file parsing and upstream XPIDL header generation
 pass; the newly included native code still needs the corrected desktop build and
 visible tray/hide/reopen/Quit acceptance.
 
+The corrected Linux ARM64 builder `37327473242` then reached the previously
+excluded tray source and reported an XML raw-string delimiter collision plus
+an ambiguous D-Bus menu callback type. The source uses a named raw-string delimiter
+and the existing `mozilla::widget` type explicitly. These are compiler corrections;
+a successful rebuilt package and installed tray acceptance remain pending.
+
 ### 5 October obsolete enrollment exception removed
 
 The old `setAgentOnionEnrollment` API, its temporary CA-less verifier state and
