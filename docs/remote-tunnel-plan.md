@@ -1358,6 +1358,15 @@ slices and their limits; they do not replace the manual acceptance table.
   closes/clears the editor and drains pending saves before persisting Off.
   JavaScript parsing and staged module imports passed; real mobile editing,
   keyboard, conflict and mid-save revocation checks remain pending.
+- Linux candidates `37269742411` (arm64) and `37269746445` (amd64) at
+  `21fea9040d` built Gecko but failed final packaging: the helper's primary
+  license is stored under its Go module name, not `remote/LICENSE`. The collector
+  now uses that actual packaged path and retains mandatory full-text validation.
+  Android candidate `37269733347` built Gecko but failed APK assembly because
+  the build-only repository lacked the template's native AAR build step. Its
+  workflow was synced in `a35f3cf406`; replacement parent `37272154905` / child
+  `37272351099` is building `50fc9bc287` with the newer native host helper.
+  These failed candidates produced no complete installable app acceptance.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

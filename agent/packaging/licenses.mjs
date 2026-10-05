@@ -97,7 +97,8 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);
     await fs.access(path.join(root, 'auth/bin', { valkey: 'valkey-server', remote: 'bashkitten-remote' }[name] || name));
-    await legalText(path.join(root, 'auth/share/licenses', name, 'LICENSE'));
+    const license = name === 'remote' ? 'remote/github.com__openresearchtools__bashkitten__remote/LICENSE' : name + '/LICENSE';
+    await relativeText(path.join(root, 'auth/share/licenses'), license);
   }
   const records = await npmInventory(root, target, auth.architecture);
   if (version) records[0].version = version;
