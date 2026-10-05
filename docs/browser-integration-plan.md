@@ -7,6 +7,22 @@ where they differ. Existing releases continue working until their replacements
 pass the checks below. No donor repository, branch or release is deleted as part
 of preparing this plan.
 
+Latest remote/service clarification, 5 October: implement the
+[remote tunnel and desktop lifetime plan](remote-tunnel-plan.md), grounded in
+TorKitten v2. It is the controlling specification for remote-first Android setup
+without Termux, one chosen Authelia account/password plus TOTP and an encrypted
+connection QR using that same password, native Chisel service tunnels, Android
+and Linux localhost mappings with automatic/chosen ports, remote service
+Start/Stop/Reload, llama.cpp router passthrough and complete remote identity
+reissue. Preserve enabled remote service mappings while using Local Pi. Linux
+window close hides to a functioning tray; explicit Quit stops owned services.
+Add optional login autostart and per-service startup. This supersedes the older
+plaintext/manual export, Android-without-relay, HTTP llama token injection and
+close-stops-runtime requirements below. Keep account-free Local, Linux-only
+publishing, existing native security boundaries and mandatory remote Authelia
+authentication. The new document specifies source updates, minimal upstream
+patches, migration, builds and manual acceptance; it does not claim completion.
+
 Latest clarification, 23 September: remove unrequested hard size/count/time
 quotas in file transfers, ZIP operations, browser tools, search extraction and
 model downloads. Keep ordinary backend/browser behavior, user cancellation and

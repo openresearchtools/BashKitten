@@ -22,8 +22,16 @@ after compaction. It records the requested replacement of the native wrappers
 and Termux suite with one Android/Linux browser, Caddy/Authelia authentication
 and optional desktop llama runtime/relay. It supersedes the older plan and the
 current-implementation descriptions below where those requirements differ;
-it does not claim that migration is already implemented. The migration keeps
-one product repository: `/agent` for the existing shared app, `/browser` for the
+it does not claim that migration is already implemented. The latest remote/service
+requirements are in `docs/remote-tunnel-plan.md`, which must also be read before
+this work and after compaction. That 5 October plan
+supersedes conflicting older remote-export, Android relay, llama bearer-injection
+and Linux window-close requirements: encrypted QR using the chosen Authelia
+password, native Chisel service mappings on both clients, remote host service
+controls, identity reissue, close-to-tray and explicit Quit. Preserve Local Pi's
+access to enabled remote localhost mappings. These are planned requirements,
+not a claim that the new transport or tray is already implemented. The migration
+keeps one product repository: `/agent` for the existing shared app, `/browser` for the
 Gecko subtree and `/auth` for tracked Authelia/Caddy/Tor source and isolated
 Termux build patches. Any installed `com.termux` must be able to request native
 browser approval, regardless of signer; already authorized calls run directly.
