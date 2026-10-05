@@ -385,8 +385,8 @@
     #goalStatus { max-height:4.5em; overflow:auto; padding:3px 8px; }
     #goalChip { display:inline-flex; align-items:center; gap:8px; margin:0 10px 3px; padding:3px 7px; border:1px solid var(--line); border-radius:var(--radius-control); color:var(--text); font-size:12px; }
     #goalChip button { padding:0; width:18px; height:18px; border:0; border-radius:50%; background:transparent; color:var(--muted); }
-    #sendBtn { display: grid; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; border-radius: 50%; place-items: center; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
-    #sendBtn:hover { background: var(--muted); }
+    #sendBtn, #dictationButton { display: grid; flex: 0 0 32px; width: 32px; height: 32px; padding: 0; border-radius: 50%; place-items: center; background: var(--text); color: var(--bg); font-size: 13px; line-height: 1; }
+    #sendBtn:hover, #dictationButton:hover { background: var(--muted); }
     #sendBtn[data-mode="pause"] { font-size: 12px; letter-spacing: -2px; }
     #composerHint { min-height: 14px; padding-top: 3px; color: var(--muted); font-size: 10px; text-align: center; }
     #composerHint:empty { display: none; }
@@ -693,7 +693,7 @@
               <select id="model" title="Model"></select>
               <select id="thinking" title="Thinking level"></select>
               <span class="toolbar-spacer"></span>
-              <button id="dictationButton" class="icon-button hidden" type="button" title="Dictate a message" aria-label="Dictate a message">🎙</button>
+              <button id="dictationButton" class="primary hidden" type="button" title="Dictate a message" aria-label="Dictate a message"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button>
               <button id="sendBtn" class="primary" type="button" data-mode="play" title="Send" aria-label="Send">▶</button>
             </div>
           </div>
