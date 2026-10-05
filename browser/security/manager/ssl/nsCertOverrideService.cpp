@@ -927,26 +927,6 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentClientCertificate(
   return NS_OK;
 }
 
-NS_IMETHODIMP nsCertOverrideService::SetAgentOnionEnrollment(
-    const nsACString& host, JS::Handle<JS::Value> originAttributes,
-    bool enabled, JSContext* cx) {
-  if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
-  OriginAttributes attrs;
-  if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
-      !IsAgentScope(host, attrs) || !IsV3OnionIdentity(host) ||
-      GetAgentRoot(host, attrs).isSome()) return NS_ERROR_INVALID_ARG;
-  OriginAttributes network;
-  nsresult rv = AgentNetworkAttributes(host, attrs, network);
-  NS_ENSURE_SUCCESS(rv, rv);
-  if (GetAgentRoot(host, network).isSome()) return NS_ERROR_INVALID_ARG;
-  mozilla::psm::SetAgentOnionEnrollment(host, attrs, enabled);
-  if (network != attrs) {
-    mozilla::psm::SetAgentOnionEnrollment(host, network, enabled);
-  }
-  InvalidateAgentTLSSessions();
-  return NS_OK;
-}
-
 NS_IMETHODIMP nsCertOverrideService::SetAuthenticatedOnion(
     const nsAString& sessionContext, const nsACString& identity, bool enabled) {
   if (sessionContext.IsEmpty() || sessionContext.Length() > 256 ||

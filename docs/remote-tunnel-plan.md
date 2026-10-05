@@ -1686,3 +1686,14 @@ the old identity; ordinary startup never generates replacement remote keys.
 Changed JavaScript syntax, Java 8 parse-only and source whitespace checks passed.
 Full native compilation and manual damaged-state/startup/Reissue checks remain
 pending; no scripted product test or installed-runtime acceptance is claimed.
+
+### 5 October obsolete enrollment exception removed
+
+The old `setAgentOnionEnrollment` API, its temporary CA-less verifier state and
+associated issuer exception are removed. A repository-wide caller trace found
+only their own declarations/implementation and verifier branch; neither current
+native client used them. TK2 supplies the CA and client certificate directly to
+`setAgentCA` and `setAgentClientCertificate`. Exact enrolled-CA verification,
+mTLS and Android's separate ordinary authenticated-onion policy are unchanged.
+The XPIDL parser and whitespace checks passed; no old symbols remain in browser
+or Agent source. Native compilation and manual acceptance remain pending.

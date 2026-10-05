@@ -54,10 +54,6 @@ void SetAgentRoot(const nsACString& host, const OriginAttributes& attributes,
                   const nsTArray<uint8_t>& root);
 Maybe<nsTArray<uint8_t>> GetAgentRoot(const nsACString& host,
                                     const OriginAttributes& attributes);
-void SetAgentOnionEnrollment(const nsACString& host,
-                             const OriginAttributes& attributes, bool enabled);
-bool IsAgentOnionEnrollment(const nsACString& host,
-                            const OriginAttributes& attributes);
 
 enum class EVStatus : uint8_t {
   NotEV = 0,

@@ -48,7 +48,6 @@ struct AgentRoot {
   nsCString host;
   OriginAttributes attributes;
   nsTArray<uint8_t> root;
-  bool enrolling = false;
 };
 static StaticMutex sAgentRootMutex;
 static StaticAutoPtr<nsTArray<AgentRoot>> sAgentRoots;
@@ -71,44 +70,17 @@ void SetAgentRoot(const nsACString& host, const OriginAttributes& attributes,
 
 Maybe<nsTArray<uint8_t>> GetAgentRoot(const nsACString& host,
                                     const OriginAttributes& attributes) {
-  // Privileged enrollment validates protected Agent and ordinary hosted-site
-  // scopes. Both use an exact host and complete origin-attributes lookup.
+  // Privileged enrollment validates a protected Agent context, with an exact
+  // host and complete origin-attributes lookup.
   StaticMutexAutoLock lock(sAgentRootMutex);
   if (sAgentRoots) {
     for (const auto& entry : *sAgentRoots) {
-      if (!entry.enrolling && entry.host == host && entry.attributes == attributes) {
+      if (entry.host == host && entry.attributes == attributes) {
         return Some(entry.root.Clone());
       }
     }
   }
   return Nothing();
-}
-
-void SetAgentOnionEnrollment(const nsACString& host,
-                             const OriginAttributes& attributes, bool enabled) {
-  MOZ_ASSERT(NS_IsMainThread());
-  StaticMutexAutoLock lock(sAgentRootMutex);
-  if (!sAgentRoots) {
-    sAgentRoots = new nsTArray<AgentRoot>();
-    ClearOnShutdown(&sAgentRoots);
-  }
-  sAgentRoots->RemoveElementsBy([&](const AgentRoot& entry) {
-    return entry.enrolling && entry.host == host && entry.attributes == attributes;
-  });
-  if (enabled) {
-    sAgentRoots->AppendElement(AgentRoot{nsCString(host), attributes, {}, true});
-  }
-}
-
-bool IsAgentOnionEnrollment(const nsACString& host,
-                            const OriginAttributes& attributes) {
-  StaticMutexAutoLock lock(sAgentRootMutex);
-  if (sAgentRoots) {
-    for (const auto& entry : *sAgentRoots) {
-      if (entry.enrolling && entry.host == host && entry.attributes == attributes) return true;
-    }
-  }
-  return false;
 }
 
 const CertVerifier::Flags CertVerifier::FLAG_LOCAL_ONLY = 1;

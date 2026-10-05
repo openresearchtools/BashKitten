@@ -69,12 +69,6 @@ interface nsICertOverrideService : nsISupports {
                                 in Array<octet> pkcs8);
   [implicit_jscontext]
   void clearAgentClientCertificate(in ACString host, in jsval originAttributes);
-  /** Credentialless CA pickup through an already authenticated exact onion.
-   * Only a transient protected enrollment context may use this policy. */
-  [implicit_jscontext]
-  void setAgentOnionEnrollment(in ACString host, in jsval originAttributes,
-                              in boolean enabled);
-
   /** Ephemeral Android policy, set only by the privileged Tor routing module.
    * The identity is a v3 onion root; sessionContext is the exact GeckoView OA.
    * This never creates a persistent certificate exception or a public CA.

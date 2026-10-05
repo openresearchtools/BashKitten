@@ -660,7 +660,7 @@ Result AuthCertificate(
 PRErrorCode AuthCertificateParseResults(
     uint64_t aPtrForLog, const nsACString& aHostName, int32_t aPort,
     const OriginAttributes& aOriginAttributes,
-    const nsCOMPtr<nsIX509Cert>& aCert, mozilla::pkix::Time aTime,
+    const nsCOMPtr<nsIX509Cert>& aCert, [[maybe_unused]] mozilla::pkix::Time aTime,
     PRErrorCode aCertVerificationError,
     /* out */
     nsITransportSecurityInfo::OverridableErrorCategory&
@@ -672,19 +672,19 @@ PRErrorCode AuthCertificateParseResults(
     return aCertVerificationError;
   }
 
+#ifdef ANDROID
   // Tor authenticates the onion identity. Only the owned, isolated Tor route
   // can enroll that identity; this replaces issuer trust, not TLS key proof,
   // certificate hostname/validity checks, or clearnet certificate validation.
   if (aCertVerificationError == SEC_ERROR_UNKNOWN_ISSUER ||
       aCertVerificationError == MOZILLA_PKIX_ERROR_SELF_SIGNED_CERT) {
-    bool enrolled = IsAgentOnionEnrollment(aHostName, aOriginAttributes);
-#ifdef ANDROID
-    if (!enrolled) {
-      nsCOMPtr<nsICertOverrideService> service = do_GetService(NS_CERTOVERRIDE_CONTRACTID);
-      if (service) service->IsAuthenticatedOnion(
-          aOriginAttributes.mGeckoViewSessionContextId, aHostName, &enrolled);
+    bool enrolled = false;
+    nsCOMPtr<nsICertOverrideService> service =
+        do_GetService(NS_CERTOVERRIDE_CONTRACTID);
+    if (service) {
+      service->IsAuthenticatedOnion(aOriginAttributes.mGeckoViewSessionContextId,
+                                   aHostName, &enrolled);
     }
-#endif
     if (enrolled) {
       UniqueCERTCertificate cert(aCert->GetCert());
       Input der;
@@ -705,6 +705,7 @@ PRErrorCode AuthCertificateParseResults(
       }
     }
   }
+#endif
   uint32_t probeValue = MapCertErrorToProbeValue(aCertVerificationError);
   glean::ssl::cert_verification_errors.AccumulateSingleSample(probeValue);
 
