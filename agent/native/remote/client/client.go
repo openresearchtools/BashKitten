@@ -168,6 +168,17 @@ func (c *Client) CancelLogin() {
 	}
 }
 
+// Authorize distinguishes an absent/expired grant from a transport failure.
+// Native callers open the protected login only for ErrLoginRequired; a failed
+// Tor/TLS request is an error, never a fallback login or direct connection.
+func (c *Client) Authorize(ctx context.Context) (bool, error) {
+	_, err := c.accessToken(ctx)
+	if errors.Is(err, oauth.ErrLoginRequired) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 func (c *Client) accessToken(parent context.Context) (string, error) {
 	c.authMu.Lock()
 	defer c.authMu.Unlock()

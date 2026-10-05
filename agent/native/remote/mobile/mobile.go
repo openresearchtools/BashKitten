@@ -117,6 +117,9 @@ func (c *Connection) CompleteLogin(callback string) error {
 	return c.client.CompleteLogin(context.Background(), callback)
 }
 func (c *Connection) CancelLogin() { c.client.CancelLogin() }
+func (c *Connection) Authorize() (bool, error) {
+	return c.client.Authorize(context.Background())
+}
 func (c *Connection) Map(id string, port int) (string, error) {
 	value, err := c.client.Map(context.Background(), id, port)
 	if err != nil {

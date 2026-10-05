@@ -1382,6 +1382,16 @@ slices and their limits; they do not replace the manual acceptance table.
   Changed JavaScript parses and the source diff is clean. Android compilation,
   real enrollment/publishing, rotation/keyboard, file save and lifecycle checks
   are pending; this source change is not a working-release claim.
+- The Android gateway now has a separate native credential per protected remote
+  route, confined to that enrolled onion on port 443. Login can use its Tor
+  route; native activation switches it to the Chisel listener and closes existing
+  login sockets. Tunnel failure has no direct route fallback. Ordinary Tor tabs
+  retain their separate route and receive none of these credentials. The native
+  client now distinguishes login-required from transport failure, and the private
+  Gecko login operation uses Authelia's actual first-factor API/cookie jar to
+  reuse a transient QR password. JavaScript parsing and diff checks pass. Native
+  binding/gateway compilation and real login/tunnel acceptance are pending;
+  connection-screen/controller activation is still being implemented.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

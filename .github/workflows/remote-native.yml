@@ -113,7 +113,8 @@ jobs:
           javac -source 8 -target 8 -classpath "$ANDROID_HOME/platforms/android-31/android.jar:$RUNNER_TEMP/remote-java/binding.jar" \
             -d "$RUNNER_TEMP/remote-java/classes" \
             browser/mobile/android/bashkitten/src/main/java/com/bashkitten/SecretStore.java \
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java
+            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java \
+            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java
       - uses: actions/upload-artifact@v4
         with:
           name: remote-client-android-arm64

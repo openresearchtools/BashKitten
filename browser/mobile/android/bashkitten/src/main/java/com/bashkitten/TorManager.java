@@ -112,6 +112,14 @@ final class TorManager {
         }
     }
     String proxySecret() { return gateway == null ? "" : gateway.secret; }
+    String socksPath() {
+        if (gateway == null || service == null || !restored) throw new IllegalStateException("Tor is unavailable");
+        return new java.io.File(new java.io.File(app.getNoBackupFilesDir(), "tor"), "socks").getAbsolutePath();
+    }
+    TorGateway.AgentRoute agentRoute(String host) {
+        if (gateway == null || service == null || !restored) throw new IllegalStateException("Tor is unavailable");
+        return gateway.agentRoute(host);
+    }
     List<String> identities() { return new ArrayList<>(installed); }
     /** Install a credential only for native Agent enrollment; do not enroll ordinary tab trust. */
     void authorizeTemporarily(OnionKey key, BiConsumer<Integer, Runnable> success, Consumer<String> failure) {
