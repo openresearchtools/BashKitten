@@ -283,11 +283,12 @@ ${backend('remote')}
       for (const server of Object.values(adapted.apps.http.servers)) {
         if (!server.listen.includes('127.0.0.1:' + this.remotePort)) continue;
         found = true; server.protocols = ['h1'];
-        if (!server.tls_connection_policies?.length) throw Error('Caddy did not configure remote TLS');
-        for (const policy of server.tls_connection_policies) policy.client_authentication = {
+        // Caddy omits default TLS policies until provisioning. Declare this
+        // listener's required client authentication before loading the config.
+        server.tls_connection_policies = [{ client_authentication: {
           mode: 'require_and_verify', ca: { provider: 'file', pem_files: [paths.remoteCertificate] },
           verifiers: [{ verifier: 'leaf', leaf_certs_loaders: [{ loader: 'file', files: [paths.remoteCertificate] }] }],
-        };
+        } }];
       }
       if (!found) throw Error('Caddy did not create the remote TLS listener');
     }
