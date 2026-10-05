@@ -532,15 +532,17 @@ class AgentRemoteStore {
     if (context < CONTEXT_MIN || context > CONTEXT_MAX) return;
     if (topic === "http-on-opening-request") {
       if (channel.URI.scheme !== "http" || channel.URI.host !== "127.0.0.1" || !channel.URI.pathQueryRef.startsWith("/oauth/callback")) return;
-      const entry = this.entries?.get(this.activeId), owner = this.clients.get(this.activeId);
+      const entry = [...(this.entries?.values() || [])].find(value => value.userContextId === context);
+      const owner = this.clients.get(entry?.id);
       let rejection;
       try {
-        if (entry?.userContextId !== context || owner?.state !== "login") return;
+        if (!entry || owner?.state !== "login") return;
         const info = channel.loadInfo, browsing = info.browsingContext;
         const browser = browsing?.embedderElement, host = browser?.ownerGlobal?.BashKittenAgent;
         const principal = info.triggeringPrincipal;
         const current = browsing?.currentWindowGlobal?.documentPrincipal;
-        rejection = !browsing ? "Sign-in response has no browsing context."
+        rejection = this.activeId !== entry.id ? "The selected Agent connection changed during sign-in."
+          : !browsing ? "Sign-in response has no browsing context."
           : info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT || browsing !== browsing.top ? "Sign-in response is not a top-level document."
           : host?.activeBrowser !== browser || host.off || host.selection !== entry.id ? "Sign-in response does not belong to the selected Agent view."
           : browser.getAttribute("bashkitten-protected") !== "true" ? "Sign-in response is outside the protected Agent view."

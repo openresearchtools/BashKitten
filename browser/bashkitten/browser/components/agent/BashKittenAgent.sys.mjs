@@ -350,7 +350,9 @@ class AgentView {
     this.localAIButton.hidden = Boolean(id);
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("remote switch");
-    await AgentRemotes.deactivate(false);
+    const closing = AgentRemotes.deactivate(false), selection = AgentRemotes.selection;
+    await closing;
+    if (this.selection !== id || AgentRemotes.selection !== selection) return;
     this.remote = null;
     this.activeBrowser = null;
     for (const browser of this.views.values()) browser.hidden = true;
@@ -461,8 +463,18 @@ class AgentView {
       throw Object.assign(new Error("The local Agent certificate identity changed. Check the service before trusting its replacement."), { code: "local_identity_changed" });
     }
     if (!this.localConnection || this.localConnection.url !== new URL(web.url).href || this.currentIdentity !== web.identity.caSha256) {
+      const selection = AgentRemotes.selection;
       await AgentRemotes.trustLocal({ url: web.url, ...web.identity });
-      this.localConnection = await AgentRemotes.activate("local");
+      if (this.off || this.selection || AgentRemotes.selection !== selection) return;
+      const activating = AgentRemotes.activate("local"), activation = AgentRemotes.selection;
+      let connection;
+      try { connection = await activating; }
+      catch (error) {
+        if (this.off || this.selection || AgentRemotes.selection !== activation) return;
+        throw error;
+      }
+      if (this.off || this.selection || AgentRemotes.selection !== activation) return;
+      this.localConnection = connection;
     }
     const connection = this.localConnection;
     this.currentIdentity = web.identity.caSha256;
