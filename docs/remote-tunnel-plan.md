@@ -1316,7 +1316,18 @@ slices and their limits; they do not replace the manual acceptance table.
   account verification retains its original password rules. The helper belongs
   to the existing authentication process group and stops with it; no new
   supervisor or public hashing endpoint. Native builds and actual Authelia
-  account/TOTP acceptance for this change remain pending.
+  account/TOTP acceptance for this change remain pending. Native compilation
+  [run 37267463370](https://github.com/openresearchtools/BashKitten/actions/runs/37267463370)
+  and full access-stack assembly
+  [run 37267463395](https://github.com/openresearchtools/BashKitten/actions/runs/37267463395)
+  at `3a37ad1149` subsequently passed all requested native targets.
+- Linux browser candidates `37266283224` (arm64) and `37266262457` (amd64)
+  at `6f6cbf9dfd` reached final package assembly. Both failed because the product
+  license collector expected `auth/bin/remote` instead of the actual packaged
+  `auth/bin/bashkitten-remote`; Android candidate `37266258560` found the same
+  mismatch while collecting companion notices. Correct the executable lookup,
+  retaining the mandatory component and full license checks. No complete package
+  or Android browser-build acceptance is claimed from these failed runs.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

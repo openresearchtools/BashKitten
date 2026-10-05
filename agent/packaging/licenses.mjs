@@ -96,7 +96,7 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   const components = new Set(auth.components?.map(value => value.name));
   for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);
-    await fs.access(path.join(root, 'auth/bin', name === 'valkey' ? 'valkey-server' : name));
+    await fs.access(path.join(root, 'auth/bin', { valkey: 'valkey-server', remote: 'bashkitten-remote' }[name] || name));
     await legalText(path.join(root, 'auth/share/licenses', name, 'LICENSE'));
   }
   const records = await npmInventory(root, target, auth.architecture);
