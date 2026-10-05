@@ -1223,8 +1223,35 @@ slices and their limits; they do not replace the manual acceptance table.
   [APK candidate run 37258390184](https://github.com/openresearchtools/BashKitten/actions/runs/37258390184)
   was dispatched with the successful native stack. APK/manual UI acceptance is
   pending; this candidate does not contain the new tunnel architecture.
+- `362db52356`: private native host executable, controller-pipe commands,
+  service-ID Unix listener and active-carrier authorization rechecks. Native
+  [run 37259995050](https://github.com/openresearchtools/BashKitten/actions/runs/37259995050)
+  built Linux amd64/arm64 and Termux aarch64 executables with complete linked
+  notices/source, plus the Android client source boundary. No public host
+  management port or Chisel source patch was added.
+- `87df811a2b`: shared Authelia PAR/PKCE browser authorization, token exchange,
+  refresh/revocation and an onion-confined Tor/TLS HTTP transport. The intended
+  native navigation callback preserves the protected Agent's real browser cookie;
+  browser callback and client-certificate wiring are still pending. Native
+  [run 37260351793](https://github.com/openresearchtools/BashKitten/actions/runs/37260351793)
+  passed all executable/client builds. Downloaded Termux payload/source hashes
+  match; its helper uses `/system/bin/linker64`, AArch64 PIE and 0x4000 LOAD
+  alignment, and includes TorKitten and linked dependency license texts.
+- `c2fac8fca9`: added the helper to normal auth/package/source/license assembly
+  and supplied its private pipe adapter through the existing AccessStack process
+  owner. Native source compilation
+  [run 37260611280](https://github.com/openresearchtools/BashKitten/actions/runs/37260611280)
+  passed. Full auth assembly
+  [run 37260611311](https://github.com/openresearchtools/BashKitten/actions/runs/37260611311)
+  is still running. Share Local has not activated the new helper; old remote
+  management removal and migration remain pending, not silently complete.
 
-Next: wire the core into the existing private host controller and native client,
+The existing Cuttlefish viewer was reopened through BashKitten's own ordinary-tab
+API and inspected; the guest remains available with the previously installed
+Termux candidate. No browser/VM restart, ADB, data clearing or scripted product
+test was used. New APK installation and user-flow acceptance remain pending.
+
+Next: activate the core through native host setup and implement the native client,
 prove the protected Agent/Authelia one-login path, then implement Share Local
 and remove its shared-web management routes. Continue all remaining gates,
 including service/file-manager boundaries, Tor routing, lifetime, Display,
