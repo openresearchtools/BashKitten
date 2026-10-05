@@ -7,6 +7,7 @@ Commit: 2fd0f48358aa37e6c23336cd550f52ab00bbe7e3
 Original files: internal/tunnel/{client,common,server}.go,
 internal/app/{identity,client,types,api}.go.
 The private Authelia authorization request follows internal/app/gateway.go.
+OAuth exchange/registration follows internal/oauth/{client,login,registration}.go.
 The complete Apache-2.0 text is in TORKITTEN-LICENSE.
 
 5 October 2026 adaptations: isolate the connection codec from the donor's
@@ -18,3 +19,6 @@ behavior. Dependency versions, complete pristine source and licenses are under
 The host adapter now rechecks active-carrier authorization and closes cancelled
 handshakes. A private controller-pipe executable reuses that adapter, with no
 public management listener or separate daemon lifecycle implementation.
+OAuth authorization uses the protected browser's real persistent login session
+and native interception of a query-mode PKCE callback, replacing the donor's
+temporary login cookie jar/form parser. No replacement token issuer is added.

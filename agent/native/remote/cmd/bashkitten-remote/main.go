@@ -21,6 +21,7 @@ import (
 
 	"github.com/openresearchtools/bashkitten/remote/bundle"
 	"github.com/openresearchtools/bashkitten/remote/host"
+	"github.com/openresearchtools/bashkitten/remote/oauth"
 	"github.com/openresearchtools/bashkitten/remote/tunnel"
 	"golang.org/x/crypto/ssh"
 )
@@ -116,6 +117,15 @@ func run() error {
 
 func action(running **host.Host, r request) (any, error) {
 	switch r.Method {
+	case "oauth-registration":
+		var p struct {
+			ClientID string `json:"client_id"`
+			Onion    string `json:"onion"`
+		}
+		if err := decode(r.Params, &p); err != nil {
+			return nil, err
+		}
+		return oauth.Registration(p.ClientID, p.Onion)
 	case "keygen":
 		_, key, err := ed25519.GenerateKey(rand.Reader)
 		if err != nil {

@@ -15,6 +15,14 @@ directly under `auth/`; no source patch or runtime source download is used.
 - `bashkitten_client` excludes the host server adapter from Android client builds.
   The host adapter accepts configured service IDs, never remote-provided targets.
   It requires an Authelia authorization callback; it does not issue tokens.
+- `oauth` uses upstream Authelia PAR, PKCE/S256, explicit consent, token exchange,
+  refresh and revocation. `Begin` supplies the URL for the protected Agent browser
+  context. Native navigation must intercept the exact loopback callback before
+  loading it, recording it in history or allowing ordinary tabs to handle it.
+  `Complete` validates issuer/state and consumes the exchange once; credentials
+  go only to the supplied native encrypted-store callback. Authelia's real browser
+  cookie stays in that same protected context for Agent/Remember me. The native
+  token transport shares the exact enrolled Tor/TLS identity with the tunnel.
 - `host` and `cmd/bashkitten-remote` provide the native host executable. Its sole
   management input is the controller-owned stdin/stdout pipe; the only listener
   is a private Unix socket serving authenticated service-ID carriers. EOF,
@@ -23,11 +31,13 @@ directly under `auth/`; no source patch or runtime source download is used.
   policy; explicit revoke/service removal closes connections immediately.
 
 The pipe accepts JSON objects with `id`, `method`, `params` and returns that `id`
-with `result` or `error`. Operations are `keygen`, `encrypt`, `start`, `service-set`,
+with `result` or `error`. Operations are `keygen`, `encrypt`, `oauth-registration`, `start`, `service-set`,
 `service-remove`, `revoke`, `shutdown`. Key and encryption inputs/outputs are
 private controller data, never logs, argv or web responses. Start takes `socket`,
 `auth_socket`, `onion`, `key`; service-set takes `id`, `network`, `address`.
 The host uses the separate Bearer-only Authelia `/login/api/authz/tunnel` endpoint.
+`oauth-registration` takes `client_id` and `onion` and returns the matching
+public-client configuration; it does not register clients remotely.
 The controller must configure that endpoint and reconcile its owned processes;
 the helper neither starts daemons nor removes existing sockets.
 

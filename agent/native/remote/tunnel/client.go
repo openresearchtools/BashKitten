@@ -68,6 +68,9 @@ func (m *Mapping) Close() error {
 // Map atomically reserves the loopback port. Every accepted native connection
 // gets one independent carrier; a failed connection is never retried or replayed.
 func Map(ctx context.Context, cfg ClientConfig, serviceID string, port int) (*Mapping, error) {
+	if cfg.AccessToken == nil {
+		return nil, errors.New("OAuth access token callback required")
+	}
 	dialer, endpoint, err := cfg.prepare(serviceID)
 	if err != nil {
 		return nil, err
@@ -123,8 +126,8 @@ func (c ClientConfig) prepare(id string) (*websocket.Dialer, string, error) {
 	if err != nil || len(pin) != 32 {
 		return nil, "", errors.New("a complete Chisel SHA256 fingerprint is required")
 	}
-	if c.AccessToken == nil || c.TLS == nil || c.TLS.InsecureSkipVerify || c.TLS.RootCAs == nil || len(c.TLS.Certificates) == 0 || (c.TLS.ServerName != "" && c.TLS.ServerName != u.Hostname()) {
-		return nil, "", errors.New("OAuth callback, trusted TLS roots, matching hostname and mTLS certificate are required")
+	if c.TLS == nil || c.TLS.InsecureSkipVerify || c.TLS.RootCAs == nil || len(c.TLS.Certificates) == 0 || (c.TLS.ServerName != "" && c.TLS.ServerName != u.Hostname()) {
+		return nil, "", errors.New("trusted TLS roots, matching hostname and mTLS certificate are required")
 	}
 	tlsConfig := c.TLS.Clone()
 	tlsConfig.ServerName = u.Hostname()
@@ -147,6 +150,35 @@ func (c ClientConfig) prepare(id string) (*websocket.Dialer, string, error) {
 	u.Scheme = "wss"
 	u.Path = "/tunnel/" + id
 	return d, u.String(), nil
+}
+
+// HTTPClient supplies the same exact onion/Tor/TLS identity to native OAuth,
+// catalogue and service actions. It has no environment proxy, direct dial or
+// cross-origin redirect. The caller owns its timeout and token persistence.
+func (c ClientConfig) HTTPClient() (*http.Client, error) {
+	dialer, _, err := c.prepare("agent")
+	if err != nil {
+		return nil, err
+	}
+	transport := &http.Transport{DialContext: dialer.NetDialContext,
+		TLSClientConfig: dialer.TLSClientConfig, TLSHandshakeTimeout: handshakeTimeout}
+	origin, _ := url.Parse(c.OnionURL) // prepare already validated this origin.
+	return &http.Client{Transport: &onionTransport{Transport: transport, host: origin.Hostname()}, Timeout: handshakeTimeout,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, nil
+}
+
+type onionTransport struct {
+	*http.Transport
+	host string
+}
+
+func (t *onionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	u := r.URL
+	if u == nil || u.Scheme != "https" || u.Hostname() != t.host || (u.Port() != "" && u.Port() != "443") ||
+		u.User != nil || u.Fragment != "" || (r.Host != "" && r.Host != u.Host) {
+		return nil, errors.New("request must use the enrolled HTTPS onion origin")
+	}
+	return t.Transport.RoundTrip(r)
 }
 
 func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websocket.Dialer, endpoint, id string, local *net.TCPConn) error {
