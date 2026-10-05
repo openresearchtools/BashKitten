@@ -13,8 +13,8 @@ import (
 
 // Authorization is private native state. Only URL goes to the protected Agent
 // context; it retains the real Authelia login/Remember me cookie for Agent.
-// The native navigation handler intercepts CallbackURI before any network load
-// and passes the URL here. No localhost listener, code in history/logs, cookie
+// The native request handler intercepts CallbackURI before any network load
+// and passes the form POST here. No localhost listener, code in history/logs, cookie
 // fabrication or second password/TOTP flow is required.
 type Authorization struct {
 	URL      string
@@ -42,7 +42,7 @@ func (c *Client) Begin(ctx context.Context) (*Authorization, error) {
 		ExpiresIn  int64  `json:"expires_in"`
 	}
 	if err := c.post(ctx, "pushed-authorization-request", url.Values{
-		"response_type": {"code"}, "response_mode": {"query"}, "redirect_uri": {CallbackURI},
+		"response_type": {"code"}, "response_mode": {"form_post"}, "redirect_uri": {CallbackURI},
 		"scope": {scope}, "audience": {c.config.Audience}, "resource": {c.config.Audience}, "state": {state},
 		"code_challenge": {challenge(verifier)}, "code_challenge_method": {"S256"}, "prompt": {"consent"},
 	}, &par); err != nil {
@@ -60,7 +60,7 @@ func (c *Client) Begin(ctx context.Context) (*Authorization, error) {
 
 // Complete consumes this PKCE exchange exactly once, including on a failed
 // exchange. A cancelled/expired attempt requires explicit new authorization.
-func (a *Authorization) Complete(ctx context.Context, callback string) (Token, error) {
+func (a *Authorization) Complete(ctx context.Context, callback, form string) (Token, error) {
 	a.mu.Lock()
 	if a.used || time.Now().After(a.until) {
 		a.mu.Unlock()
@@ -74,11 +74,10 @@ func (a *Authorization) Complete(ctx context.Context, callback string) (Token, e
 	requestCtx, cancel := context.WithDeadline(ctx, a.until)
 	stop := context.AfterFunc(a.ctx, cancel)
 	defer func() { stop(); cancel() }()
-	u, err := url.Parse(callback)
-	if err != nil || u.Scheme != "http" || u.Host != "127.0.0.1" || u.User != nil || u.Path != "/oauth/callback" || u.RawPath != "" || u.Fragment != "" {
+	if callback != CallbackURI {
 		return Token{}, errors.New("unexpected OAuth callback")
 	}
-	q, err := url.ParseQuery(u.RawQuery)
+	q, err := url.ParseQuery(form)
 	if err != nil {
 		return Token{}, errors.New("invalid OAuth callback")
 	}
@@ -123,7 +122,7 @@ func Registration(clientID, onion string) (map[string]any, error) {
 		"authorization_policy": "two_factor", "consent_mode": "explicit",
 		"redirect_uris": []string{CallbackURI}, "scopes": strings.Fields(scope),
 		"audience": []string{"https://" + onion}, "grant_types": []string{"authorization_code", "refresh_token"},
-		"response_types": []string{"code"}, "response_modes": []string{"query"},
+		"response_types": []string{"code"}, "response_modes": []string{"form_post"},
 		"token_endpoint_auth_method": "none", "require_pushed_authorization_requests": true,
 		"require_pkce": true, "pkce_challenge_method": "S256",
 	}, nil

@@ -155,6 +155,7 @@ func (p *pipe) action(r request) (any, error) {
 		Token        json.RawMessage `json:"token"`
 		SOCKSAddress string          `json:"socksAddress"`
 		Callback     string          `json:"callback"`
+		Form         string          `json:"form"`
 		ID           string          `json:"id"`
 		Port         int             `json:"port"`
 		Action       string          `json:"action"`
@@ -202,7 +203,7 @@ func (p *pipe) action(r request) (any, error) {
 	case "begin-login":
 		return c.BeginLogin()
 	case "complete-login":
-		return true, c.CompleteLogin(value.Callback)
+		return true, c.CompleteLogin(value.Callback, value.Form)
 	case "cancel-login":
 		c.CancelLogin()
 		return true, nil

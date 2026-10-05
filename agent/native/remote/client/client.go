@@ -128,9 +128,9 @@ func (c *Client) BeginLogin(parent context.Context) (string, error) {
 	return flow.URL, nil
 }
 
-// CompleteLogin is called only by native navigation interception. The callback
-// must never load as a page, enter history, or go through an ordinary-tab tool.
-func (c *Client) CompleteLogin(parent context.Context, callback string) error {
+// CompleteLogin receives the intercepted form POST only from the protected
+// native login view. Its fields must never enter history or ordinary-tab tools.
+func (c *Client) CompleteLogin(parent context.Context, callback, form string) error {
 	c.authMu.Lock()
 	defer c.authMu.Unlock()
 	ctx, cancel := c.operation(parent)
@@ -142,7 +142,7 @@ func (c *Client) CompleteLogin(parent context.Context, callback string) error {
 		return oauth.ErrLoginRequired
 	}
 	c.mu.Unlock()
-	token, err := flow.Complete(ctx, callback)
+	token, err := flow.Complete(ctx, callback, form)
 	c.mu.Lock()
 	if c.login == flow {
 		c.login = nil

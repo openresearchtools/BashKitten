@@ -17,7 +17,8 @@ directly under `auth/`; no source patch or runtime source download is used.
   It requires an Authelia authorization callback; it does not issue tokens.
 - `oauth` uses upstream Authelia PAR, PKCE/S256, explicit consent, token exchange,
   refresh and revocation. `Begin` supplies the URL for the protected Agent browser
-  context. Native navigation must intercept the exact loopback callback before
+  context. Native request handling intercepts the exact loopback callback's
+  `form_post` body (required by Authelia's bearer scope) before
   loading it, recording it in history or allowing ordinary tabs to handle it.
   `Complete` validates issuer/state and consumes the exchange once; credentials
   go only to the supplied native encrypted-store callback. Authelia's real browser

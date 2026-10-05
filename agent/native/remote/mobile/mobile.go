@@ -113,8 +113,8 @@ func BrowserIdentity(enrollment []byte) ([]byte, error) {
 }
 
 func (c *Connection) BeginLogin() (string, error) { return c.client.BeginLogin(context.Background()) }
-func (c *Connection) CompleteLogin(callback string) error {
-	return c.client.CompleteLogin(context.Background(), callback)
+func (c *Connection) CompleteLogin(callback, form string) error {
+	return c.client.CompleteLogin(context.Background(), callback, form)
 }
 func (c *Connection) CancelLogin() { c.client.CancelLogin() }
 func (c *Connection) Authorize() (bool, error) {
