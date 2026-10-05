@@ -5,11 +5,6 @@
     "sha256": "6b3747fe931cc5935f87c91df541cdc71bc69d8f8cd367d9befc852d2d2e150b"
   },
   {
-    "file": "hash-wasm-373b796205ab55fb4a657374dad6ea589bf75815.tar.gz",
-    "url": "https://codeload.github.com/Daninet/hash-wasm/tar.gz/373b796205ab55fb4a657374dad6ea589bf75815",
-    "sha256": "e7714618c62d97a4488eb6cf03bd79c79f26fa77d2b389dfc8e5a31894f283c2"
-  },
-  {
     "file": "clipboard-3a0f58eb7250a9a46ad77863bc4618eee099a248.tar.gz",
     "url": "https://codeload.github.com/badlogic/clipboard/tar.gz/3a0f58eb7250a9a46ad77863bc4618eee099a248",
     "sha256": "55eaf95319b8a3e99ddc795c1539f0e72f0988d89359f7d4e5a91764dc3fd268"

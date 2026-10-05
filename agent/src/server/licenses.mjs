@@ -57,7 +57,7 @@ export async function bundledLicenses(root = appRoot) {
       : value.name.startsWith('@esbuild/') || value.name === 'esbuild' ? 'esbuild'
       : value.name.startsWith('@aws-sdk/') ? 'aws'
       : ({ 'data-uri-to-buffer': 'data-uri-to-buffer', standardwebhooks: 'standardwebhooks',
-        'xml-naming': 'xml-naming', '@nodable/entities': 'entities', 'hash-wasm': 'hash-wasm',
+        'xml-naming': 'xml-naming', '@nodable/entities': 'entities',
         'proxy-agent-negotiate': 'proxy-agent-negotiate' })[value.name];
     if (supplement) notices.push(...await texts(path.join(root, 'licenses/upstream', supplement)));
     if (!notices.length) throw Error('Missing license text: ' + key);

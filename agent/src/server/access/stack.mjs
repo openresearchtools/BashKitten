@@ -13,6 +13,7 @@ import { accessDir, runDir, paths, binary } from './paths.mjs';
 import { authEnvironment, renderAuthelia, accountStatus, authCall } from './accounts.mjs';
 import { unixRequest, command } from './io.mjs';
 import { HostedServices } from './hosting.mjs';
+import { NativeTunnel } from './tunnel.mjs';
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const backendScript = fileURLToPath(new URL('../http/server.mjs', import.meta.url));
@@ -99,6 +100,7 @@ export class AccessStack {
     if (this.authStarted) return;
     if (this.authStarting) return this.authStarting;
     this.authStarting = (async () => {
+      this.tunnel = await NativeTunnel.launch(this);
       // Authelia encrypts its session values with the persistent session secret.
       // Keep them durable across whole-group shutdown without a public listener.
       await privateDir(paths.sessionStore);
@@ -113,7 +115,7 @@ export class AccessStack {
         client.on('error', () => {});
         client.on('close', () => resolve(response === '+PONG\r\n'));
       }), 'Valkey');
-      await renderAuthelia([this.origin, ...(this.remoteAuthOrigin ? [this.remoteAuthOrigin] : [])], this.identity.instanceId);
+      await renderAuthelia([this.origin, ...(this.remoteAuthOrigin ? [this.remoteAuthOrigin] : [])], this.identity.instanceId, this.tunnel);
       this.authEnv = await authEnvironment();
       await command(binary('authelia'), ['config', 'validate', '--config', paths.config], { env: this.authEnv });
       await this.launch('authelia', binary('authelia'), ['--config', paths.config], this.authEnv);
@@ -135,6 +137,8 @@ export class AccessStack {
   }
   async stopAuthentication() {
     this.authStarted = false;
+    await this.stopNamed('remote');
+    this.tunnel = null;
     await this.stopNamed('authelia');
     await this.stopNamed('valkey');
     for (const file of [paths.auth, paths.sessionSocket]) await fs.rm(file, { force: true });
@@ -275,7 +279,7 @@ ${backend('remote')}
   async stop() { this.stopping = true; this.ready = false; await this.stopChildren(); this.info = null; }
   async stopChildren() {
     for (const child of [...this.children].reverse()) await terminate(child);
-    this.children = []; this.authStarted = false; this.localToken = null; this.localGeneration = null;
+    this.children = []; this.authStarted = false; this.tunnel = null; this.localToken = null; this.localGeneration = null;
     await fs.rm(paths.group, { force: true });
     for (const file of [paths.auth, paths.sessionSocket, paths.admin, paths.backend, paths.backendInfo]) await fs.rm(file, { force: true });
   }

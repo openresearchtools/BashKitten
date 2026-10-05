@@ -22,3 +22,9 @@ public management listener or separate daemon lifecycle implementation.
 OAuth authorization uses the protected browser's real persistent login session
 and native interception of a query-mode PKCE callback, replacing the donor's
 temporary login cookie jar/form parser. No replacement token issuer is added.
+
+Chosen-password hashing uses the same go-crypt/crypt v0.14.15 Argon2id library
+and parameters as the pinned Authelia v4.39.28 file provider/crypto CLI. This
+host-only API receives the password through the private controller pipe instead
+of command arguments or a simulated terminal; no hashing implementation is copied.
+Authelia remains responsible for account verification and token/session issuance.

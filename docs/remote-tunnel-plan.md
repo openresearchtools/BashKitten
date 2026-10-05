@@ -1303,9 +1303,20 @@ slices and their limits; they do not replace the manual acceptance table.
   the corresponding client certificate/PKCS#8 data only for its enrolled
   onion:443, excludes it from ordinary routing and refuses credential omission
   after enrollment. Its NSS copy is cleared with the existing scoped CA/session
-  lifetime. Generated-binding Java compilation, APK/device operation and the
-  new connection-screen/controller activation are pending; this is not yet the
-  one-login user flow.
+  lifetime. Native [run 37266464187](https://github.com/openresearchtools/BashKitten/actions/runs/37266464187)
+  at `2dbd964683` passed all three source compilation targets, the ARM64 JNI/AAR
+  build and Java compilation against its actual generated binding and Android
+  API. APK/device operation and connection-screen/controller activation remain
+  pending; this is not yet the one-login user flow.
+- Host account creation now calls the private native helper using the same
+  pinned `go-crypt/crypt` Argon2id library and explicit parameters as Authelia's
+  file provider/CLI. No password enters process arguments, environment or logs;
+  the Node WASM hasher is removed. New passwords are validated against the
+  QR's 12–256 Unicode-character rule before account setup starts. Existing
+  account verification retains its original password rules. The helper belongs
+  to the existing authentication process group and stops with it; no new
+  supervisor or public hashing endpoint. Native builds and actual Authelia
+  account/TOTP acceptance for this change remain pending.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

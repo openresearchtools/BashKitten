@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/go-crypt/crypt/algorithm/argon2"
 	"github.com/openresearchtools/bashkitten/remote/bundle"
 	"github.com/openresearchtools/bashkitten/remote/host"
 	"github.com/openresearchtools/bashkitten/remote/oauth"
@@ -117,6 +118,30 @@ func run() error {
 
 func action(running **host.Host, r request) (any, error) {
 	switch r.Method {
+	case "hash-password":
+		var p struct {
+			Password string `json:"password"`
+		}
+		if err := decode(r.Params, &p); err != nil {
+			return nil, err
+		}
+		if err := bundle.ValidatePassword(p.Password); err != nil {
+			return nil, err
+		}
+		// Use the exact library and Argon2id defaults from the pinned Authelia
+		// file provider/crypto CLI. The password stays on the private pipe;
+		// Authelia's CLI otherwise requires a TTY or a secret-bearing flag.
+		hash, err := argon2.New(argon2.WithVariantID(), argon2.WithT(3),
+			argon2.WithM(64*1024), argon2.WithP(4), argon2.WithK(32), argon2.WithS(16))
+		if err != nil {
+			return nil, errors.New("password hasher configuration failed")
+		}
+		digest, err := hash.Hash(p.Password)
+		p.Password = ""
+		if err != nil {
+			return nil, errors.New("password hashing failed")
+		}
+		return digest.String(), nil
 	case "oauth-registration":
 		var p struct {
 			ClientID string `json:"client_id"`

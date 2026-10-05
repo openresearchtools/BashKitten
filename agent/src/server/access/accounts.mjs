@@ -2,9 +2,7 @@
 // Copyright 2026 The Torkitten Authors (Apache-2.0); BashKitten changes AGPL-3.0-only.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { argon2id } from 'hash-wasm';
 import { privateDir, readJson, writeJson, randomToken } from '../common.mjs';
 import { accessDir, paths, binary } from './paths.mjs';
 import { unixRequest, command } from './io.mjs';
@@ -25,7 +23,7 @@ export async function authEnvironment() {
   env.AUTHELIA_TELEMETRY_METRICS_ENABLED = 'false';
   return env;
 }
-export async function renderAuthelia(origins, instanceId) {
+export async function renderAuthelia(origins, instanceId, native) {
   await privateDir(accessDir);
   // Authelia rejects an empty file store. This disabled, unprivileged entry has
   // a discarded random password and is replaced by the local owner at setup.
@@ -33,7 +31,7 @@ export async function renderAuthelia(origins, instanceId) {
     await fs.access(paths.users);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
-    const password = await argon2id({ password: randomToken(), salt: randomBytes(16), parallelism: 1, iterations: 3, memorySize: 19456, hashLength: 32, outputType: 'encoded' });
+    const password = await native.call('hash-password', { password: randomToken() });
     await fs.writeFile(paths.users, JSON.stringify({ users: { __bashkitten_setup: { disabled: true, displayname: 'Setup pending', password, groups: [] } } }), { mode: 0o600, flag: 'wx' });
   }
   // One parent cookie provider supplies SSO to registered hosted routes. Caddy
@@ -79,8 +77,14 @@ export async function authCall(origin, route, input, cookies = '', timeout = 150
   if (result.status < 200 || result.status > 299 || value.status === 'KO') throw Error('Authelia rejected the account or verification code');
   return { value, cookies: result.headers['set-cookie']?.map(cookie => cookie.split(';')[0]).join('; ') || cookies };
 }
-function credentials(value) {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value.username || '') || typeof value.password !== 'string' || value.password.length < 8 || value.password.length > 1024) throw Error('Use a username and a password of at least 8 characters');
+export function validateAccountCredentials(value, { create = false } = {}) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(value.username || '')) throw Error('Use a username of 1–64 letters, digits, dots, underscores or hyphens, starting with a letter or digit');
+  if (create) {
+    const length = typeof value.password === 'string' ? [...value.password].length : 0;
+    if (length < 12 || length > 256 || !value.password.isWellFormed()) throw Error('Use a password of 12–256 characters');
+  } else if (typeof value.password !== 'string' || value.password.length < 8 || value.password.length > 1024) {
+    throw Error('Enter the existing account password');
+  }
 }
 async function firstFactor(origin, value) {
   let failure;
@@ -91,12 +95,14 @@ async function firstFactor(origin, value) {
   }
   throw failure;
 }
-export async function enrollAccount(origin, value, { create = false, reset = false } = {}) {
-  credentials(value);
+export async function enrollAccount(origin, value, { create = false, reset = false, native } = {}) {
+  validateAccountCredentials(value, { create });
   const account = await accountStatus();
   if (create) {
     if (account.hasUser) throw Error('This server already has an account');
-    const password = await argon2id({ password: value.password, salt: randomBytes(16), parallelism: 4, iterations: 3, memorySize: 65536, hashLength: 32, outputType: 'encoded' });
+    // Native validation uses the same Unicode length rule as encrypted QR setup.
+    // Existing-account verification above keeps accepting its original password.
+    const password = await native.call('hash-password', { password: value.password });
     await writeJson(paths.users, { users: { [value.username]: { disabled: false, displayname: value.username, password, groups: ['owner'] } } });
     await writeJson(paths.pending, { username: value.username });
   } else if (!account.hasUser) throw Error('Account not found');

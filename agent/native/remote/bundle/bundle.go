@@ -87,16 +87,20 @@ func (b Bundle) TLS() (*tls.Config, error) {
 	return &tls.Config{RootCAs: roots, Certificates: []tls.Certificate{cert}, ServerName: b.Onion, MinVersion: tls.VersionTLS13}, nil
 }
 
-func passwordValid(password string) bool {
+// ValidatePassword is shared by chosen-account setup and its encrypted export.
+func ValidatePassword(password string) error {
 	n := utf8.RuneCountInString(password)
-	return utf8.ValidString(password) && n >= 12 && n <= 256
+	if !utf8.ValidString(password) || n < 12 || n > 256 {
+		return errors.New("use a password of 12–256 characters")
+	}
+	return nil
 }
 
 // Encrypt uses the same chosen password as host Authelia enrollment. The caller
 // retains only the encrypted result; this package has no password store.
 func Encrypt(b Bundle, password string) (string, error) {
-	if !passwordValid(password) {
-		return "", errors.New("use a password of 12–256 characters")
+	if err := ValidatePassword(password); err != nil {
+		return "", err
 	}
 	if _, err := b.TLS(); err != nil {
 		return "", err
@@ -134,7 +138,7 @@ func Encrypt(b Bundle, password string) (string, error) {
 // Decrypt fully authenticates age's encrypted stream before accepting a bundle.
 func Decrypt(text, password string) (Bundle, error) {
 	var b Bundle
-	if !passwordValid(password) || !strings.HasPrefix(text, "TK2:") || len(text) > maxDocument {
+	if ValidatePassword(password) != nil || !strings.HasPrefix(text, "TK2:") || len(text) > maxDocument {
 		return b, errors.New("invalid connection image or password")
 	}
 	data, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(text, "TK2:"))

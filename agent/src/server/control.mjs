@@ -21,7 +21,7 @@ import { AccessStack } from './access/stack.mjs';
 import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake } from './access/wake.mjs';
-import { enrollAccount, completeAccount } from './access/accounts.mjs';
+import { enrollAccount, completeAccount, validateAccountCredentials } from './access/accounts.mjs';
 import { managedLlamaStatus, startManagedLlama, stopManagedLlama, configureManagedLlama, subscribeManagedLlama, llamaRuntimeOptions, installLlamaRuntime, probeLlamaEndpoint, readManagedLlamaConnection, waitForManagedLlamaReady, refreshManagedLlama } from './platform/linux/llama.mjs';
 import { syncManagedLlamaProvider } from './platform/linux/llama-provider.mjs';
 
@@ -288,8 +288,9 @@ async function serve() {
     if (['account-create', 'account-enroll', 'account-reset-totp'].includes(command)) {
       if (!stack.ready) throw Error('Turn on Agent before account setup');
       if (!remote) throw Error('Remote account setup is available on Linux only');
+      validateAccountCredentials(value, { create: command === 'account-create' });
       await stack.startAuthentication();
-      return enrollAccount(stack.origin, value, { create: command === 'account-create', reset: command === 'account-reset-totp' });
+      return enrollAccount(stack.origin, value, { create: command === 'account-create', reset: command === 'account-reset-totp', native: stack.tunnel });
     }
     if (command === 'package-cancel') { await jobs.cancel(); return status(); }
     if (command === 'package-job') {
