@@ -10,7 +10,8 @@ import tarfile
 import tempfile
 
 source, output, component = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.']}[component]
+command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.'],
+           'remote': ['./cmd/bashkitten-remote']}[component]
 raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-deps', '-json', *command], cwd=source, text=True)
 decoder, offset, modules = json.JSONDecoder(), 0, {}
 while offset < len(raw):
@@ -21,7 +22,10 @@ while offset < len(raw):
     package, offset = decoder.raw_decode(raw, offset)
     module = package.get('Module')
     if module:
-        module = module.get('Replace', module)
+        # Keep the canonical module identity. Local replacement paths can contain
+        # ../ and must never become output paths or erase the declared version.
+        if module.get('Replace'):
+            module = dict(module, Dir=module['Replace']['Dir'])
         modules[module['Path']] = module
 
 notices = output / 'share/licenses' / component
@@ -36,7 +40,9 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-go-source-') as temporary:
     for name, module in sorted(modules.items()):
         directory = Path(module['Dir'])
         destination = name.replace('/', '__')
-        files = [p for p in directory.iterdir() if p.is_file() and p.name.lower().startswith(('license', 'licence', 'notice', 'copying', 'copyright', 'authors'))]
+        files = [p for p in directory.iterdir() if p.is_file() and
+                 (p.name.lower().startswith(('license', 'licence', 'notice', 'copying', 'copyright', 'authors'))
+                  or p.name.lower().endswith('-license'))]
         license_files = [p for p in files if p.name.lower().startswith(('license', 'licence', 'copying'))]
         if not license_files:
             raise SystemExit(f'Missing license text for Go module {name}: {directory}')

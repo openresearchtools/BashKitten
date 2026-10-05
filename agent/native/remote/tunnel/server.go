@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// AuthorizeBearer delegates each new carrier's authorization to Authelia.
+// AuthorizeBearer delegates new and active carriers' authorization to Authelia.
 type AuthorizeBearer func(context.Context, string) error
 
 type service struct {
@@ -163,6 +163,29 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	v.active[conn] = cancel
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(v.active, conn); s.mu.Unlock() }()
+	stop := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stop()
+	// Match the Agent stream's authorization recheck interval. Expired/revoked
+	// tokens and unavailable authentication close the carrier, including an SSH
+	// handshake in progress. This is authorization, not a stream lifetime limit.
+	go func() {
+		ticker := time.NewTicker(15 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				check, done := context.WithTimeout(ctx, 5*time.Second)
+				err := s.authorize(check, token)
+				done()
+				if err != nil {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
 	conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	sshConfig := &ssh.ServerConfig{MaxAuthTries: 1, PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 		if meta.User() != "torkitten" || subtle.ConstantTimeCompare(password, []byte(token)) != 1 {

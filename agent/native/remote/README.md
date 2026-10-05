@@ -15,8 +15,23 @@ directly under `auth/`; no source patch or runtime source download is used.
 - `bashkitten_client` excludes the host server adapter from Android client builds.
   The host adapter accepts configured service IDs, never remote-provided targets.
   It requires an Authelia authorization callback; it does not issue tokens.
+- `host` and `cmd/bashkitten-remote` provide the native host executable. Its sole
+  management input is the controller-owned stdin/stdout pipe; the only listener
+  is a private Unix socket serving authenticated service-ID carriers. EOF,
+  shutdown or process termination closes the owned connections. Active carriers
+  recheck Authelia every 15 seconds (5-second check timeout), matching Agent stream
+  policy; explicit revoke/service removal closes connections immediately.
 
-This is integration source, not a completed remote feature. The native helper/
-JNI entry points, private controller wiring, continuous authorization lifecycle,
+The pipe accepts JSON objects with `id`, `method`, `params` and returns that `id`
+with `result` or `error`. Operations are `keygen`, `encrypt`, `start`, `service-set`,
+`service-remove`, `revoke`, `shutdown`. Key and encryption inputs/outputs are
+private controller data, never logs, argv or web responses. Start takes `socket`,
+`auth_socket`, `onion`, `key`; service-set takes `id`, `network`, `address`.
+The host uses the separate Bearer-only Authelia `/login/api/authz/tunnel` endpoint.
+The controller must configure that endpoint and reconcile its owned processes;
+the helper neither starts daemons nor removes existing sockets.
+
+This is integration source, not a completed remote feature. APK JNI entry points,
+private controller wiring, complete logout/refresh lifecycle,
 protected browser login and UI integration are still pending. Compilation does
 not establish working Tor, authentication, camera import or device acceptance.

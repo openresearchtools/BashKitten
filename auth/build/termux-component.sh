@@ -4,9 +4,10 @@ set -euo pipefail
 
 component=${1:?component required}
 output=${2:?output directory required}
-case "$component" in caddy|tor|authelia|valkey|chisel) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
+case "$component" in caddy|tor|authelia|valkey|chisel|remote) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
 executable=$component
 [[ $component != valkey ]] || executable=valkey-server
+[[ $component != remote ]] || executable=bashkitten-remote
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
 [[ $(uname -m) == x86_64 ]] || { echo 'The pinned Termux builder requires an amd64 runner.' >&2; exit 2; }
 root=$(cd "$(dirname "$0")/../.." && pwd)
