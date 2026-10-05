@@ -55,7 +55,10 @@ func ReadImage(data []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	code, err := qrcode.NewQRCodeReader().Decode(bmp, nil)
+	// Downloads contain a standalone QR; camera scans use native ZXing instead.
+	code, err := qrcode.NewQRCodeReader().Decode(bmp, map[gozxing.DecodeHintType]interface{}{
+		gozxing.DecodeHintType_PURE_BARCODE: true,
+	})
 	if err != nil || !strings.HasPrefix(code.GetText(), "TK2:") {
 		return "", errors.New("connection QR code not found")
 	}
