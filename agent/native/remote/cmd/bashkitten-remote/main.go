@@ -8,10 +8,7 @@ package main
 
 import (
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -24,7 +21,6 @@ import (
 	"github.com/openresearchtools/bashkitten/remote/host"
 	"github.com/openresearchtools/bashkitten/remote/oauth"
 	"github.com/openresearchtools/bashkitten/remote/tunnel"
-	"golang.org/x/crypto/ssh"
 )
 
 type request struct {
@@ -151,18 +147,16 @@ func action(running **host.Host, r request) (any, error) {
 			return nil, err
 		}
 		return oauth.Registration(p.ClientID, p.Onion)
-	case "keygen":
-		_, key, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			return nil, errors.New("host key generation failed")
+	case "enrollment-keys":
+		var p struct{}
+		if err := decode(r.Params, &p); err != nil {
+			return nil, err
 		}
-		defer clear(key)
-		block, err := ssh.MarshalPrivateKey(key, "BashKitten Chisel")
+		keys, err := host.NewEnrollmentKeys()
 		if err != nil {
-			return nil, errors.New("host key encoding failed")
+			return nil, errors.New("remote identity generation failed")
 		}
-		defer clear(block.Bytes)
-		return string(pem.EncodeToMemory(block)), nil
+		return keys, nil
 	case "encrypt":
 		var p struct {
 			Bundle   bundle.Bundle `json:"bundle"`
