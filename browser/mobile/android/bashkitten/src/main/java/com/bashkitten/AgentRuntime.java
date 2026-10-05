@@ -37,7 +37,6 @@ public final class AgentRuntime {
     java.lang.ref.WeakReference<Activity> activity = new java.lang.ref.WeakReference<>(null);
     private final Map<String, GeckoSession> sessions = new HashMap<>();
     private final Set<String> posted = new LinkedHashSet<>();
-    private Runnable remoteAuthorizationCleanup;
     private final Map<String, RemoteAgentConnection> remoteConnections = new HashMap<>();
     private final Map<String, JSONObject> serviceSnapshots = new HashMap<>();
     private char[] remotePassword;
@@ -206,8 +205,6 @@ public final class AgentRuntime {
         boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
         closeRemoteConnections();
-        releaseRemoteAuthorization();
-
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
@@ -245,17 +242,12 @@ public final class AgentRuntime {
     }
     private void releaseWake() {
         closeRemoteConnections();
-        releaseRemoteAuthorization();
         app.startService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_OFF));
-    }
-    private void releaseRemoteAuthorization() {
-        Runnable cleanup = remoteAuthorizationCleanup; remoteAuthorizationCleanup = null;
-        if (cleanup != null) cleanup.run();
     }
     private void setup(String message) { setup("retry", message); }
     private void setup(String step, String message) { busy = false; state = "setup"; setupStep = step; error = message; changed(); }
     private void fail(String message) {
-        releaseRemoteAuthorization(); app.remoteControl.disconnect();
+        app.remoteControl.disconnect();
         // A failed Local startup must not take away another enrollment's
         // service ports while Local Pi/setup is selected.
         if (selected.equals("local") && !remoteConnections.isEmpty()) { setup("retry", message); return; }
@@ -451,7 +443,6 @@ public final class AgentRuntime {
             return;
         }
         operation++; busy = false;
-        releaseRemoteAuthorization();
         if (session != null) { suspendSession(session); session.setActive(false); }
 
         app.remoteControl.disconnect();
@@ -711,7 +702,6 @@ public final class AgentRuntime {
         return true;
     }
     private void connectRemote() {
-        releaseRemoteAuthorization();
         final int generation = ++operation;
         RemoteAgentConnection active = remoteConnections.get(selected);
         if (active != null && active.ready && !active.isClosed()) { remoteReady(active); return; }
