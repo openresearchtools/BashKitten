@@ -38,6 +38,9 @@ public final class AgentRuntime {
     private final Map<String, GeckoSession> sessions = new HashMap<>();
     private final Set<String> posted = new LinkedHashSet<>();
     private Runnable remoteAuthorizationCleanup;
+    private final Map<String, RemoteAgentConnection> remoteConnections = new HashMap<>();
+    private char[] remotePassword;
+    private String remotePasswordHost = "";
     private JSONObject localHostedRecord;
     private JSONObject localSession;
     private boolean localSessionPending;
@@ -207,6 +210,7 @@ public final class AgentRuntime {
         if (!termuxInstalled) recordLocalControl(false);
         boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
+        closeRemoteConnections();
         restoreLocalAgent();
         releaseRemoteAuthorization();
         suspendHostedSignIns();
@@ -246,6 +250,7 @@ public final class AgentRuntime {
         busy = false; state = "off"; error = ""; releaseWake(); changed();
     }
     private void releaseWake() {
+        closeRemoteConnections();
         releaseRemoteAuthorization();
         app.startService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_OFF));
     }
@@ -356,6 +361,10 @@ public final class AgentRuntime {
         stored.put(name, identity); identities.write(stored);
     }
     private void configure(String endpoint, JSONObject identity, boolean tor, int port) throws Exception {
+        configure(endpoint, identity, tor, port, null, null);
+    }
+    private void configure(String endpoint, JSONObject identity, boolean tor, int port,
+            RemoteAgentConnection remote, Runnable configured) throws Exception {
         if (engine == null) throw new IllegalStateException("Browser engine is not ready.");
         String sessionKey = isHostedSignIn()
             ? "local-hosted-" + URI.create(localHostedRecord.getString("url")).getHost() : selected;
@@ -370,7 +379,10 @@ public final class AgentRuntime {
         if (!next.isOpen()) next.open(engine);
         final GeckoSession currentSession = next;
         BashKittenController.setHostDelegate(next, (command, args, reply) -> hostCall(currentSession, command, args, reply));
-        JSONObject params = new JSONObject().put("url", endpoint).put("identity", identity).put("tor", tor).put("port", port).put("proxySecret", app.tor.proxySecret()).put("agentOrigin", URI.create(endpoint).getScheme() + "://" + URI.create(endpoint).getRawAuthority());
+        JSONObject params = new JSONObject().put("url", endpoint).put("identity", identity).put("tor", tor).put("port", port)
+            .put("proxySecret", remote == null ? app.tor.proxySecret() : remote.route.secret)
+            .put("agentOrigin", URI.create(endpoint).getScheme() + "://" + URI.create(endpoint).getRawAuthority());
+        if (remote != null) params.put("clientCertificate", remote.identity.getJSONObject("clientCertificate"));
         if (sessionKey.equals("local") && !tor && localSession != null) params.put("localSession", localSession);
         final GeckoSession target = next;
         final int generation = operation;
@@ -384,6 +396,7 @@ public final class AgentRuntime {
                 if (reply.has("error")) throw new IllegalStateException(reply.getString("error"));
                 boolean changedUrl = !endpoint.equals(url);
                 url = endpoint;
+                if (configured != null) { changed(); configured.run(); return; }
                 if (changedUrl || needsLoad) {
                     // Attach the panel's delegates before the first navigation events.
                     changed();
@@ -391,8 +404,15 @@ public final class AgentRuntime {
                     reloadOnConnect = false;
                 }
                 changed();
-            } catch (Exception exception) { connectionFailed("Could not verify Agent connection: " + exception.getMessage()); }
-        }, exception -> { if (generation == operation) connectionFailed("Could not configure the protected Agent connection."); });
+            } catch (Exception exception) {
+                if (remote != null) remoteFailed(remote, "Could not verify Agent connection: " + exception.getMessage());
+                else connectionFailed("Could not verify Agent connection: " + exception.getMessage());
+            }
+        }, exception -> {
+            if (generation != operation) return;
+            if (remote != null) remoteFailed(remote, "Could not configure the protected Agent connection.");
+            else connectionFailed("Could not configure the protected Agent connection.");
+        });
         if (!previousUrl.isEmpty() && (needsLoad || !previousUrl.equals(endpoint))) captureDraft(target, connect);
         else connect.run();
     }
@@ -401,10 +421,15 @@ public final class AgentRuntime {
             .accept(ignored -> done.run(), ignored -> done.run());
     }
     private void suspendSession(GeckoSession target) {
+        BashKittenController.request(target, "{\"method\":\"agent.cancel\"}").accept(ignored -> {}, ignored -> {});
         clearHosted(target);
         BashKittenController.setHostDelegate(target, null);
         final int generation = operation;
-        captureDraft(target, () -> { if (target.isOpen() && (generation == operation || target != session)) { target.stop(); target.loadUri("about:blank"); } });
+        captureDraft(target, () -> {
+            if (!target.isOpen() || (generation != operation && target == session)) return;
+            BashKittenController.request(target, "{\"method\":\"agent.disconnect\"}").accept(ignored -> {}, ignored -> {});
+            target.stop(); target.loadUri("about:blank");
+        });
     }
     private void signIn() {
         if (selected.equals("local") && !isHostedSignIn() && localSession != null) {
@@ -428,10 +453,20 @@ public final class AgentRuntime {
         if (!desired) return;
         url = "";
         if (session != null && !session.isOpen() && engine != null) session.open(engine);
-        if (selected.equals("local")) refresh(); else connectRemote();
+        if (selected.equals("local")) refresh();
+        else {
+            RemoteAgentConnection connection = remoteConnections.remove(selected);
+            if (connection != null) connection.close();
+            busy = false; turnOn();
+        }
     }
     public void select(String id) {
         if (isHostedSignIn()) cancelHostedSignIn();
+        RemoteAgentConnection previousRemote = remoteConnections.get(selected);
+        if (previousRemote != null && !previousRemote.ready) {
+            remoteConnections.remove(selected); previousRemote.close();
+        }
+        if (!id.equals(remotePasswordHost)) clearRemotePassword();
         if (selected.equals(id)) {
             if (!id.equals("local")) { busy = false; turnOn(); }
             return;
@@ -448,116 +483,155 @@ public final class AgentRuntime {
         turnOn();
     }
     public JSONObject remotes() throws Exception { return new SecretStore(app, "agent-remotes").read(); }
-    public void saveRemote(JSONObject record) throws Exception {
-        URI uri = URI.create(record.getString("url"));
-        if (record.optInt("version") != 1 || !record.optString("kind").equals("agent") || !uri.getScheme().equals("https") || uri.getUserInfo() != null || !uri.getHost().matches("[a-z2-7]{56}\\.onion")) throw new IllegalArgumentException("Choose a valid Agent connection file.");
-        String id = uri.getHost();
-        new OnionKey(id, record.getString("clientAuthorization"));
-        // Enrollment without a saved certificate is handled through the authenticated onion enrollment UI.
-        if (!record.has("caPem")) throw new IllegalArgumentException("This connection requires its server certificate identity. Import the complete connection file.");
-        rememberIdentity(id, record);
-        SecretStore store = new SecretStore(app, "agent-remotes"); JSONObject all = store.read(); all.put(id, record); store.write(all);
+    /** Called only after native TK2 decryption; no plaintext/legacy enrollment fallback. */
+    public void importRemote(JSONObject bundle, String password) throws Exception {
+        JSONObject enrollment = NativeRemote.browserIdentity(app, bundle);
+        String id = bundle.getString("onion");
+        rememberIdentity(id, enrollment.getJSONObject("identity"));
+        JSONObject record = new JSONObject().put("version", 2).put("kind", "agent")
+            .put("name", bundle.getString("name")).put("bundle", bundle);
+        SecretStore store = new SecretStore(app, "agent-remotes");
+        JSONObject saved = store.read(); saved.put(id, record); store.write(saved);
+        RemoteAgentConnection previous = remoteConnections.remove(id);
+        if (previous != null) previous.close();
+        clearRemotePassword(); remotePassword = password.toCharArray(); remotePasswordHost = id;
+        select(id);
     }
-    public void enrollRemote(JSONObject record, Consumer<JSONObject> done, Consumer<String> failure) {
-        try {
-            URI endpoint = URI.create(record.getString("url"));
-            if (record.optInt("version") != 1 || !record.optString("kind").equals("agent")
-                    || !"https".equals(endpoint.getScheme()) || endpoint.getHost() == null
-                    || !endpoint.getHost().matches("[a-z2-7]{56}\\.onion") || endpoint.getUserInfo() != null
-                    || endpoint.getRawQuery() != null || endpoint.getRawFragment() != null
-                    || (endpoint.getRawPath() != null && !endpoint.getRawPath().isEmpty() && !endpoint.getRawPath().equals("/"))
-                    || endpoint.getPort() == 0 || endpoint.getPort() > 65535) throw new IllegalArgumentException();
-            OnionKey key = new OnionKey(endpoint.getHost(), record.getString("clientAuthorization"));
-            if (record.has("caPem")) { saveRemote(record); done.accept(record); return; }
-            if (engine == null) throw new IllegalStateException("Open the browser before enrolling a remote Agent.");
-            final int generation = operation;
-            app.tor.authorizeTemporarily(key, (port, releaseKey) -> {
-                if (generation != operation) { releaseKey.run(); failure.accept("Connection selection changed. Retry enrollment."); return; }
-                String context = "bashkitten-agent-ui-enroll-" + UUID.randomUUID();
-                GeckoSession enrollment = new GeckoSession(new GeckoSessionSettings.Builder().contextId(context).build());
-                java.util.concurrent.atomic.AtomicBoolean finished = new java.util.concurrent.atomic.AtomicBoolean();
-                Runnable cleanup = () -> {
-                    if (enrollment.isOpen()) enrollment.close();
-                    engine.getStorageController().clearDataForSessionContext(context);
-                    releaseKey.run();
-                };
-                try {
-                    enrollment.open(engine);
-                    JSONObject params = new JSONObject().put("url", record.getString("url"))
-                            .put("caSha256", record.optString("caSha256", ""))
-                            .put("tor", true).put("port", port).put("proxySecret", app.tor.proxySecret());
-                    BashKittenController.request(enrollment, new JSONObject().put("method", "agent.enroll").put("params", params).toString()).accept(result -> {
-                        if (!finished.compareAndSet(false, true)) return;
-                        JSONObject accepted;
-                        try {
-                            if (generation != operation) throw new IllegalStateException("Connection selection changed. Retry enrollment.");
-                            JSONObject reply = new JSONObject(result);
-                            if (reply.has("error")) {
-                                cleanup.run();
-                                failure.accept("Remote Agent: " + reply.getString("error") + ". Retry when the server is reachable.");
-                                return;
-                            }
-                            JSONObject identity = reply.getJSONObject("result");
-                            String expected = record.optString("caSha256", "").replace(":", "");
-                            if (!expected.isEmpty() && !expected.equalsIgnoreCase(identity.getString("caSha256").replace(":", ""))) {
-                                throw new SecurityException("The remote Agent certificate identity changed.");
-                            }
-                            accepted = new JSONObject(record.toString())
-                                    .put("caPem", identity.getString("caPem")).put("caSha256", identity.getString("caSha256"));
-                            if (identity.has("instanceId")) accepted.put("instanceId", identity.getString("instanceId"));
-                            saveRemote(accepted);
-                        } catch (Exception error) {
-                            cleanup.run(); failure.accept("The remote Agent identity could not be verified or saved.");
-                            return;
-                        }
-                        cleanup.run(); done.accept(accepted);
-                    }, error -> {
-                        if (!finished.compareAndSet(false, true)) return;
-                        cleanup.run();
-                        failure.accept("The remote Agent could not be reached securely through Tor.");
-                    });
-                } catch (Exception error) {
-                    if (finished.compareAndSet(false, true)) {
-                        cleanup.run(); failure.accept("Could not start remote Agent enrollment.");
-                    }
-                }
-            }, failure);
-        } catch (Exception error) { failure.accept("Choose a valid Agent connection and retry."); }
+    private void clearRemotePassword() {
+        if (remotePassword != null) Arrays.fill(remotePassword, '\0');
+        remotePassword = null; remotePasswordHost = "";
+    }
+    private void closeRemoteConnections() {
+        clearRemotePassword();
+        for (RemoteAgentConnection connection : remoteConnections.values()) connection.close();
+        remoteConnections.clear();
     }
     public void removeRemote(String id) throws Exception {
         if (id.equals("local")) throw new IllegalArgumentException("Local Agent cannot be removed.");
         SecretStore store = new SecretStore(app, "agent-remotes");
         JSONObject saved = store.read();
         if (!saved.has(id)) return;
-        if (selected.equals(id)) {
-            operation++; desired = false; busy = false;
-            selected = "local"; url = ""; session = null;
-            app.policies.edit().putString("agent.selected", "local").apply();
-            stopped();
-        }
+        RemoteAgentConnection connection = remoteConnections.remove(id);
+        if (connection != null) connection.forget();
+        JSONObject bundle = saved.getJSONObject(id).optJSONObject("bundle");
+        if (bundle != null) NativeRemote.forgetSaved(app, bundle.getString("id"));
+        if (id.equals(remotePasswordHost)) clearRemotePassword();
+        boolean wasSelected = selected.equals(id);
         GeckoSession remote = sessions.remove(id);
         if (remote != null && remote.isOpen()) { clearHosted(remote); remote.stop(); remote.close(); }
         if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-" + id);
         saved.remove(id); store.write(saved);
-        if (id.equals(app.policies.getString("agent.lastRemote", ""))) app.policies.edit().remove("agent.lastRemote").apply();
         JSONObject remembered = identities.read(); remembered.remove(id); identities.write(remembered);
         // The Tor client may also serve an independently enrolled ordinary private site. Removing
         // Agent never deletes that site's saved credential or stops its tabs.
-        changed();
+        if (wasSelected) { session = null; select("local"); }
+        else changed();
+        if (id.equals(app.policies.getString("agent.lastRemote", ""))) app.policies.edit().remove("agent.lastRemote").apply();
+    }
+    private boolean selectedRemote(RemoteAgentConnection connection) {
+        return desired && selected.equals(connection.host) && remoteConnections.get(connection.host) == connection && !connection.isClosed();
+    }
+    private void remoteFailed(RemoteAgentConnection connection, String message) {
+        if (remoteConnections.get(connection.host) != connection) return;
+        remoteConnections.remove(connection.host); connection.close();
+        if (!selected.equals(connection.host)) return;
+        clearRemotePassword();
+        if (session != null) suspendSession(session);
+        app.remoteControl.disconnect();
+        setup("remote", message);
+    }
+    private void remoteReady(RemoteAgentConnection connection) {
+        if (!selectedRemote(connection)) return;
+        clearRemotePassword();
+        try {
+            configure(connection.identity.getString("url"), connection.identity.getJSONObject("identity"),
+                true, connection.proxyPort, connection, () -> {
+                    if (!selectedRemote(connection)) return;
+                    busy = false; state = "on"; error = ""; changed();
+                    session.loadUri(url); reloadOnConnect = false;
+                });
+        } catch (Exception error) { remoteFailed(connection, "Could not configure the enrolled Agent tunnel."); }
+    }
+    private void remoteLogin(RemoteAgentConnection connection, String address) {
+        if (!selectedRemote(connection)) return;
+        try {
+            configure(connection.identity.getString("url"), connection.identity.getJSONObject("identity"),
+                true, connection.proxyPort, connection, () -> {
+                    if (!selectedRemote(connection)) return;
+                    GeckoSession target = session;
+                    Runnable openLogin = () -> {
+                        if (!selectedRemote(connection) || session != target) return;
+                        busy = false; state = "login"; error = ""; changed();
+                        target.loadUri(address);
+                    };
+                    if (remotePassword == null || !remotePasswordHost.equals(connection.host)) { openLogin.run(); return; }
+                    try {
+                        JSONObject params = new JSONObject().put("username", connection.owner)
+                            .put("password", new String(remotePassword));
+                        clearRemotePassword();
+                        String request = new JSONObject().put("method", "agent.firstFactor").put("params", params).toString();
+                        BashKittenController.request(target, request).accept(value -> {
+                            if (!selectedRemote(connection) || session != target) return;
+                            try {
+                                JSONObject result = new JSONObject(value);
+                                if (result.has("error")) throw new IllegalStateException(result.getString("error"));
+                                openLogin.run();
+                            } catch (Exception error) { remoteFailed(connection, "Remote sign-in failed: " + error.getMessage()); }
+                        }, error -> { if (selectedRemote(connection)) remoteFailed(connection, "Remote sign-in could not complete."); });
+                    } catch (Exception error) { remoteFailed(connection, "Could not start the remote sign-in."); }
+                });
+        } catch (Exception error) { remoteFailed(connection, "Could not configure the protected remote sign-in."); }
+    }
+    /** Consume the native OAuth callback before Gecko loads or records it. */
+    boolean remoteCallback(GeckoSession source, String address) {
+        URI callback;
+        try { callback = URI.create(address); } catch (Exception error) { return false; }
+        if (!"http".equals(callback.getScheme()) || !"127.0.0.1".equals(callback.getHost())
+            || !"/oauth/callback".equals(callback.getPath())) return false;
+        // Always block this reserved callback in Agent, including stale/invalid
+        // responses. Only the selected protected login may deliver it to Go.
+        RemoteAgentConnection connection = remoteConnections.get(selected);
+        if (connection == null || !selectedRemote(connection) || source != session || !connection.awaitingCallback) return true;
+        // The native flow checks the exact callback, issuer and single-use
+        // state. Gecko's triggerUri can be absent for an HTTP redirect.
+        busy = true; state = "starting"; changed();
+        connection.complete(address);
+        return true;
     }
     private void connectRemote() {
         releaseRemoteAuthorization();
         final int generation = ++operation;
+        RemoteAgentConnection active = remoteConnections.get(selected);
+        if (active != null && active.ready && !active.isClosed()) { remoteReady(active); return; }
+        if (active != null) { remoteConnections.remove(selected); active.close(); }
         try {
             JSONObject record = remotes().getJSONObject(selected);
-            URI uri = URI.create(record.getString("url"));
-            app.tor.authorizeTemporarily(new OnionKey(uri.getHost(), record.getString("clientAuthorization")), (port, cleanup) -> {
+            if (record.optInt("version") != 2 || !record.optString("kind").equals("agent")) {
+                clearRemotePassword();
+                setup("remote", "This saved connection needs a new encrypted QR from the host’s Share Local page."); return;
+            }
+            JSONObject bundle = record.getJSONObject("bundle");
+            String host = bundle.getString("onion");
+            if (!selected.equals(host)) throw new SecurityException("Remote identity does not match its saved connection.");
+            app.tor.authorizeTemporarily(new OnionKey(host, bundle.getString("tor_private")), (port, cleanup) -> {
                 if (generation != operation || !desired) { cleanup.run(); return; }
-                remoteAuthorizationCleanup = cleanup;
-                try { configure(record.getString("url"), record, true, port); busy = false; state = "on"; changed(); }
-                catch (Exception exception) { fail("Could not connect to remote Agent."); }
-            }, message -> { if (generation == operation) fail(message); });
-        } catch (Exception exception) { setup("Choose or import an Agent connection."); }
+                TorGateway.AgentRoute route = null;
+                try {
+                    route = app.tor.agentRoute(host);
+                    RemoteAgentConnection connection = new RemoteAgentConnection(app.main, bundle, port, route, cleanup,
+                        new RemoteAgentConnection.Listener() {
+                            @Override public void login(RemoteAgentConnection value, String address) { remoteLogin(value, address); }
+                            @Override public void ready(RemoteAgentConnection value) { remoteReady(value); }
+                            @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
+                        });
+                    remoteConnections.put(host, connection);
+                    connection.start(app, bundle, app.tor.socksPath());
+                } catch (Exception error) {
+                    if (route != null) route.close(); cleanup.run(); clearRemotePassword();
+                    setup("remote", "Could not start the native remote connection.");
+                }
+            }, message -> { if (generation == operation) { clearRemotePassword(); setup("remote", message); } });
+        } catch (Exception error) { clearRemotePassword(); setup("remote", "Choose a valid encrypted Agent connection."); }
     }
     private void poll() {
         if (polling) return; polling = true;

@@ -42,7 +42,10 @@ export const BashKittenHost = {
     const previous = views.get(browser);
     // Status refreshes can reapply the same enrollment while a draft query is
     // in flight. Keep its identity and pending restore operation intact.
-    if (previous?.context === context && previous.origin === origin) return;
+    if (previous?.context === context && previous.origin === origin) {
+      previous.suspended = false;
+      return;
+    }
     views.set(browser, {
       context, origin,
       draft: previous?.context === context ? previous.draft : null,
@@ -51,12 +54,17 @@ export const BashKittenHost = {
 
   close(browser) { views.delete(browser); },
 
+  suspend(browser) {
+    const view = views.get(browser);
+    if (view) view.suspended = true;
+  },
+
   require(windowGlobal) {
     const context = windowGlobal?.browsingContext;
     const browser = context?.top.embedderElement;
     const view = browser && views.get(browser);
     const principal = windowGlobal?.documentPrincipal;
-    if (!view || context !== context.top || context.currentWindowGlobal !== windowGlobal ||
+    if (!view || view.suspended || context !== context.top || context.currentWindowGlobal !== windowGlobal ||
         !principal || principal.isSystemPrincipal || !principal.isContentPrincipal ||
         principal.originAttributes.geckoViewSessionContextId !== view.context ||
         principal.URI?.prePath !== view.origin ||

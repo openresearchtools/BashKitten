@@ -14,6 +14,7 @@ on:
       - 'auth/build/**'
       - 'auth/remote-termux/**'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java'
+      - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/RemoteAgentConnection.java'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/SecretStore.java'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java'
       - '.github/workflows/remote-native.yml'
@@ -115,7 +116,8 @@ jobs:
             -d "$RUNNER_TEMP/remote-java/classes" \
             browser/mobile/android/bashkitten/src/main/java/com/bashkitten/SecretStore.java \
             browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java \
-            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java
+            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java \
+            browser/mobile/android/bashkitten/src/main/java/com/bashkitten/RemoteAgentConnection.java
       - uses: actions/upload-artifact@v4
         with:
           name: remote-client-android-arm64

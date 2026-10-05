@@ -1401,6 +1401,27 @@ slices and their limits; they do not replace the manual acceptance table.
   Gateway-only changes now trigger that native compilation workflow too.
   These results establish compilation/assembly, not an installed APK or the
   pending encrypted-import, real Authelia login and tunnel user flow.
+- Android connection import now uses native TK2 camera/image decoding and local
+  password decryption, replacing plaintext JSON/manual address/key enrollment.
+  A transient ViewModel preserves an unfinished import across rotation without
+  writing its password to saved state. The native runtime owns one tunnel client
+  per enrollment, reuses the imported password once for real Authelia first-factor
+  login, intercepts the PKCE callback before navigation and switches the protected
+  onion origin to its reserved Agent mapping after authorization. Selecting Local
+  retains established client owners; Turn off closes all owned mappings. Forget
+  closes the selected enrollment and erases its token with synchronization against
+  in-flight token writes. Old records remain visible with explicit QR migration;
+  there is no old enrollment/transport fallback. Remote failures show remote
+  retry/import actions without a Termux download prompt. Protected-view suspension
+  clears its scoped client credential while retaining the captured draft and
+  cookies. Source review, JavaScript parsing and diff checks pass. Native Java/APK
+  compilation and actual QR/password/TOTP/consent, draft, cancellation and tunnel
+  acceptance remain pending; service cards and desktop client migration remain
+  unfinished.
+- Linux candidates `37272904289` (arm64) and `37272890571` (amd64) at
+  `fc4ef81966` completed successfully after the helper-license path correction.
+  Their package assembly is verified by the workflows, not an installation or
+  complete runtime/manual acceptance result.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

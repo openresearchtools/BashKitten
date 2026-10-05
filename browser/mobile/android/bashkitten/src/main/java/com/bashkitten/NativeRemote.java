@@ -13,6 +13,8 @@ import org.json.JSONObject;
 final class NativeRemote implements AutoCloseable {
     private final SecretStore tokens;
     private final Connection client;
+    private final Object tokenLock = new Object();
+    private boolean forgotten;
     private byte[] enrollment;
 
     NativeRemote(Context context, JSONObject bundle, String torSocket) throws Exception {
@@ -33,7 +35,10 @@ final class NativeRemote implements AutoCloseable {
                     String json = new String(data, StandardCharsets.UTF_8);
                     JSONObject value = new JSONObject();
                     if (!json.equals("null")) value.put("token", new JSONObject(json));
-                    tokens.write(value); // Atomic, encrypted and complete before returning to Go.
+                    synchronized (tokenLock) {
+                        if (forgotten) throw new IllegalStateException("Remote connection was forgotten");
+                        tokens.write(value); // Atomic and complete before returning to Go.
+                    }
                 } finally { Arrays.fill(data, (byte) 0); }
             });
         } catch (Exception error) {
@@ -62,6 +67,19 @@ final class NativeRemote implements AutoCloseable {
         finally { Arrays.fill(identity, (byte) 0); }
     }
 
+    static JSONObject browserIdentity(Context context, JSONObject bundle) throws Exception {
+        go.Seq.setContext(context.getApplicationContext());
+        byte[] data = bundle.toString().getBytes(StandardCharsets.UTF_8);
+        byte[] result = null;
+        try {
+            result = Mobile.browserIdentity(data);
+            return new JSONObject(new String(result, StandardCharsets.UTF_8));
+        } finally {
+            Arrays.fill(data, (byte) 0);
+            if (result != null) Arrays.fill(result, (byte) 0);
+        }
+    }
+
     String beginLogin() throws Exception { return client.beginLogin(); }
     boolean authorize() throws Exception { return client.authorize(); }
     void completeLogin(String callback) throws Exception { client.completeLogin(callback); }
@@ -73,6 +91,19 @@ final class NativeRemote implements AutoCloseable {
     void logout() throws Exception {
         try { client.logout(); }
         finally { close(); }
+    }
+
+    void forget() throws Exception {
+        close();
+        synchronized (tokenLock) {
+            forgotten = true;
+            tokens.write(new JSONObject());
+        }
+    }
+
+    static void forgetSaved(Context context, String id) throws Exception {
+        if (!id.matches("[a-f0-9]{48}")) throw new IllegalArgumentException("Invalid remote identity");
+        new SecretStore(context, "remote-token-" + id).write(new JSONObject());
     }
 
     @Override public synchronized void close() {

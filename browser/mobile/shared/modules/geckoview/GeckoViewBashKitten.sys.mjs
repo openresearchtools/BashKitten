@@ -66,7 +66,18 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (method === "agent.restoreDraft") return BashKittenHost.restoreDraft(this.browser);
       if (method === "agent.configure") return this.configureAgent(params);
       if (method === "agent.firstFactor") return this.firstFactor(params);
-      if (method === "agent.enroll") return this.enrollAgent(params);
+      if (method === "agent.disconnect") {
+        if (this.agentHost?.endsWith(".onion")) {
+          this.clearHostedTargets();
+          certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
+          this.agentUsesClientCertificate = false;
+          this.agentIdentity = null;
+          this.agentOrigin = "";
+          BashKittenAndroid.configure(this.context, this.browserId, { tor: true, port: 0 });
+          BashKittenHost.suspend(this.browser);
+        }
+        return true;
+      }
       if (method === "agent.hostedValidate") return this.validateHosted(params);
       if (method === "agent.hostedClear") {
         this.clearHostedTargets();
@@ -343,23 +354,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
   clearHostedTargets() {
     this.hostedGeneration++;
     for (const target of [...this.hostedTargets]) target.clearHosted();
-  }
-  async enrollAgent(params) {
-    if (!String(this.context).startsWith(contextPrefix("bashkitten-agent-ui-enroll-"))) throw new Error("A fresh enrollment context is required");
-    const endpoint = this.agentEndpoint(params.url);
-    if (!endpoint.hostname.endsWith(".onion") || !params.tor || !params.port) throw new Error("Authenticated onion route required");
-    const attrs = { geckoViewSessionContextId: this.context };
-    BashKittenAndroid.configure(this.context, this.browserId, { ...params, identities: [] });
-    certificates.setAgentOnionEnrollment(endpoint.hostname, attrs, true);
-    try {
-      const principal = Services.scriptSecurityManager.createContentPrincipal(Services.io.newURI(endpoint.origin), attrs);
-      const identity = await this.agentFetch(endpoint.origin, "/.well-known/bashkitten-ca", principal, null, null, null, false);
-      const cert = certDB.constructX509FromBase64(String(identity.caPem || "").replace(/-----[^-]+-----|\s/g, ""));
-      const hash = cert.sha256Fingerprint.replace(/:/g, "").toLowerCase();
-      if (params.caSha256 && String(params.caSha256).toLowerCase() !== hash) throw new Error("Imported Agent certificate identity does not match");
-      if (identity.caSha256 && String(identity.caSha256).toLowerCase() !== hash) throw new Error("Invalid Agent identity response");
-      return { caPem: identity.caPem, caSha256: hash, instanceId: identity.instanceId || "" };
-    } finally { certificates.setAgentOnionEnrollment(endpoint.hostname, attrs, false); }
   }
   async agentRequest({ origin, path, body, csrf }) {
     const endpoint = this.agentEndpoint(origin);

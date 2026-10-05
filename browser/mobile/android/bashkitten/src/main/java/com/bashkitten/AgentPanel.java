@@ -172,11 +172,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override public void changed() {
         power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
-        power.setEnabled(!runtime.state.equals("starting") && !runtime.state.equals("stopping"));
+        power.setEnabled(!runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
         hostedBack.setVisibility(runtime.isHostedSignIn() ? VISIBLE : GONE);
         connectionStatus.setText(runtime.isHostedSignIn() ? "Connecting to hosted-site sign-in…" : "Connecting to Agent…");
-        boolean online = runtime.state.equals("on");
+        boolean online = runtime.state.equals("on") || runtime.state.equals("login");
         if (runtime.session != null && runtime.session != attached) {
             connectionError = "";
             // An existing local document can return without another navigation.
@@ -223,6 +223,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             }
             @Override public GeckoResult<AllowOrDeny> onLoadRequest(GeckoSession s, LoadRequest request) {
                 if (request.uri.equals("about:blank")) return GeckoResult.fromValue(AllowOrDeny.ALLOW);
+                if (runtime.remoteCallback(s, request.uri)) return GeckoResult.fromValue(AllowOrDeny.DENY);
                 try {
                     URI target = URI.create(request.uri), own = URI.create(runtime.url);
                     if ("blob".equals(target.getScheme())) {
@@ -390,6 +391,11 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 action("Allow background running", runtime::retryBatteryPermission);
                 action("Continue with battery restrictions", runtime::deferBatteryPermission);
             }
+            return;
+        }
+        if (!runtime.selected.equals("local")) {
+            action("Retry connection", runtime::turnOn);
+            action("Connect to remote", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class)));
             return;
         }
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); return; }
