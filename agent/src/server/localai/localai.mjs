@@ -51,9 +51,10 @@ function argument(argv, name) {
   if (!indices.length) return null;
   const index = indices[0]; return argv[index] === name ? argv[index + 1] : argv[index].slice(name.length + 1);
 }
-async function allocatePort() {
+async function allocatePort(preferred = 0) {
   const server = net.createServer();
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  try { await new Promise((resolve, reject) => { server.once('error', reject); server.listen(preferred, '127.0.0.1', resolve); }); }
+  catch (error) { if (preferred && error.code === 'EADDRINUSE') return allocatePort(); throw error; }
   const port = server.address().port; await new Promise(resolve => server.close(resolve)); return port;
 }
 async function jsonRequest(url, { key, signal, data } = {}) {
@@ -153,7 +154,8 @@ export class LocalAI {
     const existing = status.services.find(item => item.id === ids[engine]);
     const runtime = config.mode === 'custom' ? config.binary : (await runtimeInfo(engine))?.binary;
     if (!runtime || engine === 'whisper' && !config.model) { if (runtimeRequired) throw Error(`Configure ${engine} in LocalAI first`); return; }
-    const port = config.port || (existing ? Number(existing.target.address.split(':').at(-1)) : await allocatePort());
+    const previousPort = existing ? Number(existing.target.address.split(':').at(-1)) : 0;
+    const port = config.port || (this.services.running.get(ids[engine])?.child ? previousPort : await allocatePort(previousPort));
     const command = await this.command(engine, config, port);
     await this.services.save({ internal: true, revision: status.revision, service: { id: ids[engine], name: engine === 'llama' ? 'llama.cpp' : 'Whisper',
       target: { network: 'tcp', address: '127.0.0.1:' + port }, scheme: 'http', openPath: '/', kind: engine === 'llama' ? 'llama' : 'web',
