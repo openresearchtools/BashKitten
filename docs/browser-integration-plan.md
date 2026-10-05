@@ -39,6 +39,17 @@ repository, extending the runtime-source subset already present, and package
 from that tree with matching source/notices. See the remote tunnel plan for
 platform ownership, manual acceptance and source-delivery details.
 
+Latest display clarification, 5 October: Android's native Agent tab gets a compact
+**Display** panel **only in Local mode**. It checks/downloads compatible Termux:X11,
+shows actual display state and a short scrollable editable XFCE launch command,
+and provides Start/Stop/Open X11. Native UI and local Pi use the same packaged
+`bashkitten-display` launcher and durable script; both can read/update it, and
+Start runs the saved command. Provide software rendering by default and a concise
+local Termux skill for verified device-specific GPU setup, with upstream links.
+This supersedes blanket removal of X11 controls/variants below only for this
+optional feature; keep remote-only setup free of Termux and retain headless Xvfb.
+The remote tunnel plan defines the source/signing, launcher and manual gates.
+
 Additional Tor clarification, 5 October: every network request from a Tor tab,
 including HTTP/HTTPS assets on public domains, redirects, downloads and DNS,
 must use Tor or be blocked, with no direct fallback. Ordinary unenrolled onion
@@ -159,9 +170,11 @@ Read streaming tool identity and arguments from Pi's partial content block and
 final toolCall, retaining one visible tool card when a provider supplies its ID late.
 
 Replace the Android WebView and Linux GTK/WebKit hosts with the browser. Remove
-the Termux-suite distribution/store integration, API/X11 APK requirements,
-X11 variant selection and graphics/display profiles. Keep package maintenance,
-real APT/npm progress, backend controls and Pi stop/kill controls. No application
+the Termux-suite distribution/store integration and mandatory API/X11 APK setup.
+The optional native Local Display panel specified on 5 October replaces the old
+X11 variant/profile UI with compatible download selection and one editable command.
+Keep package maintenance, real APT/npm progress, backend controls and Pi stop/kill
+controls. No application
 is automatically uninstalled, including previously installed suite components.
 
 Keep Waterfox-derived privacy features, private tabs, Tor, ad blocking and normal
@@ -208,6 +221,7 @@ openresearchtools/bashkitten/
       skills/web-search/SKILL.md             # on-demand DDGS/read instructions
       skills/browser-android/SKILL.md        # Termux/mobile browser controls
       skills/browser-linux/SKILL.md          # desktop browser controls
+      skills/termux-display/SKILL.md         # local Android XFCE/launcher/GPU help
     search/                                 # adapted Buzzard Search Python CLI
       src/, third_party/                    # selected sources and provenance
       pyproject.toml, runtime lock files
@@ -456,6 +470,8 @@ Android tabs screen, use the same logo at the far left of the top row, before
 Normal, Private and Tor. It closes the tray and restores the existing
 protected Agent view, preserving its chat and draft without creating a normal tab.
 In Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/power/menu bar.
+Android Local also has the compact native Display affordance specified in the
+remote tunnel plan; it disappears in Remote mode and uses the private Termux bridge.
 Use one small power control showing On, Starting, Stopping or Off. Its On action
 is **Turn off**; its Off action is **Turn on**. Do not add a separate wake-lock
 toolbar or crowd the mobile bar with service switches.
@@ -645,7 +661,8 @@ and wake locks do not disable that system restriction; the app cannot grant it.
    `x11-repo` through `pkg`, and runs
    `pkg install bashkitten`. The `.deb` declares all required Node, Python,
    Git/archive, search/native-library and desktop dependencies, including XFCE,
-   LibreOffice and Xvfb. Keep no duplicate dependency installer inside the APK.
+   LibreOffice, Xvfb and the Termux:X11 companion for the optional visible display.
+   Keep no duplicate dependency installer inside the APK.
    The upgrade is required before dependency installation: a fresh APK bootstrap
    may contain an older C++ runtime than the rolling repository's native packages.
    The same command enables external apps, reloads settings and returns through
@@ -716,14 +733,19 @@ through the permission-checked Termux bridge without repeating a completed packa
 setup. This also covers Termux being reinstalled before the browser is updated.
 
 Keep Node, Pi, Python, git, gh, archive utilities, the existing X11 repository and
-useful desktop packages such as LibreOffice. Add the native `xorg-server-xvfb`
-package for headless display and `xdotool` where needed. No Termux:X11 APK,
-Termux:API APK, proot, root or Android shared-storage permission is required.
-Do not remove already installed desktop packages simply because their old
-control panel disappears. The short managed Pi environment note explains
-Termux/Bionic, `pkg`, skill locations and how to start an owned Xvfb display
-with `-nolisten tcp`, use `DISPLAY`, and stop its own display afterwards.
-Do not describe the Termux:X11 APK-dependent server as headless Xvfb.
+useful desktop packages such as LibreOffice. Retain native `xorg-server-xvfb`
+for headless work and `xdotool` where needed. Add `termux-x11-nightly` through
+the same package dependency path for optional visible XFCE. Only that visible
+Display feature needs the separate compatible X11 APK; chat, headless work and
+remote connections do not. Termux:API APK, proot, root and Android shared-storage
+permission remain unnecessary. Do not remove already installed desktop packages.
+The short managed Pi environment note explains Termux/Bionic, `pkg`, skills and
+the stable `bashkitten-display` launcher/saved-script paths, as defined in the
+remote tunnel plan. User and Pi command edits go to the same durable file that
+native Start runs; status supplies the real display environment for GUI tools.
+Explain owned headless Xvfb separately, with `-nolisten tcp`, `DISPLAY` and cleanup;
+do not tell agents to start a hidden Xvfb when the user wants the visible desktop,
+or describe the APK-dependent Termux:X11 server as Xvfb.
 
 Keep package controls in the app's setup/settings area with an expandable
 installed-packages list, explicit **Check for updates / Update packages**,
@@ -1303,8 +1325,9 @@ OS package manager, the Termux APK, GPU drivers or model weights into these file
 Register the bundled integration using Pi's supported package mechanism for the
 selected runtime without overwriting an existing independent Pi installation.
 Linux packages include the desktop browser skill; the Termux package includes
-the Android browser skill. Both include the search skill and their own compiled/
-packaged search runtime, with platform-specific capabilities documented accurately.
+the Android browser skill and local `termux-display` skill/launcher. Both include
+the search skill and their own compiled/packaged search runtime, with
+platform-specific capabilities documented accurately.
 The same updater updates the bundled extension, skills and managed search
 payload with the product.
 

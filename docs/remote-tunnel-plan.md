@@ -13,6 +13,14 @@ Local** beside Local/saved remotes. This supersedes the earlier Linux-only
 publishing decision. Include the complete pinned pillama source in this product
 repository, extending the production-source subset already vendored.
 
+Additional Android requirement, 5 October: add a compact native **Display** button
+and panel **only while Local is selected**, with Termux:X11 installation,
+an editable XFCE launch command, real display status and Start/Stop/Open X11.
+The panel and local Pi use one packaged Termux launcher and the same saved script.
+Provide a concise Pi skill for software rendering and verified device-specific
+GPU configuration. This supersedes the older blanket removal of X11 controls;
+X11 remains optional and remote-only operation still needs no Termux.
+
 The deliverable is working Linux amd64/arm64 packages, the Android APK and matching
 Termux package, source and notices, after builds and manual acceptance. Writing
 this plan, building a helper or dispatching CI does not complete that deliverable.
@@ -25,6 +33,7 @@ this plan, building a helper or dispatching CI does not complete that deliverabl
 | Agent selector | Local, named remotes and Connect to remote remain reachable in every setup/connection state |
 | Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current BashKitten logo, retaining accessible naming, touch target and behavior |
 | Unconfigured Local | Show the short-command setup and **Back to remote**, retaining the previous remote, login and draft |
+| Android Local Display | One compact native panel: compatible X11 download if missing, current editable command, actual status, Start/Stop and Open X11; absent in Remote mode |
 | Share Local | Browser-owned entry beside Local/remotes on Linux/Android; choose username/password, enroll with authenticator app/QR, verify TOTP, then show the downloadable connection QR |
 | Remote file-manager permission | Host setup has **Allow remote file manager**, off by default; the server gates Files/Changes browsing, editing, diffs and manager transfers while chat attachments/image previews and Pi tools continue working |
 | Connection QR | One image contains all client connection material, encrypted with that same Authelia password; display, click to download, camera scan and image upload work |
@@ -54,6 +63,162 @@ name **Agent** and its existing action: restore the protected Agent view without
 losing its chat/draft or creating another tab. Keep it available after opening
 new tabs and while Local setup or Remote connections are displayed. This is a
 required mobile change; desktop logo treatment can follow its native layout.
+
+### Android Local Display and shared Termux launcher
+
+Add **Display** in the native Android Agent tab only when **Local** is selected.
+It opens a small native sheet/dialog, not another web settings page. Hide it in
+Remote mode, dismiss it on a switch to Remote, and recheck the selection before
+dispatching a native action. No remote HTTP/RPC route, tunnel service or remote
+file-manager capability grants control of this phone's display. A remotely
+hosted Pi does not receive this phone-local skill/launcher through its browser
+connection. Stock local Termux shell authority remains unchanged.
+Keep the launch script/controller state outside remote file-manager writes too,
+including symlink/alias paths; enabling Files must not become a remote command
+editor. This does not remove Pi's separately acknowledged same-account shell access.
+
+Keep the panel short: “Run desktop apps in an XFCE desktop using Termux:X11.”
+Show one status line, the current launch command in a rounded scrollable code
+block with three or four visible lines and Copy/Edit, and the relevant actions:
+
+- Missing Termux: reuse Local setup, with Back; do not pretend X11 alone is enough.
+- Missing X11: **Download X11**, then recheck installation on return.
+- Ready/stopped: **Start**. Starting/stopping: actual progress, without duplicates.
+- Running: **Stop** and **Open X11**. Opening its Android activity does not start
+  a second desktop; dismissing that activity does not claim the server stopped.
+- Edit: multiline command with **Save / Cancel** and secondary **Restore default**.
+  Save does not execute it or stop a running desktop; show “Saved for next start”
+  if it differs from the running command. Errors stay beside the action, with
+  expandable actual output rather than a terminal/log wall.
+
+Use native theme, touch targets and keyboard insets. Refresh actual state on
+open/resume and action completion; no hidden polling. Closing the sheet leaves
+the display running. Changing to Remote only hides these controls, without
+killing local GUI work; return to Local to manage it. Whole-Agent Turn off stops
+its owned display along with its retained Local group. Do not autostart XFCE on
+every chat/app open merely because X11 is installed.
+
+#### Compatible X11 installation
+
+Inspect `com.termux.x11` with normal PackageManager visibility and the installed
+Termux signer/source. Use the existing browser download/system installer flow.
+Prefer the same trusted distribution where it actually publishes a compatible
+X11 APK. Installer identity alone is not proof of a signing match. Preserve
+installed apps/data and report an incompatible update without uninstalling them.
+
+Checked upstream on 5 October at
+[`0e1ebb4c180f4e8e7a14a80f7cd0db8301791b6d`](https://github.com/termux/termux-x11/tree/0e1ebb4c180f4e8e7a14a80f7cd0db8301791b6d):
+the [official nightly](https://github.com/termux/termux-x11/releases/tag/nightly)
+publishes standalone `termux-x11-universal-debug.apk` and
+`termux-x11-universal-sharedUid-debug.apk`. The latter requires the GitHub Termux
+signer; do not offer it for F-Droid/other signers. Prefer it for compatible GitHub
+Termux as requested. For F-Droid, use a verified matching distribution if one is
+available; otherwise offer the official standalone APK with a brief explanation,
+not a fabricated F-Droid link or a forced Termux replacement. Recheck current
+upstream assets/compatibility at implementation. The two variants currently have
+different Android target SDKs; verify installation on the supported stock Android
+version. An OS rejection must remain visible and allow a compatible standalone
+option, never an ADB/root workaround. Shared UID also shares Termux's authority;
+it is not a separate per-agent permission.
+
+The companion `termux-x11-nightly` package and XFCE run in Termux. Add the former
+to the native Termux package dependency/bootstrap path, retain the existing
+`x11-repo`, `xfce4` and D-Bus dependencies, and ensure Mesa's software renderer
+is available through its current native packages. Reuse package jobs/locks and the initial
+APT upgrade; no duplicate installer or extra command payload in the APK. The
+external X11 APK is optional for visible display, not required for Local chat,
+headless Xvfb or remote connections. Do not restore the old suite/store UI.
+
+#### One command used by the user, native UI and Pi
+
+Package **`$PREFIX/bin/bashkitten-display`**, on ordinary Termux `PATH`, as a thin
+entry to the existing private controller/process guard. Store its editable script
+at **`$BASHKITTEN_DATA_DIR/display/launch.sh`**, resolving the existing default to
+`~/.local/share/bashkitten-pi/display/launch.sh`. Expose the actual launcher/script
+paths in the Termux Pi environment note and launcher status; resolve them centrally
+so a custom data directory cannot leave the panel and agent editing different files.
+
+Planned stable command contract, to document with exact examples in the skill:
+
+```sh
+bashkitten-display command                 # read the complete saved launch script
+bashkitten-display command --path          # resolve its actual absolute path
+bashkitten-display command --set < new.sh   # validate and save from stdin
+bashkitten-display command --reset         # restore the packaged default
+bashkitten-display status                  # real state, command path and display environment
+bashkitten-display start                   # execute the saved script, idempotently
+bashkitten-display stop                    # stop this owned display session
+```
+
+Native Edit/Save and Pi call this same implementation through the private local
+bridge/CLI. Keep one user-owned file, create the default only when absent and
+preserve edits on package upgrades. Validate shell syntax without executing it;
+save atomically with private permissions and avoid overwriting a concurrent edit.
+Start rereads the saved file, so a valid direct user/agent edit also takes effect;
+do not cache a second command in Android preferences, Pi prompts or `.bashrc`.
+Keep a previous working command for an explicit restore after a failed change.
+This is an intentional Termux shell script: run it with Termux's real shell,
+not Android `/bin/sh`, command text in an intent, or HTML-generated shell code.
+
+Use the upstream XFCE launch form as the default, adding session-scoped software
+rendering and disabling X TCP listening. Illustrative command, to validate with
+the packaged versions before activation:
+
+```sh
+termux-x11 :1 -nolisten tcp -xstartup \
+  'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
+```
+
+The software override is BashKitten's choice using
+[Mesa's documented variable](https://docs.mesa3d.org/envvars.html);
+it is not a claim that upstream prescribes that exact combined command or that
+Android's own screen compositor runs on the CPU. Check display-number/socket
+conflicts before starting. Never remove a live X lock or silently reuse another
+server. Keep current-command/display/readiness distinct from saved-next-command.
+Report an independently running Termux:X11/Xvfb server as such; do not claim it
+is this managed XFCE session or stop it with a broad `pkill`.
+
+Track the exact owned X server, XFCE session and optional GPU helper processes,
+with real startup errors and crash reconciliation. An X11 failure must not stop
+Pi/chat or pretend the entire Agent died. Start succeeds only when the requested
+display/session is usable; Stop ends only owned GUI processes and reports a
+failure truthfully. Return the actual `DISPLAY` and required session environment
+through status, so Pi can launch GUI applications on this same display without
+restarting Pi or changing global shell settings. Keep separate owned Xvfb for
+tasks that explicitly need no visible desktop; update the current environment
+note that otherwise tells every agent to start Xvfb unconditionally.
+
+#### Pi skill: display setup and device-specific rendering
+
+Add one concise, self-contained **`agent/pi/skills/termux-display/SKILL.md`**, using
+stock Pi discovery for the local Termux runtime, including ordinary terminal Pi.
+Do not load it on every turn or fragment it into many reference files. It must
+explain XFCE, the stable launcher/read/write/status contract, launching a GUI app
+on its reported display, owned cleanup and restoring the default. An agent can
+replace the same saved command when helping the user configure their display;
+it must not edit the installed skill or generate a competing startup mechanism.
+
+For GPU help, inspect the actual device, Android version/ABI, GPU/driver and native
+Termux packages, then consult current primary sources for that combination.
+Consider supported Turnip/Zink or VirGL paths only where the installed hardware,
+drivers and packages support them; do not infer acceleration from a chipset name
+or an emulator result. Explain the proposed change briefly, preserve the working
+software command, verify the actual renderer plus a visible GUI application,
+and save the working replacement through the same launcher. Keep software as the
+usable choice if GPU support is missing or unproven. Do not install arbitrary
+driver binaries, root/proot, change developer settings or apply black-screen/
+colour workaround flags to every device. Record the actual skill token count.
+
+Include these primary-source links and explain what each is for: the
+[Termux:X11 setup/usage guide](https://github.com/termux/termux-x11#setup-instructions)
+and [nightly APKs](https://github.com/termux/termux-x11/releases/tag/nightly),
+[Termux package recipes](https://github.com/termux/termux-packages),
+[Mesa/native drivers](https://github.com/termux/termux-packages/tree/master/packages/mesa),
+[VirGL Android](https://github.com/termux/termux-packages/tree/master/packages/virglrenderer-android)
+and [Mesa rendering variables](https://docs.mesa3d.org/envvars.html).
+Recipe presence is not proof that a GPU path works on the user's device. Keep
+download/signing and renderer advice current at implementation, with normal
+upstream attribution and source/notices for any code actually redistributed.
 
 ## 2. Sources and verified starting points
 
@@ -596,6 +761,8 @@ during the current runtime.
 | Existing `agent/src/web` settings and remote HTTP/RPC management | Remove host publishing/account/QR/identity/permission/service-definition controls and routes; retain chat and permitted file-manager operations |
 | `agent/src/server/http/server.mjs`, shared `files/` operations/jobs and web Files/Changes UI | Host-owned remote file-manager capability, complete route/transport enforcement, editor parity and live revocation without a privileged fallback |
 | Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Native Share Local through private Termux bridge, remote-first onboarding/back, image import, service actions/mappings, foreground ownership and logo-based navigation |
+| Android native Agent panel, package visibility and `TermuxConnection.java` | Local-only Display sheet, compatible X11 detection/download, saved-command editing and private launcher actions; dismiss/deny actions after switching to Remote |
+| Termux platform/controller, `agent/packaging/build.py`, Pi integration and environment note | Package `bashkitten-display`, one durable editable launch script, owned display lifecycle/status, X11 companion dependency and local `termux-display` skill; retain headless Xvfb |
 | Android `TorManager.java`, `TorGateway.java`, `SecretStore.java` | Reuse native Tor, scoped trust and protected credentials; add native tunnel client without Termux |
 | Desktop `components/{agent,tor}` | Native Share Local over protected local IPC, equivalent connection UI, protected Agent transport/storage; replace `LlamaRelay` with common native core |
 | Android/desktop native tab and network routing | Private Tor context before onion navigation; Tor-only subresources, DNS, redirects and downloads; block unsupported direct transports; keep native mapped-service routing separately scoped |
@@ -652,6 +819,7 @@ source. This does not vendor the user's models or unrelated external OS packages
 | 4. Services/localhost/files | Host command/config/startup UI, real remote actions, automatic/chosen ports, concurrent remotes and Local Pi using an enabled remote mapping; host-controlled file-manager permission and complete Files/Changes/edit/transfer enforcement |
 | 5. Real applications | Multi-model llama router, bearer/no-bearer, byte-offset replay, pillama status, web application uploads/downloads/cookies/WebSockets; strict Tor-tab routing and ordinary private onion navigation |
 | 6. Reset/lifetime | Complete and interrupted identity rotation; old exports/sessions fail; tray/hide/reopen/autostart/Quit and owned-group cleanup |
+| 6a. Android Local Display | Compatible X11 installer, visible software-rendered XFCE, one launcher/script shared by native panel and Pi, truthful owned lifecycle and optional device-verified GPU skill |
 | 7. Delivery | Existing-data migration, four complete artifacts, offline notices/source, manual platform acceptance, release/APT publication with testing warning |
 
 Work directly on main in focused commits and push finished slices. Record actual
@@ -710,6 +878,10 @@ except where an explicit restart case requires otherwise.
 | Desktop | Supported X11/Wayland tray and icon; serving while hidden, same-window reopen, actual login autostart and disabled-autostart check, missing-tray fallback, complete Quit cleanup |
 | Android UI/lifetime | Screen-off/background runtime, reopen/reconnect, rotation/keyboard for every password/TOTP/port field; input and controls remain visible |
 | Mobile Agent logo | Current logo replaces navigation text beside the address bar and in the tabs screen; accessible Agent name, full touch target, light/dark/selected states; new tabs and setup/remote screens retain access and existing chat/draft |
+| Display installation/Local boundary | GitHub Termux uses compatible shared-UID X11; F-Droid/other signers use a verified compatible standalone/source option; normal installer acceptance/cancellation/OS rejection and return detection on supported stock Android; Remote mode has no Display button, dismisses an open sheet and cannot dispatch its actions |
+| Display operation/layout | Start a real XFCE desktop, Open X11, launch and interact with a GUI app, Stop, repeat Start without duplicates; small light/dark sheet and keyboard-visible editor; activity closure, background/resume, actual crash/status, Agent Off cleanup, independent Xvfb/X11 and occupied display numbers handled correctly |
+| Shared display command/skill | User edit, Pi edit and direct saved-script edit all become the next actual launch and appear in the panel; no execution on Save, syntax errors/concurrent changes visible, custom data path and package upgrade preserve the same command; Pi launches a GUI app using reported environment and can restore software default |
+| Display GPU coverage | Skill reads current primary sources for actual device/driver, verifies renderer and visible app before reporting acceleration, owns helper cleanup and restores working software command on failure; emulator-only coverage never establishes physical-device GPU support |
 | Upgrade/licenses | Signed APK/APT updates retain state; accurate full notices/source available offline before backend/login on Android/Linux |
 | Pillama source/package | Complete pinned upstream tree present in this repo/source archive; installed extension comes from it, MIT/provenance retained, actual Pi RPC telemetry works without fetching another product repository |
 

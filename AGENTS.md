@@ -37,7 +37,16 @@ controls belong in browser-owned **Share Local** beside Local/remotes; remove
 their web UI and remote HTTP/RPC management paths. Use the native private local
 controller/Termux bridge. Preserve permitted remote service-ID start/stop/reload.
 Keep complete pinned pillama source/build metadata in this repository and build
-its shipped runtime from that tree. These are planned requirements,
+its shipped runtime from that tree. Android's native Agent tab also gets an
+optional compact **Display** panel only in Local mode. Use one Termux
+`bashkitten-display` launcher and durable editable script shared by native UI,
+user and local Pi; preserve edits across upgrades. Plan compatible X11 downloads
+(shared UID only for matching GitHub Termux), software-rendered XFCE by default,
+actual owned display status/Start/Stop/Open X11 and a concise local Termux Pi skill
+for verified device-specific GPU help. Keep headless Xvfb and no-Termux remote
+operation; this supersedes the earlier blanket removal of X11 controls only for
+this optional feature. See the remote tunnel plan for the paths and manual gates.
+These are planned requirements,
 not a claim that the new transport or tray is already implemented. Tor tabs must
 route all network requests, including public HTTP/HTTPS assets and DNS, through
 Tor or block them. Ordinary unenrolled onion URLs enter private Tor before any
