@@ -28,9 +28,10 @@ workers/jobs. Share Local has only a **Share llama.cpp** checkbox for that manag
 service. Plan a separate `bashkitten-localai` build/distribution repository for
 mainstream llama.cpp and whisper.cpp Linux amd64/arm64 CUDA/Vulkan artifacts,
 automatic managed updates, custom-binary opt-out and automatic Pi configuration.
-Whisper enables explicit microphone recording, Stop, transcription on the
-configured host and normal text submission, with no retained audio or separate
-transcript/log store.
+Whisper uses one microphone button: click to record (red), click again to stop
+and transcribe. **Automatically send voice messages** lives in the existing native
+Whisper settings, enabled by default; Off puts text in the composer, On sends it.
+No separate Stop/Cancel buttons, retained audio or separate transcript/log store.
 
 Latest usability clarification, 5 October: Display includes a short copyable
 prompt naming `termux-display`. LocalAI's **Import this configuration into the
@@ -78,7 +79,7 @@ do not replace that final acceptance. Keep the minimal-code/no-fallback rules.
 | Android Local Display | One compact native panel: compatible X11 download if missing, current editable command, actual status, Start/Stop and Open X11; absent in Remote mode |
 | Desktop LocalAI | Native Local Agent button; llama.cpp binary/command, router INI and shared model downloader, plus optional Whisper model/device/command setup |
 | Share llama.cpp | One native Share Local checkbox exposes the same LocalAI service through the existing authenticated tunnel; no duplicate launcher/configuration |
-| Dictation | When the selected Agent has Whisper configured, microphone beside Send records until Stop, transcribes on that host, then submits text to the chat; no saved audio or separate transcript history |
+| Dictation | When the selected Agent has Whisper configured, microphone beside Send turns red while recording; another click transcribes on that host, then sends or leaves a draft according to native Whisper settings; no saved audio or separate transcript history |
 | Share Local | Browser-owned entry beside Local/remotes on Linux/Android; choose username/password, enroll with authenticator app/QR, verify TOTP, then show the downloadable connection QR |
 | Remote file-manager permission | Host setup has **Allow remote file manager**, off by default; the server gates Files/Changes browsing, editing, diffs and manager transfers while chat attachments/image previews and Pi tools continue working |
 | Connection QR | One image contains all client connection material, encrypted with that same Authelia password; display, click to download, camera scan and image upload work |
@@ -926,12 +927,14 @@ invoke inference, not edit commands/models, enable hosting or use Whisper's mode
 administration endpoints. Do not publish an unprotected Whisper server port.
 
 An explicit user click obtains ordinary microphone permission and begins capture,
-with Recording, elapsed time, **Stop** and **Cancel**. Record until the user stops;
-no always-listening or silence-triggered send. Stop releases microphone tracks,
-then transcribes on the identified host. On success, send the transcript as a
-normal user text message through the existing Pi queue exactly once. Preserve
-existing drafts and attachments rather than sending unrelated composer contents.
-Cancel, empty/silent audio, errors or a changed chat/remote must not submit text
+with a red microphone, Recording and elapsed time. Clicking the same microphone
+again releases its tracks and transcribes on the identified host. Do not add
+separate Stop/Cancel buttons or silence-triggered sending. The existing native
+Whisper settings contain **Automatically send voice messages**, enabled by default.
+Read its saved choice for each recording: On sends the transcript as normal text
+through the existing Pi queue once; Off appends it to the composer for review.
+Preserve existing drafts and attachments; automatic sending sends only the transcript.
+Empty/silent audio, errors or a changed chat/remote must not submit text
 to an unintended conversation. Bind a recording to its originating chat and
 cancel on a destination change; retain a failed submission only as that chat's
 normal recoverable text draft, with no automatic retry that could duplicate it.
@@ -1050,7 +1053,7 @@ during the current runtime.
 | `agent/src/server/control.mjs`, runtime ownership/guard | Remote reset/lifecycle, owned service units, safe Quit and reconciliation |
 | `agent/src/server/platform/linux/{llama,llama-provider}.mjs` | Command/config service ownership; remove duplicate HTTP token-injecting relay behavior |
 | Desktop native Agent controls, private controller and `agent/src/server/models/` | LocalAI page, runtime/custom binary selection, router INI/pickers and relocated downloader; preserve workers/jobs and automatically configure the owned Pi provider |
-| `agent/src/web` composer, protected browser capture, authenticated inference and owned Whisper worker | User-triggered recording, Stop/Cancel, on-demand transcription on the configured Agent host and exactly-once normal text submission; no disk staging, content logs or telemetry |
+| `agent/src/web` composer, protected browser capture, authenticated inference and owned Whisper worker | Single-button recording/stop, on-demand transcription on the configured Agent host and saved Whisper auto-send/draft choice; no disk staging, content logs or telemetry |
 | New `openresearchtools/bashkitten-localai` workflows | Mainstream llama.cpp and whisper.cpp amd64/arm64 CUDA/Vulkan builds, upstream tracking, independent engine releases, downloadable artifacts, checksums/source/notices; no TurboQuant |
 | Existing `agent/src/web` settings and remote HTTP/RPC management | Remove host publishing/account/QR/identity/permission/service-definition controls and routes; retain chat and permitted file-manager operations |
 | `agent/src/server/http/server.mjs`, shared `files/` operations/jobs and web Files/Changes UI | Host-owned remote file-manager capability, complete route/transport enforcement, editor parity and live revocation without a privileged fallback |
@@ -1184,7 +1187,7 @@ except where an explicit restart case requires otherwise.
 | LocalAI sharing/Pi | One Share llama.cpp checkbox exposes the same service; Off closes remote access while Local still runs; two router models selected in real Pi with automatic actual endpoint/IDs, no manual provider entry; remote mapping remains usable from Local Termux Pi and custom provider settings are preserved |
 | Pi import choice | New LocalAI configuration defaults checked; unchecked Save leaves Pi untouched, checked Save imports once without changing selected/default model; remote Add to Pi selects import but writes only on Save using this client's actual localhost endpoint; pending/error/conflict status is truthful, opt-out stops later writes, no-Termux remote mode remains usable and multiple/custom providers survive |
 | Whisper model/runtime | Same downloader retrieves a compatible Whisper model, existing model picker works, actual on-demand load/inference on CPU and available GPU, truthful failures, cancellation and owned worker/model cleanup |
-| Microphone privacy/flow | Real spoken recording from local desktop and authenticated Android/Linux remote clients until Stop; Cancel, permission denial, silence, startup/transcription/send failure and chat switch; identified transcription host, preserved draft/attachments, exactly one text turn, no third-party speech service; manually inspect client/host filesystem, browser storage and process output after success/error/cancel/restart for no recording, separate transcript or content log remnants |
+| Microphone privacy/flow | Real spoken recording from local desktop and authenticated Android/Linux remote clients until the second microphone click; Whisper auto-send on/off, draft preservation, permission denial, silence, startup/transcription/send failure and chat switch; identified transcription host, preserved draft/attachments, exactly one text turn, no third-party speech service; manually inspect client/host filesystem, browser storage and process output after success/error/cancel/restart for no recording, separate transcript or content log remnants |
 | Upgrade/licenses | Signed APK/APT updates retain state; accurate full notices/source available offline before backend/login on Android/Linux |
 | Pillama source/package | Complete pinned upstream tree present in this repo/source archive; installed extension comes from it, MIT/provenance retained, actual Pi RPC telemetry works without fetching another product repository |
 
@@ -1830,3 +1833,17 @@ Agent tunnel's mandatory HTTPS/mTLS are unchanged.
 Kotlin syntax, Android XML, desktop Fluent and whitespace checks passed. Full
 native builds and manual HTTP/Tor/loopback/settings acceptance remain required;
 no scripted product test or installed runtime change was made for this slice.
+
+### 5 October simplified dictation controls (manual checks pending)
+
+The composer now uses the same visible circular microphone to start and stop,
+with red/white recording state in both themes. Separate Stop/Cancel controls are
+removed. Native LocalAI → Whisper has the saved, default-on **Automatically send
+voice messages** checkbox; each recording reads the selected host's current choice.
+Off appends the transcript to the existing draft; On preserves the original
+single text submission. Changing this preference does not restart Whisper.
+Existing destination-change cancellation and in-memory audio handling remain.
+Manual checks must use Whisper tiny and Qwen 0.6B on this machine as requested.
+
+JavaScript syntax and whitespace checks passed; installed desktop/Android manual
+checks of the new controls and both saved choices remain pending.

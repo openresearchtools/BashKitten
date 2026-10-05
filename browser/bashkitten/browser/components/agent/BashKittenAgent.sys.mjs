@@ -646,7 +646,7 @@ class AgentView {
       if (!current() || !request.secure || request.requestTypes?.length !== 1 || request.requestTypes[0] !== "Microphone" ||
           !device || request.videoInputDevices?.length || request.audioOutputDevices?.length || request.sharingScreen || request.sharingAudio) return;
       const name = ownedViews.get(browser).connection.name || new URL(request.documentURI).hostname;
-      if (!Services.prompt.confirm(this.win, "Use microphone?", `Allow Agent (${name}) to record this microphone message? Recording stops when you select Stop or Cancel.`)) return;
+      if (!Services.prompt.confirm(this.win, "Use microphone?", `Allow Agent (${name}) to record this microphone message? Click the microphone again to stop recording.`)) return;
       if (!current()) return;
       if (!await actor.checkOSPermission(false, true, false)) return;
       if (!current()) return;

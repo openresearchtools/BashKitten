@@ -70,8 +70,10 @@ Remote inference mappings offer **Add to Pi** and the same checkbox, applied on
 **Save changes** to this client's local Pi. Preserve custom providers and current
 model selections; opt-out prevents later managed configuration writes.
 Add optional on-demand host-side Whisper and
-a chat microphone: explicit Record/Stop/Cancel, transcription then ordinary text
-send, without audio persistence, separate transcripts, content logs or telemetry.
+a chat microphone: click once to record (red), again to stop and transcribe.
+**Automatically send voice messages** belongs in the existing native Whisper
+settings and defaults on; Off leaves text in the composer, On sends it. No extra
+Stop/Cancel buttons, audio persistence, separate transcripts, content logs or telemetry.
 This supersedes APT-only llama installation and shared web model-management UI
 below. The remote tunnel plan specifies privacy, source/build and manual gates.
 
@@ -1169,7 +1171,8 @@ well as GGUF; the current GGUF-only search filter is insufficient. LocalAI offer
 Whisper model, CPU/GPU and effective launch command, with on-demand loading and
 owned shutdown. When the selected Agent advertises configured Whisper, local or
 authenticated remote clients show a small microphone beside Send: capture until
-Stop, transcribe on that identified host and submit exactly once as normal text.
+a second microphone click, transcribe on that identified host and either submit
+once or leave a draft according to the saved native Whisper auto-send option.
 Audio and intermediate text stay in memory, outside attachment staging/durable
 jobs; disable disk conversion, content logs, telemetry and output dumps. Only normal
 chat text/drafts/history persist. Preserve existing drafts and cancellation on

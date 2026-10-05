@@ -66,8 +66,11 @@ default it on for new LocalAI configurations. Remote mappings have Add to Pi plu
 the import checkbox, applied on Save changes to local Pi using the actual mapped
 endpoint. Preserve custom providers/defaults/current chat model and honor opt-out
 on later port/model changes. Optional host-side Whisper dictation
-records on user action until Stop, then transcribes and sends ordinary chat text;
-authenticated Android/Linux clients can use their selected host's capability.
+uses one microphone button: click to record (red), click again to stop and transcribe.
+The existing native LocalAI Whisper settings contain **Automatically send voice
+messages**, enabled by default; Off puts the transcript in the composer, On sends
+ordinary chat text. No separate Stop/Cancel buttons or general-settings toggle.
+Authenticated Android/Linux clients use their selected host's saved choice.
 No retained audio, separate transcripts, content logs or telemetry; keep audio
 out of disk staging and durable jobs. The remote plan defines the complete gates.
 These are planned requirements,
