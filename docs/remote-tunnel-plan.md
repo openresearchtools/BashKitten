@@ -1905,3 +1905,16 @@ buffers remain outside the snapshot; no server queue/store or new public API was
 added. JavaScript/inline UI syntax, both platform packaging declarations and
 whitespace checks passed. Rebuilt desktop/Android manual text/file restoration,
 consumed-draft, port-change and removal checks remain required.
+
+### 5 October rejected sign-in callback feedback
+
+Installed desktop `87911d985d` restored the real Authelia session and reached
+consent, but Accept left the protected view white and the native connection in
+`login`. The installed callback module matches the current source. Source review
+found that its protected-document validation could cancel a submitted callback
+without reporting why. Android and desktop now report those rejection categories
+through the existing native failure path, retaining every acceptance check and
+without logging credentials or response bodies. Stale, non-pending callbacks
+remain blocked. This repairs silent failure handling; the actual runtime
+rejection and successful end-to-end handoff remain unproven. JavaScript syntax,
+Java parse-only and whitespace checks passed; rebuilt manual acceptance is next.

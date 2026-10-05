@@ -361,7 +361,7 @@ public final class AgentRuntime {
         final GeckoSession currentSession = next;
         BashKittenController.setHostDelegate(next, new BashKittenController.HostDelegate() {
             @Override public void call(String command, String args, Consumer<String> reply) { hostCall(currentSession, command, args, reply); }
-            @Override public void oauthCallback(String address, String form) { completeRemoteLogin(currentSession, address, form); }
+            @Override public void oauthCallback(String address, String form, String error) { completeRemoteLogin(currentSession, address, form, error); }
         });
         JSONObject params = new JSONObject().put("url", endpoint).put("identity", identity).put("tor", tor).put("port", port)
             .put("proxySecret", remote == null ? app.tor.proxySecret() : remote.route.secret)
@@ -705,11 +705,11 @@ public final class AgentRuntime {
                 && issuer.getPort() == -1 && issuer.getRawUserInfo() == null;
         } catch (Exception error) { return false; }
     }
-    private void completeRemoteLogin(GeckoSession source, String address, String form) {
+    private void completeRemoteLogin(GeckoSession source, String address, String form, String error) {
         RemoteAgentConnection connection = remoteConnections.get(selected);
         if (connection == null || !selectedRemote(connection) || source != session || !state.equals("login") ||
             !connection.awaitingCallback || !OAUTH_CALLBACK.equals(address)) return;
-        if (form == null) { remoteFailed(connection, "The remote sign-in response could not be read."); return; }
+        if (form == null || error != null) { remoteFailed(connection, error == null ? "The remote sign-in response could not be read." : error); return; }
         // The native OAuth flow validates the original form's issuer/state and PKCE.
         busy = true; state = "starting"; changed();
         connection.complete(address, form);

@@ -243,13 +243,22 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     const top = this.browser.browsingContext;
     const source = info.triggeringPrincipal;
     const current = top.currentWindowGlobal?.documentPrincipal;
-    if (this.destroyed || !this.agentLogin || channel.URI.spec !== OAUTH_CALLBACK ||
-        info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT ||
-        info.browsingContext !== top || source?.isSystemPrincipal || current?.isSystemPrincipal ||
-        source?.originNoSuffix !== this.agentOrigin || current?.originNoSuffix !== this.agentOrigin ||
-        source?.originAttributes.geckoViewSessionContextId !== this.context ||
-        current?.originAttributes.geckoViewSessionContextId !== this.context) return;
+    if (this.destroyed || !this.agentLogin) return;
+    const error = channel.URI.spec !== OAUTH_CALLBACK ? "Sign-in response used a different callback address."
+      : info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT ? "Sign-in response is not a top-level document."
+      : !info.browsingContext ? "Sign-in response has no browsing context."
+      : info.browsingContext !== top ? "Sign-in response does not belong to the selected Agent view."
+      : !source || source.isSystemPrincipal ? "Sign-in response has no verified source document."
+      : source.originNoSuffix !== this.agentOrigin ? "Sign-in response came from a different server."
+      : source.originAttributes.geckoViewSessionContextId !== this.context ? "Sign-in response used a different protected connection."
+      : !current || current.isSystemPrincipal ? "Sign-in response has no current server document."
+      : current.originNoSuffix !== this.agentOrigin ? "The server document changed before sign-in completed."
+      : current.originAttributes.geckoViewSessionContextId !== this.context ? "The protected document connection changed before sign-in completed." : null;
     this.agentLogin = false;
+    if (error) {
+      this.eventDispatcher.sendRequest("BashKitten:OAuthCallback", { uri: OAUTH_CALLBACK, form: null, error });
+      return;
+    }
     let form = null;
     try {
       if (channel.requestMethod !== "POST" ||

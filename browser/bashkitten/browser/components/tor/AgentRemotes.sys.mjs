@@ -533,18 +533,24 @@ class AgentRemoteStore {
     if (topic === "http-on-opening-request") {
       if (channel.URI.scheme !== "http" || channel.URI.host !== "127.0.0.1" || !channel.URI.pathQueryRef.startsWith("/oauth/callback")) return;
       const entry = this.entries?.get(this.activeId), owner = this.clients.get(this.activeId);
+      let rejection;
       try {
         if (entry?.userContextId !== context || owner?.state !== "login") return;
         const info = channel.loadInfo, browsing = info.browsingContext;
         const browser = browsing?.embedderElement, host = browser?.ownerGlobal?.BashKittenAgent;
         const principal = info.triggeringPrincipal;
         const current = browsing?.currentWindowGlobal?.documentPrincipal;
-        if (info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT || !browsing || browsing !== browsing.top ||
-            host?.activeBrowser !== browser || host.off || host.selection !== entry.id ||
-            browser.getAttribute("bashkitten-protected") !== "true" || !principal?.isContentPrincipal ||
-            principal.originNoSuffix !== new URL(entry.url).origin || principal.originAttributes.userContextId !== context ||
-            !current?.isContentPrincipal || current.originNoSuffix !== principal.originNoSuffix ||
-            current.originAttributes.userContextId !== context) return;
+        rejection = !browsing ? "Sign-in response has no browsing context."
+          : info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT || browsing !== browsing.top ? "Sign-in response is not a top-level document."
+          : host?.activeBrowser !== browser || host.off || host.selection !== entry.id ? "Sign-in response does not belong to the selected Agent view."
+          : browser.getAttribute("bashkitten-protected") !== "true" ? "Sign-in response is outside the protected Agent view."
+          : !principal?.isContentPrincipal ? "Sign-in response has no verified source document."
+          : principal.originNoSuffix !== new URL(entry.url).origin ? "Sign-in response came from a different server."
+          : principal.originAttributes.userContextId !== context ? "Sign-in response used a different protected connection."
+          : !current?.isContentPrincipal ? "Sign-in response has no current server document."
+          : current.originNoSuffix !== principal.originNoSuffix ? "The server document changed before sign-in completed."
+          : current.originAttributes.userContextId !== context ? "The protected document connection changed before sign-in completed." : null;
+        if (rejection) throw new Error(rejection);
         if (channel.URI.spec !== "http://127.0.0.1/oauth/callback" || channel.requestMethod !== "POST" ||
             channel.getRequestHeader("Content-Type").split(";", 1)[0].trim().toLowerCase() !== "application/x-www-form-urlencoded" ||
             channel.QueryInterface(Ci.nsIUploadChannel2).uploadStreamHasHeaders) throw new Error("Invalid Authelia sign-in response.");
@@ -554,7 +560,7 @@ class AgentRemoteStore {
         if (form.length !== Number(channel.getRequestHeader("Content-Length")) || /[^\x00-\x7f]/.test(form)) throw new Error("Incomplete Authelia sign-in response.");
         this.complete(entry, owner, channel.URI.spec, form).catch(() => {});
       } catch {
-        this.failed(entry, owner, new Error("Could not read the Authelia sign-in response.")).catch(() => {});
+        this.failed(entry, owner, new Error(rejection || "Could not read the Authelia sign-in response.")).catch(() => {});
       } finally {
         // Consume before proxy resolution; no localhost request or code URL.
         channel.cancel(Cr.NS_BINDING_ABORTED);

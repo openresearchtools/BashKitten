@@ -23,7 +23,7 @@ public final class BashKittenController {
     public interface HostDelegate {
         void call(@NonNull String command, @NonNull String args, @NonNull Consumer<String> reply);
         /** Privileged request interception only; unavailable to the page's host bridge. */
-        default void oauthCallback(@NonNull String uri, @Nullable String form) {}
+        default void oauthCallback(@NonNull String uri, @Nullable String form, @Nullable String error) {}
     }
 
     private BashKittenController() {}
@@ -61,7 +61,7 @@ public final class BashKittenController {
             GeckoSession current = session.get();
             if (OAUTH_EVENT.equals(event)) {
                 if (active && current != null && HOSTS.get(current) == this) {
-                    delegate.oauthCallback(message.getString("uri", ""), message.getString("form"));
+                    delegate.oauthCallback(message.getString("uri", ""), message.getString("form"), message.getString("error"));
                 }
                 return;
             }
