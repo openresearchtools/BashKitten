@@ -1436,6 +1436,25 @@ slices and their limits; they do not replace the manual acceptance table.
   notices. The currently running browser and Cuttlefish guest were left intact;
   this download/integrity check did not install or accept that package.
 
+Additional observed evidence, 5 October:
+
+- Android builder `37272351099` at `50fc9bc287` completed in 63m19s. Gecko took
+  15m15s; APK assembly took 40m12s. Final sccache reported 4,960 hits, 3 misses
+  (99.94%), five cache errors and one write error. Gradle ran 4,425 tasks with
+  no task-output cache enabled; its R8 interval was about 31 minutes. Separate
+  compiler caches were intact. Enable Gradle task caching through `GRADLE_FLAGS`
+  and retain its snapshots as Actions artifacts, outside the compiler-cache quota.
+  The next full candidate must establish actual reuse/timing; no speedup is yet
+  measured. The three build repositories and their cache limits remain unchanged.
+- The Termux package at `7544113eb9`, assembled with successful auth
+  `37273991841` and search `37231795625` components, was downloaded, checksum
+  verified and reinstalled using the guest's visible Termux UI. SHA-256:
+  `25e017c7fd4a6d39bf68a6a0c325b25bb5fd87d82ca315f54b03abf952450693`.
+  APT finished successfully. Reopening BashKitten started Local without an
+  account/CA prompt. Entering `/login` opened Providers. The installed APK was
+  still `0f5bdf12`; this does not validate the new native connection screen.
+  No provider was connected, so no inference/browser-tool turn was accepted.
+
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously
 installed Termux candidate and authorized child-process setting. Android System

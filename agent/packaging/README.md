@@ -34,8 +34,13 @@ reassemble the Linux package without rebuilding unchanged Gecko. Cached binaries
 retain their actual producing commit in provenance. Native arm64 builds use an
 arm64 runner. Initial builds in the new repositories start with empty caches.
 Android caches Gradle dependency downloads without storing the multi-gigabyte
-Mozilla bootstrap directory. Compiler statistics are saved immediately after
-Gecko compilation and remain downloadable from each run.
+Mozilla bootstrap directory. Gradle task outputs use a separate, three-day Actions
+artifact, restored from a successful builder run. They do not consume GitHub's
+compiler-cache quota. Gradle validates each task's inputs before reuse; changed
+application inputs can still require R8 to run. Pass caching/worker options using
+`GRADLE_FLAGS`, since `mach` replaces `GRADLE_OPTS`. Compiler statistics are saved
+immediately after Gecko compilation; those and the Gradle timing report remain
+downloadable from each run.
 
 `build.py` accepts `linux|termux`, `--architecture`, `--auth-archive`,
 `--search-archive` and `--output`; Linux also requires `--browser-dir`.

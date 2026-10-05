@@ -40,7 +40,8 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g
+      # mach replaces GRADLE_OPTS; GRADLE_FLAGS is its supported argument path.
+      GRADLE_FLAGS: --no-daemon --max-workers=2 --build-cache
       MOZ_SOURCE_REPO: https://github.com/openresearchtools/bashkitten
       MOZ_SOURCE_CHANGESET: ${{ inputs.source_sha }}
       SCCACHE_IDLE_TIMEOUT: '0'
@@ -88,6 +89,23 @@ jobs:
       env:
         ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       run: python3 browser/bashkitten/android/scripts/prepare-signing.py
+      if: (success()) && steps.component.outputs.hit != 'true'
+    - name: Restore Gradle task outputs
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # Task snapshots are artifacts: never consume or evict the Gecko cache.
+        runs=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=android-gradle-outputs&per_page=20" \
+          --jq '.artifacts[] | select(.expired == false) | .workflow_run.id')
+        for run in $runs; do
+          eligible=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run" \
+            --jq '.conclusion == "success" and .head_branch == "main" and .path == ".github/workflows/build.yml"')
+          if [ "$eligible" != true ]; then continue; fi
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" --name android-gradle-outputs --dir "$RUNNER_TEMP/gradle-outputs"
+          mkdir -p "$HOME/.gradle/caches"
+          tar --zstd -xf "$RUNNER_TEMP/gradle-outputs/gradle-outputs.tar.zst" -C "$HOME/.gradle/caches"
+          break
+        done
       if: (success()) && steps.component.outputs.hit != 'true'
     - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
       with:
@@ -160,7 +178,7 @@ jobs:
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Assemble the release browser
       working-directory: browser
-      run: set -o pipefail; ./mach gradle :fenix:assembleRelease 2>&1 | tee ../artifacts/apk-build.log
+      run: set -o pipefail; ./mach gradle :fenix:assembleRelease --profile 2>&1 | tee ../artifacts/apk-build.log
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Sign, verify and collect the production APK
       run: python3 browser/bashkitten/android/scripts/collect-artifacts.py candidate
@@ -182,6 +200,25 @@ jobs:
           ~/.gradle/wrapper
         key: bashkitten-android-gradle-downloads-v1-${{ runner.os }}-${{ hashFiles('browser/gradle/libs.versions.toml', 'browser/mobile/android/android-components/.config.yml', 'browser/mobile/android/*/build.gradle',
           'browser/mobile/android/fenix/app/build.gradle', 'browser/python/mozboot/mozboot/android.py', 'browser/python/mozboot/mozboot/mozconfig.py') }}
+    - name: Save Gradle task outputs
+      if: success() && steps.component.outputs.hit != 'true'
+      run: |
+        tar --zstd -cf "$RUNNER_TEMP/gradle-outputs.tar.zst" -C "$HOME/.gradle/caches" build-cache-1
+    - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      if: success() && steps.component.outputs.hit != 'true'
+      with:
+        name: android-gradle-outputs
+        path: ${{ runner.temp }}/gradle-outputs.tar.zst
+        compression-level: 0
+        retention-days: 3
+        if-no-files-found: error
+    - name: Upload Gradle timing report
+      if: always() && steps.component.outputs.hit != 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: android-gradle-timing
+        path: ${{ github.workspace }}-obj-android/gradle/build/reports/profile/
+        if-no-files-found: ignore
     - name: Remove staged signing key
       if: (always()) && steps.component.outputs.hit != 'true'
       run: rm -f "$BASHKITTEN_PUBLISHER_KEYSTORE"
