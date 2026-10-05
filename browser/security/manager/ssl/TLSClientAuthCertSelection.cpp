@@ -32,6 +32,7 @@
 // continue to the TLS connection.
 
 #include "TLSClientAuthCertSelection.h"
+#include "AgentClientAuth.h"
 #include "cert_storage/src/cert_storage.h"
 #include "mozilla/Logging.h"
 #include "mozilla/dom/BrowsingContext.h"
@@ -472,7 +473,7 @@ bool FindRememberedDecision(
     return false;
   }
   rv = foundCert->GetRawDER(rememberedCertBytes);
-  if (NS_FAILED(rv)) {
+  if (NS_FAILED(rv) || IsAgentClientCertificate(rememberedCertBytes)) {
     return false;
   }
   if (BuildChainForCertificate(rememberedCertBytes, rememberedCertChainBytes,
@@ -903,6 +904,15 @@ void DoSelectClientAuthCertificate(NSSSocketControl* info,
   ClientAuthInfo authInfo(info->GetHostName(), info->GetOriginAttributes(),
                           info->GetPort(), info->GetProviderFlags(),
                           info->GetProviderTlsFlags());
+  nsTArray<uint8_t> agentCert;
+  nsTArray<nsTArray<uint8_t>> agentChain;
+  if (SelectAgentClientAuth(authInfo.HostName(), authInfo.OriginAttributesRef(),
+                            authInfo.Port(), agentCert, agentChain)) {
+    continuation->SetSelectedClientAuthData(std::move(agentCert),
+                                           std::move(agentChain));
+    (void)continuation->Run();
+    return;
+  }
   nsTArray<nsTArray<uint8_t>> enterpriseCertificates(
       GetEnterpriseCertificates());
   nsTArray<uint8_t> rememberedCertBytes;
@@ -1020,6 +1030,16 @@ bool SelectTLSClientAuthCertParent::Dispatch(
       [authInfo(std::move(authInfo)), continuation(std::move(continuation)),
        serverCertBytes(aServerCertBytes), caNames(std::move(aCANames)),
        browserId(aBrowserId)]() mutable {
+        nsTArray<uint8_t> agentCert;
+        nsTArray<nsTArray<uint8_t>> agentChain;
+        if (SelectAgentClientAuth(authInfo.HostName(),
+                                  authInfo.OriginAttributesRef(), authInfo.Port(),
+                                  agentCert, agentChain)) {
+          continuation->SetSelectedClientAuthData(std::move(agentCert),
+                                                 std::move(agentChain));
+          (void)NS_DispatchToCurrentThread(continuation);
+          return;
+        }
         SECItem serverCertItem{
             siBuffer,
             const_cast<uint8_t*>(serverCertBytes.data().Elements()),

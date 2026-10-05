@@ -1243,8 +1243,21 @@ slices and their limits; they do not replace the manual acceptance table.
   [run 37260611280](https://github.com/openresearchtools/BashKitten/actions/runs/37260611280)
   passed. Full auth assembly
   [run 37260611311](https://github.com/openresearchtools/BashKitten/actions/runs/37260611311)
-  is still running. Share Local has not activated the new helper; old remote
+  passed all Linux amd64/arm64 and Termux aarch64 component, runtime-guard and
+  assembly jobs. Share Local has not activated the new helper; old remote
   management removal and migration remain pending, not silently complete.
+- Gecko now has a parent-only enrollment API for the remote client certificate
+  and PKCS#8 key, scoped to the exact onion:443 and protected Agent origin
+  attributes, including its first-party network partition. The normal TLS
+  verifier still runs before selection. Keys stay in memory, use NSS session
+  objects for signing and are wiped when cleared; no persistent key/certificate
+  import or ordinary picker decision is created. Clearing/changing the enrolled
+  CA clears the credential and closes TLS connections. The existing socket-process
+  signing bridge carries public certificate objects only and rejects removed
+  credentials. Ordinary remembered/automatic certificate selection excludes
+  these identities. Gecko's own IDL compiler accepts the API declarations;
+  native platform enrollment wiring, browser compilation and real TLS/login
+  acceptance are pending. This is not an authenticated client release.
 
 The existing Cuttlefish viewer was reopened through BashKitten's own ordinary-tab
 API and inspected; the guest remains available with the previously installed

@@ -4,6 +4,7 @@
 
 #include "nsCertOverrideService.h"
 
+#include "AgentClientAuth.h"
 #include "NSSCertDBTrustDomain.h"
 #include "CertVerifier.h"
 #include "cert.h"
@@ -801,13 +802,6 @@ static bool IsV3OnionIdentity(const nsACString& host) {
   return true;
 }
 
-static bool IsProtectedAgentContext(const OriginAttributes& attrs) {
-  return (attrs.mUserContextId >= 0xB4500000 &&
-          attrs.mUserContextId <= 0xB450FFFF) ||
-         StringBeginsWith(attrs.mGeckoViewSessionContextId,
-                          u"gvctx626173686b697474656e2d6167656e742d"_ns);
-}
-
 static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) {
   return IsProtectedAgentContext(attrs) &&
       (host.EqualsLiteral("127.0.0.1") || IsV3OnionIdentity(host));
@@ -890,6 +884,9 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentCA(
     const nsACString& host, JS::Handle<JS::Value> originAttributes,
     nsIX509Cert* ca, JSContext* cx) {
   if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
+  if (!XRE_IsParentProcess() || !cx || !nsContentUtils::IsSystemCaller(cx)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
   OriginAttributes attrs;
   if (!ca || !originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
       !IsAgentScope(host, attrs)) return NS_ERROR_INVALID_ARG;
@@ -903,6 +900,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentCA(
   NS_ENSURE_SUCCESS(rv, rv);
   if (AgentRootMatches(host, attrs, root) &&
       AgentRootMatches(host, network, root)) return NS_OK;
+  ClearAgentClientAuth(host, attrs);
   SetAgentRoot(host, attrs, root);
   if (network != attrs) SetAgentRoot(host, network, root);
   ClearAgentTLSConnections();
@@ -912,14 +910,59 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentCA(
 NS_IMETHODIMP nsCertOverrideService::ClearAgentCA(
     const nsACString& host, JS::Handle<JS::Value> originAttributes, JSContext* cx) {
   if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
+  if (!XRE_IsParentProcess() || !cx || !nsContentUtils::IsSystemCaller(cx)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
   OriginAttributes attrs;
   if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
       !IsAgentScope(host, attrs)) return NS_ERROR_INVALID_ARG;
   OriginAttributes network;
   nsresult rv = AgentNetworkAttributes(host, attrs, network);
   NS_ENSURE_SUCCESS(rv, rv);
+  ClearAgentClientAuth(host, attrs);
   SetAgentRoot(host, attrs, nsTArray<uint8_t>());
   if (network != attrs) SetAgentRoot(host, network, nsTArray<uint8_t>());
+  ClearAgentTLSConnections();
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsCertOverrideService::SetAgentClientCertificate(
+    const nsACString& host, JS::Handle<JS::Value> originAttributes,
+    nsIX509Cert* certificate, const nsTArray<uint8_t>& pkcs8, JSContext* cx) {
+  if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
+  if (!XRE_IsParentProcess() || !cx || !nsContentUtils::IsSystemCaller(cx)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+  OriginAttributes attrs;
+  if (!certificate || !originAttributes.isObject() ||
+      !attrs.Init(cx, originAttributes) || !IsProtectedAgentContext(attrs) ||
+      !IsV3OnionIdentity(host)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+  OriginAttributes network;
+  nsresult rv = AgentNetworkAttributes(host, attrs, network);
+  NS_ENSURE_SUCCESS(rv, rv);
+  nsTArray<uint8_t> der;
+  rv = certificate->GetRawDER(der);
+  NS_ENSURE_SUCCESS(rv, rv);
+  rv = SetAgentClientAuth(host, attrs, network, der, pkcs8);
+  NS_ENSURE_SUCCESS(rv, rv);
+  ClearAgentTLSConnections();
+  return NS_OK;
+}
+
+NS_IMETHODIMP nsCertOverrideService::ClearAgentClientCertificate(
+    const nsACString& host, JS::Handle<JS::Value> originAttributes, JSContext* cx) {
+  if (!NS_IsMainThread()) return NS_ERROR_NOT_SAME_THREAD;
+  if (!XRE_IsParentProcess() || !cx || !nsContentUtils::IsSystemCaller(cx)) {
+    return NS_ERROR_DOM_SECURITY_ERR;
+  }
+  OriginAttributes attrs;
+  if (!originAttributes.isObject() || !attrs.Init(cx, originAttributes) ||
+      !IsProtectedAgentContext(attrs) || !IsV3OnionIdentity(host)) {
+    return NS_ERROR_INVALID_ARG;
+  }
+  ClearAgentClientAuth(host, attrs);
   ClearAgentTLSConnections();
   return NS_OK;
 }

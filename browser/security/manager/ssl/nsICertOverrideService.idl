@@ -58,6 +58,17 @@ interface nsICertOverrideService : nsISupports {
   void setAgentCA(in ACString host, in jsval originAttributes, in nsIX509Cert ca);
   [implicit_jscontext]
   void clearAgentCA(in ACString host, in jsval originAttributes);
+  /** Native remote enrollment only: a leaf certificate and unencrypted PKCS#8
+   * DER key, held in parent-process memory for this exact onion:443/context.
+   * setAgentCA must precede this call. No ordinary certificate-store entry or
+   * chooser decision is created. Clearing/changing the CA also clears the key.
+   */
+  [implicit_jscontext]
+  void setAgentClientCertificate(in ACString host, in jsval originAttributes,
+                                in nsIX509Cert certificate,
+                                in Array<octet> pkcs8);
+  [implicit_jscontext]
+  void clearAgentClientCertificate(in ACString host, in jsval originAttributes);
   /** Privileged parent-process enrollment for an authenticated hosted site.
    * The caller must verify the enrolled parent's CA and hosted-site catalog.
    * parentHost is a v3 onion root; host is one exact DNS label below it.

@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "IPCClientCertsParent.h"
+#include "AgentClientAuth.h"
 #include "ScopedNSSTypes.h"
 #include "nsNetCID.h"
 #include "nsNSSComponent.h"
@@ -32,6 +33,23 @@ mozilla::ipc::IPCResult IPCClientCertsParent::RecvFindObjects(
                         "IPCClientCertsParent::RecvFindObjects", [&certList]() {
                           certList =
                               psm::FindClientCertificatesWithPrivateKeys();
+                          if (!certList) return;
+                          // These public objects are for NSS's signing module,
+                          // never the ordinary certificate chooser. Selection
+                          // already checked the exact protected Agent scope.
+                          for (const auto& der : AgentClientCertificates()) {
+                            SECItem item = {
+                                siBuffer, const_cast<uint8_t*>(der.Elements()),
+                                static_cast<unsigned int>(der.Length())};
+                            UniqueCERTCertificate cert(CERT_NewTempCertificate(
+                                CERT_GetDefaultCertDB(), &item, nullptr, false,
+                                true));
+                            if (cert && CERT_AddCertToListTail(
+                                            certList.get(), cert.get()) ==
+                                            SECSuccess) {
+                              (void)cert.release();
+                            }
+                          }
                         }));
   if (!certList) {
     return IPC_OK();
@@ -88,7 +106,10 @@ mozilla::ipc::IPCResult IPCClientCertsParent::RecvSign(ByteArray aCert,
   if (!cert) {
     return IPC_OK();
   }
-  UniqueSECKEYPrivateKey key(PK11_FindKeyByAnyCert(cert.get(), nullptr));
+  UniqueSECKEYPrivateKey key;
+  if (!AgentClientKey(aCert.data(), key)) {
+    key.reset(PK11_FindKeyByAnyCert(cert.get(), nullptr));
+  }
   if (!key) {
     return IPC_OK();
   }

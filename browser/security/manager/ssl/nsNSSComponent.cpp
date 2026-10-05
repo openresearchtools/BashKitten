@@ -4,6 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "nsNSSComponent.h"
+#include "AgentClientAuth.h"
 
 #include "BinaryPath.h"
 #include "CryptoTask.h"
@@ -2153,6 +2154,16 @@ UniqueCERTCertList FindClientCertificatesWithPrivateKeys() {
     MOZ_LOG(gPIPNSSLog, LogLevel::Debug,
             ("  CERT_FilterCertListByUsage encountered an error - returning"));
     return nullptr;
+  }
+
+  // Enrolled Agent identities are selected solely by their native host/context
+  // policy. Never offer them to ordinary sites, including automatic selection.
+  for (CERTCertListNode* node = CERT_LIST_HEAD(certsWithPrivateKeys);
+       !CERT_LIST_END(node, certsWithPrivateKeys);) {
+    CERTCertListNode* current = node;
+    node = CERT_LIST_NEXT(node);
+    nsTArray<uint8_t> der(current->cert->derCert.data, current->cert->derCert.len);
+    if (IsAgentClientCertificate(der)) CERT_RemoveCertListNode(current);
   }
 
   if (MOZ_UNLIKELY(MOZ_LOG_TEST(gPIPNSSLog, LogLevel::Debug))) {

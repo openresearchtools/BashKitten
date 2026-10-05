@@ -95,6 +95,7 @@ EXPORTS.mozilla.psm += [
 ]
 
 UNIFIED_SOURCES += [
+    "AgentClientAuth.cpp",
     "AppSignatureVerification.cpp",
     "AppTrustDomain.cpp",
     "CertStorageMemoryReporting.cpp",

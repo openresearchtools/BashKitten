@@ -4,6 +4,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "NSSSocketControl.h"
+#include "AgentClientAuth.h"
 
 #include "ssl.h"
 #include "sslexp.h"
@@ -16,6 +17,7 @@
 #include "nsNSSCallbacks.h"
 #include "nsNSSComponent.h"
 #include "nsProxyRelease.h"
+#include "nsXULAppAPI.h"
 
 using namespace mozilla;
 using namespace mozilla::psm;
@@ -465,7 +467,16 @@ void NSSSocketControl::ClientAuthCertificateSelected(
       CERT_GetDefaultCertDB(), &certItem, nullptr, false, true));
   UniqueSECKEYPrivateKey key;
   if (cert) {
-    key.reset(PK11_FindKeyByAnyCert(cert.get(), nullptr));
+    if (XRE_IsParentProcess() && AgentClientKey(certBytes, key)) {
+      nsTArray<uint8_t> expected;
+      nsTArray<nsTArray<uint8_t>> chain;
+      if (!SelectAgentClientAuth(GetHostName(), GetOriginAttributes(), GetPort(),
+                                 expected, chain) || expected != certBytes) {
+        key.reset();
+      }
+    } else {
+      key.reset(PK11_FindKeyByAnyCert(cert.get(), nullptr));
+    }
     mClientCertChain.reset(CERT_NewCertList());
     if (key && mClientCertChain) {
       for (const auto& certBytes : certChainBytes) {
