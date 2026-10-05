@@ -139,6 +139,7 @@ class AgentRemoteStore {
       }
     }
     this.entries = new Map(entries.map(entry => [entry.id, entry]));
+    Services.obs.addObserver(this, "http-on-opening-request");
     Services.obs.addObserver(this, "http-on-modify-request");
     return this.entries;
   }
@@ -303,6 +304,9 @@ class AgentRemoteStore {
     const channel = NetUtil.newChannel({ uri: origin + "/login/api/firstfactor", loadingPrincipal: principal,
       securityFlags: Ci.nsILoadInfo.SEC_REQUIRE_SAME_ORIGIN_DATA_IS_BLOCKED | Ci.nsILoadInfo.SEC_COOKIES_INCLUDE,
       contentPolicyType: Ci.nsIContentPolicy.TYPE_FETCH }).QueryInterface(Ci.nsIHttpChannel);
+    const cookies = Cc["@mozilla.org/cookieJarSettings;1"].createInstance(Ci.nsICookieJarSettings);
+    cookies.initWithURI(Services.io.newURI(origin), false);
+    channel.loadInfo.cookieJarSettings = cookies;
     channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE | Ci.nsIRequest.INHIBIT_CACHING;
     channel.requestMethod = "POST"; channel.setRequestHeader("Origin", origin, false);
     const response = await readResponse(channel, { body: { username: entry.bundle.owner, password, keepMeLoggedIn: true }, signal, timeout: 120000 });
@@ -523,10 +527,11 @@ class AgentRemoteStore {
   }
 
   observe(subject, topic) {
-    if (topic !== "http-on-modify-request") return;
+    if (topic !== "http-on-opening-request" && topic !== "http-on-modify-request") return;
     const channel = subject.QueryInterface(Ci.nsIHttpChannel), context = channel.loadInfo.originAttributes.userContextId;
     if (context < CONTEXT_MIN || context > CONTEXT_MAX) return;
-    if (channel.URI.scheme === "http" && channel.URI.host === "127.0.0.1" && channel.URI.pathQueryRef.startsWith("/oauth/callback")) {
+    if (topic === "http-on-opening-request") {
+      if (channel.URI.scheme !== "http" || channel.URI.host !== "127.0.0.1" || !channel.URI.pathQueryRef.startsWith("/oauth/callback")) return;
       const entry = this.entries?.get(this.activeId), owner = this.clients.get(this.activeId);
       try {
         if (entry?.userContextId !== context || owner?.state !== "login") return;
@@ -551,7 +556,7 @@ class AgentRemoteStore {
       } catch {
         this.failed(entry, owner, new Error("Could not read the Authelia sign-in response.")).catch(() => {});
       } finally {
-        // Consume only the protected form; no localhost request or code URL.
+        // Consume before proxy resolution; no localhost request or code URL.
         channel.cancel(Cr.NS_BINDING_ABORTED);
       }
       return;

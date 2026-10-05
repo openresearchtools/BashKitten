@@ -1834,6 +1834,21 @@ Kotlin syntax, Android XML, desktop Fluent and whitespace checks passed. Full
 native builds and manual HTTP/Tor/loopback/settings acceptance remain required;
 no scripted product test or installed runtime change was made for this slice.
 
+### 5 October remote sign-in handoff corrections
+
+Installed desktop `9f676e8cc4` rejected a wrong QR password, imported with the
+correct password and reached genuine Authelia through Tor/TLS/mTLS. Manual
+username/password, TOTP and consent succeeded, but automatic first-factor reuse
+and the final Agent handoff failed. Privileged first-factor fetches had Gecko's
+default blocking cookie policy; both clients now initialize its existing cookie
+jar settings for their exact enrolled origin so Authelia's real session persists.
+The OAuth form was intercepted after proxy resolution had already rejected its
+loopback callback. Both native handlers now consume it at request opening, with
+the same pending-login, protected-context, source-principal and complete-body
+checks, before any network connection. No loopback bypass or cookie fabrication
+was added. JavaScript syntax and whitespace checks pass; rebuilt Android/Linux
+login, consent and complete tunnel acceptance remain required.
+
 ### 5 October simplified dictation controls (manual checks pending)
 
 The composer now uses the same visible circular microphone to start and stop,

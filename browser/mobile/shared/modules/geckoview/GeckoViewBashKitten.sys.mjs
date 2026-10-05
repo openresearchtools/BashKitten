@@ -21,14 +21,14 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     this.agentRequests = new Set();
     this.context = this.settings.sessionContextId;
     this.browserId = this.browser.browsingContext.browserId;
-    if (protectedContext(this.context)) Services.obs.addObserver(this, "http-on-modify-request");
+    if (protectedContext(this.context)) Services.obs.addObserver(this, "http-on-opening-request");
     BashKittenAndroid.register(this.context, this.browserId);
     this.registerListener(["BashKitten:Request"]);
     this.ready = BashKittenAndroid.init();
   }
   onDestroy() {
     this.destroyed = true;
-    if (protectedContext(this.context)) Services.obs.removeObserver(this, "http-on-modify-request");
+    if (protectedContext(this.context)) Services.obs.removeObserver(this, "http-on-opening-request");
     BashKittenHost.close(this.browser);
     for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
     this.agentRequests.clear();
@@ -231,14 +231,14 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     return { ready: true };
   }
   observe(subject, topic) {
-    if (topic !== "http-on-modify-request") return;
+    if (topic !== "http-on-opening-request") return;
     const channel = subject.QueryInterface(Ci.nsIHttpChannel);
     const info = channel.loadInfo;
     if (info.originAttributes.geckoViewSessionContextId !== this.context ||
         channel.URI.scheme !== "http" || channel.URI.host !== "127.0.0.1" ||
         !channel.URI.pathQueryRef.startsWith("/oauth/callback")) return;
-    // This endpoint is handled only in native code. Never open a loopback socket
-    // or commit a callback document, even for a stale or invalid response.
+    // Consume before proxy resolution. Never open a loopback socket or commit a
+    // callback document, even for a stale or invalid response.
     channel.cancel(Cr.NS_BINDING_ABORTED);
     const top = this.browser.browsingContext;
     const source = info.triggeringPrincipal;
@@ -293,8 +293,10 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     const origin = this.agentOrigin;
     const principal = Services.scriptSecurityManager.createContentPrincipal(Services.io.newURI(origin),
       { geckoViewSessionContextId: this.context });
+    const cookies = Cc["@mozilla.org/cookieJarSettings;1"].createInstance(Ci.nsICookieJarSettings);
+    cookies.initWithURI(Services.io.newURI(origin), false);
     try {
-      const result = await this.agentFetch(origin, "/login/api/firstfactor", principal, null,
+      const result = await this.agentFetch(origin, "/login/api/firstfactor", principal, cookies,
         JSON.stringify({ username: params.username, password: params.password, keepMeLoggedIn: true }), null, true);
       if (this.destroyed || this.agentOrigin !== origin || result?.status !== "OK") {
         throw new Error("Authelia did not accept this sign-in");
