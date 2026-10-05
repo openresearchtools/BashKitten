@@ -81,6 +81,8 @@ public final class AgentShareActivity extends ProductActivity {
             if (!state.busy) button("Retry", state::load);
             return;
         }
+        if (!state.busy && state.error.isEmpty()) message.setText(value.optString("error"));
+        if (value.optBoolean("reissueRequired")) { button("Reissue identity", () -> begin(true)); return; }
         if (!value.optString("phase").equals("ready")) {
             boolean migration = value.optBoolean("migrationRequired");
             if (migration) body.addView(text("Replace the previous remote identity to use encrypted connections. Old connection exports will stop working.", 15));
@@ -88,7 +90,7 @@ public final class AgentShareActivity extends ProductActivity {
             return;
         }
         boolean enabled = value.optBoolean("enabled");
-        body.addView(text(enabled ? (value.optBoolean("running") ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off", 18));
+        body.addView(text(!value.optString("error").isEmpty() ? "Publishing failed" : enabled ? (value.optBoolean("running") ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off", 18));
         button(enabled ? "Turn off" : "Turn on", () -> state.publish(!enabled));
         CheckBox allow = checkbox(value.optBoolean("allowFileManager"));
         allow.setOnCheckedChangeListener((button, checked) -> state.files(checked));

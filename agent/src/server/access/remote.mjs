@@ -11,7 +11,7 @@ const torRoot = path.join(remoteDir, 'tor');
 const onion = /^[a-z2-7]{56}\.onion$/;
 
 export class RemoteAccess {
-  constructor({ schedule }) { this.schedule = schedule; this.stack = null; this.operations = Promise.resolve(); this.pending = null; }
+  constructor({ schedule }) { this.schedule = schedule; this.stack = null; this.operations = Promise.resolve(); this.pending = null; this.error = ''; }
   transaction(fn) { const work = this.operations.then(fn); this.operations = work.catch(() => {}); return work; }
   async state() {
     const state = await readJson(paths.share, null);
@@ -91,9 +91,11 @@ export class RemoteAccess {
       if (!this.stack?.ready || this.stack.stopping) throw Error('Turn on Local before Share Local setup');
       validateAccountCredentials(value, { create: true });
       if (typeof value.allowFileManager !== 'boolean') throw Error('Choose whether to allow the remote file manager');
-      const state = await this.state();
-      const legacy = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
-      if ((state.phase === 'ready' || legacy) && !reissue) throw Error('Confirm Reissue identity to replace the previous remote account and disconnect its clients');
+      if (!reissue) {
+        const state = await this.state();
+        const legacy = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
+        if (state.phase === 'ready' || legacy) throw Error('Confirm Reissue identity to replace the previous remote account and disconnect its clients');
+      }
       // Drain writes before committing the new policy. Admission stays blocked
       // until the durable state is saved, including if a save fails.
       await this.stack.refreshFileManager(true);
@@ -138,17 +140,15 @@ export class RemoteAccess {
           }).catch(error => this.stack.fatal?.(error));
         }, 10 * 60000).unref();
         this.stack.ready = true;
+        this.error = '';
         return setup;
       } catch (error) {
+        this.error = error.message;
         this.cancelPending();
-        await this.stack.stopNamed('tor');
-        await this.stack.stopAuthentication();
-        // Restore the unchanged Local listener after failed identity setup.
-        if (!this.stack.children.some(child => child.name === 'caddy')) {
-          try { await this.stack.startCaddy(); } catch (restore) { this.stack.fatal?.(restore); }
-        }
-        this.stack.ready = await this.stack.localReady();
-        if (!this.stack.ready) this.stack.fatal?.(error);
+        try {
+          await this.stack.closeRemote();
+          this.stack.ready = true;
+        } catch (failure) { this.stack.fatal?.(failure); throw failure; }
         throw error;
       } finally { this.stack.reconfiguring = false; }
     });
@@ -218,11 +218,24 @@ export class RemoteAccess {
   }
   // Native private IPC only. The encrypted image is never a remote HTTP result.
   async status() {
-    const state = await this.state();
-    const migrationRequired = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
-    const running = Boolean(state.enabled && this.stack?.ready && this.stack.tunnelStarted && this.stack.children.some(child => child.name === 'tor' && child.exit === undefined));
-    return { phase: state.phase, enabled: state.enabled, running, allowFileManager: state.allowFileManager, migrationRequired,
-      address: state.phase === 'ready' ? 'https://' + await this.hostname() : null,
-      qrDataUrl: state.phase === 'ready' ? 'data:image/png;base64,' + (await fs.readFile(paths.connectionQr)).toString('base64') : null };
+    try {
+      const state = await this.state();
+      const migrationRequired = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
+      const running = Boolean(state.enabled && this.stack?.ready && this.stack.tunnelStarted && this.stack.children.some(child => child.name === 'tor' && child.exit === undefined));
+      return { phase: state.phase, enabled: state.enabled, running, allowFileManager: state.allowFileManager, migrationRequired, error: this.error,
+        address: state.phase === 'ready' ? 'https://' + await this.hostname() : null,
+        qrDataUrl: state.phase === 'ready' ? 'data:image/png;base64,' + (await fs.readFile(paths.connectionQr)).toString('base64') : null };
+    } catch (error) {
+      this.error = error.message;
+      if (this.stack?.ready && (this.stack.remoteOrigins?.length || this.stack.authStarted)) {
+        this.stack.reconfiguring = true; this.stack.ready = false;
+        try {
+          await this.stack.closeRemote();
+          this.stack.ready = true;
+        } catch (failure) { this.stack.fatal?.(failure); throw failure; }
+        finally { this.stack.reconfiguring = false; }
+      }
+      return { phase: 'error', enabled: false, running: false, allowFileManager: false, reissueRequired: true, error: error.message };
+    }
   }
 }

@@ -1671,3 +1671,18 @@ current protected top-level document, asks the user, then uses Gecko's normal OS
 permission check and rechecks selection before allowing that device. Other tabs
 retain upstream permission behavior; there is no automatic/persistent Agent grant.
 This source path still requires visible desktop microphone acceptance.
+
+### 5 October Local startup and Share Local repair (source checked)
+
+Local startup and status no longer depend on readable remote account/identity
+metadata. Local starts its existing authenticated listener first; a failed
+publishing attempt closes remote ingress and authentication while preserving
+Local's trust/session and the saved publishing choice. Failure to restore Local
+still invokes the existing whole-group failure path. Native Share Local on both
+platforms shows the publishing error and offers the existing confirmed Reissue
+action when saved remote state is unreadable. Only that explicit action replaces
+the old identity; ordinary startup never generates replacement remote keys.
+
+Changed JavaScript syntax, Java 8 parse-only and source whitespace checks passed.
+Full native compilation and manual damaged-state/startup/Reissue checks remain
+pending; no scripted product test or installed-runtime acceptance is claimed.

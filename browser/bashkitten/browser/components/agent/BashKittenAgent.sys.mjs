@@ -698,12 +698,14 @@ class AgentView {
     const render = state => {
       if (!current()) return;
       setupId = null; body.replaceChildren();
+      if (state.error) error.textContent = state.error;
+      if (state.reissueRequired) { body.append(button("Reissue identity", () => account(true))); return; }
       if (state.phase !== "ready") {
         if (state.migrationRequired) body.append(html(this.doc, "p", {}, "Replace the previous remote identity to use encrypted connections. Previously exported connections will stop working."));
         body.append(button(state.migrationRequired ? "Reissue identity" : "Turn on", () => account(state.migrationRequired)));
         return;
       }
-      body.append(html(this.doc, "p", { role: "status" }, state.enabled ? (state.running ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off"));
+      body.append(html(this.doc, "p", { role: "status" }, state.error ? "Publishing failed" : state.enabled ? (state.running ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off"));
       body.append(button(state.enabled ? "Turn off" : "Turn on", async () => {
         if (!state.enabled) await ensureLocal();
         render(await control("share-publish", { enabled: !state.enabled }));

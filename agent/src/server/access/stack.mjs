@@ -10,7 +10,7 @@ import { X509Certificate, randomUUID } from 'node:crypto';
 import { dataDir, privateDir, readJson, writeJson, randomToken } from '../common.mjs';
 import { processStart, backendAlive, serverFile } from '../instance.mjs';
 import { accessDir, runDir, paths, binary } from './paths.mjs';
-import { authEnvironment, renderAuthelia, accountStatus, authCall } from './accounts.mjs';
+import { authEnvironment, renderAuthelia, authCall } from './accounts.mjs';
 import { unixRequest, command } from './io.mjs';
 import { NativeTunnel } from './tunnel.mjs';
 import { HostedServices } from './hosting.mjs';
@@ -44,11 +44,8 @@ export class AccessStack {
       this.localCookieName = '__Host-bashkitten_local_' + identity.instanceId.replaceAll('-', '');
       // Tor must never forward to the native local listener, even with a forged Host.
       do { this.remotePort = await availablePort(0); } while (this.remotePort === port);
+      this.remoteOrigins = []; this.remoteAuthOrigin = null;
       try {
-        this.remoteOrigins = await this.remote.prepare(this);
-        const remoteHost = await this.remote.hostname();
-        this.remoteAuthOrigin = remoteHost ? 'https://' + remoteHost : null;
-        if (this.remoteOrigins.length) { await this.startAuthentication(); await this.remote.startTunnel(); }
         await this.launch('backend', process.execPath, [backendScript], { ...process.env,
           BASHKITTEN_ACCESS_ORIGIN: this.origin, BASHKITTEN_PROXY_TOKEN: this.proxyToken,
           BASHKITTEN_INSTANCE_TOKEN: this.instanceToken, BASHKITTEN_BACKEND_SOCKET: paths.backend,
@@ -59,13 +56,20 @@ export class AccessStack {
           return response.status === 200;
         }, 'Agent backend');
         await this.startCaddy();
-        await this.remote.publish();
         const backend = this.children.find(child => child.name === 'backend');
         this.info = { pid: backend.pid, started: backend.started, script: backendScript, token: this.instanceToken,
           url: this.origin, requestedPort: preferred, identity: this.identity, socket: paths.backend,
           managerPid: process.pid, managerStarted: await processStart(process.pid), children: this.identities() };
         await writeJson(serverFile, this.info);
         this.ready = true;
+        // Account-free Local is also the native repair path for a damaged share.
+        this.remote.error = '';
+        try {
+          if ((await this.remote.prepare(this)).length) await this.reconfigureRemote();
+        } catch (error) {
+          this.remote.error = error.message;
+          if (!this.ready) throw error;
+        }
         return this.info;
       } catch (error) {
         failure = error; await this.stopChildren();
@@ -184,7 +188,7 @@ export class AccessStack {
     throw Error(`${name} did not become ready; see its service log`);
   }
   async writeCaddy() {
-    const remote = await this.remote.state();
+    const remote = this.remoteAuthOrigin ? await this.remote.state() : {};
     const caId = remote.id && remote.phase !== 'replacing' ? 'remote-' + remote.id : null;
     const strip = untrusted.map(name => `request_header -${name}`).join('\n');
     const backend = access => `reverse_proxy ${quote('unix/' + paths.backend)} {\n${proxyHeaders()}\nheader_up X-Bashkitten-Proxy ${this.proxyToken}\nheader_up X-Bashkitten-Access ${access}\nflush_interval -1\n}`;
@@ -296,6 +300,7 @@ ${backend('remote')}
     try {
       await this.stopNamed('tor');
       this.remoteOrigins = await this.remote.prepare(this);
+      this.remoteAuthOrigin = this.remoteOrigins[0] || null;
       if (this.remoteOrigins.length) { await this.startAuthentication(); await this.remote.startTunnel(); }
       else await this.stopAuthentication();
       // The local listener and its native session stay live while publishing changes.
@@ -304,9 +309,29 @@ ${backend('remote')}
       if (this.remoteOrigins.length) await this.remoteRoot();
       await this.remote.publish();
       this.info.children = this.identities(); await writeJson(serverFile, this.info);
+      this.remote.error = '';
       this.ready = true;
-    } catch (error) { this.fatal?.(error); throw error; }
+    } catch (error) {
+      this.remote.error = error.message;
+      try {
+        await this.closeRemote();
+        this.ready = true;
+      } catch (failure) { this.fatal?.(failure); throw failure; }
+      throw error;
+    }
     finally { this.reconfiguring = false; }
+  }
+  async closeRemote() {
+    await this.stopNamed('tor');
+    await this.stopAuthentication();
+    this.remoteOrigins = []; this.remoteAuthOrigin = null;
+    // Close remote ingress without changing Local's listener, trust or session.
+    if (this.children.some(child => child.name === 'caddy')) {
+      await this.writeCaddy();
+      await command(binary('caddy'), ['reload', '--config', paths.caddyJson, '--address', 'unix/' + paths.admin]);
+    } else await this.startCaddy(); // Identity reissue deliberately stops Caddy.
+    this.info.children = this.identities(); await writeJson(serverFile, this.info);
+    if (!await this.localReady()) throw Error('The Local listener could not be restored after remote publishing failed');
   }
   async reload() {
     if (!this.ready || this.stopping) return;
@@ -329,7 +354,7 @@ ${backend('remote')}
     } catch { return false; }
   }
   async localReady() { return Boolean(this.identity?.caPem) && verifiedHttps(this.origin, this.identity.caPem); }
-  async status() { return { identity: this.identity || await readJson(paths.identity, null), auth: { mode: 'native-local', generation: this.localGeneration, ...await accountStatus() } }; }
+  async status() { return { identity: this.identity || await readJson(paths.identity, null), auth: { mode: 'native-local', generation: this.localGeneration } }; }
   async stopIngress() {
     this.stopping = true; this.ready = false;
     const caddy = this.children.find(child => child.name === 'caddy');
