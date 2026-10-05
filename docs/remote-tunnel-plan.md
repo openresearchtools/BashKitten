@@ -1392,6 +1392,15 @@ slices and their limits; they do not replace the manual acceptance table.
   reuse a transient QR password. JavaScript parsing and diff checks pass. Native
   binding/gateway compilation and real login/tunnel acceptance are pending;
   connection-screen/controller activation is still being implemented.
+  Native core [run 37273992184](https://github.com/openresearchtools/BashKitten/actions/runs/37273992184)
+  at `9223a35207` subsequently passed Linux amd64/arm64 and Android client builds,
+  including the generated binding and actual Android API compilation of
+  `NativeRemote`, `SecretStore` and `TorGateway`. Full access-stack
+  [run 37273991841](https://github.com/openresearchtools/BashKitten/actions/runs/37273991841)
+  passed all components and assembly for Linux amd64/arm64 and Termux aarch64.
+  Gateway-only changes now trigger that native compilation workflow too.
+  These results establish compilation/assembly, not an installed APK or the
+  pending encrypted-import, real Authelia login and tunnel user flow.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

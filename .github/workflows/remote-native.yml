@@ -15,6 +15,7 @@ on:
       - 'auth/remote-termux/**'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/SecretStore.java'
+      - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/TorGateway.java'
       - '.github/workflows/remote-native.yml'
 
 permissions:
