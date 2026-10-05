@@ -1485,3 +1485,10 @@ context changes are recorded under “Tor routing source completion” in
 `remote-tunnel-plan.md`. Mapped services remain ordinary localhost browser tabs;
 strict Tor transport policy applies to Tor/protected Agent contexts. Native
 compilation and manual acceptance of this source slice are still pending.
+
+5 October desktop activation correction: `tabs.show` now explicitly focuses
+the selected ordinary browser after leaving the full Agent view. Gecko skips
+tab-switch focus restoration when that tab was already selected behind Agent.
+The existing selection/window-focus checks remain. JavaScript syntax and source
+whitespace checks passed; the installed-browser reproduction still needs a
+candidate containing this change and manual verification.

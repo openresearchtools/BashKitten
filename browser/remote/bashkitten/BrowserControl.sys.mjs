@@ -2399,6 +2399,11 @@ class BrowserControlService {
       for (let attempt = 0; attempt < 20; attempt++) {
         entry.window.focus();
         entry.window.gBrowser.selectedTab = entry.tab;
+        if (entry.window.gBrowser.selectedTab === entry.tab) {
+          // Agent is a separate browser. Reselecting the same tab does not
+          // run Gecko's tab-switch focus restoration.
+          entry.browser.focus();
+        }
         if (
           entry.window.gBrowser.selectedTab === entry.tab &&
           Services.focus.activeWindow === entry.window &&
