@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit
  * @property useOhttp Whether the request should be performed using the OHTTP library, defaults to false.
  * Currently only GeckoViewFetchClient supports it.
  * @property contextId The GeckoView session storage and network context for the request.
+ * @property saveAsDownload Whether this fetch saves a user-requested download through Gecko's Save As policy.
  * @see [Headers.Names]
  * @see [Headers.Values]
  */
@@ -57,6 +58,7 @@ data class Request(
 ) {
     var referrerUrl: String? = null
     var conservative: Boolean = false
+    var saveAsDownload: Boolean = false
 
     /**
      * Create a Request for Backward compatibility.

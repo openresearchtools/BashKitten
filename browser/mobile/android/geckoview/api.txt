@@ -2279,6 +2279,7 @@ package org.mozilla.geckoview {
     field public static final int FETCH_FLAGS_NO_REDIRECTS = 2;
     field public static final int FETCH_FLAGS_OHTTP = 2048;
     field public static final int FETCH_FLAGS_PRIVATE = 8;
+    field public static final int FETCH_FLAGS_SAVE_AS_DOWNLOAD = 4096;
     field public static final int FETCH_FLAGS_STREAM_FAILURE_TEST = 1024;
   }
 

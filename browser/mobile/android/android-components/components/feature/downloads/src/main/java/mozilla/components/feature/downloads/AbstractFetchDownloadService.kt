@@ -688,7 +688,10 @@ abstract class AbstractFetchDownloadService : Service() {
             headers = headers,
             private = download.private,
             referrerUrl = download.referrerUrl,
-        ).apply { contextId = download.contextId }
+        ).apply {
+            contextId = download.contextId
+            saveAsDownload = true
+        }
         // When resuming a download we need to use the httpClient as
         // download.response doesn't support adding headers.
         val response = if (isResumingDownload || useHttpClient || download.response == null) {

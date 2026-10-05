@@ -60,6 +60,7 @@ public class GeckoWebExecutor {
     FETCH_FLAGS_PRIVATE,
     FETCH_FLAGS_STREAM_FAILURE_TEST,
     FETCH_FLAGS_OHTTP,
+    FETCH_FLAGS_SAVE_AS_DOWNLOAD,
   })
   public @interface FetchFlags {}
 
@@ -83,6 +84,9 @@ public class GeckoWebExecutor {
 
   /** Use the OHTTP relay for this request. */
   @WrapForJNI public static final int FETCH_FLAGS_OHTTP = 1 << 11;
+
+  /** Save a user-requested download using Gecko's Save As content policy. */
+  @WrapForJNI public static final int FETCH_FLAGS_SAVE_AS_DOWNLOAD = 1 << 12;
 
   /**
    * Create a new GeckoWebExecutor instance.

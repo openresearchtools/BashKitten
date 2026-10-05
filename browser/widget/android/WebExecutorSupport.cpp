@@ -461,7 +461,9 @@ nsresult WebExecutorSupport::CreateStreamLoader(
     rv = NS_NewChannel(getter_AddRefs(channel), uri,
                        nsContentUtils::GetSystemPrincipal(),
                        nsILoadInfo::SEC_ALLOW_CROSS_ORIGIN_SEC_CONTEXT_IS_NULL,
-                       nsIContentPolicy::TYPE_OTHER);
+                       aFlags & java::GeckoWebExecutor::FETCH_FLAGS_SAVE_AS_DOWNLOAD
+                           ? nsIContentPolicy::TYPE_SAVEAS_DOWNLOAD
+                           : nsIContentPolicy::TYPE_OTHER);
     NS_ENSURE_SUCCESS(rv, rv);
   }
 

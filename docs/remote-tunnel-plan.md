@@ -1802,3 +1802,17 @@ Local's listener is unchanged. The completed account and encrypted QR remain
 saved with publishing off after the failure. Source tracing, JavaScript syntax
 and whitespace checks passed. Rebuilt installation and actual publishing/client
 acceptance remain required; no installed runtime was patched.
+
+### 5 October Android Save image request correction
+
+On installed Android `c08317bc96`, Save image failed for an HTTP image that the
+user had already opened. Server logs showed the download fetch attempting TLS
+against that HTTP endpoint; temporarily disabling HTTPS-Only made the same save
+succeed. Android's separate fetch used Gecko's generic request type instead of
+its existing Save As download policy. Download fetches now explicitly select
+`TYPE_SAVEAS_DOWNLOAD`, including resumed requests. The originating private/storage
+context and Tor routing remain unchanged; ordinary fetches keep their original
+policy. This uses Gecko's existing Save As behavior without a new transport or
+certificate exception. The updated Request/Headers compile against the Android
+API; changed Kotlin/Java parse and whitespace checks pass. Full Android compilation
+and the installed Save image, retry and Tor-download checks remain required.

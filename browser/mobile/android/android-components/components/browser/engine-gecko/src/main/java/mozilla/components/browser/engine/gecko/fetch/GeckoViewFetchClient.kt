@@ -77,6 +77,9 @@ class GeckoViewFetchClient(
             if (useOhttp) {
                 fetchFlags += GeckoWebExecutor.FETCH_FLAGS_OHTTP
             }
+            if (saveAsDownload) {
+                fetchFlags += GeckoWebExecutor.FETCH_FLAGS_SAVE_AS_DOWNLOAD
+            }
             return fetchFlags
         }
 
