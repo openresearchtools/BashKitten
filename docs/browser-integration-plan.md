@@ -418,9 +418,12 @@ restores it after a content-process crash. User tab-close/close-all/duplicate,
 session restore and agent tab commands cannot remove, duplicate or replace it.
 The user can still quit the application normally.
 
-On phones, place **Agent** to the left of the address bar while browsing. In
-the Android tabs screen, also place **Agent** at the far left of the top row,
-before Normal, Private and Tor. It closes the tray and restores the existing
+On phones, place the **BashKitten logo button** to the left of the address bar
+while browsing, replacing the spelled-out Agent button as requested on 5 October.
+Use the current kitten-with-glasses product asset and retain **Agent** as its
+accessible name, with the native rounded styling and full touch target. In the
+Android tabs screen, use the same logo at the far left of the top row, before
+Normal, Private and Tor. It closes the tray and restores the existing
 protected Agent view, preserving its chat and draft without creating a normal tab.
 In Agent, replace the URL toolbar with a compact Agent/Local-or-Remote/power/menu bar.
 Use one small power control showing On, Starting, Stopping or Off. Its On action

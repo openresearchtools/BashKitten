@@ -16,6 +16,7 @@ this plan, building a helper or dispatching CI does not complete that deliverabl
 | --- | --- |
 | Fresh Android Agent | The Termux setup page offers **Connect to remote** before any Termux install, command permission or package setup |
 | Agent selector | Local, named remotes and Connect to remote remain reachable in every setup/connection state |
+| Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current BashKitten logo, retaining accessible naming, touch target and behavior |
 | Unconfigured Local | Show the short-command setup and **Back to remote**, retaining the previous remote, login and draft |
 | Linux Enable remote | Choose one username/password, scan the authenticator QR, verify a TOTP, then display the encrypted connection QR |
 | Connection QR | One image contains all client connection material, encrypted with that same Authelia password; display, click to download, camera scan and image upload work |
@@ -31,6 +32,20 @@ No SSH service, remote terminal, arbitrary reverse-port forwarding or UDP UI is
 included. Retain Chisel's internal SSH transport without adding an SSH server
 feature. Published application endpoints are TCP/Unix streams, primarily web
 applications and llama.cpp.
+
+### Mobile Agent button branding
+
+Additional requirement, 5 October: on Android, replace the visible **Agent** text
+on the navigation button with the existing BashKitten kitten-with-glasses logo.
+Apply this consistently beside the address bar, in the leftmost Agent entry on
+the tabs screen and wherever the same Agent navigation control is reused. Use
+the current product asset, not an old kitten image or a newly generated logo.
+Keep the native rounded/circular button treatment and full touch target, with
+clear light/dark appearance, focus and selected states. Retain the accessible
+name **Agent** and its existing action: restore the protected Agent view without
+losing its chat/draft or creating another tab. Keep it available after opening
+new tabs and while Local setup or Remote connections are displayed. This is a
+required mobile change; desktop logo treatment can follow its native layout.
 
 ## 2. Sources and verified starting points
 
@@ -427,7 +442,7 @@ during the current runtime.
 | `agent/src/server/control.mjs`, runtime ownership/guard | Remote reset/lifecycle, owned service units, safe Quit and reconciliation |
 | `agent/src/server/platform/linux/{llama,llama-provider}.mjs` | Command/config service ownership; remove duplicate HTTP token-injecting relay behavior |
 | Existing `agent/src/web` settings | Publishing flow/image, service command/startup controls and real state/errors; no web-side crypto/auth implementation |
-| Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` | Remote-first onboarding/back, encrypted image import, service actions/mappings and foreground ownership |
+| Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Remote-first onboarding/back, encrypted image import, service actions/mappings, foreground ownership and logo-based Agent navigation |
 | Android `TorManager.java`, `TorGateway.java`, `SecretStore.java` | Reuse native Tor, scoped trust and protected credentials; add native tunnel client without Termux |
 | Desktop `components/{agent,tor}` | Equivalent UI, protected Agent transport and storage; replace `LlamaRelay` with common native mapping core |
 | Android/desktop native tab and network routing | Private Tor context before onion navigation; Tor-only subresources, DNS, redirects and downloads; block unsupported direct transports; keep native mapped-service routing separately scoped |
@@ -511,6 +526,7 @@ except where an explicit restart case requires otherwise.
 | Identity reset | New user/password/TOTP/onion/client grant/CA/Chisel key; old account removed; interrupted rotation closed; local chats/provider logins/models/service definitions preserved |
 | Desktop | Supported X11/Wayland tray and icon; serving while hidden, same-window reopen, actual login autostart and disabled-autostart check, missing-tray fallback, complete Quit cleanup |
 | Android UI/lifetime | Screen-off/background runtime, reopen/reconnect, rotation/keyboard for every password/TOTP/port field; input and controls remain visible |
+| Mobile Agent logo | Current logo replaces navigation text beside the address bar and in the tabs screen; accessible Agent name, full touch target, light/dark/selected states; new tabs and setup/remote screens retain access and existing chat/draft |
 | Upgrade/licenses | Signed APK/APT updates retain state; accurate full notices/source available offline before backend/login on Android/Linux |
 
 Record results on all target platforms before release. Missing runtime coverage
