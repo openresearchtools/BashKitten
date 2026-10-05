@@ -86,24 +86,30 @@ export const BashKittenAndroid = {
     else routes.delete(context);
   },
   applyFilter(channel, original, callback) {
+    const block = () => {
+      // A proxy-resolution error alone permits HTTP to retry directly.
+      channel.cancel(Cr.NS_ERROR_PROXY_CONNECTION_REFUSED);
+      callback.onProxyFilterResult(null);
+    };
     const context = channel.loadInfo?.originAttributes?.geckoViewSessionContextId;
     const route = routes.get(context);
     let host = "";
     try { host = channel.URI.asciiHost.toLowerCase().replace(/\.$/, ""); } catch (_) {}
     const mapped = serviceContext(context);
     if (mapped && !route?.serviceRoute) {
-      channel.cancel(Cr.NS_ERROR_CONNECTION_REFUSED);
-      callback.onProxyFilterResult(original);
+      block();
       return;
     }
     if ((context && !route) || route?.tor || torContext(context) || host.endsWith(".onion")) {
       const protectedHost = !route?.agentHost && [...routes.values()].some(item => item.agentHost &&
         (host === item.agentHost || host.endsWith(`.${item.agentHost}`)));
-      const blocked = protectedHost || localHost(host);
-      const port = !blocked && route?.tor ? route?.port : 0;
+      if (protectedHost || localHost(host) || !route?.tor || !route.port) {
+        block();
+        return;
+      }
       callback.onProxyFilterResult(proxy.newProxyInfoWithAuth(
-        "socks", "127.0.0.1", port || 9,
-        context || "blocked", route?.proxySecret || "blocked", "", context || "blocked",
+        "socks", "127.0.0.1", route.port,
+        context, route.proxySecret, "", context,
         Ci.nsIProxyInfo.TRANSPARENT_PROXY_RESOLVES_HOST, 10, null
       ));
     } else {

@@ -1703,3 +1703,16 @@ native client used them. TK2 supplies the CA and client certificate directly to
 mTLS and Android's separate ordinary authenticated-onion policy are unchanged.
 The XPIDL parser and whitespace checks passed; no old symbols remain in browser
 or Agent source. Native compilation and manual acceptance remain pending.
+
+### 5 October blocked Tor requests cancel their channels
+
+Android and desktop routing now cancel blocked or unavailable requests instead
+of constructing a SOCKS route to a presumed unused local port. This also removes
+fabricated proxy credentials. Gecko's HTTP source treats proxy-resolution errors
+as permission to try a direct connection; cancelling the channel prevents that
+retry. The filter callback still completes once. Desktop requests can still wait
+for actual Tor startup and recheck their native route afterwards. Protected Agent
+origin checks and ordinary mapped-service routing remain in place.
+
+Both modules passed JavaScript syntax and whitespace checks. No scripted product
+test was added or run; native builds and manual routing acceptance remain pending.

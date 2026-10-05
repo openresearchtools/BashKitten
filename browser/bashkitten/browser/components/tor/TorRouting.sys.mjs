@@ -35,7 +35,6 @@ const CONTAINER_ID_PREF = "bashkitten.tor.containerId";
 const PERSISTENT_CONTAINER_ID_PREF = "bashkitten.tor.persistentContainerId";
 const STATE_EVENT = "BashKittenTorStateChange";
 const BINARY_PREF = "bashkitten.tor.binary.path";
-const DEAD_PROXY_PORT = 9;
 const PROXY_TIMEOUT_SECONDS = 10;
 const START_ATTEMPTS = 120;
 const START_INTERVAL_MS = 250;
@@ -894,13 +893,17 @@ export const TorRouting = {
   },
 
   applyFilter(channel, proxyInfo, callback) {
+    const block = () => {
+      // A proxy-resolution error alone permits HTTP to retry directly.
+      channel.cancel(Cr.NS_ERROR_PROXY_CONNECTION_REFUSED);
+      callback.onProxyFilterResult(null);
+    };
     const context = channel.loadInfo?.originAttributes.userContextId;
     const service = this.isServiceContext(context);
     let host = "";
     try { host = channel.URI.asciiHost.toLowerCase().replace(/\.$/, ""); } catch {}
     if (service && !this._serviceRoutes.get(context)) {
-      channel.cancel(Cr.NS_ERROR_CONNECTION_REFUSED);
-      callback.onProxyFilterResult(proxyInfo);
+      block();
       return;
     }
     const tor = this.isTorContext(context);
@@ -908,25 +911,33 @@ export const TorRouting = {
       callback.onProxyFilterResult(proxyInfo);
       return;
     }
-    const agent = this._agentContexts.get(channel.loadInfo?.originAttributes.userContextId);
+    const agent = this._agentContexts.get(context);
     if (agent && Object.hasOwn(agent, "tunnel")) {
       const route = agent.tunnel;
       const permitted = ["https", "wss"].includes(channel.URI.scheme) && channel.URI.host === agent.address + ".onion" &&
         (channel.URI.port === -1 || channel.URI.port === 443);
+      if (!permitted || !route) {
+        block();
+        return;
+      }
       callback.onProxyFilterResult(lazy.ProxyService.newProxyInfoWithAuth(
-        "socks", "127.0.0.1", permitted && route ? route.port : DEAD_PROXY_PORT,
-        route?.username || "blocked", route?.password || "blocked", "", `agent-${channel.loadInfo.originAttributes.userContextId}`,
+        "socks", "127.0.0.1", route.port,
+        route.username, route.password, "", `agent-${context}`,
         Ci.nsIProxyInfo.TRANSPARENT_PROXY_RESOLVES_HOST, PROXY_TIMEOUT_SECONDS, null));
       return;
     }
     const protectedHost = !agent && [...this._agentContexts.values()].some(entry =>
       host === `${entry.address}.onion` || host.endsWith(`.${entry.address}.onion`));
-    const applyTorProxy = () => {
+    if (!tor || localHost(host) || protectedHost || this._stopping) {
+      block();
+      return;
+    }
+    if (this._port) {
       const isolationKey = this._isolationKey(channel);
       const torProxy = lazy.ProxyService.newProxyInfoWithAuth(
         "socks",
         "127.0.0.1",
-        tor && !localHost(host) && !protectedHost ? this._port || DEAD_PROXY_PORT : DEAD_PROXY_PORT,
+        this._port,
         `bashkitten-${isolationKey}`,
         isolationKey,
         "",
@@ -936,11 +947,16 @@ export const TorRouting = {
         null
       );
       callback.onProxyFilterResult(torProxy);
-    };
-    if (this._port) {
-      applyTorProxy();
     } else {
-      this.ensureProxy().then(applyTorProxy, applyTorProxy);
+      this.ensureProxy().then(() => {
+        if (!this._port || !this.isTorContext(context) ||
+            this._agentContexts.get(context) !== agent) {
+          block();
+          return;
+        }
+        // Recheck the native route: it may have closed or changed during startup.
+        this.applyFilter(channel, proxyInfo, callback);
+      }, block);
     }
   },
 
