@@ -1663,3 +1663,11 @@ and protected-view suspension cancels its requests. Local/remote identity
 replacement remains gated by the existing reset/remove flow. Source diff and
 call-site checks passed; native compilation and simultaneous-download/remote
 stream manual verification remain pending.
+
+Desktop dictation also has a protected-browser microphone prompt: the Agent view
+is outside the ordinary selected-tab popup anchor, so its WebRTC request reaches
+its native owner directly. The owner admits only microphone requests from the
+current protected top-level document, asks the user, then uses Gecko's normal OS
+permission check and rechecks selection before allowing that device. Other tabs
+retain upstream permission behavior; there is no automatic/persistent Agent grant.
+This source path still requires visible desktop microphone acceptance.

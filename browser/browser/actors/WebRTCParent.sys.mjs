@@ -98,7 +98,10 @@ export class WebRTCParent extends JSWindowActorParent {
         data.origin = this.manager.topWindowContext.documentPrincipal.origin;
 
         let browser = this.getBrowser();
-        if (browser.fxrPermissionPrompt) {
+        if (browser.bashkittenMediaPermissionPrompt) {
+          // The protected Agent is browser-owned, outside the tab popup anchor.
+          void browser.bashkittenMediaPermissionPrompt(this, data);
+        } else if (browser.fxrPermissionPrompt) {
           // For Firefox Reality on Desktop, switch to a different mechanism to
           // prompt the user since fewer permissions are available and since many
           // UI dependencies are not available.

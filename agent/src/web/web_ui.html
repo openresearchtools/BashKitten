@@ -2895,7 +2895,7 @@
     }
     $('#dictationButton').onclick = async () => {
       if (dictation || !dictationCapability?.available) return;
-      const capture = { destination: dictationDestination(), chunks: [], abort: new AbortController(), started: Date.now() };
+      const capture = { destination: dictationDestination(), host: dictationCapability.host, chunks: [], abort: new AbortController(), started: Date.now() };
       dictation = capture; $('#dictationButton').disabled = true;
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -2910,13 +2910,14 @@
         };
         capture.input.connect(capture.processor); capture.processor.connect(capture.gain); capture.gain.connect(capture.context.destination);
         await capture.context.resume();
+        if (dictation !== capture || dictationDestination() !== capture.destination) { await releaseCapture(capture); return; }
         $('#dictationStatus').classList.remove('hidden'); $('#dictationStop').disabled = false;
         const update = () => {
           if (dictationDestination() !== capture.destination) { void cancelDictation(); return; }
-          if (!capture.processing) $('#dictationStatus span').textContent = `Recording · ${Math.floor((Date.now() - capture.started) / 1000)}s · Transcribes on ${dictationCapability.host}`;
+          if (!capture.processing) $('#dictationStatus span').textContent = `Recording · ${Math.floor((Date.now() - capture.started) / 1000)}s · Transcribes on ${capture.host}`;
         };
         update(); capture.timer = setInterval(update, 250);
-      } catch (error) { await cancelDictation(error.message); }
+      } catch (error) { if (dictation === capture) await cancelDictation(error.message); }
     };
     $('#dictationStop').onclick = async () => {
       const capture = dictation; if (!capture || capture.processing) return;
@@ -2926,7 +2927,7 @@
         await releaseCapture(capture);
         if (dictation !== capture) return;
         capture.wav = wavRecording(capture);
-        $('#dictationStatus span').textContent = `Loading / transcribing on ${dictationCapability.host}…`;
+        $('#dictationStatus span').textContent = `Loading / transcribing on ${capture.host}…`;
         const result = await api('/api/dictation', { method: 'POST', headers: { 'Content-Type': 'audio/wav' }, body: capture.wav, signal: capture.abort.signal });
         capture.wav.fill(0); capture.wav = null;
         if (dictation !== capture || dictationDestination() !== capture.destination) return;

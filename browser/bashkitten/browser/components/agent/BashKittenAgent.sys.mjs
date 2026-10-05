@@ -3,6 +3,7 @@
 import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
+import { localAISettings } from "resource:///modules/LocalAI.sys.mjs";
 import { serviceSettings } from "resource:///modules/ServiceSettings.sys.mjs";
 import { remoteServices } from "resource:///modules/RemoteServices.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
@@ -96,7 +97,7 @@ function control(command, data = {}) {
   return operation;
 }
 async function localControl(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file"].includes(command)) {
+  if (!["start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-save", "localai-ini", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -188,6 +189,9 @@ class AgentView {
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
     bar.append(this.power);
+    this.localAIButton = html(doc, "button", { type: "button" }, "LocalAI");
+    this.localAIButton.addEventListener("click", () => this.run(() => this.localAI()));
+    bar.append(this.localAIButton);
     const menu = html(doc, "button", { id: "bashkitten-agent-menu", type: "button", "aria-label": "Browser menu", "aria-haspopup": "menu" }, "☰");
     menu.addEventListener("click", event => this.win.PanelUI.toggle(event, menu));
     bar.append(menu);
@@ -334,11 +338,13 @@ class AgentView {
     }
     this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"), html(this.doc, "option", { value: "share-local" }, "Share Local"));
     this.choice.value = this.selection;
+    this.localAIButton.hidden = Boolean(this.selection);
   }
 
   async choose(id, password = "") {
     this.closeConnections();
     this.selection = id;
+    this.localAIButton.hidden = Boolean(id);
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("remote switch");
     await AgentRemotes.deactivate(false);
@@ -353,6 +359,7 @@ class AgentView {
 
   async selectRemote(connection, password = "", forceLogin = false) {
     this.selection = connection.id;
+    this.localAIButton.hidden = true;
     this.remote = connection;
     this.off = false;
     this.choice.value = connection.id;
@@ -371,6 +378,7 @@ class AgentView {
   }
 
   async local() {
+    this.localAIButton.hidden = false;
     this.selection = "";
     this.remote = null;
     this.choice.value = "";
@@ -493,6 +501,7 @@ class AgentView {
       });
       this.views.set(key, browser);
       this.viewBox.append(browser);
+      browser.bashkittenMediaPermissionPrompt = (actor, request) => this.microphonePermission(browser, actor, request);
       const host = this;
       browser.addProgressListener({
         QueryInterface: ChromeUtils.generateQI(["nsIWebProgressListener", "nsISupportsWeakReference"]),
@@ -627,6 +636,36 @@ class AgentView {
     } catch (error) { message.textContent = error.message; }
   }
 
+  async microphonePermission(browser, actor, request) {
+    let allowed = false;
+    try {
+      const current = () => protectedAgentView(actor)?.host === this && actor.browsingContext.embedderElement === browser &&
+        !this.pane.hidden && !browser.hidden && !new URL(request.documentURI).pathname.startsWith("/login");
+      const device = request.audioInputDevices?.[0];
+      if (!current() || !request.secure || request.requestTypes?.length !== 1 || request.requestTypes[0] !== "Microphone" ||
+          !device || request.videoInputDevices?.length || request.audioOutputDevices?.length || request.sharingScreen || request.sharingAudio) return;
+      const name = ownedViews.get(browser).connection.name || new URL(request.documentURI).hostname;
+      if (!Services.prompt.confirm(this.win, "Use microphone?", `Allow Agent (${name}) to record this microphone message? Recording stops when you select Stop or Cancel.`)) return;
+      if (!current()) return;
+      if (!await actor.checkOSPermission(false, true, false)) return;
+      if (!current()) return;
+      actor.activateDevicePerm(request.windowID, device.mediaSource, device.rawId);
+      actor.sendAsyncMessage("webrtc:Allow", { callID: request.callID, windowID: request.windowID, devices: [device.deviceIndex] });
+      allowed = true;
+    } catch {
+      // A changed/destroyed protected document receives no permission.
+    } finally {
+      if (!allowed) { try { actor.denyRequest(request); } catch {} }
+    }
+  }
+
+  async localAI() {
+    if (this.selection || this.remote) throw new Error("Select Local to open LocalAI.");
+    this.closeConnections();
+    const { panel, content } = this.connectionPanel("LocalAI");
+    await localAISettings(content, control, this.win, () => this.connectionsPanel === panel && !this.selection && !this.remote);
+  }
+
   async shareLocal() {
     this.closeConnections();
     const { panel, content } = this.connectionPanel("Share Local");
@@ -691,6 +730,15 @@ class AgentView {
       const save = button("", download); save.setAttribute("aria-label", "Download QR image"); save.append(qr);
       body.append(save, button("Download QR image", download));
       body.append(button("Reissue identity", () => account(true)));
+      const llama = html(this.doc, "div"); body.append(llama);
+      control("localai-status").then(local => {
+        if (!current() || !llama.isConnected) return;
+        const checkbox = html(this.doc, "input", { type: "checkbox" }); checkbox.checked = Boolean(local.llama.service?.enabled);
+        const label = html(this.doc, "label", {}, "Share llama.cpp"); label.prepend(checkbox); llama.append(label);
+        llama.append(html(this.doc, "p", {}, local.llama.service ? local.llama.service.state : "Configure llama.cpp in LocalAI first."));
+        checkbox.addEventListener("change", () => { const enabled = checkbox.checked; checkbox.checked = Boolean(local.llama.service?.enabled); run(async () => { await control("localai-share", { enabled }); render(await control("share-status")); }); });
+        if (!this.selection) llama.append(button("Open LocalAI", () => this.localAI()));
+      }).catch(failure => { if (llama.isConnected) llama.textContent = failure.message; });
       const services = html(this.doc, "details"); services.append(html(this.doc, "summary", {}, "Services"));
       const serviceBody = html(this.doc, "div"); services.append(serviceBody); body.append(services);
       services.addEventListener("toggle", () => {
