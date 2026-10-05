@@ -29,7 +29,15 @@ supersedes conflicting older remote-export, Android relay, llama bearer-injectio
 and Linux window-close requirements: encrypted QR using the chosen Authelia
 password, native Chisel service mappings on both clients, remote host service
 controls, identity reissue, close-to-tray and explicit Quit. Preserve Local Pi's
-access to enabled remote localhost mappings. These are planned requirements,
+access to enabled remote localhost mappings. Publishing is now planned for Linux
+and Android's Termux backend, superseding the 4 October Linux-only restriction.
+Build Chisel for both the APK client and native Termux host. All host publishing,
+account/enrollment/export/reset, file-manager permission and service-definition
+controls belong in browser-owned **Share Local** beside Local/remotes; remove
+their web UI and remote HTTP/RPC management paths. Use the native private local
+controller/Termux bridge. Preserve permitted remote service-ID start/stop/reload.
+Keep complete pinned pillama source/build metadata in this repository and build
+its shipped runtime from that tree. These are planned requirements,
 not a claim that the new transport or tray is already implemented. Tor tabs must
 route all network requests, including public HTTP/HTTPS assets and DNS, through
 Tor or block them. Ordinary unenrolled onion URLs enter private Tor before any
@@ -132,12 +140,13 @@ tabs. Keep actual protocol/format validation and user cancellation.
 Bind to 127.0.0.1. Local Android/Linux Agent sessions authenticate automatically
 with a runtime credential delivered only through the native private controller
 bridge and installed as a Secure/HttpOnly/SameSite cookie in the protected Agent
-context. No local account or Authelia enrollment is required. Linux-only Tor
+context. No local account or Authelia enrollment is required. Host Tor
 publishing uses a separate listener with mandatory Authelia two-factor login;
 never bypass remote authentication based on a loopback source address or Host.
 Start Authelia/Valkey only for remote account setup or enabled publishing, retaining
-their durable account/session storage. Android runs Local or connects to remotes;
-it never publishes a Termux backend. Keep Argon2id, Origin/CSRF checks, private
+their durable account/session storage. Android can connect without Termux, or
+publish its local Termux backend through native Share Local as planned above.
+Keep Argon2id, Origin/CSRF checks, private
 storage permissions and filesystem path confinement. Do not expose provider credentials in browser
 status, logs or URLs. Disable startup catalog/update traffic and telemetry.
 

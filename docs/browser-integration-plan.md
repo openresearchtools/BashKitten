@@ -18,10 +18,26 @@ reissue. Preserve enabled remote service mappings while using Local Pi. Linux
 window close hides to a functioning tray; explicit Quit stops owned services.
 Add optional login autostart and per-service startup. This supersedes the older
 plaintext/manual export, Android-without-relay, HTTP llama token injection and
-close-stops-runtime requirements below. Keep account-free Local, Linux-only
-publishing, existing native security boundaries and mandatory remote Authelia
+close-stops-runtime requirements below. Keep account-free Local,
+existing native security boundaries and mandatory remote Authelia
 authentication. The new document specifies source updates, minimal upstream
 patches, migration, builds and manual acceptance; it does not claim completion.
+
+Latest hosting/UI clarification, 5 October: allow Android to publish its Local
+Agent and approved services through the native Termux Caddy/Authelia/Tor stack
+plus a native Termux Chisel host. The APK also builds the native Chisel client;
+connecting to a remote remains possible without Termux. This supersedes the
+4 October Linux-only publishing decision. Put all host publishing/account/TOTP,
+QR export, identity reset, file-manager permission and service-definition controls
+in browser-owned **Share Local** beside Local/saved remotes on both platforms.
+Remove these controls and their remote HTTP/RPC management routes from the shared
+web UI; private native controller/Termux IPC is required. Remote clients retain
+only the explicitly permitted service-ID Start/Stop/Reload actions and their own
+client mappings. Preserve the existing native security boundaries and no-account
+Local flow. Vendor complete pinned pillama source/build metadata in this product
+repository, extending the runtime-source subset already present, and package
+from that tree with matching source/notices. See the remote tunnel plan for
+platform ownership, manual acceptance and source-delivery details.
 
 Additional Tor clarification, 5 October: every network request from a Tor tab,
 including HTTP/HTTPS assets on public domains, redirects, downloads and DNS,
@@ -31,7 +47,7 @@ APIs/local mapped service sockets retain their separate scoped route; do not
 create a blanket localhost exception for Tor pages. The detailed requirements
 and manual acceptance cases are in the remote tunnel plan.
 
-Additional file-access clarification, 5 October: Linux remote setup/settings has
+Additional file-access clarification, 5 October: native Share Local setup/settings has
 **Allow remote file manager**, off by default and controlled by the host. When
 enabled, remote Android/Linux clients receive the Termux-style Files/Changes
 sidecar with host file browsing, editing, diffs, uploads and downloads. Enforce
@@ -66,13 +82,11 @@ subtree, retaining BashKitten integration and compact upstream ancestry. Product
 version becomes 153.4. Source merge and provenance checks do not establish
 Android/Linux build or manual acceptance; complete those before publication.
 
-Latest platform clarification, 4 October: remote publishing is Linux-only.
-Android runs its local Termux Agent or connects to an existing remote server;
-it does not publish its local Agent, llama endpoint or hosted websites. Hide
-publishing settings for the Termux backend, reject its publishing commands and
-do not create or start a backend Tor publisher, even with older enabled settings.
-This supersedes the Android publishing requirements below. Android's browser Tor
-client, remote import/login and authorized remote browser control remain available.
+Historical platform decision, 4 October: publishing was limited to Linux and
+disabled in the Termux backend. The 5 October Share Local/Android-hosting request
+above replaces that restriction. Restore publishing only through the new trusted
+native host flow; do not restore remote web management endpoints or silently
+activate old enabled settings before native configuration/security migration.
 
 Latest authentication clarification, 4 October: Local on Android and Linux opens
 without account creation, password or 2FA. The native private bridge obtains a
@@ -81,13 +95,14 @@ session cookie only in the protected local Agent context. Keep pinned HTTPS,
 Origin/CSRF and private file boundaries. No public token endpoint or URL secret.
 A separate Caddy listener handles Tor ingress with existing mandatory Authelia
 2FA, client authorization and hosted-site/llama policies. Never classify traffic
-as local by its source IP: Tor forwards to loopback too. Linux's first Publish
+as local by its source IP: Tor forwards to loopback too. The first Share Local
 opens native account/TOTP enrollment; publishing starts only after verification.
 Existing accounts and durable remote sessions remain valid. Authelia/Valkey run
 only for remote setup or enabled publishing and stop when publishing is disabled.
 The local cookie is replaced automatically after a backend restart, preserving
 Pi credentials, history and drafts. These requirements supersede the local
-account/login, startup health and Android publishing requirements below.
+account/login and startup health requirements below. Android publishing follows
+the later Share Local/Termux host clarification above.
 
 ## 1. Product boundary
 
@@ -103,8 +118,11 @@ compaction display, attachments, repository browsing, backend ZIP downloads,
 provider login and native Pi session behavior. Pi remains stock: its own tools,
 extensions, skills, models, credentials, sessions and RPC. This is not another
 Pi adapter rewrite.
-Bundle the pinned pillama extension with Pi on Linux and Termux. Under the
-existing token/compaction line, show its native RPC status text for llama.cpp
+Bundle the pinned pillama extension with Pi on Linux and Termux. Keep its complete
+pristine upstream source tree and build metadata in `agent/pi/vendor/pillama/`,
+with exact revision, original license and separate BashKitten adapter; build the
+runtime subset from this tree and include the full source in release archives.
+Under the existing token/compaction line, show its native RPC status text for llama.cpp
 loading, prefill progress, cached tokens, prefill/decode speeds and elapsed time.
 Keep the compact top-bar height; long mobile status text can scroll horizontally.
 Retain the latest status on reconnect, without writing telemetry to chat history.
@@ -925,13 +943,16 @@ proot fallback. This portability and shutdown behavior are not yet tested.
 
 ## 6. Remote Agent connections and Tor
 
-Every backend has **Settings → Remote access**: off/on, address, QR, save/import
-connection file and copy/reveal controls. Keys are masked by default. Publish
-through a backend-owned Tor onion service, separate from the browser's client
-Tor process. Android browser closure leaves publishing running. Linux browser
-closure stops its adopted group, including publishing; standalone CLI servers
-remain independent until adopted. Explicit Turn off stops the published service
-with the rest of Agent.
+Native **Share Local**, beside Local/saved remotes in the browser selector,
+owns publishing setup, On/Off, account/TOTP, the password-encrypted QR export,
+host permissions and identity reset. The shared web UI has no such controls or
+remote management API. Use the private local controller on Linux and the native
+Termux bridge on Android; full details are in the remote tunnel plan. Publish
+through the backend-owned Tor instance, separate from client Tor. Android UI
+closure leaves the Termux publisher running; Linux close hides to the tray.
+Explicit whole-Agent Turn off stops its owned publisher and runtime. Desktop
+Quit stops adopted services; standalone CLI servers remain independent until
+adopted.
 
 Use Torkitten's v3 client authorization and Caddy/Authelia route pattern. A remote
 connection record contains its name, kind, onion endpoint, client authorization
@@ -959,9 +980,10 @@ Switching changes the protected view's server while keeping per-server login
 state and reconnect information. It does not create a browser profile or window.
 Client connection import and saved connections belong only to the browser's
 selector and a non-modal browser-owned view with Back to Agent, never an overlay
-over server settings or a web-to-browser import shortcut. The server web UI only
-sends publishing/key/export requests to the backend. Put its device connection,
-QR and file export controls immediately below the published server address.
+over server settings or a web-to-browser import shortcut. Publishing/key/export
+operations are accessible only through native Share Local and its private
+controller, with the encrypted QR immediately below publishing status. Remove
+their shared web UI and remote HTTP/RPC routes, rather than merely hiding them.
 Enabling or disabling publishing must retain the local loopback endpoint and
 local login session; it must not select a Tor client connection or restart
 Authelia merely to add/remove the already prepared onion cookie scope.
@@ -972,8 +994,10 @@ to the agent automation API.
 
 ### Hosted local websites
 
-In the same **Settings → Remote access** panel, let the owner add, edit, disable
-and remove named loopback HTTP services. A single valid DNS label such as
+In native **Share Local**, let the owner add, edit, disable and remove named
+loopback services; the remote web UI cannot edit those definitions. The following
+original HTTP-hostname design is superseded by the unified Chisel service/localhost
+mapping contract in the remote tunnel plan. A single valid DNS label such as
 `randomwebui` and target `http://127.0.0.1:3030` publishes
 `https://randomwebui.<agent-address>.onion` through the existing Tor/Caddy stack.
 Reject invalid labels, non-loopback targets and embedded credentials. Keep all

@@ -3,8 +3,15 @@
 Requested 5 October 2026. **Status: plan, not implemented or accepted.** This
 extends the [browser integration plan](browser-integration-plan.md) and replaces
 its conflicting remote-export, llama relay and desktop-close requirements.
-Local Agent remains account-free. Publishing remains Linux-only. Android remote
-use requires no Termux; Termux is needed only for a local Pi/backend.
+Local Agent remains account-free. Publishing is supported on Linux and on Android
+through its native Termux backend. Android can connect to a remote without
+Termux; hosting its own Agent/services requires the local Termux runtime.
+
+Latest clarification, 5 October: all publishing, enrollment, identity and host
+permission controls move out of the shared web UI into browser-owned **Share
+Local** beside Local/saved remotes. This supersedes the earlier Linux-only
+publishing decision. Include the complete pinned pillama source in this product
+repository, extending the production-source subset already vendored.
 
 The deliverable is working Linux amd64/arm64 packages, the Android APK and matching
 Termux package, source and notices, after builds and manual acceptance. Writing
@@ -18,14 +25,14 @@ this plan, building a helper or dispatching CI does not complete that deliverabl
 | Agent selector | Local, named remotes and Connect to remote remain reachable in every setup/connection state |
 | Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current BashKitten logo, retaining accessible naming, touch target and behavior |
 | Unconfigured Local | Show the short-command setup and **Back to remote**, retaining the previous remote, login and draft |
-| Linux Enable remote | Choose one username/password, scan the authenticator QR, verify a TOTP, then display the encrypted connection QR |
+| Share Local | Browser-owned entry beside Local/remotes on Linux/Android; choose username/password, enroll with authenticator app/QR, verify TOTP, then show the downloadable connection QR |
 | Remote file-manager permission | Host setup has **Allow remote file manager**, off by default; the server gates Files/Changes browsing, editing, diffs and manager transfers while chat attachments/image previews and Pi tools continue working |
 | Connection QR | One image contains all client connection material, encrypted with that same Authelia password; display, click to download, camera scan and image upload work |
 | Remote login | Decrypt the QR, verify the server, authenticate with Authelia/TOTP and connect; no separately chosen tunnel password or pasted keys |
 | Connected remote | List Agent and every published service, actual host state, local URL/port, Open/Copy, mapping control and host Start/Stop/Reload |
 | Android localhost | Services bind an available port automatically or a user-selected port; Termux Pi and ordinary local applications can use them |
 | Tor browsing on both platforms | Every network request from a Tor tab uses Tor or is blocked; ordinary unenrolled `.onion` navigation always enters the private Tor context |
-| Linux host services | Explicit target and launch command/configuration, including llama.cpp router mode, with Start/Stop/Reload and Launch on startup |
+| Host services | Linux or native Termux targets/launch commands, configuration, Start/Stop/Reload and Launch on startup; llama.cpp router support where a compatible native runtime is installed |
 | Reissue identity | Close old access, replace the remote account and all remote keys, enroll fresh TOTP, issue the new password-encrypted QR |
 | Linux lifetime | Close hides to a functioning tray with BashKitten icon; Quit stops owned services and exits; Start on login is configurable |
 
@@ -83,15 +90,17 @@ Adapt these donor differences deliberately:
   real session/refresh lifecycle, not repeated password prompts.
 - V2 explicitly has incomplete Android packaging/device proof. Its mobile
   facade is a reference, not evidence that our Android flow already works.
-- Host command control uses systemd user units. The Android client must not
-  include that host-only dependency or `/usr/bin/openssl`/`ssh-keygen` assumptions.
+- Donor host commands use systemd user units on Linux. Termux hosting uses the
+  existing native controller/guard and owned process groups instead; no systemd,
+  root or proot. The APK's client library must not acquire host-only dependencies
+  or `/usr/bin/openssl`/`ssh-keygen` assumptions.
 - Keep real protocol validation. Do not import unrelated SSH UI, arbitrary
   service-count quotas, another application shell or a new supervisor framework.
 
 ## 3. Transport and security boundaries
 
 ```text
-Android / Linux client                              Linux publishing host
+Android / Linux client                       Linux / Android-Termux host
 
 ordinary client: Pi, browser, curl
   -> 127.0.0.1:<actual local service port>
@@ -119,8 +128,10 @@ Mandatory boundaries:
 - Tor v3 client authorization, exact onion/TLS identity, enrolled client
   certificate, full Chisel fingerprint and valid Authelia authorization.
   No clearnet retry, arbitrary CA acceptance or account-free Local fallback.
-- Caddy/Authelia stay on the Linux host. Android remote access uses native Tor
-  and the client core without Termux or Android-hosted authentication daemons.
+- The publishing host runs Caddy/Authelia/Tor/Chisel: Linux native binaries on
+  desktop or native Android/Bionic binaries in Termux on a phone. An Android
+  remote-only client still uses the APK's Tor/client core without Termux or
+  authentication daemons. Do not merge these separate hosting/client roles.
 - The private tunnel backend independently verifies Authelia authorization,
   following v2. A remote supplies only a configured service ID, never a new dial
   address, Unix socket, command or arbitrary reverse-forwarding destination.
@@ -197,9 +208,41 @@ cannot gain direct loopback/LAN access or the native API exception by requesting
 such a URL. Enforce this in native network routing on both platforms, not only
 in address-bar navigation or JavaScript fetch helpers.
 
-## 4. Publisher setup and encrypted image
+## 4. Browser-owned Share Local and encrypted image
 
-1. Linux **Enable remote** opens first-time account setup: username, password and
+Add **Share Local** to the native Local/remote selector on Android and Linux.
+It always configures **this device's Local node**, even when a remote Agent is
+currently selected. Keep the title short, and identify the device inside the
+panel. This opens a compact browser-owned page with Back, not a server-rendered
+settings page. First-time controls are username/password, authenticator setup,
+the file-manager checkbox and the final connection image. Once configured, show
+publishing On/Off, connection QR/download, service configuration and Reissue
+identity; keep secondary details collapsible.
+
+Remove publishing/account creation, QR/key export, identity reset, file-manager
+permission and host service command/exposure editing from `agent/src/web` and
+from remotely callable HTTP/RPC management routes, including legacy `/api/control`
+proxies. Hiding buttons while retaining an authorized remote management endpoint
+does not satisfy this requirement. Backend operations remain behind the private
+native controller: Linux's protected local IPC and Android's permission-checked
+Termux bridge. No arbitrary webpage or protected Agent document gets that host
+administration capability; selecting Local or supplying a loopback/Origin/header
+does not grant it. Authentication UI may use Authelia's real APIs, but cannot
+change host policy. Browser automation must not inspect or operate these controls.
+Keep publisher policy, identities/keys and controller sockets outside remote
+file-manager exposure even when that feature is allowed, including canonical
+path/symlink/archive access. Otherwise editing the permission file itself would
+bypass the native-only administration boundary. This does not restrict ordinary
+chat attachments/image previews or Pi's separately acknowledged OS authority.
+
+Remote clients retain the explicitly allowed Start/Stop/Reload actions for
+already-published service IDs and their own localhost mappings in the native
+connected-remote screen. They cannot change the service command/target, enable
+file-manager access, export host enrollment material or republish/reissue the
+host through those actions. Stock Pi's same-account OS/shell authority remains
+separate; native UI placement is not an OS sandbox for that execution environment.
+
+1. **Share Local → Turn on** opens first-time account setup: username, password and
    confirmation. Use Authelia's own Argon2 hashing and TOTP storage. Validate the
    password against both account and QR requirements before creating anything;
    retain v2's encryption work factor and check real mobile decrypt performance.
@@ -208,16 +251,36 @@ in address-bar navigation or JavaScript fetch helpers.
 2. Generate the remote generation directory, onion identity/client grant, private
    server CA, client certificate/key, Chisel host key, OAuth registration/signing
    material and session secrets. No extra user key fields.
-3. Show Authelia's authenticator QR and verify a real TOTP through Authelia.
+3. Offer **Open authenticator** where supported and display Authelia's
+   authenticator QR, then verify a real TOTP through Authelia.
    This **authenticator QR** is distinct from the final **Connection QR**.
    Application access/publication remains closed until verification succeeds.
 4. Encrypt the complete connection bundle with that same chosen password.
-   Display the Connection QR in Remote access with **Download QR image**;
+   Display the Connection QR in the native Share Local panel with
+   **Download QR image**;
    clicking the image downloads the same PNG. Preserve the encrypted image for
    redisplay after restart; plaintext connection JSON is not the normal export.
 5. Show actual publishing/address/service state. Publishing Off closes remote
    ingress/carriers; subsequent On retains the account/identity without enrolling
    again. Local remains usable without an account and does not switch to Tor.
+
+On Android, Share Local checks local Termux/package readiness and reuses the
+ordinary one-command setup if needed, with Back to return to the current remote.
+It then drives the host setup through the native Termux bridge. Existing native
+Caddy/Authelia builds are reused; add the native Termux Chisel host build from
+the same pristine source as the APK client. Keep client Tor and publisher Tor
+as separate owned instances/data directories. A remote-only client does not
+install or start the Termux host stack.
+
+Android publishing uses the existing foreground runtime, Termux/browser wake
+handling and ordinary battery-permission flow. Closing/hiding the browser UI
+does not deliberately stop the Termux publisher; Publishing Off and whole-Agent
+Turn off do. An OS kill or network outage must show truthful status and recover
+through the controller without duplicate processes, changed identity or weaker
+authentication. A normal restart retains the host identity; Termux uninstall
+removes its host data and requires fresh local setup/QR enrollment, while saved
+connections to other hosts remain intact. Never silently republish with missing
+account, TOTP, file-manager policy or identity records.
 
 Reuse the actual v2 sequence: versioned bundle -> gzip -> pristine age scrypt
 encryption -> base64 QR text -> PNG. Retain the `TK2:` envelope and field meanings
@@ -273,8 +336,8 @@ Local only; preserve dynamic-port discovery and native Local trust recovery.
 
 ### Optional remote file manager: server-enforced permission
 
-Additional requirement, 5 October: the publishing host's Remote setup and Remote
-access settings include **Allow remote file manager**, **off by default**. Only
+Additional requirement, 5 October: the publishing device's browser-owned **Share
+Local** setup/settings include **Allow remote file manager**, **off by default**. Only
 the host-local trusted setup/control path can change it. A remote client cannot
 enable it through its own settings, QR fields, cached capability response,
 Authelia login alone or a generic remote control request. Apply it to every
@@ -348,8 +411,9 @@ another service. Independently published applications retain their own policies.
 
 ## 6. Host services and client localhost mappings
 
-Extend existing service settings with one saved host catalogue and a separate
-client mapping record per remote/service; no second service-manager UI.
+Move host service configuration into the native Share Local panel, reusing one
+saved host catalogue and a separate client mapping record per remote/service.
+Remove the old web settings implementation rather than maintaining two editors.
 
 | Host field | Meaning |
 | --- | --- |
@@ -366,6 +430,16 @@ possible; do not add component fingerprinting. No root service is needed. Keep
 arguments/quoting intact; no implicit shell expansion. Owners needing shell syntax
 can explicitly configure `/bin/sh -lc ...`. Configuration files remain on the
 host, without a custom model registry or command rewriting.
+
+For Termux hosts, reuse the existing BashKitten controller and native process
+guard for equivalent owned-process-group start/stop/reload and startup choices.
+Use Termux paths and native Android/Bionic executables; do not run Linux/glibc
+binaries, systemd or `/bin/sh` assumptions on Android. Explicit shell commands
+use the host platform's real shell. Track exact process identities and stop only
+owned services; do not kill unrelated Termux jobs. Expose actual support/errors
+for user commands and llama.cpp runtimes instead of offering Linux-only package
+or GPU controls on a phone. An external loopback service can still be published
+without pretending that BashKitten owns its process.
 
 Start is idempotent; Stop stops the owned unit. **Reload** restarts it with the
 current command/configuration, matching v2, and indicates that active streams
@@ -458,9 +532,9 @@ HTTP chunk boundaries. Preserve pillama's native progress/cache/speed display.
 
 ## 8. Identity reissue and failure recovery
 
-**Reissue identity** is a host-local action with confirmation that old clients
-will disconnect. It is not a remote account-takeover endpoint. Collect the new
-username/password, then:
+**Reissue identity** is an action in the host browser's Share Local panel with
+confirmation that old clients will disconnect. It is not a remote account-takeover
+endpoint. Collect the new username/password, then:
 
 1. Persist replacement-in-progress; reject new remote work. Close carriers,
    handshakes, remote Agent/browser-control sessions and ingress. Stop the owned
@@ -519,21 +593,26 @@ during the current runtime.
 | `agent/src/server/access/{remote,accounts,stack,paths,hosting}.mjs` | Remote generations, chosen account, QR delivery, Authelia OAuth config, catalogue/actions, Tor/Caddy routes |
 | `agent/src/server/control.mjs`, runtime ownership/guard | Remote reset/lifecycle, owned service units, safe Quit and reconciliation |
 | `agent/src/server/platform/linux/{llama,llama-provider}.mjs` | Command/config service ownership; remove duplicate HTTP token-injecting relay behavior |
-| Existing `agent/src/web` settings | Publishing flow/image, service command/startup controls and real state/errors; no web-side crypto/auth implementation |
+| Existing `agent/src/web` settings and remote HTTP/RPC management | Remove host publishing/account/QR/identity/permission/service-definition controls and routes; retain chat and permitted file-manager operations |
 | `agent/src/server/http/server.mjs`, shared `files/` operations/jobs and web Files/Changes UI | Host-owned remote file-manager capability, complete route/transport enforcement, editor parity and live revocation without a privileged fallback |
-| Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Remote-first onboarding/back, encrypted image import, service actions/mappings, foreground ownership and logo-based Agent navigation |
+| Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Native Share Local through private Termux bridge, remote-first onboarding/back, image import, service actions/mappings, foreground ownership and logo-based navigation |
 | Android `TorManager.java`, `TorGateway.java`, `SecretStore.java` | Reuse native Tor, scoped trust and protected credentials; add native tunnel client without Termux |
-| Desktop `components/{agent,tor}` | Equivalent UI, protected Agent transport and storage; replace `LlamaRelay` with common native mapping core |
+| Desktop `components/{agent,tor}` | Native Share Local over protected local IPC, equivalent connection UI, protected Agent transport/storage; replace `LlamaRelay` with common native core |
 | Android/desktop native tab and network routing | Private Tor context before onion navigation; Tor-only subresources, DNS, redirects and downloads; block unsupported direct transports; keep native mapped-service routing separately scoped |
 | Desktop native GTK/lifetime integration | Tray, hide/reopen, autostart and real Quit |
 | `auth`, packaging/workflows/notices | Full source imports, native builds, minimal staged patches, provenance/source/license bundles and four artifacts |
+| `auth/chisel-termux/`, native core build and `auth-native.yml` | Native Bionic Termux host executable from the same Chisel source as the APK client; declare dependencies and reuse the pinned Termux toolchain |
+| `agent/pi/vendor/pillama`, `agent/PI_UPSTREAM.md`, adapter and packaging notices | Complete pinned pillama source/build metadata in this repository; package the required runtime subset from that local source |
 
 Put one small shared Go integration under `agent/native/remote/`, derived from
 v2's inspected tunnel/OAuth/encrypted-bundle code with its Apache attribution.
-Build a Linux helper over private existing native/controller channels and an
-Android JNI/AAR client library. Compile host-only functionality out of the
-Android client. Reuse platform Tor/credential stores and current UI/controller,
-not the entire donor app or duplicated account managers on each platform.
+Build a Linux helper over private existing native/controller channels, an
+Android JNI/AAR client library, and a native Termux aarch64 host executable.
+All three use the same pinned Chisel/core sources with thin platform adapters.
+Compile host-only functionality out of the APK client library; the Termux
+executable supplies Android hosting. Reuse platform Tor/credential stores and
+the current UI/controller, not the entire donor app or duplicated account
+managers on each platform.
 
 Keep Chisel, age and retained QR libraries pristine/pinned. First build the
 unmodified client for Android; **zero Chisel source patches is preferable when
@@ -544,13 +623,32 @@ supervisor. Caddy/Authelia remain upstream components with small integration
 changes. Do not duplicate Node/Pi behavior in Go or claim this multi-process
 stack is one PID. Document exact process ownership and private IPC.
 
+### Complete pillama source in the product repository
+
+The current `agent/pi/vendor/pillama/` contains the unmodified 0.2.1 production
+subset at `e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f`, plus its MIT notice.
+Extend this to the complete source tree of the exact selected upstream revision,
+including its package/dependency lock files where supplied and build metadata,
+with recorded commit/hash/provenance. Keep upstream files pristine and the small
+BashKitten adapter separate. No submodule, runtime Git clone or release-time
+fetch from the pillama repository is required to obtain product sources.
+
+Build/package the runtime extension from this checked-in tree on Linux/Termux;
+include the full corresponding tree in source releases and accurate notices in
+both browser platforms. Upstream development/test files may remain as source
+provenance but are not installed or executed as BashKitten product tests. Preserve
+native Pi discovery/RPC and telemetry behavior. Audit the release manifests so
+every bundled component is traceable to source/build material in this product
+repository; no binary-only pillama payload or version label without matching
+source. This does not vendor the user's models or unrelated external OS packages.
+
 ## 11. Ordered gates, migration and release
 
 | Gate | Work and required proof |
 | --- | --- |
-| 1. Sources/native boundary | Pin/import complete Chisel/crypto/QR and donor provenance; update Caddy; build Linux and Android core without host-only client dependencies; verify ABI, licenses and 16 KB alignment |
-| 2. Host/tunnel | Actual Tor/Caddy/Authelia/Chisel, chosen account, verified TOTP, encrypted image and approved-service mapping; reject invalid identity/auth/target |
-| 3. One-login UI | Protected Agent/OAuth integration, no-Termux Android onboarding, camera/image import, stored secrets, Back to remote and remembered restart; desktop parity |
+| 1. Sources/native boundary | Pin/import complete Chisel/crypto/QR/pillama and donor provenance; update Caddy; build Linux helper, APK client and native Termux host without host-only APK dependencies; verify ABI/licenses/16 KB alignment |
+| 2. Host/tunnel | Actual Tor/Caddy/Authelia/Chisel on Linux and Termux, chosen account/TOTP, encrypted image and service mapping; reject invalid identity/auth/target |
+| 3. Native setup and one-login UI | Share Local in both browser selectors; remove web management controls/routes; protected Agent/OAuth integration, no-Termux client onboarding, image import, Back to remote and remembered restart |
 | 4. Services/localhost/files | Host command/config/startup UI, real remote actions, automatic/chosen ports, concurrent remotes and Local Pi using an enabled remote mapping; host-controlled file-manager permission and complete Files/Changes/edit/transfer enforcement |
 | 5. Real applications | Multi-model llama router, bearer/no-bearer, byte-offset replay, pillama status, web application uploads/downloads/cookies/WebSockets; strict Tor-tab routing and ordinary private onion navigation |
 | 6. Reset/lifetime | Complete and interrupted identity rotation; old exports/sessions fail; tray/hide/reopen/autostart/Quit and owned-group cleanup |
@@ -591,6 +689,8 @@ except where an explicit restart case requires otherwise.
 | Case | Required evidence |
 | --- | --- |
 | Fresh Android without Termux | Immediate remote option, image import, actual TOTP login, Agent and mapped service URL; no Termux prompts |
+| Native host administration | Share Local beside Local/remotes on Linux/Android; compact account/authenticator/QR flow; remote web UI/direct management requests cannot change publishing, permissions/service definitions, export keys or reset identity; legacy routes, spoofed native markers and manager writes to private host-policy/key files remain denied even with file manager enabled |
+| Android host | Ordinary Termux setup then native Share Local; actual phone-hosted Agent and configured web service reached from Linux/another client through Tor/Chisel; remembered restart, screen-off/background, Off/On, OS process recovery and fresh-setup behavior after Termux removal |
 | Switching/setup/reinstall | Unconfigured Local has Back to remote; login/draft retained; later normal Termux setup; removal/reinstall does not break saved remotes |
 | QR inputs | Real screen-to-camera scan and PNG import on both platforms; wrong password, damaged image and camera denial handled without replacing working state |
 | Auth lifecycle | No access before TOTP; actual consent, remembered restart, refresh, expiry/logout/revocation, valid TLS leaf renewal under the same pinned CA, incorrect TLS/mTLS/fingerprint rejection, no repeated login merely to open Agent |
@@ -611,6 +711,7 @@ except where an explicit restart case requires otherwise.
 | Android UI/lifetime | Screen-off/background runtime, reopen/reconnect, rotation/keyboard for every password/TOTP/port field; input and controls remain visible |
 | Mobile Agent logo | Current logo replaces navigation text beside the address bar and in the tabs screen; accessible Agent name, full touch target, light/dark/selected states; new tabs and setup/remote screens retain access and existing chat/draft |
 | Upgrade/licenses | Signed APK/APT updates retain state; accurate full notices/source available offline before backend/login on Android/Linux |
+| Pillama source/package | Complete pinned upstream tree present in this repo/source archive; installed extension comes from it, MIT/provenance retained, actual Pi RPC telemetry works without fetching another product repository |
 
 Record results on all target platforms before release. Missing runtime coverage
 remains missing, never inferred from compilation. Fix observed failures, rebuild
