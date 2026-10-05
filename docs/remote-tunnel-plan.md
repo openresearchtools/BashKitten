@@ -32,6 +32,13 @@ Whisper enables explicit microphone recording, Stop, transcription on the
 configured host and normal text submission, with no retained audio or separate
 transcript/log store.
 
+Latest usability clarification, 5 October: Display includes a short copyable
+prompt naming `termux-display`. LocalAI's **Import this configuration into the
+coding agent** checkbox starts checked for new configurations. Remote llama
+mapping cards offer **Add to Pi** and the same import choice, applied on **Save
+changes**. Pi configuration is conditional on that saved choice, not an automatic
+side effect of every runtime start, connection or port change.
+
 The deliverable is working Linux amd64/arm64 packages, the Android APK and matching
 Termux package, source and notices, after builds and manual acceptance. Writing
 this plan, building a helper or dispatching CI does not complete that deliverable.
@@ -104,6 +111,16 @@ block with three or four visible lines and Copy/Edit, and the relevant actions:
   Save does not execute it or stop a running desktop; show “Saved for next start”
   if it differs from the running command. Errors stay beside the action, with
   expandable actual output rather than a terminal/log wall.
+
+Under **Ask your agent**, include this short copyable text block with **Copy prompt**:
+
+```text
+Use the termux-display skill to set up XFCE for this device and save a working launch command, using supported GPU acceleration if available.
+```
+
+Keep it a few visible lines, separate from the executable launch command, with
+brief copy feedback. It copies only the prompt for the user to paste into chat;
+it does not submit a chat turn, execute a command or change display settings.
 
 Use native theme, touch targets and keyboard insets. Refresh actual state on
 open/resume and action completion; no hidden polling. Closing the sheet leaves
@@ -645,6 +662,18 @@ Every published service, including stopped ones, has one card containing:
 - **Local access** on/off and **Port: Automatic / chosen number**.
 - Actual local URL, for example `http://127.0.0.1:43127/`, with Open/Copy;
   llama.cpp additionally shows its `/v1` API URL.
+- For llama.cpp/compatible inference services, **Add to Pi** opens that mapping's
+  settings and checks **Import this configuration into the coding agent**. A new
+  remote mapping starts unchecked until the user chooses it. **Save changes**
+  applies the selected import along with the port/mapping settings; the quick
+  action does not write Pi configuration before Save. Keep this inline and compact.
+
+Import targets **this device's local Pi** and its real localhost mapping, never
+the remote server's Pi or another device's loopback address. Use native local IPC
+or the permission-checked Termux bridge. If local Pi is not set up, show that beside
+the import option; remote connection/mapping still works without installing Termux.
+Do not offer Pi import for ordinary web services. Persist the choice per enrolled
+remote/service, preserving unrelated local/custom provider configuration.
 
 After login, restore enabled mappings. On first connection, default offered
 service mappings to automatic ports so the list provides usable addresses;
@@ -714,13 +743,18 @@ The llama.cpp section shows:
 - **Models** links to the same downloader in this panel. Selecting downloaded
   GGUFs can create appropriate router entries; preserve split-model/mmproj files
   and use actual upstream model IDs and path semantics.
+- **Import this configuration into the coding agent**, checked by default for
+  a new configuration and persisted thereafter. **Save changes** applies that
+  choice; it is independent of Managed/Custom binary and Share llama.cpp. Users
+  keeping their own local or remote provider settings can uncheck it.
 
 Use a working starter command/config and automatic or chosen loopback port.
 Persist one command/config record behind the private controller so native UI,
 service lifecycle and Pi integration agree. A custom command is deliberate
 execution by the host owner; retain arguments/environment/working directory and
 do not guess missing credentials from arbitrary shell text. The normal managed
-flow supplies its own actual endpoint and model list without manual provider setup.
+flow supplies its actual endpoint and model list without manual provider setup
+when the saved coding-agent import option is enabled.
 
 Under **Share Local**, add only **Share llama.cpp**, off by default, plus status
 and a link back to LocalAI if setup is incomplete. This checkbox publishes the
@@ -731,7 +765,7 @@ carriers and removes exposure while keeping local use running. The account/TOTP
 and tunnel requirements remain mandatory, and the stream is still unchanged.
 Do not automatically publish Whisper when enabling llama.cpp sharing.
 
-### Reuse the backend and configure Pi automatically
+### Reuse the backend and apply the selected Pi import
 
 Move the UI and its trusted entry points, retaining existing model-download child
 processes, durable jobs, pause/resume/cancel, package jobs and process ownership.
@@ -748,18 +782,32 @@ operations. LocalAI command/config files and credentials must not be writable
 through the remote file manager. Stock Pi keeps its separate OS authority.
 
 Extend the existing `bashkitten-llama` provider integration through stock Pi's
-supported configuration. Set the actual ready loopback URL, router model IDs and
-configured application bearer/key file, if any; no mandatory extra bearer or
+supported configuration, **only when its saved import checkbox is enabled**.
+Save changes imports/updates the one owned provider using the actual ready
+loopback URL, router model IDs and configured application bearer/key file, if any;
+no mandatory extra bearer or
 rewriting tunnel traffic. Refresh at an idle boundary without replaying prompts,
 changing an existing chat's selected model or overwriting other provider entries.
-Retain pillama's native router/progress integration. The user sees a ready local
-provider/model after setup, without typing a port into Providers. Apply the same
-managed preset to an enrolled llama service's actual client-local mapping on
-Linux/Termux; a remote Pi instead uses its own host endpoint. Selecting Local
+Retain pillama's native router/progress integration. With import enabled, the user
+sees a ready local provider/model after setup without typing a port into Providers.
+Apply the same selected import to an enrolled llama service's actual client-local
+mapping on Linux/Termux; a remote Pi instead uses its own host endpoint. Selecting Local
 keeps enabled remote mappings alive as specified above. Changed/conflicting ports
 update only owned settings after confirming the actual service identity/readiness.
 Use distinct owned provider entries for Local and each enrolled llama service,
 so connecting another remote cannot overwrite the working Local endpoint.
+
+Show import success/failure beside Save, including the provider name and actual
+endpoint. If the service/mapping is not ready or Pi must wait for an idle boundary,
+show a pending state and complete only while the saved import option remains on;
+never claim an unavailable endpoint was imported successfully or silently start
+a stopped host just to discover its models. Repeat Save is idempotent. An enabled
+saved import keeps its owned endpoint current on verified port/model changes;
+unchecking and saving cancels pending import and stops later managed writes.
+Unchecked means save runtime/mapping settings only; it does not delete existing
+Pi providers. Preserve user-created entries and manual edits even when they have
+the same name as a proposed import; report a conflict rather than overwrite them.
+Do not change the user's default provider or any current chat's selected model.
 
 The shared downloader currently filters Hugging Face search to GGUF. Extend its
 model-type selection to support whisper.cpp's actual supported model files too;
@@ -1105,10 +1153,12 @@ except where an explicit restart case requires otherwise.
 | Display installation/Local boundary | GitHub Termux uses compatible shared-UID X11; F-Droid/other signers use a verified compatible standalone/source option; normal installer acceptance/cancellation/OS rejection and return detection on supported stock Android; Remote mode has no Display button, dismisses an open sheet and cannot dispatch its actions |
 | Display operation/layout | Start a real XFCE desktop, Open X11, launch and interact with a GUI app, Stop, repeat Start without duplicates; small light/dark sheet and keyboard-visible editor; activity closure, background/resume, actual crash/status, Agent Off cleanup, independent Xvfb/X11 and occupied display numbers handled correctly |
 | Shared display command/skill | User edit, Pi edit and direct saved-script edit all become the next actual launch and appear in the panel; no execution on Save, syntax errors/concurrent changes visible, custom data path and package upgrade preserve the same command; Pi launches a GUI app using reported environment and can restore software default |
+| Display prompt | Copy prompt produces the short `termux-display` request exactly, with visible feedback; pasting it into Local chat lets stock Pi discover the skill and use the shared launcher; copying alone performs no chat/display action |
 | Display GPU coverage | Skill reads current primary sources for actual device/driver, verifies renderer and visible app before reporting acceleration, owns helper cleanup and restores working software command on failure; emulator-only coverage never establishes physical-device GPU support |
 | Native LocalAI migration | Local-only desktop button, binary/folder/model pickers, command and router INI edit/Save as/reload; existing models/jobs/HF credentials preserved; removed web management routes cannot configure runtimes or start downloads; native downloader works with the panel closed |
 | LocalAI builds/updates | Mainstream-only llama and Whisper amd64/arm64 CUDA/Vulkan artifacts and source/notices downloadable; real compatible CUDA, Vulkan and CPU runs, missing-driver/ABI errors, safe idle update/failed-update recovery, no interruption of active inference; Custom preserves the selected executable/libraries and stops that engine's update checks/replacements |
 | LocalAI sharing/Pi | One Share llama.cpp checkbox exposes the same service; Off closes remote access while Local still runs; two router models selected in real Pi with automatic actual endpoint/IDs, no manual provider entry; remote mapping remains usable from Local Termux Pi and custom provider settings are preserved |
+| Pi import choice | New LocalAI configuration defaults checked; unchecked Save leaves Pi untouched, checked Save imports once without changing selected/default model; remote Add to Pi selects import but writes only on Save using this client's actual localhost endpoint; pending/error/conflict status is truthful, opt-out stops later writes, no-Termux remote mode remains usable and multiple/custom providers survive |
 | Whisper model/runtime | Same downloader retrieves a compatible Whisper model, existing model picker works, actual on-demand load/inference on CPU and available GPU, truthful failures, cancellation and owned worker/model cleanup |
 | Microphone privacy/flow | Real spoken recording from local desktop and authenticated Android/Linux remote clients until Stop; Cancel, permission denial, silence, startup/transcription/send failure and chat switch; identified transcription host, preserved draft/attachments, exactly one text turn, no third-party speech service; manually inspect client/host filesystem, browser storage and process output after success/error/cancel/restart for no recording, separate transcript or content log remnants |
 | Upgrade/licenses | Signed APK/APT updates retain state; accurate full notices/source available offline before backend/login on Android/Linux |

@@ -49,6 +49,9 @@ local Termux skill for verified device-specific GPU setup, with upstream links.
 This supersedes blanket removal of X11 controls/variants below only for this
 optional feature; keep remote-only setup free of Termux and retain headless Xvfb.
 The remote tunnel plan defines the source/signing, launcher and manual gates.
+Display also has a short **Ask your agent** code block and **Copy prompt**, naming
+the `termux-display` skill and asking it to save a working device-appropriate
+launch command; copying does not submit or execute it.
 
 Latest desktop LocalAI clarification, 5 October: move llama.cpp runtime/command
 and router INI editing plus model downloads from the shared web UI into native
@@ -57,7 +60,12 @@ only gets **Share llama.cpp** for this same service. Use the new planned
 `bashkitten-localai` builder for mainstream llama.cpp and whisper.cpp Linux
 amd64/arm64 CUDA/Vulkan runtimes, managed updates and custom llama binary selection
 that disables its managed updates. Configure stock Pi's owned provider from the
-actual router endpoint/model IDs. Add optional on-demand host-side Whisper and
+actual router endpoint/model IDs only when **Import this configuration into the
+coding agent** is saved enabled (checked by default for new LocalAI configurations).
+Remote inference mappings offer **Add to Pi** and the same checkbox, applied on
+**Save changes** to this client's local Pi. Preserve custom providers and current
+model selections; opt-out prevents later managed configuration writes.
+Add optional on-demand host-side Whisper and
 a chat microphone: explicit Record/Stop/Cancel, transcription then ordinary text
 send, without audio persistence, separate transcripts, content logs or telemetry.
 This supersedes APT-only llama installation and shared web model-management UI
@@ -1147,8 +1155,9 @@ use their backend folder picker and actual subdirectories. One saved models root
 and the real INI supply the managed router, using upstream `--models-dir` and/or
 `--models-preset` as configured. Preserve model filenames, split shards/mmproj
 files and original repository paths in download metadata; no recursive shadow
-registry. Refresh actual router IDs after downloads/configuration and configure
-the owned Pi provider's endpoint/models automatically before reporting Ready.
+registry. Refresh actual router IDs after downloads/configuration and, when its
+saved import checkbox is enabled, update the owned Pi provider's endpoint/models.
+Show pending/import errors without changing user-owned providers or selected models.
 Preserve existing external HTTP providers and existing single-model setups.
 
 The same downloader/model picker supports whisper.cpp's compatible models as

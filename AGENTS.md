@@ -46,13 +46,19 @@ actual owned display status/Start/Stop/Open X11 and a concise local Termux Pi sk
 for verified device-specific GPU help. Keep headless Xvfb and no-Termux remote
 operation; this supersedes the earlier blanket removal of X11 controls only for
 this optional feature. See the remote tunnel plan for the paths and manual gates.
+Display also includes a short Copy prompt block asking Pi to use `termux-display`
+and save the device's working launch command; copying never submits or executes it.
 Desktop Local gets native **LocalAI** for llama.cpp/Whisper runtime commands,
 router INI editing and the relocated model downloader; retain backend jobs and
 remove shared web management routes. Share Local only has **Share llama.cpp**
 for that same service. The planned `bashkitten-localai` runtime build repository
 supplies mainstream llama.cpp/whisper.cpp amd64/arm64 CUDA/Vulkan artifacts;
-Custom llama binary disables its managed updates. Auto-configure the owned Pi
-provider from the real endpoint/router IDs. Optional host-side Whisper dictation
+Custom llama binary disables its managed updates. Configure the owned Pi provider
+only when **Import this configuration into the coding agent** is saved enabled;
+default it on for new LocalAI configurations. Remote mappings have Add to Pi plus
+the import checkbox, applied on Save changes to local Pi using the actual mapped
+endpoint. Preserve custom providers/defaults/current chat model and honor opt-out
+on later port/model changes. Optional host-side Whisper dictation
 records on user action until Stop, then transcribes and sends ordinary chat text;
 authenticated Android/Linux clients can use their selected host's capability.
 No retained audio, separate transcripts, content logs or telemetry; keep audio
