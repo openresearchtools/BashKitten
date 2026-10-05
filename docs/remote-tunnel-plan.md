@@ -1262,15 +1262,20 @@ slices and their limits; they do not replace the manual acceptance table.
   signing bridge carries public certificate objects only and rejects removed
   credentials. Ordinary remembered/automatic certificate selection excludes
   these identities. Gecko's own IDL compiler accepts the API declarations;
-  native platform enrollment wiring, browser compilation and real TLS/login
-  acceptance are pending. This is not an authenticated client release.
-- Shared native `client` source now owns per-enrollment login/cancellation,
+  the first Linux arm64 build caught a hidden NSS allocation-function name,
+  corrected by explicitly qualifying the NSS call. Browser compilation, native
+  platform enrollment wiring and real TLS/login acceptance remain pending.
+  This is not an authenticated client release.
+- `8199a6a7e6`: shared native `client` source owns per-enrollment login/cancellation,
   serialized refresh, remembered-token persistence callbacks and service mappings.
   Normal Close preserves saved credentials; explicit Logout closes local access
   before revoking and clearing them. Token rotation erases the saved old token
   before exchange, preventing replay after a failed request or process death.
-  A failed replacement-port bind preserves the working mapping. This has not
-  yet been wired to native platform storage/UI or accepted through a real tunnel.
+  A failed replacement-port bind preserves the working mapping. Native
+  [run 37264273374](https://github.com/openresearchtools/BashKitten/actions/runs/37264273374)
+  compiled Linux amd64/arm64 and the Android arm64 client source boundary.
+  This has not yet been wired to native platform storage/UI or accepted through
+  a real tunnel.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously

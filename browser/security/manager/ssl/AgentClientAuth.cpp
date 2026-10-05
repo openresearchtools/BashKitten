@@ -86,8 +86,8 @@ nsresult SetAgentClientAuth(const nsACString& host,
   }
   auto cert = DecodeAgentCertificate(certificate);
   if (!UsableAgentCertificate(cert.get())) return NS_ERROR_INVALID_ARG;
-  KeyBytes bytes(SECITEM_AllocItem(nullptr, nullptr,
-                                 static_cast<unsigned int>(pkcs8.Length())));
+  KeyBytes bytes(::SECITEM_AllocItem(nullptr, nullptr,
+                                   static_cast<unsigned int>(pkcs8.Length())));
   if (!bytes) return NS_ERROR_OUT_OF_MEMORY;
   memcpy(bytes->data, pkcs8.Elements(), pkcs8.Length());
   auto key = ImportAgentKey(bytes.get());
