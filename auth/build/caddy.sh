@@ -13,11 +13,7 @@ trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/caddy/." "$work/"
 cd "$work"
 export CGO_ENABLED=0 GOTOOLCHAIN=local GOTELEMETRY=off
-version=$(python3 - "$root/auth/caddy-termux/upstream-build.sh" <<'PY'
-import re, sys
-print(re.search(r'^TERMUX_PKG_VERSION="([^"]+)"', open(sys.argv[1]).read(), re.M)[1])
-PY
-)
+version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["caddy"]["version"])' "$root/auth/upstreams.lock.json")
 mkdir -p "$output/bin"
 go build -mod=readonly -trimpath -buildvcs=false \
   -ldflags="-s -w -X github.com/caddyserver/caddy/v2.CustomVersion=v$version" \

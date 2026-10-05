@@ -10,7 +10,7 @@ import tarfile
 import tempfile
 
 source, output, component = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3]
-command = ['./cmd/authelia'] if component == 'authelia' else ['./cmd/caddy']
+command = {'authelia': ['./cmd/authelia'], 'caddy': ['./cmd/caddy'], 'chisel': ['.']}[component]
 raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-deps', '-json', *command], cwd=source, text=True)
 decoder, offset, modules = json.JSONDecoder(), 0, {}
 while offset < len(raw):

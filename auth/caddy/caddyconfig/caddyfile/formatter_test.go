@@ -445,6 +445,11 @@ block2 {
 			expect:      "block {respond \"All braces should remain: {{now | date `2006`}}\"}",
 		},
 		{
+			description: "Preserve quoted brace arguments",
+			input:       "block {\n\trespond \"{\"\n\trespond \"}\"\n}",
+			expect:      "block {\n\trespond \"{\"\n\trespond \"}\"\n}",
+		},
+		{
 			description: "Preserve quoted backticks and backticked quotes",
 			input:       "block { respond \"`\" } block { respond `\"`}",
 			expect:      "block {\n\trespond \"`\"\n}\n\nblock {\n\trespond `\"`\n}",
@@ -489,6 +494,28 @@ import ./conf.d/matcher_not_my_subnet.caddy
 	order crowdsec first
 	order appsec after crowdsec
 }`,
+		},
+		{
+			description: "keep an opening brace that ends the input",
+			input:       `localhost {`,
+			expect:      `localhost {`,
+		},
+		{
+			description: "keep a standalone opening brace that ends the input",
+			input:       `{`,
+			expect:      `{`,
+		},
+		{
+			description: "keep adjacent opening braces that end the input",
+			input:       `{{`,
+			expect: `{
+	{`,
+		},
+		{
+			description: "keep spaced opening braces that end the input",
+			input:       `{ {`,
+			expect: `{
+	{`,
 		},
 	} {
 		// the formatter should output a trailing newline,

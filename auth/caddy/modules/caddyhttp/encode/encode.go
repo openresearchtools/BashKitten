@@ -34,6 +34,8 @@ import (
 	"github.com/caddyserver/caddy/v2/modules/caddyhttp"
 )
 
+const sseMediaType = "text/event-stream"
+
 func init() {
 	caddy.RegisterModule(Encode{})
 }
@@ -250,21 +252,31 @@ type responseWriter struct {
 	config       *Encode
 	statusCode   int
 	wroteHeader  bool
+	incremental  bool
 	isConnect    bool
-	disabled     bool // disable encoding (for error responses)
+	disabled     bool // disable encoding for this response
 }
 
 // WriteHeader stores the status to write when the time comes
 // to actually write the header.
 func (rw *responseWriter) WriteHeader(status int) {
 	rw.statusCode = status
+	if status == http.StatusPartialContent {
+		rw.disabled = true // partial representations must not be dynamically re-encoded
+	}
+
+	h := rw.Header()
+	finalStatus := status < 100 || status > 199
+	if !rw.wroteHeader && finalStatus {
+		rw.incremental = caddyhttp.IsIncremental(h)
+	}
 
 	// See #5849 and RFC 9110 section 15.4.5 (https://www.rfc-editor.org/rfc/rfc9110.html#section-15.4.5) - 304
 	// Not Modified must have certain headers set as if it was a 200 response, and according to the issue
 	// we would miss the Vary header in this case when compression was also enabled; note that we set this
 	// header in the responseWriter.init() method but that is only called if we are writing a response body
-	if status == http.StatusNotModified && !hasVaryValue(rw.Header(), "Accept-Encoding") {
-		rw.Header().Add("Vary", "Accept-Encoding")
+	if status == http.StatusNotModified && !hasVaryValue(h, "Accept-Encoding") {
+		h.Add("Vary", "Accept-Encoding")
 	}
 
 	// write status immediately if status is 2xx and the request is CONNECT
@@ -280,6 +292,36 @@ func (rw *responseWriter) WriteHeader(status int) {
 	if 100 <= status && status <= 199 {
 		rw.ResponseWriter.WriteHeader(status)
 	}
+
+	// write header immediately for server-sent events responses and for
+	// responses that ask for incremental forwarding (RFC 10036), since the
+	// body may not be written for a while and the client needs the headers
+	// to establish the stream; see #6293
+	if !rw.wroteHeader && finalStatus &&
+		(rw.incremental || isSSE(h.Get("Content-Type"))) {
+		rw.init()
+		rw.ResponseWriter.WriteHeader(status)
+		rw.wroteHeader = true
+	}
+	if rw.incremental && rw.wroteHeader {
+		// WriteHeader alone may remain buffered by net/http. Incremental
+		// forwarding requires the header section to be sent downstream now.
+		_ = http.NewResponseController(rw.ResponseWriter).Flush()
+	}
+}
+
+func isSSE(contentType string) bool {
+	if len(contentType) < len(sseMediaType) || !strings.EqualFold(contentType[:len(sseMediaType)], sseMediaType) {
+		return false
+	}
+
+	// After the media type, allow only optional whitespace followed by the
+	// end of the value or a parameter separator, so a longer type such as
+	// "text/event-streamfoo" or garbage like "text/event-stream nonsense"
+	// does not match. TrimLeft on the tail does not allocate.
+	rest := strings.TrimLeft(contentType[len(sseMediaType):], " \t")
+
+	return rest == "" || rest[0] == ';'
 }
 
 // Match determines, if encoding should be done based on the ResponseMatcher.
@@ -290,6 +332,10 @@ func (enc *Encode) Match(rw *responseWriter) bool {
 // FlushError is an alternative Flush returning an error. It delays the actual Flush of the underlying
 // ResponseWriterWrapper until headers were written.
 func (rw *responseWriter) FlushError() error {
+	if !rw.wroteHeader && rw.statusCode == 0 && caddyhttp.IsIncremental(rw.Header()) {
+		rw.WriteHeader(http.StatusOK)
+	}
+
 	// WriteHeader wasn't called and is a CONNECT request, treat it as a success.
 	// otherwise, wait until header is written.
 	if rw.isConnect && !rw.wroteHeader && rw.statusCode == 0 {
@@ -329,6 +375,12 @@ func (rw *responseWriter) Write(p []byte) (int, error) {
 	if rw.isConnect && !rw.wroteHeader && rw.statusCode == 0 {
 		rw.WriteHeader(http.StatusOK)
 	}
+	if !rw.wroteHeader && rw.statusCode == 0 && caddyhttp.IsIncremental(rw.Header()) {
+		if rw.Header().Get("Content-Type") == "" {
+			rw.Header().Set("Content-Type", http.DetectContentType(p))
+		}
+		rw.WriteHeader(http.StatusOK)
+	}
 
 	// sniff content-type and determine content-length
 	if !rw.wroteHeader && rw.config.MinLength > 0 {
@@ -360,11 +412,17 @@ func (rw *responseWriter) Write(p []byte) (int, error) {
 		rw.wroteHeader = true
 	}
 
+	var n int
+	var err error
 	if rw.w != nil {
-		return rw.w.Write(p)
+		n, err = rw.w.Write(p)
 	} else {
-		return rw.ResponseWriter.Write(p)
+		n, err = rw.ResponseWriter.Write(p)
 	}
+	if err != nil || !rw.incremental {
+		return n, err
+	}
+	return n, rw.FlushError()
 }
 
 // used to mask ReadFrom method
@@ -380,6 +438,10 @@ const sniffLen = 512
 // It's based on the standard library HTTP/1.1 response writer implementation.
 // https://github.com/golang/go/blob/f4e3ec3dbe3b8e04a058d266adf8e048bab563f2/src/net/http/server.go#L586
 func (rw *responseWriter) ReadFrom(r io.Reader) (int64, error) {
+	if rw.incremental || !rw.wroteHeader && caddyhttp.IsIncremental(rw.Header()) {
+		return io.Copy(writerOnly{rw}, r)
+	}
+
 	rf, ok := rw.ResponseWriter.(io.ReaderFrom)
 	// sendfile can't be used anyway
 	if !ok {
@@ -444,8 +506,7 @@ func (rw *responseWriter) Unwrap() http.ResponseWriter {
 
 // init should be called before we write a response, if rw.buf has contents.
 func (rw *responseWriter) init() {
-	// Don't initialize encoder for error responses
-	// This prevents response corruption when handle_errors is used
+	// Don't initialize encoder for responses that must not be encoded.
 	if rw.disabled {
 		return
 	}
@@ -497,22 +558,23 @@ func hasVaryValue(hdr http.Header, target string) bool {
 // http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html.
 func AcceptedEncodings(r *http.Request, preferredOrder []string) []string {
 	acceptEncHeader := r.Header.Get("Accept-Encoding")
-	websocketKey := r.Header.Get("Sec-WebSocket-Key")
 	if acceptEncHeader == "" {
 		return []string{}
 	}
+	websocketKey := r.Header.Get("Sec-Websocket-Key")
 
-	prefs := []encodingPreference{}
+	prefs := make([]encodingPreference, 0, strings.Count(acceptEncHeader, ",")+1)
 
 	for accepted := range strings.SplitSeq(acceptEncHeader, ",") {
-		parts := strings.Split(accepted, ";")
-		encName := strings.ToLower(strings.TrimSpace(parts[0]))
+		encName, params, found := strings.Cut(accepted, ";")
+		encName = strings.ToLower(strings.TrimSpace(encName))
 
 		// determine q-factor
 		qFactor := 1.0
-		if len(parts) > 1 {
-			qFactorStr := strings.ToLower(strings.TrimSpace(parts[1]))
-			if strings.HasPrefix(qFactorStr, "q=") {
+		if found {
+			qFactorStr, _, _ := strings.Cut(params, ";")
+			qFactorStr = strings.TrimSpace(qFactorStr)
+			if len(qFactorStr) >= 2 && strings.EqualFold(qFactorStr[:2], "q=") {
 				if qFactorFloat, err := strconv.ParseFloat(qFactorStr[2:], 32); err == nil {
 					if qFactorFloat >= 0 && qFactorFloat <= 1 {
 						qFactor = qFactorFloat

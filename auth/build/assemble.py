@@ -13,7 +13,7 @@ artifacts.mkdir(parents=True, exist_ok=True)
 metadata = stage / 'share/metadata'
 metadata.mkdir(parents=True, exist_ok=True)
 components = []
-for component in ('authelia', 'caddy', 'tor', 'valkey'):
+for component in ('authelia', 'caddy', 'tor', 'valkey', 'chisel'):
     binary = stage / 'bin' / ('valkey-server' if component == 'valkey' else component)
     if not binary.is_file():
         raise SystemExit(f'Missing binary: {binary}')

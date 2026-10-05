@@ -101,6 +101,9 @@ func parseCaddyfile(h httpcaddyfile.Helper) (caddyhttp.MiddlewareHandler, error)
 //	    stream_close_delay <duration>
 //	    verbose_logs
 //
+//	    # reporting
+//	    proxy_status_name <name>
+//
 //	    # request manipulation
 //	    trusted_proxies [private_ranges] <ranges...>
 //	    header_up   [+|-]<field> [<value|regexp> [<replacement>]]
@@ -675,6 +678,15 @@ func (h *Handler) UnmarshalCaddyfile(d *caddyfile.Dispenser) error {
 				h.StreamBufferSize = int(size)
 			}
 
+		case "proxy_status_name":
+			if !d.NextArg() {
+				return d.ArgErr()
+			}
+			h.ProxyStatusName = d.Val()
+			if d.NextArg() {
+				return d.ArgErr()
+			}
+
 		case "stream_timeout":
 			if !d.NextArg() {
 				return d.ArgErr()
@@ -923,13 +935,8 @@ func (h *Handler) FinalizeUnmarshalCaddyfile(helper httpcaddyfile.Helper) error 
 		d.Next()
 		args := d.RemainingArgs()
 
-		// TODO: Remove this check at some point in the future
-		if len(args) == 2 {
-			return d.Errf("configuring 'handle_response' for status code replacement is no longer supported. Use 'replace_status' instead.")
-		}
-
 		if len(args) > 1 {
-			return d.Errf("too many arguments for 'handle_response': %s", args)
+			return d.Errf("too many arguments for 'handle_response': only a single response matcher name is allowed, but got: %s", args)
 		}
 
 		var matcher *caddyhttp.ResponseMatcher

@@ -4,7 +4,7 @@ set -euo pipefail
 
 component=${1:?component required}
 output=${2:?output directory required}
-case "$component" in caddy|tor|authelia|valkey) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
+case "$component" in caddy|tor|authelia|valkey|chisel) ;; *) echo "Unsupported component: $component" >&2; exit 2 ;; esac
 executable=$component
 [[ $component != valkey ]] || executable=valkey-server
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }

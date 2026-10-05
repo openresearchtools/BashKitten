@@ -157,6 +157,14 @@ func (t Transport) DefaultBufferSizes() (int64, int64) {
 	return 4096, 0
 }
 
+// RequiresContentLength reports that fastcgi cannot forward a body of unknown
+// length: without a valid CONTENT_LENGTH the client rejects the request rather
+// than let the upstream hang, so the request buffer above is the only way to
+// learn the length of a body that does not announce one.
+func (t Transport) RequiresContentLength() bool {
+	return true
+}
+
 // RoundTrip implements http.RoundTripper.
 func (t Transport) RoundTrip(r *http.Request) (*http.Response, error) {
 	server := r.Context().Value(caddyhttp.ServerCtxKey).(*caddyhttp.Server)
@@ -365,6 +373,18 @@ func (t Transport) buildEnv(r *http.Request) (envVars, error) {
 		"SCRIPT_NAME":     scriptName,
 	}
 
+	if localAddr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok {
+		var ipStr string
+		if host, _, err := net.SplitHostPort(localAddr.String()); err == nil {
+			ipStr = host
+		} else {
+			ipStr = localAddr.String()
+		}
+		if ip := net.ParseIP(ipStr); ip != nil {
+			env["SERVER_ADDR"] = ipStr
+		}
+	}
+
 	// compliance with the CGI specification requires that
 	// PATH_TRANSLATED should only exist if PATH_INFO is defined.
 	// Info: https://www.ietf.org/rfc/rfc3875 Page 14
@@ -409,6 +429,13 @@ func (t Transport) buildEnv(r *http.Request) (envVars, error) {
 
 	// Add all HTTP headers to env variables
 	for field, val := range r.Header {
+		// HTTPoxy mitigation: client-supplied Proxy header must not
+		// be trusted for setting the HTTP_PROXY environment variable.
+		// See https://httpoxy.org for details.
+		if http.CanonicalHeaderKey(field) == "Proxy" {
+			continue
+		}
+
 		header := strings.ToUpper(field)
 		header = headerNameReplacer.Replace(header)
 		env["HTTP_"+header] = strings.Join(val, ", ")
@@ -513,7 +540,8 @@ var headerNameReplacer = strings.NewReplacer("-", "_")
 var (
 	_ zapcore.ObjectMarshaler = (*loggableEnv)(nil)
 
-	_ caddy.Provisioner              = (*Transport)(nil)
-	_ http.RoundTripper              = (*Transport)(nil)
-	_ reverseproxy.BufferedTransport = (*Transport)(nil)
+	_ caddy.Provisioner                           = (*Transport)(nil)
+	_ http.RoundTripper                           = (*Transport)(nil)
+	_ reverseproxy.BufferedTransport              = (*Transport)(nil)
+	_ reverseproxy.ContentLengthRequiredTransport = (*Transport)(nil)
 )

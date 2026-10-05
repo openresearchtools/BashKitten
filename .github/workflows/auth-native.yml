@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [authelia, caddy, tor, valkey]
+        component: [authelia, caddy, tor, valkey, chisel]
         target: [linux-amd64, linux-arm64, termux-aarch64]
         include:
           - target: linux-amd64
@@ -63,7 +63,7 @@ jobs:
             auth
             agent/src/server/access
       - uses: actions/setup-go@v6
-        if: matrix.component == 'authelia' || matrix.component == 'caddy'
+        if: matrix.component == 'authelia' || matrix.component == 'caddy' || matrix.component == 'chisel'
         with:
           go-version: '1.27.1'
           cache-dependency-path: auth/${{ matrix.component }}/go.sum
