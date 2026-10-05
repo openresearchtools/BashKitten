@@ -1693,6 +1693,14 @@ Changed JavaScript syntax, Java 8 parse-only and source whitespace checks passed
 Full native compilation and manual damaged-state/startup/Reissue checks remain
 pending; no scripted product test or installed-runtime acceptance is claimed.
 
+The installed Linux ARM64 candidate `d773ea374f` exposed a missing tray component
+after a full Quit/relaunch. The product configure file defined `MOZ_BASHKITTEN`
+for C++ but omitted its build substitution, excluding the tray source, XPIDL and
+static component registration. Exporting the same setting through `set_config`
+fixes those build gates. Build-file parsing and upstream XPIDL header generation
+pass; the newly included native code still needs the corrected desktop build and
+visible tray/hide/reopen/Quit acceptance.
+
 ### 5 October obsolete enrollment exception removed
 
 The old `setAgentOnionEnrollment` API, its temporary CA-less verifier state and

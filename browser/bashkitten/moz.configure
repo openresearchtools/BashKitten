@@ -10,6 +10,7 @@ imply_option("--with-distribution-id", "org.bashkitten")
 imply_option("--enable-system-extension-dirs", False)
 imply_option("--enable-crashreporter", False)
 set_define("MOZ_BASHKITTEN", True)
+set_config("MOZ_BASHKITTEN", True)
 
 option(
     "--with-bashkitten-tor",
