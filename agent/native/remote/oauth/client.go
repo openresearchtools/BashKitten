@@ -144,19 +144,38 @@ func (c *Client) exchange(ctx context.Context, values url.Values) (Token, error)
 	return token, nil
 }
 
-// Refresh rotates credentials. Callers must serialize refreshes per profile;
-// a failed rotation is never retried automatically with an old refresh token.
+// Refresh rotates credentials. Callers must serialize refreshes per profile.
+// Clear the saved token before sending so a process death or failed exchange
+// cannot cause the consumed refresh token to be retried after restart.
 func (c *Client) Refresh(ctx context.Context, token Token) (Token, error) {
-	if !c.owns(token) {
+	if !c.Owns(token) {
 		return Token{}, ErrLoginRequired
 	}
+	if err := ctx.Err(); err != nil {
+		return Token{}, err
+	}
+	if c.config.Save(Token{}) != nil {
+		return Token{}, errors.New("could not prepare saved OAuth credentials for rotation")
+	}
 	return c.exchange(ctx, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {token.RefreshToken}})
+}
+
+// Access returns a usable token or performs its single refresh. The native
+// owner serializes calls and discards an old token after any failed rotation.
+func (c *Client) Access(ctx context.Context, token Token) (Token, error) {
+	if !c.Owns(token) {
+		return Token{}, ErrLoginRequired
+	}
+	if time.Until(token.ExpiresAt) > 30*time.Second {
+		return token, nil
+	}
+	return c.Refresh(ctx, token)
 }
 
 // Revoke invalidates both credentials through Authelia's supported endpoint.
 // The caller separately closes live carriers and deletes the saved token.
 func (c *Client) Revoke(ctx context.Context, token Token) error {
-	if !c.owns(token) {
+	if !c.Owns(token) {
 		return ErrLoginRequired
 	}
 	for _, value := range []struct{ token, hint string }{{token.AccessToken, "access_token"}, {token.RefreshToken, "refresh_token"}} {
@@ -167,7 +186,8 @@ func (c *Client) Revoke(ctx context.Context, token Token) error {
 	return nil
 }
 
-func (c *Client) owns(t Token) bool {
+// Owns prevents stored credentials being applied to another enrolled issuer.
+func (c *Client) Owns(t Token) bool {
 	return t.Issuer == c.config.Issuer && t.ClientID == c.config.ClientID && safeValue(t.AccessToken) && safeValue(t.RefreshToken)
 }
 

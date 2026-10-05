@@ -1221,8 +1221,14 @@ slices and their limits; they do not replace the manual acceptance table.
 - `0f5bdf12c8`: Android navigation uses the existing kitten logo; Local setup
   offers Connect to remote and remembers the previous remote for Back to remote.
   [APK candidate run 37258390184](https://github.com/openresearchtools/BashKitten/actions/runs/37258390184)
-  was dispatched with the successful native stack. APK/manual UI acceptance is
-  pending; this candidate does not contain the new tunnel architecture.
+  succeeded. Its signed APK was installed through the ordinary Android Package
+  Installer in the existing Cuttlefish guest without clearing data. Opening it
+  restored Local chat without the earlier saved-certificate-change error or an
+  account prompt after the prior fresh Termux setup. The logo is visible beside
+  the address bar, at the left of the tabs tray and after New tab; returning to
+  Agent preserved the exact unsent draft. Provider/model turns, no-Termux remote
+  setup, keyboard and full lifecycle acceptance remain pending. This candidate
+  does not contain the new tunnel architecture.
 - `362db52356`: private native host executable, controller-pipe commands,
   service-ID Unix listener and active-carrier authorization rechecks. Native
   [run 37259995050](https://github.com/openresearchtools/BashKitten/actions/runs/37259995050)
@@ -1246,7 +1252,7 @@ slices and their limits; they do not replace the manual acceptance table.
   passed all Linux amd64/arm64 and Termux aarch64 component, runtime-guard and
   assembly jobs. Share Local has not activated the new helper; old remote
   management removal and migration remain pending, not silently complete.
-- Gecko now has a parent-only enrollment API for the remote client certificate
+- `d4d21f23d3`: Gecko has a parent-only enrollment API for the remote client certificate
   and PKCS#8 key, scoped to the exact onion:443 and protected Agent origin
   attributes, including its first-party network partition. The normal TLS
   verifier still runs before selection. Keys stay in memory, use NSS session
@@ -1258,11 +1264,21 @@ slices and their limits; they do not replace the manual acceptance table.
   these identities. Gecko's own IDL compiler accepts the API declarations;
   native platform enrollment wiring, browser compilation and real TLS/login
   acceptance are pending. This is not an authenticated client release.
+- Shared native `client` source now owns per-enrollment login/cancellation,
+  serialized refresh, remembered-token persistence callbacks and service mappings.
+  Normal Close preserves saved credentials; explicit Logout closes local access
+  before revoking and clearing them. Token rotation erases the saved old token
+  before exchange, preventing replay after a failed request or process death.
+  A failed replacement-port bind preserves the working mapping. This has not
+  yet been wired to native platform storage/UI or accepted through a real tunnel.
 
-The existing Cuttlefish viewer was reopened through BashKitten's own ordinary-tab
-API and inspected; the guest remains available with the previously installed
-Termux candidate. No browser/VM restart, ADB, data clearing or scripted product
-test was used. New APK installation and user-flow acceptance remain pending.
+Manual evidence is outside product source/artifacts under the 5 October native
+remote verification directory. The existing Cuttlefish guest uses the previously
+installed Termux candidate and authorized child-process setting. Android System
+UI hung before APK installation; its own ANR dialog's Close app action recovered
+the system UI, followed by an ordinary lock-screen swipe. No browser/VM restart,
+ADB, root, app-data clearing or scripted product test was used. This is emulator
+coverage, not a physical Pixel or a complete application acceptance result.
 
 Next: activate the core through native host setup and implement the native client,
 prove the protected Agent/Authelia one-login path, then implement Share Local

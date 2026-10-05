@@ -23,6 +23,15 @@ directly under `auth/`; no source patch or runtime source download is used.
   go only to the supplied native encrypted-store callback. Authelia's real browser
   cookie stays in that same protected context for Agent/Remember me. The native
   token transport shares the exact enrolled Tor/TLS identity with the tunnel.
+- `client` owns one enrollment's login/cancellation, serialized token refresh
+  and loopback mappings. The platform supplies the existing Tor SOCKS endpoint
+  and an atomic encrypted `Save(Token)` callback; an empty token means erase.
+  Normal Close preserves saved login; Logout closes all local access before
+  revoking/erasing credentials. Failed rotation closes mappings and cannot retry
+  the consumed token. An occupied replacement port leaves the old mapping open.
+  Mapping status reports its bound port/carrier error, not host readiness.
+  Register the native OAuth client as `bashkitten-` plus the TK2 bundle ID;
+  `client.OAuthClientID` supplies the identical value to both native owners.
 - `host` and `cmd/bashkitten-remote` provide the native host executable. Its sole
   management input is the controller-owned stdin/stdout pipe; the only listener
   is a private Unix socket serving authenticated service-ID carriers. EOF,
@@ -42,8 +51,9 @@ The controller must configure that endpoint and reconcile its owned processes;
 the helper neither starts daemons nor removes existing sockets.
 
 This is integration source, not a completed remote feature. APK JNI entry points,
-private controller wiring, complete logout/refresh lifecycle,
-protected browser login and UI integration are still pending. Compilation does
+private controller activation, protected browser login and UI integration are
+still pending; client lifecycle source has not passed real authentication and
+device acceptance. Compilation does
 not establish working Tor, authentication, camera import or device acceptance.
 `access/tunnel.mjs` now provides the private pipe adapter through the existing
 AccessStack process owner; Share Local has not yet activated it. The auth-native
