@@ -1637,12 +1637,18 @@ builder is created. It pins pristine llama.cpp v0.5.0 at
 CPU/Vulkan/CUDA builds with immediate Actions artifacts, matching full source,
 build records, offline notices, checksums and a testing-only release manifest.
 The first runtime compile identified GCC 13's missing ARM SME support; the
-builder uses GCC 14 without patching upstream. Component builds are in progress;
-full app builds were not dispatched for this source slice.
+builder uses GCC 14 without patching upstream. Runtime builds
+[llama 37308116410](https://github.com/openresearchtools/bashkitten-localai/actions/runs/37308116410)
+and [Whisper 37308122209](https://github.com/openresearchtools/bashkitten-localai/actions/runs/37308122209)
+passed all twelve variants and published separate testing prereleases. Their
+six-variant manifests, exact source pins, checksums and builder-source inventories
+were checked; downloaded Vulkan/CUDA ELF dependencies match the declared ordinary
+runtime libraries and external GPU requirements. Linux packaging now explicitly
+depends on libstdc++6, libgomp1 and libvulkan1; no GPU drivers are bundled.
 
 Changed JavaScript, inline browser script and Python parse checks, native guard
-C syntax and source whitespace checks passed. Still required: successful runtime
-matrices, native desktop/app compilation, real managed/custom GPU and CPU starts,
+C syntax and source whitespace checks passed. Still required: native desktop/app
+compilation, real managed/custom GPU and CPU starts,
 INI/download/import interaction, unchanged mapped llama streaming, and manual
 Linux/Android dictation permission, cancellation, exactly-once submission and
 no-retained-audio checks. No scripted product test was added or run.
