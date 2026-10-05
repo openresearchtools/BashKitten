@@ -807,11 +807,13 @@ static bool IsAgentScope(const nsACString& host, const OriginAttributes& attrs) 
       (host.EqualsLiteral("127.0.0.1") || IsV3OnionIdentity(host));
 }
 
-static void ClearAgentTLSConnections() {
+static void InvalidateAgentTLSSessions() {
   nsCOMPtr<nsINSSComponent> nss(do_GetService(PSM_COMPONENT_CONTRACTID));
   if (nss) nss->ClearSSLExternalAndInternalSessionCache();
   nsCOMPtr<nsIObserverService> observers = mozilla::services::GetObserverService();
-  if (observers) observers->NotifyObservers(nullptr, "net:cancel-all-connections", nullptr);
+  // Prevent old TLS/HTTP sessions being reused without aborting other tabs or
+  // remotes. Native owners close the revoked route and its active requests.
+  if (observers) observers->NotifyObservers(nullptr, "net:prune-all-connections", nullptr);
 }
 
 static nsresult AgentNetworkAttributes(const nsACString& host,
@@ -861,7 +863,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentCA(
   ClearAgentClientAuth(host, attrs);
   SetAgentRoot(host, attrs, root);
   if (network != attrs) SetAgentRoot(host, network, root);
-  ClearAgentTLSConnections();
+  InvalidateAgentTLSSessions();
   return NS_OK;
 }
 
@@ -880,7 +882,7 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentCA(
   ClearAgentClientAuth(host, attrs);
   SetAgentRoot(host, attrs, nsTArray<uint8_t>());
   if (network != attrs) SetAgentRoot(host, network, nsTArray<uint8_t>());
-  ClearAgentTLSConnections();
+  InvalidateAgentTLSSessions();
   return NS_OK;
 }
 
@@ -905,7 +907,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentClientCertificate(
   NS_ENSURE_SUCCESS(rv, rv);
   rv = SetAgentClientAuth(host, attrs, network, der, pkcs8);
   NS_ENSURE_SUCCESS(rv, rv);
-  ClearAgentTLSConnections();
+  InvalidateAgentTLSSessions();
   return NS_OK;
 }
 
@@ -921,7 +923,7 @@ NS_IMETHODIMP nsCertOverrideService::ClearAgentClientCertificate(
     return NS_ERROR_INVALID_ARG;
   }
   ClearAgentClientAuth(host, attrs);
-  ClearAgentTLSConnections();
+  InvalidateAgentTLSSessions();
   return NS_OK;
 }
 
@@ -941,7 +943,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAgentOnionEnrollment(
   if (network != attrs) {
     mozilla::psm::SetAgentOnionEnrollment(host, network, enabled);
   }
-  ClearAgentTLSConnections();
+  InvalidateAgentTLSSessions();
   return NS_OK;
 }
 
@@ -964,12 +966,7 @@ NS_IMETHODIMP nsCertOverrideService::SetAuthenticatedOnion(
       mAuthenticatedOnions.Remove(key);
     }
   }
-  if (removed) {
-    nsCOMPtr<nsINSSComponent> nss(do_GetService(PSM_COMPONENT_CONTRACTID));
-    if (nss) nss->ClearSSLExternalAndInternalSessionCache();
-    nsCOMPtr<nsIObserverService> observers = mozilla::services::GetObserverService();
-    if (observers) observers->NotifyObservers(nullptr, "net:cancel-all-connections", nullptr);
-  }
+  if (removed) InvalidateAgentTLSSessions();
   return NS_OK;
 }
 

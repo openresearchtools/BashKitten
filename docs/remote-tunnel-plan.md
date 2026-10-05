@@ -1646,3 +1646,20 @@ matrices, native desktop/app compilation, real managed/custom GPU and CPU starts
 INI/download/import interaction, unchanged mapped llama streaming, and manual
 Linux/Android dictation permission, cancellation, exactly-once submission and
 no-retained-audio checks. No scripted product test was added or run.
+
+### 5 October TLS lifecycle correction (source checked)
+
+Agent CA/client-certificate changes and Android authenticated-onion removal no
+longer send Gecko's global active-connection cancellation. They retain NSS
+internal/external session-cache invalidation and use the existing
+`net:prune-all-connections` path: idle connections close, active connections
+become non-reusable, and existing unrelated streams finish normally. This is
+upstream HTTP connection cleanup, not another transport or identity layer.
+
+The source trace confirms desktop disconnect blocks its Agent route before
+closing the native helper; that helper closes its gateway sockets before client
+mappings. Android closes its owned AgentRoute sockets before its native client,
+and protected-view suspension cancels its requests. Local/remote identity
+replacement remains gated by the existing reset/remove flow. Source diff and
+call-site checks passed; native compilation and simultaneous-download/remote
+stream manual verification remain pending.
