@@ -10,15 +10,15 @@ export async function localAISettings(parent, control, win, isLocal) {
   const engineStatus = {};
   const active = () => parent.isConnected && isLocal();
   const call = async (name, args) => { if (!active()) throw Error('Select Local to use LocalAI'); return control(name, args); };
-  const run = async action => {
+  const run = async (action, feedback = message) => {
     if (busy || !active()) return;
-    busy = true; message.textContent = '';
+    busy = true; feedback.textContent = '';
     const disabled = [...parent.querySelectorAll('button')].map(button => [button, button.disabled]);
     for (const [button] of disabled) button.disabled = true;
-    try { await action(); } catch (error) { if (active()) message.textContent = error.message; }
+    try { await action(); } catch (error) { if (active()) feedback.textContent = error.message; }
     finally { busy = false; for (const [button, previous] of disabled) if (button.isConnected) button.disabled = previous; }
   };
-  const button = (text, action) => { const result = node('button', text); result.type = 'button'; result.onclick = () => run(action); return result; };
+  const button = (text, action, feedback = message) => { const result = node('button', text); result.type = 'button'; result.onclick = () => run(action, feedback); return result; };
   const field = (parent, text, value = '', multiline = false) => {
     const label = node('label', text), input = node(multiline ? 'textarea' : 'input'); input.value = value;
     if (multiline) { input.rows = 4; input.style.cssText = 'font-family:monospace;resize:vertical;max-height:20rem;overflow:auto'; }
@@ -119,12 +119,13 @@ export async function localAISettings(parent, control, win, isLocal) {
     const editor = node('section'); editor.className = 'connection-card';
     const path = node('p', file.file), text = field(editor, 'Router INI', file.content, true); text.rows = 12;
     editor.prepend(path); parent.append(editor);
-    editor.append(button('Save', async () => { file = await call('localai-ini', { file: file.file, content: text.value, revision: file.revision }); saved(file.file); message.textContent = 'INI saved. Reload to apply.'; }), button('Save as…', async () => {
+    const status = node('p'); status.setAttribute('role', 'status'); editor.append(status);
+    editor.append(button('Save', async () => { file = await call('localai-ini', { file: file.file, content: text.value, revision: file.revision }); saved(file.file); status.textContent = 'INI saved. Reload to apply.'; }, status), button('Save as…', async () => {
       const filename = await pick('Save router INI', 'save', file.file); if (!filename) return;
       const existing = await call('localai-ini', { file: filename });
       file = await call('localai-ini', { file: filename, content: text.value, revision: existing.revision });
-      path.textContent = file.file; saved(file.file); message.textContent = 'INI saved. Save changes to use this file.';
-    }), button('Close editor', () => editor.remove()));
+      path.textContent = file.file; saved(file.file); status.textContent = 'INI saved. Save changes to use this file.';
+    }, status), button('Close editor', () => editor.remove()));
     text.focus();
   };
   const drawModels = async root => {

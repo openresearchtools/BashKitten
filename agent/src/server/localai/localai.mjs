@@ -67,11 +67,12 @@ async function jsonRequest(url, { key, signal, data } = {}) {
 }
 function validateINI(content) {
   if (typeof content !== 'string' || content.includes('\0')) throw Error('Invalid router INI');
-  let section = false;
-  for (const [index, raw] of content.split(/\r?\n/).entries()) {
+  // Upstream places keys before the first section (including version) in
+  // its default preset. Option names/values remain llama.cpp's responsibility.
+  for (const [index, raw] of content.split(/\r\n|\r|\n/).entries()) {
     const line = raw.trim(); if (!line || /^[;#]/.test(line)) continue;
-    if (/^\[[^\]\r\n]+\]\s*(?:[;#].*)?$/.test(line)) { section = true; continue; }
-    if (!section || !/^[^=\r\n]+\s*=/.test(line)) throw Error(`Invalid router INI syntax at line ${index + 1}`);
+    if (/^\[[^\]\r\n]+\]\s*(?:[;#].*)?$/.test(line)) continue;
+    if (!/^[A-Za-z_][A-Za-z0-9_.-]*[ \t]*=/.test(line)) throw Error(`Invalid router INI syntax at line ${index + 1}`);
   }
 }
 export class LocalAI {
