@@ -46,6 +46,17 @@ actual owned display status/Start/Stop/Open X11 and a concise local Termux Pi sk
 for verified device-specific GPU help. Keep headless Xvfb and no-Termux remote
 operation; this supersedes the earlier blanket removal of X11 controls only for
 this optional feature. See the remote tunnel plan for the paths and manual gates.
+Desktop Local gets native **LocalAI** for llama.cpp/Whisper runtime commands,
+router INI editing and the relocated model downloader; retain backend jobs and
+remove shared web management routes. Share Local only has **Share llama.cpp**
+for that same service. The planned `bashkitten-localai` runtime build repository
+supplies mainstream llama.cpp/whisper.cpp amd64/arm64 CUDA/Vulkan artifacts;
+Custom llama binary disables its managed updates. Auto-configure the owned Pi
+provider from the real endpoint/router IDs. Optional host-side Whisper dictation
+records on user action until Stop, then transcribes and sends ordinary chat text;
+authenticated Android/Linux clients can use their selected host's capability.
+No retained audio, separate transcripts, content logs or telemetry; keep audio
+out of disk staging and durable jobs. The remote plan defines the complete gates.
 These are planned requirements,
 not a claim that the new transport or tray is already implemented. Tor tabs must
 route all network requests, including public HTTP/HTTPS assets and DNS, through

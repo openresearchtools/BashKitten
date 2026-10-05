@@ -21,6 +21,17 @@ Provide a concise Pi skill for software rendering and verified device-specific
 GPU configuration. This supersedes the older blanket removal of X11 controls;
 X11 remains optional and remote-only operation still needs no Termux.
 
+Additional desktop requirement, 5 October: native **LocalAI** in the Local Agent
+tab owns llama.cpp/Whisper runtime setup, launch commands, router INI editing and
+model downloads. Move those controls out of the shared web UI; reuse backend
+workers/jobs. Share Local has only a **Share llama.cpp** checkbox for that managed
+service. Plan a separate `bashkitten-localai` build/distribution repository for
+mainstream llama.cpp and whisper.cpp Linux amd64/arm64 CUDA/Vulkan artifacts,
+automatic managed updates, custom-binary opt-out and automatic Pi configuration.
+Whisper enables explicit microphone recording, Stop, transcription on the
+configured host and normal text submission, with no retained audio or separate
+transcript/log store.
+
 The deliverable is working Linux amd64/arm64 packages, the Android APK and matching
 Termux package, source and notices, after builds and manual acceptance. Writing
 this plan, building a helper or dispatching CI does not complete that deliverable.
@@ -34,6 +45,9 @@ this plan, building a helper or dispatching CI does not complete that deliverabl
 | Mobile Agent navigation | Replace the spelled-out **Agent** navigation button with the current BashKitten logo, retaining accessible naming, touch target and behavior |
 | Unconfigured Local | Show the short-command setup and **Back to remote**, retaining the previous remote, login and draft |
 | Android Local Display | One compact native panel: compatible X11 download if missing, current editable command, actual status, Start/Stop and Open X11; absent in Remote mode |
+| Desktop LocalAI | Native Local Agent button; llama.cpp binary/command, router INI and shared model downloader, plus optional Whisper model/device/command setup |
+| Share llama.cpp | One native Share Local checkbox exposes the same LocalAI service through the existing authenticated tunnel; no duplicate launcher/configuration |
+| Dictation | When the selected Agent has Whisper configured, microphone beside Send records until Stop, transcribes on that host, then submits text to the chat; no saved audio or separate transcript history |
 | Share Local | Browser-owned entry beside Local/remotes on Linux/Android; choose username/password, enroll with authenticator app/QR, verify TOTP, then show the downloadable connection QR |
 | Remote file-manager permission | Host setup has **Allow remote file manager**, off by default; the server gates Files/Changes browsing, editing, diffs and manager transfers while chat attachments/image previews and Pi tools continue working |
 | Connection QR | One image contains all client connection material, encrypted with that same Authelia password; display, click to download, camera scan and image upload work |
@@ -579,6 +593,9 @@ another service. Independently published applications retain their own policies.
 Move host service configuration into the native Share Local panel, reusing one
 saved host catalogue and a separate client mapping record per remote/service.
 Remove the old web settings implementation rather than maintaining two editors.
+For desktop llama.cpp, the later LocalAI requirement below specializes this:
+LocalAI owns its binary/command/router/models; Share Local only controls whether
+that same service is published. Other service definitions remain in Share Local.
 
 | Host field | Meaning |
 | --- | --- |
@@ -661,14 +678,216 @@ loopback is not Android-package or desktop-process authentication. Do not expose
 the privileged controller on these service ports. Preserve application-native
 authentication if the owner enables it; no mandatory extra token or HTTP rewrite.
 
-## 7. llama.cpp router passthrough
+## 7. Native desktop LocalAI and llama.cpp router passthrough
 
-Treat llama.cpp as a normal managed service with a convenient command/config
-form. Use the installed `llama-server` and supported router preset syntax, such
-as `--models-preset <file>`, with an explicit loopback host/port. Verify against
-the packaged version. Preserve model/config files, existing downloads/runtime
-selection, and real readiness/errors. Do not introduce another llama supervisor
-or modify Pi's agent loop.
+Treat llama.cpp as one managed service configured in native desktop **LocalAI**.
+Use its selected `llama-server` and upstream `--models-preset <file>` router INI,
+with an explicit loopback host/port. Verify against the selected runtime version.
+Preserve model/config files, existing download jobs and real readiness/errors.
+Do not introduce another llama supervisor or modify Pi's agent loop. Android's
+native Termux host can still publish a compatible externally configured service;
+Linux runtime downloads are not Android binaries.
+
+### Native desktop LocalAI and sharing
+
+Add a **LocalAI** button in the desktop Agent tab while **Local** is selected.
+Open a native browser-owned panel/page with Back, compact sections for llama.cpp,
+Whisper and Models, and native file/folder pickers. This is host configuration,
+not another settings page served by the Agent web backend. Do not expose these
+controls while a remote Agent is selected. Retain chat/provider/model selection
+in the shared chat UI; remove its local runtime/downloader settings sections.
+
+The llama.cpp section shows:
+
+- **Managed / Custom binary**, installed version/path, actual CPU/GPU choice and
+  runtime update state. Pick a `llama-server` executable or its containing folder;
+  if ambiguous, require selection of the actual executable in the same native UI.
+- The effective launch command in a compact copyable/editable code block, actual
+  loopback URL/port, Start/Stop/Reload, real loading/failure state and Launch on startup.
+- **Router INI**: select an existing file, or write/edit its contents in the panel
+  and Save/Save as through a native picker. Keep one real file and its path, using
+  upstream syntax; preserve comments/unknown supported options and external edits.
+  Detect concurrent changes, save atomically and report invalid configuration
+  beside the editor. Saving alone does not interrupt running inference; Reload
+  explicitly applies it. Never overwrite the selected file with a hidden model
+  registry or substitute Pi's JSON for llama.cpp's INI.
+- **Models** links to the same downloader in this panel. Selecting downloaded
+  GGUFs can create appropriate router entries; preserve split-model/mmproj files
+  and use actual upstream model IDs and path semantics.
+
+Use a working starter command/config and automatic or chosen loopback port.
+Persist one command/config record behind the private controller so native UI,
+service lifecycle and Pi integration agree. A custom command is deliberate
+execution by the host owner; retain arguments/environment/working directory and
+do not guess missing credentials from arbitrary shell text. The normal managed
+flow supplies its own actual endpoint and model list without manual provider setup.
+
+Under **Share Local**, add only **Share llama.cpp**, off by default, plus status
+and a link back to LocalAI if setup is incomplete. This checkbox publishes the
+same stable service ID/target; it does not create a second server, command editor,
+model downloader or independent runtime choice. A stopped configured service may
+remain listed for permitted remote Start/Stop/Reload. Unchecking closes its remote
+carriers and removes exposure while keeping local use running. The account/TOTP
+and tunnel requirements remain mandatory, and the stream is still unchanged.
+Do not automatically publish Whisper when enabling llama.cpp sharing.
+
+### Reuse the backend and configure Pi automatically
+
+Move the UI and its trusted entry points, retaining existing model-download child
+processes, durable jobs, pause/resume/cancel, package jobs and process ownership.
+Disk/network work stays out of the browser UI thread. Refactor the existing
+`ManagedLlama` into the planned common service lifecycle rather than run both.
+Keep model downloads working while the native panel is closed. Preserve existing
+models, chosen directories, Hugging Face credentials and partially downloaded files.
+
+Call host configuration through the private native controller. Remove model
+download/settings/search management and `llama-configure`/runtime-install routes
+from the shared web management API, including `/api/control` forwarding. Preserve
+chat `/api/models` and authorized inference/service-ID actions; they are different
+operations. LocalAI command/config files and credentials must not be writable
+through the remote file manager. Stock Pi keeps its separate OS authority.
+
+Extend the existing `bashkitten-llama` provider integration through stock Pi's
+supported configuration. Set the actual ready loopback URL, router model IDs and
+configured application bearer/key file, if any; no mandatory extra bearer or
+rewriting tunnel traffic. Refresh at an idle boundary without replaying prompts,
+changing an existing chat's selected model or overwriting other provider entries.
+Retain pillama's native router/progress integration. The user sees a ready local
+provider/model after setup, without typing a port into Providers. Apply the same
+managed preset to an enrolled llama service's actual client-local mapping on
+Linux/Termux; a remote Pi instead uses its own host endpoint. Selecting Local
+keeps enabled remote mappings alive as specified above. Changed/conflicting ports
+update only owned settings after confirming the actual service identity/readiness.
+Use distinct owned provider entries for Local and each enrolled llama service,
+so connecting another remote cannot overwrite the working Local endpoint.
+
+The shared downloader currently filters Hugging Face search to GGUF. Extend its
+model-type selection to support whisper.cpp's actual supported model files too;
+do not label arbitrary Whisper/PyTorch or GGUF files compatible. Keep one download
+engine, immutable revision/hash checks, streamed progress and existing job recovery.
+Native Models offers file/folder selection as well as downloads, separating llama
+router entries from Whisper choices without duplicating downloaded files.
+
+### Managed runtime builds and custom binaries
+
+Create **`openresearchtools/bashkitten-localai`** during implementation as the
+runtime build/distribution repository. Copy/adapt only mainstream llama.cpp
+workflows and necessary Docker/build inputs from
+[`llama-cpp-arm64-builds`](https://github.com/openresearchtools/llama-cpp-arm64-builds/tree/d6e2239e6b96365b6c79391c137c4e1e4df2944c),
+checked at `d6e2239e6b96365b6c79391c137c4e1e4df2944c`, and add whisper.cpp builds.
+Do not copy the TurboQuant tracker or choose TurboQuant assets. The existing
+mainstream tracker checked on 5 October already has upstream llama.cpp **v0.5.0**
+(`7fe450e19305b828c199d602c23a8337aaa1f03b`) and successful daily checks; a refresh
+is only needed when actual upstream/new build inputs require it, not because its
+repository name says arm64. Leave that donor and its unrelated releases intact.
+
+Build both engines for Linux **amd64 and arm64**, each with **CUDA** and
+**Vulkan/CPU** variants. Check CPU operation without a GPU/driver; use an explicit
+CPU artifact if needed to make that work reliably. Whisper upstream supports
+CUDA/Vulkan, but its checked v1.9.4 release/nightly inventory does not supply the
+complete requested Linux GPU matrix. Start from
+[`v1.9.4`](https://github.com/ggml-org/whisper.cpp/releases/tag/v1.9.4),
+`927cfce34f31707e17f2bff35c349632fb9e2c3a`, or a newer verified official release.
+Recheck both upstreams during implementation. Pin exact tags/commits and locks;
+no private inference fork, moving branch in a released artifact, or compiler
+optimizations that silently exclude supported CPUs.
+
+Give llama and Whisper distinct release/asset names so GitHub's single “latest”
+release cannot confuse the engines. Publish checksums, exact source/build records,
+required shared libraries, full dependency notices and corresponding sources.
+LocalAI exposes the installed runtime's matching offline notices/source record;
+an independently updated runtime must not keep an older binary's license inventory.
+Keep artifacts downloadable from Actions immediately for manual checks as well
+as runtime releases; retain the testing-release notice while required. Product
+UI/controller/Pi changes remain in BashKitten. This explicitly requested runtime
+builder is separate from the three existing app build-only repositories; do not
+move product code or replace their cache/workflow arrangement. Preserve complete
+source for what is shipped, without reviving another product-source repository.
+
+Managed installation selects by OS/architecture and compatible ABI/driver, not
+filename substring or release recency alone. Probe `nvidia-smi` and the real CUDA
+device/driver; select CUDA when the matching binary can initialize it. Otherwise
+select Vulkan/CPU and verify the available Vulkan device, falling back visibly
+to CPU if none works. Retain an explicit CPU/GPU override. Do not assume that
+`nvidia-smi` existing proves the required CUDA runtime libraries are installed,
+or download a glibc Linux arm64 build for Termux. Report missing libraries/unsupported
+drivers without altering the user's system GPU drivers.
+
+Fetch verified archives into versioned private runtime directories through the
+existing job mechanism, checking architecture, checksums, safe extraction and
+required libraries before activation. Managed mode checks for newer matching
+official builds when LocalAI opens and through the existing update flow; offer
+Check now and apply downloaded updates at a safe idle/restart boundary. Never
+replace a running inference binary or restart an active turn; retain the last
+working version if validation fails. Avoid network checks on every chat render.
+This replaces the earlier APT-only llama-runtime selection; preserve existing
+external/APT installations and let users select their binary as Custom.
+
+**Custom binary** disables BashKitten's checks/downloads/replacement for that
+engine, including queued automatic updates. Keep its selected path and adjoining
+libraries in place; validate executability, architecture and required router/server
+capabilities without copying over or modifying it. A missing/incompatible custom
+binary gets a visible error, not a silent switch to Managed. Re-enabling Managed
+is an explicit native choice. Changing llama ownership does not disable Whisper
+runtime updates or BashKitten app updates.
+
+### Whisper setup and private dictation
+
+LocalAI's Whisper section has a downloaded/existing model picker using the same
+Models view, Auto/GPU/CPU selection, the effective editable server command and
+actual setup/runtime state. Launch the owned loopback `whisper-server` and load
+its model **on demand**, showing Loading/Transcribing rather than a frozen chat.
+It need not occupy GPU memory at browser startup; stop/release it when idle after
+the request unless the user explicitly keeps it running. Reuse the current process
+owner/worker cancellation and shutdown, not a second daemon manager. CPU remains
+available on machines without usable GPU support.
+
+After setup, the Agent backend advertises its configured transcription capability
+and the protected chat composer shows a small **microphone** beside Send. Local
+desktop chat uses that desktop's Whisper. Linux/Android clients connected to that
+Agent can use the same host-side Whisper through the authenticated Agent/tunnel
+path, without a Linux executable or Termux on the client phone. Show which host
+transcribes in the recording UI. If the selected backend has no configured
+Whisper, omit the microphone; never fall back to an unrelated host or cloud speech
+service. Keep LocalAI configuration native and Local-only. Remote dictation may
+invoke inference, not edit commands/models, enable hosting or use Whisper's model
+administration endpoints. Do not publish an unprotected Whisper server port.
+
+An explicit user click obtains ordinary microphone permission and begins capture,
+with Recording, elapsed time, **Stop** and **Cancel**. Record until the user stops;
+no always-listening or silence-triggered send. Stop releases microphone tracks,
+then transcribes on the identified host. On success, send the transcript as a
+normal user text message through the existing Pi queue exactly once. Preserve
+existing drafts and attachments rather than sending unrelated composer contents.
+Cancel, empty/silent audio, errors or a changed chat/remote must not submit text
+to an unintended conversation. Bind a recording to its originating chat and
+cancel on a destination change; retain a failed submission only as that chat's
+normal recoverable text draft, with no automatic retry that could duplicate it.
+
+Audio and intermediate transcript data stay in memory for this operation. Do
+not use the existing chat multipart/attachment staging path or durable job body
+store for audio: those save files. Convert to a supported PCM/WAV representation
+in memory and use a dedicated authenticated, non-persisting inference operation
+to call Whisper's in-memory request path. Remote audio crosses only the selected
+Agent's authenticated tunnel and stays in memory on that host too. In the inspected
+[upstream server](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/examples/server/server.cpp),
+`--convert` writes temporary files; keep it off and avoid other output/debug
+dump options. Do not forward arbitrary page-selected request flags. Use upstream
+no-context behavior between recordings so one dictation does not retain another's
+transcript in decoder context.
+
+No recording files, cached blobs, browser storage, separate transcription history,
+request/response logs or telemetry. Do not persist Whisper stdout/stderr, debug
+dumps or audio in crash reports; report necessary failure state inline without
+its content. Disable owned-worker core dumps and clear/release buffers on success,
+cancellation or failure. The only retained transcription is the ordinary chat
+text/draft and native Pi conversation the user submits. Normal text submission
+continues to the selected LLM provider.
+Handle real memory/resource exhaustion visibly rather than silently spilling
+audio to disk. Validate the selected command against these capture/privacy
+requirements before enabling the microphone, including after a custom edit.
+
+### Unmodified llama.cpp streams
 
 The user's launch command/configuration decides whether llama.cpp requires an
 API bearer token. Carry the client's Authorization header unchanged; never
@@ -758,6 +977,9 @@ during the current runtime.
 | `agent/src/server/access/{remote,accounts,stack,paths,hosting}.mjs` | Remote generations, chosen account, QR delivery, Authelia OAuth config, catalogue/actions, Tor/Caddy routes |
 | `agent/src/server/control.mjs`, runtime ownership/guard | Remote reset/lifecycle, owned service units, safe Quit and reconciliation |
 | `agent/src/server/platform/linux/{llama,llama-provider}.mjs` | Command/config service ownership; remove duplicate HTTP token-injecting relay behavior |
+| Desktop native Agent controls, private controller and `agent/src/server/models/` | LocalAI page, runtime/custom binary selection, router INI/pickers and relocated downloader; preserve workers/jobs and automatically configure the owned Pi provider |
+| `agent/src/web` composer, protected browser capture, authenticated inference and owned Whisper worker | User-triggered recording, Stop/Cancel, on-demand transcription on the configured Agent host and exactly-once normal text submission; no disk staging, content logs or telemetry |
+| New `openresearchtools/bashkitten-localai` workflows | Mainstream llama.cpp and whisper.cpp amd64/arm64 CUDA/Vulkan builds, upstream tracking, independent engine releases, downloadable artifacts, checksums/source/notices; no TurboQuant |
 | Existing `agent/src/web` settings and remote HTTP/RPC management | Remove host publishing/account/QR/identity/permission/service-definition controls and routes; retain chat and permitted file-manager operations |
 | `agent/src/server/http/server.mjs`, shared `files/` operations/jobs and web Files/Changes UI | Host-owned remote file-manager capability, complete route/transport enforcement, editor parity and live revocation without a privileged fallback |
 | Android `AgentPanel.java`, `AgentRuntime.java`, `AgentRemotesActivity.java` and Fenix Agent navigation | Native Share Local through private Termux bridge, remote-first onboarding/back, image import, service actions/mappings, foreground ownership and logo-based navigation |
@@ -820,12 +1042,14 @@ source. This does not vendor the user's models or unrelated external OS packages
 | 5. Real applications | Multi-model llama router, bearer/no-bearer, byte-offset replay, pillama status, web application uploads/downloads/cookies/WebSockets; strict Tor-tab routing and ordinary private onion navigation |
 | 6. Reset/lifetime | Complete and interrupted identity rotation; old exports/sessions fail; tray/hide/reopen/autostart/Quit and owned-group cleanup |
 | 6a. Android Local Display | Compatible X11 installer, visible software-rendered XFCE, one launcher/script shared by native panel and Pi, truthful owned lifecycle and optional device-verified GPU skill |
-| 7. Delivery | Existing-data migration, four complete artifacts, offline notices/source, manual platform acceptance, release/APT publication with testing warning |
+| 6b. Desktop LocalAI/dictation | Native launcher/INI/downloader, managed/custom runtime and Pi preset, Share llama.cpp toggle, real Whisper CPU/GPU transcription with verified non-persistence and cancellation |
+| 7. Delivery | Existing-data migration, four complete app artifacts plus required local-AI runtime matrix, offline notices/source, manual platform acceptance, release/APT/runtime publication with testing warning |
 
 Work directly on main in focused commits and push finished slices. Record actual
 evidence per exact candidate commit. Resolve early integration gates before full
 Gecko iterations; reuse unchanged component artifacts under existing provenance
-rules. No new build repositories or fingerprinting scheme.
+rules. Keep the three app builders; the requested `bashkitten-localai` runtime
+builder is the sole new repository in this extension. No new fingerprinting scheme.
 
 Preserve Local data, providers, Pi history/runtime, drafts, native permissions and
 saved remotes. Never clear app/Termux data to make an upgrade work. Existing hosts
@@ -882,6 +1106,11 @@ except where an explicit restart case requires otherwise.
 | Display operation/layout | Start a real XFCE desktop, Open X11, launch and interact with a GUI app, Stop, repeat Start without duplicates; small light/dark sheet and keyboard-visible editor; activity closure, background/resume, actual crash/status, Agent Off cleanup, independent Xvfb/X11 and occupied display numbers handled correctly |
 | Shared display command/skill | User edit, Pi edit and direct saved-script edit all become the next actual launch and appear in the panel; no execution on Save, syntax errors/concurrent changes visible, custom data path and package upgrade preserve the same command; Pi launches a GUI app using reported environment and can restore software default |
 | Display GPU coverage | Skill reads current primary sources for actual device/driver, verifies renderer and visible app before reporting acceleration, owns helper cleanup and restores working software command on failure; emulator-only coverage never establishes physical-device GPU support |
+| Native LocalAI migration | Local-only desktop button, binary/folder/model pickers, command and router INI edit/Save as/reload; existing models/jobs/HF credentials preserved; removed web management routes cannot configure runtimes or start downloads; native downloader works with the panel closed |
+| LocalAI builds/updates | Mainstream-only llama and Whisper amd64/arm64 CUDA/Vulkan artifacts and source/notices downloadable; real compatible CUDA, Vulkan and CPU runs, missing-driver/ABI errors, safe idle update/failed-update recovery, no interruption of active inference; Custom preserves the selected executable/libraries and stops that engine's update checks/replacements |
+| LocalAI sharing/Pi | One Share llama.cpp checkbox exposes the same service; Off closes remote access while Local still runs; two router models selected in real Pi with automatic actual endpoint/IDs, no manual provider entry; remote mapping remains usable from Local Termux Pi and custom provider settings are preserved |
+| Whisper model/runtime | Same downloader retrieves a compatible Whisper model, existing model picker works, actual on-demand load/inference on CPU and available GPU, truthful failures, cancellation and owned worker/model cleanup |
+| Microphone privacy/flow | Real spoken recording from local desktop and authenticated Android/Linux remote clients until Stop; Cancel, permission denial, silence, startup/transcription/send failure and chat switch; identified transcription host, preserved draft/attachments, exactly one text turn, no third-party speech service; manually inspect client/host filesystem, browser storage and process output after success/error/cancel/restart for no recording, separate transcript or content log remnants |
 | Upgrade/licenses | Signed APK/APT updates retain state; accurate full notices/source available offline before backend/login on Android/Linux |
 | Pillama source/package | Complete pinned upstream tree present in this repo/source archive; installed extension comes from it, MIT/provenance retained, actual Pi RPC telemetry works without fetching another product repository |
 

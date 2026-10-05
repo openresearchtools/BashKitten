@@ -50,6 +50,19 @@ This supersedes blanket removal of X11 controls/variants below only for this
 optional feature; keep remote-only setup free of Termux and retain headless Xvfb.
 The remote tunnel plan defines the source/signing, launcher and manual gates.
 
+Latest desktop LocalAI clarification, 5 October: move llama.cpp runtime/command
+and router INI editing plus model downloads from the shared web UI into native
+**LocalAI** in the desktop Local Agent tab. Keep backend workers/jobs; Share Local
+only gets **Share llama.cpp** for this same service. Use the new planned
+`bashkitten-localai` builder for mainstream llama.cpp and whisper.cpp Linux
+amd64/arm64 CUDA/Vulkan runtimes, managed updates and custom llama binary selection
+that disables its managed updates. Configure stock Pi's owned provider from the
+actual router endpoint/model IDs. Add optional on-demand host-side Whisper and
+a chat microphone: explicit Record/Stop/Cancel, transcription then ordinary text
+send, without audio persistence, separate transcripts, content logs or telemetry.
+This supersedes APT-only llama installation and shared web model-management UI
+below. The remote tunnel plan specifies privacy, source/build and manual gates.
+
 Additional Tor clarification, 5 October: every network request from a Tor tab,
 including HTTP/HTTPS assets on public domains, redirects, downloads and DNS,
 must use Tor or be blocked, with no direct fallback. Ordinary unenrolled onion
@@ -1077,20 +1090,24 @@ Do not imply a browser-local port is automatically reachable by a remote agent.
 The relay is available while this browser is running; closing it closes that
 port. This is the deliberately requested browser relay, not a second chat server.
 
-For a **managed local Linux runtime**, reuse the current packages from
-[llama-deb](https://github.com/openresearchtools/llama-deb): `llama-cpp`
-(Vulkan/CPU) or `llama-cpp-cuda` for both Debian arm64 and amd64. They conflict
-because they supply the same commands. Use APT for an actual change, show its
-output and never reinstall an already satisfied selection. Do not bundle both
-runtimes, NVIDIA drivers, Unsloth Studio or PyTorch into the browser.
+For a **managed local Linux runtime**, follow the later LocalAI requirement in
+the remote tunnel plan: verified per-architecture CUDA or Vulkan/CPU downloads
+from the planned `bashkitten-localai` repository, using mainstream llama.cpp.
+The native LocalAI panel owns runtime/command/router INI/model configuration;
+Share Local only publishes this same service through its checkbox. Existing
+[llama-deb](https://github.com/openresearchtools/llama-deb) or other external
+installations remain selectable through Custom binary, which disables managed
+runtime updates for that engine. Preserve associated libraries and never
+overwrite the user's executable. Do not bundle NVIDIA drivers, Unsloth Studio
+or PyTorch into the browser.
 
-Auto selection probes the available driver/devices and verifies the selected
-llama binary can load its backend. Prefer CUDA only when the packaged CUDA 13
-runtime, driver and supported device actually work; otherwise use supported
-Vulkan or explicit CPU mode. Retain an override. Unsloth's
+Auto selection probes `nvidia-smi`, the available driver/devices and the selected
+binary's actual backend. Prefer CUDA only when the matching runtime, driver and
+supported device work; otherwise use Vulkan or explicit CPU mode. Retain an override.
+Unsloth's
 [setup/detection code](https://github.com/unslothai/unsloth/blob/main/studio/setup.sh)
-is a reference, not a new dependency. The existing CUDA packages require system
-CUDA/driver libraries; merely seeing an NVIDIA vendor ID is insufficient.
+is a reference, not a new dependency. Check the selected artifact's CUDA/runtime
+library requirements; merely seeing an NVIDIA vendor ID or `nvidia-smi` is insufficient.
 
 The existing backend manager starts an owned llama-server with the chosen model
 and options when that managed provider is selected. Show Starting/Loading/Ready/
@@ -1102,33 +1119,49 @@ in-flight inference is reported to stock Pi without silently replaying a prompt.
 from API-key checks. Also verify an authenticated model request and the selected
 model. [llama.cpp server interface](https://github.com/ggml-org/llama.cpp/tree/master/tools/server).
 
-### Model downloads and one models folder
+### Native LocalAI models, router files and dictation
 
-Add **Settings → Download models** to the shared web UI, usable locally and
-remotely on Linux and Termux. Adapt the useful SimpleHF/BashKitten Rust downloader
-behavior, retaining donor license texts and provenance. Search Hugging Face,
+Move **Download models** into native desktop **LocalAI**, along with llama.cpp's
+binary/command and a real router INI editor with native Open/Save as pickers.
+Remove the shared web downloader/configuration controls and remote management
+routes, while preserving ordinary chat model selection. Reuse the
+SimpleHF/BashKitten Rust downloader behavior, retaining donor license texts and
+provenance. Search Hugging Face,
 browse repository files and sizes, choose downloads, and display real progress
 with Pause, Resume and Cancel. Pin each download to its selected immutable
 revision, stream to temporary files, validate resumed ranges, and retain progress
-across server restarts. Hiding the Agent view does not stop a download; whole-Agent
-shutdown stops owned transfers safely. Do not add another resident daemon.
+across server restarts. Keep its existing backend child processes/jobs; closing
+the native panel does not stop a download. Whole-Agent shutdown stops owned
+transfers safely. Do not add another resident daemon or delete existing Termux
+models/jobs when retiring their old web controls.
 
 Save an optional masked Hugging Face token in private server credential storage,
 never status responses, URLs, logs or browser localStorage. Preserve native
 password-store integration where the client owns a credential, without making
 headless or remote downloads depend on that client staying open.
 
-Local Linux uses the browser's native system folder picker for working and models
-directories, accepting the selected directory directly and preserving cancellation.
-Android/Termux and remote sessions use the backend folder picker, which lists
-the actual subdirectories at every depth. One picker selects the shared models directory. Downloads
-go there, and managed desktop llama.cpp receives that same directory through
-its native `--models-dir`. Store each GGUF model/quantization family in a direct
-child directory that native llama.cpp discovers, preserving filenames and split
-shards; do not invent a recursive model registry or shadow symlink tree. Retain
-original repository paths in download metadata. Refresh the native model list
-after downloads and load the selected native model ID before declaring Ready.
+Local Linux uses the browser's native file/folder pickers for models, runtime
+executables and router INI files, preserving cancellation and selected paths.
+Keep working-folder selection separate: Android/Termux and remote sessions still
+use their backend folder picker and actual subdirectories. One saved models root
+and the real INI supply the managed router, using upstream `--models-dir` and/or
+`--models-preset` as configured. Preserve model filenames, split shards/mmproj
+files and original repository paths in download metadata; no recursive shadow
+registry. Refresh actual router IDs after downloads/configuration and configure
+the owned Pi provider's endpoint/models automatically before reporting Ready.
 Preserve existing external HTTP providers and existing single-model setups.
+
+The same downloader/model picker supports whisper.cpp's compatible models as
+well as GGUF; the current GGUF-only search filter is insufficient. LocalAI offers
+Whisper model, CPU/GPU and effective launch command, with on-demand loading and
+owned shutdown. When the selected Agent advertises configured Whisper, local or
+authenticated remote clients show a small microphone beside Send: capture until
+Stop, transcribe on that identified host and submit exactly once as normal text.
+Audio and intermediate text stay in memory, outside attachment staging/durable
+jobs; disable disk conversion, content logs, telemetry and output dumps. Only normal
+chat text/drafts/history persist. Preserve existing drafts and cancellation on
+chat changes. See the remote tunnel plan for native client scope and the full
+privacy/manual acceptance requirements.
 
 ## 8. Built-in DDGS search and Markdown skill
 
@@ -1410,7 +1443,7 @@ release notes stay short; implementation detail belongs here and in AGENTS.md.
 | 4 | Local integration and any-Termux approval | Existing UI and real stock Pi turn; correct distinct mobile/desktop browser skill and actual platform tools; official GitHub, F-Droid, independently signed `com.termux` and existing suite Termux; first normal browser command opens native approval without `--authorize`, executes once after allow and never after deny; other-app request/revocation also works; bootstrap/files/OAuth/update jobs |
 | 5 | Power, wake locks, recovery and layout | Fresh launch On; actual browser and Termux CPU locks remain one each with 50 agents; Turn off stops all owned services/Pi and releases locks while leaving browser/Termux/unrelated tasks; Turn on discovers the actual dynamic port; core crash shows Off; owner/browser/Termux deaths recover without duplicates or prompt replay; rotate/fold preserves state |
 | 6 | Tor Agent remotes | QR/file/manual enrollment, 2FA, TLS renewal, rejected changed identity, revocation, offline/reconnect, ordinary private onion tabs and permission-controlled remote browser tools |
-| 7 | Desktop llama | arm64 and amd64 runtime selection; real ready model, crash/restart, wrong token, token-free health distinction; onion relay streams unchanged paths and never leaks credentials/falls back to direct access |
+| 7 | Native desktop LocalAI | Mainstream llama/Whisper arm64 and amd64 CUDA/Vulkan/CPU selection, managed update and custom-binary opt-out; real router INI/pickers/downloader and automatic Pi preset; Share llama.cpp with unchanged tunneled bytes; on-demand microphone transcription, cancellation and manually verified absence of saved audio/content logs |
 | 8 | Built-in DDGS and native Pi skill | Real searches using our packaged native runtime in stock terminal Pi and UI/RPC Pi on Linux amd64/arm64 and unrooted Termux, with no preinstalled DDGS or separate search package; skill discovery/on-demand loading; one query-or-url call and response contract without provider switches; HTML/text, PDF, repository and available transcript reads save complete Markdown, including content beyond the inline limit; paths survive reconnect/restart; concurrent saves, cancellation and real network failures; native imports and package upgrades work; no SearXNG requirement |
 | 9 | Four complete packages and upgrades | Linux amd64/arm64 full `.deb`, Termux aarch64 `.deb` with Pi browser extension, DDGS skill/runtime and native auth stack, Android APK; actual installs/upgrades through APT/Android; Firefox-aligned product versions and metadata agree across artifacts; external Pi preserved; About/licenses without backend; independent browser can authenticate; matching source/notices and no testing payloads |
 
