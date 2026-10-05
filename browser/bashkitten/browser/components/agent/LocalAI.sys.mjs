@@ -136,10 +136,13 @@ export async function localAISettings(parent, control, win, isLocal) {
     tokenPanel.append(button('Save token', async () => { const value = token.value; token.value = ''; await call('native-models-settings', { token: value }); message.textContent = 'Token saved privately'; }), button('Remove token', async () => { token.value = ''; await call('native-models-settings', { token: '' }); })); root.append(tokenPanel);
     const type = select(root, 'Model type', [['llama', 'llama.cpp GGUF'], ['whisper', 'whisper.cpp GGML']], 'llama');
     const query = field(root, 'Search or owner/repository'); const results = node('div');
+    type.onchange = () => { if (!query.value.trim() && type.value === 'whisper') query.value = 'whisper.cpp'; };
     const repository = async id => {
       const value = await call('native-models-repository', { id }); results.replaceChildren(node('strong', value.id), node('p', value.revision));
       const selected = new Set();
-      for (const file of value.files.filter(file => type.value === 'llama' ? file.gguf : file.whisper)) {
+      const compatible = value.files.filter(file => type.value === 'llama' ? file.gguf : file.whisper);
+      if (!compatible.length) results.append(node('p', 'This repository has no files in the selected model format.'));
+      for (const file of compatible) {
         const box = check(results, `${file.path} · ${(file.size / 1048576).toFixed(1)} MiB`, false);
         box.onchange = () => { if (box.checked) selected.add(file.path); else selected.delete(file.path); };
       }

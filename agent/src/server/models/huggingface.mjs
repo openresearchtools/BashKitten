@@ -86,7 +86,7 @@ async function jsonRequest(route, signal) {
 export async function searchModels({ query, type = 'llama' } = {}) {
   if (typeof query !== 'string' || !query.trim()) throw modelError('Enter a model name to search');
   if (!['llama', 'whisper'].includes(type)) throw modelError('Choose llama.cpp or whisper.cpp models');
-  const parameters = new URLSearchParams({ search: type === 'whisper' ? query.trim() + ' whisper.cpp' : query.trim(), ...(type === 'llama' ? { filter: 'gguf' } : {}), sort: 'downloads', direction: '-1' });
+  const parameters = new URLSearchParams({ search: query.trim(), ...(type === 'llama' ? { filter: 'gguf' } : {}), sort: 'downloads', direction: '-1' });
   const { value } = await jsonRequest('/api/models?' + parameters);
   if (!Array.isArray(value)) throw modelError('Hugging Face returned invalid search results');
   return { models: value.filter(x => typeof x.id === 'string').map(x => ({ id: x.id, downloads: Number(x.downloads) || 0, likes: Number(x.likes) || 0 })) };
