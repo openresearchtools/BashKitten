@@ -1753,3 +1753,19 @@ selection and pending-login checks precede the native two-argument completion.
 Only that callback's intentional cancellation is excluded from the generic load
 error UI. JavaScript syntax and five Java parse-only checks passed; fresh generated
 binding/APK type compilation and manual sign-in acceptance remain pending.
+
+### 5 October disabled speculation also suppresses DNS
+
+Source tracing found that Fenix autocomplete can queue Gecko's context-free
+`speculativeConnect` during startup. `nsAppShell::SpeculativeConnect` supplies
+empty origin attributes; `nsHttpConnectionMgr::DoSpeculativeConnectionInternal`
+can request HTTPS DNS records before checking the configured parallel limit.
+The existing Android limit of zero therefore did not suppress that DNS path.
+The URI-based `nsHttpHandler::SpeculativeConnectInternal` now returns immediately
+when that limit is zero, before dispatching speculative work. Enabled speculation
+and ordinary request handling are unchanged.
+
+Whitespace and the existing member/call-path source checks passed. Native
+compilation and manual verification of this correction remain pending. The
+guest-wide capture's UDP traffic to `8.8.8.8:443` is not attributed to BashKitten
+or this path; no runtime leak claim is made from that capture.

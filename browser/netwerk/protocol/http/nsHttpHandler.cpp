@@ -2482,7 +2482,8 @@ nsresult nsHttpHandler::SpeculativeConnectInternal(
     return NS_OK;
   }
 
-  if (!mHandlerActive) return NS_OK;
+  // The zero limit must suppress speculative DNS too, before HTTPS RR lookup.
+  if (!mHandlerActive || !mParallelSpeculativeConnectLimit) return NS_OK;
 
   MOZ_ASSERT(NS_IsMainThread());
 
