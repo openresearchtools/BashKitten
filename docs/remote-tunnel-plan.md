@@ -1351,6 +1351,13 @@ slices and their limits; they do not replace the manual acceptance table.
   Changed JavaScript and the extracted shared UI script parse; backend module
   imports resolve against pinned dependencies in external staging. No scripted
   product tests or manual acceptance claim accompanies these checks.
+- Files now includes a compact UTF-8 text editor behind that same manager gate.
+  It opens pinned file descriptors, rejects binary/invalid UTF-8 content, compares
+  the opened revision before saving, serializes same-file saves and atomically
+  replaces the file while preserving its permissions. Permission revocation
+  closes/clears the editor and drains pending saves before persisting Off.
+  JavaScript parsing and staged module imports passed; real mobile editing,
+  keyboard, conflict and mid-save revocation checks remain pending.
 
 Manual evidence is outside product source/artifacts under the 5 October native
 remote verification directory. The existing Cuttlefish guest uses the previously
@@ -1361,7 +1368,7 @@ ADB, root, app-data clearing or scripted product test was used. This is emulator
 coverage, not a physical Pixel or a complete application acceptance result.
 
 Next: finish Android Share Local and the native clients, prove the actual host
-enrollment and protected Agent/Authelia one-login path, and complete file editing
-and the manager boundary's manual acceptance. Continue all remaining gates,
+enrollment and protected Agent/Authelia one-login path, and complete the editor
+and manager boundary's manual acceptance. Continue all remaining gates,
 including service/file-manager boundaries, Tor routing, lifetime, Display,
 LocalAI/dictation, migration and the complete verified release.

@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { pipeline } from 'node:stream/promises';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { authorizeManagerPath, managerContext } from './access.mjs';
 import { fileURLToPath } from 'node:url';
 import { dataDir, privateDir, safeName } from '../common.mjs';
@@ -123,6 +123,53 @@ export async function uploadFiles(root, relative, files) {
     saved.push(path.relative(root, target));
   }
   return saved;
+}
+const edits = new Map();
+const revision = (bytes, stat) => createHash('sha256').update(bytes).update(`\0${stat.dev}:${stat.ino}:${stat.mode}:${stat.mtimeNs}:${stat.ctimeNs}`).digest('hex');
+async function textContent(file) {
+  await authorizeManagerPath(file);
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    await authorizeManagerPath(`/proc/self/fd/${handle.fd}`);
+    const before = await handle.stat({ bigint: true });
+    if (!before.isFile()) throw Error('Choose a regular text file');
+    const bytes = await handle.readFile(), after = await handle.stat({ bigint: true });
+    if (before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.size !== after.size) throw Object.assign(Error('The file changed while opening; reopen it'), { status: 409 });
+    if (bytes.includes(0)) throw Error('This is a binary file; use Open or Download');
+    let text;
+    try { text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
+    catch { throw Error('The editor requires UTF-8 text; use Open or Download for this file'); }
+    return { text, revision: revision(bytes, after), mode: Number(after.mode) & 0o777 };
+  } finally { await handle.close(); }
+}
+export async function editFile(root, relative, value) {
+  const file = await filePath(root, relative);
+  if (value === undefined) {
+    const { text, revision } = await textContent(file);
+    return { text, revision };
+  }
+  if (typeof value.text !== 'string' || !/^[a-f0-9]{64}$/.test(value.revision || '')) throw Error('Open this text file before saving');
+  const work = (edits.get(file) || Promise.resolve()).then(async () => {
+    const parent = await fs.open(path.dirname(file), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    const target = `/proc/self/fd/${parent.fd}/${path.basename(file)}`;
+    const temporary = `/proc/self/fd/${parent.fd}/.bashkitten-edit-${randomUUID()}`;
+    try {
+      const previous = await textContent(target);
+      if (previous.revision !== value.revision) throw Object.assign(Error('The file changed since you opened it; reopen it before saving'), { status: 409 });
+      await fs.writeFile(temporary, value.text, { flag: 'wx', mode: previous.mode, flush: true });
+      await fs.chmod(temporary, previous.mode);
+      const current = await textContent(target);
+      if (current.revision !== value.revision) throw Object.assign(Error('The file changed while saving; your edit was not applied'), { status: 409 });
+      await authorizeManagerPath(target);
+      managerContext().signal.throwIfAborted();
+      await fs.rename(temporary, target);
+      await parent.sync();
+      return { saved: true };
+    } finally { await fs.rm(temporary, { force: true }); await parent.close(); }
+  });
+  const settled = work.catch(() => {}); edits.set(file, settled);
+  try { return await work; }
+  finally { if (edits.get(file) === settled) edits.delete(file); }
 }
 export async function saveAttachments(files) {
   if (!files.length) return [];

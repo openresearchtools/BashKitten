@@ -15,7 +15,7 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
+import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments, editFile } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
 import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
 import { syncContext } from '../rpc/context.mjs';
@@ -169,6 +169,11 @@ const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 async function fileRequest(req, res, url) {
   const route = url.pathname, mutation = !['GET', 'HEAD'].includes(req.method);
+  if (route === '/api/files/edit') {
+    requireMethod(req, ['GET', 'POST']);
+    const value = mutation ? await jsonBody(req) : undefined;
+    return json(res, await editFile(url.searchParams.get('root'), url.searchParams.get('path'), value));
+  }
   if (route === '/api/folders') {
     requireMethod(req, ['GET', 'POST']);
     if (mutation) { const input = await jsonBody(req); const parent = (await pickerDirectory(input.parent)).path; const folder = path.join(parent, safeName(input.name)); await authorizeManagerPath(folder); await fs.mkdir(folder, { mode: 0o700 }); return json(res, { path: folder }); }

@@ -436,6 +436,8 @@
     .dialog-actions button { padding: 8px 13px; border: 1px solid var(--line); }
     .dialog-actions button:not(.primary) { background: transparent; }
     .dialog-actions .primary { border: 0; }
+    #fileEditor { width:min(900px,calc(100vw - 28px)); }
+    #fileEditorText { width:100%; min-height:160px; height:50dvh; resize:vertical; white-space:pre; overflow:auto; font:13px/1.5 ui-monospace,monospace; }
     #folderDialog { width: min(620px, calc(100vw - 28px)); }
     .folder-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
     .folder-toolbar button, .folder-create button, #folderLocations button { padding: 7px 9px; border: 1px solid var(--line); background: var(--surface-2); }
@@ -801,6 +803,7 @@
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
   <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
+  <dialog id="fileEditor" aria-labelledby="fileEditorTitle"><form id="fileEditorForm" class="dialog-body"><h2 id="fileEditorTitle"></h2><textarea id="fileEditorText" aria-label="File contents" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><p id="fileEditorError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button><button id="fileEditorSave" class="primary">Save</button></div></form></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="piDialog"><form id="piDialogForm" class="dialog-body"><h2 id="piDialogTitle"></h2><p id="piDialogMessage"></p><div id="piDialogInput"></div><div class="dialog-actions"><button id="piDialogCancel" type="button">Cancel</button><button class="primary">Continue</button></div></form></dialog>
 
@@ -3216,7 +3219,7 @@
       ++fileGeneration; ++changesGeneration; ++folderGeneration;
       diffAbort?.abort();
       for (const id of ['fileTree', 'changesList', 'changesCounts', 'fileNotice']) $('#'+id).replaceChildren();
-      for (const id of ['folderDialog', 'fileActionDialog']) if ($('#'+id)?.open) $('#'+id).close();
+      for (const id of ['folderDialog', 'fileActionDialog', 'fileEditor']) if ($('#'+id)?.open) $('#'+id).close();
       fileRoot = fileFolder = projectRoot = changesRoot = ''; selectedFiles.clear();
       pendingFileAction = null; fileJob = null;
       $('#fileJob').classList.add('hidden'); $('#fileJobText').textContent = '';
@@ -3306,7 +3309,9 @@
         } else {
           const row=document.createElement('div');row.className='file-row';
           const open=document.createElement('a');open.className='file-name';open.textContent=entry.name;open.href=fileUrl('/content',entry.path);open.target='_blank';open.rel='noopener';
-          row.append(fileCheckbox(entry),fileIcon('file'),open);target.append(row);
+          row.append(fileCheckbox(entry),fileIcon('file'),open);
+          const edit=document.createElement('button'); edit.type='button'; edit.textContent='Edit'; edit.title='Edit '+entry.name;
+          edit.onclick=()=>openFileEditor(fileRoot,entry.path); row.append(edit); target.append(row);
         }
       }
       if(!result.entries.length){const empty=document.createElement('p');empty.className='file-empty';empty.textContent='Empty folder';target.append(empty);}
@@ -3339,6 +3344,43 @@
       setFileTab(fileTab);updateBackdrop();
       if(fileJob){renderFileJob();pollFileJob();}
     }
+    let fileEdit = null, fileEditGeneration = 0;
+    async function openFileEditor(root, path) {
+      if (!fileManagerAllowed) return;
+      const generation = ++fileEditGeneration;
+      fileEdit = null; $('#fileEditorTitle').textContent = path;
+      $('#fileEditorText').value = ''; $('#fileEditorText').disabled = true;
+      $('#fileEditorSave').disabled = true; $('#fileEditorError').textContent = 'Opening file…';
+      $('#fileEditor').showModal();
+      try {
+        const value = await api(fileUrl('/edit', path, root));
+        if (generation !== fileEditGeneration || !fileManagerAllowed || !$('#fileEditor').open) return;
+        fileEdit = {root, path, revision:value.revision};
+        $('#fileEditorText').value = value.text; $('#fileEditorText').disabled = false;
+        $('#fileEditorSave').disabled = false; $('#fileEditorError').textContent = '';
+        $('#fileEditorText').focus();
+      } catch (error) { if (generation === fileEditGeneration) $('#fileEditorError').textContent = error.message; }
+    }
+    $('#fileEditor').addEventListener('close', () => {
+      ++fileEditGeneration; fileEdit = null; $('#fileEditorText').value = ''; $('#fileEditorError').textContent = '';
+    });
+    $('#fileEditorForm').onsubmit = async event => {
+      event.preventDefault();
+      if (!fileManagerAllowed || !fileEdit || $('#fileEditorSave').disabled) return;
+      const edit = fileEdit, generation = fileEditGeneration;
+      $('#fileEditorSave').disabled = true; $('#fileEditorText').disabled = true;
+      $('#fileEditorError').textContent = 'Saving…';
+      try {
+        await filePost(fileUrl('/edit',edit.path,edit.root), {revision:edit.revision, text:$('#fileEditorText').value});
+        if (generation !== fileEditGeneration) return;
+        $('#fileEditor').close(); refreshProjectPanel();
+      } catch (error) {
+        if (generation === fileEditGeneration) {
+          $('#fileEditorError').textContent = error.message;
+          $('#fileEditorSave').disabled = false; $('#fileEditorText').disabled = false;
+        }
+      }
+    };
     function refreshProjectPanel() {
       changesDirty=true;
       if(projectPanelVisible()&&fileTab==='changes') refreshChanges();
