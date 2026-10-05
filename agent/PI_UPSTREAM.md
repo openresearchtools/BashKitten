@@ -19,7 +19,10 @@ with Pi's supported offline/telemetry flags.
 Only this native runtime pin applies to this branch. The old Rust port and its
 differential fixtures are available in Git history, outside the current tree.
 
-The bundled browser integration also installs unmodified pillama 0.2.1 production
-sources at `e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f`; its MIT license and
-provenance are in `pi/vendor/pillama/`. It uses native Pi extension status RPC
+The complete unmodified pillama 0.2.1 source tree at
+`e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f` is in `pi/vendor/pillama/`, including
+its MIT license, dependency lock and build metadata. Exact tree/archive provenance
+is in `pi/vendor/pillama.upstream.json`. Packaging selects its declared runtime
+files from this tree; no pillama fetch or development/test payload is required.
+It uses native Pi extension status RPC
 for llama.cpp loading, prefill/cache, decode speeds and elapsed time.

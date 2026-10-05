@@ -207,7 +207,19 @@ def assemble(args):
         app.mkdir(parents=True)
         for folder in ['src/server', 'src/web', 'reference', 'licenses', 'pi']:
             require((ROOT / folder).is_dir(), f'Missing product payload: {folder}')
-            shutil.copytree(ROOT / folder, app / folder, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+            shutil.copytree(ROOT / folder, app / folder,
+                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama') if folder == 'pi'
+                            else shutil.ignore_patterns('__pycache__', '*.pyc'))
+        # Keep the complete upstream tree in source releases; install only its
+        # declared runtime files, without upstream tests or development tools.
+        pillama = ROOT / 'pi/vendor/pillama'
+        for name in [*read_json(pillama / 'package.json')['files'], 'package.json', 'NOTICE']:
+            source = pillama / name
+            require(source.is_file() and source.resolve().is_relative_to(pillama.resolve()),
+                    f'Invalid pillama runtime file: {name}')
+            destination = app / 'pi/vendor/pillama' / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
         for folder in ['src', 'third_party']:
             shutil.copytree(ROOT / 'search' / folder, app / 'search' / folder,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
