@@ -6,7 +6,8 @@ export async function localAISettings(parent, control, win, isLocal) {
   const doc = parent.ownerDocument;
   const node = (tag, text = '') => { const result = doc.createElementNS(HTML, tag); result.textContent = text; return result; };
   const message = node('p'), body = node('div'); message.setAttribute('role', 'status'); parent.append(message, body);
-  let state, busy = false, progressNode, outputNode, refreshVisibleModels;
+  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels;
+  const engineStatus = {};
   const active = () => parent.isConnected && isLocal();
   const call = async (name, args) => { if (!active()) throw Error('Select Local to use LocalAI'); return control(name, args); };
   const run = async action => {
@@ -50,7 +51,8 @@ export async function localAISettings(parent, control, win, isLocal) {
       const current = state[engine], config = current.config;
       const section = node('details'); section.open = engine === 'llama'; section.className = 'connection-card';
       section.append(node('summary', engine === 'llama' ? 'llama.cpp' : 'Whisper dictation'));
-      section.append(node('p', [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, current.runtime?.selectedBackend].filter(Boolean).join(' · ')));
+      engineStatus[engine] = node('p', [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, current.runtime?.selectedBackend].filter(Boolean).join(' · '));
+      section.append(engineStatus[engine]);
       if (engine === 'whisper') section.append(node('p', 'Loads on demand for microphone messages on this Agent, including connected phones. Audio stays in memory and is discarded after transcription.'));
       const mode = select(section, 'Runtime', engine === 'llama' ? [['managed', 'Managed'], ['custom', 'Custom binary']] : [['managed', 'Managed']], config.mode);
       const binary = pickerField(section, 'Executable', config.mode === 'custom' ? config.binary : current.runtime?.binary || '');
@@ -85,7 +87,8 @@ export async function localAISettings(parent, control, win, isLocal) {
         keyFile = pickerField(section, 'Optional application API-key file', config.keyFile);
         startup = check(section, 'Launch on startup', config.startup);
         imported = check(section, 'Import this configuration into the coding agent', config.importToPi);
-        section.append(node('p', ['Pi import: ' + state.import.state, state.import.provider, state.import.endpoint, state.import.error].filter(Boolean).join(' · ')));
+        importNode = node('p', ['Pi import: ' + state.import.state, state.import.provider, state.import.endpoint, state.import.error].filter(Boolean).join(' · '));
+        section.append(importNode);
       } else {
         model = pickerField(section, 'whisper.cpp model (ggml-*.bin)', config.model);
         keepRunning = check(section, 'Keep Whisper running after transcription', config.keepRunning);
@@ -188,13 +191,18 @@ export async function localAISettings(parent, control, win, isLocal) {
     refreshVisibleModels = () => root.isConnected && root.parentElement.open ? refreshJobs() : undefined;
   };
   await run(async () => draw(await call('localai-status')));
-  // Update progress only while this native panel is visible. Never replace an
+  // Update status only while this native panel is visible. Never replace an
   // unfinished configuration/INI edit with a background status response.
   const poll = async () => {
     if (!active()) return;
     try {
       if (!busy) {
         const latest = await call('localai-status');
+        for (const engine of ['llama', 'whisper']) {
+          const current = latest[engine];
+          if (engineStatus[engine]?.isConnected) engineStatus[engine].textContent = [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, current.runtime?.selectedBackend].filter(Boolean).join(' · ');
+        }
+        if (importNode?.isConnected) importNode.textContent = ['Pi import: ' + latest.import.state, latest.import.provider, latest.import.endpoint, latest.import.error].filter(Boolean).join(' · ');
         if (progressNode?.isConnected) progressNode.textContent = latest.job ? [latest.job.phase, latest.job.progress?.downloaded ? `${(latest.job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', latest.job.error].filter(Boolean).join(' · ') : '';
         if (outputNode?.isConnected) outputNode.textContent = latest.job?.log || '';
         await refreshVisibleModels?.();

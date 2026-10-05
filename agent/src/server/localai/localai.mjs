@@ -15,6 +15,8 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
   ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : { model: '', keepRunning: false }) });
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
+// Pi import does not change the running inference command.
+const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined }) === JSON.stringify({ ...b, importToPi: undefined });
 async function readConfiguration() {
   const saved = await readJson(configFile, null);
   if (saved) { if (saved.version !== 1) throw Error('Unsupported LocalAI configuration'); return saved; }
@@ -90,7 +92,7 @@ export class LocalAI {
     for (const engine of Object.keys(ids)) {
       const runtime = await runtimeInfo(engine), service = host.services.find(item => item.id === ids[engine]);
       engines[engine] = { config: config[engine], runtime, service, url: service ? 'http://' + service.target.address : null,
-        savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && JSON.stringify(this.runningConfig.get(engine)) !== JSON.stringify(config[engine])), error: this.errors.get(engine) || '' };
+        savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && !sameRuntimeConfig(this.runningConfig.get(engine), config[engine])), error: this.errors.get(engine) || '' };
     }
     return { ...engines, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
   }
@@ -209,7 +211,7 @@ export class LocalAI {
     if (!config.importToPi) { this.importState = { state: 'off' }; return; }
     try {
       const info = await this.catalogue();
-      if (JSON.stringify(config) !== JSON.stringify(info.config)) throw Error('Saved changes are pending Reload; the running service and existing Pi provider are unchanged');
+      if (!sameRuntimeConfig(config, info.config)) throw Error('Saved changes are pending Reload; the running service and existing Pi provider are unchanged');
       // Recheck after network/model discovery so opting out cancels pending work.
       if (!(await this.config()).llama.importToPi) return;
       const key = await this.key(info.config);
