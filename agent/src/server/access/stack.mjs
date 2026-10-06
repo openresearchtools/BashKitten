@@ -173,7 +173,20 @@ export class AccessStack {
     this.children.push(record); await writeJson(paths.group, { manager: process.pid, managerStarted: await processStart(process.pid), children: this.identities() });
     child.once('exit', (code, signal) => {
       record.exit = `${signal || code}`;
-      if (this.ready && !this.stopping && !record.stopping) { this.ready = false; this.fatal?.(Error(`${name} stopped (${signal || code})`)); }
+      if (!this.ready || this.stopping || record.stopping) return;
+      const error = Error(`${name} stopped (${signal || code})`);
+      if (['tor', 'remote', 'authelia', 'valkey'].includes(name)) {
+        this.remote.error = error.message;
+        // Close failed publishing on the controller queue. Local's listener,
+        // session and Pi workers do not depend on these optional services.
+        this.remote.schedule(async () => {
+          if (this.stopping || !this.ready || record.stopping || !this.children.includes(record)) return;
+          await this.closeRemote();
+        }).catch(failure => { this.ready = false; this.fatal?.(failure); });
+      } else {
+        this.ready = false;
+        this.fatal?.(error);
+      }
     });
     return record;
   }
@@ -348,9 +361,17 @@ ${backend('remote')}
   }
   async healthy() {
     if (!this.ready || !this.info) return false;
-    for (const child of this.children) if (!await sameProcess(child)) return false;
+    for (const child of this.children) {
+      if (['backend', 'caddy'].includes(child.name) && !await sameProcess(child)) return false;
+    }
     try {
-      if (this.authStarted) await authCall(this.remoteAuthOrigin, '/api/health', undefined, '', 2000);
+      if (this.authStarted) {
+        try { await authCall(this.remoteAuthOrigin, '/api/health', undefined, '', 2000); }
+        catch (error) {
+          this.remote.error = error.message;
+          await this.closeRemote();
+        }
+      }
       return await verifiedHttps(this.origin, this.identity.caPem);
     } catch { return false; }
   }
