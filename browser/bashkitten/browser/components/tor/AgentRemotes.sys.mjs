@@ -538,7 +538,7 @@ class AgentRemoteStore {
       try {
         if (!entry || owner?.state !== "login") return;
         const info = channel.loadInfo, browsing = info.browsingContext;
-        const browser = browsing?.embedderElement, host = browser?.ownerGlobal?.BashKittenAgent;
+        const browser = browsing?.embedderElement, host = browser?.documentGlobal?.BashKittenAgent;
         const principal = info.triggeringPrincipal;
         const current = browsing?.currentWindowGlobal?.documentPrincipal;
         rejection = this.activeId !== entry.id ? "The selected Agent connection changed during sign-in."
