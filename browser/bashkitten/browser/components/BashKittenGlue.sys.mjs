@@ -84,8 +84,9 @@ export const BashKittenGlue = {
     lazy.BashKittenTheme.init();
     lazy.BashKittenThemeColors.init();
 
-    lazy.PrivateTab.init();
-    lazy.TorRouting.init();
+    // Tor installs its fail-closed routing immediately, then loads container
+    // metadata asynchronously before either module initializes its UI.
+    lazy.TorRouting.init().catch(console.error);
     lazy.StatusBar.init();
     lazy.TabFeatures.init();
     lazy.TabGrouping.init();

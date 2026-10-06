@@ -542,9 +542,22 @@ export const URILoadingHelper = {
         where = "tab";
       }
       if (params.private) {
-        lazy.PrivateTab.init();
-        if (!lazy.PrivateTab.userContextId) {
-          throw new Error("Private tab storage is unavailable");
+        if (
+          !lazy.PrivateTab.userContextId ||
+          (window?.gBrowser && !window.gBrowserInit?.delayedStartupFinished)
+        ) {
+          const pendingParams = { ...params };
+          Promise.all([lazy.PrivateTab.init(), window?.delayedStartupPromise])
+            .then(() => {
+              if (!window?.closed) {
+                this.openLinkIn(window, url, where, pendingParams);
+              }
+            })
+            .catch(console.error);
+          return;
+        }
+        if (window?.gBrowser) {
+          lazy.PrivateTab.onWindowOpened(window);
         }
         params = {
           ...params,

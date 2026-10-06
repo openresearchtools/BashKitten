@@ -14,7 +14,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
   NewTabUtils: "resource://gre/modules/NewTabUtils.sys.mjs",
   PartnerLinkAttribution: "resource:///modules/PartnerLinkAttribution.sys.mjs",
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
-  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
 });
 
@@ -265,12 +264,10 @@ export class PlacesFeed {
 
     const win = action._target.window;
     if (isPrivate) {
-      const userContextId = lazy.PrivateTab.container?.userContextId;
-      if (!userContextId || !Services.policies.isAllowed("privatebrowsing")) {
+      if (!Services.policies.isAllowed("privatebrowsing")) {
         return;
       }
-      params.private = false;
-      params.userContextId = userContextId;
+      params.private = true;
       where = "tab";
     }
     win.openTrustedLinkIn(

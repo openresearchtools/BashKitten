@@ -33,21 +33,23 @@ const PLACES_ITEMS = [
 ];
 
 export const PrivateTab = {
-  _initialized: false,
+  _initTask: null,
   _windows: new WeakSet(),
   _additionalPrivateContextIds: new Set(),
   container: null,
 
   init() {
-    if (this._initialized) {
-      return;
+    if (!this._initTask) {
+      this._initTask = this._initialize();
     }
-    this._initialized = true;
+    return this._initTask;
+  },
 
+  async _initialize() {
+    await lazy.ContextualIdentityService.load();
     this.container = this._ensureContainer();
     if (!this.container) {
-      console.error("PrivateTab: could not create the private container");
-      return;
+      throw new Error("PrivateTab: could not create the private container");
     }
     // Whatever the previous session left behind in the container.
     this.clearData();
@@ -156,8 +158,12 @@ export const PrivateTab = {
   },
 
   onWindowOpened(win) {
+    if (!this.container) {
+      this.init().then(() => this.onWindowOpened(win)).catch(console.error);
+      return;
+    }
     if (
-      !this.container ||
+      win.closed ||
       this._windows.has(win) ||
       lazy.PrivateBrowsingUtils.isWindowPrivate(win)
     ) {
@@ -273,8 +279,10 @@ export const PrivateTab = {
   },
 
   async togglePrivate(win, tab = win.gBrowser.selectedTab) {
+    await this.init();
+    await win.delayedStartupPromise;
     if (
-      !this.container ||
+      win.closed ||
       !tab ||
       lazy.PrivateBrowsingUtils.isWindowPrivate(win)
     ) {
@@ -326,9 +334,16 @@ export const PrivateTab = {
   },
 
   openNewPrivateTab(win) {
-    if (!this.container || lazy.PrivateBrowsingUtils.isWindowPrivate(win)) {
+    if (win.closed || lazy.PrivateBrowsingUtils.isWindowPrivate(win)) {
       return null;
     }
+    if (!this.container || !win.gBrowserInit?.delayedStartupFinished) {
+      Promise.all([this.init(), win.delayedStartupPromise])
+        .then(() => this.openNewPrivateTab(win))
+        .catch(console.error);
+      return null;
+    }
+    this.onWindowOpened(win);
     const tab = win.gBrowser.addTrustedTab(win.BROWSER_NEW_TAB_URL, {
       userContextId: this.container.userContextId,
       focusUrlBar: true,

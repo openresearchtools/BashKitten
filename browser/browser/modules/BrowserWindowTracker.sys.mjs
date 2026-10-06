@@ -224,7 +224,6 @@ export const BrowserWindowTracker = {
           : [];
     if (!urls.length) {
       if (isPrivate) {
-        lazy.PrivateTab.init();
         lazy.PrivateTab.openNewPrivateTab(win);
       } else {
         win.BrowserCommands.openTab();

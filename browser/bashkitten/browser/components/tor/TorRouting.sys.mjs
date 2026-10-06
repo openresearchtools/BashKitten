@@ -57,6 +57,8 @@ function quoteToml(value) {
 
 export const TorRouting = {
   _initialized: false,
+  _initTask: null,
+  _restoredContextIds: new Set(),
   _windows: new WeakSet(),
   _isolationKeys: new WeakMap(),
   _pendingOnionNavigations: new WeakMap(),
@@ -77,7 +79,7 @@ export const TorRouting = {
 
   init() {
     if (this._initialized) {
-      return;
+      return this._initTask;
     }
     if (Services.appinfo.processType != Ci.nsIXULRuntime.PROCESS_TYPE_DEFAULT) {
       throw new Error("Tor belongs to the main browser process");
@@ -86,6 +88,34 @@ export const TorRouting = {
     AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: stop Tor", () =>
       this.stop()
     );
+    // Install routing before yielding to profile IO. Restored Tor identities
+    // remain Tor even while their container metadata is still loading.
+    for (const pref of [CONTAINER_ID_PREF, PERSISTENT_CONTAINER_ID_PREF]) {
+      const id = Services.prefs.getIntPref(pref, 0);
+      if (id) {
+        this._restoredContextIds.add(id);
+      }
+    }
+    lazy.ProxyService.registerChannelFilter(this, 0);
+    Services.obs.addObserver(this, "http-on-modify-request");
+    Services.obs.addObserver(this, "bashkitten-onion-authorization-needed");
+    Services.obs.addObserver(this, "quit-application-granted");
+    lazy.PrivateTab.registerPrivateContainer({
+      userContextId: this.userContextId,
+    });
+    this._initTask = this._initialize();
+    this._initTask.catch(error => {
+      this._lastError = error.message;
+      this._notifyState();
+    });
+    return this._initTask;
+  },
+
+  async _initialize() {
+    await lazy.PrivateTab.init();
+    if (this._stopping) {
+      throw new Error("Tor is shutting down");
+    }
     this.container = this._ensureContainer();
     if (Services.prefs.getIntPref(PERSISTENT_CONTAINER_ID_PREF, 0)) {
       this.persistentContainer = this._ensureContainer(
@@ -93,15 +123,10 @@ export const TorRouting = {
       );
     }
     if (!this.container) {
-      this._lastError = "Could not create the Tor container";
-      return;
+      throw new Error("Could not create the Tor container");
     }
     lazy.PrivateTab.registerPrivateContainer(this.container);
     this.clearData();
-    lazy.ProxyService.registerChannelFilter(this, 0);
-    Services.obs.addObserver(this, "http-on-modify-request");
-    Services.obs.addObserver(this, "bashkitten-onion-authorization-needed");
-    Services.obs.addObserver(this, "quit-application-granted");
   },
 
   _ensureContainer(pref = CONTAINER_ID_PREF) {
@@ -120,7 +145,10 @@ export const TorRouting = {
   },
 
   get userContextId() {
-    return this.container?.userContextId;
+    return (
+      this.container?.userContextId ||
+      Services.prefs.getIntPref(CONTAINER_ID_PREF, 0)
+    );
   },
 
   get stateEvent() {
@@ -144,6 +172,7 @@ export const TorRouting = {
       !!id &&
       (id == this.userContextId ||
         id == this.persistentContainer?.userContextId ||
+        this._restoredContextIds.has(id) ||
         this._agentContexts.has(id))
     );
   },
@@ -160,6 +189,9 @@ export const TorRouting = {
   },
 
   contextIdForURI(uri) {
+    if (!this.container) {
+      throw new Error("Tor containers are not ready");
+    }
     const address = this.serviceAddress(uri);
     if (address && !OnionAuthStore.usesPrivateMode(address)) {
       this.persistentContainer ??= this._ensureContainer(
@@ -208,8 +240,12 @@ export const TorRouting = {
   },
 
   onWindowOpened(win) {
+    if (!this.container) {
+      this.init().then(() => this.onWindowOpened(win)).catch(console.error);
+      return;
+    }
     if (
-      !this.container ||
+      win.closed ||
       this._windows.has(win) ||
       lazy.PrivateBrowsingUtils.isWindowPrivate(win)
     ) {
@@ -371,8 +407,9 @@ export const TorRouting = {
   },
 
   async toggle(win, tab = win.gBrowser.selectedTab) {
+    await this.init();
     if (
-      !this.container ||
+      win.closed ||
       !tab ||
       this._busy ||
       lazy.PrivateBrowsingUtils.isWindowPrivate(win)
@@ -417,13 +454,18 @@ export const TorRouting = {
   },
 
   async createTab(win, options = {}) {
-    this.init();
+    await this.init();
     if (!this.container) {
       throw new Error(this._lastError || "Tor is unavailable");
     }
     if (lazy.PrivateBrowsingUtils.isWindowPrivate(win)) {
       throw new Error("Tor tabs must be opened in a normal browser window");
     }
+    await win.delayedStartupPromise;
+    if (win.closed) {
+      throw new Error("The browser window is closed");
+    }
+    lazy.PrivateTab.onWindowOpened(win);
     await this.ensureProxy();
     const { uri = null, ...tabOptions } = options;
     const tab = win.gBrowser.addTrustedTab(null, {
@@ -537,6 +579,7 @@ export const TorRouting = {
   },
 
   async ensureProxy() {
+    await this.init();
     if (this._stopping) {
       throw new Error("Tor is shutting down");
     }
@@ -744,7 +787,7 @@ export const TorRouting = {
   },
 
   async registerAgentContext(id, host, key) {
-    this.init();
+    await this.init();
     if (!Number.isInteger(id) || id < 0xB4500000 || id > 0xB450FFFF) {
       throw new Error("Invalid protected Agent context");
     }
@@ -1025,7 +1068,7 @@ export const TorRouting = {
       const torContext = this.isTorContext(channel.loadInfo?.originAttributes.userContextId);
       const { tab, topLevel, win } = this._navigationTarget(channel.loadInfo);
       if (torContext && (!topLevel || !tab ||
-          tab.userContextId == this.contextIdForURI(channel.URI))) return;
+          (this.container && tab.userContextId == this.contextIdForURI(channel.URI)))) return;
       if (tab && topLevel) {
         this.routeOnion(win, tab, channel.URI.spec, { reloadIfSame: true });
       }

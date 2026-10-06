@@ -13,7 +13,6 @@ import "chrome://browser/content/sidebar/sidebar-panel-header.mjs";
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BrowserUtils: "resource://gre/modules/BrowserUtils.sys.mjs",
-  PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
   PlacesUIUtils: "moz-src:///browser/components/places/PlacesUIUtils.sys.mjs",
 });
 
@@ -250,9 +249,8 @@ export class SidebarPage extends MozLitElement {
   }
 
   openPrivateTab(url) {
-    const userContextId = lazy.PrivateTab.userContextId;
-    if (userContextId && Services.policies.isAllowed("privatebrowsing")) {
-      this.topWindow.openTrustedLinkIn(url, "tab", { userContextId });
+    if (Services.policies.isAllowed("privatebrowsing")) {
+      this.topWindow.openTrustedLinkIn(url, "tab", { private: true });
     }
   }
 
