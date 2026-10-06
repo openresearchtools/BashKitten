@@ -254,7 +254,7 @@ class AgentRemoteStore {
     }
   }
 
-  async connect(id, password = "", forceLogin = false) {
+  async connect(id, forceLogin = false) {
     const entry = (await this.load()).get(id);
     if (!entry?.bundle || this.activeId !== id) throw new Error("Select an enrolled remote Agent.");
     let owner = this.clients.get(id);
@@ -291,27 +291,10 @@ class AgentRemoteStore {
       if (!forceLogin && await helper.call("authorize")) { await this.ready(entry, owner); return { connection: this.info(entry) }; }
       const loginURL = await helper.call("begin-login");
       this.current(entry, owner);
-      if (password) await this.firstFactor(entry, password, owner.abort.signal);
-      this.current(entry, owner);
       owner.state = "login"; this.notify(); return { connection: this.info(entry), loginURL };
     } catch (error) {
       await this.failed(entry, owner, error); throw error;
-    } finally { password = ""; }
-  }
-
-  async firstFactor(entry, password, signal) {
-    const origin = new URL(entry.url).origin;
-    const principal = Services.scriptSecurityManager.createContentPrincipal(Services.io.newURI(origin), { userContextId: entry.userContextId });
-    const channel = NetUtil.newChannel({ uri: origin + "/login/api/firstfactor", loadingPrincipal: principal,
-      securityFlags: Ci.nsILoadInfo.SEC_REQUIRE_SAME_ORIGIN_DATA_IS_BLOCKED | Ci.nsILoadInfo.SEC_COOKIES_INCLUDE,
-      contentPolicyType: Ci.nsIContentPolicy.TYPE_FETCH }).QueryInterface(Ci.nsIHttpChannel);
-    const cookies = Cc["@mozilla.org/cookieJarSettings;1"].createInstance(Ci.nsICookieJarSettings);
-    cookies.initWithURI(Services.io.newURI(origin), false);
-    channel.loadInfo.cookieJarSettings = cookies;
-    channel.loadFlags |= Ci.nsIRequest.LOAD_BYPASS_CACHE | Ci.nsIRequest.INHIBIT_CACHING;
-    channel.requestMethod = "POST"; channel.setRequestHeader("Origin", origin, false);
-    const response = await readResponse(channel, { body: { username: entry.bundle.owner, password, keepMeLoggedIn: true }, signal, timeout: 120000 });
-    if (response.status !== 200 || response.data?.status !== "OK") throw new Error("Authelia did not accept this sign-in.");
+    }
   }
 
   async ready(entry, owner) {

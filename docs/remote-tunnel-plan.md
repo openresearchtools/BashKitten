@@ -44,6 +44,13 @@ The deliverable is working Linux amd64/arm64 packages, the Android APK and match
 Termux package, source and notices, after builds and manual acceptance. Writing
 this plan, building a helper or dispatching CI does not complete that deliverable.
 
+Latest login clarification, 6 October: the QR password is only for local image
+decryption. Open the real Authelia page in the protected Gecko session for normal
+username/password, TOTP and consent. Remove privileged first-factor API calls and
+retained QR-password login state. The native background client still validates
+the PKCE callback, persists tokens and establishes Chisel. This supersedes the
+earlier password-reuse instruction and historical implementation notes below.
+
 ### Implementation constraints, 5 October
 
 Implement this plan end to end, feature by feature. Add only the functions,
@@ -538,10 +545,10 @@ client sessions still have their own token lifecycle.
    before updating saved state. Wrong password/damaged image gets visible local
    feedback without overwriting a working connection.
 3. Verify Tor and TLS/mTLS before sending login credentials; validate the imported
-   fingerprint and verify it at the authenticated Chisel handshake. Use the owner
-   name and reuse the entered password in memory for the actual Authelia first
-   factor during this one flow. Request a current authenticator code and present
-   the required OAuth consent. Decryption alone is not authentication.
+   fingerprint and verify it at the authenticated Chisel handshake. Open the real
+   Authelia page for username/password, authenticator code and OAuth consent;
+   native code must not submit the QR password to a first-factor API.
+   Decryption alone is not authentication.
 4. Save enrollment and refresh/session state using Android Keystore-protected
    storage or desktop NSS. No secrets in URLs, logs, clipboard, page storage or
    status responses. Remembered login survives normal app/process/package

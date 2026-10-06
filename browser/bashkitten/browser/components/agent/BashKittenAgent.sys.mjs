@@ -344,7 +344,7 @@ class AgentView {
     this.localAIButton.hidden = Boolean(this.selection);
   }
 
-  async choose(id, password = "") {
+  async choose(id) {
     this.closeConnections();
     this.selection = id;
     this.localAIButton.hidden = Boolean(id);
@@ -359,18 +359,17 @@ class AgentView {
     Services.prefs.setStringPref("bashkitten.agent.selectedRemote", id);
     if (!id) return this.local();
     const connection = await AgentRemotes.activate(id);
-    await this.selectRemote(connection || await AgentRemotes.connection(id), password);
+    await this.selectRemote(connection || await AgentRemotes.connection(id));
   }
 
-  async selectRemote(connection, password = "", forceLogin = false) {
+  async selectRemote(connection, forceLogin = false) {
     this.selection = connection.id;
     this.localAIButton.hidden = true;
     this.remote = connection;
     this.off = false;
     this.choice.value = connection.id;
     this.message("Connecting to remote", "Opening the enrolled Tor connection…");
-    const result = await AgentRemotes.connect(connection.id, password, forceLogin);
-    password = "";
+    const result = await AgentRemotes.connect(connection.id, forceLogin);
     if (this.selection !== connection.id || this.off) return;
     this.remote = result.connection;
     if (result.loginURL) AgentRemotes.onLogin(connection.id, (error, ready) => {
@@ -933,7 +932,7 @@ class AgentView {
         const secret = password.value; password.value = "";
         const record = await AgentRemotes.enroll(source, secret);
         if (this.connectionsPanel !== panel) return;
-        source = ""; await this.refreshRemotes(); await this.choose(record.id, secret);
+        source = ""; await this.refreshRemotes(); await this.choose(record.id);
       }).finally(() => { add.disabled = !source; });
     });
     panel.addEventListener("close", () => { source = password.value = image.value = ""; decoding.abort(); stopCamera(); }, { once: true });
@@ -1022,7 +1021,7 @@ class AgentView {
     if (!entry) return;
     if (entry.local) return this.reconnect();
     await lazy.BrowserControlChannel.close("sign in");
-    return this.selectRemote(entry.connection, "", true);
+    return this.selectRemote(entry.connection, true);
   }
 
   async licenses() {

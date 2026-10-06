@@ -59,7 +59,7 @@ public final class AgentRemotesActivity extends ProductActivity {
         if (!state.serviceHost.isEmpty()) { services(); return; }
         if (!state.encrypted.isEmpty()) {
             body.addView(text("Connection password", 20));
-            body.addView(text("Use the host’s account password. The image is decrypted here; sign-in still requires the authenticator code.", 15));
+            body.addView(text("Use the host’s account password to decrypt the image. Then sign in on the host’s Authelia page.", 15));
             EditText password = new EditText(this);
             password.setHint("Password"); password.setSingleLine();
             password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -281,7 +281,7 @@ public final class AgentRemotesActivity extends ProductActivity {
                     busy = false;
                     if (result == null) { error = "Incorrect password or invalid connection image."; changed(); return; }
                     try {
-                        app.agent.importRemote(result, supplied);
+                        app.agent.importRemote(result);
                         encrypted = ""; connected = true;
                     } catch (Exception error) { this.error = "The connection could not be saved: " + error.getMessage(); }
                     changed();

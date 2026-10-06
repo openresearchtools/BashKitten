@@ -20,7 +20,7 @@ final class RemoteAgentConnection implements AutoCloseable {
         void failed(RemoteAgentConnection connection, String error);
     }
 
-    final String host, owner;
+    final String host;
     final int proxyPort;
     final TorGateway.AgentRoute route;
     JSONObject identity;
@@ -84,7 +84,7 @@ final class RemoteAgentConnection implements AutoCloseable {
     RemoteAgentConnection(Handler main, JSONObject bundle,
             int proxyPort, TorGateway.AgentRoute route, Runnable releaseKey, Listener listener,
             RemoteAgentConnection previous) throws Exception {
-        this.host = bundle.getString("onion"); this.owner = bundle.getString("owner");
+        this.host = bundle.getString("onion");
         this.main = main; this.proxyPort = proxyPort; this.route = route;
         this.releaseKey = releaseKey; this.listener = listener;
         this.previousClosed = previous == null ? null : previous.nativeClosed;

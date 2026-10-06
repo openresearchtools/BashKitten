@@ -62,7 +62,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (method === "agent.captureDraft") return BashKittenHost.captureDraft(this.browser);
       if (method === "agent.restoreDraft") return BashKittenHost.restoreDraft(this.browser);
       if (method === "agent.configure") return this.configureAgent(params);
-      if (method === "agent.firstFactor") return this.firstFactor(params);
       if (method === "agent.disconnect") {
         this.agentLogin = false;
         if (this.agentHost?.endsWith(".onion")) {
@@ -290,28 +289,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     if (!bootstrap && (typeof csrf !== "string" || !csrf || /[\r\n]/.test(csrf))) throw new Error("Missing Agent CSRF token");
     const payload = bootstrap ? null : JSON.stringify(body ?? {});
     return this.agentFetch(origin, path, principal, current.cookieJarSettings, payload, csrf, true);
-  }
-  async firstFactor(params) {
-    // Native QR import may reuse its transient password for Authelia's real
-    // first factor. Gecko receives the real Set-Cookie in this protected jar;
-    // no cookie or OAuth token is invented or returned to page JavaScript.
-    if (!this.agentUsesClientCertificate || !/^[a-z2-7]{56}\.onion$/.test(this.agentHost) ||
-        !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(params.username || "") || typeof params.password !== "string") {
-      throw new Error("An enrolled native remote login is required");
-    }
-    const origin = this.agentOrigin;
-    const principal = Services.scriptSecurityManager.createContentPrincipal(Services.io.newURI(origin),
-      { geckoViewSessionContextId: this.context });
-    const cookies = Cc["@mozilla.org/cookieJarSettings;1"].createInstance(Ci.nsICookieJarSettings);
-    cookies.initWithURI(Services.io.newURI(origin), false);
-    try {
-      const result = await this.agentFetch(origin, "/login/api/firstfactor", principal, cookies,
-        JSON.stringify({ username: params.username, password: params.password, keepMeLoggedIn: true }), null, true);
-      if (this.destroyed || this.agentOrigin !== origin || result?.status !== "OK") {
-        throw new Error("Authelia did not accept this sign-in");
-      }
-      return true;
-    } finally { delete params.password; }
   }
   async agentFetch(origin, path, principal, cookies, payload, csrf, authenticated) {
     const channel = NetUtil.newChannel({
