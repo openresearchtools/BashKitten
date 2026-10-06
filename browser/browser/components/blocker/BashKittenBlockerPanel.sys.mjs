@@ -300,7 +300,7 @@ export const BashKittenBlockerPanel = {
     try {
       const panel = node.closest("panel");
       if (panel) {
-        node.ownerGlobal.PanelMultiView.hidePopup(panel);
+        node.documentGlobal.PanelMultiView.hidePopup(panel);
       }
     } catch (_) {
       // Panel may already be hidden.
@@ -452,7 +452,7 @@ export const BashKittenBlockerPanel = {
   _onSiteProtectionEvent(subject) {
     const wrapped = subject?.wrappedJSObject;
     const browser = wrapped?.browser;
-    const win = browser?.ownerGlobal;
+    const win = browser?.documentGlobal;
     if (!win?.gBrowser) {
       return;
     }

@@ -1071,7 +1071,7 @@ function cssPropertyValue(element, property, pseudo = null) {
   }
 
   try {
-    const view = element.ownerGlobal;
+    const view = element.documentGlobal;
     const computed = view?.getComputedStyle?.(element, pseudo);
     const value =
       computed?.getPropertyValue(normalizedProperty) ||
