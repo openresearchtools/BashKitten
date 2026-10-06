@@ -25,12 +25,12 @@
   "tor": {
     "repository": "https://gitlab.torproject.org/tpo/core/tor.git",
     "branch": "main",
-    "version": "0.4.9.12",
-    "tag": "tor-0.4.9.12",
-    "commit": "78923280eed3eff6a77910bba59ecc1fa2244e02",
-    "tagObject": "118cdb4323fd914162690644143dbc7f182584f5",
-    "archive": "https://gitlab.torproject.org/tpo/core/tor/-/archive/78923280eed3eff6a77910bba59ecc1fa2244e02/tor-78923280eed3eff6a77910bba59ecc1fa2244e02.tar.gz",
-    "sha256": "dd8179fc053be40655e20c47c4b2a6628d7d030d1cdcc6cb001da88f8c039994",
+    "version": "0.4.9.13",
+    "tag": "tor-0.4.9.13",
+    "commit": "3c575400909efe6599d88e61e7daf0012655ca44",
+    "tagObject": "28842efe551624ea383ee56c40e63a1bdfb36556",
+    "archive": "https://gitlab.torproject.org/tpo/core/tor/-/archive/3c575400909efe6599d88e61e7daf0012655ca44/tor-3c575400909efe6599d88e61e7daf0012655ca44.tar.gz",
+    "sha256": "dd0a0a5f3a94585e3ec114c7f07fb87af0c1e5b852189122aeded823a2a8ebcb",
     "license": "tor/LICENSE"
   },
   "termux": {
