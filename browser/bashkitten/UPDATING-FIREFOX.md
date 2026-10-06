@@ -107,3 +107,59 @@ outer `.git`, with no nested repository or submodule. Use `--versions-only` for
 shallow build checkouts and the complete compact history plus internal source
 tags for ESR update operations. Source downloads use temporary disk space next
 to Git's object database and are removed on success or failure.
+
+## Android security backports and security data
+
+After each ESR update, also compare Tor Browser's release on the **same pristine
+Firefox tree**. Its Android backports can contain fixes that are not in Mozilla's
+ESR Android source. Do not merge a Tor branch or substitute a Firefox release
+branch. Inspect each production patch, its prerequisites and our overlapping
+changes; preserve upstream copyright and record exact commits in
+`upstreams.toml`. Carry these patches forward until the ESR source includes them.
+Native Tor is a separate component pinned in `auth/upstreams.lock.json`.
+
+The 6 October 2026 comparison used [Tor Browser 16.0a13](https://blog.torproject.org/new-alpha-release-tor-browser-160a13/)
+and the exact tag/commit/tree recorded in the manifest. Fifteen production
+backports were included (not fifteen distinct CVEs). They cover Android download
+and permission prompts, content-channel validation, hardware-buffer ownership,
+WASM collection, layout caching, cloned RegExp validation, resource URI lookup,
+about:config handlers, upload field names and orientation behavior. The Windows
+orientation follow-up `3126ad57cab0a58d93cd55021a7a5f43ab28127a` and rumdl packaging
+change `189176e6bc1153184e91764178b5128a5e53fd95` do not affect our shipped targets
+and were excluded. No upstream test code was changed or claimed to have run.
+
+Two patches required product-specific integration:
+
+- Bug 1842361: preserve BashKitten's existing `shouldSkipConfirmation` callback
+  while adding the upstream dismissal callback to both browser and extension
+  download dialogs. Dialogs now dismiss when their originating tab changes.
+- Bug 2053320: remove the `HomeActivity` Nimbus intent-tooling entry point.
+  BashKitten already returns `NimbusDisabled`, so do not add Mozilla's replacement
+  QA broadcast receiver or enable experiments. The security-sensitive entry
+  point is removed without introducing a feature we do not ship.
+
+Relevant Mozilla advisories include [MFSA 2026-73](https://www.mozilla.org/en-US/security/advisories/mfsa2026-73/),
+[2026-74](https://www.mozilla.org/en-US/security/advisories/mfsa2026-74/),
+[2026-82](https://www.mozilla.org/en-US/security/advisories/mfsa2026-82/) and
+[2026-97](https://www.mozilla.org/en-US/security/advisories/mfsa2026-97/).
+This comparison is not a claim that every Firefox release fix is present in ESR,
+or that BashKitten has Tor Browser's complete anonymity configuration.
+
+Both Android and Linux load the shared `99-bashkitten.js` preferences and
+`BashKittenSettingsPolicy`. They enable signed OneCRL, CRLite, intermediate
+certificate, extension/graphics blocklist and anti-tracking data updates, following
+[Waterfox's security-data policy](https://www.waterfox.com/docs/policies/privacy/#security-data).
+Gecko retains signature verification, attachment integrity checks and its normal
+update scheduling. Only the explicit security collections may sync or download
+attachments; Nimbus, studies, telemetry, Google Safe Browsing and the extension
+store remain disabled. CRLite enforces revocations with Gecko's platform channel
+(`compat` on Android, `default` on Linux); existing platform OCSP behavior is
+unchanged. These background list requests disclose the client's IP to Mozilla's
+Remote Settings/attachment/signature servers, not visited URLs or file contents.
+
+Build and manual acceptance must cover both Android architectures and both Linux
+architectures. On Android check that changing tabs dismisses download prompts,
+immediate taps cannot approve fresh permission/download prompts, and ordinary
+browser tabs remain usable while remote login or any backend service fails.
+The native login path and its validation status are in
+[`docs/android-agent-login.md`](../../docs/android-agent-login.md).

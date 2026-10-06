@@ -743,6 +743,10 @@ abstract class BaseBrowserFragment :
             onNeedToRequestPermissions = { permissions ->
                 requestPermissions(permissions, REQUEST_CODE_DOWNLOAD_PERMISSIONS)
             },
+            dismissCustomFirstPartyDownloadDialog = {
+                dismissRenameDialog()
+                dismissDownloadDialogs()
+            },
             customFirstPartyDownloadDialog = {
                     currentDownloadState,
                     fileNameIfAlreadyDownloaded,

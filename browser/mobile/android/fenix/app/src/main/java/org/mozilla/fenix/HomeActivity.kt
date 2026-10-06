@@ -89,7 +89,6 @@ import mozilla.components.support.utils.toSafeIntent
 import mozilla.components.support.webextensions.WebExtensionOptionsPageObserver
 import mozilla.components.support.webextensions.WebExtensionPopupObserver
 import mozilla.telemetry.glean.private.NoExtras
-import org.mozilla.experiments.nimbus.initializeTooling
 import org.mozilla.fenix.GleanMetrics.AppIcon
 import org.mozilla.fenix.GleanMetrics.Events
 import org.mozilla.fenix.GleanMetrics.Metrics
@@ -447,8 +446,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         components.settings.browserWindowWidthDp = resources.configuration.screenWidthDp
         tabStripShownForWindow = components.settings.isTabStripEnabled
 
-        // Setup nimbus-cli tooling. This is a NOOP when launching normally.
-        components.nimbus.sdk.initializeTooling(applicationContext, intent)
         components.strictMode.attachListenerToDisablePenaltyDeath(supportFragmentManager)
         MarkersFragmentLifecycleCallbacks.register(supportFragmentManager, components.core.engine)
 

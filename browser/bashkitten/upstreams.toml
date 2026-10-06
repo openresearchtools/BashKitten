@@ -62,3 +62,29 @@ path = "third_party/rust/smallbitvec"
 commit = "5d195c909130a732a8b9520d129af36446711a6a"
 advisory = "GHSA-97wc-2hqc-cjgr"
 scope = "buffer_len checked capacity calculation; upstream production fix only"
+
+[tor_browser_security_backports]
+remote = "https://gitlab.torproject.org/tpo/applications/tor-browser.git"
+version = "16.0a13"
+ref = "tor-browser-153.4.0esr-16.0-1-build3"
+commit = "b06b7fcaa558a84ceb38937945509fdad77ccee8"
+firefox_source_tree = "30d6c5ace5a2fc4dd3760f8ba9a6c38f744f4787"
+checked = "2026-10-06"
+scope = "Mozilla production backports carried by Tor on the identical ESR baseline; not the complete Tor Browser patchset"
+commits = [
+  "b034c49ff636cb210c17c03cbc3cedbcb68138e0", # Bug 2051440: Android resource URI lookup
+  "f245c9c322406d859fd51d43c1cee13f8890dc3b", # Bug 1842361: download origin spoofing (adapted)
+  "34b7d38ac53647ce397b7705380bd20eaff89cbb", # Bug 1978587: permission clickjacking
+  "375a46b650e47c9b6cac60ae2fb3a0a3adc1cc41", # Bug 2049034: initial download confirmation delay
+  "56037c52bca07c392c28e9fe7bdbfb337054cfdf", # Bug 2049810: Android hardware-buffer ownership
+  "5c0ee93fc22ab0ffd64c0053f2fb9ec66b2040af", # Bug 2055683: content-channel scheme validation
+  "51ff820cf4725736e07b8a35057c1281aed8eeb9", # Bug 2059471: RFP orientation lock behavior
+  "9d9a56b33a3c205decf3c4fe28a25c57df029f12", # Bug 2045435: sweep dying WASM instances
+  "e00b42e0013e20ff4c46e0975bca343273be60fe", # Bug 2053578: layout cast prerequisite
+  "968e830897c1597f4a404bfd8aa21e9ca824e2d1", # Bug 2053578: first-in-flow layout cache
+  "f3e6095abd93e41fe6b2d74f7e0446e2c6b4008b", # Bug 2058626: cloned RegExp flag validation
+  "1672541dbd6852387bac772fe7af215800985b0b", # Bug 2053320: remove Nimbus intent tooling (adapted)
+  "c53f5cbbe64a9adc9a8e98d0527b857afcd377df", # Bug 2052011: about:config inline-handler removal
+  "5bdc9fc9b7e1d774ae2e326962fe0e4d5b48e419", # Bug 2054384: download notification filename display
+  "2b4271f74521f7119021d9b7584030bff7d6ac65", # Bug 2061470: preserve upload field keys
+]
