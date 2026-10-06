@@ -74,11 +74,13 @@ pref("app.normandy.api_url", "", locked);
 pref("app.normandy.shieldLearnMoreUrl", "about:blank", locked);
 pref("messaging-system.rsexperimentloader.enabled", false, locked);
 
-// Gecko's signed tracking-protection lists use its normal Remote Settings
-// endpoint. BashKittenSettingsPolicy keeps unrelated collections offline.
+// Gecko's signed certificate, extension and tracking-protection data use its
+// normal Remote Settings endpoint on desktop and Android. Other collections stay
+// offline through BashKittenSettingsPolicy; studies and telemetry remain off.
 pref("services.settings.preview_enabled", false, locked);
-pref("security.remote_settings.intermediates.enabled", false, locked);
-pref("security.remote_settings.crlite_filters.enabled", false, locked);
+pref("security.remote_settings.intermediates.enabled", true, locked);
+pref("security.remote_settings.crlite_filters.enabled", true, locked);
+pref("security.pki.crlite_mode", 2, locked);
 pref("browser.discovery.enabled", false, locked);
 pref(
   "browser.newtabpage.activity-stream.feeds.system.topstories",
@@ -315,8 +317,8 @@ pref("signon.firefoxRelay.privacy_policy_url", "about:blank", locked);
 pref("signon.recipes.remoteRecipes.enabled", false, locked);
 pref("signon.management.page.breachAlertUrl", "about:blank", locked);
 
-// Do not contact Mozilla's add-on discovery, recommendation, blocklist, or
-// update services. Local/manual extension installation remains available.
+// Keep discovery, recommendations and the extension store disabled. The signed
+// blocklist still protects local/manual extension installations.
 pref("extensions.getAddons.cache.enabled", false, locked);
 pref("extensions.getAddons.get.url", "", locked);
 pref("extensions.getAddons.search.browseURL", "about:blank", locked);
@@ -330,7 +332,8 @@ pref(
   "about:blank",
   locked
 );
-pref("extensions.blocklist.enabled", false, locked);
+pref("extensions.blocklist.enabled", true, locked);
+pref("extensions.blocklist.softblock.enabled", true, locked);
 pref("extensions.blocklist.url", "", locked);
 pref("extensions.blocklist.detailsURL", "about:blank", locked);
 pref("extensions.blocklist.itemURL", "about:blank", locked);

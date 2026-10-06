@@ -41,7 +41,6 @@ pref("xpinstall.signatures.required", true);
 pref("extensions.quarantinedDomains.enabled", false, locked);
 pref("extensions.postDownloadThirdPartyPrompt", false);
 pref("extensions.abuseReport.enabled", false);
-pref("extensions.blocklist.softblock.enabled", false);
 pref("browser.disable_pickers_in_hidden_extension_pages", true);
 
 // WebRTC.
