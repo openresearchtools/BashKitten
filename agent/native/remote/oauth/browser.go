@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 )
 
 // Authorization is private native state. Only URL goes to the protected Agent
@@ -21,7 +20,6 @@ type Authorization struct {
 	client   *Client
 	state    string
 	verifier string
-	until    time.Time
 	ctx      context.Context
 	cancel   context.CancelFunc
 	mu       sync.Mutex
@@ -52,17 +50,18 @@ func (c *Client) Begin(ctx context.Context) (*Authorization, error) {
 		return nil, errors.New("invalid pushed authorization response")
 	}
 	query := url.Values{"client_id": {c.config.ClientID}, "request_uri": {par.RequestURI}}
-	until := time.Now().Add(time.Duration(min(par.ExpiresIn, 300)) * time.Second)
-	flowCtx, cancel := context.WithDeadline(context.Background(), until)
+	// PAR expiry governs opening request_uri, not the user's time on Authelia's
+	// login page. Authelia validates request and code expiry at their endpoints.
+	flowCtx, cancel := context.WithCancel(context.Background())
 	return &Authorization{URL: c.config.Issuer + "/api/oidc/authorization?" + query.Encode(), client: c,
-		state: state, verifier: verifier, until: until, ctx: flowCtx, cancel: cancel}, nil
+		state: state, verifier: verifier, ctx: flowCtx, cancel: cancel}, nil
 }
 
 // Complete consumes this PKCE exchange exactly once, including on a failed
-// exchange. A cancelled/expired attempt requires explicit new authorization.
+// exchange. A cancelled attempt requires explicit new authorization.
 func (a *Authorization) Complete(ctx context.Context, callback, form string) (Token, error) {
 	a.mu.Lock()
-	if a.used || time.Now().After(a.until) {
+	if a.used {
 		a.mu.Unlock()
 		return Token{}, ErrLoginRequired
 	}
@@ -71,7 +70,7 @@ func (a *Authorization) Complete(ctx context.Context, callback, form string) (To
 	a.state, a.verifier = "", ""
 	a.mu.Unlock()
 	defer a.Cancel()
-	requestCtx, cancel := context.WithDeadline(ctx, a.until)
+	requestCtx, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(a.ctx, cancel)
 	defer func() { stop(); cancel() }()
 	if callback != CallbackURI {
