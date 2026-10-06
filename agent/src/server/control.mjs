@@ -24,7 +24,6 @@ import { acquireWake, releaseWake } from './access/wake.mjs';
 import { LocalAI } from './localai/localai.mjs';
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
 import { saveModelSettings } from './models/settings.mjs';
-import { TermuxDisplay } from './platform/termux/display.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
 
 export const controlSocket = paths.control;
@@ -128,7 +127,8 @@ async function serve() {
   const stack = new AccessStack({
     fatal: error => { lastError = error.message; serial = serial.then(() => turnOff(error.message)).catch(error => { lastError = error.message; }); },
   });
-  const display = platform === 'termux' ? new TermuxDisplay() : null;
+  // The Display CLI imports this controller; load its implementation only in the manager.
+  const display = platform === 'termux' ? new (await import('./platform/termux/display.mjs')).TermuxDisplay() : null;
   const localAI = platform === 'linux' ? new LocalAI(stack.services) : null;
   if (localAI) await localAI.initialize();
   setDownloadCompleteHandler(() => localAI?.importProvider());
