@@ -36,6 +36,7 @@ public final class AgentRemotesActivity extends ProductActivity {
     private ImportState state;
     private LinearLayout body;
     private TextView status;
+    private int renderGeneration;
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -53,6 +54,7 @@ public final class AgentRemotesActivity extends ProductActivity {
     }
 
     private void render() {
+        final int generation = ++renderGeneration;
         if (state.connected) { finish(); return; }
         body.removeAllViews();
         status.setText(state.busy ? state.progress : state.error);
@@ -76,18 +78,21 @@ public final class AgentRemotesActivity extends ProductActivity {
             button(body, "Cancel", () -> { state.encrypted = ""; state.password = ""; state.error = ""; render(); });
             return;
         }
-        card("Local", "This device · Termux", "local", false);
-        try {
-            JSONObject saved = app.agent.remotes();
-            List<String> ids = new ArrayList<>();
-            saved.keys().forEachRemaining(id -> { if (saved.optJSONObject(id) != null) ids.add(id); });
-            ids.sort(Comparator.comparing((String id) -> saved.optJSONObject(id).optString("name", id), String.CASE_INSENSITIVE_ORDER));
-            for (String id : ids) {
-                JSONObject record = saved.getJSONObject(id);
-                card(record.optString("name", id), record.optInt("version") == 2 ? id
-                    : "Import a new encrypted QR from this host’s Share Local page.", id, true);
-            }
-        } catch (Exception error) { status.setText("Saved connections could not be opened."); }
+        card(body, "Local", "This device · Termux", "local", false);
+        LinearLayout connections = column(); body.addView(connections);
+        app.agent.remotes(saved -> {
+            if (isFinishing() || isDestroyed() || generation != renderGeneration) return;
+            try {
+                List<String> ids = new ArrayList<>();
+                saved.keys().forEachRemaining(id -> { if (saved.optJSONObject(id) != null) ids.add(id); });
+                ids.sort(Comparator.comparing((String id) -> saved.optJSONObject(id).optString("name", id), String.CASE_INSENSITIVE_ORDER));
+                for (String id : ids) {
+                    JSONObject record = saved.getJSONObject(id);
+                    card(connections, record.optString("name", id), record.optInt("version") == 2 ? id
+                        : "Import a new encrypted QR from this host’s Share Local page.", id, true);
+                }
+            } catch (Exception error) { status.setText("Saved connections could not be opened: " + error.getMessage()); }
+        }, message -> { if (!isFinishing() && !isDestroyed() && generation == renderGeneration) status.setText(message); });
         button(body, "Share Local", () -> startActivityForResult(new Intent(this, AgentShareActivity.class), SHARE_LOCAL));
         TextView title = text("Add a remote Agent", 20); title.setPadding(0, dp(24), 0, dp(8)); body.addView(title);
         button(body, "Scan QR", () -> new IntentIntegrator(this).setCaptureActivity(OnionCaptureActivity.class)
@@ -97,8 +102,8 @@ public final class AgentRemotesActivity extends ProductActivity {
             .setType("image/*").addCategory(Intent.CATEGORY_OPENABLE), OPEN_CONNECTION));
     }
 
-    private void card(String title, String description, String id, boolean removable) {
-        LinearLayout card = column(); card.setPadding(0, dp(18), 0, dp(8)); body.addView(card);
+    private void card(LinearLayout parent, String title, String description, String id, boolean removable) {
+        LinearLayout card = column(); card.setPadding(0, dp(18), 0, dp(8)); parent.addView(card);
         boolean current = app.agent.selected.equals(id);
         card.addView(text((current ? "✓  " : "") + title, 18));
         TextView location = text(description, 13); location.setTextIsSelectable(true); card.addView(location);
@@ -278,13 +283,12 @@ public final class AgentRemotesActivity extends ProductActivity {
                 final JSONObject result = bundle;
                 app.main.post(() -> {
                     if (closed) return;
-                    busy = false;
-                    if (result == null) { error = "Incorrect password or invalid connection image."; changed(); return; }
-                    try {
-                        app.agent.importRemote(result);
-                        encrypted = ""; connected = true;
-                    } catch (Exception error) { this.error = "The connection could not be saved: " + error.getMessage(); }
-                    changed();
+                    if (result == null) { failed("Incorrect password or invalid connection image."); return; }
+                    progress = "Saving connection…"; changed();
+                    app.agent.importRemote(result, () -> {
+                        if (closed) return;
+                        busy = false; encrypted = ""; connected = true; changed();
+                    }, message -> failed("The connection could not be saved: " + message));
                 });
             }, "agent-qr-decrypt").start();
         }
