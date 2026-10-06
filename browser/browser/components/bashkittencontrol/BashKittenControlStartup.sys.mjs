@@ -5,6 +5,7 @@
 import { BrowserControl } from "chrome://remote/content/bashkitten/BrowserControl.sys.mjs";
 import { handleBashKittenCommand } from "resource:///modules/BashKittenCommand.sys.mjs";
 import { NetUtil } from "resource://gre/modules/NetUtil.sys.mjs";
+import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { clearTimeout, setTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024;
@@ -103,16 +104,30 @@ async function prepareDirectory(path, create) {
       permissions: 0o700,
     });
   }
-  const directory = new LocalFile(path);
-  if (!directory.isDirectory() || directory.isSymlink()) {
+  let mode = await fileMode(path);
+  if ((mode & 0o170000) !== 0o040000) {
     throw new Error("Unsafe BashKitten runtime directory");
   }
   if (create) {
     await IOUtils.setPermissions(path, 0o700, false);
+    mode = await fileMode(path);
   }
-  if ((directory.permissions & 0o077) !== 0) {
+  if ((mode & 0o077) !== 0) {
     throw new Error("Insecure BashKitten runtime directory permissions");
   }
+}
+
+async function fileMode(path) {
+  // IOUtils.stat follows links. Keep the socket boundary's no-follow checks,
+  // with filesystem access in a subprocess instead of the browser UI thread.
+  const process = await Subprocess.call({
+    command: "/usr/bin/stat", arguments: ["--format=%f", "--", path], stderr: "stdout",
+  });
+  let output = "";
+  for (let chunk; (chunk = await process.stdout.readString());) output += chunk;
+  const { exitCode } = await process.wait();
+  if (exitCode || !/^[a-f0-9]+\n$/.test(output)) throw new Error("Could not inspect the BashKitten control path");
+  return parseInt(output, 16);
 }
 
 async function ensureSocketPathUnused(path) {
@@ -300,11 +315,10 @@ export const BashKittenControlStartup = {
       onStopListening() {},
     });
     await IOUtils.setPermissions(this.path, 0o600, false);
-    const socket = new LocalFile(this.path);
+    const mode = await fileMode(this.path);
     if (
-      !socket.isSpecial() ||
-      socket.isSymlink() ||
-      (socket.permissions & 0o777) !== 0o600
+      (mode & 0o170000) !== 0o140000 ||
+      (mode & 0o777) !== 0o600
     ) {
       throw new Error("Insecure BashKitten control socket");
     }
@@ -317,8 +331,7 @@ export const BashKittenControlStartup = {
     } catch {}
     if (this.path && this.ownsSocket) {
       try {
-        const socket = new LocalFile(this.path);
-        if (socket.exists() && socket.isSpecial() && !socket.isSymlink()) {
+        if (((await fileMode(this.path)) & 0o170000) === 0o140000) {
           await IOUtils.remove(this.path, { ignoreAbsent: true });
         }
       } catch {}
@@ -342,4 +355,3 @@ export const BashKittenControlStartup = {
     this.ownsSocket = false;
   },
 };
-

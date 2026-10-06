@@ -440,6 +440,30 @@ class AgentRemoteStore {
     if (!owner || owner.state !== "login") throw new Error("Remote sign-in is no longer active.");
     owner.callback = callback;
   }
+  async readLoginResponse(entry, owner, url, stream, contentLength) {
+    // The opening-request observer runs before upload consumption. Copy on
+    // Gecko's stream worker; even a disk/IPC-backed upload must not block UI.
+    const buffer = Cc["@mozilla.org/storagestream;1"].createInstance(Ci.nsIStorageStream);
+    buffer.init(4096, 0xffffffff);
+    await new Promise((resolve, reject) => {
+      const copy = NetUtil.asyncCopy(stream, buffer.getOutputStream(0), status => {
+        owner.abort.signal.removeEventListener("abort", cancel);
+        if (Components.isSuccessCode(status)) resolve();
+        else reject(new Error("Could not read the Authelia sign-in response."));
+      });
+      const cancel = () => copy.cancel(Cr.NS_BINDING_ABORTED);
+      owner.abort.signal.addEventListener("abort", cancel, { once: true });
+      if (owner.abort.signal.aborted) cancel();
+    });
+    this.current(entry, owner);
+    if (buffer.length !== contentLength) throw new Error("Incomplete Authelia sign-in response.");
+    const input = buffer.newInputStream(0);
+    let form;
+    try { form = NetUtil.readInputStreamToString(input, buffer.length); }
+    finally { input.close(); }
+    if (/[^\x00-\x7f]/.test(form)) throw new Error("Invalid Authelia sign-in response.");
+    await this.complete(entry, owner, url, form);
+  }
   async complete(entry, owner, url, form) {
     this.current(entry, owner);
     owner.state = "connecting";
@@ -540,11 +564,12 @@ class AgentRemoteStore {
         if (channel.URI.spec !== "http://127.0.0.1/oauth/callback" || channel.requestMethod !== "POST" ||
             channel.getRequestHeader("Content-Type").split(";", 1)[0].trim().toLowerCase() !== "application/x-www-form-urlencoded" ||
             channel.QueryInterface(Ci.nsIUploadChannel2).uploadStreamHasHeaders) throw new Error("Invalid Authelia sign-in response.");
+        const contentLength = Number(channel.getRequestHeader("Content-Length"));
+        if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Incomplete Authelia sign-in response.");
         const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
-        stream.QueryInterface(Ci.nsISeekableStream).seek(0, 0);
-        const form = NetUtil.readInputStreamToString(stream, stream.available());
-        if (form.length !== Number(channel.getRequestHeader("Content-Length")) || /[^\x00-\x7f]/.test(form)) throw new Error("Incomplete Authelia sign-in response.");
-        this.complete(entry, owner, channel.URI.spec, form).catch(() => {});
+        owner.state = "connecting";
+        this.readLoginResponse(entry, owner, channel.URI.spec, stream, contentLength)
+          .catch(error => this.failed(entry, owner, error)).catch(console.error);
       } catch {
         this.failed(entry, owner, new Error(rejection || "Could not read the Authelia sign-in response.")).catch(() => {});
       } finally {
