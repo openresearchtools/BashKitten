@@ -1169,8 +1169,10 @@ class Settings(
     val shouldUseCookieBannerPrivateModeDefaultValue: Boolean
         get() = true
 
-    val shouldUseCookieBanner: Boolean
-        get() = true
+    var shouldUseCookieBanner by booleanPreference(
+        appContext.getPreferenceKey(R.string.pref_key_cookie_banner_handling),
+        default = true,
+    )
 
     val shouldShowCookieBannerUI: Boolean
         get() = cookieBannersSection[CookieBannersSection.FEATURE_UI] == 1
@@ -2301,7 +2303,7 @@ class Settings(
      * Get the current mode for cookie banner handling
      */
     fun getCookieBannerHandlingPrivateMode(): CookieBannerHandlingMode {
-        return when (shouldUseCookieBannerPrivateMode) {
+        return when (shouldUseCookieBanner && shouldUseCookieBannerPrivateMode) {
             true -> CookieBannerHandlingMode.REJECT_ALL
             false -> {
                 CookieBannerHandlingMode.DISABLED

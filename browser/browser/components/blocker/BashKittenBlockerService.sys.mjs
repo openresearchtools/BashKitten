@@ -40,6 +40,7 @@ const CONTRACT_ID = "@bashkitten.invalid/bashkitten-blocker-engine;1";
 const PREF_ENABLED = "bashkitten.blocker.enabled";
 const PREF_FILTER_LIST_URLS = "bashkitten.blocker.filterListUrls";
 const PREF_ENABLED_LISTS = "bashkitten.blocker.enabledLists";
+const PREF_COOKIE_BANNERS = "cookiebanners.service.mode";
 const PREF_LEGACY_SITE_EXCEPTIONS = "bashkitten.blocker.siteExceptions";
 const PREF_SITE_EXCEPTIONS_MIGRATED =
   "bashkitten.blocker.siteExceptions.migrated";
@@ -1787,6 +1788,11 @@ export const BashKittenBlockerService = {
    * Hash verification is left to async initialisation and periodic updates.
    */
   _tryInitFromCacheSync() {
+    // An older cache can still contain cookie-banner rules after an opt-out.
+    // The async path verifies its list selection before using it.
+    if (Services.prefs.getIntPref(PREF_COOKIE_BANNERS, 1) === 0) {
+      return;
+    }
     try {
       const cacheData = lazy.EngineCache.readSync();
       if (!cacheData?.length) {
@@ -1999,6 +2005,9 @@ export const BashKittenBlockerService = {
       try {
         const storedListsForEngine =
           await this._preprocessListRecords(storedLists);
+        if (this._initGeneration !== generation) {
+          return;
+        }
         const initializedFromStored =
           await this._initEngineFromListRecords(storedListsForEngine);
         if (initializedFromStored) {
@@ -2033,6 +2042,9 @@ export const BashKittenBlockerService = {
     const preprocessedFetchedListsForEngine = await this._preprocessListRecords(
       fetchedListsForEngine
     );
+    if (this._initGeneration !== generation) {
+      return;
+    }
     const fetchedListsUsable =
       fetchedLists.length ||
       (!this._hasNonCustomDescriptors(descriptors) &&
@@ -2077,6 +2089,9 @@ export const BashKittenBlockerService = {
     const preprocessedBundledListsForEngine = await this._preprocessListRecords(
       bundledListsForEngine
     );
+    if (this._initGeneration !== generation) {
+      return;
+    }
     if (!bundledListsForEngine.length) {
       if (!this._hasNonCustomDescriptors(descriptors)) {
         this._engine = null;
@@ -2189,6 +2204,9 @@ export const BashKittenBlockerService = {
           descriptors,
           storedListsForEngine
         ));
+      if (this._initGeneration !== generation) {
+        return;
+      }
       if (!cacheMatchesCurrentLists) {
         const previousEngine = this._engine;
         this._engine = null;
@@ -2196,7 +2214,9 @@ export const BashKittenBlockerService = {
           await this._initFromTextSourcesAndCache(descriptors, generation);
         } catch (err) {
           // Restore the previous engine before surfacing the rebuild failure.
-          this._engine = previousEngine;
+          if (this._initGeneration === generation) {
+            this._engine = previousEngine;
+          }
           throw err;
         }
 
@@ -2220,7 +2240,7 @@ export const BashKittenBlockerService = {
 
     let loadedFromCache = false;
     try {
-      loadedFromCache = await this._tryInitFromCache(descriptors);
+      loadedFromCache = await this._tryInitFromCache(descriptors, generation);
     } catch (e) {
       // File not found is expected on first run.
       if (e.result !== Cr.NS_ERROR_FILE_NOT_FOUND) {
@@ -3150,7 +3170,7 @@ export const BashKittenBlockerService = {
     }
   },
 
-  async _tryInitFromCache(descriptors) {
+  async _tryInitFromCache(descriptors, generation) {
     const storedLists = await this._readStoredLists(descriptors);
     const storedListsForEngine = await this._preprocessListRecords(storedLists);
     const cacheMatchesCurrentLists =
@@ -3166,6 +3186,9 @@ export const BashKittenBlockerService = {
     }
 
     const cacheData = await lazy.EngineCache.read();
+    if (this._initGeneration !== generation) {
+      return false;
+    }
     const candidate = this._createEngine();
     try {
       candidate.initFromCache(cacheData);
@@ -3177,12 +3200,18 @@ export const BashKittenBlockerService = {
     return true;
   },
 
-  async _refreshEngineAfterListUpdate(anyUpdated, descriptors) {
+  async _refreshEngineAfterListUpdate(anyUpdated, descriptors, generation) {
+    if (this._initGeneration !== generation) {
+      return;
+    }
     if (anyUpdated) {
       const storedLists = await this._readStoredLists(descriptors);
       if (storedLists.length) {
         const storedListsForEngine =
           await this._preprocessListRecords(storedLists);
+        if (this._initGeneration !== generation) {
+          return;
+        }
         const initializedFromStored =
           await this._initEngineFromListRecords(storedListsForEngine);
         if (initializedFromStored) {
@@ -3221,6 +3250,7 @@ export const BashKittenBlockerService = {
       } catch (_) {}
     }
 
+    const generation = this._initGeneration;
     const result = await this._listUpdates().updateIfNeeded();
     if (!result) {
       // Another update pass owns the resource refresh and engine reload.
@@ -3229,7 +3259,8 @@ export const BashKittenBlockerService = {
 
     await this._refreshEngineAfterListUpdate(
       result.anyUpdated,
-      result.descriptors
+      result.descriptors,
+      generation
     );
   },
 
@@ -3790,6 +3821,7 @@ export const BashKittenBlockerService = {
     }
 
     Services.prefs.addObserver(PREF_BRANCH, this);
+    Services.prefs.addObserver(PREF_COOKIE_BANNERS, this);
     this._initialized = true;
 
     this._migrateSiteExceptions();
@@ -3852,6 +3884,18 @@ export const BashKittenBlockerService = {
     }
 
     switch (data) {
+      case PREF_COOKIE_BANNERS:
+        if (this.isEnabled()) {
+          this._engine = null;
+          this._rebuildEngineFromCurrentSources().catch(err => {
+            console.error(
+              "[BashKittenBlocker] Failed to apply cookie-banner setting:",
+              err
+            );
+          });
+        }
+        break;
+
       case PREF_ENABLED:
         if (this.isEnabled()) {
           this._registerNetworkObservers();
@@ -4012,6 +4056,7 @@ export const BashKittenBlockerService = {
 
     try {
       Services.prefs.removeObserver(PREF_BRANCH, this);
+      Services.prefs.removeObserver(PREF_COOKIE_BANNERS, this);
     } catch (err) {
       console.warn("[BashKittenBlocker] Failed to remove pref observer:", err);
     }

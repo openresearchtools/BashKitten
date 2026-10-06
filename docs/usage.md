@@ -56,6 +56,16 @@ identity. The port can change; do not use a fixed HTTP URL. The local credential
 stays in the protected Agent cookie context and renews automatically after a
 service restart. Pi provider credentials and chat history remain in their stores.
 
+## Cookie banners
+
+**Automatically dismiss cookie banners** is on by default. Find it in Android's
+**Settings → Privacy and security**, or desktop **Settings → Ad Blocking**.
+It rejects optional cookies on supported sites and enables the selected bundled
+cookie-banner filters. Turn it off to handle banners yourself in normal and
+private tabs, then reload open pages. This keeps other ad/tracker protection and
+your individual filter-list choices. It does not erase previously saved consent
+cookies or change filters supplied by extensions or custom lists.
+
 ## Providers and chats
 
 Open **Settings → Providers**, or enter `/login` or `/providers`. Choose the

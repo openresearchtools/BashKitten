@@ -5,4 +5,6 @@
     <string name="bashkitten_agent">Agent</string>
     <string name="bashkitten_open_agent">Open Agent</string>
     <string name="bashkitten_https_only_exclusions">Excludes Tor, localhost and loopback addresses (127.0.0.1, ::1).</string>
+    <string name="bashkitten_cookie_banners_title">Automatically dismiss cookie banners</string>
+    <string name="bashkitten_cookie_banners_summary">Reject optional cookies on supported sites and hide cookie banners. Turn off to handle banners yourself. Reload open pages after changing this setting.</string>
 </resources>

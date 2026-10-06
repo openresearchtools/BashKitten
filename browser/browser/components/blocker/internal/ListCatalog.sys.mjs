@@ -14,6 +14,10 @@ const LIST_CATALOG_URL =
 const BUNDLED_FILTERS_BASE = "resource://bashkitten/blocker/assets/filters/";
 const PREF_FILTER_LIST_URLS = "bashkitten.blocker.filterListUrls";
 const PREF_ENABLED_LISTS = "bashkitten.blocker.enabledLists";
+const COOKIE_BANNER_LISTS = new Set([
+  "annoyances-easylist-cookie",
+  "annoyances-ublock-cookies",
+]);
 
 // Catalog data is immutable for the process, so a module cache is enough
 // and we don't need a state object on the service.
@@ -179,8 +183,14 @@ export const ListCatalog = {
       Services.locale.appLocaleAsBCP47?.split("-")[0] || ""
     ).toLowerCase();
     const overrides = getEnabledListOverrides();
+    const dismissCookieBanners =
+      Services.prefs.getIntPref("cookiebanners.service.mode", 1) !== 0;
 
     for (const entry of catalog) {
+      // Keep the user's list selections; the global switch only gates their use.
+      if (!dismissCookieBanners && COOKIE_BANNER_LISTS.has(entry.id)) {
+        continue;
+      }
       if (!isCatalogEntryEnabled(entry, userLocale, overrides)) {
         continue;
       }

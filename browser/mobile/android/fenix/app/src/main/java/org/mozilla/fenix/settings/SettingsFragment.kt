@@ -12,6 +12,7 @@ import androidx.navigation.fragment.navArgs
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import androidx.preference.PreferenceFragmentCompat
+import androidx.preference.SwitchPreferenceCompat
 import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
 import mozilla.components.support.utils.BuildManufacturerChecker
 import mozilla.components.support.utils.ext.navigateToDefaultBrowserAppsSettings
@@ -32,6 +33,18 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.preferences, rootKey)
+        requirePreference<SwitchPreferenceCompat>(R.string.pref_key_cookie_banner_handling).apply {
+            isChecked = requireComponents.settings.shouldUseCookieBanner
+            setOnPreferenceChangeListener { _, value ->
+                val settings = requireComponents.settings
+                settings.shouldUseCookieBanner = value as Boolean
+                requireComponents.core.engine.settings.apply {
+                    cookieBannerHandlingMode = settings.getCookieBannerHandling()
+                    cookieBannerHandlingModePrivateBrowsing = settings.getCookieBannerHandlingPrivateMode()
+                }
+                true
+            }
+        }
         val category = PreferenceCategory(requireContext()).apply {
             title = "Agent"
             key = "bashkitten_settings"

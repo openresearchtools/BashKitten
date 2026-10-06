@@ -14,11 +14,30 @@ ChromeUtils.defineESModuleGetters(lazy, {
   isEnabledAdblockAddon: "resource:///modules/BashKittenBlockerUtils.sys.mjs",
 });
 
-Preferences.addAll([{ id: "bashkitten.blocker.enabled", type: "bool" }]);
+Preferences.addAll([
+  { id: "bashkitten.blocker.enabled", type: "bool" },
+  { id: "cookiebanners.service.mode", type: "int" },
+  { id: "cookiebanners.service.mode.privateBrowsing", type: "int" },
+]);
 
 Preferences.addSetting({
   id: "bashkitten-blocker-enabled",
   pref: "bashkitten.blocker.enabled",
+});
+
+Preferences.addSetting({
+  id: "bashkitten-cookie-banners-enabled",
+  pref: "cookiebanners.service.mode",
+  get(mode) {
+    return mode !== Ci.nsICookieBannerService.MODE_DISABLED;
+  },
+  set(enabled) {
+    const mode = enabled
+      ? Ci.nsICookieBannerService.MODE_REJECT
+      : Ci.nsICookieBannerService.MODE_DISABLED;
+    Preferences.get("cookiebanners.service.mode.privateBrowsing").value = mode;
+    return mode;
+  },
 });
 
 Preferences.addSetting({
@@ -118,6 +137,14 @@ SettingGroupManager.registerGroups({
         control: "moz-toggle",
         controlAttrs: {
           searchkeywords: "adblock adblocker ublock filter",
+        },
+      },
+      {
+        id: "bashkitten-cookie-banners-enabled",
+        l10nId: "bashkitten-cookie-banners-enabled-toggle",
+        control: "moz-toggle",
+        controlAttrs: {
+          searchkeywords: "cookies consent banners reject dismiss hide",
         },
       },
       {

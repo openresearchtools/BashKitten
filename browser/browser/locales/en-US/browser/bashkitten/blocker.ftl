@@ -274,6 +274,10 @@ bashkitten-blocker-enabled-toggle =
     .label = Block ads and trackers
     .description = Blocks ads and trackers with minimal impact on page loading.
 
+bashkitten-cookie-banners-enabled-toggle =
+    .label = Automatically dismiss cookie banners
+    .description = Reject optional cookies on supported sites and hide cookie banners. Turn off to handle banners yourself. Reload open pages after changing this setting.
+
 # Variables:
 #   $extensionName (String) - Name of the third-party extension that also blocks ads.
 bashkitten-blocker-extension-notice =
@@ -281,6 +285,7 @@ bashkitten-blocker-extension-notice =
 
 bashkitten-blocker-lists-group =
     .label = Filter lists
+    .description = Cookie-banner lists apply only when Automatically dismiss cookie banners is on.
 
 bashkitten-blocker-manage-lists-button =
     .label = Manage filter lists
