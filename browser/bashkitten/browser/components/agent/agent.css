@@ -25,6 +25,10 @@
 #bashkitten-agent-connections input, #bashkitten-agent-connections textarea { min-width: 0; padding: 8px 12px; border: 1px solid var(--border-color, ThreeDShadow); border-radius: 999px; background: Field; color: FieldText; font: inherit; }
 #bashkitten-agent-connections textarea { display: block; box-sizing: border-box; width: 100%; margin-block: 12px; border-radius: 16px; }
 #bashkitten-agent-connections input[type="checkbox"] { justify-self: start; }
+#bashkitten-agent-connections .share-local-content label:has(> input[type="checkbox"]) { grid-template-columns: auto 1fr; align-items: center; }
+#bashkitten-agent-connections .share-local-qr { display: block; width: 320px; max-width: 100%; height: auto; margin-block: 16px; }
+#bashkitten-agent-connections .connection-qr { display: block; box-sizing: border-box; width: fit-content; max-width: 100%; padding: 8px; border-radius: 16px; }
+#bashkitten-agent-connections .connection-qr > img { margin: 0; }
 #bashkitten-agent-connections [hidden] { display: none !important; }
 #bashkitten-agent-button { font-weight: 600; min-width: 110px; margin: 4px 2px; padding-inline: 18px; border-radius: 999px; }
 #bashkitten-agent-button[checked] { background: var(--tab-selected-bgcolor, var(--toolbar-bgcolor, Canvas)); box-shadow: 0 1px 4px #0003; }

@@ -691,7 +691,7 @@ class AgentView {
     this.closeConnections();
     const { panel, content } = this.connectionPanel("Share Local");
     const description = html(this.doc, "p", {}, "Publish this device’s Local Agent through Tor. Other devices use your password and authenticator code.");
-    const body = html(this.doc, "div");
+    const body = html(this.doc, "div", { class: "share-local-content" });
     const error = html(this.doc, "p", { role: "alert" });
     content.append(description, body, error);
     let busy = false, setupId = null;
@@ -713,7 +713,7 @@ class AgentView {
     };
     const image = (url, title) => {
       if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(url || "")) throw new Error("The controller did not supply a valid QR image.");
-      return html(this.doc, "img", { src: url, alt: title, style: "display:block;width:min(100%,320px);height:auto;margin-block:16px" });
+      return html(this.doc, "img", { src: url, alt: title, class: "share-local-qr" });
     };
     const render = state => {
       if (!current()) return;
@@ -750,7 +750,7 @@ class AgentView {
         await IOUtils.write(picker.file.path, bytes, { permissions: 0o600 });
       };
       const qr = image(state.qrDataUrl, "Encrypted connection QR");
-      const save = button("", download); save.setAttribute("aria-label", "Download QR image"); save.append(qr);
+      const save = button("", download); save.className = "connection-qr"; save.setAttribute("aria-label", "Download QR image"); save.append(qr);
       body.append(save, button("Download QR image", download));
       body.append(button("Reissue identity", () => account(true)));
       const llama = html(this.doc, "div"); body.append(llama);
