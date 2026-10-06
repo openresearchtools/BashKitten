@@ -81,8 +81,10 @@ func (a *Authorization) Complete(ctx context.Context, callback, form string) (To
 	if err != nil {
 		return Token{}, errors.New("invalid OAuth callback")
 	}
-	for key, values := range q {
-		if len(values) != 1 || (key != "code" && key != "state" && key != "iss" && key != "scope" && key != "error" && key != "error_description" && key != "error_uri") {
+	// RFC 6749 section 4.1.2 requires ignoring unrecognized response fields.
+	// Repeated parameters remain invalid; validate the fields we consume below.
+	for _, values := range q {
+		if len(values) != 1 {
 			return Token{}, errors.New("invalid OAuth callback fields")
 		}
 	}
