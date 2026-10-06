@@ -115,7 +115,8 @@ class AgentRemoteStore {
     if (await IOUtils.exists(FILE)) {
       const saved = await IOUtils.readJSON(FILE);
       if (saved.version !== 1 || typeof saved.encrypted !== "string") throw new Error("The saved remote connections could not be read.");
-      entries = JSON.parse(this.crypto.decrypt(saved.encrypted));
+      const [plaintext] = await this.crypto.decryptMany([saved.encrypted]);
+      entries = JSON.parse(plaintext);
       if (!Array.isArray(entries)) throw new Error("Invalid remote connections.");
     }
     const ids = new Set();
@@ -146,7 +147,7 @@ class AgentRemoteStore {
 
   save() {
     const pending = this.writes.then(async () => {
-      const encrypted = this.crypto.encrypt(JSON.stringify([...this.entries.values()]));
+      const [encrypted] = await this.crypto.encryptMany([JSON.stringify([...this.entries.values()])]);
       await IOUtils.writeJSON(FILE, { version: 1, encrypted }, { tmpPath: FILE + ".tmp", permissions: 0o600 });
       await IOUtils.setPermissions(FILE, 0o600);
     });

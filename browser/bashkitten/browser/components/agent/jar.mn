@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 browser.jar:
     content/browser/bashkitten/agent/agent.css (agent.css)
+    content/browser/bashkitten/agent/ConnectionQR.worker.js (ConnectionQR.worker.js)
     content/browser/bashkitten/agent/jsQR.js (third_party/jsqr/jsQR.js)

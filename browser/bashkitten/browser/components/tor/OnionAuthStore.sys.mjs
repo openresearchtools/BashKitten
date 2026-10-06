@@ -78,7 +78,8 @@ export class OnionAuthStorage {
       ) {
         throw new Error("The saved onion authorizations could not be read.");
       }
-      entries = JSON.parse(this._crypto.decrypt(saved.encrypted));
+      const [plaintext] = await this._crypto.decryptMany([saved.encrypted]);
+      entries = JSON.parse(plaintext);
       if (!Array.isArray(entries)) {
         throw new Error("The saved onion authorizations are invalid.");
       }
@@ -137,7 +138,7 @@ export class OnionAuthStorage {
         .filter(entry => entry.remember || !entry.privateMode)
         .map(entry => ({ ...entry, key: entry.remember ? entry.key : null }));
       if (saved.length) {
-        const encrypted = this._crypto.encrypt(JSON.stringify(saved));
+        const [encrypted] = await this._crypto.encryptMany([JSON.stringify(saved)]);
         await IOUtils.writeJSON(
           this.path,
           { version: 1, encrypted },

@@ -568,9 +568,8 @@ export const TorRouting = {
       throw new Error("The bundled Tor runtime is not installed");
     }
     if (AppConstants.platform == "linux") {
-      const executable = Cc["@mozilla.org/file/local;1"].createInstance(Ci.nsIFile);
-      executable.initWithPath(sourcePath);
-      if (!executable.isFile() || !executable.isExecutable()) {
+      const executable = await IOUtils.stat(sourcePath);
+      if (executable.type !== "regular" || !(executable.permissions & 0o111)) {
         throw new Error("The bundled Tor runtime is not executable");
       }
       // The package can update Tor without rebuilding Gecko. A profile copy

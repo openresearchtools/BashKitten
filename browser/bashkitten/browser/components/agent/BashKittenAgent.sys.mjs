@@ -899,12 +899,13 @@ class AgentView {
     const selected = html(this.doc, "p", { role: "status" });
     const add = html(this.doc, "button", { type: "submit", disabled: "" }, "Connect");
     let source = "", stopCamera = () => {};
+    const decoding = new AbortController();
     const accept = text => {
       if (!text.startsWith("TK2:")) throw new Error("Use the encrypted Connection QR from Share Local.");
       source = text; selected.textContent = "Connection image ready. Enter its password."; add.disabled = false; password.focus();
     };
     image.addEventListener("change", () => report(async () => {
-      if (image.files[0]) accept(await this.decodeQR(await this.win.createImageBitmap(image.files[0])));
+      if (image.files[0]) accept(await this.decodeQR(await this.win.createImageBitmap(image.files[0]), decoding.signal));
     }));
     const camera = button("Scan QR", async () => {
       stopCamera();
@@ -912,14 +913,15 @@ class AgentView {
       if (this.connectionsPanel !== panel) { stream.getTracks().forEach(track => track.stop()); return; }
       const video = html(this.doc, "video", { autoplay: "", muted: "", style: "width:100%;max-height:260px" });
       let timer, stopped = false;
+      const capture = new AbortController();
       const cancel = button("Cancel scan", () => stopCamera());
-      stopCamera = () => { stopped = true; clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); video.remove(); cancel.remove(); };
+      stopCamera = () => { stopped = true; capture.abort(); clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); video.remove(); cancel.remove(); };
       video.srcObject = stream; form.append(video, cancel);
       const scan = async () => {
         if (stopped || this.connectionsPanel !== panel) return stopCamera();
         try {
-          if (video.readyState >= 2) { const text = await this.decodeQR(video); if (stopped) return; accept(text); stopCamera(); return; }
-        } catch (e) { if (e.message !== "No connection QR code was found.") { error.textContent = e.message; stopCamera(); return; } }
+          if (video.readyState >= 2) { const text = await this.decodeQR(video, capture.signal); if (stopped) return; accept(text); stopCamera(); return; }
+        } catch (e) { if (stopped) return; if (e.message !== "No connection QR code was found.") { error.textContent = e.message; stopCamera(); return; } }
         timer = setTimeout(scan, 250);
       };
       try { await video.play(); scan(); } catch (e) { stopCamera(); throw e; }
@@ -934,26 +936,30 @@ class AgentView {
         source = ""; await this.refreshRemotes(); await this.choose(record.id, secret);
       }).finally(() => { add.disabled = !source; });
     });
-    panel.addEventListener("close", () => { source = password.value = image.value = ""; stopCamera(); }, { once: true });
+    panel.addEventListener("close", () => { source = password.value = image.value = ""; decoding.abort(); stopCamera(); }, { once: true });
     content.append(saved, html(this.doc, "h3", {}, "Connect to remote"),
       html(this.doc, "p", {}, "Scan or upload its Connection QR. Use the password chosen in Share Local, then your authenticator code to sign in."), form, error);
     await report(refresh);
   }
 
-  async decodeQR(source) {
-    if (!this.win.jsQR) Services.scriptloader.loadSubScript("chrome://browser/content/bashkitten/agent/jsQR.js", this.win);
-    const width = source.videoWidth || source.width;
-    const height = source.videoHeight || source.height;
-    if (!width || !height) throw new Error("The QR image dimensions are invalid.");
-    const scale = Math.min(1, 1600 / Math.max(width, height));
-    const canvas = html(this.doc, "canvas"); canvas.width = Math.round(width * scale); canvas.height = Math.round(height * scale);
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.drawImage(source, 0, 0, canvas.width, canvas.height);
-    const image = context.getImageData(0, 0, canvas.width, canvas.height);
-    const result = this.win.jsQR(image.data, image.width, image.height);
-    source.close?.();
-    if (!result?.data) throw new Error("No connection QR code was found.");
-    return result.data;
+  async decodeQR(source, signal) {
+    const bitmap = source.close ? source : await this.win.createImageBitmap(source);
+    let worker, cancel;
+    try {
+      signal.throwIfAborted();
+      worker = new this.win.Worker("chrome://browser/content/bashkitten/agent/ConnectionQR.worker.js");
+      return await new Promise((resolve, reject) => {
+        cancel = () => reject(signal.reason);
+        signal.addEventListener("abort", cancel, { once: true });
+        worker.onmessage = ({ data }) => data.error ? reject(new Error(data.error)) : resolve(data.text);
+        worker.onerror = event => { event.preventDefault(); reject(new Error(event.message || "Connection QR decoder failed.")); };
+        worker.postMessage(bitmap, [bitmap]);
+      });
+    } finally {
+      if (cancel) signal.removeEventListener("abort", cancel);
+      worker?.terminate();
+      bitmap.close();
+    }
   }
 
   async draftEnrollment(entry, actor) {
