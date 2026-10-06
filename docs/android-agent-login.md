@@ -23,7 +23,11 @@ of the combined changes are still required.
    protected storage context; there is no custom login web engine.
 5. Gecko intercepts the pending exact OAuth `form_post` callback before network
    access. It checks the protected current document, browsing context, source
-   principal, top-level POST and form body. Android then checks the selected
+   principal and top-level POST. The upload is copied by Gecko's stream worker
+   into memory, without synchronously seeking/reading the original stream.
+   Agent cancel/disconnect/reconfiguration/destruction cancels that copy. Its
+   completion rechecks the pending owner and exact current document, then validates
+   complete body length and ASCII form encoding. Android then checks the selected
    session, live connection and pending callback. Native completion validates
    issuer, state and PKCE and exchanges the code on the connection worker.
 6. The native client maps the reserved Agent service. The existing route switches
@@ -40,6 +44,7 @@ permission-checked Termux bridge and native session; it is not a remote fallback
 | --- | --- | --- |
 | Saved remotes, mapping choices and certificate identity | `AgentRuntime.storage` | Render results or storage errors; discard stale operation callbacks |
 | OAuth/token exchange, Chisel and service requests | `RemoteAgentConnection.io` / native client | Select views, show login/progress/results/errors |
+| OAuth POST upload body | Gecko `NetUtil.asyncCopy` stream worker | Cancel the callback channel immediately, validate context before/after copying, pass the validated form to native |
 | Disconnect/replacement | Remote close worker | Revoke the route immediately; socket drain precedes native port release |
 | Tor startup/control and shutdown | TorManager and TorService workers | Receive success/failure, update affected views |
 | Share Local setup, password hashing, TOTP, reissue, publishing, host services | Termux's native backend via `RUN_COMMAND` and result PendingIntent | Collect input, show progress/errors; no process or network wait |
@@ -67,6 +72,10 @@ transcription remain the existing Agent/Whisper flow.
 
 The six Java files changed in this follow-up pass parse with JDK 17 and pass
 whitespace checks. This is not Java/Android type compilation or runtime testing.
+The Gecko OAuth module also passes JavaScript syntax checking. Its ordinary
+`onDataAvailable` reads remain synchronous as required by `nsIStreamListener`:
+the supplied chunk is already available without blocking and must be consumed
+before returning. Those reads do not seek or wait for the rest of an upload.
 No app restart, ADB, instrumented API or scripted product test was used.
 
 After building and updating through the published nightly, manually exercise QR

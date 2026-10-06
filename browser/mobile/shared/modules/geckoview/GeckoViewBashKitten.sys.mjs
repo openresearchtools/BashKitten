@@ -28,6 +28,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
   }
   onDestroy() {
     this.destroyed = true;
+    this.cancelLoginResponse();
     if (protectedContext(this.context)) Services.obs.removeObserver(this, "http-on-opening-request");
     BashKittenHost.close(this.browser);
     for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
@@ -55,6 +56,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (!protectedContext(this.context)) throw new Error("Protected Agent context required");
       if (method === "agent.cancel") {
         this.agentLogin = false;
+        this.cancelLoginResponse();
         for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
         this.agentRequests.clear();
         return true;
@@ -64,6 +66,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (method === "agent.configure") return this.configureAgent(params);
       if (method === "agent.disconnect") {
         this.agentLogin = false;
+        this.cancelLoginResponse();
         if (this.agentHost?.endsWith(".onion")) {
           certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
           this.agentUsesClientCertificate = false;
@@ -177,6 +180,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     return cert;
   }
   configureAgent(params) {
+    this.cancelLoginResponse();
     const endpoint = this.agentEndpoint(params.url);
     const identity = params.identity;
     const cert = this.agentCertificate(identity);
@@ -241,7 +245,8 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     channel.cancel(Cr.NS_BINDING_ABORTED);
     const top = this.browser.browsingContext;
     const source = info.triggeringPrincipal;
-    const current = top.currentWindowGlobal?.documentPrincipal;
+    const document = top.currentWindowGlobal;
+    const current = document?.documentPrincipal;
     if (this.destroyed || !this.agentLogin) return;
     const error = channel.URI.spec !== OAUTH_CALLBACK ? "Sign-in response used a different callback address."
       : info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT ? "Sign-in response is not a top-level document."
@@ -258,6 +263,16 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       this.eventDispatcher.sendRequest("BashKitten:OAuthCallback", { uri: OAUTH_CALLBACK, form: null, error });
       return;
     }
+    const response = {};
+    this.agentLoginResponse = response;
+    this.readLoginResponse(channel, response, top, document);
+  }
+  cancelLoginResponse() {
+    const response = this.agentLoginResponse;
+    this.agentLoginResponse = null;
+    response?.copy?.cancel(Cr.NS_BINDING_ABORTED);
+  }
+  async readLoginResponse(channel, response, top, document) {
     let form = null;
     try {
       if (channel.requestMethod !== "POST" ||
@@ -267,13 +282,34 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       const upload = channel.QueryInterface(Ci.nsIUploadChannel2);
       if (upload.uploadStreamHasHeaders) throw new Error("Invalid sign-in response");
       const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
-      stream.QueryInterface(Ci.nsISeekableStream).seek(Ci.nsISeekableStream.NS_SEEK_SET, 0);
       const length = channel.getRequestHeader("Content-Length");
-      if (!/^\d+$/.test(length) || stream.available() !== Number(length)) throw new Error("Incomplete sign-in response");
-      const body = NetUtil.readInputStreamToString(stream, Number(length));
+      if (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)) || Number(length) <= 0) {
+        throw new Error("Incomplete sign-in response");
+      }
+      // Opening-request precedes upload consumption. Gecko's stream worker
+      // reads any disk/IPC-backed body; main only reads the completed buffer.
+      const buffer = Cc["@mozilla.org/storagestream;1"].createInstance(Ci.nsIStorageStream);
+      buffer.init(4096, 0xffffffff);
+      await new Promise((resolve, reject) => {
+        response.copy = NetUtil.asyncCopy(stream, buffer.getOutputStream(0), status => {
+          if (Components.isSuccessCode(status)) resolve();
+          else reject(new Error("Could not read the sign-in response"));
+        });
+      });
+      if (this.destroyed || this.agentLoginResponse !== response) return;
+      if (this.browser.browsingContext !== top || top.currentWindowGlobal !== document) {
+        throw new Error("The sign-in document changed");
+      }
+      if (buffer.length !== Number(length)) throw new Error("Incomplete sign-in response");
+      const input = buffer.newInputStream(0);
+      let body;
+      try { body = NetUtil.readInputStreamToString(input, buffer.length); }
+      finally { input.close(); }
       if (body.length !== Number(length) || /[^\x00-\x7f]/.test(body)) throw new Error("Invalid sign-in response");
       form = body;
     } catch (_) { /* Only a generic failure crosses the private native event. */ }
+    if (this.destroyed || this.agentLoginResponse !== response) return;
+    this.agentLoginResponse = null;
     this.eventDispatcher.sendRequest("BashKitten:OAuthCallback", { uri: OAUTH_CALLBACK, form });
   }
   async agentRequest({ origin, path, body, csrf }) {
@@ -331,6 +367,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
             }
           },
           onDataAvailable(request, input, offset, count) {
+            // nsIStreamListener guarantees this chunk can be read without blocking.
             bytes += NetUtil.readInputStreamToString(input, count);
           },
           onStopRequest(request, status) {
