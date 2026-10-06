@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -87,7 +88,7 @@ func (c *Client) post(ctx context.Context, endpoint string, values url.Values, o
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		return errors.New("OAuth endpoint unavailable")
+		return fmt.Errorf("OAuth endpoint unavailable: %w", err)
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxBody+1))
