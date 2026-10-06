@@ -16,8 +16,6 @@ __pycache__/
 /node_modules/
 /test-results/
 .gradle/
-/src/android/local.properties
-/src/android/**/build/
 *.jks
 *.keystore
 *.p12

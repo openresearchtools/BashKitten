@@ -13,6 +13,9 @@ one power control and the Linux amd64/arm64, Termux aarch64 and Android packages
 This document remains the historical plan for the existing implementation;
 unchanged shared UI, stock Pi, data and
 package-maintenance requirements carry forward as specified in the new plan.
+The obsolete `src/android` WebView and `src/linux` GTK/WebKit wrappers were removed
+on 6 October 2026. Current builds use `browser/mobile/android/` for Android,
+`browser/` for desktop Gecko and `agent/` for the shared backend and chat UI.
 
 Status: implementation in progress, researched 19–20 September 2026. The `main`
 branch supplies the web UI and native Pi adapter, promoted from `codex/pi-termux-rpc`. This
