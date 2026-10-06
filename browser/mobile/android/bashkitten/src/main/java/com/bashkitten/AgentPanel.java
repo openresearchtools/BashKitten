@@ -436,7 +436,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             } else message.setText("Approve Android’s Termux permission prompt to continue. If you dismissed it, turn Agent off and on to try again.");
         } else if (runtime.setupStep.equals("connection")) {
             TextView guide = text();
-            guide.setText("Copy this command, open Termux, paste it and press Enter. It installs the Open Research Tools keyring and BashKitten with all its dependencies through pkg. Progress appears in Termux. After installation, it returns here and starts Agent automatically.");
+            guide.setText("Copy this command, open Termux, paste it and press Enter. It enables Open Research Tools stable and nightly packages and installs BashKitten with its dependencies through pkg. These are testing releases. Progress appears in Termux. After installation, it returns here and starts Agent automatically.");
             actions.addView(guide);
             if (Build.VERSION.SDK_INT >= 34) {
                 TextView processGuide = text();
@@ -491,13 +491,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         message.setText("Finding the official Termux release…");
         new Thread(() -> {
             try {
-                java.net.HttpURLConnection conn=(java.net.HttpURLConnection)new java.net.URL("https://api.github.com/repos/termux/termux-app/releases/latest").openConnection(); conn.setConnectTimeout(15000);conn.setReadTimeout(15000);conn.setRequestProperty("Accept","application/vnd.github+json");
-                JSONObject release;try(InputStream input=conn.getInputStream()){release=new JSONObject(new String(input.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));}finally{conn.disconnect();}
+                String abi = TermuxConnection.downloadAbi();
+                JSONObject release = new JSONObject(releaseMetadata("https://api.github.com/repos/termux/termux-app/releases/latest"));
                 JSONArray assets=release.getJSONArray("assets");String apk=null;
-                for(int i=0;i<assets.length();i++){JSONObject a=assets.getJSONObject(i);String n=a.getString("name");if(n.endsWith(".apk")&&n.contains("arm64-v8a")){apk=a.getString("browser_download_url");break;}}
-                if(apk==null)throw new IOException("The official release has no compatible APK.");String link=apk;
+                for(int i=0;i<assets.length();i++){JSONObject a=assets.getJSONObject(i);if(a.getString("name").endsWith("_"+abi+".apk")){apk=a.getString("browser_download_url");break;}}
+                if(apk==null)throw new IOException("The official Termux release has no " + abi + " APK.");String link=apk;
                 app.main.post(() -> app.create(BrowserApp.USER,false,link,tab->{app.show(tab);showBrowser();},this::error));
-            }catch(Exception e){app.main.post(()->error("Unable to read the official Termux release. Try again when online."));}
+            }catch(Exception e){app.main.post(()->error("Unable to read the official Termux release: " + e.getMessage()));}
         },"termux-release").start();
     }
     public void browserControl() {
@@ -526,24 +526,48 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         app.message("Checking for a BashKitten update…");
         new Thread(() -> {
             try {
-                java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL("https://api.github.com/repos/openresearchtools/bashkitten/releases/latest").openConnection();
-                connection.setConnectTimeout(15000); connection.setReadTimeout(15000); connection.setRequestProperty("Accept", "application/vnd.github+json");
-                JSONObject release;
-                try (InputStream input = connection.getInputStream()) { release = new JSONObject(new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)); }
-                finally { connection.disconnect(); }
-                String current = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).versionName;
-                String available = release.getString("tag_name").replaceFirst("^v", "");
-                String[] have = current.split("\\."), latest = available.split("\\.");
-                int comparison = 0;
-                for (int i=0; i<Math.max(have.length,latest.length) && comparison==0; i++) comparison = Integer.compare(i<latest.length ? Integer.parseInt(latest[i]) : 0, i<have.length ? Integer.parseInt(have[i]) : 0);
-                if (comparison <= 0) { app.main.post(() -> app.message("BashKitten is up to date.")); return; }
-                JSONArray assets = release.getJSONArray("assets"); String download = null;
-                for (int i=0; i<assets.length(); i++) { JSONObject asset=assets.getJSONObject(i); if (asset.getString("name").endsWith("arm64-v8a.apk")) { download=asset.getString("browser_download_url"); break; } }
-                if (download == null) throw new IOException("Release has no Android APK.");
-                String link = download;
-                app.main.post(() -> new MaterialAlertDialogBuilder(activity).setTitle("BashKitten " + available).setMessage("A browser update is available.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
-            } catch (Exception error) { app.main.post(() -> app.message("The update check failed. Try again when online.")); }
+                String abi = TermuxConnection.downloadAbi(), download = null, available = null;
+                long newest = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).getLongVersionCode();
+                // The published APK's versionCode decides upgrades across stable
+                // and nightly; tag dates and prerelease suffixes do not order APKs.
+                for (int page = 1; ; page++) {
+                    JSONArray releases = new JSONArray(releaseMetadata("https://api.github.com/repos/openresearchtools/bashkitten/releases?per_page=100&page=" + page));
+                    for (int i = 0; i < releases.length(); i++) {
+                        JSONObject release = releases.getJSONObject(i);
+                        if (release.optBoolean("draft")) continue;
+                        JSONArray assets = release.getJSONArray("assets");
+                        Map<String, String> downloads = new HashMap<>();
+                        for (int j = 0; j < assets.length(); j++) {
+                            JSONObject asset = assets.getJSONObject(j);
+                            downloads.put(asset.getString("name"), asset.getString("browser_download_url"));
+                        }
+                        String manifestUrl = downloads.get("release.json");
+                        if (manifestUrl == null) continue;
+                        JSONArray apps = new JSONObject(releaseMetadata(manifestUrl)).getJSONArray("apps");
+                        for (int j = 0; j < apps.length(); j++) {
+                            JSONObject candidate = apps.getJSONObject(j);
+                            if (!candidate.getString("packageId").equals(activity.getPackageName()) || !candidate.getString("abi").equals(abi)) continue;
+                            long code = candidate.getLong("versionCode");
+                            if (code <= newest) continue;
+                            String name = candidate.getString("asset"), link = downloads.get(name);
+                            if (link == null || !name.endsWith(".apk")) throw new IOException("Release " + release.getString("tag_name") + " is missing its " + abi + " APK.");
+                            newest = code; download = link; available = release.getString("tag_name");
+                        }
+                    }
+                    if (releases.length() < 100) break;
+                }
+                if (download == null) { app.main.post(() -> app.message("BashKitten is up to date.")); return; }
+                String link = download, version = available;
+                app.main.post(() -> new MaterialAlertDialogBuilder(activity).setTitle("BashKitten " + version).setMessage("A browser update is available. Testing release only; not ready for production.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
+            } catch (Exception error) { app.main.post(() -> app.message("The update check failed: " + error.getMessage())); }
         }, "bashkitten-update").start();
+    }
+    private static String releaseMetadata(String url) throws IOException {
+        java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+        connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
+        connection.setRequestProperty("Accept", "application/vnd.github+json");
+        try (InputStream input = connection.getInputStream()) { return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8); }
+        finally { connection.disconnect(); }
     }
     public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new MaterialAlertDialogBuilder(activity).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
     private void packageCommand(String command, TextView output) {

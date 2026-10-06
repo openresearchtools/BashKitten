@@ -22,6 +22,36 @@ RPC launches leave tool selection to Pi's defaults, native settings and extensio
 Normal `pi install` packages and global/project resources use Pi's own loader.
 Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
 
+## Android installation and updates
+
+Local Agent supports native Termux `aarch64` and `x86_64`. These use Android
+Bionic and Termux's package prefix; desktop Debian `arm64`/`amd64` packages are
+not interchangeable. Download Termux selects the official GitHub APK for the
+device's preferred supported 64-bit ABI. Existing F-Droid or other compatible
+`com.termux` installations stay in place.
+
+Copy command first updates/upgrades Termux through APT, repairing old bootstrap
+libraries before invoking curl. It then follows the HTTPS redirect at
+`https://termux.bashkitten.com`, downloads the whole `install.sh`, and runs it
+with this APK's actual return activity. The script verifies architecture-specific
+keyring/setup package hashes, enables the stable and nightly APT sources, and
+installs BashKitten's dependencies through `pkg`. These are testing releases.
+The successful callback resumes the normal Android permission/start flow.
+
+Update packages uses both signed sources with normal APT version ordering.
+Removing `openresearchtools-termux-nightly` removes only nightly access;
+stable upgrades continue when their version exceeds the installed package.
+The native browser update check includes published stable and prerelease APKs,
+selects the device ABI from `release.json`, and offers only a higher Android
+`versionCode`. APK installation still uses Android's normal package installer.
+
+Termux:X11's official nightly APKs are universal, containing both ARM64 and
+x86_64 native libraries. Shared UID is offered only for the verified GitHub
+Termux signer; F-Droid/other signers use the official standalone X11 APK.
+The installed Termux package architecture chooses its X11 companion and other
+dependencies through APT. See [Termux:X11 setup](https://github.com/termux/termux-x11#setup-instructions)
+and [F-Droid's Termux architectures](https://f-droid.org/en/packages/com.termux/).
+
 ## Transport and UI contract
 
 Browser → web server uses same-origin authenticated HTTP. Live output uses SSE.

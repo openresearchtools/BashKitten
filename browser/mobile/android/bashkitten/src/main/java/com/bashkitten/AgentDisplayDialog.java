@@ -151,6 +151,8 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
     }
     private void download(boolean shared) {
         if (!local()) return;
+        // Upstream ships both ARM64 and x86_64 in each universal APK. The
+        // signing/shared-UID choice is independent of the device architecture.
         String url = "https://github.com/termux/termux-x11/releases/download/nightly/termux-x11-universal-" + (shared ? "sharedUid-" : "") + "debug.apk";
         BrowserApp app = state.runtime.app;
         app.create(BrowserApp.USER, false, url, tab -> { app.show(tab); dismissAllowingStateLoss(); }, error -> { state.error = error; render(); });

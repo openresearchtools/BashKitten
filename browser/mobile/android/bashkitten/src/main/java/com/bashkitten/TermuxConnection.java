@@ -72,6 +72,14 @@ public final class TermuxConnection {
         context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     }
 
+    /** Prefer the device's native 64-bit ABI over an emulated secondary ABI. */
+    static String downloadAbi() {
+        for (String abi : android.os.Build.SUPPORTED_64_BIT_ABIS) {
+            if (abi.equals("arm64-v8a") || abi.equals("x86_64")) return abi;
+        }
+        throw new IllegalStateException("BashKitten requires ARM64 or x86_64 Android.");
+    }
+
     /** The only setup command shown to the user. It carries no executable intent extras. */
     public String setupCommand() {
         PackageManager packages = context.getPackageManager();
@@ -86,7 +94,7 @@ public final class TermuxConnection {
                 + "apt-get -o APT::Update::Error-Mode=any update; "
                 + "apt-get full-upgrade -y -o Dpkg::Options::=--force-confold; "
                 + "curl -fL --proto '=https' --proto-redir '=https' "
-                + "https://raw.githubusercontent.com/openresearchtools/BashKitten/main/agent/packaging/termux/install.sh "
+                + "https://termux.bashkitten.com "
                 + "-o \"$TMPDIR/bashkitten-install.sh\"; "
                 + "bash \"$TMPDIR/bashkitten-install.sh\" " + shellQuote(destination.flattenToShortString()) + ")";
     }
