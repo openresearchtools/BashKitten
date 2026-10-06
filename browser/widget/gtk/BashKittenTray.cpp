@@ -16,7 +16,7 @@ NS_IMPL_ISUPPORTS(BashKittenTray, nsIBashKittenTray)
 static constexpr char kWatcher[] = "org.kde.StatusNotifierWatcher";
 static constexpr char kPath[] = "/StatusNotifierItem";
 static constexpr char kInterface[] = "org.kde.StatusNotifierItem";
-static constexpr char kMenu[] = "/org/bashkitten/TrayMenu";
+static constexpr char kMenu[] = "/com/bashkitten/TrayMenu";
 static constexpr char kDescription[] = R"xml(
 <node><interface name="org.kde.StatusNotifierItem">
  <property name="Category" type="s" access="read"/>

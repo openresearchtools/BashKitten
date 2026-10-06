@@ -2018,8 +2018,7 @@ void nsWindowWayland::MaybeCreatePipResources() {
       WaylandDisplayGet()->GetPipShell(), mPipResources.mXdgSurface);
   xx_pip_v1_add_listener(mPipResources.mPipSurface, &pip_listener, this);
 #ifdef MOZ_BASHKITTEN
-  xx_pip_v1_set_app_id(mPipResources.mPipSurface,
-                       "org.bashkitten.BashKitten");
+  xx_pip_v1_set_app_id(mPipResources.mPipSurface, "com.bashkitten");
 #else
   xx_pip_v1_set_app_id(mPipResources.mPipSurface, "org.mozilla." MOZ_APP_NAME);
 #endif

@@ -3,10 +3,10 @@
 # Keep Firefox in the user-agent for website compatibility while giving the
 # installed application, profile, and package their own BashKitten identity.
 imply_option("MOZ_APP_UA_NAME", "Firefox")
-imply_option("MOZ_APP_REMOTINGNAME", "org.bashkitten.BashKitten")
+imply_option("MOZ_APP_REMOTINGNAME", "com.bashkitten")
 imply_option("MOZ_TELEMETRY_REPORTING", False)
 imply_option("--with-app-basename", "BashKitten")
-imply_option("--with-distribution-id", "org.bashkitten")
+imply_option("--with-distribution-id", "com.bashkitten")
 imply_option("--enable-system-extension-dirs", False)
 imply_option("--enable-crashreporter", False)
 set_define("MOZ_BASHKITTEN", True)

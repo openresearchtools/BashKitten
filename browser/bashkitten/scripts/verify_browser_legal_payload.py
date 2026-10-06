@@ -14,7 +14,7 @@ class ValidationError(Exception):
 EXPECTED_APP_IDENTITY = {
     "Vendor": "BashKitten",
     "Name": "BashKitten",
-    "RemotingName": "org.bashkitten.BashKitten",
+    "RemotingName": "com.bashkitten",
     "ID": "{648cc8ea-a8a6-59ec-b7e7-3ddc7e685961}",
 }
 

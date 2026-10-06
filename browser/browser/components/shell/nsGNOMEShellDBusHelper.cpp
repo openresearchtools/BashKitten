@@ -14,9 +14,8 @@
 #include "nsIOpenTabsProvider.h"
 
 #ifdef MOZ_BASHKITTEN
-#  define DBUS_BUS_NAME_TEMPLATE "org.bashkitten.BashKitten.SearchProvider"
-#  define DBUS_OBJECT_PATH_TEMPLATE \
-    "/org/bashkitten/BashKitten/SearchProvider"
+#  define DBUS_BUS_NAME_TEMPLATE "com.bashkitten.SearchProvider"
+#  define DBUS_OBJECT_PATH_TEMPLATE "/com/bashkitten/SearchProvider"
 #else
 #  define DBUS_BUS_NAME_TEMPLATE "org.mozilla.%s.SearchProvider"
 #  define DBUS_OBJECT_PATH_TEMPLATE "/org/mozilla/%s/SearchProvider"

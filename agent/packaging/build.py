@@ -163,6 +163,7 @@ def package_browser(args, app, stage, version, auth):
     desktop.write_text('[Desktop Entry]\nName=BashKitten\nComment=Browser and native Pi coding agent\n'
                        'Exec=bashkitten %u\nIcon=com.bashkitten\nTerminal=false\nType=Application\n'
                        'Categories=Network;WebBrowser;Development;\nStartupNotify=true\n'
+                       'StartupWMClass=com.bashkitten\n'
                        'MimeType=text/html;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;\n')
     for size in (16, 22, 24, 32, 48, 64, 128, 256, 512):
         icon = REPOSITORY / f'browser/bashkitten/browser/branding/default{size}.png'

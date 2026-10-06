@@ -35,8 +35,8 @@ void DBusService::Run() {
 #define G_BUS_NAME_OWNER_FLAGS_DO_NOT_QUEUE GBusNameOwnerFlags(1 << 2)
 
 #ifdef MOZ_BASHKITTEN
-#  define DBUS_BUS_NAME_TEMPLATE "org.bashkitten.BashKitten"
-#  define DBUS_OBJECT_PATH_TEMPLATE "/org/bashkitten/BashKitten"
+#  define DBUS_BUS_NAME_TEMPLATE "com.bashkitten"
+#  define DBUS_OBJECT_PATH_TEMPLATE "/com/bashkitten"
 #else
 #  define DBUS_BUS_NAME_TEMPLATE "org.mozilla.%s"
 #  define DBUS_OBJECT_PATH_TEMPLATE "/org/mozilla/%s"

@@ -26,8 +26,8 @@ static mozilla::LazyLogModule sRemoteLm("nsDBusRemoteClient");
 using namespace mozilla;
 
 #ifdef MOZ_BASHKITTEN
-#  define DBUS_NAMESPACE "org.bashkitten"
-#  define DBUS_OBJECT_NAMESPACE "/org/bashkitten"
+#  define DBUS_NAMESPACE "com"
+#  define DBUS_OBJECT_NAMESPACE "/com"
 #else
 #  define DBUS_NAMESPACE "org.mozilla"
 #  define DBUS_OBJECT_NAMESPACE "/org/mozilla"
