@@ -11,6 +11,8 @@ import { notifyTurn } from './notifications.mjs';
 import { claimInstance } from '../instance.mjs';
 import { attachmentImages } from '../files/files.mjs';
 import { browserSocketPath } from '../access/browser-channel.mjs';
+import { readSubagentSettings, saveSubagentSettings } from './subagents.mjs';
+import { agentRequest } from '../../../pi/agent-channel.mjs';
 
 process.umask(0o077);
 let id = process.argv[2];
@@ -35,6 +37,21 @@ function checkpoint() {
 const clients = new Set(), dialogs = new Map();
 const extensionStatuses = new Map();
 let operations = Promise.resolve(), eventWork = Promise.resolve();
+let reportWork = Promise.resolve();
+async function reportCompleted(entryId, chatId = id, session = meta.piSessionId) {
+  if (!meta.subagentParent) return;
+  const file = path.join(sessionDir(chatId), 'subagent-reports.json');
+  const work = reportWork.then(async () => {
+    const state = await readJson(file, { pending: [], last: null });
+    if (entryId && state.last !== entryId) { state.pending.push(entryId); state.last = entryId; await writeJson(file, state); }
+    while (state.pending.length) {
+      await agentRequest({ action: 'report', session, entryId: state.pending[0] });
+      state.pending.shift(); await writeJson(file, state);
+    }
+  });
+  reportWork = work.catch(error => emit({ type: 'notice', message: 'Could not deliver the subagent result: ' + error.message }, false));
+  return reportWork;
+}
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
 function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e); }
 function status() { return { runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
@@ -69,12 +86,19 @@ async function readState(follow) {
 // and bind a new sidebar row to the session Pi selected; never serialize history.
 async function adoptSession(state, follow) {
   const previous = id, oldServer = server, oldOwnership = ownership;
+  const subagents = await readSubagentSettings(previous);
   await draftWrites;
   id = state.sessionId;
   meta = { ...meta, id, piFile: state.sessionFile, piSessionId: state.sessionId,
     title: state.sessionName || `Fork: ${meta.title}`, parentSession: previous, modified: Date.now() };
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   await writeMeta(meta);
+  await saveSubagentSettings(id, subagents);
+  if (meta.subagentParent) {
+    const last = (await savedSession(meta))?.getBranch().findLast(entry => entry.type === 'message' && entry.message.role === 'assistant');
+    // Forked history is already past work, not a newly completed child turn.
+    await writeJson(path.join(sessionDir(id), 'subagent-reports.json'), { pending: [], last: last?.id || null });
+  }
   ownership = await claimInstance('pi-' + id);
   await listen();
   await socketRequest(browserSocketPath(meta.browserOwner), '/session', { id });
@@ -108,7 +132,9 @@ async function launch() {
   providersVersion = await providerRevision();
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   rpc = new PiRpc(meta);
+  let lastAssistantMessage;
   rpc.on('event', event => {
+    if (event.type === 'message_end' && event.message.role === 'assistant') lastAssistantMessage = event.message;
     if (event.type === 'extension_ui_request' && event.method === 'setStatus') {
       if (event.statusText === undefined) extensionStatuses.delete(event.statusKey);
       else extensionStatuses.set(event.statusKey, event);
@@ -132,6 +158,17 @@ async function launch() {
     if (event.type === 'extension_ui_request' && ['select', 'confirm', 'input', 'editor'].includes(event.method)) dialogs.set(event.id, event);
     if (event.type === 'agent_settled') {
       busy = false;
+      const completed = lastAssistantMessage; lastAssistantMessage = null;
+      if (meta.subagentParent && completed && completed.stopReason !== 'toolUse') {
+        const chatId = id, session = meta.piSessionId;
+        // The normal message_end event precedes native persistence. By settled,
+        // Pi has saved it; read its native ID instead of manufacturing history.
+        rpc.command('get_entries').then(history => {
+          const entry = history.entries.findLast(item => item.type === 'message' && item.message.role === 'assistant' && item.message.timestamp === completed.timestamp);
+          if (!entry) throw Error('Pi did not return the completed turn');
+          return reportCompleted(entry.id, chatId, session);
+        }).catch(error => emit({ type: 'notice', message: 'Could not deliver the subagent result: ' + error.message }, false));
+      }
       eventWork = eventWork.then(async () => {
         await refresh();
         // A new prompt may have arrived while RPC history was being read.
@@ -273,6 +310,12 @@ async function handle(req, res) {
     if (req.url === '/fork-messages') return json(res, await rpc.command('get_fork_messages'));
     if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
     const value = await jsonBody(req);
+    if (req.url === '/sidebar-changed') { emit({ type: 'sessions_changed' }, false); return json(res, { ok: true }); }
+    if (req.url === '/subagent-settings') {
+      await rpc.command('prompt', { message: '/bashkitten-agents-refresh' });
+      emit({ type: 'subagent_settings', settings: await readSubagentSettings(id) }, false);
+      return json(res, { ok: true });
+    }
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
       const pending = status();
@@ -301,11 +344,11 @@ async function handle(req, res) {
       if (req.url === '/message') {
         await applyPending();
         meta.messages ||= [];
-        meta.messages.push({ text: value.text, wire: value.wire, attachments: value.attachments });
-        await writeMeta(meta);
+        if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { data: status() };
+        meta.messages.push({ text: value.text, wire: value.wire, attachments: value.attachments, agentSource: value.agentSource, agentDelivery: value.agentDelivery });
         const item = { ...value, id: randomUUID(), kind: value.kind || 'queue' };
         queue.push(item);
-        try { await send(item); } catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
+        try { await checkpoint(); await writeMeta(meta); await send(item); } catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
         return { data: status() };
       }
       if (req.url === '/queue') {
@@ -369,6 +412,10 @@ await privateDir(path.dirname(socketPath(id)));
 // Keep one worker per saved session, including simultaneous reconnects after a kill.
 ownership = await claimInstance('pi-' + id);
 if (!ownership) process.exit(0);
-try { await launch(); await listen(); }
+try {
+  await launch(); await listen();
+  const last = entries.findLast(entry => entry.type === 'message' && entry.message.role === 'assistant');
+  void reportCompleted(last && last.message.stopReason !== 'toolUse' ? last.id : null);
+}
 catch (error) { console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
 process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });

@@ -25,6 +25,8 @@ import { claimInstance, processStart, probeBackend } from '../instance.mjs';
 import { paths } from '../access/paths.mjs';
 import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
 import { transcribe } from '../localai/dictation.mjs';
+import { subagentSettings, readSubagentSettings, saveSubagentSettings } from '../rpc/subagents.mjs';
+import { SubagentChats } from '../rpc/subagent-chats.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -56,6 +58,7 @@ await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const scheme = 'https';
 const services = new Services(), starts = new Map();
+const subagents = new SubagentChats({ createSession, ensureWorker, running });
 const configFile = path.join(dataDir, 'settings.json');
 let config = await readJson(configFile, { web_port: 3939, theme: 'system', default_cwd: os.homedir(), default_model: '', default_thinking: '' });
 const portOverride = process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || process.env.PORT;
@@ -63,24 +66,29 @@ if (portOverride) config.web_port = Number(portOverride);
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function running(id) { try { return await workerRequest(id, '/status'); } catch { return null; } }
 async function ensureWorker(id, explicit = false) {
+  return subagents.serial('worker:' + id, () => startWorker(id, explicit));
+}
+async function startWorker(id, explicit) {
   allowRuntimeWork();
   const lifecycle = path.join(sessionDir(id), 'lifecycle.json');
   if ((await readJson(lifecycle, {})).stopped) {
     if (!explicit) throw Error('Pi is stopped. Use Resume Pi or send a message to continue.');
-    await writeJson(lifecycle, { stopped: false });
   }
   if (starts.has(id)) return starts.get(id);
   const starting = (async () => {
     const meta = await readMeta(id);
     if (await running(id)) { await ensureBrowserSocket(meta.browserOwner || meta.workerOwner || id, id); return; }
-    await closeBrowserSocket(id, { keepBinding: true });
-    const browserOwner = randomUUID(), browserSocket = await ensureBrowserSocket(browserOwner, id);
-    const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
-    const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
-    closeSync(log); child.unref();
-    let failure; child.on('error', error => { failure = error; });
-    for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
-    throw Error('Pi could not start. Check Node/Pi installation and the session worker.log.');
+    return subagents.admit(meta, async () => {
+      if (explicit) await writeJson(lifecycle, { stopped: false });
+      await closeBrowserSocket(id, { keepBinding: true });
+      const browserOwner = randomUUID(), browserSocket = await ensureBrowserSocket(browserOwner, id);
+      const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
+      const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
+      closeSync(log); child.unref();
+      let failure; child.on('error', error => { failure = error; });
+      for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
+      throw Error('Pi could not start. Check Node/Pi installation and the session worker.log.');
+    });
   })();
   starts.set(id, starting);
   try { return await starting; } finally { starts.delete(id); }
@@ -127,15 +135,17 @@ async function sessionList() {
   await discoverSessions();
   return Promise.all((await allMeta()).map(async meta => {
     const state = await running(meta.id);
-    return { id: meta.id, title: meta.title, cwd: meta.cwd, model: meta.model, thinking: meta.thinking, modified: meta.modified, current_segment: 1, running: Boolean(state?.data.busy) };
+    return { id: meta.id, title: meta.title, cwd: meta.cwd, model: meta.model, thinking: meta.thinking, modified: meta.modified, current_segment: 1, running: Boolean(state?.data.busy), subagentParent: meta.subagentParent, subagents: await readSubagentSettings(meta.id) };
   })).then(items => items.sort((a, b) => b.modified - a.modified));
 }
-async function createSession(value) {
+async function createSession(value, ownership = {}) {
   const cwd = (await pickerDirectory(value.cwd || config.default_cwd)).path;
   const id = randomUUID(), dir = sessionDir(id); await privateDir(dir);
   const title = String(value.title || value.prompt || 'New chat').trim().replace(/\s+/g, ' ').slice(0, 100) || 'Image session';
   const meta = { id, cwd, title, model: value.model || config.default_model, thinking: value.thinking || config.default_thinking,
-    piFile: null, modified: Date.now(), messages: [] };
+    piFile: null, modified: Date.now(), messages: [], ...ownership };
+  const settings = typeof value.subagents === 'string' ? JSON.parse(value.subagents) : value.subagents;
+  await saveSubagentSettings(id, subagentSettings({ ...config.default_subagents, ...settings }));
   await writeMeta(meta);
   return meta;
 }
@@ -146,7 +156,7 @@ async function deleteSession(id) {
   if (await running(id)) await workerRequest(id, '/shutdown', {});
   // Pi owns history, including native forks that may share a session directory.
   // Removing a sidebar entry must never remove another native session.
-  for (const name of ['ui.json', 'drafts.json', 'lifecycle.json', 'worker.log']) await fs.rm(path.join(sessionDir(id), name), { force: true });
+  for (const name of ['ui.json', 'drafts.json', 'lifecycle.json', 'worker.log', 'subagents.json', 'subagent-reports.json']) await fs.rm(path.join(sessionDir(id), name), { force: true });
   await fs.rmdir(sessionDir(id)).catch(() => {});
   await fs.rm(socketPath(id), { force: true }); await fs.rm(socketPath(id) + '.lock', { force: true });
   await closeBrowserSocket(id);
@@ -241,6 +251,11 @@ async function handler(req, res) {
       await refreshManagerPolicy(revokeRemoteFileJobs, block);
       return json(res, { ok: true });
     }
+    if (route === '/api/instance/subagents') {
+      if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
+      const value = await jsonBody(req);
+      return json(res, await subagents.handle(value.session, value));
+    }
     auth.origin(req);
     if (route === '/.well-known/bashkitten-ca' && req.method === 'GET') return json(res, await readJson(paths.identity));
     if (['/', '/pi-login'].includes(route) && req.method === 'GET') { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" }); return res.end(route === '/' ? html : loginHtml); }
@@ -306,7 +321,8 @@ async function handler(req, res) {
       if (!mutation) return json(res, { config, locations: await folderLocations(), platform });
       const input = await jsonBody(req);
       const next = { web_port: Number(input.web_port), theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : 'system',
-        default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || '') };
+        default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || ''),
+        default_subagents: subagentSettings(input.default_subagents || config.default_subagents) };
       if (input.notifications !== undefined) next.notifications = { enabled: Boolean(input.notifications?.enabled), onlyWhenHidden: input.notifications?.onlyWhenHidden !== false, preview: input.notifications?.preview !== false };
       if (!Number.isInteger(next.web_port) || next.web_port < 1024 || next.web_port > 65535) throw Error('Port must be between 1024 and 65535');
       const restartRequired = next.web_port !== config.web_port;
@@ -355,7 +371,13 @@ async function handler(req, res) {
         finally { await form.cleanup(); }
       }
       const sessions = await sessionList(), offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(100, Number(url.searchParams.get('limit')) || 100);
-      return json(res, { sessions: sessions.slice(offset, offset + limit), nextOffset: offset + limit < sessions.length ? offset + limit : null });
+      const page = sessions.slice(offset, offset + limit), included = new Set(page.map(session => session.id));
+      const byId = new Map(sessions.map(session => [session.id, session]));
+      for (const session of page) {
+        const parent = byId.get(session.subagentParent);
+        if (parent && !included.has(parent.id)) { included.add(parent.id); page.push(parent); }
+      }
+      return json(res, { sessions: page, nextOffset: offset + limit < sessions.length ? offset + limit : null });
     }
     if (route === '/api/projects/delete' || route === '/api/sessions/project' || route === '/api/session-groups') {
       requireMethod(req, ['GET', 'POST', 'DELETE']);
@@ -369,6 +391,14 @@ async function handler(req, res) {
     const match = route.match(/^\/api\/sessions\/([a-f0-9-]{36})(?:\/(.*))?$/);
     if (!match) throw Object.assign(Error('Not found'), { status: 404 });
     const [, id, action = ''] = match; let meta = await readMeta(id);
+    if (action === 'subagents') {
+      requireMethod(req, ['GET', 'POST']);
+      if (mutation) {
+        await saveSubagentSettings(id, await jsonBody(req));
+        if (await running(id)) await workerRequest(id, '/subagent-settings', {});
+      }
+      return json(res, { settings: await readSubagentSettings(id) });
+    }
     if (action === 'image') {
       requireMethod(req, ['GET']);
       const view = await running(id) ? await workerRequest(id, '/view') : await savedView(meta);

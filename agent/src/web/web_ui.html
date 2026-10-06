@@ -167,6 +167,9 @@
     }
     .session:hover { background: var(--surface); }
     .session.active { background: var(--surface-2); }
+    .session-children { margin-left: 12px; border-left: 1px solid var(--line-soft); }
+    .session .branch-toggle { position: absolute; left: 3px; top: 3px; width: 27px; height: 27px; padding: 0; }
+    .agent-source { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; }
     .session { padding-right: 22px; }
     .session:focus-visible, .folder-heading:focus-visible { outline:1px solid var(--text); outline-offset:-1px; }
     #sessionActions { position:fixed; z-index:80; min-width:150px; padding:4px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-control); box-shadow:0 6px 20px var(--shadow); }
@@ -370,7 +373,7 @@
     .composer-toolbar select { height: 27px; min-width: 0; padding: 0 22px 0 6px; overflow: hidden; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; }
     .composer-toolbar select:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .composer-toolbar select:focus { border-color: var(--line); outline: 0; box-shadow: none; }
-    #model { width: 100px; } #thinking { width: 82px; }
+    #model { width: 100px; } #thinking { width: 82px; } #subagents { width: 106px; }
     .toolbar-spacer { flex: 1; }
     #attachBtn { width: 27px; height: 27px; }
     #folderBtn:not(:disabled) { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
@@ -634,7 +637,10 @@
             <label class="wide">Default working folder<span class="folder-field"><input id="defaultCwd"><button id="defaultCwdBrowse" type="button">Browse…</button></span></label>
             <label>Default model<select id="defaultModel"></select></label>
             <label>Default thinking<select id="defaultThinking"></select></label>
-
+            <label class="wide check-label"><input id="defaultAgentsEnabled" type="checkbox"> Allow subagents in new chats</label>
+            <label>Subagent limit<input id="defaultAgentsCount" type="number" min="1" step="1" value="3" required></label>
+            <label>Subagent model<select id="defaultAgentsModel"></select></label>
+            <label>Subagent thinking<select id="defaultAgentsThinking"></select></label>
           </div>
           <div class="settings-section" id="packageUpdates">
             <h3>Packages</h3>
@@ -694,6 +700,7 @@
               </div>
               <select id="model" title="Model"></select>
               <select id="thinking" title="Thinking level"></select>
+              <select id="subagents" title="Subagents" aria-label="Subagents"><option value="off">Agents: Off</option><option value="on">Agents: On</option><option value="settings">Settings…</option></select>
               <span class="toolbar-spacer"></span>
               <button id="dictationButton" class="primary hidden" type="button" title="Dictate a message" aria-label="Dictate a message" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button>
               <button id="sendBtn" class="primary" type="button" data-mode="play" title="Send" aria-label="Send">▶</button>
@@ -735,6 +742,16 @@
   <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
   <dialog id="fileEditor" aria-labelledby="fileEditorTitle"><form id="fileEditorForm" class="dialog-body"><h2 id="fileEditorTitle"></h2><textarea id="fileEditorText" aria-label="File contents" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><p id="fileEditorError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button><button id="fileEditorSave" class="primary">Save</button></div></form></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
+  <dialog id="subagentDialog" aria-labelledby="subagentHeading"><form id="subagentForm" class="dialog-body">
+    <h2 id="subagentHeading">Subagents for this chat</h2>
+    <label class="check-label"><input id="agentsEnabled" type="checkbox"> Allow this chat to start subagents</label>
+    <label>Subagent limit<input id="agentsCount" type="number" min="1" step="1" required></label>
+    <label>Model<select id="agentsModel"></select></label>
+    <label>Thinking<select id="agentsThinking"></select></label>
+    <p class="meta">Each child is a saved chat sharing the working files. Children start with further subagents off; you can enable them in that child’s chat. Turning this off prevents new children and keeps existing chats and messages.</p>
+    <p id="subagentError" class="meta" role="alert"></p>
+    <div class="dialog-actions"><button type="button" data-close>Cancel</button><button class="primary">Save</button></div>
+  </form></dialog>
   <dialog id="piDialog"><form id="piDialogForm" class="dialog-body"><h2 id="piDialogTitle"></h2><p id="piDialogMessage"></p><div id="piDialogInput"></div><div class="dialog-actions"><button id="piDialogCancel" type="button">Cancel</button><button class="primary">Continue</button></div></form></dialog>
 
   <dialog id="folderDialog">
@@ -799,6 +816,9 @@
     let current = null;
     let source = null;
     let config = null;
+    const agentDefaults = { enabled: false, count: 3, model: '', thinking: '' };
+    let chatAgents = { ...agentDefaults }, subagentTarget = null;
+    const collapsedAgents = new Set();
     let pendingCwd = '';
     let pendingFiles = [];
     let goalDraft = false;
@@ -1452,6 +1472,12 @@
       if (message.role === 'user') {
         beginRenderedTurn(message.timestamp);
         const body = messageRow('user');
+        if (message.agentSource) {
+          const attribution = document.createElement('button'); attribution.type = 'button'; attribution.className = 'agent-source';
+          attribution.textContent = (message.agentSource.report ? 'Completed turn · ' : 'Agent · ') + message.agentSource.name;
+          attribution.onclick = () => openSessionById(message.agentSource.id).catch(error => { $('#composerHint').textContent = error.message; });
+          body.append(attribution);
+        }
         const hasStoredAttachments = renderStoredAttachments(message.content, body);
         if (!hasStoredAttachments) renderImages(message.content, body, 'Attached image');
         const text = textBlocks(message.content);
@@ -1513,6 +1539,8 @@
 
     function renderEvent(event) {
       if (event.type === 'session') return;
+      if (event.type === 'sessions_changed') { loadSessions().catch(error => { $('#composerHint').textContent = error.message; }); return; }
+      if (event.type === 'subagent_settings') { chatAgents = event.settings; if (current) current.subagents = chatAgents; showAgentChoice(); return; }
       if (event.type === 'session_changed') {
         openSessionById(event.id).catch(error => { $('#composerHint').textContent = error.message; });
         return;
@@ -1648,10 +1676,10 @@
       $('#chatInner').innerHTML = '<div class="welcome"><div><div class="cat">🐈</div><strong>What are we working on?</strong><p>Choose a folder, then send the first message.</p></div></div>';
     }
 
-    function fillSelect(element, list, chosen) {
-      element.innerHTML = `<option value="" ${current && element.id === 'model' ? 'disabled' : ''}>Pi default</option>` + list.map(model => `<option value="${escapeHtml(`${model.provider}/${model.id}`)}" ${model.available ? '' : 'disabled'}>${escapeHtml(model.name)}${model.available ? '' : ' (unavailable)'}</option>`).join('');
+    function fillSelect(element, list, chosen, thinkingTarget = element.id === 'defaultModel' ? $('#defaultThinking') : $('#thinking'), placeholder = 'Pi default') {
+      element.innerHTML = `<option value="" ${current && element.id === 'model' ? 'disabled' : ''}>${placeholder}</option>` + list.map(model => `<option value="${escapeHtml(`${model.provider}/${model.id}`)}" ${model.available ? '' : 'disabled'}>${escapeHtml(model.name)}${model.available ? '' : ' (unavailable)'}</option>`).join('');
       element.value = chosen && list.some(model => `${model.provider}/${model.id}` === chosen) ? chosen : '';
-      setThinking(element, element.id === 'defaultModel' ? $('#defaultThinking') : $('#thinking'));
+      setThinking(element, thinkingTarget);
     }
 
     function setThinking(modelElement, target = $('#thinking')) {
@@ -1671,7 +1699,59 @@
       setThinking($('#defaultModel'), $('#defaultThinking'));
       if ([...$('#thinking').options].some(option => option.value === thinking)) $('#thinking').value = thinking;
       $('#defaultThinking').value = value.defaultThinking;
+      fillAgentForm('defaultAgents', config?.default_subagents || agentDefaults);
     }
+
+    function showAgentChoice() { $('#subagents').value = chatAgents.enabled ? 'on' : 'off'; }
+    function agentThinking(prefix) {
+      const select = $('#' + prefix + 'Thinking'), model = $('#' + prefix + 'Model');
+      const old = select.value;
+      if (model.value) setThinking(model, select);
+      else select.innerHTML = '<option value="">Same as parent</option>' + [...new Set(models.flatMap(model => model.thinking_levels || []))].map(level => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join('');
+      select.options[0].textContent = 'Same as parent';
+      if ([...select.options].some(option => option.value === old)) select.value = old;
+    }
+    function fillAgentForm(prefix, settings) {
+      const value = { ...agentDefaults, ...settings };
+      $('#' + prefix + 'Enabled').checked = value.enabled;
+      $('#' + prefix + 'Count').value = value.count;
+      fillSelect($('#' + prefix + 'Model'), models, value.model, $('#' + prefix + 'Thinking'), 'Same as parent');
+      // Keep a saved, temporarily unavailable model visible instead of silently
+      // changing it to inheritance when providers are disconnected.
+      if (value.model && ![...$('#' + prefix + 'Model').options].some(option => option.value === value.model)) $('#' + prefix + 'Model').add(new Option(value.model + ' (unavailable)', value.model));
+      $('#' + prefix + 'Model').value = value.model;
+      agentThinking(prefix);
+      if (value.thinking && ![...$('#' + prefix + 'Thinking').options].some(option => option.value === value.thinking)) $('#' + prefix + 'Thinking').add(new Option(value.thinking, value.thinking));
+      $('#' + prefix + 'Thinking').value = value.thinking;
+    }
+    function readAgentForm(prefix) {
+      return { enabled: $('#' + prefix + 'Enabled').checked, count: Number($('#' + prefix + 'Count').value),
+        model: $('#' + prefix + 'Model').value, thinking: $('#' + prefix + 'Thinking').value };
+    }
+    async function saveChatAgents(settings, id = current?.id) {
+      if (id) await api(`/api/sessions/${id}/subagents`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(settings) });
+      const row = sessionCache.find(session => session.id === id); if (row) row.subagents = settings;
+      if ((current?.id || null) === (id || null)) { chatAgents = settings; if (current) current.subagents = settings; showAgentChoice(); draftChanged(); }
+    }
+    $('#subagents').onchange = async () => {
+      const choice = $('#subagents').value; showAgentChoice();
+      if (choice === 'settings') {
+        subagentTarget = current?.id || null; fillAgentForm('agents', chatAgents);
+        $('#subagentError').textContent = ''; $('#subagentDialog').showModal(); return;
+      }
+      $('#subagents').disabled = true;
+      try { await saveChatAgents({ ...chatAgents, enabled: choice === 'on' }); }
+      catch (error) { $('#composerHint').textContent = error.message; }
+      finally { $('#subagents').disabled = false; }
+    };
+    $('#subagentForm').onsubmit = async event => {
+      event.preventDefault(); const button = event.submitter; button.disabled = true;
+      try { await saveChatAgents(readAgentForm('agents'), subagentTarget); $('#subagentDialog').close(); }
+      catch (error) { $('#subagentError').textContent = error.message; }
+      finally { button.disabled = false; }
+    };
+    $('#agentsModel').onchange = () => agentThinking('agents');
+    $('#defaultAgentsModel').onchange = () => agentThinking('defaultAgents');
 
     let folderLocations=[];
     function displayFolder(value) {
@@ -1689,6 +1769,7 @@
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
       $('#defaultCwd').value = displayFolder(config.default_cwd);
+      fillAgentForm('defaultAgents', config.default_subagents || agentDefaults);
       if (activeSettingsTab === 'services') await refreshServices();
     }
     async function loadNotifications() {
@@ -1984,7 +2065,12 @@
       const scrollTop = root.scrollTop;
       root.innerHTML = '';
       const groups = new Map();
+      const byId = new Map(sessions.map(session => [session.id, session])), children = new Map();
       for (const session of sessions) {
+        if (byId.has(session.subagentParent)) {
+          if (!children.has(session.subagentParent)) children.set(session.subagentParent, []);
+          children.get(session.subagentParent).push(session); continue;
+        }
         const folder = session.cwd || '';
         if (!groups.has(folder)) groups.set(folder, []);
         groups.get(folder).push(session);
@@ -2003,11 +2089,20 @@
 
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
-        for (const session of groupSessions) {
+        function appendSession(session, container) {
           const item = document.createElement('div');
           item.className = `session${current?.id === session.id ? ' active' : ''}`;
           item.dataset.id = session.id;
           item.title = session.title;
+          const descendants = children.get(session.id) || [];
+          if (descendants.length) {
+            const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'icon-button branch-toggle';
+            const expanded = !collapsedAgents.has(session.id);
+            toggle.textContent = expanded ? '▾' : '▸'; toggle.setAttribute('aria-expanded', String(expanded));
+            toggle.setAttribute('aria-label', (expanded ? 'Collapse' : 'Expand') + ' subagents of ' + session.title);
+            toggle.onclick = event => { event.stopPropagation(); if (expanded) collapsedAgents.add(session.id); else collapsedAgents.delete(session.id); renderSessionSidebar(sessionCache); };
+            item.append(toggle);
+          }
           const title = document.createElement('b');
           title.textContent = session.title;
           item.append(title);
@@ -2022,8 +2117,14 @@
           bindSessionContextMenu(item,session);
           item.onclick = () => openSession(session).catch(error => { $('#composerHint').textContent = error.message; });
           item.addEventListener('keydown',event=>{if(event.target===item&&(event.key==='Enter'||event.key===' ')){event.preventDefault();item.click();}});
-          group.append(item);
+          container.append(item);
+          if (descendants.length && !collapsedAgents.has(session.id)) {
+            const branch = document.createElement('div'); branch.className = 'session-children';
+            for (const child of descendants) appendSession(child, branch);
+            container.append(branch);
+          }
         }
+        for (const session of groupSessions) appendSession(session, group);
         root.append(group);
       }
       root.scrollTop = scrollTop;
@@ -2113,10 +2214,11 @@
         const byId = new Map(sessionCache.map(session => [session.id, session]));
         for (const session of value.sessions) byId.set(session.id, session);
         sessionCache = [...byId.values()].sort((a,b) => b.modified - a.modified || b.id.localeCompare(a.id));
-        nextSessionOffset = value.nextOffset === null ? null : (append ? value.nextOffset : sessionCache.length);
+        nextSessionOffset = value.nextOffset === null ? null : (append ? value.nextOffset : Math.max(nextSessionOffset || 0, value.nextOffset));
         const updated = current && value.sessions.find(session => session.id === current.id);
         if (updated) {
           current.current_segment = updated.current_segment;
+          current.subagents = updated.subagents; chatAgents = { ...agentDefaults, ...updated.subagents }; showAgentChoice();
           if (updated.cwd !== current.cwd) {
             current.cwd = updated.cwd;
             $('#folderLabel').textContent = displayFolder(current.cwd);
@@ -2275,6 +2377,10 @@
         if (sessionView !== view) return;
         closeImageViewer();
         current = {...session};
+        chatAgents = { ...agentDefaults, ...session.subagents }; showAgentChoice();
+        let ancestor = session.subagentParent;
+        while (ancestor) { collapsedAgents.delete(ancestor); ancestor = sessionCache.find(item => item.id === ancestor)?.subagentParent; }
+        renderSessionSidebar(sessionCache);
         history.replaceState(null, '', '#session=' + session.id);
         sendVisibility();
         oldestSegment = 0;
@@ -2326,6 +2432,7 @@
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
+      chatAgents = { ...agentDefaults, ...config?.default_subagents }; showAgentChoice();
       history.replaceState(null, '', location.pathname + location.search);
       sendVisibility();
       updateInstanceControl(false);
@@ -2772,6 +2879,7 @@
           createForm.append('cwd', pendingCwd);
           createForm.append('model', $('#model').value);
           createForm.append('thinking', $('#thinking').value);
+          createForm.append('subagents', JSON.stringify(chatAgents));
           const result = await api('/api/sessions', {method: 'POST', body: createForm});
           const sessions = await loadSessions();
           current = sessions.find(session => session.id === result.id) || {id: result.id, title: text || 'Image session', cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value, running: true};
@@ -2868,6 +2976,7 @@
       if (!destination) {
         const form = new FormData(); form.append('prompt', text); form.append('cwd', pendingCwd);
         form.append('model', $('#model').value); form.append('thinking', $('#thinking').value);
+        form.append('subagents', JSON.stringify(chatAgents));
         const result = await api('/api/sessions', { method: 'POST', body: form, signal: capture.abort.signal });
         if (dictation !== capture || dictationDestination() !== capture.destination) return;
         destination = { id: result.id, title: text, cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value };
@@ -3021,6 +3130,7 @@
       config.default_cwd = $('#defaultCwd').value;
       config.default_model = $('#defaultModel').value;
       config.default_thinking = $('#defaultThinking').value;
+      config.default_subagents = readAgentForm('defaultAgents');
       if (nativeHost?.platform === 'android') {
         const notifications = await nativeHost.call('notification-settings', {enabled:$('#notifyEnabled').checked, onlyWhenHidden:$('#notifyHidden').checked, preview:$('#notifyPreview').checked});
         config.notifications = notifications;
@@ -3030,6 +3140,7 @@
       await loadModels();
       if (!current) {
         pendingCwd = config.default_cwd;
+        chatAgents = { ...config.default_subagents }; showAgentChoice();
         $('#model').value = config.default_model;
         setThinking($('#model'));
         $('#thinking').value = config.default_thinking;
@@ -3563,7 +3674,7 @@
     window.bashkittenDraft = {
       capture() {
         if (!initialized || draftRestoring) return null;
-        return {sessionId:current?.id || null,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null};
+        return {sessionId:current?.id || null,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null};
       },
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
@@ -3582,6 +3693,7 @@
           pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
           goalDraft = Boolean(value.goal);
           if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
+          if (!current && value.subagents) { chatAgents = { ...agentDefaults, ...value.subagents }; showAgentChoice(); }
           for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
           if (value.edit && current?.id === value.sessionId) {
             editingQueueId = value.edit.id; editingQueueToken = value.edit.token; editingQueueSnapshot = value.edit.snapshot;

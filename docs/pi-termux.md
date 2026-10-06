@@ -22,6 +22,45 @@ RPC launches leave tool selection to Pi's defaults, native settings and extensio
 Normal `pi install` packages and global/project resources use Pi's own loader.
 Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
 
+## Subagent chats
+
+The composer’s Agents selector defaults to Off. On permits three child workers
+by default, using this chat’s current model and thinking level. Settings changes
+the saved limit/model/thinking for this chat; App settings supplies defaults for
+new chats. Each child starts with further delegation Off. The user can enable it
+inside that child to allow another level, with no fixed depth limit.
+
+The small bundled `subagents` extension calls the existing backend over its
+private Unix socket. Child chats use the same detached worker and stock Pi RPC
+as normal chats. Pi writes their native histories under
+`<parent session directory>/subagentsessions/<parent Pi ID>/`; separate UI metadata
+records the direct parent and group. Sidebar arrows expand/collapse the retained
+chats. A user can open, continue, rename or remove them like other chats.
+
+Agents can list the group, launch a child, send a question/update to another
+member, resume a saved child with a follow-up, and stop a direct child. Messages
+use the existing durable prompt queue and include their actual sender. A
+completed child turn is delivered automatically to its direct parent, with the
+native entry ID used to avoid duplicate delivery. A stopped recipient keeps a
+held draft; ordinary messages and reports do not silently resume it. Follow-up
+explicitly resumes it. Failed reports remain pending for retry when the child
+resumes or next completes a turn. Chats and results remain saved after Stop.
+
+Limits count running child workers, including idle ones, separately for each
+parent. They are checked on the backend when a worker starts. Turning Off
+prevents creating more children and retains communication with existing chats.
+The skill explains shared files, explicit task/file assignments and coordination
+before overlapping edits. There are no file ownership locks or replacement Pi
+agent loops. No additional third-party dependency is used for coordination.
+
+Source syntax checks do not establish runtime acceptance. The manual gates are:
+Off/On and persisted global/per-chat controls; model/thinking inheritance; two
+children exchanging a question and answer; one final report per completed turn;
+follow-up and Stop/resume; nested opt-in and independent limits; reopening saved
+child chats, fork/clone, stopped-parent drafts and report retry after restart;
+Android layout and remote-host operation. These checks remain pending for the
+first candidate containing this feature.
+
 ## Android installation and updates
 
 Local Agent supports native Termux `aarch64` and `x86_64`. These use Android

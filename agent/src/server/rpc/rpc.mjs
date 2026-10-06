@@ -22,7 +22,7 @@ export function displayMessage(meta, message) {
   if (message.role !== 'user') return message;
   const text = typeof message.content === 'string' ? message.content : (message.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   const upload = (meta.messages || []).find(m => m.wire === text);
-  return upload ? { ...message, content: [...upload.attachments, { type: 'text', text: upload.text }] } : message;
+  return upload ? { ...message, agentSource: upload.agentSource, content: [...upload.attachments, { type: 'text', text: upload.text }] } : message;
 }
 export function queueItem(item) {
   return { id: item.id, content: item.text, attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken), recovered: Boolean(item.recovered) };
@@ -50,13 +50,14 @@ export class PiRpc extends EventEmitter {
     this.runtime = selectedRuntime();
     const args = [this.runtime.cli, '--offline', '--mode', 'rpc'];
     if (meta.piFile) args.push('--session', meta.piFile);
+    else if (meta.piSessionDir) args.push('--session-dir', meta.piSessionDir);
     // Pi owns tools/extensions and restores model/thinking from its session.
     // Only a new chat receives the user's explicit initial selections.
     if (!meta.piFile || !existsSync(meta.piFile)) {
       if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
       if (meta.thinking) args.push('--thinking', meta.thinking);
     }
-    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0', BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
+    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0', BASHKITTEN_SESSION_ID: meta.id, BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {
       if (value.type === 'response') {
