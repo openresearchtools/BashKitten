@@ -201,7 +201,10 @@ fn header_len() -> usize {
 /// The minimum number of `Storage` elements to hold at least `cap` bits.
 #[inline(always)]
 fn buffer_len(cap: usize) -> usize {
-    (cap + bits_per_storage() - 1) / bits_per_storage()
+    let bits = bits_per_storage();
+    cap.checked_add(bits - 1)
+        .expect("capacity overflow")
+        / bits
 }
 
 /// A typed representation of a `SmallBitVec`'s internal storage.
