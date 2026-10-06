@@ -187,7 +187,7 @@ class AgentView {
         return this.shareLocal();
       }
       return this.choose(this.choice.value);
-    }));
+    }, { replace: !["connect-remote", "share-local"].includes(this.choice.value) }));
     bar.append(this.choice);
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
@@ -240,17 +240,21 @@ class AgentView {
     this.show();
     await this.refreshRemotes();
     const selected = Services.prefs.getStringPref("bashkitten.agent.selectedRemote", "");
-    if (selected && [...this.choice.options].some(option => option.value === selected)) await this.choose(selected);
-    else await this.start();
+    await this.run(() => selected && [...this.choice.options].some(option => option.value === selected)
+      ? this.choose(selected) : this.start());
     DesktopLifetime.started();
   }
 
-  async run(operation) {
-    if (this.busy || DesktopLifetime.quitting) return;
-    this.busy = true;
+  async run(operation, { replace = false } = {}) {
+    if (this.busy && (!replace || this.off) || DesktopLifetime.quitting) return;
+    const running = {};
+    this.busy = running;
     this.power.disabled = true;
-    try { await operation(); } catch (error) { this.failure(error); }
-    finally { this.busy = false; this.power.disabled = DesktopLifetime.quitting; }
+    try { await operation(); }
+    catch (error) { if (this.busy === running) this.failure(error); }
+    finally {
+      if (this.busy === running) { this.busy = false; this.power.disabled = DesktopLifetime.quitting; }
+    }
   }
 
   show() {
@@ -350,9 +354,8 @@ class AgentView {
     this.localAIButton.hidden = Boolean(id);
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("remote switch");
-    const closing = AgentRemotes.deactivate(false), selection = AgentRemotes.selection;
-    await closing;
-    if (this.selection !== id || AgentRemotes.selection !== selection) return;
+    // Revoke pending remote authority now; Local must not wait for its process to exit.
+    AgentRemotes.deactivate(false).catch(console.error);
     this.remote = null;
     this.activeBrowser = null;
     for (const browser of this.views.values()) browser.hidden = true;

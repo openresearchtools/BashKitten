@@ -1939,3 +1939,14 @@ required-scope validator. Duplicate/unknown fields, issuer, state, PKCE, expiry,
 single-use and protected-document checks remain unchanged. Linux arm64/amd64 and
 Android arm64/amd64 client source builds and whitespace checks passed; rebuilt
 installed desktop and Android consent/tunnel acceptance remain pending.
+
+### 6 October desktop Local selection during remote work
+
+Source tracing found that a pending remote operation silently consumed selector
+changes, Local selection waited for remote helper exit, and Local trust queued
+behind Tor startup and remote service requests. Selecting Local now supersedes
+the pending selection, ignores its late UI errors, and starts Local after immediate
+remote authority revocation while helper shutdown completes asynchronously.
+Local trust operations retain their own serialization, separate from remote I/O;
+ready remote mappings stay connected. JavaScript syntax and whitespace checks
+passed. Installed remote-failure-to-Local switching still needs manual verification.

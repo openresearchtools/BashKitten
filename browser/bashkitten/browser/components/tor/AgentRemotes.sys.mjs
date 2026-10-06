@@ -97,6 +97,7 @@ class AgentRemoteStore {
   activeId = null;
   selection = 0;
   queue = Promise.resolve();
+  localQueue = Promise.resolve();
   writes = Promise.resolve();
   contexts = new Map();
   clients = new Map();
@@ -154,8 +155,10 @@ class AgentRemoteStore {
     this.writes = pending.catch(() => {}); return pending;
   }
 
-  serialized(operation) {
-    const task = this.queue.then(operation); this.queue = task.catch(() => {}); return task;
+  serialized(operation, local = false) {
+    // Local trust never waits behind a Tor connection or remote service request.
+    const queue = local ? "localQueue" : "queue";
+    const task = this[queue].then(operation); this[queue] = task.catch(() => {}); return task;
   }
   allocateContext() {
     const ids = new Set([...this.entries.values()].map(entry => entry.userContextId));
@@ -187,7 +190,7 @@ class AgentRemoteStore {
       const entry = { id: "local", kind: "agent", name: "Local", url, caPem, caSha256: identity, instanceId,
         userContextId: previous?.userContextId ?? this.allocateContext() };
       this.entries.set("local", entry); await this.save(); await this.prepare(entry); return this.info(entry);
-    });
+    }, true);
   }
 
   enroll(text, password) {
@@ -226,7 +229,7 @@ class AgentRemoteStore {
     if (id !== "local" && !entry.bundle) throw new Error("Import a new encrypted Connection QR from this host's Share Local setup.");
     if (selection !== this.selection) throw new Error("The Agent selection changed.");
     this.activeId = id;
-    await this.serialized(() => this.prepare(entry));
+    await this.serialized(() => this.prepare(entry), id === "local");
     if (selection !== this.selection) {
       if (id !== "local" && this.entries.get(id) === entry && !this.clients.has(id)) this.block(entry);
       throw new Error("The Agent selection changed.");
@@ -502,8 +505,8 @@ class AgentRemoteStore {
     ++this.selection;
     const previous = this.activeId; this.activeId = null;
     if (previous) Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", previous);
-    if (closeClients) await Promise.all([...this.clients.keys()].map(id => this.disconnect(id)));
-    else for (const [id, owner] of this.clients) if (owner.state !== "ready") await this.disconnect(id);
+    await Promise.all([...this.clients].filter(([, owner]) => closeClients || owner.state !== "ready")
+      .map(([id]) => this.disconnect(id)));
     this.notify();
   }
   async remove(id) {
@@ -519,7 +522,7 @@ class AgentRemoteStore {
         await new Promise(resolve => Services.clearData.deleteDataFromOriginAttributesPattern({ userContextId }, { onDataDeleted: resolve }));
       }
       this.entries.delete(id); await this.save(); this.notify();
-    });
+    }, id === "local");
   }
 
   async request(connection, path, { method = "GET", body, signal, csrf } = {}) {
