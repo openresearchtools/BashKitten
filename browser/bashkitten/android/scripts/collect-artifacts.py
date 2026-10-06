@@ -18,6 +18,11 @@ OUT = Path(sys.argv[1]).resolve()
 OUT.mkdir(parents=True, exist_ok=True)
 OBJ = Path(os.environ.get('BASHKITTEN_ANDROID_OBJDIR', ROOT.parent.parent / 'obj-bashkitten-android'))
 version = (ROOT / 'bashkitten/config/version.txt').read_text().strip()
+abi = os.environ.get('BASHKITTEN_ANDROID_ABI', 'arm64-v8a')
+machine, machine_name, target = {
+    'arm64-v8a': (183, 'AArch64', 'android'),
+    'x86_64': (62, 'x86-64', 'android-x86_64'),
+}[abi]
 engine = (ROOT / 'browser/config/version_display.txt').read_text().strip()
 key = Path(os.environ['BASHKITTEN_PUBLISHER_KEYSTORE'])
 if not key.is_file():
@@ -34,11 +39,11 @@ for candidate in (OBJ / 'gradle/build/mobile/android/fenix').rglob('*.apk'):
     if 'release' not in candidate.parts:
         continue
     with zipfile.ZipFile(candidate) as archive:
-        if 'lib/arm64-v8a/libxul.so' in archive.namelist():
+        if f'lib/{abi}/libxul.so' in archive.namelist():
             outputs.append(candidate)
 if len(outputs) != 1:
-    raise SystemExit('Expected exactly one release ARM64 Gecko APK, found ' + str(len(outputs)))
-destination = OUT / f'bashkitten_{version}_arm64-v8a.apk'
+    raise SystemExit(f'Expected exactly one release {abi} Gecko APK, found ' + str(len(outputs)))
+destination = OUT / f'bashkitten_{version}_{abi}.apk'
 aligned = OUT / '.aligned.apk'
 subprocess.run([str(tools / 'zipalign'), '-P', '16', '-f', '4', str(outputs[0]), str(aligned)], check=True)
 subprocess.run([str(tools / 'apksigner'), 'sign', '--ks', str(key), '--ks-type', 'PKCS12',
@@ -60,9 +65,9 @@ with zipfile.ZipFile(destination) as apk:
     for notice in ('THIRD-PARTY-NOTICES', 'BASHKITTEN-NOTICES', 'TOR-NOTICES', 'BLOCKER-NOTICES', 'QR-NOTICES'):
         if 'assets/' + notice + '.txt' not in files:
             raise SystemExit('Missing offline license notice: ' + notice)
-    if 'lib/arm64-v8a/libtor.so' not in files:
+    if f'lib/{abi}/libtor.so' not in files:
         raise SystemExit('Browser Tor client is missing')
-    if 'lib/arm64-v8a/libgojni.so' not in files:
+    if f'lib/{abi}/libgojni.so' not in files:
         raise SystemExit('Native remote client is missing')
     metadata = apk.read('assets/raw/third_party_license_metadata')
     licenses = apk.read('assets/raw/third_party_licenses')
@@ -76,12 +81,12 @@ with zipfile.ZipFile(destination) as apk:
     for name in sorted(files):
         if not name.startswith('lib/') or not name.endswith('.so'):
             continue
-        if not name.startswith('lib/arm64-v8a/'):
+        if not name.startswith(f'lib/{abi}/'):
             raise SystemExit('Unexpected APK ABI: ' + name)
         with apk.open(name) as library:
             header = library.read(64)
-            if header[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', header, 18)[0] != 183:
-                raise SystemExit('Library is not AArch64 ELF: ' + name)
+            if header[:6] != b'\x7fELF\x02\x01' or struct.unpack_from('<H', header, 18)[0] != machine:
+                raise SystemExit(f'Library is not {machine_name} ELF: ' + name)
             offset = struct.unpack_from('<Q', header, 32)[0]
             size, count = struct.unpack_from('<HH', header, 54)
             library.seek(offset)
@@ -95,27 +100,27 @@ with zipfile.ZipFile(destination) as apk:
                 if alignment < 16384 or file_offset % 16384 != address % 16384:
                     raise SystemExit('Library does not satisfy 16 KB segment alignment: ' + name)
                 alignments.append(alignment)
-            native[name] = {'machine': 'AArch64', 'load_segment_alignment': min(alignments)}
+            native[name] = {'machine': machine_name, 'load_segment_alignment': min(alignments)}
 revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 manifest = {'source': revision, 'product_version': version, 'firefox_version': engine,
             'package_id': identity[1], 'version_code': int(identity[2]), 'publisher_signed': True,
-            'architecture': 'arm64-v8a', 'native_libraries': native, 'certificate_sha256': certificate,
+            'architecture': abi, 'native_libraries': native, 'certificate_sha256': certificate,
             'apks': {destination.name: hashlib.sha256(destination.read_bytes()).hexdigest()}}
 manifest['browser_input_sha256'] = subprocess.check_output(
-    ['python3', str(ROOT.parent / 'agent/packaging/browser-component.py'), 'fingerprint', 'android'],
+    ['python3', str(ROOT.parent / 'agent/packaging/browser-component.py'), 'fingerprint', target],
     text=True).strip()
 manifest['build_repository'] = os.environ.get('GITHUB_REPOSITORY', '')
 manifest['build_run'] = os.environ.get('GITHUB_RUN_ID', '')
 remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
 remote_manifest = json.loads((remote / 'build-manifest.json').read_text())
-if remote_manifest['source'] != revision or remote_manifest['architecture'] != 'arm64-v8a':
+if remote_manifest['source'] != revision or remote_manifest['architecture'] != abi:
     raise SystemExit('Native remote client source/architecture does not match the APK')
 with zipfile.ZipFile(destination) as apk:
-    if hashlib.sha256(apk.read('lib/arm64-v8a/libgojni.so')).hexdigest() != remote_manifest['library_sha256']:
+    if hashlib.sha256(apk.read(f'lib/{abi}/libgojni.so')).hexdigest() != remote_manifest['library_sha256']:
         raise SystemExit('APK remote client differs from its built library')
 manifest['remote_client'] = remote_manifest
-shutil.copy2(remote / 'share/source/remote-client-go.tar.gz', OUT / 'bashkitten-remote-client-source.tar.gz')
-shutil.copy2(remote / 'bashkitten-remote-sources.jar', OUT / 'bashkitten-remote-client-java-source.jar')
+shutil.copy2(remote / 'share/source/remote-client-go.tar.gz', OUT / f'bashkitten-remote-client-source_{abi}.tar.gz')
+shutil.copy2(remote / 'bashkitten-remote-sources.jar', OUT / f'bashkitten-remote-client-java-source_{abi}.jar')
 source_inventories = list((OBJ / 'gradle/build/mobile/android/fenix').rglob('generated/bashkitten-sources/sources.json'))
 if len(source_inventories) != 1:
     raise SystemExit('Expected exactly one resolved Android dependency source inventory, found ' + str(len(source_inventories)))
@@ -129,7 +134,7 @@ for entry in source_manifest:
         raise SystemExit('Missing Android dependency source: ' + name)
     entry['sha256'] = hashlib.sha256((sources / name).read_bytes()).hexdigest()
 (sources / 'sources.json').write_text(json.dumps(source_manifest, indent=2) + '\n')
-with tarfile.open(OUT / 'bashkitten-android-library-source.tar.gz', 'w:gz') as archive:
+with tarfile.open(OUT / f'bashkitten-android-library-source_{abi}.tar.gz', 'w:gz') as archive:
     archive.add(sources, arcname='android-library-sources')
 (OUT / 'build-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 (OUT / 'signature.txt').write_text(signature)

@@ -11,14 +11,16 @@ URL = "https://raw.githubusercontent.com/guardianproject/gpmaven/master/info/gua
 SHA256 = "c2697d7f0e24507b63a14cadb5f832163ad302f8a03651aa03172e008df1c6ef"
 
 def main():
+    abi = sys.argv[2]
+    machine = {'arm64-v8a': 183, 'x86_64': 62}[abi]
     data = urllib.request.urlopen(URL, timeout=120).read()
     if hashlib.sha256(data).hexdigest() != SHA256:
         raise SystemExit("Tor archive checksum mismatch")
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        binary = archive.read("jni/arm64-v8a/libtor.so")
-    if binary[:4] != b"\x7fELF" or int.from_bytes(binary[18:20], "little") != 183:
-        raise SystemExit("Expected an AArch64 ELF")
-    target = Path(sys.argv[1]) / "arm64-v8a/libtor.so"
+        binary = archive.read(f"jni/{abi}/libtor.so")
+    if binary[:6] != b"\x7fELF\x02\x01" or int.from_bytes(binary[18:20], "little") != machine:
+        raise SystemExit(f"Expected a {abi} ELF")
+    target = Path(sys.argv[1]) / f"{abi}/libtor.so"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(binary)
 

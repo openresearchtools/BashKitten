@@ -44,6 +44,10 @@ def isAppBundle = gradle.startParameter.taskNames.any { it.toLowerCase().contain
 def publisherKeystore = System.getenv('BASHKITTEN_PUBLISHER_KEYSTORE')
 def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
 def bashKittenVersion = file("${rootProject.projectDir}/bashkitten/config/version.txt").text.trim()
+def bashKittenCommitSeconds = providers.exec {
+    workingDir rootProject.projectDir
+    commandLine 'git', 'show', '-s', '--format=%ct', 'HEAD'
+}.standardOutput.asText.map { it.trim().toLong() }
 
 android {
     def ciDebugKeystore = System.getenv('BASHKITTEN_DEBUG_KEYSTORE')
@@ -248,9 +252,9 @@ android {
             // while running benchmark tests or generating baseline profiles. To circumvent this,
             // this flag is passed to make sure only one apk is generated so gradle can pick that one.
             if (project.hasProperty("benchmarkTest")) {
-                include "arm64-v8a"
+                include gradle.mozconfig.substs.ANDROID_CPU_ARCH
             } else {
-                include "arm64-v8a"
+                include gradle.mozconfig.substs.ANDROID_CPU_ARCH
                 if (gradle.mozconfig.substs.MOZILLA_OFFICIAL || System.getenv("MOZ_BUILD_CONFIG_LINT") == "1") {
                     universalApk true
                 }
@@ -343,13 +347,21 @@ androidComponents {
             project.logger.debug("versionName override: $versionName")
 
             variant.outputs.each { output ->
-                // We use the same version code generator, that we inherited from Fennec, across all channels - even on
-                // channels that never shipped a Fennec build.
                 def abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier ?: "universal"
-                def versionCodeOverride = Config.generateFennecVersionCode(abi)
+                // Deterministic source minutes allow same-hour nightly upgrades. The
+                // new range is above legacy Fennec codes; retain its ABI ordering.
+                def sourceSeconds = bashKittenCommitSeconds.get()
+                def abiBits = ['arm64-v8a': 2, 'x86_64': 6, universal: 7][abi]
+                if (sourceSeconds < 1767225600L || abiBits == null) {
+                    throw new GradleException("Invalid BashKitten source date or ABI: $abi")
+                }
+                def versionCodeOverride = 2020000000L + Math.floorDiv(sourceSeconds - 1767225600L, 60L) * 8L + abiBits
+                if (versionCodeOverride > 2100000000L) {
+                    throw new GradleException('BashKitten versionCode exceeds the Android publishing limit')
+                }
                 project.logger.debug("versionCode for $abi = $versionCodeOverride")
                 output.versionName.set(versionName)
-                output.versionCode.set(versionCodeOverride)
+                output.versionCode.set(versionCodeOverride.intValue())
             }
         } else if (gradle.hasProperty("localProperties.branchBuild.fenix.version")) {
             def versionName = gradle.getProperty("localProperties.branchBuild.fenix.version")

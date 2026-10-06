@@ -3,11 +3,11 @@ name: Android browser candidate
   workflow_dispatch:
     inputs:
       auth_run:
-        description: Successful native-auth run containing auth-termux-aarch64
+        description: Successful native-auth run containing native auth artifacts for both Termux architectures
         required: true
         type: string
       search_run:
-        description: Successful native-search run containing search-runtime-termux-aarch64
+        description: Successful native-search run containing native search artifacts for both Termux architectures
         required: true
         type: string
   workflow_call:
@@ -26,9 +26,13 @@ permissions:
   actions: read
 jobs:
   android:
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [android, android-x86_64]
     uses: ./.github/workflows/remote-browser.yml
     with:
-      target: android
+      target: ${{ matrix.target }}
       auth_run: ${{ inputs.auth_run }}
       search_run: ${{ inputs.search_run }}
     secrets:

@@ -5,6 +5,11 @@ plugins {
 
 apply plugin: 'com.android.library'
 
+def bashKittenAbi = gradle.mozconfig.substs.ANDROID_CPU_ARCH
+if (!(bashKittenAbi in ['arm64-v8a', 'x86_64'])) {
+    throw new GradleException("Unsupported BashKitten Android ABI: $bashKittenAbi")
+}
+
 android {
     namespace 'com.bashkitten'
     compileSdk {
@@ -13,7 +18,7 @@ android {
     defaultConfig {
         minSdk 31
         targetSdk project.ext.targetSdkVersion
-        ndk { abiFilters 'arm64-v8a' }
+        ndk { abiFilters bashKittenAbi }
         manifestPlaceholders = project.ext.manifestPlaceholders
         consumerProguardFiles 'consumer-rules.pro'
     }
@@ -67,8 +72,9 @@ tasks.register('stageNotices', Exec) {
 tasks.named('preBuild').configure { dependsOn 'stageNotices' }
 
 tasks.register('stageTor', Exec) {
-    commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/tor.py", "$buildDir/generated/tor"
+    commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/tor.py", "$buildDir/generated/tor", bashKittenAbi
+    inputs.property('abi', bashKittenAbi)
     inputs.file("${rootProject.projectDir}/bashkitten/android/scripts/tor.py")
-    outputs.file("$buildDir/generated/tor/arm64-v8a/libtor.so")
+    outputs.file("$buildDir/generated/tor/$bashKittenAbi/libtor.so")
 }
 tasks.named('preBuild').configure { dependsOn 'stageTor' }

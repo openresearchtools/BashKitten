@@ -2,7 +2,11 @@
 mk_add_options MOZ_OBJDIR=${BASHKITTEN_ANDROID_OBJDIR:-@TOPSRCDIR@/../../obj-bashkitten-android}
 mk_add_options MOZ_MAKE_FLAGS="-j4"
 ac_add_options --enable-application=mobile/android
-ac_add_options --target=aarch64-linux-android
+case "${BASHKITTEN_ANDROID_ABI:-arm64-v8a}" in
+  arm64-v8a) ac_add_options --target=aarch64-linux-android ;;
+  x86_64) ac_add_options --target=x86_64-linux-android ;;
+  *) echo 'Unsupported BashKitten Android ABI' >&2; exit 1 ;;
+esac
 ac_add_options --enable-android-subproject=fenix
 ac_add_options --disable-debug
 ac_add_options --enable-optimize

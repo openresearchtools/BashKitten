@@ -52,11 +52,28 @@ jobs:
         repository: openresearchtools/bashkitten
         ref: ${{ inputs.source_sha }}
         persist-credentials: false
+    - name: Select the Android architecture
+      run: |
+        case "$GITHUB_REPOSITORY" in
+          openresearchtools/bashkitten-build-android)
+            echo 'BROWSER_TARGET=android' >> "$GITHUB_ENV"
+            echo 'BASHKITTEN_ANDROID_ABI=arm64-v8a' >> "$GITHUB_ENV"
+            echo 'BASHKITTEN_ANDROID_TARGET=aarch64-linux-android' >> "$GITHUB_ENV"
+            echo 'TERMUX_ARCH=aarch64' >> "$GITHUB_ENV"
+            ;;
+          openresearchtools/bashkitten-build-android-x86_64)
+            echo 'BROWSER_TARGET=android-x86_64' >> "$GITHUB_ENV"
+            echo 'BASHKITTEN_ANDROID_ABI=x86_64' >> "$GITHUB_ENV"
+            echo 'BASHKITTEN_ANDROID_TARGET=x86_64-linux-android' >> "$GITHUB_ENV"
+            echo 'TERMUX_ARCH=x86_64' >> "$GITHUB_ENV"
+            ;;
+          *) echo 'Unknown Android builder repository' >&2; exit 1 ;;
+        esac
     - id: component
       name: Restore a matching completed Android artifact
       env:
         GH_TOKEN: ${{ github.token }}
-      run: python3 agent/packaging/browser-component.py restore android --directory candidate
+      run: python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate
     - name: Prepare hosted runner
       run: |
         printf '%s\n' "BASHKITTEN_PUBLISHER_KEYSTORE=$RUNNER_TEMP/droid.p12" "BASHKITTEN_COMPANION_LICENSES=$RUNNER_TEMP/companion-licenses.json" >> "$GITHUB_ENV"
@@ -112,7 +129,7 @@ jobs:
         version: v0.17.0
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Install the compatible Rust toolchain
-      run: rustup toolchain install 1.96.0 --profile minimal --target aarch64-linux-android
+      run: rustup toolchain install 1.96.0 --profile minimal --target "$BASHKITTEN_ANDROID_TARGET"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Bootstrap the pinned Mozilla Android toolchain
       working-directory: browser
@@ -140,7 +157,7 @@ jobs:
         bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
         echo "BASHKITTEN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
-    - name: Build Gecko for ARM64
+    - name: Build Gecko for the selected architecture
       working-directory: browser
       run: set -o pipefail; ./mach build 2>&1 | tee ../artifacts/gecko-build.log
       if: (success()) && steps.component.outputs.hit != 'true'
@@ -159,7 +176,7 @@ jobs:
         AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
         SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
       run: |
-        for item in "auth:$AUTH_RUN:auth-termux-aarch64" "search:$SEARCH_RUN:search-runtime-termux-aarch64"; do
+        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH"; do
           IFS=: read -r target run artifact <<< "$item"
           ready=false
           for attempt in $(seq 1 60); do
@@ -171,9 +188,9 @@ jobs:
           test "$ready" = true
           gh run download "$run" --repo "openresearchtools/bashkitten" --name "$artifact" --dir "$RUNNER_TEMP/companion/$target"
         done
-        python3 agent/packaging/android-notices.py \
-          --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-aarch64.tar.gz" \
-          --search-archive "$RUNNER_TEMP/companion/search/search-runtime-termux-aarch64.tar.zst" \
+        python3 agent/packaging/android-notices.py --architecture "$TERMUX_ARCH" \
+          --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-$TERMUX_ARCH.tar.gz" \
+          --search-archive "$RUNNER_TEMP/companion/search/search-runtime-termux-$TERMUX_ARCH.tar.zst" \
           --output "$BASHKITTEN_COMPANION_LICENSES"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Assemble the release browser
@@ -184,7 +201,7 @@ jobs:
       run: python3 browser/bashkitten/android/scripts/collect-artifacts.py candidate
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Verify the Android artifact and source inputs
-      run: python3 agent/packaging/browser-component.py verify android --directory candidate
+      run: python3 agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory candidate
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ steps.component.outputs.artifact }}
