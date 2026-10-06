@@ -14,8 +14,6 @@ import shutil
 import subprocess
 import tarfile
 
-from release_version import nightly_version
-
 ROOT = Path(__file__).resolve().parents[2]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
 
@@ -52,11 +50,11 @@ def main():
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version):
         raise ValueError('Invalid Firefox-aligned product version')
-    package_version = nightly_version(version, ROOT)
-    expected_tag = 'v' + package_version.replace('~', '-')
+    package_version = version
+    expected_tag = 'v' + version
     tag = args.tag or expected_tag
     if tag != expected_tag:
-        raise ValueError('Release tag must match this nightly source version')
+        raise ValueError('Release tag must match the committed product version')
     if not args.candidate_only:
         if not args.run:
             parser.error('--run is required outside the candidate build')
@@ -150,7 +148,7 @@ def main():
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
              'Checksums and corresponding source archives are attached.\n')
     (args.output / 'release-notes.md').write_text(notes)
-    result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'prerelease': True, 'packageVersion': package_version,
+    result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
               'apps': apps, 'packages': packages, 'sources': sources}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')

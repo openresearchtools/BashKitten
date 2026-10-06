@@ -13,7 +13,6 @@ import subprocess
 import tarfile
 import tempfile
 
-from release_version import nightly_version
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT.parent
@@ -190,7 +189,7 @@ def assemble(args):
     shell = prefix + '/bin/sh' if termux else '/bin/sh'
     version = (REPOSITORY / 'browser/bashkitten/config/version.txt').read_text().strip()
     require(re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version), 'Invalid Firefox-aligned product version')
-    package_version = nightly_version(version, REPOSITORY)
+    package_version = version
     package = read_json(ROOT / 'package.json')
     lock = read_json(ROOT / 'package-lock.json')
     npm_version = version if version.count('.') == 2 else version + '.0'

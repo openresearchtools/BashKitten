@@ -6,6 +6,10 @@ name: Publish testing release
         description: Successful Complete BashKitten candidates run to publish
         required: true
         type: string
+      prerelease:
+        description: Publish to nightly APT (off publishes to stable APT)
+        default: true
+        type: boolean
 permissions:
   contents: read
   actions: read
@@ -22,6 +26,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: openresearchtools/BashKitten
       CANDIDATE_RUN: ${{ inputs.candidate_run }}
+      PRERELEASE: ${{ inputs.prerelease }}
     steps:
     - name: Locate successful complete candidate
       id: candidate
@@ -53,19 +58,24 @@ jobs:
         notes = Path('release-notes.md').read_text()
         if release['sourceCommit'] != os.environ['CANDIDATE_REVISION']:
             raise SystemExit('Candidate source does not match the successful build')
-        if not release.get('prerelease') or not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
+        if not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
             raise SystemExit('The testing release warning is required')
-        if not re.fullmatch(r'v\d+\.\d+(?:\.\d+)?-nightly\.\d{14}', release['tag']):
+        version = Path('../browser/bashkitten/config/version.txt').read_text().strip()
+        if not re.fullmatch(r'v\d+\.\d+(?:\.\d+)?', release['tag']) or release['tag'] != 'v' + version or release['version'] != version or release['packageVersion'] != version:
             raise SystemExit('Invalid product release tag')
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('tag=' + release['tag'] + '\n')
         PY
+    - name: Require a newer version across stable and prerelease channels
+      run: python3 -B agent/packaging/release_version.py check
     - name: Publish with the README warning and complete sources
       env:
         RELEASE_TAG: ${{ steps.release.outputs.tag }}
         CANDIDATE_REVISION: ${{ steps.candidate.outputs.revision }}
       run: |
+        flags=(--latest)
+        if [ "$PRERELEASE" = true ]; then flags=(--prerelease --latest=false); fi
         gh release create "$RELEASE_TAG" release/* \
           --target "$CANDIDATE_REVISION" \
           --title "BashKitten ${RELEASE_TAG#v} · Testing release" \
-          --notes-file release/release-notes.md --prerelease --latest=false
+          --notes-file release/release-notes.md "${flags[@]}"
