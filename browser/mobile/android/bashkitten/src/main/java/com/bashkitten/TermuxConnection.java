@@ -204,10 +204,9 @@ public final class TermuxConnection {
             request.fail.accept("Termux returned an invalid service response.");
             return;
         }
-        if (value.has("error")) {
-            String error = value.optString("error", "Service command failed.");
-            request.fail.accept(error);
-        } else request.done.accept(value);
+        // Successful status responses may describe a service's error state.
+        // Command failures use the nonzero exit code handled above.
+        request.done.accept(value);
     }
 
     private static String shellQuote(String value) { return "'" + value.replace("'", "'\\''") + "'"; }
