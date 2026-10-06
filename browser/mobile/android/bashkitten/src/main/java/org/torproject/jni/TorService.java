@@ -1,5 +1,6 @@
 // Guardian Project tor-android 0.4.9.12, commit cb04167d313cc3b5e1c1246111591aa57c2147cb.
 // BSD-3-Clause; full copyright and terms: bashkitten/android/notices/tor-android-LICENSE.
+// BashKitten adapts the private socket and worker-owned Android lifecycle here.
 package org.torproject.jni;
 
 import android.app.Service;
@@ -258,8 +259,12 @@ public class TorService extends Service implements TorControlCommands {
                 readyConnection.authenticate(new byte[0]);
                 readyConnection.addRawEventListener(startedEventListener);
                 readyConnection.setEvents(Collections.singletonList(EVENT_STATUS_CLIENT));
-                if (controlStopped) throw new IOException("Tor stopped during startup");
                 torControlConnection = readyConnection;
+                if (controlStopped) {
+                    shutdownTor();
+                    closeControlSocket();
+                    return;
+                }
 
                 socksPort = getPortFromGetInfo("net/listeners/socks");
                 httpTunnelPort = getPortFromGetInfo("net/listeners/httptunnel");
@@ -275,7 +280,8 @@ public class TorService extends Service implements TorControlCommands {
 
     private LocalSocket connectControlSocket() throws IOException, InterruptedException {
         long deadline = SystemClock.elapsedRealtime() + 30000;
-        while (!controlStopped && SystemClock.elapsedRealtime() < deadline) {
+        // Even a cancelled startup must reach the control socket to stop Tor.
+        while (SystemClock.elapsedRealtime() < deadline) {
             var socket = new LocalSocket();
             try {
                 socket.connect(new LocalSocketAddress(getControlSocket(this).getAbsolutePath(),
@@ -301,6 +307,13 @@ public class TorService extends Service implements TorControlCommands {
         @Override
         public void run() {
             final var context = getApplicationContext();
+            // Serialize native Tor lifetimes on their worker, never on Android's
+            // service/UI thread. A replacement waits until native cleanup ends.
+            runLock.lock();
+            if (controlStopped) {
+                runLock.unlock();
+                return;
+            }
             try {
                 createTorConfiguration();
                 setDefaultProxyPorts();
@@ -349,8 +362,8 @@ public class TorService extends Service implements TorControlCommands {
                 broadcastError(context, e);
             } finally {
                 broadcastStatus(context, STATUS_STOPPING);
-                mainConfigurationFree();
-                TorService.this.stopSelf();
+                try { mainConfigurationFree(); }
+                finally { runLock.unlock(); TorService.this.stopSelf(); }
             }
         }
     };
@@ -393,7 +406,6 @@ public class TorService extends Service implements TorControlCommands {
      * @see <a href="https://github.com/torproject/tor/blob/40be20d542a83359ea480bbaa28380b4137c88b2/src/app/config/config.c#L4730">options that must be on the command line</a>
      */
     private void startTorServiceThread() {
-        runLock.lock();
         torThread.start();
     }
 
@@ -401,15 +413,16 @@ public class TorService extends Service implements TorControlCommands {
     public void onDestroy() {
         super.onDestroy();
         controlStopped = true;
-        controlPortThread.interrupt();
-        if (torControlConnection != null) {
-            torControlConnection.removeRawEventListener(startedEventListener);
-        }
-        if (runLock.isLocked()) {
-            runLock.unlock();
-        }
-        shutdownTor();
-        closeControlSocket();
+        new Thread(() -> {
+            var control = torControlConnection;
+            if (control != null) {
+                control.removeRawEventListener(startedEventListener);
+                shutdownTor();
+                closeControlSocket();
+            }
+            // If startup is still connecting, controlPortThread performs shutdown
+            // after authentication. Closing its socket here would strand Tor.
+        }, "tor-stop").start();
         broadcastStatus(TorService.this, STATUS_OFF);
     }
 
@@ -437,7 +450,7 @@ public class TorService extends Service implements TorControlCommands {
 
     /**
      * Send a signal to the Tor process to shut it down or halt it.
-     * Does not wait for a response, or report errors.
+     * Called on a worker because the control connection may wait for a response.
      *
      * @see TorControlConnection#shutdownTor(String)
      */
