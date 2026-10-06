@@ -440,7 +440,7 @@ class AgentRemoteStore {
     if (!owner || owner.state !== "login") throw new Error("Remote sign-in is no longer active.");
     owner.callback = callback;
   }
-  async readLoginResponse(entry, owner, url, stream, contentLength) {
+  async readLoginResponse(entry, owner, url, stream, contentLength, view) {
     // The opening-request observer runs before upload consumption. Copy on
     // Gecko's stream worker; even a disk/IPC-backed upload must not block UI.
     const buffer = Cc["@mozilla.org/storagestream;1"].createInstance(Ci.nsIStorageStream);
@@ -456,6 +456,12 @@ class AgentRemoteStore {
       if (owner.abort.signal.aborted) cancel();
     });
     this.current(entry, owner);
+    const { browsing, browser, host, global } = view;
+    if (this.activeId !== entry.id || host.activeBrowser !== browser || host.off || host.selection !== entry.id ||
+        !browser.isConnected || browser.documentGlobal?.BashKittenAgent !== host || browser.browsingContext !== browsing ||
+        browsing.currentWindowGlobal !== global || browser.getAttribute("bashkitten-protected") !== "true") {
+      throw new Error("The protected Agent document changed during sign-in.");
+    }
     if (buffer.length !== contentLength) throw new Error("Incomplete Authelia sign-in response.");
     const input = buffer.newInputStream(0);
     let form;
@@ -548,7 +554,8 @@ class AgentRemoteStore {
         const info = channel.loadInfo, browsing = info.browsingContext;
         const browser = browsing?.embedderElement, host = browser?.documentGlobal?.BashKittenAgent;
         const principal = info.triggeringPrincipal;
-        const current = browsing?.currentWindowGlobal?.documentPrincipal;
+        const global = browsing?.currentWindowGlobal;
+        const current = global?.documentPrincipal;
         rejection = this.activeId !== entry.id ? "The selected Agent connection changed during sign-in."
           : !browsing ? "Sign-in response has no browsing context."
           : info.externalContentPolicyType !== Ci.nsIContentPolicy.TYPE_DOCUMENT || browsing !== browsing.top ? "Sign-in response is not a top-level document."
@@ -568,7 +575,7 @@ class AgentRemoteStore {
         if (!Number.isSafeInteger(contentLength) || contentLength <= 0) throw new Error("Incomplete Authelia sign-in response.");
         const stream = channel.QueryInterface(Ci.nsIUploadChannel).uploadStream;
         owner.state = "connecting";
-        this.readLoginResponse(entry, owner, channel.URI.spec, stream, contentLength)
+        this.readLoginResponse(entry, owner, channel.URI.spec, stream, contentLength, { browsing, browser, host, global })
           .catch(error => this.failed(entry, owner, error)).catch(console.error);
       } catch {
         this.failed(entry, owner, new Error(rejection || "Could not read the Authelia sign-in response.")).catch(() => {});
