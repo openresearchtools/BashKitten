@@ -90,14 +90,16 @@ Termux build patches. Any installed `com.termux` must be able to request native
 browser approval, regardless of signer; already authorized calls run directly.
 Preserve dynamic-port discovery. One Agent power control owns both Android wake
 locks and whole-group start/stop, including owned Pi workers. Target full Linux
-amd64/arm64 .deb packages, a Termux aarch64 .deb with the Pi browser extension,
-and the Android APK. Reuse WildBuzzard's working component-artifact/GHA compiler
+amd64/arm64 .deb packages, native Termux aarch64/x86_64 .deb packages with the Pi browser extension,
+and Android arm64-v8a/x86_64 APKs with the same signing identity. Keep each browser
+target in its own build repository and select downloads, updates and dependencies
+for the actual architecture. Reuse WildBuzzard's working component-artifact/GHA compiler
 cache workflow for desktop builds. Bring Buzzard Search into `/agent/search`
 as a native Python helper with a normally discovered Pi skill. DDGS only for
 now; SearXNG integration is deferred. Preserve full Markdown saving, native
 Termux dependency recipes and Unsloth/other retained license provenance.
 Package our own native search runtime for Linux amd64/arm64 as well as Termux
-aarch64; do not require a separate DDGS install. Supply distinct mobile/Termux
+aarch64/x86_64; do not require a separate DDGS install. Supply distinct mobile/Termux
 and desktop Linux browser skills and install the one matching each target.
 The first migrated browser release must include the latest verified Firefox
 153.x ESR update and retain WildBuzzard's Firefox-aligned product versioning.
