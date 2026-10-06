@@ -82,7 +82,7 @@ func (a *Authorization) Complete(ctx context.Context, callback, form string) (To
 		return Token{}, errors.New("invalid OAuth callback")
 	}
 	for key, values := range q {
-		if len(values) != 1 || (key != "code" && key != "state" && key != "iss" && key != "error" && key != "error_description" && key != "error_uri") {
+		if len(values) != 1 || (key != "code" && key != "state" && key != "iss" && key != "scope" && key != "error" && key != "error_description" && key != "error_uri") {
 			return Token{}, errors.New("invalid OAuth callback fields")
 		}
 	}
@@ -91,6 +91,10 @@ func (a *Authorization) Complete(ctx context.Context, callback, form string) (To
 	}
 	if q.Get("error") != "" {
 		return Token{}, ErrLoginRequired
+	}
+	// Authelia includes granted scopes in its authorization-code form response.
+	if scopes, present := q["scope"]; present && !exactScopes(strings.Fields(scopes[0])) {
+		return Token{}, errors.New("required OAuth scopes were not granted")
 	}
 	if !safeValue(q.Get("code")) {
 		return Token{}, errors.New("missing OAuth authorization code")

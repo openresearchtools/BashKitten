@@ -1925,3 +1925,17 @@ without logging credentials or response bodies. Stale, non-pending callbacks
 remain blocked. This repairs silent failure handling; the actual runtime
 rejection and successful end-to-end handoff remain unproven. JavaScript syntax,
 Java parse-only and whitespace checks passed; rebuilt manual acceptance is next.
+
+### 6 October authorization response scope correction
+
+Installed desktop `c6f0ea4157` reached genuine Authelia consent with its remembered
+session, then reported “invalid OAuth callback fields” on Accept. The pinned
+Authelia 4.39.28 configuration includes the granted `scope` in authorization-code
+responses through `authelia.com/provider/oauth2` 0.3.2
+(`e33433471eaa9512980b756b51500c77a43d8da3`). Both browser adapters pass the original
+form to the shared native parser, which incorrectly rejected that standard field.
+The parser now accepts one `scope` value and checks its contents with the existing
+required-scope validator. Duplicate/unknown fields, issuer, state, PKCE, expiry,
+single-use and protected-document checks remain unchanged. Linux arm64/amd64 and
+Android arm64/amd64 client source builds and whitespace checks passed; rebuilt
+installed desktop and Android consent/tunnel acceptance remain pending.
