@@ -7,5 +7,5 @@
 -brand-shortcut-name = BashKitten
 -brand-full-name = BashKitten
 -brand-product-name = BashKitten
--vendor-short-name = BashKitten
+-vendor-short-name = openresearchtools
 trademarkInfo = { " " }

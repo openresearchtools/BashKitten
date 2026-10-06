@@ -1,7 +1,7 @@
 TERMUX_PKG_HOMEPAGE=https://www.authelia.com/
 TERMUX_PKG_DESCRIPTION="BashKitten private native Authelia authentication server"
 TERMUX_PKG_LICENSE="Apache-2.0"
-TERMUX_PKG_MAINTAINER="OpenResearchTools"
+TERMUX_PKG_MAINTAINER="openresearchtools <openresearchtools@gmail.com>"
 TERMUX_PKG_VERSION=4.39.28
 TERMUX_PKG_DEPENDS="ca-certificates"
 TERMUX_PKG_BUILD_IN_SRC=true

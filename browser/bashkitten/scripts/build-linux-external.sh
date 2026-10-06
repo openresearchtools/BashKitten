@@ -147,7 +147,7 @@ if [[ "${include_working_tree}" == true ]]; then
       GIT_COMMITTER_DATE="@${source_date_epoch} +0000" \
       git -C "${checkout_dir}" \
       -c user.name="openresearchtools" \
-      -c user.email="229047507+openresearchtools@users.noreply.github.com" \
+      -c user.email="openresearchtools@gmail.com" \
       commit -m "BashKitten external build snapshot"
     build_commit="$(git -C "${checkout_dir}" rev-parse HEAD)"
   fi

@@ -337,7 +337,7 @@ fi
         shutil.copy2(app / 'build-platform.json', doc / 'build-platform.json')
         size = sum(p.stat().st_size for p in stage.rglob('*') if p.is_file() and not p.is_symlink()) // 1024
         (control / 'control').write_text(f'Package: bashkitten\nVersion: {package_version}\nArchitecture: {args.architecture}\n'
-            'Maintainer: Open Research Tools <openresearchtools@users.noreply.github.com>\n'
+            'Maintainer: openresearchtools <openresearchtools@gmail.com>\n'
             f'Depends: {", ".join(depends)}\nInstalled-Size: {size}\n{replacements}Section: web\nPriority: optional\n'
             'Homepage: https://bashkitten.com\nDescription: BashKitten browser and native Pi agent\n'
             + (' Native Termux backend, search, authentication and browser controls.\n' if termux else
