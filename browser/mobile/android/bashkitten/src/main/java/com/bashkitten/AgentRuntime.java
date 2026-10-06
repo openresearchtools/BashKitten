@@ -442,14 +442,15 @@ public final class AgentRuntime {
     public void select(String id) {
         if (removingRemotes.contains(id)) { app.message("This connection is being removed."); return; }
         RemoteAgentConnection previousRemote = remoteConnections.get(selected);
+        if (selected.equals(id)) {
+            // Open returns to the selected view without cancelling its sign-in.
+            if (id.equals("local") || desired && (busy || previousRemote != null && !previousRemote.isClosed())) return;
+            busy = false; turnOn(); return;
+        }
         if (previousRemote != null && !previousRemote.ready) {
             previousRemote.close();
         }
         if (!id.equals(remotePasswordHost)) clearRemotePassword();
-        if (selected.equals(id)) {
-            if (!id.equals("local")) { busy = false; turnOn(); }
-            return;
-        }
         operation++; busy = false;
         if (session != null) { suspendSession(session); session.setActive(false); }
 
@@ -476,6 +477,7 @@ public final class AgentRuntime {
         app.closeServiceRoutes(id); serviceSnapshots.remove(id);
         if (previous != null) previous.close();
         clearRemotePassword(); remotePassword = password.toCharArray(); remotePasswordHost = id;
+        if (selected.equals(id)) busy = false;
         select(id);
     }
     private void clearRemotePassword() {
@@ -771,7 +773,7 @@ public final class AgentRuntime {
                     remoteConnections.put(host, connection);
                     connection.start(app, bundle, socket);
                 } catch (Exception error) {
-                    if (route != null) route.close(); cleanup.run(); clearRemotePassword();
+                    if (route != null) route.revoke(); cleanup.run(); clearRemotePassword();
                     setup("remote", "Could not start the native remote connection.");
                 }
             }, message -> { if (generation == operation) { clearRemotePassword(); setup("remote", message); } });

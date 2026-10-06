@@ -136,10 +136,10 @@ final class RemoteAgentConnection implements AutoCloseable {
     private void activate(NativeRemote current, JSONObject enrollment) throws Exception {
         JSONObject mapping = current.map("agent", 0);
         int port = mapping.getInt("port");
+        route.useTunnel(port);
         main.post(() -> {
             if (isClosed()) return;
             try {
-                route.useTunnel(port);
                 identity = enrollment; ready = true;
                 listener.ready(this);
             } catch (Exception error) { failed(error); }
@@ -171,14 +171,15 @@ final class RemoteAgentConnection implements AutoCloseable {
             }
             closed = true; current = client; client = null;
         }
-        // Close the browser route before releasing its port, so a later local
-        // listener cannot receive an old protected Agent connection.
-        route.close();
+        // Revoke immediately; drain sockets on the close worker before releasing
+        // the native port, without blocking Android's main thread.
+        route.revoke();
         identity = null; ready = false; awaitingCallback = false;
         // Go's TLS close can write close_notify. It must not block Android's
         // main thread or queue behind the request that shutdown must cancel.
         new Thread(() -> {
             try {
+                route.close();
                 if (previousClosed != null) previousClosed.join();
                 if (forget) {
                     try { if (current != null) current.forget(); }

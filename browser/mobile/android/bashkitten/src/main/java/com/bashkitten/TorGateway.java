@@ -49,6 +49,7 @@ final class TorGateway {
     final class AgentRoute implements AutoCloseable {
         final String host, secret = newSecret();
         private final Set<Socket> active = new HashSet<>();
+        private final Object socketCloseLock = new Object();
         private int mappedPort;
         private boolean closed;
         private AgentRoute(String host) { this.host = host; }
@@ -61,20 +62,37 @@ final class TorGateway {
             if (closed) throw new IOException("Agent route is closed");
             return mappedPort;
         }
-        synchronized void useTunnel(int port) {
-            if (closed || port < 1 || port > 65535) throw new IllegalStateException("Invalid Agent tunnel");
-            if (mappedPort == port) return;
-            mappedPort = port;
-            // Existing login sockets must not keep bypassing the carrier after
-            // activation. Gecko reconnects with the same enrolled HTTPS origin.
-            closeSockets();
+        void useTunnel(int port) {
+            synchronized (socketCloseLock) {
+                Set<Socket> sockets;
+                synchronized (this) {
+                    if (closed || port < 1 || port > 65535) throw new IllegalStateException("Invalid Agent tunnel");
+                    if (mappedPort == port) return;
+                    mappedPort = port;
+                    sockets = takeSockets();
+                }
+                // Existing login sockets must not keep bypassing the carrier after
+                // activation. Gecko reconnects with the same enrolled HTTPS origin.
+                closeSockets(sockets);
+            }
         }
-        private void closeSockets() {
-            for (Socket socket : active) try { socket.close(); } catch (IOException ignored) {}
+        private Set<Socket> takeSockets() {
+            Set<Socket> sockets = new HashSet<>(active);
             active.clear();
+            return sockets;
         }
-        @Override public synchronized void close() {
-            closed = true; agents.remove(secret, this); closeSockets();
+        private void closeSockets(Set<Socket> sockets) {
+            for (Socket socket : sockets) try { socket.close(); } catch (IOException ignored) {}
+        }
+        synchronized void revoke() { closed = true; agents.remove(secret, this); }
+        @Override public void close() {
+            // Only workers take this drain lock; UI revocation uses the short
+            // route monitor and never waits for an in-flight socket close.
+            synchronized (socketCloseLock) {
+                Set<Socket> sockets;
+                synchronized (this) { revoke(); sockets = takeSockets(); }
+                closeSockets(sockets);
+            }
         }
     }
     AgentRoute agentRoute(String host) {
