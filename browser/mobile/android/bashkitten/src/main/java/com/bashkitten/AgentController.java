@@ -89,8 +89,15 @@ final class AgentController extends ContextWrapper {
                 if (method.equals("downloads.list")) list.put(download.json());
                 else if (download.id.equals(params.getString("downloadId"))) {
                     if (!download.status.equals("COMPLETED")) throw new IllegalStateException("Download is not complete");
-                    send.accept(new JSONObject().put("result", download.json().put("transfer",
-                        app.transfers.grant(download.file, download.mime, false, access)))); return;
+                    app.transfers.execute(() -> {
+                        try {
+                            JSONObject result = download.json().put("transfer", app.transfers.grant(download.file, download.mime, false, access));
+                            app.main.post(() -> {
+                                try { access.check.run(); app.owned(download.tabId, owner); send.accept(new JSONObject().put("result", result)); }
+                                catch (Exception error) { fail.accept("Download is no longer available to this caller"); }
+                            });
+                        } catch (Exception error) { app.main.post(() -> fail.accept("Download could not be shared")); }
+                    }); return;
                 }
             }
             if (method.equals("downloads.get")) throw new SecurityException("Download is not associated with an ordinary browsing tab");
@@ -126,33 +133,51 @@ final class AgentController extends ContextWrapper {
                     try {
                         access.check.run();
                         app.owned(tab.id, owner);
-                        if (transfer) {
+                    } catch (Exception error) { fail.accept("Screenshot is no longer available to this caller"); return; }
+                    // Gecko delivers captures on main. PNG encoding, filesystem and
+                    // provider work must not stall that thread or ordinary tabs.
+                    app.transfers.execute(() -> {
+                        Consumer<JSONObject> encoded = result -> app.main.post(() -> {
+                            try {
+                                access.check.run(); app.owned(tab.id, owner);
+                                JSONObject value = result.getJSONObject("result");
+                                if (value.has("uri")) {
+                                    Uri uri = Uri.parse(value.getString("uri"));
+                                    String[] packages = getPackageManager().getPackagesForUid(uid);
+                                    if (packages != null) for (String name : packages) grantUriPermission(name, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                                }
+                                send.accept(result);
+                            }
+                            catch (Exception error) { fail.accept("Screenshot is no longer available to this caller"); }
+                        });
+                        try {
+                            access.check.run();
+                            if (transfer) {
+                                File directory = new File(getCacheDir(), "agent"); directory.mkdirs();
+                                File file = new File(directory, UUID.randomUUID() + ".png");
+                                try {
+                                    try (FileOutputStream out = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
+                                    encoded.accept(new JSONObject().put("result", new JSONObject().put("mimeType", "image/png")
+                                        .put("width", bitmap.getWidth()).put("height", bitmap.getHeight())
+                                        .put("transfer", app.transfers.grant(file, "image/png", true, access))));
+                                } catch (Exception error) { file.delete(); throw error; }
+                                return;
+                            }
+                            if (access.shell) {
+                                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+                                encoded.accept(new JSONObject().put("result", new JSONObject()
+                                    .put(uid < 0 ? "data" : "base64", android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP))
+                                    .put("mimeType", "image/png")));
+                                return;
+                            }
                             File directory = new File(getCacheDir(), "agent"); directory.mkdirs();
                             File file = new File(directory, UUID.randomUUID() + ".png");
-                            try {
-                                try (FileOutputStream out = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
-                                send.accept(new JSONObject().put("result", new JSONObject().put("mimeType", "image/png")
-                                    .put("width", bitmap.getWidth()).put("height", bitmap.getHeight())
-                                    .put("transfer", app.transfers.grant(file, "image/png", true, access))));
-                            } catch (Exception error) { file.delete(); throw error; }
-                            return;
-                        }
-                        if (access.shell) {
-                            ByteArrayOutputStream out = new ByteArrayOutputStream();
-                            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
-                            send.accept(new JSONObject().put("result", new JSONObject()
-                                .put(uid < 0 ? "data" : "base64", android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP))
-                                .put("mimeType", "image/png")));
-                            return;
-                        }
-                        File directory = new File(getCacheDir(), "agent"); directory.mkdirs();
-                        File file = new File(directory, UUID.randomUUID() + ".png");
-                        try (FileOutputStream out = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
-                        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", file);
-                        String[] packages = getPackageManager().getPackagesForUid(uid);
-                        if (packages != null) for (String name : packages) grantUriPermission(name, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        send.accept(new JSONObject().put("result", new JSONObject().put("uri", uri.toString()).put("mimeType", "image/png")));
-                    } catch (Exception error) { fail.accept("Screenshot failed"); }
+                            try (FileOutputStream out = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, out); }
+                            Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".files", file);
+                            encoded.accept(new JSONObject().put("result", new JSONObject().put("uri", uri.toString()).put("mimeType", "image/png")));
+                        } catch (Exception error) { app.main.post(() -> fail.accept("Screenshot failed")); }
+                    });
                 }); return;
             }
             default:

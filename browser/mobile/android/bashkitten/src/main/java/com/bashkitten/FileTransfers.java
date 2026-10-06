@@ -15,6 +15,7 @@ final class FileTransfers {
     private final Map<String, Entry> entries = new HashMap<>();
     private final ExecutorService workers = Executors.newCachedThreadPool();
     private ServerSocket server;
+    private int generation;
     private static final class Entry {
         final File file;
         final String token, mime;
@@ -26,42 +27,63 @@ final class FileTransfers {
         }
     }
     FileTransfers(BrowserApp app) { this.app = app; }
-    synchronized JSONObject grant(File file, String mime, boolean temporary, AgentController.Access access) throws Exception {
+    void execute(Runnable work) { workers.execute(work); }
+    JSONObject grant(File file, String mime, boolean temporary, AgentController.Access access) throws Exception {
+        final int version;
+        synchronized (this) { version = generation; }
         access.check.run();
         if (!file.isFile()) throw new IOException("Downloaded file is unavailable");
         prune();
-        if (server == null) listen();
         String id = UUID.randomUUID().toString();
-        Entry entry = new Entry(file, mime, temporary, access); entries.put(id, entry);
-        String url = "http://127.0.0.1:" + server.getLocalPort() + "/files/" + id;
-        return new JSONObject().put("url", url).put("token", entry.token)
-            .put("size", file.length()).put("mimeType", mime)
-            .put("wget", "wget --header='Authorization: Bearer " + entry.token + "' -O '" +
-                file.getName().replace("'", "'\\''") + "' '" + url + "'");
+        Entry entry = new Entry(file, mime, temporary, access);
+        boolean needsListener;
+        synchronized (this) { needsListener = server == null; }
+        ServerSocket candidate = needsListener ? new ServerSocket() : null;
+        try {
+            if (candidate != null) candidate.bind(new InetSocketAddress("127.0.0.1", 0));
+            ServerSocket listener;
+            boolean start;
+            synchronized (this) {
+                if (version != generation) throw new SecurityException("File transfers revoked");
+                start = server == null;
+                if (start && candidate == null) throw new SecurityException("File transfers revoked");
+                if (start) { server = candidate; candidate = null; }
+                listener = server; entries.put(id, entry);
+            }
+            if (start) listen(listener);
+            String url = "http://127.0.0.1:" + listener.getLocalPort() + "/files/" + id;
+            return new JSONObject().put("url", url).put("token", entry.token)
+                .put("size", file.length()).put("mimeType", mime)
+                .put("wget", "wget --header='Authorization: Bearer " + entry.token + "' -O '" +
+                    file.getName().replace("'", "'\\''") + "' '" + url + "'");
+        } finally { if (candidate != null) candidate.close(); }
     }
-    synchronized void revokeAll() {
-        for (Entry entry : entries.values()) if (entry.temporary) entry.file.delete();
-        entries.clear(); closeIdle();
+    void revokeAll() {
+        final List<Entry> revoked;
+        final ServerSocket listener;
+        synchronized (this) {
+            generation++; revoked = new ArrayList<>(entries.values()); entries.clear();
+            listener = server; server = null;
+        }
+        workers.execute(() -> {
+            if (listener != null) try { listener.close(); } catch (IOException ignored) {}
+            for (Entry entry : revoked) if (entry.temporary) entry.file.delete();
+        });
     }
-    private synchronized void prune() {
-        entries.entrySet().removeIf(value -> {
+    private void prune() {
+        final Map<String, Entry> snapshot;
+        synchronized (this) { snapshot = new HashMap<>(entries); }
+        for (Map.Entry<String, Entry> value : snapshot.entrySet()) {
             Entry entry = value.getValue();
             boolean revoked = false;
             try { entry.access.check.run(); } catch (Exception error) { revoked = true; }
-            if (revoked && entry.temporary) entry.file.delete();
-            return revoked;
-        });
-        closeIdle();
-    }
-    private void closeIdle() {
-        if (entries.isEmpty() && server != null) {
-            try { server.close(); } catch (IOException ignored) {}
-            server = null;
+            if (revoked) {
+                synchronized (this) { entries.remove(value.getKey(), entry); }
+                if (entry.temporary) entry.file.delete();
+            }
         }
     }
-    private void listen() throws IOException {
-        ServerSocket listener = new ServerSocket();
-        listener.bind(new InetSocketAddress("127.0.0.1", 0)); server = listener;
+    private void listen(ServerSocket listener) {
         Thread accept = new Thread(() -> {
             while (!listener.isClosed()) try {
                 Socket socket = listener.accept();

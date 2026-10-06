@@ -62,11 +62,13 @@ public final class BrowserControlService extends Service {
         catch (Exception error) { result(callback, "{\"error\":\"Invalid browser command\"}"); }
     }
     private void result(IAgentCallback callback, String value) {
-        try { callback.onResult(value); }
-        catch (RemoteException error) {
-            try { callback.onResult("{\"error\":\"Android Binder could not deliver the browser result: " + error.getClass().getSimpleName() + "\",\"code\":\"transport_error\"}"); }
-            catch (RemoteException unavailable) { android.util.Log.w("BashKitten", "Browser callback is unavailable"); }
-        }
+        app.transfers.execute(() -> {
+            try { callback.onResult(value); }
+            catch (RemoteException error) {
+                try { callback.onResult("{\"error\":\"Android Binder could not deliver the browser result: " + error.getClass().getSimpleName() + "\",\"code\":\"transport_error\"}"); }
+                catch (RemoteException unavailable) { android.util.Log.w("BashKitten", "Browser callback is unavailable"); }
+            }
+        });
     }
     @Override public IBinder onBind(Intent intent) { return binder; }
 }

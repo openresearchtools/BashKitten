@@ -36,13 +36,13 @@ final class AppCommandGateway extends Binder {
         String json = data.readString();
         IBinder callback = data.readStrongBinder();
         if (callback == null) return true;
-        Consumer<String> result = value -> {
+        Consumer<String> result = value -> app.transfers.execute(() -> {
             try { sendResult(callback, value); }
             catch (RemoteException error) {
                 try { sendResult(callback, "{\"error\":\"Android Binder could not deliver the browser result: " + error.getClass().getSimpleName() + "\",\"code\":\"transport_error\"}"); }
                 catch (RemoteException unavailable) { android.util.Log.w("BashKitten", "Browser callback is unavailable"); }
             }
-        };
+        });
         dispatch(uid, json, result);
         return true;
     }

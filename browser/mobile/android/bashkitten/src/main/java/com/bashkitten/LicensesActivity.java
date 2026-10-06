@@ -4,7 +4,6 @@ package com.bashkitten;
 import android.os.Bundle;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.io.InputStream;
 import org.mozilla.geckoview.*;
 
 /** Bundled component notices remain available before login or service setup. */
@@ -23,11 +22,15 @@ public final class LicensesActivity extends ProductActivity {
                 }
                 return GeckoResult.fromValue(AllowOrDeny.DENY);
             }
+            @Override public GeckoResult<String> onLoadError(GeckoSession source, String uri, WebRequestError error) {
+                TextView text = new TextView(LicensesActivity.this);
+                text.setText("This build is missing its required offline license inventory."); root.addView(text);
+                return null;
+            }
         });
         session.open(app.host.runtime());
         GeckoView view = new GeckoView(this); view.setSession(session); root.addView(view, new LinearLayout.LayoutParams(-1, 0, 1));
-        try (InputStream input = getAssets().open("about.html")) { session.loadUri("resource://android/assets/about.html"); }
-        catch (Exception error) { TextView text = new TextView(this); text.setText("This build is missing its required offline license inventory."); root.addView(text); }
+        session.loadUri("resource://android/assets/about.html");
         showContent(root, false);
     }
     @Override protected void onDestroy() { if (session != null) session.close(); super.onDestroy(); }
