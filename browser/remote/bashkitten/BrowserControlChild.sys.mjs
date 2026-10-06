@@ -3,6 +3,7 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 import { ContentDOMReference } from "resource://gre/modules/ContentDOMReference.sys.mjs";
+import { setTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const lazy = {};
 
@@ -838,7 +839,7 @@ async function typeText(target, text, delayMs = 0) {
   const win = target.ownerDocument.defaultView;
   for (const character of text) {
     sendKey(win, character === "\n" ? "Enter" : character === "\t" ? "Tab" : character);
-    if (delayMs) await new Promise(resolve => win.setTimeout(resolve, delayMs));
+    if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
   }
 }
 
