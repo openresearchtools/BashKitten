@@ -135,7 +135,7 @@ export async function existingDirectory(input) {
   return real;
 }
 export function safeName(name) {
-  if (!name || name === '.' || name === '..' || /[/\\\x00-\x1f]/.test(name) || Buffer.byteLength(name) > 240) throw Error('Use a single valid file or folder name');
+  if (!name || name === '.' || name === '..' || /[/\\\x00-\x1f]/.test(name)) throw Error('Use a single valid file or folder name');
   return name;
 }
 export async function withinRoot(root, relative = '') {
