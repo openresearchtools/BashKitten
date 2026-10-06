@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-importScripts("jsQR.js");
+importScripts("chrome://browser/content/bashkitten/agent/jsQR.js");
 
 self.onmessage = ({ data: bitmap }) => {
   try {
