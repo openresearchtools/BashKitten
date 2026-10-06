@@ -13,14 +13,14 @@ case "$architecture" in
     aarch64)
         keyring_url=https://termux.openresearchtools.com
         nightly_url=https://nightly-termux.openresearchtools.com
-        keyring_sha=d8b1c57b81cee66761a428a46d22297107d81431415d3712960e88a86c81050a
-        nightly_sha=65835cdf5bd67813524247812f6b88278e43162f76dff7850249228196f68f9e
+        keyring_sha=7023814ef3728ac90a77a8e316a852a6431498e54b3c3bacd89a183d97e1f225
+        nightly_sha=03e4e96f3233fb6a4bdf94f183c7b0b59eec5ecc49b3f329653f53cbd8508541
         ;;
     x86_64)
-        keyring_url=https://apt.openresearchtools.com/apt/releases/download/repo/openresearchtools-termux-keyring_2026.10.06_x86_64.deb
-        nightly_url=https://apt.openresearchtools.com/apt/releases/download/nightly/openresearchtools-termux-nightly_2026.10.06_x86_64.deb
-        keyring_sha=44b556e0464890bc8bf856fe9844fe79be8960bb59c08e9923305a8888e507a8
-        nightly_sha=ced2e108569474fec6c5149480650eac6bafb2ecc9e2485327a2eeb1f017a08e
+        keyring_url=https://apt.openresearchtools.com/apt/releases/download/repo/openresearchtools-termux-keyring_2026.10.06.1_x86_64.deb
+        nightly_url=https://apt.openresearchtools.com/apt/releases/download/nightly/openresearchtools-termux-nightly_2026.10.06.1_x86_64.deb
+        keyring_sha=47ca6e30a466ec69fdf29b77fd19dc8579c4ab881bc85cf8a156896023df6f93
+        nightly_sha=f7017bfa15baa1a6905725d57e178fe79f650c3190197de3453b46d02a9dd05a
         ;;
     *) echo "Unsupported Termux architecture: $architecture. Use ARM64 or x86_64 Termux." >&2; exit 1 ;;
 esac
