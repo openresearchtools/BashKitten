@@ -41,7 +41,7 @@ async function npmInventory(root, target, architecture) {
   for (const [location, value] of Object.entries(lock.packages)) {
     if (!location || value.dev || value.optional) continue;
     if (!location.startsWith('node_modules/') || location.split('/').includes('..')) throw Error('Invalid locked production dependency path');
-    if (!compatible(value.os, target === 'termux' ? 'android' : 'linux') || !compatible(value.cpu, architecture === 'amd64' ? 'x64' : 'arm64')) continue;
+    if (!compatible(value.os, target === 'termux' ? 'android' : 'linux') || !compatible(value.cpu, ['amd64', 'x86_64'].includes(architecture) ? 'x64' : 'arm64')) continue;
     // Missing required modules must not disappear silently from the notice list.
     const installed = await json(path.join(root, location, 'package.json'));
     if (!installed.name || !installed.version) throw Error('Invalid installed dependency: ' + location);
@@ -92,7 +92,7 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   root = path.resolve(root);
   if (!['linux', 'termux'].includes(target)) throw Error('Choose the linux or termux package target');
   const auth = await json(path.join(root, 'auth/share/metadata/runtime.json'));
-  if (!auth.target?.startsWith(target === 'termux' ? 'termux-' : 'linux-') || !['amd64', 'arm64', 'aarch64'].includes(auth.architecture)) throw Error('Native access stack does not match the package target');
+  if (auth.target !== `${target}-${auth.architecture}` || !(target === 'termux' ? ['aarch64', 'x86_64'] : ['amd64', 'arm64']).includes(auth.architecture)) throw Error('Native access stack does not match the package target');
   const components = new Set(auth.components?.map(value => value.name));
   for (const name of ['authelia', 'caddy', 'tor', 'valkey', 'chisel', 'remote']) {
     if (!components.has(name)) throw Error('Missing native access component: ' + name);

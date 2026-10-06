@@ -130,7 +130,7 @@ def main():
         raise ValueError('All four complete native packages are required')
     sources = []
     for file in sorted(args.candidates.rglob('*')):
-        if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip)$', file.name):
+        if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip|jar)$', file.name):
             sources.append(copy(file))
     names = [value['asset'] for value in sources]
     for token in ('bashkitten-source-', 'dependency-source-', 'auth', 'search', 'blocker', 'android-library-source'):
