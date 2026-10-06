@@ -11,10 +11,14 @@ fi
 architecture=$(dpkg --print-architecture)
 case "$architecture" in
     aarch64)
+        keyring_url=https://termux.openresearchtools.com
+        nightly_url=https://nightly-termux.openresearchtools.com
         keyring_sha=d8b1c57b81cee66761a428a46d22297107d81431415d3712960e88a86c81050a
         nightly_sha=65835cdf5bd67813524247812f6b88278e43162f76dff7850249228196f68f9e
         ;;
     x86_64)
+        keyring_url=https://apt.openresearchtools.com/apt/releases/download/repo/openresearchtools-termux-keyring_2026.10.06_x86_64.deb
+        nightly_url=https://apt.openresearchtools.com/apt/releases/download/nightly/openresearchtools-termux-nightly_2026.10.06_x86_64.deb
         keyring_sha=44b556e0464890bc8bf856fe9844fe79be8960bb59c08e9923305a8888e507a8
         nightly_sha=ced2e108569474fec6c5149480650eac6bafb2ecc9e2485327a2eeb1f017a08e
         ;;
@@ -31,14 +35,12 @@ trap 'rm -rf -- "$setup_dir"' EXIT
 # Register stable and nightly with the same signing key. These are testing
 # releases; normal package version ordering still permits a newer stable update.
 curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
-    -o "$setup_dir/keyring.deb" \
-    "https://github.com/openresearchtools/apt/releases/download/repo/openresearchtools-termux-keyring_2026.10.06_${architecture}.deb"
+    -o "$setup_dir/keyring.deb" "$keyring_url"
 printf '%s  %s\n' "$keyring_sha" \
     "$setup_dir/keyring.deb" | sha256sum -c -
 pkg install -y -o Dpkg::Options::=--force-confold "$setup_dir/keyring.deb" x11-repo
 curl --fail --location --proto '=https' --proto-redir '=https' --retry 3 \
-    -o "$setup_dir/nightly.deb" \
-    "https://github.com/openresearchtools/apt/releases/download/nightly/openresearchtools-termux-nightly_2026.10.06_${architecture}.deb"
+    -o "$setup_dir/nightly.deb" "$nightly_url"
 printf '%s  %s\n' "$nightly_sha" "$setup_dir/nightly.deb" | sha256sum -c -
 pkg install -y -o Dpkg::Options::=--force-confold "$setup_dir/nightly.deb"
 apt-get -o APT::Update::Error-Mode=any update
