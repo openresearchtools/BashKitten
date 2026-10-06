@@ -13,9 +13,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def fingerprint(target):
     paths = ['browser', 'agent/packaging/browser-component.py']
-    if target == 'android':
+    if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
+                  'agent/packaging/release_version.py',
                   'agent/packaging/licenses.mjs', 'agent/packaging/termux/search',
                   'agent/src/server/licenses.mjs',
                   'agent/package.json', 'agent/package-lock.json', 'agent/LICENSE',
@@ -54,9 +55,9 @@ def verify(directory, target, digest):
     payload = {item.name for item in directory.iterdir() if item.is_file() and item.name != 'SHA256SUMS'}
     if not checked or checked != payload:
         raise ValueError('Component checksums must cover the complete artifact')
-    if target == 'android':
+    if target.startswith('android'):
         manifest = json.loads((directory / 'build-manifest.json').read_text())
-        if manifest.get('browser_input_sha256') != digest or manifest.get('architecture') != 'arm64-v8a':
+        if manifest.get('browser_input_sha256') != digest or manifest.get('architecture') != ('x86_64' if target == 'android-x86_64' else 'arm64-v8a'):
             raise ValueError('Android component inputs do not match this source')
         if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')):
             raise ValueError('Android component has no producing source revision')
@@ -115,7 +116,7 @@ def restore(directory, target, digest):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['fingerprint', 'restore', 'verify'])
-    parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android'])
+    parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android', 'android-x86_64'])
     parser.add_argument('--directory', type=Path)
     args = parser.parse_args()
     digest = fingerprint(args.target)

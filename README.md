@@ -8,7 +8,7 @@ tools, image attachments and file browsing. The same Agent interface also works
 in an ordinary browser. This branch contains the browser migration; integration
 builds and testing are in progress.
 
-Android uses an ordinary Termux installation for the Agent server. Linux packages
+Android ARM64 and x86_64 use an ordinary Termux installation for the Agent server. Linux packages
 include both the browser and server. Local connects automatically without an
 account login. Optional Linux publishing and remote connections use Tor and
 an account with two-factor authentication. Turning Agent off stops its services;
@@ -23,6 +23,10 @@ this is separate from the wake locks managed by Turn on/off.
 [Releases](https://github.com/openresearchtools/bashkitten/releases) ·
 [Package repository](https://github.com/openresearchtools/apt) ·
 [Build packages](agent/packaging/README.md)
+
+Current builds are published as prereleases. To receive them through APT, install
+the platform's main keyring and nightly setup package from the
+[package repository](https://github.com/openresearchtools/apt).
 
 About and full licenses are available offline in the browser's settings.
 BashKitten's own code is [AGPL-3.0-only](LICENSE); inherited browser and dependency notices retain

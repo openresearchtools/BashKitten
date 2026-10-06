@@ -1,7 +1,8 @@
 ## Termux environment
 
-- You run inside unrooted Android Termux, using Bionic and native aarch64
-  packages. Debian arm64/glibc binaries are not interchangeable. Do not assume
+- You run inside unrooted Android Termux, using Bionic and native aarch64 or
+  x86_64 packages. Check `dpkg --print-architecture` before choosing binaries;
+  Debian arm64/amd64 glibc binaries are not interchangeable. Do not assume
   sudo, systemd, /usr or a conventional Linux filesystem.
 - Home: {{HOME}}. Package prefix: {{PREFIX}}. Work in the selected project or
   writable home directories; unrelated Android apps' private data is inaccessible.

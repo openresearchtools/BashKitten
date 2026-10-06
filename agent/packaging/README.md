@@ -1,24 +1,25 @@
 # Product packaging
 
 All compilation runs in GitHub Actions. Dispatch `Complete BashKitten candidates`
-on `main` to build the Android APK and complete Linux amd64, Linux arm64 and
-Termux aarch64 packages. The main workflow builds authentication/search components,
+on `main` to build ARM64 and x86_64 Android APKs, Linux amd64/arm64 packages,
+and native Termux aarch64/x86_64 packages. The main workflow builds authentication/search components,
 Termux and source bundles. It dispatches the exact product commit to these builders:
 
 - `openresearchtools/bashkitten-build-arm64`: complete Linux ARM64 `.deb`.
 - `openresearchtools/bashkitten-build-amd64`: complete Linux AMD64 `.deb`.
-- `openresearchtools/bashkitten-build-android`: signed Android APK.
+- `openresearchtools/bashkitten-build-android`: signed ARM64 Android APK.
+- `openresearchtools/bashkitten-build-android-x86_64`: signed x86_64 Android APK.
 
 Each builder has its own compiler cache and uploads its installable candidate to
 its Actions run. Those artifacts can be downloaded manually immediately. The
 main workflow collects each target as soon as its upload appears; it does not
-wait for the other builders. Complete release assembly still requires all four
+wait for the other builders. Complete release assembly still requires all six
 binaries. Neither the builders nor the candidate workflow publish releases or APT.
 
 `BUILD_REPOS_TOKEN` exists only as an encrypted Actions secret in the product
-repository. Its fine-grained scope is Actions read/write on those three builders.
+repository. Its fine-grained scope is Actions read/write on those four builders.
 Builders use their own job token to read the public product's component artifacts;
-only the Android builder also needs the four existing Android signing secrets.
+both Android builders also need the four existing Android signing secrets.
 Never put credential values in source or workflow files.
 
 The builder workflow sources are `.github/builders/linux.yml` and `android.yml`.
@@ -50,12 +51,19 @@ product version comes from `browser/bashkitten/config/version.txt`; internal npm
 metadata uses its three-component SemVer equivalent. Native architecture and
 Termux 16 KB ELF alignment are checked before creating the package.
 
-`release.py` collects exactly one signed `com.bashkitten` APK and three complete
+`release.py` collects two signed `com.bashkitten` APKs and four complete
 native packages plus corresponding sources. A release must match the exact
-successful candidate run. Runtime/device validation happens outside the repository
-before publishing or APT promotion. Logs, probes and test profiles are not shipped.
+successful candidate run. Runtime/device validation happens outside the repository. Prereleases are published
+for that testing; a completed build does not certify device acceptance. Logs, probes and test profiles are not shipped.
 
-For now, every published version is a testing release. `release.py` includes the
+For now, every published version is a GitHub prerelease. The stable APT catalogue
+excludes prereleases; the separate nightly catalogue indexes them. Install the
+platform's stable keyring first and then its `openresearchtools-nightly` or
+`openresearchtools-termux-nightly` package to opt in. Both sources remain enabled
+with equal priority, so a newer stable package can replace a nightly. Removing
+the nightly setup package disables that source and leaves stable enabled.
+
+Every published version is a testing release. `release.py` includes the
 README's warning SVG and an explicit production warning in `release-notes.md`.
 The manual `Publish testing release` workflow takes a successful complete-candidate
 run and uses those exact notes. Any manual publication must also use that file
@@ -66,3 +74,12 @@ alone. Its full Gecko build starts immediately; final Gradle assembly waits for
 the actual Termux component notices. Temporary server payloads supply license
 texts only and never enter the APK. Droid credentials stay in GitHub secrets and
 an external temporary file removed after signing.
+
+Nightly `.deb` versions are `<product>~nightly.<UTC source-commit timestamp>`;
+release tags replace `~` with `-`. Every target built from that commit uses the
+same version. A final stable `<product>` sorts after its prereleases. The Android
+version code is `2020000000 + floor((commitEpoch - 1767225600) / 60) * 8 + abiBits`,
+where ARM64 uses 2 and x86_64 uses 6. This advances beyond the previous Fennec
+version codes while preserving deterministic rebuilds. Publish distinct APK
+updates from different source minutes; reusing an identical cached APK keeps its
+original code and does not require a browser update.

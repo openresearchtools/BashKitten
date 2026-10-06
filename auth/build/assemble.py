@@ -9,7 +9,7 @@ import sys
 import tarfile
 
 root, stage, target, artifacts = Path(sys.argv[1]), Path(sys.argv[2]), sys.argv[3], Path(sys.argv[4])
-architecture = {'linux-amd64': 'amd64', 'linux-arm64': 'arm64', 'termux-aarch64': 'aarch64'}[target]
+architecture = {'linux-amd64': 'amd64', 'linux-arm64': 'arm64', 'termux-aarch64': 'aarch64', 'termux-x86_64': 'x86_64'}[target]
 artifacts.mkdir(parents=True, exist_ok=True)
 metadata = stage / 'share/metadata'
 metadata.mkdir(parents=True, exist_ok=True)

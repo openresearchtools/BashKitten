@@ -9,7 +9,12 @@ TERMUX_PKG_AUTO_UPDATE=false
 
 termux_step_make() {
   termux_setup_golang
-  export GOOS=android GOARCH=arm64 CGO_ENABLED=1 GOTOOLCHAIN=local GOTELEMETRY=off
+  case "$TERMUX_ARCH" in
+    aarch64) export GOARCH=arm64 ;;
+    x86_64) export GOARCH=amd64 ;;
+    *) echo "Unsupported Termux architecture: $TERMUX_ARCH" >&2; exit 2 ;;
+  esac
+  export GOOS=android CGO_ENABLED=1 GOTOOLCHAIN=local GOTELEMETRY=off
   export CGO_CFLAGS="$CFLAGS" CGO_CPPFLAGS="$CPPFLAGS"
   export CGO_LDFLAGS="$LDFLAGS -Wl,-z,max-page-size=16384"
   cd "$TERMUX_PKG_SRCDIR"

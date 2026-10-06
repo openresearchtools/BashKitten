@@ -4,8 +4,8 @@ target=${1:?target required}
 output=$(realpath -m "${2:?output directory required}")
 root=$(cd "$(dirname "$0")/../.." && pwd)
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
-if [[ $target == termux-aarch64 ]]; then
-  exec "$root/auth/build/termux-component.sh" tor "$output"
+if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
+  exec "$root/auth/build/termux-component.sh" tor "$output" "${target#termux-}"
 fi
 case "$target:$(uname -m)" in linux-amd64:x86_64|linux-arm64:aarch64) ;; *) echo "Use a native runner for $target." >&2; exit 2 ;; esac
 work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/bashkitten-tor.XXXXXX")

@@ -103,7 +103,7 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
         shutil.copy(ROOT / name, source / name)
     for path in ROOT.glob("requirements-*.txt"):
         shutil.copy(path, source / path.name)
-    termux = target == "termux-aarch64"
+    termux = target in {"termux-aarch64", "termux-x86_64"}
     if termux:
         if not termux_native:
             raise RuntimeError("Termux requires the native recipe artifact")
@@ -220,7 +220,7 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("target", choices=["linux-amd64", "linux-arm64", "termux-aarch64"])
+    parser.add_argument("target", choices=["linux-amd64", "linux-arm64", "termux-aarch64", "termux-x86_64"])
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--termux-native", type=Path)
     args = parser.parse_args()

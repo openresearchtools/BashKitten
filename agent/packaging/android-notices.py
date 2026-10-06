@@ -11,10 +11,13 @@ from build import checked_archive, extract
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--architecture', choices=['aarch64', 'x86_64'], default='aarch64')
 parser.add_argument('--auth-archive', type=Path, required=True)
 parser.add_argument('--search-archive', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
+cpu = 'x64' if args.architecture == 'x86_64' else 'arm64'
+target = 'termux-' + args.architecture
 for archive in (args.auth_archive, args.search_archive):
     checked_archive(archive)
 version = (ROOT.parent / 'browser/bashkitten/config/version.txt').read_text().strip()
@@ -26,13 +29,13 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
         shutil.copy2(ROOT / name, stage / name)
     for name in ('licenses', 'pi', 'search', 'src/server/models/third_party'):
         shutil.copytree(ROOT / name, stage / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'runtime'))
-    subprocess.run(['npm', 'ci', '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=arm64'], check=True)
-    subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', 'arm64'], check=True)
+    subprocess.run(['npm', 'ci', '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=' + cpu], check=True)
+    subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', cpu], check=True)
     extract(args.auth_archive, stage / 'auth')
     extract(args.search_archive, stage)
-    if json.loads((stage / 'auth/share/metadata/runtime.json').read_text())['target'] != 'termux-aarch64':
+    if json.loads((stage / 'auth/share/metadata/runtime.json').read_text())['target'] != target:
         raise ValueError('Android companion notices require the native Termux auth payload')
-    if json.loads((stage / 'search/runtime/manifest.json').read_text())['target'] != 'termux-aarch64':
+    if json.loads((stage / 'search/runtime/manifest.json').read_text())['target'] != target:
         raise ValueError('Android companion notices require the native Termux search payload')
     subprocess.run(['node', str(ROOT / 'packaging/licenses.mjs'), str(stage), '--target', 'termux', '--version', version], check=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)

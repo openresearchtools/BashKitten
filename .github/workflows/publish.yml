@@ -53,9 +53,9 @@ jobs:
         notes = Path('release-notes.md').read_text()
         if release['sourceCommit'] != os.environ['CANDIDATE_REVISION']:
             raise SystemExit('Candidate source does not match the successful build')
-        if not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
+        if not release.get('prerelease') or not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
             raise SystemExit('The testing release warning is required')
-        if not re.fullmatch(r'v\d+\.\d+(?:\.\d+)?', release['tag']):
+        if not re.fullmatch(r'v\d+\.\d+(?:\.\d+)?-nightly\.\d{14}', release['tag']):
             raise SystemExit('Invalid product release tag')
         with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
             output.write('tag=' + release['tag'] + '\n')
@@ -68,4 +68,4 @@ jobs:
         gh release create "$RELEASE_TAG" release/* \
           --target "$CANDIDATE_REVISION" \
           --title "BashKitten ${RELEASE_TAG#v} · Testing release" \
-          --notes-file release/release-notes.md
+          --notes-file release/release-notes.md --prerelease --latest=false

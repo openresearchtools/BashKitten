@@ -6,7 +6,7 @@ target=${1:?target required}
 output=$(realpath -m "${2:?staging directory required}")
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
-case "$target" in linux-amd64|linux-arm64|termux-aarch64) ;; *) exit 2 ;; esac
+case "$target" in linux-amd64|linux-arm64|termux-aarch64|termux-x86_64) ;; *) exit 2 ;; esac
 work=$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/bashkitten-authelia.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 cp -a "$root/auth/authelia" "$work/source"
@@ -28,8 +28,8 @@ find "$work/source/web" -path '*/node_modules' -prune -o -type f -name '*.licens
   relative=${notice#"$work/source/"}
   install -Dm644 "$notice" "$work/source/.bashkitten-frontend/share/licenses/authelia-assets/$relative"
 done
-if [[ $target == termux-aarch64 ]]; then
-  "$root/auth/build/termux-component.sh" authelia "$output" "$work/source"
+if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
+  "$root/auth/build/termux-component.sh" authelia "$output" "${target#termux-}" "$work/source"
 else
   expected=${target#linux-}
   actual=$(go env GOHOSTARCH)

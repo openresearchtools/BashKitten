@@ -12,6 +12,10 @@
     "termux-aarch64": [
       3,
       14
+    ],
+    "termux-x86_64": [
+      3,
+      14
     ]
   },
   "termuxPackages": {
@@ -624,6 +628,12 @@
       ]
     ],
     "termux-aarch64": [
+      [
+        3,
+        14
+      ]
+    ],
+    "termux-x86_64": [
       [
         3,
         14

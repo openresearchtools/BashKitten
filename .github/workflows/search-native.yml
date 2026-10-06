@@ -67,6 +67,12 @@ jobs:
           if-no-files-found: error
 
   termux:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [aarch64, x86_64]
+    env:
+      TERMUX_ARCH: ${{ matrix.architecture }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -92,19 +98,19 @@ jobs:
           inputs = {'source': primp['source']['sha256'],
                     'termux': lock['termuxPackages']['commit'],
                     'builder': lock['termuxPackages']['builderImage'],
-                    'python': lock['python']['termux-aarch64']}
+                    'python': lock['python']['termux-' + os.environ['TERMUX_ARCH']]}
           digest = hashlib.sha256(json.dumps(inputs, sort_keys=True).encode())
           for path in sorted(pathlib.Path('agent/packaging/termux/search/python-primp').rglob('*')):
               if path.is_file():
                   digest.update(path.name.encode())
                   digest.update(path.read_bytes())
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('key=search-primp-termux-aarch64-' + digest.hexdigest() + '\n')
+              output.write('key=search-primp-termux-' + os.environ['TERMUX_ARCH'] + '-' + digest.hexdigest() + '\n')
           PY
       - uses: actions/cache/restore@v4
         id: primp
         with:
-          path: termux-packages/output/python-primp_1.3.1_aarch64.deb
+          path: termux-packages/output/python-primp_1.3.1_${{ matrix.architecture }}.deb
           key: ${{ steps.primp-inputs.outputs.key }}
       - name: Build Android/Bionic primp using the upstream Termux build system
         if: steps.primp.outputs.cache-hit != 'true'
@@ -113,18 +119,18 @@ jobs:
         run: |
           cp -a agent/packaging/termux/search/python-primp termux-packages/packages/
           cd termux-packages
-          scripts/run-docker.sh ./build-package.sh -I -a aarch64 python-primp
+          scripts/run-docker.sh ./build-package.sh -I -a "$TERMUX_ARCH" python-primp
       - name: Stage and check native ELF alignment
         run: |
           mkdir -p "$RUNNER_TEMP/native"
-          dpkg-deb -x termux-packages/output/python-primp_1.3.1_aarch64.deb "$RUNNER_TEMP/native"
+          dpkg-deb -x termux-packages/output/python-primp_1.3.1_${{ matrix.architecture }}.deb "$RUNNER_TEMP/native"
           readelf -h "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/bashkitten/search/runtime/site-packages/primp.abi3.so"
           readelf -lW "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/bashkitten/search/runtime/site-packages/primp.abi3.so" |
             awk '$1=="LOAD" { if ($NF!="0x4000" && $NF!="0x10000") exit 1; found=1 } END { if (!found) exit 1 }'
       - uses: actions/cache/save@v4
         if: steps.primp.outputs.cache-hit != 'true'
         with:
-          path: termux-packages/output/python-primp_1.3.1_aarch64.deb
+          path: termux-packages/output/python-primp_1.3.1_${{ matrix.architecture }}.deb
           key: ${{ steps.primp-inputs.outputs.key }}
       - uses: actions/cache@v4
         with:
@@ -133,11 +139,11 @@ jobs:
           restore-keys: search-sources-
       - name: Assemble Termux payload with private native binding
         run: |
-          python3 agent/search/build/runtime.py termux-aarch64 --output "$RUNNER_TEMP/search" \
+          python3 agent/search/build/runtime.py "termux-$TERMUX_ARCH" --output "$RUNNER_TEMP/search" \
             --termux-native "$RUNNER_TEMP/native/data/data/com.termux/files/usr/lib/bashkitten/search/runtime/site-packages"
       - uses: actions/upload-artifact@v4
         with:
-          name: search-runtime-termux-aarch64
+          name: search-runtime-termux-${{ matrix.architecture }}
           path: |
             ${{ runner.temp }}/search/search-*.tar.zst
             ${{ runner.temp }}/search/SHA256SUMS

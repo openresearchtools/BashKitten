@@ -15,7 +15,8 @@ TERMUX_PKG_AUTO_UPDATE=false
 termux_step_pre_configure() {
 	termux_setup_rust
 	export CARGO_BUILD_TARGET="$CARGO_TARGET_NAME"
-	export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC"
+	local linker="CARGO_TARGET_${CARGO_TARGET_NAME^^}_LINKER"
+	export "${linker//-/_}=$CC"
 	export OPENSSL_NO_VENDOR=1
 	export OPENSSL_DIR="$TERMUX_PREFIX"
 	# Android loads Python extensions with RTLD_LOCAL. Link libpython explicitly,

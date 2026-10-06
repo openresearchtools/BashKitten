@@ -13,6 +13,8 @@ import subprocess
 import tarfile
 import tempfile
 
+from release_version import nightly_version
+
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = ROOT.parent
 
@@ -86,7 +88,7 @@ def dependencies(*groups):
 def elf_payload(root, architecture, termux):
     """Reject another CPU's native binaries and unaligned Android executable loads."""
     count = 0
-    machine = 62 if architecture == 'amd64' else 183
+    machine = 62 if architecture in {'amd64', 'x86_64'} else 183
     for path in root.rglob('*'):
         if path.is_symlink() or not path.is_file():
             continue
@@ -181,13 +183,14 @@ def package_browser(args, app, stage, version, auth):
 
 def assemble(args):
     termux = args.target == 'termux'
-    require(args.architecture in (['aarch64'] if termux else ['amd64', 'arm64']), 'Architecture does not match target')
+    require(args.architecture in (['aarch64', 'x86_64'] if termux else ['amd64', 'arm64']), 'Architecture does not match target')
     require(not termux or args.browser_dir is None, 'The Termux package does not include an Android browser')
     target = args.target + '-' + args.architecture
     prefix = '/data/data/com.termux/files/usr' if termux else '/usr'
     shell = prefix + '/bin/sh' if termux else '/bin/sh'
     version = (REPOSITORY / 'browser/bashkitten/config/version.txt').read_text().strip()
     require(re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version), 'Invalid Firefox-aligned product version')
+    package_version = nightly_version(version, REPOSITORY)
     package = read_json(ROOT / 'package.json')
     lock = read_json(ROOT / 'package-lock.json')
     npm_version = version if version.count('.') == 2 else version + '.0'
@@ -230,12 +233,12 @@ def assemble(args):
         for name in ['package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']:
             shutil.copy2(ROOT / name, app / name)
         command = ['npm', 'ci', '--prefix', str(app), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
-                   '--os=' + ('android' if termux else 'linux'), '--cpu=' + ('x64' if args.architecture == 'amd64' else 'arm64')]
+                   '--os=' + ('android' if termux else 'linux'), '--cpu=' + ('x64' if args.architecture in {'amd64', 'x86_64'} else 'arm64')]
         require(int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10,
                 'Use npm >=10 for explicit target dependency selection')
         run(command)
         run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(app),
-             'android' if termux else 'linux', 'x64' if args.architecture == 'amd64' else 'arm64'])
+             'android' if termux else 'linux', 'x64' if args.architecture in {'amd64', 'x86_64'} else 'arm64'])
         auth_hash = checked_archive(args.auth_archive)
         auth = app / 'auth'
         extract(args.auth_archive, auth)
@@ -268,7 +271,7 @@ def assemble(args):
         installation = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/installed.json'
         runtime = (prefix + '/var/lib' if termux else '/var/lib') + '/bashkitten/runtimes/' + pi_version + '-' + lock_hash[:12]
         stamp = {'format': 2, 'platform': 'android' if termux else 'linux', 'architecture': args.architecture,
-                 'version': version, 'lockSha256': lock_hash, 'piVersion': pi_version,
+                 'version': version, 'packageVersion': package_version, 'lockSha256': lock_hash, 'piVersion': pi_version,
                  'installationStamp': installation, 'revision': revision, 'components': components}
         write_json(app / 'build-platform.json', stamp)
         write_json(app / 'runtime-default.json', {'root': runtime, 'version': pi_version})
@@ -333,13 +336,13 @@ fi
         write_json(app / 'build-platform.json', stamp)
         shutil.copy2(app / 'build-platform.json', doc / 'build-platform.json')
         size = sum(p.stat().st_size for p in stage.rglob('*') if p.is_file() and not p.is_symlink()) // 1024
-        (control / 'control').write_text(f'Package: bashkitten\nVersion: {version}\nArchitecture: {args.architecture}\n'
+        (control / 'control').write_text(f'Package: bashkitten\nVersion: {package_version}\nArchitecture: {args.architecture}\n'
             'Maintainer: Open Research Tools <openresearchtools@users.noreply.github.com>\n'
             f'Depends: {", ".join(depends)}\nInstalled-Size: {size}\n{replacements}Section: web\nPriority: optional\n'
             'Homepage: https://bashkitten.com\nDescription: BashKitten browser and native Pi agent\n'
             + (' Native Termux backend, search, authentication and browser controls.\n' if termux else
                ' Firefox-based browser, native Pi backend, search and authentication.\n'))
-        asset = output / f'bashkitten_{version}_{args.architecture}.deb'
+        asset = output / f'bashkitten_{package_version}_{args.architecture}.deb'
         run(['dpkg-deb', '--root-owner-group', '-Zzstd', '-z10', '--build', str(stage), str(asset)],
             env={**os.environ, 'SOURCE_DATE_EPOCH': epoch})
         write_json(output / (asset.name + '.json'), {**stamp, 'asset': asset.name, 'sha256': sha(asset), 'depends': depends})
@@ -349,7 +352,7 @@ fi
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('target', choices=['linux', 'termux'])
-    parser.add_argument('--architecture', required=True, choices=['amd64', 'arm64', 'aarch64'])
+    parser.add_argument('--architecture', required=True, choices=['amd64', 'arm64', 'aarch64', 'x86_64'])
     parser.add_argument('--browser-dir', type=Path)
     parser.add_argument('--auth-archive', type=Path, required=True)
     parser.add_argument('--search-archive', type=Path, required=True)

@@ -28,7 +28,7 @@ def api(endpoint, body=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android'])
+    parser.add_argument('target', choices=['linux-arm64', 'linux-amd64', 'android', 'android-x86_64'])
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--auth-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--search-run', default=os.environ.get('GITHUB_RUN_ID', ''))
@@ -43,7 +43,7 @@ def main():
         if not re.fullmatch('[0-9]+', run):
             raise ValueError('Build requires the source component run IDs')
     inputs.update(auth_run=args.auth_run, search_run=args.search_run)
-    if args.target != 'android':
+    if not args.target.startswith('android'):
         inputs['warm_gkrust'] = args.warm_gkrust
     endpoint = f'repos/{repository}/actions/workflows/build.yml'
     runs = api(endpoint + '/runs?event=workflow_dispatch&per_page=100')['workflow_runs']
@@ -52,7 +52,7 @@ def main():
         api(endpoint + '/dispatches', {'ref': 'main', 'inputs': inputs})
         print(f'Started {args.target} for source {source} in {repository}', flush=True)
     digest = component.fingerprint(args.target)
-    name = (component.artifact_name(args.target, digest) if args.target == 'android'
+    name = (component.artifact_name(args.target, digest) if args.target.startswith('android')
             else f'bashkitten-{args.target}-candidate')
     linked = False
     while True:
@@ -70,7 +70,7 @@ def main():
             if artifact:
                 subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', repository,
                                 '--name', name, '--dir', str(args.directory)], check=True)
-                if args.target == 'android':
+                if args.target.startswith('android'):
                     component.verify(args.directory, args.target, digest)
                 else:
                     component.verify_package(args.directory, args.target, source, digest)

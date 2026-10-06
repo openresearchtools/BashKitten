@@ -43,6 +43,11 @@ jobs:
             os: android
             arch: arm64
             tags: bashkitten_client
+          - target: android-amd64-client
+            runner: ubuntu-24.04
+            os: android
+            arch: amd64
+            tags: bashkitten_client
     runs-on: ${{ matrix.runner }}
     env:
       GOTELEMETRY: 'off'
@@ -78,10 +83,15 @@ jobs:
           path: ${{ runner.temp }}/remote-packages.txt
           if-no-files-found: error
   android-library:
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64-v8a, x86_64]
     runs-on: ubuntu-24.04
     env:
       GOTELEMETRY: 'off'
       GOTOOLCHAIN: local
+      BASHKITTEN_ANDROID_ABI: ${{ matrix.abi }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -120,6 +130,6 @@ jobs:
             browser/mobile/android/bashkitten/src/main/java/com/bashkitten/RemoteAgentConnection.java
       - uses: actions/upload-artifact@v4
         with:
-          name: remote-client-android-arm64
+          name: remote-client-android-${{ matrix.abi }}
           path: ${{ runner.temp }}/remote-android
           if-no-files-found: error

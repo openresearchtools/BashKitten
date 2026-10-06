@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Collect the four matching build candidates and their corresponding sources.
+"""Collect the six matching build candidates and their corresponding sources.
 
-This assembles files only. Publishing and APT promotion follow real device
-validation; a successful compilation does not claim that validation occurred.
+This assembles files only. Prereleases enable APT testing; a successful compilation does not claim
+that real device validation has occurred.
 """
 import argparse
 import hashlib
@@ -13,6 +13,8 @@ import re
 import shutil
 import subprocess
 import tarfile
+
+from release_version import nightly_version
 
 ROOT = Path(__file__).resolve().parents[2]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
@@ -50,9 +52,11 @@ def main():
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     if not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', version):
         raise ValueError('Invalid Firefox-aligned product version')
-    tag = args.tag or 'v' + version
-    if tag != 'v' + version:
-        raise ValueError('Release tag must match the browser product version')
+    package_version = nightly_version(version, ROOT)
+    expected_tag = 'v' + package_version.replace('~', '-')
+    tag = args.tag or expected_tag
+    if tag != expected_tag:
+        raise ValueError('Release tag must match this nightly source version')
     if not args.candidate_only:
         if not args.run:
             parser.error('--run is required outside the candidate build')
@@ -74,49 +78,56 @@ def main():
         return {'asset': file.name, 'sha256': sha(file), 'size': file.stat().st_size,
                 'url': f'https://github.com/openresearchtools/bashkitten/releases/download/{tag}/{file.name}'}
 
-    apks = list(args.candidates.rglob('*.apk'))
-    if len(apks) != 1:
-        raise ValueError('Exactly one production APK is required')
-    apk = apks[0]
-    manifest = json.loads((apk.parent / 'build-manifest.json').read_text())
-    if manifest.get('product_version') != version or manifest.get('firefox_version') != engine:
-        raise ValueError('APK product, engine or source revision mismatch')
-    if manifest.get('source') != revision:
-        inputs = subprocess.check_output(
-            ['python3', str(ROOT / 'agent/packaging/browser-component.py'), 'fingerprint', 'android'], text=True).strip()
-        if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')) or manifest.get('browser_input_sha256') != inputs:
-            raise ValueError('Cached APK inputs do not match this source')
-    if manifest.get('package_id') != 'com.bashkitten' or not manifest.get('publisher_signed'):
-        raise ValueError('APK must be the signed BashKitten product')
-    if manifest.get('apks', {}).get(apk.name) != sha(apk):
-        raise ValueError('APK hash mismatch')
+    apks = sorted(args.candidates.rglob('*.apk'))
+    if len(apks) != 2:
+        raise ValueError('Exactly one ARM64 and one x86_64 production APK are required')
     sdk = Path(os.environ.get('ANDROID_HOME', '/usr/local/lib/android/sdk'))
     signers = sorted(sdk.glob('build-tools/*/apksigner'))
     if not signers:
-        raise ValueError('Android apksigner is required to verify the final APK')
-    signature = subprocess.check_output([str(signers[-1]), 'verify', '--print-certs', str(apk)], text=True)
-    if 'certificate SHA-256 digest: ' + CERT not in signature:
-        raise ValueError('APK did not use the existing Droid signing certificate')
-    app = {**copy(apk), 'packageId': 'com.bashkitten', 'versionName': version,
-           'versionCode': manifest['version_code'], 'abi': 'arm64-v8a',
-           'certificateSha256': CERT, 'sourceCommit': manifest['source'],
-           'buildRepository': manifest.get('build_repository', 'openresearchtools/bashkitten'),
-           'buildRun': manifest.get('build_run') or args.run or os.environ.get('GITHUB_RUN_ID')}
+        raise ValueError('Android apksigner is required to verify the final APKs')
+    apps, abis = [], set()
+    for apk in apks:
+        manifest = json.loads((apk.parent / 'build-manifest.json').read_text())
+        abi = manifest.get('architecture')
+        if abi not in {'arm64-v8a', 'x86_64'} or abi in abis:
+            raise ValueError('Duplicate or unexpected Android ABI')
+        abis.add(abi)
+        target = 'android-x86_64' if abi == 'x86_64' else 'android'
+        if manifest.get('product_version') != version or manifest.get('firefox_version') != engine:
+            raise ValueError('APK product, engine or source revision mismatch')
+        if manifest.get('source') != revision:
+            inputs = subprocess.check_output(
+                ['python3', str(ROOT / 'agent/packaging/browser-component.py'), 'fingerprint', target], text=True).strip()
+            if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')) or manifest.get('browser_input_sha256') != inputs:
+                raise ValueError('Cached APK inputs do not match this source')
+        if manifest.get('package_id') != 'com.bashkitten' or not manifest.get('publisher_signed'):
+            raise ValueError('APK must be the signed BashKitten product')
+        if manifest.get('apks', {}).get(apk.name) != sha(apk):
+            raise ValueError('APK hash mismatch')
+        signature = subprocess.check_output([str(signers[-1]), 'verify', '--print-certs', str(apk)], text=True)
+        if 'certificate SHA-256 digest: ' + CERT not in signature:
+            raise ValueError('APK did not use the existing Droid signing certificate')
+        app = {**copy(apk), 'packageId': 'com.bashkitten', 'versionName': version,
+               'versionCode': manifest['version_code'], 'abi': abi,
+               'certificateSha256': CERT, 'sourceCommit': manifest['source'],
+               'buildRepository': manifest.get('build_repository', 'openresearchtools/bashkitten'),
+               'buildRun': manifest.get('build_run') or args.run or os.environ.get('GITHUB_RUN_ID')}
+        apps.append(app)
     packages = []
     architectures = set()
     for file in sorted(args.candidates.rglob('*.deb')):
         fields, stamp = package(file)
         architecture = fields['Architecture']
-        if fields['Package'] != 'bashkitten' or fields['Version'].split('-', 1)[0] != version:
+        if fields['Package'] != 'bashkitten' or fields['Version'] != package_version:
             raise ValueError('Unexpected package name/version: ' + file.name)
-        if architecture in architectures or architecture not in {'amd64', 'arm64', 'aarch64'}:
+        if architecture in architectures or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
             raise ValueError('Duplicate or unexpected package architecture')
         if stamp.get('revision') != revision or stamp.get('architecture') != architecture:
             raise ValueError('Package build provenance mismatch')
         architectures.add(architecture)
         packages.append({**fields, **copy(file), 'build': stamp})
-    if architectures != {'amd64', 'arm64', 'aarch64'}:
-        raise ValueError('All three complete native packages are required')
+    if architectures != {'amd64', 'arm64', 'aarch64', 'x86_64'}:
+        raise ValueError('All four complete native packages are required')
     sources = []
     for file in sorted(args.candidates.rglob('*')):
         if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip)$', file.name):
@@ -133,19 +144,19 @@ def main():
                             '(https://raw.githubusercontent.com/openresearchtools/BashKitten/main/docs/testing-releases.svg)')
     notes = (banner + '\n\n> [!WARNING]\n> **Testing release only. Not ready for production. Coming soon.**\n\n'
              f'BashKitten {version} · Firefox ESR {engine}.\n\n'
-             '- **Android:** install the ARM64 APK, open Agent and follow the Termux setup command.\n'
+             '- **Android:** install the ARM64 or x86_64 APK matching your device, open Agent and follow the Termux setup command.\n'
              '- **Linux:** install the AMD64 or ARM64 `.deb`, which includes the browser and Agent server.\n'
              '- **Updating Android:** update both the APK and the BashKitten package in Termux. Provider logins and chat history are retained.\n\n'
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
              'Checksums and corresponding source archives are attached.\n')
     (args.output / 'release-notes.md').write_text(notes)
-    result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True,
+    result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'prerelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
-              'apps': [app], 'packages': packages, 'sources': sources}
+              'apps': apps, 'packages': packages, 'sources': sources}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
     (args.output / 'SHA256SUMS').write_text(''.join(
         sha(file) + '  ' + file.name + '\n' for file in sorted(args.output.iterdir()) if file.name != 'SHA256SUMS'))
-    print('Assembled Android APK, three complete native packages and matching sources; not published.')
+    print('Assembled two Android APKs, four complete native packages and matching sources; not published.')
 
 
 if __name__ == '__main__':
