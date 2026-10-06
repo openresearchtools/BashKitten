@@ -28,6 +28,8 @@ import org.json.JSONArray;
 
 import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /** Host administration is native-only. Nothing here is a web/automation command. */
@@ -36,6 +38,7 @@ public final class AgentShareActivity extends ProductActivity {
     private ShareState state;
     private LinearLayout body;
     private TextView message;
+    private final ExecutorService images = Executors.newSingleThreadExecutor();
 
     @Override public void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -245,16 +248,27 @@ public final class AgentShareActivity extends ProductActivity {
         return Base64.decode(value.substring("data:image/png;base64,".length()), Base64.NO_WRAP);
     }
     private ImageView qr(String encoded, String label) {
-        byte[] bytes = null;
-        try {
-            bytes = png(encoded); Bitmap image = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-            if (image == null) throw new IllegalArgumentException();
-            ImageView view = new ImageView(this); view.setImageBitmap(image); view.setAdjustViewBounds(true);
-            view.setContentDescription(label); view.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, dp(280));
-            layout.setMargins(0, dp(12), 0, dp(12)); body.addView(view, layout); return view;
-        } catch (Exception error) { message.setText("The controller returned an invalid QR image."); return null; }
-        finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
+        ImageView view = new ImageView(this); view.setAdjustViewBounds(true);
+        view.setContentDescription(label); view.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, dp(280));
+        layout.setMargins(0, dp(12), 0, dp(12)); body.addView(view, layout);
+        images.execute(() -> {
+            byte[] bytes = null;
+            Bitmap decoded = null;
+            try { bytes = png(encoded); decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.length); }
+            catch (Exception ignored) { /* Report invalid images without logging connection data. */ }
+            finally { if (bytes != null) Arrays.fill(bytes, (byte) 0); }
+            Bitmap image = decoded;
+            state.runtime.app.main.post(() -> {
+                if (isFinishing() || isDestroyed() || view.getParent() != body) {
+                    if (image != null) image.recycle();
+                    return;
+                }
+                if (image == null) message.setText("The controller returned an invalid QR image.");
+                else view.setImageBitmap(image);
+            });
+        });
+        return view;
     }
     private LinearLayout column() { LinearLayout layout = new LinearLayout(this); layout.setOrientation(LinearLayout.VERTICAL); return layout; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
@@ -281,6 +295,7 @@ public final class AgentShareActivity extends ProductActivity {
         });
     }
     @Override protected void onDestroy() {
+        images.shutdownNow();
         body.removeAllViews();
         super.onDestroy();
     }

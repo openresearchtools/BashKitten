@@ -96,16 +96,28 @@ public final class OnionActivity extends ProductActivity {
         super.onActivityResult(request, result, data);
         try {
             if (request == 20 && result == RESULT_OK && data != null && data.getData() != null) {
-                try (InputStream input = getContentResolver().openInputStream(data.getData())) {
-                    if (input == null) throw new IOException("Credential file could not be read");
-                    ByteArrayOutputStream output = new ByteArrayOutputStream();
-                    byte[] chunk = new byte[8192]; int count;
-                    try { while ((count = input.read(chunk)) != -1) output.write(chunk, 0, count); }
-                    finally { java.util.Arrays.fill(chunk, (byte) 0); }
-                    byte[] bytes = output.toByteArray();
-                    try { confirmImport(OnionKey.parse(new String(bytes, StandardCharsets.UTF_8))); }
-                    finally { java.util.Arrays.fill(bytes, (byte) 0); }
-                }
+                android.net.Uri uri = data.getData();
+                ContentResolver resolver = getApplicationContext().getContentResolver();
+                status.setText("Reading onion credential…");
+                new Thread(() -> {
+                    OnionKey key = null;
+                    try (InputStream input = resolver.openInputStream(uri)) {
+                        if (input == null) throw new IOException("Credential file could not be read");
+                        ByteArrayOutputStream output = new ByteArrayOutputStream();
+                        byte[] chunk = new byte[8192]; int count;
+                        try { while ((count = input.read(chunk)) != -1) output.write(chunk, 0, count); }
+                        finally { java.util.Arrays.fill(chunk, (byte) 0); }
+                        byte[] bytes = output.toByteArray();
+                        try { key = OnionKey.parse(new String(bytes, StandardCharsets.UTF_8)); }
+                        finally { java.util.Arrays.fill(bytes, (byte) 0); }
+                    } catch (Exception ignored) { /* Do not log credential material. */ }
+                    OnionKey parsed = key;
+                    app.main.post(() -> {
+                        if (isFinishing() || isDestroyed()) return;
+                        if (parsed == null) message("Could not read a valid onion credential");
+                        else { status.setText(""); confirmImport(parsed); }
+                    });
+                }, "onion-credential-import").start();
             } else {
                 IntentResult scanned = IntentIntegrator.parseActivityResult(request, result, data);
                 if (scanned != null && scanned.getContents() != null) confirmImport(OnionKey.parse(scanned.getContents()));
