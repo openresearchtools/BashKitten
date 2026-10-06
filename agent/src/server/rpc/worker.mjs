@@ -312,6 +312,8 @@ async function handle(req, res) {
     const value = await jsonBody(req);
     if (req.url === '/sidebar-changed') { emit({ type: 'sessions_changed' }, false); return json(res, { ok: true }); }
     if (req.url === '/subagent-settings') {
+      const { commands } = await rpc.command('get_commands');
+      if (!commands.some(command => command.source === 'extension' && command.name === 'bashkitten-agents-refresh')) throw Error('The BashKitten subagents extension is not loaded in this Pi chat');
       await rpc.command('prompt', { message: '/bashkitten-agents-refresh' });
       emit({ type: 'subagent_settings', settings: await readSubagentSettings(id) }, false);
       return json(res, { ok: true });
@@ -364,9 +366,10 @@ async function handle(req, res) {
             else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; }
             else if (value.action === 'cancel_edit') delete item.editToken;
             else if (value.action === 'edit') {
-              const suffix = item.wire.slice(item.text.length);
-              item.text = value.content; item.wire = value.content + suffix; delete item.editToken; delete item.recovered;
-              meta.messages.push({ text: item.text, wire: item.wire, attachments: item.attachments });
+              const prefix = item.agentSource ? item.wire.slice(0, item.wire.length - item.text.length) : '';
+              const suffix = item.agentSource ? '' : item.wire.slice(item.text.length);
+              item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered;
+              meta.messages.push({ text: item.text, wire: item.wire, attachments: item.attachments, agentSource: item.agentSource, agentDelivery: item.agentDelivery });
             } else throw Error('Unknown queue action');
           }
         });
