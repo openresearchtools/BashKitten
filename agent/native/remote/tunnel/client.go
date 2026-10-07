@@ -163,7 +163,9 @@ func (c ClientConfig) HTTPClient() (*http.Client, error) {
 	transport := &http.Transport{DialContext: dialer.NetDialContext,
 		TLSClientConfig: dialer.TLSClientConfig, TLSHandshakeTimeout: handshakeTimeout}
 	origin, _ := url.Parse(c.OnionURL) // prepare already validated this origin.
-	return &http.Client{Transport: &onionTransport{Transport: transport, host: origin.Hostname()}, Timeout: handshakeTimeout,
+	// A fresh onion circuit can outlast the TLS handshake budget. Match Tor's
+	// default SocksTimeout; operation cancellation still interrupts the request.
+	return &http.Client{Transport: &onionTransport{Transport: transport, host: origin.Hostname()}, Timeout: 2 * time.Minute,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, nil
 }
 

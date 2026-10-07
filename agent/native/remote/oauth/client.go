@@ -69,8 +69,8 @@ func New(config Config) (*Client, error) {
 	c := &Client{config: config, http: *config.HTTP, origin: "https://" + u.Host}
 	c.http.Jar = nil // Login stays in the protected browser's persistent context.
 	c.http.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	if c.http.Timeout == 0 || c.http.Timeout > 45*time.Second {
-		c.http.Timeout = 45 * time.Second
+	if c.http.Timeout == 0 {
+		c.http.Timeout = 2 * time.Minute
 	}
 	return c, nil
 }
