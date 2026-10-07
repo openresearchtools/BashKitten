@@ -192,16 +192,16 @@ func (c *Client) accessTokenLocked(parent context.Context) (string, error) {
 		return "", err
 	}
 	previous := c.token
-	// A failed refresh may have reached Authelia and consumed its old token.
-	// Never keep retrying that credential after an uncertain network result.
-	c.token = oauth.Token{}
 	token, err := c.oauth.Access(ctx, previous)
 	if err != nil {
-		c.mu.Lock()
-		c.closeMappings()
-		c.mu.Unlock()
-		if previous != (oauth.Token{}) && c.save(oauth.Token{}) != nil {
-			return "", errors.New("could not clear unavailable OAuth credentials")
+		if errors.Is(err, oauth.ErrLoginRequired) {
+			c.token = oauth.Token{}
+			c.mu.Lock()
+			c.closeMappings()
+			c.mu.Unlock()
+			if previous != (oauth.Token{}) && c.save(oauth.Token{}) != nil {
+				return "", errors.New("could not clear rejected OAuth credentials")
+			}
 		}
 		return "", err
 	}

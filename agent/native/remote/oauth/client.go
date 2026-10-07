@@ -69,9 +69,6 @@ func New(config Config) (*Client, error) {
 	c := &Client{config: config, http: *config.HTTP, origin: "https://" + u.Host}
 	c.http.Jar = nil // Login stays in the protected browser's persistent context.
 	c.http.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	if c.http.Timeout == 0 {
-		c.http.Timeout = 2 * time.Minute
-	}
 	return c, nil
 }
 
@@ -146,8 +143,8 @@ func (c *Client) exchange(ctx context.Context, values url.Values) (Token, error)
 }
 
 // Refresh rotates credentials. Callers must serialize refreshes per profile.
-// Clear the saved token before sending so a process death or failed exchange
-// cannot cause the consumed refresh token to be retried after restart.
+// exchange persists the replacement before returning. A network error alone
+// does not establish that Authelia rejected the saved credential.
 func (c *Client) Refresh(ctx context.Context, token Token) (Token, error) {
 	if !c.Owns(token) {
 		return Token{}, ErrLoginRequired
@@ -155,14 +152,11 @@ func (c *Client) Refresh(ctx context.Context, token Token) (Token, error) {
 	if err := ctx.Err(); err != nil {
 		return Token{}, err
 	}
-	if c.config.Save(Token{}) != nil {
-		return Token{}, errors.New("could not prepare saved OAuth credentials for rotation")
-	}
 	return c.exchange(ctx, url.Values{"grant_type": {"refresh_token"}, "refresh_token": {token.RefreshToken}})
 }
 
 // Access returns a usable token or performs its single refresh. The native
-// owner serializes calls and discards an old token after any failed rotation.
+// owner serializes calls and clears credentials only after a rejected grant.
 func (c *Client) Access(ctx context.Context, token Token) (Token, error) {
 	if !c.Owns(token) {
 		return Token{}, ErrLoginRequired
