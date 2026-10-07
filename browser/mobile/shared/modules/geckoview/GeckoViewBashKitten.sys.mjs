@@ -4,7 +4,6 @@ import { BashKittenHost } from "resource://gre/modules/BashKittenHost.sys.mjs";
 import { BashKittenAndroid } from "resource://gre/modules/BashKittenAndroid.sys.mjs";
 
 const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
-const { setTimeout, clearTimeout } = ChromeUtils.importESModule("resource://gre/modules/Timer.sys.mjs");
 
 const certificates = Cc["@mozilla.org/security/certoverride;1"].getService(Ci.nsICertOverrideService);
 const certDB = Cc["@mozilla.org/security/x509certdb;1"].getService(Ci.nsIX509CertDB);
@@ -350,9 +349,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     try {
       return await new Promise((resolve, reject) => {
         let bytes = "", failure;
-        const timer = setTimeout(() => {
-          failure = new Error("Agent channel timed out"); channel.cancel(Cr.NS_ERROR_NET_TIMEOUT);
-        }, path.endsWith("/poll") ? 40000 : 120000);
         const listener = {
           QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver", "nsIInterfaceRequestor", "nsIChannelEventSink"]),
           getInterface(iid) { return this.QueryInterface(iid); },
@@ -361,8 +357,12 @@ export class GeckoViewBashKitten extends GeckoViewModule {
             callback.onRedirectVerifyCallback(Cr.NS_BINDING_ABORTED);
           },
           onStartRequest(request) {
-            if (channel.responseStatus !== 200) {
-              failure = new Error("Agent channel HTTP " + channel.responseStatus);
+            let status;
+            // Network failures can reach this callback without HTTP headers.
+            // onStopRequest reports the underlying channel error.
+            try { status = channel.responseStatus; } catch { return; }
+            if (status !== 200) {
+              failure = new Error("Agent channel HTTP " + status);
               request.cancel(Cr.NS_BINDING_ABORTED);
             }
           },
@@ -371,7 +371,6 @@ export class GeckoViewBashKitten extends GeckoViewModule {
             bytes += NetUtil.readInputStreamToString(input, count);
           },
           onStopRequest(request, status) {
-            clearTimeout(timer);
             if (failure || !Components.isSuccessCode(status)) {
               reject(failure || new Error("Agent channel disconnected (" + Components.Exception("", status).name + ")"));
               return;
@@ -382,7 +381,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
         };
         channel.notificationCallbacks = listener;
         try { channel.asyncOpen(listener); }
-        catch (error) { clearTimeout(timer); reject(error); }
+        catch (error) { reject(error); }
       });
     } finally { this.agentRequests.delete(channel); }
   }

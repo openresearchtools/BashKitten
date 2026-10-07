@@ -45,7 +45,7 @@ type Client struct {
 	oauth  *oauth.Client
 	save   func(oauth.Token) error
 
-	authMu      sync.Mutex // A refresh token is consumed at most once, including failure.
+	authMu      sync.Mutex // Serializes refreshes and token persistence.
 	token       oauth.Token
 	mu          sync.Mutex
 	closed      bool

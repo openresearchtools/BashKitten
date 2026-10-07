@@ -5,13 +5,11 @@ package host
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/openresearchtools/bashkitten/remote/tunnel"
 )
@@ -19,7 +17,7 @@ import (
 // Only catalogue reads and fixed actions cross into the existing private
 // controller. No client-supplied path, target, command, headers or body is forwarded.
 func serviceControl(authorize tunnel.AuthorizeBearer, transport *http.Transport, generation string) http.Handler {
-	client := &http.Client{Transport: transport, Timeout: 45 * time.Second,
+	client := &http.Client{Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	pattern := regexp.MustCompile(`^/services/([a-z0-9][a-z0-9_-]{0,63})/(start|stop|reload)$`)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,9 +41,7 @@ func serviceControl(authorize tunnel.AuthorizeBearer, transport *http.Transport,
 			http.Error(w, "unauthorized", 401)
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-		err := authorize(ctx, strings.TrimPrefix(headers[0], "Bearer "))
-		cancel()
+		err := authorize(r.Context(), strings.TrimPrefix(headers[0], "Bearer "))
 		if err != nil {
 			http.Error(w, "unauthorized", 401)
 			return

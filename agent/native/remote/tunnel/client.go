@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	share "github.com/jpillora/chisel/share"
@@ -132,7 +131,7 @@ func (c ClientConfig) prepare(id string) (*websocket.Dialer, string, error) {
 	tlsConfig := c.TLS.Clone()
 	tlsConfig.ServerName = u.Hostname()
 	tlsConfig.MinVersion = tls.VersionTLS13
-	socks, err := proxy.SOCKS5(c.SOCKSNetwork, c.SOCKSAddress, nil, &net.Dialer{Timeout: handshakeTimeout})
+	socks, err := proxy.SOCKS5(c.SOCKSNetwork, c.SOCKSAddress, nil, &net.Dialer{})
 	if err != nil {
 		return nil, "", err
 	}
@@ -141,7 +140,7 @@ func (c ClientConfig) prepare(id string) (*websocket.Dialer, string, error) {
 		return nil, "", errors.New("Tor SOCKS dialer must support cancellation")
 	}
 	expected := net.JoinHostPort(u.Hostname(), "443")
-	d := &websocket.Dialer{HandshakeTimeout: handshakeTimeout, Subprotocols: []string{share.ProtocolVersion}, TLSClientConfig: tlsConfig, NetDialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+	d := &websocket.Dialer{Subprotocols: []string{share.ProtocolVersion}, TLSClientConfig: tlsConfig, NetDialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 		if network != "tcp" || address != expected {
 			return nil, errors.New("unexpected tunnel destination")
 		}
@@ -161,7 +160,7 @@ func (c ClientConfig) HTTPClient() (*http.Client, error) {
 		return nil, err
 	}
 	transport := &http.Transport{DialContext: dialer.NetDialContext,
-		TLSClientConfig: dialer.TLSClientConfig, TLSHandshakeTimeout: handshakeTimeout}
+		TLSClientConfig: dialer.TLSClientConfig}
 	origin, _ := url.Parse(c.OnionURL) // prepare already validated this origin.
 	// Tor owns the SOCKS circuit deadline. Do not cut it short with an overall
 	// HTTP timer; the native owner's context cancels outstanding requests.
@@ -186,25 +185,39 @@ func (t *onionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websocket.Dialer, endpoint, id string, local *net.TCPConn) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	tokenCtx, tokenCancel := context.WithTimeout(ctx, handshakeTimeout)
-	token, err := cfg.AccessToken(tokenCtx)
-	tokenCancel()
-	if err != nil || !validToken(token) {
+	token, err := cfg.AccessToken(ctx)
+	if err != nil {
+		return fmt.Errorf("OAuth access token unavailable: %w", err)
+	}
+	if !validToken(token) {
 		return errors.New("OAuth access token unavailable")
 	}
-	ws, response, err := dialer.DialContext(ctx, endpoint, http.Header{"Authorization": []string{"Bearer " + token}})
+	// Gorilla uses the context during dialing and TLS, but its HTTP upgrade
+	// reads need the socket closed explicitly when the native owner cancels.
+	carrier := *dialer
+	var stopDial func() bool
+	carrier.NetDialContext = func(dialCtx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dialer.NetDialContext(dialCtx, network, address)
+		if err == nil {
+			stopDial = context.AfterFunc(ctx, func() { conn.Close() })
+		}
+		return conn, err
+	}
+	ws, response, err := carrier.DialContext(ctx, endpoint, http.Header{"Authorization": []string{"Bearer " + token}})
+	if stopDial != nil {
+		stopDial()
+	}
 	if response != nil && response.Body != nil {
 		response.Body.Close()
 	}
 	if err != nil {
-		return errors.New("Tor/TLS tunnel upgrade failed")
+		return fmt.Errorf("Tor/TLS tunnel upgrade failed: %w", err)
 	}
 	conn := cnet.NewWebSocketConn(ws)
 	ws.SetReadLimit(512 * 1024)
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { conn.Close(); local.Close() })
 	defer stop()
-	conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	sc, channels, requests, err := ssh.NewClientConn(conn, "", &ssh.ClientConfig{User: "torkitten", Auth: []ssh.AuthMethod{ssh.Password(token)}, ClientVersion: "SSH-" + share.ProtocolVersion + "-client", HostKeyCallback: func(_ string, _ net.Addr, key ssh.PublicKey) error {
 		if ccrypto.FingerprintKey(key) != cfg.Fingerprint {
 			return errors.New("SSH fingerprint mismatch")
@@ -224,7 +237,6 @@ func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websoc
 	if err != nil {
 		return errors.New("service channel unavailable")
 	}
-	conn.SetDeadline(time.Time{})
 	m.setStatus(nil)
 	go ssh.DiscardRequests(reqs)
 	go func() {

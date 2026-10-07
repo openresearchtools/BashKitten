@@ -20,8 +20,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-const handshakeTimeout = 45 * time.Second
-
 var servicePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 var onionPattern = regexp.MustCompile(`^[a-z2-7]{56}\.onion$`)
 

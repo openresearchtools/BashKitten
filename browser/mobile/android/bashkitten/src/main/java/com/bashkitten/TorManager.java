@@ -88,12 +88,9 @@ final class TorManager {
                     installed.clear(); installed.addAll(enrolled);
                     restored = true;
                 }
-                while (true) {
-                    String status = current.getTorControlConnection().getInfo("status/bootstrap-phase");
-                    if (status.contains("PROGRESS=100")) break;
-                    if (SystemClock.elapsedRealtime() > deadline) throw new IllegalStateException();
-                    Thread.sleep(250);
-                }
+                // The private SOCKS listener is ready. Tor owns bootstrap and
+                // circuit establishment for its pending connections; do not
+                // expire every waiting tab/Agent after a fixed network delay.
                 int port = gateway.port();
                 if (port < 1) throw new IllegalStateException();
                 app.main.post(() -> finishConnecting(port, null));

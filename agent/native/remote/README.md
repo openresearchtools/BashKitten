@@ -28,11 +28,16 @@ directly under `auth/`; no source patch or runtime source download is used.
   and loopback mappings. The platform supplies the existing Tor SOCKS endpoint
   and an atomic encrypted `Save(Token)` callback; an empty token means erase.
   Normal Close preserves saved login; Logout closes all local access before
-  revoking/erasing credentials. Failed rotation closes mappings and cannot retry
-  the consumed token. An occupied replacement port leaves the old mapping open.
+  revoking/erasing credentials. Transport failures preserve saved credentials;
+  an explicitly rejected grant clears them and closes mappings. An occupied
+  replacement port leaves the old mapping open.
   Mapping status reports its bound port/carrier error, not host readiness.
   Register the native OAuth client as `bashkitten-` plus the TK2 bundle ID;
   `client.OAuthClientID` supplies the identical value to both native owners.
+  Connection setup, token refresh and service actions follow their native
+  owner's cancellation context, without wrapper-imposed elapsed-time cutoffs.
+  Cancellation closes pending WebSocket/SSH sockets as well as active streams.
+  Tor retains its own circuit handling; Authelia still enforces authorization.
 - `host` and `cmd/bashkitten-remote` provide the native host executable. Its sole
   management input is the controller-owned stdin/stdout pipe; the only listener
   is a private Unix socket serving authenticated service-ID carriers. EOF,

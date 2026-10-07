@@ -134,9 +134,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
-	authCtx, authCancel := context.WithTimeout(r.Context(), 15*time.Second)
-	err := s.authorize(authCtx, token)
-	authCancel()
+	err := s.authorize(r.Context(), token)
 	if err != nil {
 		http.Error(w, "unauthorized", 401)
 		return
@@ -145,7 +143,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid protocol", 400)
 		return
 	}
-	upgrade := websocket.Upgrader{Subprotocols: []string{share.ProtocolVersion}, HandshakeTimeout: handshakeTimeout}
+	upgrade := websocket.Upgrader{Subprotocols: []string{share.ProtocolVersion}}
 	ws, err := upgrade.Upgrade(w, r, nil)
 	if err != nil {
 		return
@@ -186,7 +184,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
-	conn.SetDeadline(time.Now().Add(handshakeTimeout))
 	sshConfig := &ssh.ServerConfig{MaxAuthTries: 1, PasswordCallback: func(meta ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {
 		if meta.User() != "torkitten" || subtle.ConstantTimeCompare(password, []byte(token)) != 1 {
 			return nil, errors.New("unauthorized")
@@ -204,8 +201,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case request = <-requests:
 	case <-ctx.Done():
 		return
-	case <-time.After(10 * time.Second):
-		return
 	}
 	if request == nil {
 		return
@@ -217,7 +212,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err := request.Reply(true, nil); err != nil {
 		return
 	}
-	conn.SetDeadline(time.Time{})
 	noChannels := make(chan ssh.NewChannel)
 	close(noChannels)
 	go func() { bind(ctx, sc, requests, noChannels); cancel() }()
@@ -229,7 +223,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		used = true
 		go func() {
-			target, err := (&net.Dialer{Timeout: 30 * time.Second}).DialContext(ctx, v.endpoint.Network, v.endpoint.Address)
+			target, err := (&net.Dialer{}).DialContext(ctx, v.endpoint.Network, v.endpoint.Address)
 			if err != nil {
 				ch.Reject(ssh.ConnectionFailed, "service unavailable")
 				return

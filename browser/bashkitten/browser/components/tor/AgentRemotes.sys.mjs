@@ -4,7 +4,6 @@ import { NetUtil } from "resource://gre/modules/NetUtil.sys.mjs";
 import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
 import { onionPrivateKey } from "resource:///modules/OnionAuthStore.sys.mjs";
 import { NativeRemote } from "resource:///modules/NativeRemote.sys.mjs";
-import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const CONTEXT_MIN = 0xB4500000;
 const CONTEXT_MAX = 0xB450FFFF;
@@ -34,11 +33,10 @@ function certificate(pem, expected = "") {
   return { cert, identity };
 }
 
-function readResponse(channel, { body, signal, limit = Infinity, timeout = 35000 } = {}) {
+function readResponse(channel, { body, signal, limit = Infinity } = {}) {
   return new Promise((resolve, reject) => {
     let data = "";
     const cancel = () => channel.cancel(Cr.NS_BINDING_ABORTED);
-    const timer = setTimeout(cancel, timeout);
     signal?.addEventListener("abort", cancel, { once: true });
     if (body !== undefined) {
       const stream = Cc["@mozilla.org/io/string-input-stream;1"].createInstance(Ci.nsIStringInputStream);
@@ -65,7 +63,6 @@ function readResponse(channel, { body, signal, limit = Infinity, timeout = 35000
         data += input.read(count);
       },
       onStopRequest(_request, status) {
-        clearTimeout(timer);
         signal?.removeEventListener("abort", cancel);
         let httpStatus = 0;
         try { httpStatus = channel.responseStatus; } catch {}
