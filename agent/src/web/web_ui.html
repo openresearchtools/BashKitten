@@ -892,7 +892,6 @@
       source?.close(); source = null;
       filePolicyEvents?.close(); filePolicyEvents = null;
       applyFilePermission(false);
-      $('#app').inert = true;
       $('#app').classList.add('hidden');
       $('#auth').classList.remove('hidden');
       const local = location.hostname === '127.0.0.1';
@@ -2371,7 +2370,6 @@
       if (!session) return;
       void cancelDictation();
       const view = ++sessionView;
-      $('#composer').inert = true;
       try {
         if (editingQueueId && !reconnect) await cancelQueueEdit();
         if (sessionView !== view) return;
@@ -2408,6 +2406,7 @@
         renderedEntries = new Set();
         resetUsage();
         $('#chatInner').innerHTML = '';
+        $('#composerHint').textContent = 'Opening chat…';
         const resumed = await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
         if (sessionView !== view) return;
         updateInstanceControl(resumed.stopped);
@@ -2420,7 +2419,15 @@
         if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
         document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
         $('#chat').scrollTop = $('#chat').scrollHeight;
-      } finally { if (sessionView === view) $('#composer').inert = false; }
+      } catch (error) {
+        if (sessionView === view && !authRequired) {
+          current.running = false;
+          updateInstanceControl(true);
+          setRunButton(false);
+          $('#composerHint').textContent = error.message;
+        }
+        throw error;
+      }
     }
 
     async function beginNewSession() {
@@ -2428,7 +2435,6 @@
       const view = ++sessionView;
       if (editingQueueId) await cancelQueueEdit();
       if (sessionView !== view) return;
-      $('#composer').inert = false;
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
@@ -2596,7 +2602,6 @@
       if (booting) return;
       booting = true;
       bootPending = true;
-      $('#app').inert = true;
       try {
         const value = await api('/api/bootstrap');
         if (!value.authenticated) {
@@ -2617,17 +2622,30 @@
         $('#app').classList.remove('hidden');
         await loadSettings();
         await loadModels();
-        const sessions = await loadSessions();
-        if (initialized) {
-          if (current) await openSession(sessions.find(session => session.id === current.id) || current, true);
-        } else {
-          if (sessions.length) await openSession(await linkedSession(sessions) || sessions[0]);
-          else await beginNewSession();
-        }
+        const reconnect = initialized;
+        // The page is ready before an individual Pi session starts. A failed
+        // session must leave New chat, Settings and the sidebar usable.
         initialized = true;
         bootPending = false;
-        $('#app').inert = false;
         $('#authError').textContent = '';
+        try {
+          const view = sessionView;
+          const sessions = await loadSessions();
+          if (sessionView !== view) return;
+          if (reconnect) {
+            if (current) await openSession(sessions.find(session => session.id === current.id) || current, true);
+          } else {
+            if (sessions.length) {
+              const session = await linkedSession(sessions) || sessions[0];
+              if (sessionView !== view) return;
+              await openSession(session);
+            }
+            else await beginNewSession();
+          }
+        } catch (error) {
+          if (authRequired) throw error;
+          $('#composerHint').textContent = error.message;
+        }
         window.dispatchEvent(new Event('BashKittenDraftReady'));
       } catch (error) {
         if (!initialized) $('#auth').classList.remove('hidden');
@@ -3679,15 +3697,23 @@
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
         draftRestoring = true;
-        const wasInert = $('#composer').inert;
-        $('#composer').inert = true;
+        const prompt = $('#prompt').value;
+        let view = sessionView;
         try {
           if (value.sessionId && /^[a-f0-9-]{36}$/.test(value.sessionId)) {
             history.replaceState(null, '', '#session=' + value.sessionId);
             const session = await linkedSession(await loadSessions());
+            if (sessionView !== view || $('#prompt').value !== prompt) return;
             if (!session) return;
-            if (current?.id !== session.id) await openSession(session);
-          } else if (current) await beginNewSession();
+            if (current?.id !== session.id) {
+              const opening = openSession(session); view = sessionView;
+              await opening;
+            }
+          } else if (current) {
+            const opening = beginNewSession(); view = sessionView;
+            await opening;
+          }
+          if (sessionView !== view || $('#prompt').value !== prompt) return;
           $('#prompt').value = value.text;
           pendingFiles = (value.files || []).filter(file => file instanceof File);
           pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
@@ -3704,7 +3730,7 @@
           if (Array.isArray(value.selection)) $('#prompt').setSelectionRange(...value.selection.slice(0,2));
           $('#chat').scrollTop = Number(value.scroll) || 0;
           $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
-        } finally { draftRestoring = false; $('#composer').inert = wasInert; }
+        } finally { draftRestoring = false; }
       }
     };
     boot();

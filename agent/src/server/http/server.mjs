@@ -78,6 +78,13 @@ async function startWorker(id, explicit) {
   const starting = (async () => {
     const meta = await readMeta(id);
     if (await running(id)) { await ensureBrowserSocket(meta.browserOwner || meta.workerOwner || id, id); return; }
+    const cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
+    try {
+      if (!(await fs.stat(cwd)).isDirectory()) throw Error(`This chat's working folder is not a directory: ${cwd}`);
+    } catch (error) {
+      if (error.code === 'ENOENT') throw Error(`This chat's working folder no longer exists: ${cwd}. Restore it or start a new chat in another folder.`);
+      throw error;
+    }
     return subagents.admit(meta, async () => {
       if (explicit) await writeJson(lifecycle, { stopped: false });
       await closeBrowserSocket(id, { keepBinding: true });
@@ -86,6 +93,7 @@ async function startWorker(id, explicit) {
       const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
       closeSync(log); child.unref();
       let failure; child.on('error', error => { failure = error; });
+      child.once('exit', (code, signal) => { if (code !== 0) failure = Error(`Pi could not start (${signal || code}). Check the session worker.log.`); });
       for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
       throw Error('Pi could not start. Check Node/Pi installation and the session worker.log.');
     });
