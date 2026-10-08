@@ -368,7 +368,8 @@ fi
         base_deps = (['python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar',
                       'x11-repo', 'termux-x11-nightly', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
                      ['python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
-                      'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1', 'libdbusmenu-glib4', 'libdbusmenu-gtk3-4', 'libgomp1', 'libstdc++6', 'libvulkan1'])
+                      'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1', 'libdbusmenu-glib4', 'libdbusmenu-gtk3-4', 'libgomp1', 'libstdc++6', 'libvulkan1',
+                      'libreoffice-writer', 'libreoffice-impress', 'libreoffice-draw', 'fonts-dejavu-core'])
         depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'], components['node']['metadata']['depends'])
         replacements = '' if termux else 'Replaces: bashkitten-desktop\nBreaks: bashkitten-desktop\nProvides: bashkitten-desktop\n'
         doc = stage / prefix.lstrip('/') / 'share/doc/bashkitten'

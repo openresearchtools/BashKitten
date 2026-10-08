@@ -33,7 +33,13 @@ args.output.mkdir(parents=True, exist_ok=True)
 records = {}
 for location, value in lock['packages'].items():
     if not location or value.get('dev') or not value.get('resolved'): continue
-    url = value['resolved']; assert url.startswith('https://registry.npmjs.org/')
+    url = value['resolved']
+    # SheetJS CE publishes current open-source releases on its own official CDN;
+    # the npm registry copy is obsolete. Keep this exception exact and verify
+    # the lockfile integrity and package identity below, as for every npm source.
+    assert url.startswith('https://registry.npmjs.org/') or (
+        url == 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz'
+        and location == 'node_modules/xlsx' and value['version'] == '0.20.3')
     records.setdefault(url, {**value, 'name': value.get('name') or location.rsplit('node_modules/', 1)[-1]})
 
 def collect(item):
