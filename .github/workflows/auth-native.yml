@@ -2,6 +2,17 @@ name: Native authentication components
 
 on:
   workflow_dispatch:
+    inputs:
+      component:
+        description: Component to build (individual builds upload only that component)
+        type: choice
+        default: all
+        options: [all, authelia, caddy, tor, valkey, chisel, remote]
+      target:
+        description: Target ABI
+        type: choice
+        default: all
+        options: [all, linux-amd64, linux-arm64, termux-aarch64, termux-x86_64]
   workflow_call:
   push:
     branches: [main]
@@ -12,6 +23,7 @@ permissions:
 
 jobs:
   guard:
+    if: ${{ !inputs.component || inputs.component == 'all' }}
     name: Runtime guard · ${{ matrix.architecture }}
     strategy:
       matrix:
@@ -41,18 +53,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [authelia, caddy, tor, valkey, chisel, remote]
-        target: [linux-amd64, linux-arm64, termux-aarch64, termux-x86_64]
-        include:
-          - target: linux-amd64
-            runner: ubuntu-24.04
-          - target: linux-arm64
-            runner: ubuntu-24.04-arm
-          - target: termux-aarch64
-            runner: ubuntu-24.04
-          - target: termux-x86_64
-            runner: ubuntu-24.04
-    runs-on: ${{ matrix.runner }}
+        component: ${{ fromJSON(inputs.component && inputs.component != 'all' && format('["{0}"]', inputs.component) || '["authelia","caddy","tor","valkey","chisel","remote"]') }}
+        target: ${{ fromJSON(inputs.target && inputs.target != 'all' && format('["{0}"]', inputs.target) || '["linux-amd64","linux-arm64","termux-aarch64","termux-x86_64"]') }}
+    runs-on: ${{ matrix.target == 'linux-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 90
     env:
       GOTELEMETRY: 'off'
@@ -92,7 +95,7 @@ jobs:
         id: payload
         with:
           path: ${{ runner.temp }}/payload
-          key: auth-payload-${{ matrix.runner }}-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles(format('auth/{0}/**', matrix.component), format('agent/native/{0}/**', matrix.component), 'auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml') }}
+          key: auth-payload-${{ matrix.target == 'linux-arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}-${{ matrix.component }}-${{ matrix.target }}-${{ hashFiles(format('auth/{0}/**', matrix.component), format('agent/native/{0}/**', matrix.component), 'auth/upstreams.lock.json', 'auth/build/**', 'auth/*-termux/**', 'agent/src/server/access/runtime-guard.c', '.github/workflows/auth-native.yml') }}
       - name: Build tracked source for the target ABI
         if: steps.payload.outputs.cache-hit != 'true'
         env:
@@ -141,10 +144,12 @@ jobs:
           retention-days: 14
 
   assemble:
+    # A partial component dispatch cannot claim or upload a complete auth stack.
+    if: ${{ !inputs.component || inputs.component == 'all' }}
     needs: component
     strategy:
       matrix:
-        target: [linux-amd64, linux-arm64, termux-aarch64, termux-x86_64]
+        target: ${{ fromJSON(inputs.target && inputs.target != 'all' && format('["{0}"]', inputs.target) || '["linux-amd64","linux-arm64","termux-aarch64","termux-x86_64"]') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

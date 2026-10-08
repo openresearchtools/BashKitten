@@ -11,10 +11,14 @@ TERMUX_PKG_EXTRA_CONFIGURE_ARGS+="
 -DBUILD_TLS=OFF
 -DBUILD_RDMA=OFF
 -DBUILD_LUA=static
+-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 "
 
 termux_step_pre_configure() {
   CPPFLAGS+=" -DHAVE_BACKTRACE"
+  # Bionic rejects the x86 TSC probe's non-POSIX \s regex at startup.
+  # Select Valkey's documented OS monotonic clock; keep upstream source intact.
+  if [[ "$TERMUX_ARCH" == x86_64 ]]; then CPPFLAGS+=" -DNO_PROCESSOR_CLOCK"; fi
   CFLAGS+=" $CPPFLAGS"
   LDFLAGS+=" -landroid-execinfo -landroid-glob -Wl,-z,max-page-size=16384"
   ( cd "$TERMUX_PKG_SRCDIR/src" && ./mkreleasehdr.sh )
@@ -22,6 +26,15 @@ termux_step_pre_configure() {
 
 termux_step_make() {
   cmake --build "$TERMUX_PKG_BUILDDIR" --target valkey-server -j "$TERMUX_PKG_MAKE_PROCESSES"
+  if [[ "$TERMUX_ARCH" == x86_64 ]]; then
+    python3 - "$TERMUX_PKG_BUILDDIR/compile_commands.json" <<'PY'
+import json, shlex, sys
+commands = [item for item in json.load(open(sys.argv[1])) if item['file'].endswith('/monotonic.c')]
+assert commands, 'Missing actual monotonic.c compile command'
+assert all('-DNO_PROCESSOR_CLOCK' in item.get('arguments', shlex.split(item.get('command', ''))) for item in commands), 'Missing required Bionic clock build option'
+print('Verified monotonic.c compiles with the upstream NO_PROCESSOR_CLOCK option')
+PY
+  fi
 }
 
 termux_step_make_install() {

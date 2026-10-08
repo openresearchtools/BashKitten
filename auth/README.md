@@ -7,7 +7,7 @@ Termux recipes and patches are separate; they never replace the pristine source.
 
 `build/authelia.sh`, `build/caddy.sh`, `build/tor.sh`, `build/valkey.sh` and
 `build/chisel.sh` take a target
-(`linux-amd64`, `linux-arm64` or `termux-aarch64`) and a staging directory.
+(`linux-amd64`, `linux-arm64`, `termux-aarch64` or `termux-x86_64`) and a staging directory.
 GitHub Actions produces the binaries, dependency notices and matching source.
 The staged `bin/`, `share/` and any `lib/` directories install below the Agent
 package's `auth/`; the server uses `BASHKITTEN_AUTH_BIN` only as an explicit
@@ -37,6 +37,15 @@ The private `valkey-server` stores Authelia's sessions so remembered logins
 survive full service restarts. It listens only on the controller's private Unix
 socket and is owned by the same service group. It does not install a system
 Redis/Valkey service or run in the Android APK.
+Termux x86_64 selects Valkey's documented `NO_PROCESSOR_CLOCK` build option,
+using `CLOCK_MONOTONIC`. The upstream x86 TSC probe aborts in Bionic's regex
+compiler during actual Share Local startup. The recipe verifies the flag in
+the emitted `monotonic.c` compiler command; other targets remain unchanged.
+
+The native authentication workflow accepts optional component/target choices
+for a focused rebuild. Defaults and reusable workflow calls still build the
+complete matrix. Selecting one component uploads only its component archive;
+it does not assemble or publish a complete authentication package.
 
 Build/configuration patterns retain attribution to
 [Torkitten](https://github.com/openresearchtools/torkitten), Apache-2.0.
