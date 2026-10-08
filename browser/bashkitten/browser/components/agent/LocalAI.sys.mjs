@@ -115,8 +115,8 @@ export async function localAISettings(parent, control, win, isLocal) {
     const modelBody = node('div'); models.append(modelBody); body.append(models);
     models.ontoggle = () => { if (models.open && !modelBody.hasChildNodes()) void run(() => drawModels(modelBody)); };
     const progress = node('p', state.job ? [state.job.phase, state.job.error].filter(Boolean).join(' · ') : ''); progressNode = progress; body.append(progress);
-    body.append(button('Refresh status', async () => draw(await call('localai-status'))), button('Cancel runtime download', async () => { const value = await call('localai-cancel'); progress.textContent = value?.phase || ''; }));
-    const output = node('details'); output.append(node('summary', 'Runtime download output')); const text = node('pre', state.job?.log || ''); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
+    body.append(button('Refresh status', async () => draw(await call('localai-status'))), button('Cancel LocalAI operation', async () => { const value = await call('localai-cancel'); progress.textContent = value?.phase || ''; }));
+    const output = node('details'); output.append(node('summary', 'LocalAI operation output')); const text = node('pre', state.job?.log || ''); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
   };
   const drawTTS = () => {
     if (!state.tts) return;
@@ -130,6 +130,15 @@ export async function localAISettings(parent, control, win, isLocal) {
     section.append(button('Choose output…', async () => { const file = await pick('Save generated speech', 'save', output.value); if (file) output.value = file; }));
     synthesisStatus = node('p'); section.append(synthesisStatus);
     section.append(button('Generate speech', async () => { const result = await call('localai-synthesize', { text: prompt.value, output: output.value }); prompt.value = ''; synthesisStatus.textContent = result.tts.synthesis.state; }), button('Stop synthesis', async () => { const result = await call('localai-synthesis-cancel'); synthesisStatus.textContent = result.tts.synthesis.state; }));
+    section.append(node('p', 'Select the original downloaded Pocket F16 model to create a smaller Q4_0 or Q8_0 copy. Keep its matching projector.'));
+    for (const type of ['Q4_0', 'Q8_0']) section.append(button(`Create Pocket ${type} copy`, async () => {
+      if (family.value !== 'pocket' || !/\.gguf$/i.test(model.value)) throw Error('Select the original Pocket F16 model first');
+      await call('localai-quantize', { file: model.value, type, output: model.value.replace(/\.gguf$/i, `-${type}.gguf`) });
+      message.textContent = 'Creating a separate quantized model. Refresh status when complete to select it.';
+    }));
+    if (state.job?.kind === 'localai-quantize' && state.job.status === 'complete' && state.job.result?.file) section.append(button('Use created Pocket model', async () => {
+      draw(await call('localai-model-use', { engine: 'tts', file: state.job.result.file, kind: 'pocket', projector: projector.value }));
+    }));
     body.append(section);
   };
   const editINI = async (filename, saved) => {

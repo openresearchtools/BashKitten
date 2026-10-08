@@ -1,3 +1,5 @@
+import { publishNewFile } from './files.mjs';
+import { quantizePocket } from './quantize.mjs';
 // SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -275,7 +277,7 @@ export class LocalAI {
       try { await output.writeFile(content); await output.sync(); } finally { await output.close(); }
       const latest = await fs.readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
       if (latest !== before) throw Error('The router INI changed while saving');
-      if (before === null) { await fs.link(temporary, file); await fs.unlink(temporary); } else await fs.rename(temporary, file);
+      if (before === null) { await publishNewFile(temporary, file); await fs.rm(temporary, { force: true }); } else await fs.rename(temporary, file);
       const directory = await fs.open(path.dirname(file), 'r'); try { await directory.sync(); } finally { await directory.close(); }
     } finally { await fs.rm(temporary, { force: true }); }
     return { file, content, revision: digest(content) };
@@ -330,13 +332,20 @@ export class LocalAI {
         try { const header = Buffer.alloc(12); await file.read(header, 0, 12, 0); if (header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE' || (await file.stat()).size <= 44) throw Error('The TTS runtime did not produce valid WAV audio'); }
         finally { await file.close(); }
         // Do not replace an output created by another operation while generating.
-        await fs.link(temporary, output); this.synthesisState = { state: 'complete', output };
+        await publishNewFile(temporary, output); this.synthesisState = { state: 'complete', output };
       } catch (error) { this.synthesisState = { state: 'failed', error: error.message }; }
       finally { await fs.rm(temporary, { force: true }); this.synthesis = null; }
     })();
     return this.status();
   }
   async cancelSynthesis() { if (this.synthesis) { this.synthesis.kill('SIGTERM'); await this.synthesisFinished; } return this.status(); }
+  async quantize(job, input) {
+    if (this.stopping || this.quantization) throw Error('Quantization is busy or Agent is stopping');
+    this.quantizationJob = job;
+    this.quantization = quantizePocket(job, input);
+    try { return await this.quantization; }
+    finally { this.quantization = null; this.quantizationJob = null; }
+  }
   async install(job, { engine }) {
     const before = (await this.config())[engine];
     return installRuntime(job, { engine, config: before }, async (runtime, activate) => {
@@ -414,5 +423,5 @@ export class LocalAI {
     })();
     return operation.release;
   }
-  async shutdown() { this.stopping = true; await this.cancelSynthesis(); if (this.speech) await this.releaseSpeech(this.speech.id); }
+  async shutdown() { this.stopping = true; await this.quantizationJob?.cancel(); await this.quantization?.catch(() => {}); await this.cancelSynthesis(); if (this.speech) await this.releaseSpeech(this.speech.id); }
 }

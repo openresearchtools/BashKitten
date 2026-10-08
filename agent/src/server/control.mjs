@@ -137,7 +137,7 @@ async function serve() {
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
     'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
     'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages,
-    ...(localAI ? { 'localai-runtime': (job, input) => localAI.install(job, input) } : {}),
+    ...(localAI ? { 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
   });
   await jobs.init();
   await ensureIntegration();
@@ -282,7 +282,7 @@ async function serve() {
       return display.start();
     }
     if (command.startsWith('localai-')) {
-      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: job?.kind === 'localai-runtime' ? job : null }; }
+      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: ['localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
       if (command === 'localai-save') return localAI.save(value);
       if (command === 'localai-model-use') return localAI.useModel(value);
       if (command === 'localai-synthesize') { if (!stack.ready || stopping) throw Error('Turn on Local before generating speech'); return localAI.synthesize(value); }
@@ -290,7 +290,8 @@ async function serve() {
       if (command === 'localai-ini') return localAI.ini(value);
       if (command === 'localai-check') return localAI.check(value.engine);
       if (command === 'localai-install') { if (stopping) throw Error('Agent is stopping'); return jobs.start('localai-runtime', { engine: value.engine }); }
-      if (command === 'localai-cancel') { if ((await jobs.status())?.kind !== 'localai-runtime') throw Error('No LocalAI download is active'); await jobs.cancel(); return jobs.status(); }
+      if (command === 'localai-quantize') { if (!stack.ready || stopping) throw Error('Turn on Local before quantizing a model'); return jobs.start('localai-quantize', value); }
+      if (command === 'localai-cancel') { if (!['localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
       if (command === 'localai-share') return localAI.share(value.enabled);
       if (command === 'localai-action') {
         if (!stack.ready || stopping) throw Error('Turn on Local before starting an engine');

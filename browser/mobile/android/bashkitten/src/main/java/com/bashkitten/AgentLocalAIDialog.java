@@ -175,6 +175,16 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         plainField("New output WAV path in Termux", state.output, false, value -> state.output = value);
         button("Generate speech", () -> request("localai-synthesize", object("text", prompt.getText().toString(), "output", state.output), result -> { state.value = result; state.prompt = ""; }));
         button("Stop synthesis", () -> request("localai-synthesis-cancel", new JSONObject(), result -> state.value = result));
+        text("Choose the original downloaded Pocket F16 model to create a smaller copy. Keep its matching projector.");
+        for (String type : new String[]{"Q4_0", "Q8_0"}) button("Create Pocket " + type + " copy", () -> {
+            String source = config.optString("model");
+            if (!config.optString("modelKind").equals("pocket") || !source.toLowerCase(java.util.Locale.ROOT).endsWith(".gguf")) { state.error = "Select the original Pocket F16 model first"; render(); return; }
+            request("localai-quantize", object("file", source, "type", type, "output", source.substring(0, source.length() - 5) + "-" + type + ".gguf"), result -> state.error = result.optString("phase"));
+        });
+        JSONObject job = state.value.optJSONObject("job");
+        if (job != null && job.optString("kind").equals("localai-quantize") && job.optString("status").equals("complete") && job.optJSONObject("result") != null) button("Use created Pocket model", () -> request("localai-model-use", object("engine", "tts", "file", job.optJSONObject("result").optString("file"), "kind", "pocket", "projector", config.optString("projector")), result -> { state.value = result; state.drafts.remove("tts"); }));
+        button("Refresh status", () -> request("localai-status", new JSONObject(), result -> state.value = result));
+        button("Cancel quantization", () -> request("localai-cancel", new JSONObject(), result -> state.error = result.optString("phase")));
         button("Models", () -> { state.section = "models"; render(); });
     }
     private void editINI(JSONObject file) {
