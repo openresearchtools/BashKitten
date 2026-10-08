@@ -214,9 +214,15 @@ async function applyPending() {
   }
   if (pendingModel) {
     const selection = pendingModel; pendingModel = null;
-    await prepareManagedModel(selection.model);
     const at = selection.model.indexOf('/');
-    await rpc.command('set_model', { provider: selection.model.slice(0, at), modelId: selection.model.slice(at + 1) });
+    const provider = selection.model.slice(0, at), modelId = selection.model.slice(at + 1);
+    const { model } = await rpc.command('get_state');
+    // Selecting thinking must retain Pi's current model, including capabilities
+    // discovered by its extensions, rather than reloading the catalog definition.
+    if (model?.provider !== provider || model?.id !== modelId) {
+      await prepareManagedModel(selection.model);
+      await rpc.command('set_model', { provider, modelId });
+    }
     if (selection.thinking) await rpc.command('set_thinking_level', { level: selection.thinking });
     await refresh(); emit({ type: 'model_change', model: meta.model, thinking: meta.thinking }, false);
   }
