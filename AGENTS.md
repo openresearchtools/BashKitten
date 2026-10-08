@@ -28,7 +28,7 @@ request to bundle AI engines into desktop/Termux packages. Build llama.cpp
 (including llama-tts) and Whisper/Parakeet only in the daughter repository's
 GitHub Actions, not on this workstation. Publish matching native Linux and
 Android assets with full licenses, source provenance and checksums. Termux
-downloads and runs its native Android CPU/Vulkan engines; the APK controls that
+downloads native Android Vulkan engines for CPU/GPU execution; the APK controls that
 Termux backend. Models remain separate downloads. No release path may depend on
 local build directories or unpublished workstation binaries. Node and Pi remain
 bundled in desktop/Termux packages. Local desktop/Android browser builds are for
