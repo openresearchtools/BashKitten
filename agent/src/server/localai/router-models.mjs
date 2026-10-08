@@ -134,7 +134,7 @@ export async function verifyTestConfiguration(environment = {}) {
   const env = { ...process.env, ...environment };
   const userConfig = env.XDG_CONFIG_HOME || path.join(env.HOME || os.homedir(), '.config');
   const selectors = new Set(['m', 'model', 'LLAMA_ARG_MODEL', 'mu', 'model-url', 'LLAMA_ARG_MODEL_URL',
-    'hf', 'hf-repo', 'hf-model', 'LLAMA_ARG_HF_REPO', 'models-dir', 'LLAMA_ARG_MODELS_DIR']);
+    'hf', 'hfr', 'hf-repo', 'LLAMA_ARG_HF_REPO', 'models-dir', 'LLAMA_ARG_MODELS_DIR', 'dr', 'docker-repo', 'LLAMA_ARG_DOCKER_REPO']);
   for (const file of ['/etc/llama.cpp/config.ini', path.join(userConfig, 'llama.cpp', 'config.ini')]) {
     const content = await fs.readFile(file, 'utf8').catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     if (content === null) continue;

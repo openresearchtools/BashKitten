@@ -341,8 +341,8 @@ export class LocalAI {
           const port = await allocatePort(), command = await this.command('llama', config, port);
           const selector = argument(command.argv, '--models-preset');
           if (selector !== config.preset) throw Error('Model checks require the selected INI in the launcher --models-preset argument');
-          if (['--model', '-m', '--models-dir', '--hf-repo', '--hf-model', '-hf', '--model-url', '-mu'].some(flag => argument(command.argv, flag) !== null)) throw Error('This custom launcher selects other models. Remove its global model source before checking an INI preset.');
-          for (const key of ['LLAMA_ARG_MODEL', 'LLAMA_ARG_MODEL_URL', 'LLAMA_ARG_HF_REPO', 'LLAMA_ARG_MODELS_DIR']) if (config.env[key] ?? process.env[key]) throw Error('This launcher environment selects other models: ' + key);
+          if (['--model', '-m', '--models-dir', '--hf-repo', '-hfr', '-hf', '--model-url', '-mu', '--docker-repo', '-dr'].some(flag => argument(command.argv, flag) !== null)) throw Error('This custom launcher selects other models. Remove its global model source before checking an INI preset.');
+          for (const key of ['LLAMA_ARG_MODEL', 'LLAMA_ARG_MODEL_URL', 'LLAMA_ARG_HF_REPO', 'LLAMA_ARG_MODELS_DIR', 'LLAMA_ARG_DOCKER_REPO']) if (config.env[key] ?? process.env[key]) throw Error('This launcher environment selects other models: ' + key);
           command.argv = command.argv.map((value, index, all) => all[index - 1] === '--models-preset' ? temporary : value.startsWith('--models-preset=') ? '--models-preset=' + temporary : value);
           // Upstream always discovers its model cache, even with an INI. Keep
           // unrelated cached/autoload models out of this temporary router.
