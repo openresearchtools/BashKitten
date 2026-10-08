@@ -13,6 +13,7 @@ import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.widget.AppCompatButton;
+import androidx.appcompat.widget.SwitchCompat;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.io.*;
@@ -28,7 +29,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button power, location, hideAgent;
+    private final Button location, hideAgent;
+    private final SwitchCompat power;
     private final ImageButton display, localAI;
     private final GeckoView view;
     private final ScrollView setup;
@@ -43,6 +45,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private boolean split;
     private boolean browserUi;
     private boolean destroyed;
+    private boolean updatingPower;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
@@ -64,6 +67,17 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
+        power = new SwitchCompat(activity);
+        power.setShowText(false); power.setTextOn("On"); power.setTextOff("Off");
+        power.setContentDescription("Agent power"); power.setGravity(Gravity.CENTER);
+        power.setSwitchMinWidth(dp(40)); power.setMinWidth(0); power.setMinimumWidth(0);
+        power.setPadding(dp(4), 0, dp(4), 0);
+        power.setOnCheckedChangeListener((button, checked) -> {
+            if (updatingPower) return;
+            if (!checked || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn();
+            updatePower();
+        });
+        bar.addView(power, new LayoutParams(dp(56), -1));
         location = barButton("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
         display = barIcon("Display", R.drawable.ic_agent_display, () -> {
             if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
@@ -77,8 +91,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         bar.addView(localAI, new LayoutParams(dp(40), -1));
         bar.addView(barIcon("Performance", R.drawable.ic_agent_performance, () -> new AgentPerformanceDialog().show(
             ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-performance")), new LayoutParams(dp(40), -1));
-        power = barButton("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
-        bar.addView(power, new LayoutParams(dp(90), -1));
         Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
@@ -141,6 +153,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private ImageButton barIcon(String label, int icon, Runnable action) {
         androidx.appcompat.widget.AppCompatImageButton button = new androidx.appcompat.widget.AppCompatImageButton(activity);
         button.setImageResource(icon); button.setContentDescription(label); button.setTooltipText(label);
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
         TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary, android.R.attr.selectableItemBackgroundBorderless});
         try { button.setImageTintList(theme.getColorStateList(0)); button.setBackground(theme.getDrawable(1)); } finally { theme.recycle(); }
@@ -193,10 +206,22 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void destroy() { destroyed = true; if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
+    private void updatePower() {
+        boolean stopping = runtime.state.equals("stopping"), stopFailed = runtime.state.equals("stop-failed");
+        // The switch controls the complete Agent group for Local and Remote.
+        // Keep an unconfirmed stop visibly on so toggling off retries shutdown.
+        updatingPower = true;
+        try { power.setChecked(runtime.isOnRequested() || stopFailed); }
+        finally { updatingPower = false; }
+        power.setEnabled(!stopping);
+        String status = runtime.state.equals("starting") ? "Starting" : stopping ? "Stopping"
+            : stopFailed ? "Shutdown not confirmed; toggle off to retry" : runtime.isOnRequested() ? "On" : "Off";
+        power.setTooltipText("Agent: " + status);
+        if (Build.VERSION.SDK_INT >= 30) power.setStateDescription(status);
+    }
     @Override public void changed() {
         if (microphone != null) microphone.changed();
-        power.setText(runtime.state.equals("starting") ? "Starting" : runtime.state.equals("stopping") ? "Stopping" : runtime.state.equals("stop-failed") ? "Retry stop" : runtime.isOnRequested() ? "Turn off" : "Turn on");
-        power.setEnabled(!runtime.state.equals("stopping"));
+        updatePower();
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
         display.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
         localAI.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
