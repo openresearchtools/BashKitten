@@ -22,7 +22,10 @@ public final class AgentPerformanceDialog extends AppCompatDialogFragment {
     private TextView values;
     private int generation;
     private String session;
-    private boolean requested;
+    private boolean requested, workloadInFlight, workloadPending;
+    private Double workloadCpu;
+    private String workloadReason;
+    private PerformanceMonitor.Sample latest;
     private AgentRuntime runtime;
     private final Runnable poll = this::sample;
     private PerformanceMonitor monitor;
@@ -37,6 +40,7 @@ public final class AgentPerformanceDialog extends AppCompatDialogFragment {
     @Override public void onResume() {
         super.onResume(); generation++;
         session = UUID.randomUUID().toString(); requested = false;
+        workloadInFlight = false; workloadPending = true; workloadCpu = null; workloadReason = ""; latest = null;
         runtime = BrowserApp.get(requireContext()).agent;
         monitor = new PerformanceMonitor(requireContext().getApplicationContext());
         worker = Executors.newSingleThreadExecutor(); sample();
@@ -63,18 +67,27 @@ public final class AgentPerformanceDialog extends AppCompatDialogFragment {
             PerformanceMonitor.Sample reading = source.sample();
             main.post(() -> {
                 if (!active(expected, executor)) return;
-                requested = true;
-                runtime.command("performance-sample", input(id), result -> {
-                    if (!active(expected, executor)) { closeSession(id); return; }
-                    Double cpu = result.isNull("cpuPercent") ? null : result.optDouble("cpuPercent", Double.NaN);
-                    if (cpu != null && (!Double.isFinite(cpu) || cpu < 0 || cpu > 100)) cpu = null;
-                    show(reading, cpu, result.optBoolean("pending"), result.isNull("reason") ? "" : result.optString("reason"));
-                    main.postDelayed(poll, Math.max(0, 1000 - (SystemClock.uptimeMillis() - started)));
-                }, error -> {
-                    if (!active(expected, executor)) { closeSession(id); return; }
-                    show(reading, null, false, error);
-                    main.postDelayed(poll, Math.max(0, 1000 - (SystemClock.uptimeMillis() - started)));
-                });
+                latest = reading;
+                show(reading, workloadCpu, workloadPending || workloadInFlight, workloadReason);
+                // Native counters keep their visible cadence even if the Termux
+                // bridge is slow. Only one workload request may be in flight.
+                if (!workloadInFlight) {
+                    requested = true; workloadInFlight = true;
+                    runtime.command("performance-sample", input(id), result -> {
+                        if (!active(expected, executor)) { closeSession(id); return; }
+                        workloadInFlight = false;
+                        Double cpu = result.isNull("cpuPercent") ? null : result.optDouble("cpuPercent", Double.NaN);
+                        workloadCpu = cpu != null && Double.isFinite(cpu) && cpu >= 0 && cpu <= 100 ? cpu : null;
+                        workloadPending = result.optBoolean("pending");
+                        workloadReason = result.isNull("reason") ? "" : result.optString("reason");
+                        show(latest, workloadCpu, workloadPending, workloadReason);
+                    }, error -> {
+                        if (!active(expected, executor)) { closeSession(id); return; }
+                        workloadInFlight = false; workloadCpu = null; workloadPending = false; workloadReason = error;
+                        show(latest, workloadCpu, workloadPending, workloadReason);
+                    });
+                }
+                main.postDelayed(poll, Math.max(0, 1000 - (SystemClock.uptimeMillis() - started)));
             });
         });
     }
