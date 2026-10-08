@@ -2,6 +2,7 @@ import { npmCommand, npmArgs, npmPrefix } from '../node-runtime.mjs';
 import fs from 'node:fs/promises';
 import { selectPlatformPackages } from './platform-packages.mjs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import semver from 'semver';
@@ -98,8 +99,32 @@ export async function installPi(job) {
     await job.exec(npmCommand, npmArgs(['install', '--prefix', temporary, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--loglevel=http']));
     await selectPlatformPackages(temporary);
     await job.phase(`Checking Pi ${available.latest}`);
-    const agent = 'file://' + path.join(temporary, 'node_modules/@earendil-works/pi-coding-agent/dist/');
-    const check = `import {ModelRuntime,SessionManager,parseSessionEntries} from ${JSON.stringify(agent + 'index.js')}; import {createLlamaProvider} from ${JSON.stringify(agent + 'extensions/llama/provider.js')}; const r=await ModelRuntime.create({allowModelNetwork:false}); r.registerNativeProvider(createLlamaProvider().provider); await r.refresh({providers:['llama.cpp'],allowNetwork:false}); if(!r.getProvider('llama.cpp')?.auth.apiKey?.login||!SessionManager.inMemory||!parseSessionEntries)process.exit(1);`;
+    const agent = pathToFileURL(path.join(temporary, 'node_modules/@earendil-works/pi-coding-agent/dist/')).href;
+    const ai = pathToFileURL(path.join(temporary, 'node_modules/@earendil-works/pi-ai/dist/index.js')).href;
+    // Exercise the public default-selection APIs without resource discovery,
+    // a prompt, durable session or changes to the user's settings.
+    const check = `
+      import {ModelRuntime,SessionManager,SettingsManager,DefaultResourceLoader,createAgentSession,parseSessionEntries,getAgentDir} from ${JSON.stringify(agent + 'index.js')};
+      import {clampThinkingLevel,getSupportedThinkingLevels} from ${JSON.stringify(ai)};
+      import {createLlamaProvider} from ${JSON.stringify(agent + 'extensions/llama/provider.js')};
+      const required={createAgentSession,DefaultResourceLoader,parseSessionEntries,clampThinkingLevel,getSupportedThinkingLevels,
+        settingsCreate:SettingsManager.create,settingsInMemory:SettingsManager.inMemory,sessionInMemory:SessionManager.inMemory,
+        getDefaultProvider:SettingsManager.prototype.getDefaultProvider,getDefaultModel:SettingsManager.prototype.getDefaultModel,
+        getDefaultThinkingLevel:SettingsManager.prototype.getDefaultThinkingLevel,getModelThinkingLevel:SettingsManager.prototype.getModelThinkingLevel,
+        getAllModelThinkingLevels:SettingsManager.prototype.getAllModelThinkingLevels};
+      for(const [name,method] of Object.entries(required))if(typeof method!=='function')throw Error('Pi lacks required API: '+name);
+      const r=await ModelRuntime.create({allowModelNetwork:false});
+      r.registerNativeProvider(createLlamaProvider().provider);
+      await r.refresh({providers:['llama.cpp'],allowNetwork:false});
+      if(!r.getProvider('llama.cpp')?.auth.apiKey?.login)throw Error('Pi lacks native llama.cpp login');
+      const cwd=process.cwd(),agentDir=getAgentDir(),settingsManager=SettingsManager.inMemory();
+      const resourceLoader=new DefaultResourceLoader({cwd,agentDir,settingsManager,noExtensions:true,noSkills:true,noPromptTemplates:true,noThemes:true,noContextFiles:true});
+      const {session}=await createAgentSession({cwd,agentDir,modelRuntime:r,settingsManager,resourceLoader,sessionManager:SessionManager.inMemory(cwd),noTools:'all'});
+      try {
+        if(typeof session.dispose!=='function')throw Error('Pi lacks session disposal');
+        if(session.model&&(!Array.isArray(getSupportedThinkingLevels(session.model))||typeof clampThinkingLevel(session.model,'medium')!=='string'))throw Error('Pi has incompatible thinking APIs');
+      } finally {session.dispose?.();}
+    `;
     await job.exec(process.execPath, ['--input-type=module', '-e', check], { timeout: 60000 });
     const hash = digest(await fs.readFile(path.join(temporary, 'package-lock.json')));
     root = path.join(parent, available.latest + '-' + hash.slice(0, 12));
