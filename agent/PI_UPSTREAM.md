@@ -20,12 +20,15 @@ Only this native runtime pin applies to this branch. The old Rust port and its
 differential fixtures are available in Git history, outside the current tree.
 
 The complete unmodified pillama 0.4.0 source tree at
-`fefa5a90c5f5f6eead52e9de9a3a698d2ea48f67` is in `pi/vendor/pillama/`, including
+`a34432ba51dbf79d509849df331a7093dbaca0bc` is in `pi/vendor/pillama/`, including
 its MIT license, dependency lock and build metadata. Exact tree/archive provenance
 is in `pi/vendor/pillama.upstream.json`. Packaging selects its declared runtime
 files from this tree; no pillama fetch or development/test payload is required.
 It uses native Pi extension status RPC
 for llama.cpp loading, prefill/cache, decode speeds and elapsed time.
+The adapter identifies unchanged generated providers by their complete ownership
+snapshot so live thinking discovery can replace provisional cold-model metadata;
+independently edited provider definitions retain their explicit settings.
 
 Pillama can opt into native llama.cpp response replay with `/pillama-resume on 3`.
 It retains raw SSE byte offsets and the original generation ID across connection
