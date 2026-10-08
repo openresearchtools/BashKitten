@@ -105,7 +105,7 @@ export async function installPi(job) {
     // a prompt, durable session or changes to the user's settings.
     const check = `
       import {ModelRuntime,SessionManager,SettingsManager,DefaultResourceLoader,createAgentSession,parseSessionEntries,getAgentDir} from ${JSON.stringify(agent + 'index.js')};
-      import {clampThinkingLevel,getSupportedThinkingLevels} from ${JSON.stringify(ai)};
+      import {clampThinkingLevel,getSupportedThinkingLevels,InMemoryCredentialStore} from ${JSON.stringify(ai)};
       import {createLlamaProvider} from ${JSON.stringify(agent + 'extensions/llama/provider.js')};
       const required={createAgentSession,DefaultResourceLoader,parseSessionEntries,clampThinkingLevel,getSupportedThinkingLevels,
         settingsCreate:SettingsManager.create,settingsInMemory:SettingsManager.inMemory,sessionInMemory:SessionManager.inMemory,
@@ -113,7 +113,7 @@ export async function installPi(job) {
         getDefaultThinkingLevel:SettingsManager.prototype.getDefaultThinkingLevel,getModelThinkingLevel:SettingsManager.prototype.getModelThinkingLevel,
         getAllModelThinkingLevels:SettingsManager.prototype.getAllModelThinkingLevels};
       for(const [name,method] of Object.entries(required))if(typeof method!=='function')throw Error('Pi lacks required API: '+name);
-      const r=await ModelRuntime.create({allowModelNetwork:false});
+      const r=await ModelRuntime.create({allowModelNetwork:false,credentials:new InMemoryCredentialStore(),modelsPath:null});
       r.registerNativeProvider(createLlamaProvider().provider);
       await r.refresh({providers:['llama.cpp'],allowNetwork:false});
       if(!r.getProvider('llama.cpp')?.auth.apiKey?.login)throw Error('Pi lacks native llama.cpp login');
