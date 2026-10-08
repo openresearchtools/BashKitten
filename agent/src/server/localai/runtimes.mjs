@@ -48,8 +48,11 @@ async function github(route) {
 }
 async function releaseManifest(engine) {
   const releases = await github('/releases?per_page=100');
-  const release = releases.find(item => !item.draft && item.tag_name.startsWith(engine + '-') && item.assets.some(asset => asset.name === 'manifest.json'));
-  if (!release) throw Error(`No ${engine} runtime release is published yet`);
+  // Android's native CPU/Vulkan releases are independent of the Linux CUDA
+  // matrix. A mobile publication must not replace desktop's runtime catalogue.
+  const prefix = (runtimeOS === 'android' ? 'android-' : '') + engine + '-';
+  const release = releases.find(item => !item.draft && item.tag_name.startsWith(prefix) && item.assets.some(asset => asset.name === 'manifest.json'));
+  if (!release) throw Error(`No ${runtimeOS} ${engine} runtime release is published yet`);
   const asset = release.assets.find(asset => asset.name === 'manifest.json');
   const response = await fetch(downloadURL(asset.browser_download_url), { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw Error(`Runtime manifest returned HTTP ${response.status}`);

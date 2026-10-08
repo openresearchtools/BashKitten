@@ -22,6 +22,21 @@ build repository, with 40 GiB desktop and Android x86_64 build budgets and P cor
 0–7. These instructions supersede conflicting older ADB/profile/storage rules
 below; do not claim emulator evidence verifies physical-device GPU behavior.
 
+The user's latest 8 October instruction is to KEEP downloadable AI runtimes and
+make the Android downloads work. This explicitly supersedes the intervening
+request to bundle AI engines into desktop/Termux packages. Build llama.cpp
+(including llama-tts) and Whisper/Parakeet only in the daughter repository's
+GitHub Actions, not on this workstation. Publish matching native Linux and
+Android assets with full licenses, source provenance and checksums. Termux
+downloads and runs its native Android CPU/Vulkan engines; the APK controls that
+Termux backend. Models remain separate downloads. No release path may depend on
+local build directories or unpublished workstation binaries. Node and Pi remain
+bundled in desktop/Termux packages. Local desktop/Android browser builds are for
+development and acceptance only.
+The chat controls must show the effective model/reasoning selection, or Not set
+when absent, with compact widths. Android Agent power is a toggle beside the
+logo; Display, LocalAI and performance use compact matching icons.
+
 This branch reuses BashKitten's browser UI with unmodified Pi 1.0.2
 (`cd32f7725fdbddbaecdff5b1e68491563394e0ca`). It contains no Rust backend or
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
