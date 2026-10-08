@@ -117,6 +117,9 @@ LibreOffice on the selected host. Spreadsheets use a read-only scrolling grid
 with sheet selection. Formulas show saved results; missing results are labelled
 as not calculated. The original document remains available through Download.
 
+The [manual preview verification record](file-preview-verification.md) identifies
+the installed revisions, observed Android flows and remaining acceptance cases.
+
 ## Local models, dictation and speech
 
 **LocalAI** uses the same runtime controller, router INI and resumable downloader
