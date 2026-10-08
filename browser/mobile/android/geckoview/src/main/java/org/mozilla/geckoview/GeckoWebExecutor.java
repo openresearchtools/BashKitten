@@ -7,14 +7,18 @@ package org.mozilla.geckoview;
 import androidx.annotation.AnyThread;
 import androidx.annotation.IntDef;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CancellationException;
 import org.mozilla.gecko.GeckoThread;
 import org.mozilla.gecko.annotation.WrapForJNI;
+import org.mozilla.gecko.util.ThreadUtils;
 
 /**
  * GeckoWebExecutor is responsible for fetching a {@link WebRequest} and delivering a {@link
@@ -45,6 +49,71 @@ public class GeckoWebExecutor {
 
   @WrapForJNI(dispatchTo = "gecko", stubName = "Resolve")
   private static native void nativeResolve(String host, GeckoResult<InetAddress[]> result);
+
+  /** The cancellation signal settles on success/error too, releasing its native listener. */
+  private static final class FetchResult extends GeckoResult<WebResponse> {
+    final GeckoResult<Boolean> cancellation = new GeckoResult<>();
+    boolean cancelled;
+
+    FetchResult() {
+      setCancellationDelegate(
+          new CancellationDelegate() {
+            @Override
+            public GeckoResult<Boolean> cancel() {
+              synchronized (FetchResult.this) {
+                if (!cancelled) {
+                  cancelled = true;
+                  cancellation.complete(true);
+                }
+              }
+              return GeckoResult.fromValue(true).withHandler(ThreadUtils.getUiHandler());
+            }
+          });
+    }
+
+    @Override
+    public synchronized void complete(final @Nullable WebResponse response) {
+      if (cancelled) {
+        // Headers may win the race with native cancellation. Close the existing
+        // body stream in that case instead of handing out an abandoned channel.
+        try {
+          if (response != null && response.body != null) {
+            response.body.close();
+          }
+        } catch (final IOException ignored) {
+        }
+        return;
+      }
+      super.complete(response);
+      cancellation.complete(false);
+    }
+
+    @Override
+    public synchronized void completeExceptionally(final @NonNull Throwable error) {
+      // GeckoResult.cancel() owns cancellation completion. The channel's later
+      // OnStartRequest error must not complete that same result a second time.
+      if (cancelled && !(error instanceof CancellationException)) {
+        return;
+      }
+      super.completeExceptionally(error);
+      if (!cancelled) {
+        cancellation.complete(false);
+      }
+    }
+  }
+
+  @WrapForJNI(calledFrom = "gecko")
+  private static boolean isFetchCancelled(final GeckoResult<WebResponse> result) {
+    synchronized (result) {
+      return result instanceof FetchResult && ((FetchResult) result).cancelled;
+    }
+  }
+
+  @WrapForJNI(calledFrom = "gecko")
+  private static @Nullable GeckoResult<Boolean> fetchCancellation(
+      final GeckoResult<WebResponse> result) {
+    return result instanceof FetchResult ? ((FetchResult) result).cancellation : null;
+  }
 
   @WrapForJNI(calledFrom = "gecko", exceptionMode = "nsresult")
   private static ByteBuffer createByteBuffer(final int capacity) {
@@ -138,7 +207,9 @@ public class GeckoWebExecutor {
           "Unsupported URI scheme: " + (uri.length() > 10 ? uri.substring(0, 10) : uri));
     }
 
-    final GeckoResult<WebResponse> result = new GeckoResult<>();
+    // OHTTP also owns a shared configuration fetch; retain its existing lifetime.
+    final GeckoResult<WebResponse> result =
+        (flags & FETCH_FLAGS_OHTTP) == 0 ? new FetchResult() : new GeckoResult<>();
 
     if (GeckoThread.isStateAtLeast(GeckoThread.State.PROFILE_READY)) {
       nativeFetch(request, flags, result);
