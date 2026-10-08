@@ -228,9 +228,12 @@ def main():
         (root / 'etc').mkdir()
         # Explicitly use OpenSSL's built-in default provider. A private file prevents
         # Termux's compiled global prefix from deciding this application's config.
+        # "default" is OpenSSL's global configuration section, not a safe
+        # provider section name. Reusing it also passes openssl_conf/providers
+        # to the provider and makes native Tor's RNG initialization fail.
         (root / 'etc/openssl.cnf').write_text('openssl_conf = openssl_init\n'
-            '[openssl_init]\nproviders = providers\n[providers]\ndefault = default\n'
-            '[default]\nactivate = 1\n')
+            '[openssl_init]\nproviders = provider_sect\n[provider_sect]\ndefault = default_sect\n'
+            '[default_sect]\nactivate = 1\n')
         source = temporary / 'node-source'
         source.mkdir()
         shutil.copytree(HERE, source / 'recipe', ignore=shutil.ignore_patterns('__pycache__'))

@@ -43,6 +43,10 @@ libdl, liblog and libandroid remain OS libraries. No global `LD_LIBRARY_PATH`
 is needed. Package launchers set `OPENSSL_CONF` to `node/etc/openssl.cnf`, an
 explicit default-provider configuration, so another Termux OpenSSL installation
 does not select this runtime's configuration. npm wrappers set it themselves.
+Its provider section has a distinct name: OpenSSL reserves `[default]` for the
+global section. Reusing that name caused the inherited configuration to abort
+native Tor's crypto initialization; the corrected file was checked with both
+Tor and private Node in the actual Termux app domain.
 Termux wrappers also select upstream termux-exec's
 `TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` so execution uses the actual
 Node ELF rather than making Android's dynamic linker the process executable.
