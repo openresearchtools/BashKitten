@@ -46,6 +46,8 @@ does not select this runtime's configuration. npm wrappers set it themselves.
 Termux wrappers also select upstream termux-exec's
 `TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` so execution uses the actual
 Node ELF rather than making Android's dynamic linker the process executable.
+If that mode was not already selected, wrappers re-execute `/system/bin/sh`
+before any external command, because termux-exec caches its mode per process.
 This is for the supported GitHub Termux target-SDK-28 environment; Android app
 variants that prohibit executing their private binaries must fail explicitly.
 Certificate verification remains enabled; Termux's CA and resolver data remain
