@@ -76,8 +76,17 @@ and Whisper `v1.9.5-r1` as Vulkan packages, with CPU execution selected.
 **Save and test load** then loaded that Qwen preset and displayed **Check passed;
 model unloaded**. A separate read-only process inspection found no remaining
 llama router/model process. This verifies the successful check path in Cuttlefish;
-close/cancel/failure cleanup, ordinary chat inference, inactivity unloading and
-physical-device GPU execution remain separate acceptance cases.
+close/cancel/failure cleanup, inactivity unloading and physical-device GPU
+execution remain separate acceptance cases.
+
+A subsequent ordinary Android composer request used the installed r1 router and
+that saved CPU preset through stock Pi. The response was “Two plus two is four.”
+The UI reported 2.9k input tokens, 47 output tokens and 1m 47s total during a
+concurrent browser build. While inference ran, the native overlay showed
+57.75–58.86% owned-workload CPU and 3.40–3.42 / 16.75 GB system RAM; Close
+dismissed it normally. GPU remained unavailable on this Cuttlefish device. The
+model emitted thinking despite the effective Pi reasoning selector showing Off;
+that provider/template mapping still needs correction and re-verification.
 
 The native Models → Use Pocket action selected its matching projector. Saving
 CPU synthesis with the public upstream JFK reference, entering a sentence/output
