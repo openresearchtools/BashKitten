@@ -127,7 +127,18 @@ Consequently those whole-device counters cannot provide a truthful system CPU
 percentage in this app context. The user's later 8 October instruction selected
 the owned workload CPU scope above instead; it does not reinterpret the denied
 system counter as zero. GPU remains unavailable when the driver supplies no
-readable supported counter. RAM and overlay lifecycle remain independently
-testable. The new workload command and resulting APK still require real Termux
-app-domain and native UI acceptance; a successful syntax check or readable ADB
-shell counter is not evidence of application access.
+readable supported counter.
+
+Actual Termux `RunCommandService` verification returned a pending first sample,
+then 0.166% workload CPU across six owned processes on the eight-core guest;
+closing the sampling session succeeded. With Agent turned off in the native UI,
+sampling returned unavailable without starting the controller. The installed
+native overlay initially showed 0.25% workload CPU and 2.80/16.75 GB system RAM.
+On Android candidate `3686bcb1b7`, a normal Pi chat using Qwen3.5 0.8B completed
+with “Two plus two is four.” During that actual model response, the visible
+overlay showed 57.75–58.86% workload CPU and 3.40–3.42/16.75 GB system RAM, then
+closed normally. The process collector includes the owned router's model child;
+these observations verify the workload scope during real inference, not a
+privileged ADB aggregate counter. Total CPU remained omitted and GPU unavailable
+on this restricted Cuttlefish guest. Physical-phone GPU and total-CPU coverage
+remain unverified.
