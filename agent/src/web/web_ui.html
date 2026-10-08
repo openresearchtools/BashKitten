@@ -179,7 +179,7 @@
     .dialog-actions .delete-confirm { background:var(--danger); color:#fff; border:0; }
     .session b { display: block; overflow: hidden; font-size: 13px; font-weight: 430; text-overflow: ellipsis; white-space: nowrap; }
     .running-dot { position: absolute; top: 12px; right: 9px; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
-    #workspace { position: relative; display: grid; min-width: 0; min-height: 0; height: 100%; overflow: hidden; grid-template-rows: auto minmax(0, 1fr) auto; }
+    #workspace { position: relative; display: grid; min-width: 0; min-height: 0; height: 100%; overflow: hidden; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
     .workspace-heading { min-width: 0; }
     .topbar { display: flex; min-height: 58px; min-width: 0; align-items: center; gap: 12px; padding: 0 18px; border-bottom: 1px solid var(--line-soft); }
     .chat-heading { display: flex; min-width: 0; flex: 1; align-items: center; gap: 10px; }
@@ -349,7 +349,7 @@
     .thought summary { color: var(--muted); font-style: normal; }
     .thought .tool-body { margin-left: 25px; }
 
-    #composerWrap { padding: 0 16px 10px; background: linear-gradient(180deg, transparent, var(--bg) 12px); }
+    #composerWrap { min-width: 0; padding: 0 16px 10px; background: linear-gradient(180deg, transparent, var(--bg) 12px); }
     #composer { width: min(790px, 100%); margin: 0 auto; }
     #attachmentTray { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 8px 0; }
     .attachment { position: relative; width: 58px; height: 58px; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--surface); }
