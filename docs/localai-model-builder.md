@@ -65,9 +65,24 @@ Source contract: [llama.cpp v0.6.0 server model presets](https://github.com/ggml
 [INI parser](https://github.com/ggml-org/llama.cpp/blob/d81235049384534c167caea52b85a694f6103d14/common/preset.cpp),
 [argument definitions](https://github.com/ggml-org/llama.cpp/blob/d81235049384534c167caea52b85a694f6103d14/common/arg.cpp).
 
-Source parsing and Java syntax checks are separate from actual native UI
-acceptance. The earlier Cuttlefish router attempt exposed an upstream Android
-build without subprocess support; the daughter builder now enables the supported
-fork/exec path. Do not report the new model editor or load-check UI accepted until
-its updated packages have been installed and exercised through BashKitten's
-Cuttlefish browser flow.
+On 8 October, the installed Android editor passed actual interaction through the
+BashKitten desktop browser's Cuttlefish UI: opening the existing Qwen3.5 0.8B
+Q4_0 preset, selecting explicit CPU, saving and retaining the global 8192 context
+setting. Backend file browsing selected a downloaded Pocket model from Termux's
+home directory. The normal Check/Download actions installed Android llama
+`v0.6.0-r1` (peeled commit `d81235049384534c167caea52b85a694f6103d14`)
+and Whisper `v1.9.5-r1` as Vulkan packages, with CPU execution selected.
+
+**Save and test load** then loaded that Qwen preset and displayed **Check passed;
+model unloaded**. A separate read-only process inspection found no remaining
+llama router/model process. This verifies the successful check path in Cuttlefish;
+close/cancel/failure cleanup, ordinary chat inference, inactivity unloading and
+physical-device GPU execution remain separate acceptance cases.
+
+The native Models → Use Pocket action selected its matching projector. Saving
+CPU synthesis with the public upstream JFK reference, entering a sentence/output
+path and clicking Generate speech produced a 2.56-second, mono PCM16 24 kHz WAV.
+Read-only transcription of that output recovered the exact entered sentence.
+This synthesis used the already-installed earlier runtime before the r1 update;
+r1 synthesis and actual composer microphone/dictation still require acceptance.
+No captured microphone audio or user speech was used for that check.
