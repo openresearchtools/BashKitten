@@ -35,8 +35,14 @@ completed** and the normal Downloads screen listed `document.pdf`. Both complete
 MediaStore files contained all 146,453 bytes and matched the source SHA-256
 `faa06a15d80b2a91a5c044712858cfe2929f8b37e35c6e9d1f79aa49a71dc018`.
 
-Cancellation while conversion is still running remains unverified: the small
-documents completed before the attempted cancellation. Desktop native Files
-interaction also remains unverified because the available OS input path did not
-activate its controls. Parser coverage for additional supported extensions is
-not a claim that every extension has been opened manually.
+A later View → Cancel attempt used a larger external ODT made only from public
+project documentation. The native dialog closed, but read-only process inspection
+still found the worker and LibreOffice converter immediately afterwards. They
+subsequently exited and removed their scratch files. The existing Android fetch
+result had no cancellation delegate before response headers arrived, so this did
+not establish prompt conversion cancellation; its native fix requires a separate
+installed-build recheck.
+
+Desktop native Files interaction remains unverified because the available OS
+input path did not activate its controls. Parser coverage for additional supported
+extensions is not a claim that every extension has been opened manually.
