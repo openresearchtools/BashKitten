@@ -83,7 +83,13 @@ export class SubagentChats {
       if (typeof value.name !== 'string' || !value.name.trim()) throw Error('Name the subagent');
       const children = (await allMeta()).filter(meta => meta.subagentParent === source.id);
       const existing = children.find(meta => meta.spawnCall === value.deliveryId);
-      if (existing) return { id: existing.id, name: existing.title, message: 'This call already created the chat. Check its status before sending a follow-up.' };
+      if (existing) {
+        // Chat creation precedes worker startup. Retry the original delivery
+        // after a startup failure; the durable delivery ID prevents replay of
+        // an already accepted task and preserves an explicit Stop as a draft.
+        const delivery = await this.deliver(source, existing, value.message, value.deliveryId);
+        return { ...delivery, name: existing.title, parent: source.id };
+      }
       const active = await Promise.all(children.map(meta => this.running(meta.id)));
       if (active.filter(Boolean).length >= settings.count) throw Error(`This chat already has ${settings.count} running subagents. Stop a finished child before starting another.`);
       const parent = await readMeta(source.id);
@@ -92,7 +98,6 @@ export class SubagentChats {
         model: settings.model || parent.model, thinking: settings.thinking || parent.thinking,
         subagents: { enabled: false } }, { subagentParent: parent.id, subagentRoot: root,
         spawnCall: value.deliveryId, piSessionDir: path.join(path.dirname(parent.piFile), 'subagentsessions', parent.piSessionId) });
-      await this.ensureWorker(child.id);
       await this.deliver(parent, child, value.message, value.deliveryId);
       if (await this.running(parent.id)) await workerRequest(parent.id, '/sidebar-changed', {});
       return { id: child.id, name: child.title, parent: parent.id };
