@@ -94,5 +94,20 @@ CPU synthesis with the public upstream JFK reference, entering a sentence/output
 path and clicking Generate speech produced a 2.56-second, mono PCM16 24 kHz WAV.
 Read-only transcription of that output recovered the exact entered sentence.
 This synthesis used the already-installed earlier runtime before the r1 update;
-r1 synthesis and actual composer microphone/dictation still require acceptance.
-No captured microphone audio or user speech was used for that check.
+no captured microphone audio or user speech was used for that check.
+
+The same native Speech synthesis flow was subsequently repeated with the managed
+`v0.6.0-r1` runtime in explicit CPU mode. **Generate speech** accepted the public
+reference and entered sentence, and the panel displayed **complete** with the
+requested new WAV path. This is an actual r1 UI check, separate from stock engine
+CLI validation.
+
+A bounded composer dictation check on APK `a7e0ed2c72` and backend `0f493ab6ff`
+approved the native per-recording microphone prompt, displayed the red recording
+state, and stopped with the same microphone button. A public JFK audio sample was
+played through a temporary host virtual input. Whisper returned `[BLANK_AUDIO]`
+twice into the composer with the saved automatic-send option Off. The unsent draft
+was cleared, the temporary audio source stopped and the original automatic host
+input restored. Recording/stop/transcription handling ran, but successful speech
+dictation remains unverified. The point where silence entered was not measured;
+the cause is unconfirmed. No microphone recording was retained.
