@@ -32,12 +32,53 @@ export async function localAISettings(parent, control, win, isLocal) {
   const check = (parent, text, checked) => { const label = node('label', text), input = node('input'); input.type = 'checkbox'; input.checked = checked; label.prepend(input); parent.append(label); return input; };
   const copy = value => { Cc['@mozilla.org/widget/clipboardhelper;1'].getService(Ci.nsIClipboardHelper).copyString(value); message.textContent = 'Copied'; };
   const pick = async (title, kind = 'file', initial = '') => {
-    const picker = Cc['@mozilla.org/filepicker;1'].createInstance(Ci.nsIFilePicker);
-    picker.init(win.browsingContext, title, kind === 'folder' ? Ci.nsIFilePicker.modeGetFolder : kind === 'save' ? Ci.nsIFilePicker.modeSave : Ci.nsIFilePicker.modeOpen);
-    if (initial) { const file = Cc['@mozilla.org/file/local;1'].createInstance(Ci.nsIFile); file.initWithPath(initial); picker.displayDirectory = kind === 'folder' ? file : file.parent; picker.defaultString = file.leafName; }
-    const result = await new Promise(resolve => picker.open(resolve));
-    if (![Ci.nsIFilePicker.returnOK, Ci.nsIFilePicker.returnReplace].includes(result) || !active()) return null;
-    return picker.file.path;
+    const chooser = node('section'); chooser.className = 'connection-card';
+    chooser.setAttribute('role', 'dialog'); chooser.setAttribute('aria-label', title);
+    chooser.append(node('h3', title)); parent.append(chooser);
+    const location = field(chooser, 'Backend folder or path', initial);
+    const listing = node('div'), feedback = node('p'); feedback.setAttribute('role', 'status');
+    listing.style.cssText = 'max-height:24rem;overflow:auto;display:flex;flex-direction:column;align-items:stretch';
+    const filename = kind === 'save' ? field(chooser, 'New filename', initial.split('/').at(-1)) : null;
+    let current, pending = false, finished = false, resolve;
+    const result = new Promise(done => { resolve = done; });
+    const observer = new win.MutationObserver(() => { if (!active() || !chooser.isConnected) finish(null); });
+    const finish = value => { if (finished) return; finished = true; observer.disconnect(); chooser.remove(); resolve(value); };
+    const action = (label, handler) => {
+      const element = node('button', label); element.type = 'button';
+      element.onclick = async () => {
+        if (pending || finished) return;
+        pending = true; feedback.textContent = '';
+        try { await handler(); } catch (error) { if (!finished) feedback.textContent = error.message; }
+        finally { pending = false; }
+      };
+      return element;
+    };
+    const browse = async path => {
+      const directory = await call('localai-browse', { path, kind });
+      if (finished) return;
+      current = directory; location.value = current.path; listing.replaceChildren();
+      if (current.parent) listing.append(action('Parent folder', () => browse(current.parent)));
+      for (const entry of current.entries) {
+        if (kind === 'folder' && !entry.directory) continue;
+        listing.append(action((entry.directory ? 'Folder: ' : '') + entry.name, () => {
+          if (entry.directory) return browse(entry.path);
+          if (filename) filename.value = entry.name;
+          else finish(entry.path);
+        }));
+      }
+      if (!current.entries.length) listing.append(node('p', 'This folder is empty.'));
+    };
+    chooser.append(action('Open path', () => browse(location.value)), listing, feedback);
+    if (kind !== 'file') chooser.append(action(kind === 'folder' ? 'Use this folder' : 'Use this filename', () => {
+      if (!current) throw Error('Open a backend folder first');
+      if (filename && (!filename.value.trim() || /[\/\0]/.test(filename.value) || ['.', '..'].includes(filename.value))) throw Error('Enter a filename without a directory');
+      finish(filename ? current.path.replace(/\/$/, '') + '/' + filename.value : current.path);
+    }));
+    const cancel = node('button', 'Cancel'); cancel.type = 'button'; cancel.onclick = () => finish(null); chooser.append(cancel);
+    observer.observe(doc.documentElement, { childList: true, subtree: true });
+    try { pending = true; await browse(initial); } catch (error) { feedback.textContent = error.message; } finally { pending = false; }
+    location.focus();
+    return result;
   };
   const pickerField = (parent, title, value, kind = 'file') => {
     const input = field(parent, title, value);
@@ -60,29 +101,34 @@ export async function localAISettings(parent, control, win, isLocal) {
       const folder = button('Choose binary folder…', async () => { const directory = await pick('Choose runtime folder', 'folder'); if (directory) binary.value = directory; }); section.append(folder);
       const updateMode = () => { binary.disabled = mode.value !== 'custom'; chooseBinary.disabled = mode.value !== 'custom'; folder.disabled = mode.value !== 'custom'; };
       mode.onchange = updateMode; updateMode();
-      const backend = select(section, 'Device', [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], config.backend);
+      const savedBackend = engine === 'llama' && config.backend === 'cpu' ? 'vulkan' : config.backend;
+      const backend = select(section, engine === 'llama' ? 'Runtime package' : 'Device', engine === 'llama' ? [['auto', 'Automatic'], ['cuda', 'CUDA + CPU'], ['vulkan', 'Vulkan + CPU']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], savedBackend);
+      if (engine === 'llama') section.append(node('p', 'Choose CPU or a GPU for each model below. Launcher environment applies to all router models.'));
       const version = node('p'); version.setAttribute('role', 'status'); section.append(version);
       section.append(button('Check now', async () => {
-        if (mode.value !== config.mode || backend.value !== config.backend) throw Error('Save the runtime choice first');
+        if (mode.value !== config.mode || backend.value !== savedBackend) throw Error('Save the runtime choice first');
         const result = await call('localai-check', { engine });
         version.textContent = result.custom ? 'Custom binary — managed updates disabled' : `${result.version} · ${result.backend} · ${result.updateAvailable ? 'Update available' : 'Up to date'}`;
       }), button('Download / update runtime', async () => {
-        if (mode.value !== config.mode || backend.value !== config.backend) throw Error('Save the runtime choice first');
+        if (mode.value !== config.mode || backend.value !== savedBackend) throw Error('Save the runtime choice first');
         const result = await call('localai-install', { engine }); message.textContent = result.phase;
       }));
       if (current.runtime?.root) for (const [label, filename] of [['Licenses', 'LICENSES.txt'], ['Source record', 'SOURCE.json']]) section.append(button(label, () => {
         const file = Cc['@mozilla.org/file/local;1'].createInstance(Ci.nsIFile); file.initWithPath(current.runtime.root + '/' + filename);
         win.openTrustedLinkIn(Services.io.newFileURI(file).spec, 'tab');
       }));
-      const port = field(section, 'Port — 0 chooses an available port', config.port); port.type = 'number'; port.min = '0'; port.max = '65535';
-      const argv = field(section, 'Launch command — JSON arguments; {port} uses the chosen port. Empty uses the starter command.', config.argv.length ? JSON.stringify(config.argv, null, 2) : '', true);
-      section.append(button('Copy effective command', () => copy(JSON.stringify(current.service?.command?.argv || config.argv, null, 2))));
-      if (current.service?.command) { const command = node('pre', JSON.stringify(current.service.command.argv, null, 2)); command.style.cssText = 'max-height:6em;overflow:auto;white-space:pre-wrap'; section.append(command); }
-      const cwd = pickerField(section, 'Working directory', config.cwd, 'folder');
-      const env = engine === 'llama' ? field(section, 'Environment — JSON object', JSON.stringify(config.env), true) : null;
+      const launcher = node('details'); launcher.append(node('summary', 'Launcher and environment')); section.append(launcher);
+      launcher.append(node('p', 'The default launcher supplies the executable, port and saved configuration. Override these settings only when needed.'));
+      const port = field(launcher, 'Port — 0 chooses an available port', config.port); port.type = 'number'; port.min = '0'; port.max = '65535';
+      const argv = field(launcher, 'Optional launch arguments — JSON array; {port} uses the chosen port', config.argv.length ? JSON.stringify(config.argv, null, 2) : '', true);
+      launcher.append(button('Copy effective command', () => copy(JSON.stringify(current.service?.command?.argv || config.argv, null, 2))));
+      if (current.service?.command) { const command = node('pre', JSON.stringify(current.service.command.argv, null, 2)); command.style.cssText = 'max-height:6em;overflow:auto;white-space:pre-wrap'; launcher.append(command); }
+      const cwd = pickerField(launcher, 'Working directory', config.cwd, 'folder');
+      const env = engine === 'llama' ? field(launcher, 'Environment — JSON object', JSON.stringify(config.env), true) : null;
       let preset, startup, imported, keyFile, model, keepRunning, autoSend;
       if (engine === 'llama') {
         preset = pickerField(section, 'Router INI', config.preset);
+        section.append(button('Add / edit router models', () => editRouterModels(preset.value, path => { preset.value = path; })));
         section.append(button('Edit router INI', () => editINI(preset.value, path => { preset.value = path; })));
         keyFile = pickerField(section, 'Optional application API-key file', config.keyFile);
         startup = check(section, 'Keep router available while Agent is on (models load on demand)', config.startup);
@@ -140,6 +186,111 @@ export async function localAISettings(parent, control, win, isLocal) {
       draw(await call('localai-model-use', { engine: 'tts', file: state.job.result.file, kind: 'pocket', projector: projector.value }));
     }));
     body.append(section);
+  };
+  const editRouterModels = async (filename, saved) => {
+    let catalogue = await call('localai-router-models', { file: filename });
+    const editor = node('section'); editor.className = 'connection-card';
+    editor.append(node('h3', 'Router models'));
+    const location = node('p', catalogue.file); editor.append(location);
+    const entries = select(editor, 'Saved model', [['', 'Add a model']], '');
+    const form = node('div'); editor.append(form);
+    const name = field(form, 'Model name');
+    const model = pickerField(form, 'Model file', '');
+    const projector = pickerField(form, 'Optional mmproj file', '');
+    const context = field(form, 'Context length — 0 uses the model default', '0'); context.type = 'number'; context.min = '0'; context.step = '1';
+    const device = select(form, 'Run on', [['none', 'CPU']], 'none');
+    const deviceNote = node('p'); form.append(deviceNote);
+    const layers = field(form, 'GPU layers — all, auto, or a number', '0');
+    const fit = check(form, 'Fit the model to available memory', true);
+    const cacheGpu = check(form, 'Keep KV cache on GPU', false);
+    const flash = select(form, 'Flash attention', [['auto', 'Automatic'], ['on', 'On'], ['off', 'Off']], 'auto');
+    const idle = select(form, 'Keep loaded after last use', [['0', 'Indefinitely'], ['1', '1 minute'], ['5', '5 minutes'], ['10', '10 minutes'], ['30', '30 minutes'], ['60', '1 hour'], ['custom', 'Custom minutes']], '0');
+    const customIdle = field(form, 'Idle minutes — 0 means indefinitely', '0'); customIdle.type = 'number'; customIdle.min = '0'; customIdle.step = '1'; customIdle.parentElement.hidden = true;
+    idle.onchange = () => { customIdle.parentElement.hidden = idle.value !== 'custom'; };
+    form.append(node('p', 'The inactivity timer resets when the model is used. Unloading releases the active KV context too. The router may also unload an idle model to make room for another model.'));
+    const extra = field(form, 'Additional INI parameters — one key=value per line', '', true);
+    const status = node('p'); status.setAttribute('role', 'status'); editor.append(status);
+    let originalName, dirty = true, testOwner, testState = 'idle', testTimer;
+    const running = () => ['loading', 'checking'].includes(testState);
+    const cancelTest = async () => {
+      if (testTimer) win.clearTimeout(testTimer); testTimer = null;
+      if (!testOwner || !running()) return;
+      const owner = testOwner;
+      try { const result = await control('localai-router-model-test-cancel', { owner }); if (owner === testOwner) showTest(result); }
+      catch (error) { if (editor.isConnected) status.textContent = error.message; }
+    };
+    const observer = new win.MutationObserver(() => {
+      if (!active() || !editor.isConnected) { observer.disconnect(); void cancelTest(); }
+    });
+    const populate = selected => {
+      const value = catalogue.models.find(item => item.name === selected);
+      const config = value?.config || { device: 'none', gpuLayers: 0, contextSize: 0, fit: true, cacheGpu: false, flashAttention: 'auto', idleMinutes: 0 };
+      originalName = value?.name; name.value = value?.name || ''; model.value = config.model || ''; projector.value = config.projector || '';
+      context.value = config.contextSize ?? 0; layers.value = config.gpuLayers ?? 'auto'; fit.checked = config.fit !== false;
+      cacheGpu.checked = config.cacheGpu !== false; flash.value = config.flashAttention || 'auto'; extra.value = config.extra || '';
+      const choices = [['none', 'CPU'], ['', 'Engine default'], ...catalogue.devices.map(item => [item.id, item.label || item.id])];
+      if (config.device && !choices.some(([id]) => id === config.device)) choices.push([config.device, config.device + ' (saved; not currently available)']);
+      device.replaceChildren(...choices.map(([id, label]) => { const option = node('option', label); option.value = id; return option; })); device.value = config.device ?? '';
+      deviceNote.textContent = catalogue.deviceError || '';
+      const minutes = String(config.idleMinutes ?? 0); customIdle.value = minutes;
+      idle.value = [...idle.options].some(option => option.value === minutes) ? minutes : 'custom'; customIdle.parentElement.hidden = idle.value !== 'custom';
+      dirty = !value;
+    };
+    const refresh = async selected => {
+      catalogue = await call('localai-router-models', { file: catalogue.file }); location.textContent = catalogue.file;
+      entries.replaceChildren(...[['', 'Add a model'], ...catalogue.models.map(item => [item.name, item.name])].map(([id, title]) => { const option = node('option', title); option.value = id; return option; }));
+      entries.value = selected || ''; populate(selected);
+    };
+    form.addEventListener('input', () => { dirty = true; }); form.addEventListener('change', () => { dirty = true; });
+    device.onchange = () => {
+      if (device.value === 'none') { layers.value = '0'; cacheGpu.checked = false; }
+      else if (device.value) { layers.value = 'all'; cacheGpu.checked = true; flash.value = 'auto'; }
+      dirty = true;
+    };
+    // Backend path pickers assign values directly rather than synthesizing form input.
+    const editedConfig = () => ({ model: model.value, projector: projector.value, contextSize: Number(context.value), device: device.value,
+      gpuLayers: ['all', 'auto'].includes(layers.value.trim()) ? layers.value.trim() : Number(layers.value), fit: fit.checked,
+      cacheGpu: cacheGpu.checked, flashAttention: flash.value, idleMinutes: Number(idle.value === 'custom' ? customIdle.value : idle.value), extra: extra.value });
+    let savedConfig;
+    entries.onchange = () => void run(async () => { if (running()) throw Error('Stop the load check before selecting another model'); populate(entries.value); savedConfig = JSON.stringify(editedConfig()); }, status);
+    editor.append(button('Save model', async () => {
+      if (running()) throw Error('Stop the load check before saving changes');
+      const config = editedConfig();
+      if (!Number.isInteger(config.contextSize) || config.contextSize < 0 || !Number.isFinite(config.idleMinutes) || config.idleMinutes < 0 ||
+          !(typeof config.gpuLayers === 'string' || Number.isInteger(config.gpuLayers) && config.gpuLayers >= 0)) throw Error('Enter valid context, GPU layer and idle values');
+      await call('localai-router-model-save', { file: catalogue.file, revision: catalogue.revision, name: name.value, originalName, config });
+      const selected = name.value; saved(catalogue.file); await refresh(selected); savedConfig = JSON.stringify(editedConfig());
+      status.textContent = 'Model saved. Reload the router to apply changes.';
+    }, status), button('Add another model', () => {
+      if (running()) throw Error('Stop the load check before adding a model'); entries.value = ''; populate(''); savedConfig = null;
+    }, status));
+    const showTest = result => {
+      testState = result.state;
+      if (!editor.isConnected) return;
+      status.textContent = result.state === 'passed' ? 'Check passed. Model unloaded.' : result.state === 'failed' ? 'Load check failed: ' + (result.error || 'See the engine error') :
+        result.state === 'cancelled' ? 'Load check cancelled. Temporary model stopped.' : 'Checking model load…';
+    };
+    const pollTest = async owner => {
+      if (owner !== testOwner) return;
+      if (!active() || !editor.isConnected) { await cancelTest(); return; }
+      try { showTest(await call('localai-router-model-test-status', { owner })); }
+      catch (error) { status.textContent = error.message; await cancelTest(); return; }
+      if (running()) testTimer = win.setTimeout(() => void pollTest(owner), 1000);
+    };
+    editor.append(button('Check model load', async () => {
+      if (running()) throw Error('A load check is already running');
+      if (!originalName || dirty || name.value !== originalName || savedConfig !== JSON.stringify(editedConfig())) throw Error('Save this model before checking its load');
+      testOwner = Services.uuid.generateUUID().toString().slice(1, -1);
+      testState = 'loading';
+      try { showTest(await call('localai-router-model-test', { file: catalogue.file, revision: catalogue.revision, name: originalName, owner: testOwner })); }
+      catch (error) { await cancelTest(); throw error; }
+      if (running()) testTimer = win.setTimeout(() => void pollTest(testOwner), 1000);
+    }, status), button('Stop load check', cancelTest, status), button('Edit INI directly', async () => {
+      await cancelTest(); observer.disconnect(); editor.remove(); await editINI(catalogue.file, saved);
+    }, status), button('Close model builder', async () => { await cancelTest(); observer.disconnect(); editor.remove(); }, status));
+    editor.append(node('p', 'The load check uses a temporary router, then stops it and unloads the model before reporting success.'));
+    parent.append(editor); observer.observe(doc.documentElement, { childList: true, subtree: true });
+    await refresh(''); savedConfig = JSON.stringify(editedConfig()); name.focus();
   };
   const editINI = async (filename, saved) => {
     let file = await call('localai-ini', { file: filename });
