@@ -740,7 +740,7 @@
     <button id="drawerBackdrop" class="hidden" type="button" aria-label="Close panel"></button>
   </section>
   <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
-  <dialog id="filePreview" aria-labelledby="filePreviewTitle"><div class="dialog-body"><h2 id="filePreviewTitle"></h2><p id="filePreviewStatus" role="status">Preparing preview…</p><progress id="filePreviewProgress" aria-label="Preparing preview"></progress><p id="filePreviewError" class="meta" role="alert"></p><div class="dialog-actions"><a id="filePreviewDownload" download>Download original</a><button id="filePreviewClose" type="button" data-close>Cancel</button><button id="filePreviewOpen" class="primary hidden" type="button">Open preview ↗</button></div></div></dialog>
+  <dialog id="filePreview" aria-labelledby="filePreviewTitle"><div class="dialog-body"><h2 id="filePreviewTitle"></h2><p id="filePreviewStatus" role="status">Preparing preview…</p><progress id="filePreviewProgress" aria-label="Preparing preview"></progress><p id="filePreviewError" class="meta" role="alert"></p><div class="dialog-actions"><a id="filePreviewDownload" download>Download original</a><button id="filePreviewClose" type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="fileEditor" aria-labelledby="fileEditorTitle"><form id="fileEditorForm" class="dialog-body"><h2 id="fileEditorTitle"></h2><textarea id="fileEditorText" aria-label="File contents" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><p id="fileEditorError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button><button id="fileEditorSave" class="primary">Save</button></div></form></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="subagentDialog" aria-labelledby="subagentHeading"><form id="subagentForm" class="dialog-body">
@@ -3358,60 +3358,36 @@
       setFileTab(fileTab);updateBackdrop();
       if(fileJob){renderFileJob();pollFileJob();}
     }
-    let filePreview = null, filePreviewGeneration = 0, filePreviewTimer = null, filePreviewAbort = null;
-    function previewActive(generation) { return generation === filePreviewGeneration && fileManagerAllowed && $('#filePreview').open; }
-    function cancelPreparedPreview(job) {
-      if(job?.id && !job.handedOff) filePost('/api/files/previews/'+encodeURIComponent(job.id)+'/cancel',{}).catch(()=>{});
+    let filePreview = null, filePreviewGeneration = 0;
+    function cancelPreparedPreview() {
+      if(filePreview && !filePreview.handedOff) nativeHost?.call('cancel-file-view').catch(()=>{});
+      filePreview=null;
     }
-    function renderPreparedPreview(job) {
-      const ready=job.status==='ready', running=job.status==='running';
-      $('#filePreviewStatus').textContent=ready?'Ready to open in a separate tab.':running?'Preparing preview…':job.status==='cancelled'?'Preview cancelled.':'Unable to prepare this preview.';
-      $('#filePreviewError').textContent=job.error||'';
-      $('#filePreviewProgress').classList.toggle('hidden',!running);
-      $('#filePreviewOpen').classList.toggle('hidden',!ready);
-      $('#filePreviewOpen').disabled=false;$('#filePreviewClose').textContent=running?'Cancel':'Close';
-    }
-    async function pollFilePreview(generation) {
-      clearTimeout(filePreviewTimer);
-      if(!previewActive(generation)||document.hidden||!filePreview?.id||filePreview.status!=='running')return;
-      filePreviewAbort=new AbortController();
-      try {
-        const value=await api('/api/files/previews/'+encodeURIComponent(filePreview.id),{signal:filePreviewAbort.signal});
-        if(!previewActive(generation))return;
-        filePreview=value;renderPreparedPreview(value);
-        if(value.status==='running')filePreviewTimer=setTimeout(()=>pollFilePreview(generation),1000);
-      } catch(error) { if(previewActive(generation)&&error.name!=='AbortError'){$('#filePreviewError').textContent=error.message;filePreviewTimer=setTimeout(()=>pollFilePreview(generation),1000);} }
-    }
-    async function openFilePreview(root, entry) {
+    function openFilePreview(root, entry) {
       if(!fileManagerAllowed)return;
       if(entry.previewKind==='image') { openImageViewer(fileUrl('/content',entry.path,root),entry.name,{manager:true,download:fileUrl('/content',entry.path,root)+'&download=true'});return; }
+      const url=new URL(fileUrl('/previews/content',entry.path,root),location.href);
+      if(!nativeHost) { window.open(url.href,'_blank','noopener,noreferrer');return; }
       if($('#filePreview').open)return;
-      const generation=++filePreviewGeneration;filePreview=null;
+      const generation=++filePreviewGeneration,job={handedOff:false};filePreview=job;
       $('#filePreviewTitle').textContent=entry.name;$('#filePreviewDownload').href=fileUrl('/content',entry.path,root)+'&download=true';$('#filePreviewDownload').download=entry.name;
-      renderPreparedPreview({status:'running'});$('#filePreview').showModal();
-      try {
-        const value=await filePost('/api/files/previews',{root,path:entry.path});
-        if(!previewActive(generation)){cancelPreparedPreview(value);return;}
-        filePreview=value;renderPreparedPreview(value);if(value.status==='running')filePreviewTimer=setTimeout(()=>pollFilePreview(generation),1000);
-      } catch(error) { if(previewActive(generation))renderPreparedPreview({status:'failed',error:error.message}); }
+      $('#filePreviewStatus').textContent='Preparing and opening preview…';$('#filePreviewError').textContent='';
+      $('#filePreviewProgress').classList.remove('hidden');$('#filePreviewClose').textContent='Cancel';$('#filePreview').showModal();
+      // This call starts during the original View gesture. Native streaming waits
+      // for the guarded backend conversion; no credentials reach the new tab.
+      nativeHost.call('view-file',{url:url.href}).then(()=>{
+        if(generation!==filePreviewGeneration)return;
+        job.handedOff=true;$('#filePreview').close();
+      }).catch(error=>{
+        if(generation!==filePreviewGeneration||!$('#filePreview').open)return;
+        $('#filePreviewStatus').textContent='Unable to open this preview.';$('#filePreviewError').textContent=error.message;
+        $('#filePreviewProgress').classList.add('hidden');$('#filePreviewClose').textContent='Close';
+      });
     }
     $('#filePreview').addEventListener('close',()=>{
-      ++filePreviewGeneration;clearTimeout(filePreviewTimer);filePreviewAbort?.abort();cancelPreparedPreview(filePreview);filePreview=null;
-      $('#filePreviewDownload').removeAttribute('href');$('#filePreviewError').textContent='';
+      ++filePreviewGeneration;cancelPreparedPreview();$('#filePreviewDownload').removeAttribute('href');$('#filePreviewError').textContent='';
     });
-    $('#filePreviewOpen').onclick=()=>{
-      const job=filePreview,generation=filePreviewGeneration;if(!previewActive(generation)||job?.status!=='ready')return;
-      let url;try { url=new URL(job.contentUrl,location.href);if(url.origin!==location.origin||!/^\/api\/files\/previews\/[0-9a-f-]{36}\/content$/.test(url.pathname)||url.search||url.hash)throw new Error('Invalid preview location'); }
-      catch(error){$('#filePreviewError').textContent=error.message;return;}
-      if(nativeHost) {
-        // Invoke from this genuine user click. Native streaming may finish later;
-        // opening automatically after conversion would lose the user activation.
-        $('#filePreviewOpen').disabled=true;$('#filePreviewStatus').textContent='Opening preview…';
-        nativeHost.call('view-file',{url:url.href}).then(()=>{if(previewActive(generation)){job.handedOff=true;$('#filePreview').close();}}).catch(error=>{if(previewActive(generation)){$('#filePreviewError').textContent=error.message;$('#filePreviewOpen').disabled=false;}});
-      } else { window.open(url.href,'_blank','noopener,noreferrer');job.handedOff=true;$('#filePreview').close(); }
-    };
-    document.addEventListener('visibilitychange',()=>{if(document.hidden){clearTimeout(filePreviewTimer);filePreviewAbort?.abort();}else if($('#filePreview').open)pollFilePreview(filePreviewGeneration);});
-    window.addEventListener('pagehide',()=>{clearTimeout(filePreviewTimer);cancelPreparedPreview(filePreview);});
+    window.addEventListener('pagehide',()=>{++filePreviewGeneration;cancelPreparedPreview();});
     let fileEdit = null, fileEditGeneration = 0;
     async function openFileEditor(root, path) {
       if (!fileManagerAllowed) return;

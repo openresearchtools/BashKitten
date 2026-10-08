@@ -48,10 +48,15 @@ final class DocumentPreviews {
     }
     void open(GeckoSession source, String value, BooleanSupplier current, Consumer<String> reply) throws Exception {
         URI own = URI.create(app.agent.url), target = own.resolve(value);
+        Uri query = Uri.parse(target.toASCIIString());
+        Set<String> names = query.getQueryParameterNames();
         if (!current.getAsBoolean() || !"https".equals(target.getScheme()) ||
                 !Objects.equals(own.getScheme(), target.getScheme()) || !Objects.equals(own.getHost(), target.getHost()) || own.getPort() != target.getPort() ||
-                target.getRawUserInfo() != null || target.getRawQuery() != null || target.getRawFragment() != null ||
-                !target.getRawPath().matches("/api/files/previews/[a-f0-9-]{36}/content")) throw new SecurityException("Invalid prepared document");
+                target.getRawUserInfo() != null || target.getRawFragment() != null ||
+                !target.getRawPath().equals("/api/files/previews/content") ||
+                names.size() != 2 || !names.contains("root") || !names.contains("path") ||
+                query.getQueryParameters("root").size() != 1 || !query.getQueryParameter("root").startsWith("/") ||
+                query.getQueryParameters("path").size() != 1 || query.getQueryParameter("path").isEmpty() || query.getQueryParameter("path").startsWith("/")) throw new SecurityException("Invalid prepared document");
         Transfer transfer = new Transfer(current); pending.add(transfer);
         WebRequest request = new WebRequest.Builder(target.toASCIIString())
             .contextId(source.getSettings().getContextId()).cacheMode(WebRequest.CACHE_MODE_NO_STORE)
@@ -115,8 +120,11 @@ final class DocumentPreviews {
     void tabsChanged(Set<String> tabs) {
         for (String id : new ArrayList<>(opened.keySet())) if (!tabs.contains(id)) cleanup(opened.remove(id));
     }
-    void close() {
+    void cancelPending() {
         for (Transfer transfer : new ArrayList<>(pending)) transfer.cancel();
+    }
+    void close() {
+        cancelPending();
         for (Transfer transfer : opened.values()) cleanup(transfer);
         opened.clear();
     }

@@ -49,12 +49,15 @@ export class BashKittenAgentChild extends JSWindowActorChild {
   }
 
   async call(command, data, entry) {
+    if (command === "cancel-file-view") return this.sendQuery("CancelFileView");
     if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view.");
     if (command === "sign-in") return this.sendQuery("SignIn");
     if (command === "view-file" && typeof data.url === "string") {
       const url = new URL(data.url, this.document.location.href);
-      if (url.origin !== entry.origin || url.username || url.password || url.search || url.hash ||
-          !/^\/api\/files\/previews\/[a-f0-9-]{36}\/content$/.test(url.pathname)) throw new Error("Invalid prepared document.");
+      if (url.origin !== entry.origin || url.username || url.password || url.hash ||
+          url.pathname !== "/api/files/previews/content" || url.searchParams.size !== 2 ||
+          url.searchParams.getAll("root").length !== 1 || !url.searchParams.get("root").startsWith("/") ||
+          url.searchParams.getAll("path").length !== 1 || !url.searchParams.get("path") || url.searchParams.get("path").startsWith("/")) throw new Error("Invalid prepared document.");
       return this.sendQuery("ViewFile", { url: url.href });
     }
     if (!entry.local) throw new Error("Files on a remote Agent use browser downloads.");

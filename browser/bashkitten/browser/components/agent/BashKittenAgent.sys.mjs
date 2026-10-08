@@ -328,7 +328,7 @@ class AgentView {
   }
 
   cancelDocumentTransfers() {
-    for (const download of this.documentTransfers) download.cancel().catch(console.error);
+    return Promise.allSettled([...this.documentTransfers].map(transfer => transfer.cancel()));
   }
 
   async viewFile(browser, value) {
@@ -340,8 +340,10 @@ class AgentView {
     if (!entry || !current() || !principal?.isContentPrincipal ||
         principal.originNoSuffix !== target.origin || target.origin !== new URL(entry.connection.url).origin ||
         principal.originAttributes.userContextId !== entry.connection.userContextId ||
-        target.username || target.password || target.search || target.hash ||
-        !/^\/api\/files\/previews\/[a-f0-9-]{36}\/content$/.test(target.pathname)) throw new Error("The prepared document is not in the selected Agent.");
+        target.username || target.password || target.hash || target.pathname !== "/api/files/previews/content" ||
+        target.searchParams.size !== 2 || target.searchParams.getAll("root").length !== 1 ||
+        !target.searchParams.get("root").startsWith("/") || target.searchParams.getAll("path").length !== 1 ||
+        !target.searchParams.get("path") || target.searchParams.get("path").startsWith("/")) throw new Error("The prepared document is not in the selected Agent.");
     const directory = Services.dirsvc.get("TmpD", Ci.nsIFile);
     directory.append("bashkitten-preview"); directory.createUnique(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
     let identity, tab, download, responseChannel, cleaned = false;
@@ -351,6 +353,8 @@ class AgentView {
       try { if (identity) lazy.ContextualIdentityService.remove(identity.userContextId); }
       finally { await IOUtils.remove(directory.path, { recursive: true, ignoreAbsent: true }); }
     };
+    const transfer = { cancel: () => { revoked = true; return download ? download.cancel() : Promise.resolve(); } };
+    this.documentTransfers.add(transfer);
     documentCleanups.add(cleanup);
     const revoke = (_subject, _topic, id) => { if (id === entry.connection.id) { revoked = true; download?.cancel().catch(console.error); } };
     Services.obs.addObserver(revoke, "bashkitten-agent-control-revoke");
@@ -368,7 +372,7 @@ class AgentView {
           }, allowHttpStatus: (_download, status) => current() && status === 200 },
         target: pending,
       });
-      this.documentTransfers.add(download);
+      if (!current()) throw new Error("The document request was cancelled.");
       download.onchange = () => { if (!current() && !download.stopped) download.cancel().catch(console.error); };
       await download.start();
       if (!current() || cleaned) throw new Error("The selected Agent changed.");
@@ -394,7 +398,7 @@ class AgentView {
       finally { await cleanup(); }
       throw error;
     }
-    finally { this.documentTransfers.delete(download); Services.obs.removeObserver(revoke, "bashkitten-agent-control-revoke"); }
+    finally { this.documentTransfers.delete(transfer); Services.obs.removeObserver(revoke, "bashkitten-agent-control-revoke"); }
   }
 
   async chooseFolder(browser, { title, path } = {}) {

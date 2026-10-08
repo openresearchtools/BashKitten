@@ -820,6 +820,7 @@ public final class AgentRuntime {
         if (source != session || !desired || !state.equals("on")) { reply.accept("{\"error\":\"Agent connection is not active.\"}"); return; }
         try {
             JSONObject args = new JSONObject(json);
+            if (command.equals("cancel-file-view")) { app.previews.cancelPending(); reply.accept("{\"result\":{\"ok\":true}}"); return; }
             if (command.equals("view-file")) {
                 final int generation = operation;
                 final String address = url, choice = selected;
