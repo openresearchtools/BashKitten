@@ -268,7 +268,7 @@ export async function localAISettings(parent, control, win, isLocal) {
       testState = result.state;
       if (!editor.isConnected) return;
       status.textContent = result.state === 'passed' ? 'Check passed. Model unloaded.' : result.state === 'failed' ? 'Load check failed: ' + (result.error || 'See the engine error') :
-        result.state === 'cancelled' ? 'Load check cancelled. Temporary model stopped.' : 'Checking model load…';
+        result.state === 'cancelled' ? 'Load check cancelled. Temporary model stopped.' : result.state === 'idle' ? 'No active load check.' : 'Checking model load…';
     };
     const pollTest = async owner => {
       if (owner !== testOwner) return;
