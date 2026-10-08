@@ -41,6 +41,13 @@ also provide CPU execution; do not build or download separate CPU artifacts.
 Keep CPU/GPU execution choices, with GPU use disabled explicitly in CPU mode.
 Show owned-workload CPU and, where real device counters permit, total CPU in
 the Android performance overlay. Sample only while the overlay is visible.
+Router model settings belong in per-model INI entries, with a native Add/Edit
+form for backend file browsing, optional mmproj, context, actual devices, fit,
+KV offload, flash attention and extra parameters. Keep direct INI editing and
+separate launcher executable/port/INI/environment settings. Model retention
+means idle time since last use, displayed in minutes with 0 meaning no idle
+timeout (upstream sleep-idle-seconds=-1). An optional load check must stop its
+temporary model and confirm cleanup before reporting success.
 The chat controls must show the effective model/reasoning selection, or Not set
 when absent, with compact widths. Android Agent power is a toggle beside the
 logo; Display, LocalAI and performance use compact matching icons.
