@@ -16,6 +16,8 @@ import { RouterModelTest } from './router-test.mjs';
 
 const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
+// Stock Pi keeps 20k recent tokens for compaction and reserves 4k for safety.
+const defaultContextSize = 32768;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: platform === 'termux' ? 'cpu' : 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
   ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket' } : { model: '', modelKind: 'whisper', keepRunning: false, autoSend: true }) });
@@ -104,7 +106,7 @@ export class LocalAI {
     requireLocalRuntime(); await privateDir(localAIDir);
     const config = await readConfiguration();
     if (!await fs.stat(config.llama.preset).catch(() => null) && config.llama.preset === defaults('llama').preset) {
-      await fs.writeFile(config.llama.preset, '# llama.cpp router presets. Model sections use their real paths.\n[*]\nctx-size = 8192\n', { mode: 0o600, flag: 'wx' });
+      await fs.writeFile(config.llama.preset, `# llama.cpp router presets. Model sections use their real paths.\n[*]\nctx-size = ${defaultContextSize}\n`, { mode: 0o600, flag: 'wx' });
     }
     await writeJson(configFile, config);
   }
@@ -374,7 +376,7 @@ export class LocalAI {
       if (/[\]\r\n]/.test(name) || /[\r\n]/.test(file + projector) || !/\.gguf$/i.test(file)) throw Error('Choose a GGUF filename representable in router INI');
       if (ini.content.split(/\r?\n/).some(line => line.trim() === '[' + name + ']')) throw Error('This router entry already exists');
       if (projector) { if (!path.isAbsolute(projector)) throw Error('Choose an absolute projector path'); await fs.access(projector); }
-      await this.ini({ file: ini.file, revision: ini.revision, content: await updateRouterModel(ini.content, { name, config: { model: file, projector, contextSize: 8192, device: 'none', gpuLayers: 0, fit: true, idleMinutes: 0, cacheGpu: false, flashAttention: 'auto', extra: '' } }) });
+      await this.ini({ file: ini.file, revision: ini.revision, content: await updateRouterModel(ini.content, { name, config: { model: file, projector, contextSize: defaultContextSize, device: 'none', gpuLayers: 0, fit: true, idleMinutes: 0, cacheGpu: false, flashAttention: 'auto', extra: '' } }) });
       return { ...await this.status(), selectedModel: name };
     }
     const next = { ...saved[engine], model: file, modelKind: kind };

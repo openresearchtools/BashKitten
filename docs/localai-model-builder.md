@@ -12,6 +12,11 @@ all layers, KV offload and automatic flash attention. Android's simple selector
 uses CPU or all GPU layers; desktop additionally exposes a layer count.
 Existing expert INI values remain editable manually. Unspecified existing
 settings retain the engine defaults, rather than adopting the new-model defaults.
+New router profiles and downloaded-model presets use 32,768 context tokens.
+Stock Pi reserves 4,096 tokens for output safety and keeps 20,000 recent tokens
+for compaction; an 8,192-token context left only one output token after the
+observed 4.5k-token tool prompt. Existing context choices are preserved and remain
+editable in the model form.
 GPU choices come from the actual selected runtime's `--list-devices`. Discovery
 failure is shown and does not prevent an explicit CPU preset.
 
