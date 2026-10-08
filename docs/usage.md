@@ -87,7 +87,8 @@ are inside Termux home, displayed as `~`.
   queued during a turn support editing, steering and removal.
 - Files supports uploads, downloads, backend ZIP downloads and confirmed bulk
   operations. Changes displays Git differences without staging or committing.
-  Linux Local uses Changes and native folder opening.
+  Both panels are available on Linux and Android; Linux also has native folder
+  opening.
 - **Settings → Providers → Open an existing Pi session** adds a native session to
   the sidebar. Avoid opening the same session concurrently in another Pi client.
 - **Local → LocalAI → Models** saves selected Hugging Face files to the local
@@ -102,6 +103,19 @@ profile. From an ordinary terminal, use `bashkitten-pi install` for BashKitten;
 an independently installed `pi` keeps its own profile.
 Browser and search skills ship in the integration package. The browser guide
 matches the authorized client platform.
+
+## Viewing files
+
+In **Files**, choose **View** beside a supported file or the download arrow to
+save its original. Images open in the image viewer. Other previews open in a
+normal browser tab when ready; preparation can be cancelled.
+
+PDFs use the browser's PDF viewer. Text and code show their contents; Markdown
+opens rendered, with a **Raw** toggle and horizontally scrollable tables. Word,
+PowerPoint and OpenDocument text/presentation files are converted to PDF by
+LibreOffice on the selected host. Spreadsheets use a read-only scrolling grid
+with sheet selection. Formulas show saved results; missing results are labelled
+as not calculated. The original document remains available through Download.
 
 ## Local models, dictation and speech
 

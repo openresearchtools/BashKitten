@@ -52,6 +52,16 @@ The chat controls must show the effective model/reasoning selection, or Not set
 when absent, with compact widths. Android Agent power is a toggle beside the
 logo; Display, LocalAI and performance use compact matching icons.
 
+The latest file-viewer request enables Files on both native Linux and Android,
+alongside Changes. Supported files have View and all files retain Download.
+Images use the existing viewer; PDFs, text/code, rendered/raw Markdown, office
+documents and spreadsheets open in ordinary browser tabs. Prepare documents
+asynchronously on the backend, using LibreOffice for office-to-PDF conversion
+and a read-only scrolling grid for spreadsheets. Use one request path with
+cancellation and cleanup; remove superseded job/polling/open flows. The user
+explicitly rejected adding OS sandboxing or device-capability gates around
+LibreOffice conversion. Preserve the existing protected Agent/browser boundary.
+
 This branch reuses BashKitten's browser UI with unmodified Pi 1.0.2
 (`cd32f7725fdbddbaecdff5b1e68491563394e0ca`). It contains no Rust backend or
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
