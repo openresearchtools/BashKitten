@@ -85,8 +85,9 @@ The UI reported 2.9k input tokens, 47 output tokens and 1m 47s total during a
 concurrent browser build. While inference ran, the native overlay showed
 57.75–58.86% owned-workload CPU and 3.40–3.42 / 16.75 GB system RAM; Close
 dismissed it normally. GPU remained unavailable on this Cuttlefish device. The
-model emitted thinking despite the effective Pi reasoning selector showing Off;
-that provider/template mapping still needs correction and re-verification.
+model emitted thinking despite the effective Pi reasoning selector showing Off.
+The generated-provider discovery fix in `ab825a34e2` is installed; an explicit
+Off selection and subsequent ordinary request still need UI re-verification.
 
 The native Models → Use Pocket action selected its matching projector. Saving
 CPU synthesis with the public upstream JFK reference, entering a sentence/output
