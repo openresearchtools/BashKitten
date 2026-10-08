@@ -86,8 +86,14 @@ concurrent browser build. While inference ran, the native overlay showed
 57.75–58.86% owned-workload CPU and 3.40–3.42 / 16.75 GB system RAM; Close
 dismissed it normally. GPU remained unavailable on this Cuttlefish device. The
 model emitted thinking despite the effective Pi reasoning selector showing Off.
-The generated-provider discovery fix in `ab825a34e2` is installed; an explicit
-Off selection and subsequent ordinary request still need UI re-verification.
+The generated-provider discovery fix is `ab825a34e2`. A subsequent warm native
+picker check found that choosing Off reselected the same cold model definition
+and returned to Medium. Backend `a47c6f2115` keeps the discovered model for a
+thinking-only change. Its installed recheck selected Off, retained Off after
+readiness, and completed an ordinary request with Off still selected. The tiny
+Qwen model emitted literal empty `<think></think>` tags and answered with the
+previous request's word; no reasoning text appeared. The selection fix passed,
+while that model-output behavior remains distinct from the selection state.
 
 The native Models → Use Pocket action selected its matching projector. Saving
 CPU synthesis with the public upstream JFK reference, entering a sentence/output
@@ -100,7 +106,8 @@ The same native Speech synthesis flow was subsequently repeated with the managed
 `v0.6.0-r1` runtime in explicit CPU mode. **Generate speech** accepted the public
 reference and entered sentence, and the panel displayed **complete** with the
 requested new WAV path. This is an actual r1 UI check, separate from stock engine
-CLI validation.
+CLI validation. Read-only inspection found a non-silent, mono 24 kHz WAV lasting
+3.2 seconds; stock Whisper recovered exactly the sentence entered in the UI.
 
 A bounded composer dictation check on APK `a7e0ed2c72` and backend `0f493ab6ff`
 approved the native per-recording microphone prompt, displayed the red recording
