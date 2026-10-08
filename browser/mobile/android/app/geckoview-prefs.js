@@ -81,8 +81,8 @@ pref("browser.download.folderList", 1);
 // Use Android DownloadManager for scanning downloads (bug 816318)
 pref("browser.download.manager.addToRecentDocs", true);
 
-// Load PDF files inline with PDF.js (bug 1754499)
-pref("browser.download.open_pdf_attachments_inline", true);
+// Honor explicit PDF attachment downloads. Inline PDFs still use PDF.js.
+pref("browser.download.open_pdf_attachments_inline", false);
 
 pref("browser.download.useDownloadDir", true);
 
