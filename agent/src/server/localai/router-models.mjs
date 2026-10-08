@@ -11,6 +11,7 @@ const aliases = {
   flashAttention: ['flash-attn', 'fa', 'LLAMA_ARG_FLASH_ATTN'],
   cacheGpu: ['kv-offload', 'kvo', 'no-kv-offload', 'nkvo', 'LLAMA_ARG_KV_OFFLOAD'],
   projectorGpu: ['mmproj-offload', 'no-mmproj-offload', 'LLAMA_ARG_MMPROJ_OFFLOAD'],
+  projectorDevice: ['mmproj-device', 'mmdev', 'MTMD_BACKEND_DEVICE'],
 };
 const fields = new Map(Object.entries(aliases).flatMap(([field, names]) => names.map(name => [name, field])));
 const header = line => /^\s*\[([^\]\r\n]+)\]\s*(?:[;#].*)?$/.exec(line);
@@ -86,7 +87,7 @@ export async function modelValues(config) {
     model: config.model, projector: config.projector || '', contextSize: config.contextSize, device: config.device || null,
     gpuLayers: cpu ? 0 : config.gpuLayers, fit: config.fit ? 'on' : 'off',
     idleMinutes: config.idleMinutes === 0 ? -1 : config.idleMinutes * 60,
-    flashAttention: config.flashAttention, cacheGpu: cpu ? 'false' : String(config.cacheGpu), projectorGpu: cpu ? 'false' : 'true',
+    flashAttention: config.flashAttention, cacheGpu: cpu ? 'false' : String(config.cacheGpu), projectorGpu: cpu ? 'false' : 'true', projectorDevice: cpu ? 'none' : config.device || null,
   }, extra };
 }
 
@@ -98,7 +99,7 @@ export async function updateRouterModel(content, { name, originalName, config })
   const { values, extra } = await modelValues(config), written = new Set(), lines = [];
   const previous = parsed.models.find(model => model.name === originalName)?.config;
   const changed = new Set(Object.keys(values).filter(field => !previous ||
-    (field === 'projectorGpu' ? previous.device !== config.device : previous[field] !== config[field])));
+    (['projectorGpu', 'projectorDevice'].includes(field) ? previous.device !== config.device : previous[field] !== config[field])));
   if (changed.has('device') && !config.device && (parsed.sections.find(section => section.name === '*')?.lines || [])
       .some(line => { const match = pair(line); return match && fields.get(match[1]) === 'device'; })) throw Error('Engine default inherits the [*] device. Edit that global INI setting or choose an explicit device.');
   const extraChanged = !previous || previous.extra !== config.extra;
