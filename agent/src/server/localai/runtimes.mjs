@@ -107,7 +107,11 @@ export async function validateBinary(engine, filename, backend, environment = {}
   }
   if (backend === 'auto') selectedBackend = devices.some(device => device.backend === 'cuda') ? 'cuda' : devices.some(device => device.backend === 'vulkan') ? 'vulkan' : 'cpu';
   if (selectedBackend !== 'cpu' && !devices.some(device => device.backend === selectedBackend)) throw Error(`The runtime cannot initialize ${selectedBackend}. Select CPU or correct the driver installation.`);
-  const linked = await exec('ldd', [filename], { env, timeout: 10000 });
+  // Bionic provides the dependency report itself; Termux does not require a
+  // separate ldd package. This only inspects linkage, never launches inference.
+  const linked = platform === 'termux'
+    ? await exec('/system/bin/linker64', ['--list', filename], { env, timeout: 10000 })
+    : await exec('ldd', [filename], { env, timeout: 10000 });
   const libraries = [...new Set([...linked.stdout.matchAll(/(?:=>\s*)?(\/[^\s]+)\s*\(/g)].map(match => match[1]))];
   for (const directory of new Set([path.dirname(filename), environment.GGML_BACKEND_PATH].filter(Boolean))) {
     for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
