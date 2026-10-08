@@ -233,6 +233,14 @@ verification on a physical Pixel or guaranteeing the absence of every bug.
 Preserve unmodified upstream sources and
 licenses. Do not commit runtime credentials, node_modules or personal sessions.
 
+## Packaged Pi tools (8 October update)
+
+Ship one concise `browser` guide for the installed client, plus `websearch` and
+`subagents`; Android additionally includes `termux-display`. Keep the other
+client's browser guide outside discovered skills for authorized remote control.
+Browser/search/agent tools use stock Pi's `exposure: 'deferred'` and `tool_search`;
+do not replace that with a custom loader or patch Pi. See `docs/pi-tools.md`.
+
 ## User-facing documentation and license delivery
 
 Keep README and release notes short, factual and for users. Preserve developer

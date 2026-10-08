@@ -241,6 +241,7 @@ def assemble(args):
             shutil.copytree(ROOT / folder, app / folder,
                             ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama') if folder == 'pi'
                             else shutil.ignore_patterns('__pycache__', '*.pyc'))
+        run(['python3', str(ROOT / 'packaging/pi-skills.py'), str(app / 'pi'), args.target])
         # Keep the complete upstream tree in source releases; install only its
         # declared runtime files, without upstream tests or development tools.
         pillama = ROOT / 'pi/vendor/pillama'

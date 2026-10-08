@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Short-lived child of the existing runtime guard. Commands arrive through an
-// inherited private pipe; prompts/audio never enter files, argv or logs here.
+// inherited private pipe rather than the worker command line. Audio stays on
+// stdin; the upstream TTS CLI receives its requested prompt argument.
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
