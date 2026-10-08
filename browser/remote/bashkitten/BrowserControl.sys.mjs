@@ -2396,6 +2396,8 @@ class BrowserControlService {
     const entry = this.pageForId(page);
     if (action === "activate") {
       if (entry.window.BashKittenAgent?.layout === "full") entry.window.BashKittenAgent.browse();
+      entry.window.gBrowser.selectedTab = entry.tab;
+      entry.window.BashKittenLifetime?.reveal();
       for (let attempt = 0; attempt < 20; attempt++) {
         entry.window.focus();
         entry.window.gBrowser.selectedTab = entry.tab;
