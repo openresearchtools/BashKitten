@@ -17,6 +17,7 @@ import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
 import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments, editFile } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
+import { startFilePreview, filePreview, cancelFilePreview, sendFilePreview, closeFilePreviews, revokeRemotePreviews } from '../files/previews.mjs';
 import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
@@ -183,8 +184,20 @@ const html = (await fs.readFile(path.join(here, '../../web/web_ui.html'), 'utf8'
   .replaceAll('/__bashkitten_license__', `${sourceRoot}/blob/${sourceRef}/LICENSE`);
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
-async function fileRequest(req, res, url) {
+async function fileRequest(req, res, url, record) {
   const route = url.pathname, mutation = !['GET', 'HEAD'].includes(req.method);
+  if (route === '/api/files/previews') {
+    requireMethod(req, ['POST']);
+    return json(res, await startFilePreview(await jsonBody(req), close => auth.watch(record, close)), 202);
+  }
+  const preview = route.match(/^\/api\/files\/previews\/([a-f0-9-]{36})(?:\/(content|cancel))?$/);
+  if (preview) {
+    const [, id, action] = preview;
+    requireMethod(req, action === 'cancel' ? ['POST'] : action === 'content' ? ['GET', 'HEAD'] : ['GET']);
+    if (action === 'cancel') return json(res, cancelFilePreview(id));
+    if (action === 'content') return await sendFilePreview(req, res, id);
+    return json(res, filePreview(id));
+  }
   if (route === '/api/files/edit') {
     requireMethod(req, ['GET', 'POST']);
     const value = mutation ? await jsonBody(req) : undefined;
@@ -256,7 +269,7 @@ async function handler(req, res) {
       if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       const { block } = await jsonBody(req);
       if (typeof block !== 'boolean') throw Error('Choose file-manager policy transition');
-      await refreshManagerPolicy(revokeRemoteFileJobs, block);
+      await refreshManagerPolicy(async () => { await Promise.all([revokeRemoteFileJobs(), revokeRemotePreviews()]); }, block);
       return json(res, { ok: true });
     }
     if (route === '/api/instance/subagents') {
@@ -281,7 +294,7 @@ async function handler(req, res) {
     if (mutation) auth.checkCsrf(req, record);
     if (/^\/api\/(?:files|folders|git)(?:\/|$)/.test(route)) {
       const stopWatching = auth.watch(record, () => { req.destroy(); res.destroy(); });
-      try { return await runManagerRequest(req, res, record, () => fileRequest(req, res, url)); }
+      try { return await runManagerRequest(req, res, record, () => fileRequest(req, res, url, record)); }
       finally { stopWatching(); }
     }
     if (route === '/api/file-manager/events') {
@@ -483,4 +496,4 @@ for (const meta of await allMeta()) if (await running(meta.id)) {
   await workerRequest(meta.id, '/context', {}).catch(() => {});
 }
 console.log('BashKitten private Pi RPC backend ready');
-process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs()]).finally(() => process.exit(0)); });
+process.on('SIGTERM', () => { closeBrowserChannels(); activeServer.close(); activeServer.closeAllConnections(); Promise.allSettled([services.cancel(), closeFileJobs(), closeFilePreviews()]).finally(() => process.exit(0)); });

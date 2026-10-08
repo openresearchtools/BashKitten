@@ -8,6 +8,7 @@ import { authorizeManagerPath, managerContext } from './access.mjs';
 import { fileURLToPath } from 'node:url';
 import { dataDir, privateDir, safeName } from '../common.mjs';
 import { platform, projectLocations } from '../platform/index.mjs';
+import { previewKind } from './preview-types.mjs';
 
 const types = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.bmp': 'image/bmp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.pdf': 'application/pdf', '.txt': 'text/plain', '.md': 'text/plain', '.json': 'application/json', '.html': 'text/html', '.js': 'text/plain', '.ts': 'text/plain', '.css': 'text/plain', '.csv': 'text/csv', '.zip': 'application/zip', '.mp3': 'audio/mpeg', '.mp4': 'video/mp4' };
 export const mimeType = filename => types[path.extname(filename).toLowerCase()] || 'application/octet-stream';
@@ -92,7 +93,11 @@ export async function listFiles(root, relative = '') {
       await authorizeManagerPath(real);
       if (!containsPath(location.scopeRoot, real)) throw Error('Outside available files');
       const stat = await fs.stat(real);
-      entries.push({ name: file.name, path: rel, directory: stat.isDirectory(), symlink: file.isSymbolicLink(), size: stat.size });
+      const kind = stat.isFile() ? await previewKind(real, file.name).catch(error => {
+        if (error.status === 403 || managerContext()?.signal.aborted) throw error;
+        return null;
+      }) : null;
+      entries.push({ name: file.name, path: rel, directory: stat.isDirectory(), symlink: file.isSymbolicLink(), size: stat.size, previewKind: kind });
     } catch (error) { if (error.status === 403) continue; entries.push({ name: file.name, path: rel, blocked: true, symlink: file.isSymbolicLink() }); }
   }
   entries.sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
