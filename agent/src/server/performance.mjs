@@ -36,7 +36,7 @@ async function snapshot(owner) {
     }
   }
   const root = processes.get(owner.pid);
-  if (!root || root.started !== owner.started || ['Z', 'X'].includes(root.state)) throw Error('The Agent workload owner is unavailable');
+  if (!root || root.started !== owner.started || ['Z', 'X', 'x'].includes(root.state)) throw Error('The Agent workload owner is unavailable');
   const children = new Map();
   for (const value of processes.values()) {
     const parent = processes.get(value.parent);
@@ -56,11 +56,12 @@ async function snapshot(owner) {
   let ticks = 0, count = 0;
   for (const previous of pending.reverse()) {
     const value = await processStat(previous.pid);
-    if (!value || value.started !== previous.started || value.parent !== previous.parent) {
+    if (!value || ['X', 'x'].includes(previous.state) || ['X', 'x'].includes(value.state) ||
+        value.started !== previous.started || value.parent !== previous.parent) {
       throw Error('The workload process tree changed while sampling');
     }
     ticks += value.ticks;
-    if (!['Z', 'X'].includes(value.state)) count++;
+    if (value.state !== 'Z') count++;
   }
   // If a child was reaped after its counter read but before its parent's, its
   // time could be present in both. Reject that changing snapshot, not a spike.
@@ -68,7 +69,9 @@ async function snapshot(owner) {
     const values = await Promise.all(pending.slice(at, at + 64).map(value => processStat(value.pid)));
     for (let index = 0; index < values.length; index++) {
       const previous = pending[at + index], value = values[index];
-      if (!value || value.started !== previous.started || value.parent !== previous.parent) {
+      // wait_task_zombie transfers CPU accounting before release_task removes
+      // an EXIT_DEAD PID. A still-readable X record can already be in its parent.
+      if (!value || ['X', 'x'].includes(value.state) || value.started !== previous.started || value.parent !== previous.parent) {
         throw Error('The workload process tree changed while sampling');
       }
     }
