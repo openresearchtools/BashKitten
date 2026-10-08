@@ -8,9 +8,11 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment } from './runtimes.mjs';
+import { localAIDir, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
 import { launchInference } from './launch.mjs';
+import { parseRouterINI, updateRouterModel, isolatedPreset, routerModelId, browseBackend, verifyTestConfiguration } from './router-models.mjs';
+import { RouterModelTest } from './router-test.mjs';
 
 const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
@@ -96,7 +98,7 @@ function validateINI(content) {
   }
 }
 export class LocalAI {
-  constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); }
+  constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); this.routerTest = new RouterModelTest(); }
   exclusive(action) { const result = this.serial.then(action); this.serial = result.catch(() => {}); return result; }
   async initialize() {
     requireLocalRuntime(); await privateDir(localAIDir);
@@ -124,7 +126,7 @@ export class LocalAI {
     const config = configuration(engine, input);
     if (engine === 'tts') { saved.tts = config; await writeJson(configFile, saved); return this.status(); }
     if (config.mode === 'custom') {
-      const verified = await validateBinary(engine, config.binary, config.backend, config.env); config.binary = verified.binary; config.libraries = verified.libraries;
+      const verified = await validateBinary(engine, config.binary, engine === 'llama' ? 'cpu' : config.backend, config.env); config.binary = verified.binary; config.libraries = verified.libraries;
     }
     if (engine === 'whisper' && config.model) await this.model(config.model, config.modelKind);
     // Save a new managed device choice before its matching download. Missing
@@ -136,16 +138,20 @@ export class LocalAI {
     if (engine === 'llama') await this.importProvider();
     return this.status();
   }
-  async binary(engine, config) {
+  async binary(engine, config, { router = false } = {}) {
     const runtime = await runtimeInfo(engine);
     if (config.mode === 'managed' && !supportsManagedChoice(runtime, config)) throw downloadRequired(engine, config);
     const file = config.mode === 'custom' ? config.binary : runtime?.binary;
     if (!file) throw Error(`Download the ${engine} runtime first`);
-    const environment = config.mode === 'custom' ? config.env : managedRuntimeEnvironment(file, config.env, config.backend);
+    const environment = config.mode === 'custom' ? config.env : managedRuntimeEnvironment(file, config.env, router ? 'auto' : config.backend);
+    if (router) {
+      const verified = await validateBinary(engine, file, 'cpu', environment);
+      return { ...verified, env: environment }; // Model presets, not the package flavour, select devices.
+    }
     return validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, environment);
   }
   async command(engine, config, port) {
-    const runtime = await this.binary(engine, config);
+    const runtime = await this.binary(engine, config, { router: engine === 'llama' });
     if (engine === 'whisper' && config.modelKind === 'parakeet') {
       if (config.argv.length || config.keepRunning) throw Error('Parakeet uses its on-demand stdin command; clear the custom command and Keep running');
       const executable = path.join(path.dirname(runtime.binary), 'parakeet-cli');
@@ -160,8 +166,6 @@ export class LocalAI {
         // decoders/projectors to Pi as if they were language models.
         argv.push('--models-preset', config.preset, '--offline', '--jinja');
         if (config.keyFile) argv.push('--api-key-file', config.keyFile);
-        const device = runtime.devices.find(item => item.backend === runtime.backend);
-        argv.push('--device', device?.id || 'none', '--gpu-layers', runtime.backend === 'cpu' ? '0' : platform === 'termux' ? '999' : 'auto');
       } else { argv.push('--model', config.model, '--language', 'auto', '--no-timestamps'); if (runtime.backend === 'cpu') argv.push('--no-gpu'); else argv.push('--device', runtime.devices.find(item => item.backend === runtime.backend).id); }
     }
     if (await fs.realpath(argv[0]) !== runtime.binary || argument(argv, '--host') !== '127.0.0.1' || argument(argv, '--port') !== String(port)) throw Error('The command must use the selected binary, --host 127.0.0.1 and --port {port}');
@@ -292,6 +296,65 @@ export class LocalAI {
     } finally { await fs.rm(temporary, { force: true }); }
     return { file, content, revision: digest(content) };
   }
+  async browse(value) { return browseBackend(value); }
+  async routerModels({ file } = {}) {
+    const config = (await this.config()).llama;
+    const ini = await this.ini({ file: file || config.preset });
+    const { models } = parseRouterINI(ini.content);
+    let devices = [], deviceError = '';
+    try {
+      const runtime = await runtimeInfo('llama');
+      const binary = config.mode === 'custom' ? config.binary : runtime?.binary;
+      if (!binary) throw Error('Download or select llama.cpp to list GPU devices');
+      devices = await listRuntimeDevices(binary, config.mode === 'custom' ? config.env : managedRuntimeEnvironment(binary, config.env));
+      if (!devices.length) deviceError = 'No GPU devices reported; explicit CPU models remain available';
+    } catch (error) { deviceError = 'GPU device discovery: ' + error.message; }
+    return { file: ini.file, revision: ini.revision, models, devices, deviceError };
+  }
+  async saveRouterModel(value) { return this.exclusive(async () => {
+    const ini = await this.ini({ file: value.file });
+    if (value.revision !== ini.revision) throw Error('The router INI changed. Reopen the model editor.');
+    const content = await updateRouterModel(ini.content, value);
+    await this.ini({ file: ini.file, content, revision: ini.revision });
+    return this.routerModels({ file: ini.file });
+  }); }
+  async testRouterModel({ file, revision, name, owner }) {
+    if (this.stopping || this.routerTest.busy) throw Error('Agent is stopping or a model check is still unloading');
+    // Register the owner before any I/O so a closing native view can cancel
+    // preparation too; no late launch may escape its cancellation.
+    return this.routerTest.start({ owner, model: name,
+      prepare: async signal => {
+        signal.throwIfAborted();
+        const ini = await this.ini({ file });
+        if (ini.revision !== revision) throw Error('The router INI changed. Save and reopen it before checking.');
+        const model = routerModelId(name);
+        if (this.services.running.get(ids.llama)?.child) {
+          const running = await this.catalogue();
+          if (running.models.some(entry => entry.status?.value !== 'unloaded')) throw Error('A router model is active. Finish its work and unload it before testing another load.');
+        }
+        const preset = isolatedPreset(ini.content, name), config = (await this.config()).llama;
+        await verifyTestConfiguration(config.env);
+        signal.throwIfAborted();
+        const directory = await fs.mkdtemp(path.join(localAIDir, '.model-check-'));
+        try {
+          const temporary = path.join(directory, 'router.ini'); await fs.writeFile(temporary, preset, { mode: 0o600 });
+          const port = await allocatePort(), command = await this.command('llama', config, port);
+          const selector = argument(command.argv, '--models-preset');
+          if (selector !== config.preset) throw Error('Model checks require the selected INI in the launcher --models-preset argument');
+          if (['--model', '-m', '--models-dir', '--hf-repo', '--hf-model', '-hf', '--model-url', '-mu'].some(flag => argument(command.argv, flag) !== null)) throw Error('This custom launcher selects other models. Remove its global model source before checking an INI preset.');
+          for (const key of ['LLAMA_ARG_MODEL', 'LLAMA_ARG_MODEL_URL', 'LLAMA_ARG_HF_REPO', 'LLAMA_ARG_MODELS_DIR']) if (config.env[key] ?? process.env[key]) throw Error('This launcher environment selects other models: ' + key);
+          command.argv = command.argv.map((value, index, all) => all[index - 1] === '--models-preset' ? temporary : value.startsWith('--models-preset=') ? '--models-preset=' + temporary : value);
+          // Upstream always discovers its model cache, even with an INI. Keep
+          // unrelated cached/autoload models out of this temporary router.
+          const cache = path.join(directory, 'cache'); await fs.mkdir(cache, { mode: 0o700 });
+          command.env = { ...command.env, LLAMA_CACHE: cache, LLAMA_ARG_MODELS_PRESET: temporary };
+          signal.throwIfAborted();
+          return { directory, command, model, url: 'http://127.0.0.1:' + port, key: await this.key(config) };
+        } catch (error) { await fs.rm(directory, { recursive: true, force: true }); throw error; }
+      },
+      request: (prepared, suffix, options) => jsonRequest(prepared.url + suffix, { ...options, key: prepared.key }),
+    });
+  }
   async model(file, kind = 'whisper') {
     if (!file || !path.isAbsolute(file)) throw Error('Choose a whisper.cpp ggml model');
     const handle = await fs.open(file, 'r');
@@ -311,8 +374,8 @@ export class LocalAI {
       if (/[\]\r\n]/.test(name) || /[\r\n]/.test(file + projector) || !/\.gguf$/i.test(file)) throw Error('Choose a GGUF filename representable in router INI');
       if (ini.content.split(/\r?\n/).some(line => line.trim() === '[' + name + ']')) throw Error('This router entry already exists');
       if (projector) { if (!path.isAbsolute(projector)) throw Error('Choose an absolute projector path'); await fs.access(projector); }
-      await this.ini({ file: ini.file, revision: ini.revision, content: ini.content + `\n[${name}]\nmodel = ${file}\n` + (projector ? `mmproj = ${projector}\n` : '') });
-      return this.status();
+      await this.ini({ file: ini.file, revision: ini.revision, content: await updateRouterModel(ini.content, { name, config: { model: file, projector, contextSize: 8192, device: 'none', gpuLayers: 0, fit: true, idleMinutes: 0, cacheGpu: false, flashAttention: 'auto', extra: '' } }) });
+      return { ...await this.status(), selectedModel: name };
     }
     const next = { ...saved[engine], model: file, modelKind: kind };
     if (engine === 'tts') next.projector = projector;
@@ -360,7 +423,7 @@ export class LocalAI {
     const before = (await this.config())[engine];
     return installRuntime(job, { engine, config: before }, async (runtime, activate) => {
       await job.phase('Waiting for this runtime to stop before activating the update', 'waiting');
-      while (this.services.running.get(ids[engine])?.child || engine === 'whisper' && this.speech || engine === 'llama' && this.synthesis) {
+      while (this.services.running.get(ids[engine])?.child || engine === 'whisper' && this.speech || engine === 'llama' && (this.synthesis || this.routerTest.busy)) {
         job.checkCancellation();
         if (JSON.stringify((await this.config())[engine]) !== JSON.stringify(before)) throw Error('Runtime selection changed; update was not activated');
         await pause(250);
@@ -368,7 +431,7 @@ export class LocalAI {
       await this.exclusive(async () => {
         const config = await this.config(); job.checkCancellation();
         if (JSON.stringify(config[engine]) !== JSON.stringify(before) || config[engine].mode !== 'managed') throw Error('Runtime selection changed; update was not activated');
-        if (this.services.running.get(ids[engine])?.child || engine === 'llama' && this.synthesis) throw Error('The runtime started before update activation; retry after stopping it');
+        if (this.services.running.get(ids[engine])?.child || engine === 'llama' && (this.synthesis || this.routerTest.busy)) throw Error('The runtime started before update activation; retry after stopping it');
         await job.phase('Activating verified runtime'); await activate();
       });
     });
@@ -433,5 +496,5 @@ export class LocalAI {
     })();
     return operation.release;
   }
-  async shutdown() { this.stopping = true; await this.quantizationJob?.cancel(); await this.quantization?.catch(() => {}); await this.cancelSynthesis(); if (this.speech) await this.releaseSpeech(this.speech.id); }
+  async shutdown() { this.stopping = true; await this.routerTest.cancel(); await this.quantizationJob?.cancel(); await this.quantization?.catch(() => {}); await this.cancelSynthesis(); if (this.speech) await this.releaseSpeech(this.speech.id); }
 }

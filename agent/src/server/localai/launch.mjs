@@ -3,9 +3,9 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { binary } from '../access/paths.mjs';
 
-export function launchInference(command, { signal, capture = true } = {}) {
+export function launchInference(command, { signal, capture = true, diagnostics = false } = {}) {
   const child = spawn(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./inference-worker.mjs', import.meta.url)), 'serve'],
-    { stdio: [capture ? 'pipe' : 'ignore', capture ? 'pipe' : 'ignore', 'ignore', 'pipe'], signal });
+    { stdio: [capture ? 'pipe' : 'ignore', capture ? 'pipe' : 'ignore', diagnostics ? 'pipe' : 'ignore', 'pipe'], signal });
   child.stdio[3].on('error', () => {});
   const message = Buffer.from(JSON.stringify(command));
   child.stdio[3].end(message, () => message.fill(0));

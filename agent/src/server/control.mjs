@@ -287,6 +287,12 @@ async function serve() {
     }
     if (command.startsWith('localai-')) {
       if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: ['localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
+      if (command === 'localai-browse') return localAI.browse(value);
+      if (command === 'localai-router-models') return localAI.routerModels(value);
+      if (command === 'localai-router-model-save') return localAI.saveRouterModel(value);
+      if (command === 'localai-router-model-test') { if (!stack.ready || stopping) throw Error('Turn on Local before checking a model'); return localAI.testRouterModel(value); }
+      if (command === 'localai-router-model-test-status') return localAI.routerTest.status(value);
+      if (command === 'localai-router-model-test-cancel') return localAI.routerTest.cancel(value);
       if (command === 'localai-save') return localAI.save(value);
       if (command === 'localai-model-use') return localAI.useModel(value);
       if (command === 'localai-synthesize') { if (!stack.ready || stopping) throw Error('Turn on Local before generating speech'); return localAI.synthesize(value); }
@@ -388,6 +394,10 @@ async function serve() {
       // model loading or package operation, and never starts/stops a workload.
       if (req.url === '/performance-sample') return json(res, await performance.sample(value));
       if (req.url === '/performance-close') return json(res, performance.close(value));
+      // A native view must be able to renew/cancel its temporary model even
+      // while another queued operation is discovering devices or saving files.
+      if (req.url === '/localai-router-model-test-status') return json(res, localAI.routerTest.status(value));
+      if (req.url === '/localai-router-model-test-cancel') return json(res, await localAI.routerTest.cancel(value));
       if (req.url === '/llama-wait' || req.url === '/whisper-acquire') {
         if (!localAI || !state.web || stopping) throw Error('LocalAI is unavailable while Agent is off');
         const cancelled = new AbortController();

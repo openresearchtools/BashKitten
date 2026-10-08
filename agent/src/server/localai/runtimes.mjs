@@ -105,8 +105,13 @@ export async function checkRuntime(engine, config) {
   if (!asset) throw Error('The runtime archive is missing');
   const installed = await runtimeInfo(engine);
   return { version: `${manifest.upstreamVersion} · r${manifest.packageRevision}`, upstreamRelease: manifest.upstreamRelease, packageRevision: manifest.packageRevision, sourceCommit: manifest.sourceCommit, release: release.tag_name,
-    backend: config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend, artifact: { ...artifact, url: downloadURL(asset.browser_download_url).href },
+    backend: engine !== 'llama' && config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend, artifact: { ...artifact, url: downloadURL(asset.browser_download_url).href },
     updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed: describeRuntime(installed) };
+}
+export async function listRuntimeDevices(binary, environment = {}) {
+  const listed = await exec(binary, ['--list-devices'], { env: engineEnvironment(environment), timeout: 30000, maxBuffer: Infinity });
+  return [...(listed.stdout + listed.stderr).matchAll(/(CUDA\d+|Vulkan\d+):\s*([^\n]+)/g)]
+    .map(([, id, name]) => ({ id, name, label: id + ': ' + name, backend: id.startsWith('CUDA') ? 'cuda' : 'vulkan' }));
 }
 export async function validateBinary(engine, filename, backend, environment = {}) {
   requireLocalRuntime(); engineName(engine);
@@ -185,7 +190,7 @@ export async function installRuntime(job, { engine, config, selection }, activat
     if (runtimeOS === 'android' && engine === 'llama' && (record.capabilities?.router !== true || record.capabilities?.subprocess !== true)) throw Error('The Android llama.cpp archive lacks required router subprocess support');
     await fs.access(path.join(extracted, 'LICENSES.txt')); await fs.access(path.join(extracted, 'SOURCE.json'));
     const filename = path.join(extracted, 'bin', executable(engine));
-    const executionBackend = config.backend === 'cpu' ? 'cpu' : config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend;
+    const executionBackend = engine === 'llama' || config.backend === 'cpu' ? 'cpu' : config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend;
     const verified = await validateBinary(engine, filename, executionBackend, managedRuntimeEnvironment(filename, {}, executionBackend));
     const destination = path.join(runtimeDirectory, engine + '-' + available.release + '-' + artifact.backend + '-' + path.basename(staging).slice(10));
     await fs.rename(extracted, destination); inactive = destination;
