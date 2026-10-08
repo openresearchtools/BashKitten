@@ -11,10 +11,17 @@ const app = fileURLToPath(new URL('../../', import.meta.url));
 const packaged = fs.existsSync(path.join(app, 'build-platform.json')) || fs.existsSync(path.join(app, 'runtime-default.json'));
 const bundledNode = path.join(app, 'node/bin/node');
 const bundledNpm = path.join(app, 'node/lib/node_modules/npm/bin/npm-cli.js');
+if (process.platform === 'android') {
+  // Launchers set this before Node starts. Retain it for tool and worker
+  // descendants; using Android's linker as the executable breaks execPath and
+  // native process ownership. Do not spoof process.execPath or remove the check.
+  process.env.TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE = 'disable';
+}
 if (packaged) {
   if (!fs.existsSync(bundledNode) || !fs.existsSync(bundledNpm) || !fs.existsSync(path.join(app, 'node/bin/pi')) ||
       fs.realpathSync(process.execPath) !== fs.realpathSync(bundledNode)) {
-    throw Error('BashKitten requires its bundled Node runtime. Reinstall the package and launch bashkittenctl or bashkitten-pi.');
+    const termux = process.platform === 'android' ? ' Termux must support direct native execution (the GitHub/F-Droid app targeting SDK 28); system-linker execution is unsupported.' : '';
+    throw Error('BashKitten requires its bundled Node runtime. Reinstall the package and launch bashkittenctl or bashkitten-pi.' + termux);
   }
 }
 export const npmPrefix = path.join(piAgentDir, 'npm');

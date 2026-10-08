@@ -102,6 +102,14 @@ native Termux aarch64/x86_64. `node/build.py` consumes hash-pinned official Node
 LTS or Termux binaries and publishes `node-runtime-<platform>-<arch>.tar.gz`,
 `node-source-<platform>-<arch>.tar.gz` and SHA256SUMS. Its download cache defaults
 to `~/.cache/bashkitten-node` and can be moved with `BASHKITTEN_NODE_CACHE`.
+
+Termux launchers use upstream termux-exec's
+`TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` for BashKitten and its children.
+This preserves the actual Node ELF in `process.execPath`, including under
+`RUN_COMMAND` and terminal environments with `LD_PRELOAD`. The supported
+GitHub/F-Droid Termux app targets SDK 28 and permits direct native execution;
+a variant whose Android policy forbids it is unsupported. The executable check
+does not silently substitute Android's linker or a system Node runtime.
 The payload contains the actual Node ELF, npm/npx wrappers bound to that ELF,
 private npm sources and native libraries, target/version/source metadata and
 full license texts. `build.py` rejects mismatched targets and missing notices;

@@ -309,6 +309,11 @@ def assemble(args):
         installed_app = prefix + '/lib/bashkitten'
         node = installed_app + '/node/bin/node'
         node_environment = f'unset NODE_OPTIONS NODE_PATH\nexport OPENSSL_CONF={installed_app}/node/etc/openssl.cnf\n'
+        if termux:
+            # Node, native guards and child_process must see the real ELF in
+            # /proc/self/exe. Keep termux-exec's shebang handling, but use its
+            # supported direct execution mode in GitHub/F-Droid Termux (SDK 28).
+            node_environment += 'export TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable\n'
         executable(app / 'node/bin/pi', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/rpc/launcher.mjs "$@"\n')
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
