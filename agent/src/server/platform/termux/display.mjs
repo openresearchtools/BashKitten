@@ -14,9 +14,11 @@ const directory = path.join(dataDir, 'display');
 export const displayCommand = path.join(directory, 'launch.sh');
 const runningCommand = path.join(directory, 'running.sh');
 const previousCommand = path.join(directory, 'last-working.sh');
-const shell = () => path.join(path.dirname(process.execPath), 'sh');
+// Node is private to BashKitten; shell/X11 paths belong to the Termux prefix.
+const prefix = process.env.PREFIX || '/data/data/com.termux/files/usr';
+const shell = () => path.join(prefix, 'bin/sh');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-const temporary = process.env.TMPDIR || path.join(path.dirname(process.execPath), '../tmp');
+const temporary = process.env.TMPDIR || path.join(prefix, 'tmp');
 const defaultCommand = `exec termux-x11 "$DISPLAY" -nolisten tcp -xstartup 'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
 `;
 
