@@ -93,9 +93,9 @@ async function startWorker(id, explicit) {
       const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
       closeSync(log); child.unref();
       let failure; child.on('error', error => { failure = error; });
-      child.once('exit', (code, signal) => { if (code !== 0) failure = Error(`Pi could not start (${signal || code}). Check the session worker.log.`); });
+      child.once('exit', (code, signal) => { if (code !== 0) failure = Error(`BashKitten's Pi runtime could not start (${signal || code}). Check this chat's worker.log.`); });
       for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
-      throw Error('Pi could not start. Check Node/Pi installation and the session worker.log.');
+      throw Error("BashKitten's Pi runtime did not become ready. Check this chat's worker.log.");
     });
   })();
   starts.set(id, starting);
