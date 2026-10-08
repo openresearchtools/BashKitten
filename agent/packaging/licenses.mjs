@@ -135,10 +135,13 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   records.push(...await searchInventory(root, auth.target));
   records.push(...await nodeInventory(root, target, auth.architecture));
   const integration = await json(path.join(root, 'pi/package.json'));
+  const pillama = await json(path.join(root, 'pi/vendor/pillama/package.json'));
+  const pillamaSource = await json(path.join(root, 'pi/vendor/pillama.upstream.json'));
+  if (!/^[0-9a-f]{40}$/.test(pillamaSource.commit) || pillamaSource.repository !== 'https://github.com/openresearchtools/pillama.git') throw Error('Invalid bundled Pillama source pin');
   records.push(...await sourceNotices(path.join(root, 'pi'), 'Pi integration', [
     [integration.name, integration.license, ['LICENSE', 'NOTICE']],
     ['pillama', 'MIT', ['vendor/pillama/NOTICE', 'vendor/pillama/LICENSE'],
-      { version: '0.4.0', source: 'https://github.com/openresearchtools/pillama/tree/fefa5a90c5f5f6eead52e9de9a3a698d2ea48f67' }],
+      { version: pillama.version, source: `${pillamaSource.repository.slice(0, -4)}/tree/${pillamaSource.commit}` }],
   ]));
   if (target === 'linux') {
     if (!browser) throw Error('The complete Linux package requires its built browser license inventory');

@@ -34,6 +34,6 @@ notices remain intact; third-party code is not relicensed by BashKitten’s own 
 ## pillama
 
 The bundled Pi extension includes unmodified pillama 0.4.0 production sources
-(MIT), commit `fefa5a90c5f5f6eead52e9de9a3a698d2ea48f67` from
+(MIT), commit `250d558ded87e6b389456a549adccf7168bbeb45` from
 https://github.com/openresearchtools/pillama. Full license and source notice:
 `pi/vendor/pillama/LICENSE` and `pi/vendor/pillama/NOTICE`.
