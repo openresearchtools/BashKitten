@@ -109,7 +109,9 @@ export async function sendFilePreview(req, res, id) {
   job.transfers++;
   try {
     const extension = path.extname(job.output), name = path.parse(job.name).name + extension;
-    await sendFile(req, res, job.output, false, name, { artifact: true });
+    await sendFile(req, res, job.output, false, name, {
+      artifact: true, generatedPreview: ['text', 'markdown', 'sheet'].includes(job.kind),
+    });
   } finally { job.transfers--; job.touched = Date.now(); }
 }
 export async function revokeRemotePreviews() {

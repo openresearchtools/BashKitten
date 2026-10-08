@@ -103,17 +103,22 @@ export async function listFiles(root, relative = '') {
   entries.sort((a, b) => Number(b.directory) - Number(a.directory) || a.name.localeCompare(b.name));
   return { root, path: path.relative(root, dir), currentPath: dir, parent: dir === location.scopeRoot ? null : path.dirname(dir), scopeRoot: location.scopeRoot, entries };
 }
-export async function sendFile(req, res, file, download = false, name = path.basename(file), { artifact = false } = {}) {
+export async function sendFile(req, res, file, download = false, name = path.basename(file), { artifact = false, generatedPreview = false } = {}) {
   if (!artifact) await authorizeManagerPath(file);
-  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     if (!artifact) await authorizeManagerPath(`/proc/self/fd/${handle.fd}`);
     const stat = await handle.stat();
     if (!stat.isFile()) throw Error('Choose a regular file');
+    // Only our generated standalone viewer may run its nonce-authorized code.
+    // Its own meta policy further restricts scripts; its document iframe remains
+    // opaque. Raw repository HTML/SVG keeps the script-disabled sandbox below.
+    const policy = artifact && generatedPreview && mimeType(file) === 'text/html'
+      ? "sandbox allow-scripts allow-downloads; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'self' about:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      : "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
     const headers = { 'Content-Type': mimeType(file), 'Content-Length': stat.size,
       'Content-Disposition': disposition(name, download), 'X-Content-Type-Options': 'nosniff',
-      // Repository HTML/SVG must never acquire the app's origin privileges.
-      'Content-Security-Policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:", 'Cache-Control': 'no-store' };
+      'Content-Security-Policy': policy, 'Referrer-Policy': 'no-referrer', 'Cache-Control': 'no-store' };
     res.writeHead(200, headers);
     if (req.method === 'HEAD') { res.end(); return; }
     await pipeline(handle.createReadStream({ autoClose: false }), res, { signal: managerContext()?.signal });
