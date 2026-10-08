@@ -6,7 +6,7 @@ export async function localAISettings(parent, control, win, isLocal) {
   const doc = parent.ownerDocument;
   const node = (tag, text = '') => { const result = doc.createElementNS(HTML, tag); result.textContent = text; return result; };
   const message = node('p'), body = node('div'); message.setAttribute('role', 'status'); parent.append(message, body);
-  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus;
+  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus, routerPresetNode;
   const engineStatus = {};
   const active = () => parent.isConnected && isLocal();
   const call = async (name, args) => { if (!active()) throw Error('Select Local to use LocalAI'); return control(name, args); };
@@ -88,7 +88,7 @@ export async function localAISettings(parent, control, win, isLocal) {
   };
   const draw = value => {
     if (!active()) return;
-    state = value; refreshVisibleModels = null; body.replaceChildren();
+    state = value; refreshVisibleModels = null; routerPresetNode = null; body.replaceChildren();
     for (const engine of ['llama', 'whisper']) {
       const current = state[engine], config = current.config;
       const section = node('details'); section.open = engine === 'llama'; section.className = 'connection-card';
@@ -129,6 +129,7 @@ export async function localAISettings(parent, control, win, isLocal) {
       let preset, startup, imported, keyFile, model, keepRunning, autoSend;
       if (engine === 'llama') {
         preset = pickerField(section, 'Router INI', config.preset);
+        routerPresetNode = preset;
         section.append(button('Add / edit router models', () => editRouterModels(preset.value, path => { preset.value = path; })));
         section.append(button('Edit router INI', () => editINI(preset.value, path => { preset.value = path; })));
         keyFile = pickerField(section, 'Optional application API-key file', config.keyFile);
@@ -188,7 +189,7 @@ export async function localAISettings(parent, control, win, isLocal) {
     }));
     body.append(section);
   };
-  const editRouterModels = async (filename, saved) => {
+  const editRouterModels = async (filename, saved, selectedName = '') => {
     let catalogue = await call('localai-router-models', { file: filename });
     const editor = node('section'); editor.className = 'connection-card';
     editor.append(node('h3', 'Router models'));
@@ -291,7 +292,7 @@ export async function localAISettings(parent, control, win, isLocal) {
     }, status), button('Close model builder', async () => { await cancelTest(); observer.disconnect(); editor.remove(); }, status));
     editor.append(node('p', 'The load check uses a temporary router, then stops it and unloads the model before reporting success.'));
     parent.append(editor); observer.observe(doc.documentElement, { childList: true, subtree: true });
-    await refresh(''); savedConfig = JSON.stringify(editedConfig()); name.focus();
+    await refresh(selectedName); savedConfig = JSON.stringify(editedConfig()); name.focus();
   };
   const editINI = async (filename, saved) => {
     let file = await call('localai-ini', { file: filename });
@@ -353,8 +354,9 @@ export async function localAISettings(parent, control, win, isLocal) {
         const presets = catalogue.presets.filter(item => item.repository === job.repository && item.revision === job.revision && item.files.every(name => job.files.some(file => file.path === name && file.status === 'complete')));
         for (const preset of presets) card.append(button('Use ' + preset.title, async () => {
           const files = preset.files.map(name => job.directory + '/' + job.files.find(file => file.path === name).outputPath);
-          draw(await call('localai-model-use', { engine: preset.engine, kind: preset.kind, file: files[0], projector: files[1] || '' }));
-          message.textContent = 'Model selected. Reload llama.cpp to apply a new router entry.';
+          const result = await call('localai-model-use', { engine: preset.engine, kind: preset.kind, file: files[0], projector: files[1] || '' }); draw(result);
+          if (preset.engine === 'llama' && result.selectedModel) await editRouterModels(result.llama.config.preset, path => { if (routerPresetNode?.isConnected) routerPresetNode.value = path; }, result.selectedModel);
+          message.textContent = preset.engine === 'llama' ? 'Model added. Review its settings, then reload the router.' : 'Model selected.';
         }));
         const projections = job.files.filter(file => file.status === 'complete' && /mmproj.*\.gguf$/i.test(file.path));
         const projector = projections.length ? select(card, 'Vision projector for router entries', [['', 'None'], ...projections.map(file => [file.outputPath, file.path])], projectorChoices.get(job.id) ?? (projections.length === 1 ? projections[0].outputPath : '')) : null;
@@ -367,14 +369,10 @@ export async function localAISettings(parent, control, win, isLocal) {
               draw(await call('localai-model-use', { engine: 'whisper', kind: /parakeet/i.test(file.path) ? 'parakeet' : 'whisper', file: filename }));
             }));
             if (/\.gguf$/i.test(file.path) && !/tts|pocket/i.test(job.repository) && !presets.some(item => item.files.includes(file.path)) && !/mmproj|-(?!00001)\d{5}-of-\d{5}/i.test(file.path)) card.append(button('Add router entry', async () => {
-              const latest = await call('localai-status'), ini = await call('localai-ini', { file: latest.llama.config.preset });
-              const name = file.path.split('/').at(-1).replace(/\.gguf$/i, '');
-              if (/[\]\r\n]/.test(name) || /[\r\n]/.test(filename)) throw Error('The filename cannot be represented as a router INI entry');
-              if (ini.content.split(/\r?\n/).some(line => line.trim() === '[' + name + ']')) throw Error('This router entry already exists');
               const projection = projector?.value ? job.directory + '/' + projector.value : '';
-              if (/[\r\n]/.test(projection)) throw Error('The projector filename cannot be represented as an INI value');
-              await call('localai-ini', { file: ini.file, revision: ini.revision, content: ini.content + `\n[${name}]\nmodel = ${filename}\n` + (projection ? `mmproj = ${projection}\n` : '') });
-              message.textContent = 'Router entry saved. Reload llama.cpp to apply.';
+              const result = await call('localai-model-use', { engine: 'llama', file: filename, projector: projection }); draw(result);
+              await editRouterModels(result.llama.config.preset, path => { if (routerPresetNode?.isConnected) routerPresetNode.value = path; }, result.selectedModel);
+              message.textContent = 'Model added. Review its settings, then reload the router.';
             }));
           }
         }
