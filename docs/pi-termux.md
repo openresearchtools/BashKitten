@@ -22,6 +22,15 @@ RPC launches leave tool selection to Pi's defaults, native settings and extensio
 Normal `pi install` packages and global/project resources use Pi's own loader.
 Termux supplies `ripgrep` and `fd`; no Linux binaries are downloaded on Android.
 
+On 8 October 2026, both active Pi children in Android 17 Cuttlefish were observed
+executing the bundled native x86_64 Node ELF under Termux's UID. Their
+`PI_CODING_AGENT_DIR` and session directory pointed beneath BashKitten's private
+`~/.local/share/bashkitten-pi/pi`, as did npm's prefix, cache and both configuration
+paths; `PI_PACKAGE_DIR` was absent. HOME and cwd remained Termux home. The installed
+Linux controller/server also used bundled Node and the private paths, but no Linux
+Pi child was active for this check. This verifies current process routing, without
+reading credentials or establishing whether another profile was changed earlier.
+
 ## Subagent chats
 
 The composer’s Agents selector defaults to Off. On permits three child workers
