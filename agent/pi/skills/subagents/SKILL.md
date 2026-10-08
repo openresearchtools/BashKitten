@@ -1,13 +1,13 @@
 ---
 name: subagents
-description: Delegate independent work to saved BashKitten child chats, send peer messages and follow-ups, and receive child results. Read before using bashkitten_agents.
+description: Delegate independent work to saved BashKitten child chats, send peer messages and follow-ups, and receive child results. Read before using agents.
 ---
 
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 
 # Coordinating agents
 
-Use `bashkitten_agents`. Each agent is an ordinary Pi chat with its own context,
+Use `agents`. Each agent is an ordinary Pi chat with its own context,
 history and tools. Chats share the working files, not conversation memory. The
 sidebar keeps children indented beneath their direct parent after work finishes.
 

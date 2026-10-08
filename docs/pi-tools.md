@@ -1,0 +1,40 @@
+# Packaged Pi tools and skills
+
+The installed integration exposes `browser`, `browser_screenshot`,
+`browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's
+`deferred` exposure. Its built-in `tool_search` is activated without replacing
+the existing active tool set. Pi owns discovery, schema activation and transcript
+recording; no custom tool loader or Pi patch is involved. Once a tool is loaded,
+its declaration remains subject to Pi's ordinary session/history behavior.
+
+`agents` is hidden while delegation is Off and the chat has no family to message.
+Enabling delegation or membership in an existing family makes it discoverable.
+The backend independently checks delegation settings, group membership, direct
+parent authority, live child limits and durable Stop intent for each operation.
+Completed child turns reach the direct parent using native session entries.
+Messages and retried spawn tasks use stable delivery IDs to avoid duplicate
+queue entries; a stopped recipient receives a held draft.
+
+Search uses one thin deferred tool adapter to the existing packaged Python
+query-or-URL helper. Input validation, extraction, saved full Markdown and errors
+remain owned by that helper. No second search implementation or service is added.
+
+`agent/packaging/pi-skills.py` builds the shipped guides from the source references.
+Both targets discover `browser`, `websearch` and `subagents`; only Termux includes
+`termux-display`. Curation uses reviewed, exact prose replacements and fails if
+those source passages change. Command contracts, working examples, permission
+boundaries and attribution are retained. Pi's native skill discovery adds only
+the short name/description/path until the agent reads a guide.
+
+The selected browser guide is `skills/browser/SKILL.md`. The other platform's
+curated reference is outside skill discovery: an authorized remote connection
+can control a browser whose OS differs from Pi's host. `browser capabilities`
+and `help` select that connected client's complete guide, still named `browser`.
+Agents do not choose a platform tool name. The uncurated source references keep
+their platform directories and local shell entry points for development and
+other coding agents.
+
+The normal managed skill selection upgrades to the new packaged paths. Explicit
+custom package skill filters are preserved. Architecture acceptance uses the
+fresh private BashKitten Pi profile requested on 8 October; standalone Pi and npm
+profiles are not imported.

@@ -12,7 +12,7 @@ Use this skill for the **connected browser**, not for the computer running the
 agent. The browser may be remote. A Linux agent can be connected to Android;
 that connection requires the Android skill instead.
 
-`bashkitten_browser` is a Pi tool, not a shell executable. Its arguments are one
+`browser` is a Pi tool, not a shell executable. Its arguments are one
 object: `{"method":"METHOD","params":{...}}`. Send one request per tool call.
 Omit `params` when the method takes no arguments. Do not send a JSON array of
 commands, a JavaScript function call, or legacy CLI text such as `click e4`.
@@ -23,7 +23,7 @@ this task. Never infer a tab ID from its position in a list.
 
 ### Start here
 
-**Identify the connected browser** — tool: `bashkitten_browser`
+**Identify the connected browser** — tool: `browser`
 
 ```json
 {"method":"capabilities"}
@@ -32,7 +32,7 @@ this task. Never infer a tab ID from its position in a list.
 Check `platform` and `methods`. Continue here only for `platform:"linux"`.
 Pi adds `browserGuide`, the absolute path to the matching skill on the Pi host.
 
-**Get this guide when it is not already loaded** — tool: `bashkitten_browser`
+**Get this guide when it is not already loaded** — tool: `browser`
 
 ```json
 {"method":"help"}
@@ -43,7 +43,7 @@ file at `browserGuide` using the agent's file-reading tool. Do one or the other
 once; do not repeatedly load help. `help` is implemented by the Pi extension,
 not by the native browser dispatcher. It has no topic parameter.
 
-**Find the user’s tab** — tool: `bashkitten_browser`
+**Find the user’s tab** — tool: `browser`
 
 ```json
 {"method":"tabs.list"}
@@ -57,7 +57,7 @@ Create a tab only when needed. A link can open another tab: list again to find i
 
 1. **Choose:** retain the real `tabId`; supply it on every page operation.
 2. **Inspect:** use `snapshot` for controls, `read` for content, and
-   `bashkitten_screenshot` for pixels such as a canvas or video.
+   `browser_screenshot` for pixels such as a canvas or video.
 3. **Act:** use the current element reference. Use `clear:true` to replace text.
    Focus the intended field before a keyboard-only action.
 4. **Verify:** inspect the returned change summary and check the expected URL,
@@ -66,7 +66,7 @@ Create a tab only when needed. A link can open another tab: list again to find i
 
 ### From a snapshot to one action
 
-**Inspect controls** — tool: `bashkitten_browser`
+**Inspect controls** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":12,"mode":"interactive"}}
@@ -82,7 +82,7 @@ button "Search" [ref=e6]
 Copy the value after `ref=`. Pass the string `"e4"`, not `"[ref=e4]"`, a CSS
 selector, the visible name, or a raw Gecko node object.
 
-**Replace the observed search field** — tool: `bashkitten_browser`
+**Replace the observed search field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"fill","ref":"e4","value":"browser documentation","clear":true}}
@@ -92,7 +92,7 @@ This is one action. Inspect its result before the next dependent action.
 Desktop `act` normally returns a diff; it does not return an Android-style tree.
 Use another snapshot when the diff does not identify the next control.
 
-**Click an observed button** — tool: `bashkitten_browser`
+**Click an observed button** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"click","ref":"e6"}}
@@ -122,7 +122,7 @@ Optional fields are described in prose; do not append `?` to JSON keys.
 
 ### Tabs and navigation
 
-**Open a new ordinary tab** — tool: `bashkitten_browser`
+**Open a new ordinary tab** — tool: `browser`
 
 ```json
 {"method":"tabs.create","params":{"url":"https://example.com"}}
@@ -133,13 +133,13 @@ Returns `tabId`. Optional: `background` (default `true`), `private`, `tor`,
 Tor routing is not disabled by setting `tor:false`. Check the returned page
 and wait for application-specific content if it is still changing.
 
-**Show a tab to the user** — tool: `bashkitten_browser`
+**Show a tab to the user** — tool: `browser`
 
 ```json
 {"method":"tabs.show","params":{"tabId":12}}
 ```
 
-**Close the intended tab** — tool: `bashkitten_browser`
+**Close the intended tab** — tool: `browser`
 
 ```json
 {"method":"tabs.close","params":{"tabId":12}}
@@ -147,7 +147,7 @@ and wait for application-specific content if it is still changing.
 
 Close only tabs the user asked to close or temporary tabs you created for this task.
 
-**Navigate to a URL** — tool: `bashkitten_browser`
+**Navigate to a URL** — tool: `browser`
 
 ```json
 {"method":"navigate","params":{"tabId":12,"url":"https://example.com"}}
@@ -157,19 +157,19 @@ Returns a snapshot after navigation, or authorization information when needed.
 The default action is `"url"`. A completed navigation does not guarantee that
 a client-side application has finished rendering.
 
-**Go back** — tool: `bashkitten_browser`
+**Go back** — tool: `browser`
 
 ```json
 {"method":"navigate","params":{"tabId":12,"action":"back"}}
 ```
 
-**Go forward** — tool: `bashkitten_browser`
+**Go forward** — tool: `browser`
 
 ```json
 {"method":"navigate","params":{"tabId":12,"action":"forward"}}
 ```
 
-**Reload** — tool: `bashkitten_browser`
+**Reload** — tool: `browser`
 
 ```json
 {"method":"navigate","params":{"tabId":12,"action":"reload"}}
@@ -183,13 +183,13 @@ window ID to create or supply.
 
 For compatibility with a caller that needs the legacy entry points:
 
-**List through the legacy method** — tool: `bashkitten_browser`
+**List through the legacy method** — tool: `browser`
 
 ```json
 {"method":"tabs","params":{"action":"list"}}
 ```
 
-**Open through the create alias** — tool: `bashkitten_browser`
+**Open through the create alias** — tool: `browser`
 
 ```json
 {"method":"tabs.open","params":{"url":"https://example.com"}}
@@ -197,7 +197,7 @@ For compatibility with a caller that needs the legacy entry points:
 
 ### Inspection and page content
 
-**Take a complete snapshot** — tool: `bashkitten_browser`
+**Take a complete snapshot** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":12}}
@@ -208,7 +208,7 @@ Optional: `mode:"full"|"interactive"` (default `"full"`), `depth`, `maxNodes`,
 Check `truncated` and `embeddedFrameErrors`; missing output is not proof that an
 element does not exist. References can identify supported embedded-frame elements.
 
-**Inspect changes since the previous snapshot** — tool: `bashkitten_browser`
+**Inspect changes since the previous snapshot** — tool: `browser`
 
 ```json
 {"method":"diff","params":{"tabId":12}}
@@ -217,7 +217,7 @@ element does not exist. References can identify supported embedded-frame element
 Returns `changed`, `added` and `removed` information. Snapshot-based calls
 update the comparison baseline. Use `snapshot` for a complete current view.
 
-**Read page content as Markdown** — tool: `bashkitten_browser`
+**Read page content as Markdown** — tool: `browser`
 
 ```json
 {"method":"read","params":{"tabId":12,"format":"markdown"}}
@@ -228,13 +228,13 @@ Formats: `markdown` (default), `text`, `links`, `console`, `network`. Optional
 `includeLinks` (default `true`), `includeImages`, and `viewportOnly`. Selectors
 are allowed here; they are not substitutes for `act.ref`.
 
-**Read text from an observed section** — tool: `bashkitten_browser`
+**Read text from an observed section** — tool: `browser`
 
 ```json
 {"method":"read","params":{"tabId":12,"format":"text","selector":"main"}}
 ```
 
-**Read page links** — tool: `bashkitten_browser`
+**Read page links** — tool: `browser`
 
 ```json
 {"method":"read","params":{"tabId":12,"format":"links"}}
@@ -244,7 +244,7 @@ Desktop renders the links as text in content blocks, not an Android-style
 array of link objects. `read` with `format:"console"` is an error/warning view;
 use `list_console_messages` for the broader console interface.
 
-**Search the current snapshot** — tool: `bashkitten_browser`
+**Search the current snapshot** — tool: `browser`
 
 ```json
 {"method":"grep","params":{"tabId":12,"pattern":"continue|next","over":"ax","limit":20}}
@@ -261,37 +261,37 @@ actions use `ref`. Coordinate actions use viewport CSS pixels; see screenshots.
 For `click` and `click_at`, optional `button` is `"left"`, `"middle"` or `"right"`
 (default `"left"`); optional `clickCount` defaults to `1`.
 
-**Click a referenced element** — tool: `bashkitten_browser`
+**Click a referenced element** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"click","ref":"e4"}}
 ```
 
-**Click a measured point** — tool: `bashkitten_browser`
+**Click a measured point** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"click_at","x":240,"y":180}}
 ```
 
-**Hover over a referenced element** — tool: `bashkitten_browser`
+**Hover over a referenced element** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"hover","ref":"e4"}}
 ```
 
-**Hover over a measured point** — tool: `bashkitten_browser`
+**Hover over a measured point** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"hover_at","x":240,"y":180}}
 ```
 
-**Focus a field** — tool: `bashkitten_browser`
+**Focus a field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"focus","ref":"e4"}}
 ```
 
-**Replace one field** — tool: `bashkitten_browser`
+**Replace one field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"fill","ref":"e4","value":"New value","clear":true}}
@@ -300,7 +300,7 @@ For `click` and `click_at`, optional `button` is `"left"`, `"middle"` or `"right
 Without `clear:true`, existing contents are not cleared. `fill`, `type` and
 `type_at` accept optional `delayMs` between typed characters.
 
-**Replace several observed fields in one call** — tool: `bashkitten_browser`
+**Replace several observed fields in one call** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"fill","fields":[{"ref":"e4","value":"First value"},{"ref":"e6","value":"Second value"}],"clear":true}}
@@ -309,7 +309,7 @@ Without `clear:true`, existing contents are not cleared. `fill`, `type` and
 `clear` applies to the whole fill operation. The `fields` array is supported
 inside this action; it is not a general command-batching interface.
 
-**Type into the already focused field** — tool: `bashkitten_browser`
+**Type into the already focused field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"type","text":"Appended text"}}
@@ -317,13 +317,13 @@ inside this action; it is not a general command-batching interface.
 
 Use `clear:true` here only when replacing the focused field is intended.
 
-**Click a measured field and replace its text** — tool: `bashkitten_browser`
+**Click a measured field and replace its text** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"type_at","x":240,"y":180,"text":"New value","clear":true}}
 ```
 
-**Press a key in the focused page control** — tool: `bashkitten_browser`
+**Press a key in the focused page control** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"press","key":"Enter"}}
@@ -333,19 +333,19 @@ Key combinations are strings, for example `"Control+a"` or `"Shift+ArrowLeft"`.
 Common named keys include `Tab`, `Escape`, `Backspace`, `Delete`, arrows, `Home`,
 `End`, `PageUp`, `PageDown`, and `F1`–`F12`. This is page input, not a shell command.
 
-**Set a checkbox to checked** — tool: `bashkitten_browser`
+**Set a checkbox to checked** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"check","ref":"e4"}}
 ```
 
-**Set a checkbox to unchecked** — tool: `bashkitten_browser`
+**Set a checkbox to unchecked** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"uncheck","ref":"e4"}}
 ```
 
-**Choose a native select option** — tool: `bashkitten_browser`
+**Choose a native select option** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"select","ref":"e4","value":"gb"}}
@@ -354,7 +354,7 @@ Common named keys include `Tab`, `Escape`, `Backspace`, `Delete`, arrows, `Home`
 Use an observed option value or visible option text. The result can include
 `selectedValues`. A custom dropdown may require ordinary clicks instead.
 
-**Scroll the page down** — tool: `bashkitten_browser`
+**Scroll the page down** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"scroll","direction":"down","amount":3}}
@@ -364,7 +364,7 @@ Directions: `up`, `down`, `left`, `right`. Default direction is `down`; default
 amount is `3`. One amount unit is 120 CSS pixels after rounding. Add `ref` to
 send a wheel event at an observed scrollable container.
 
-**Drag one referenced element to another** — tool: `bashkitten_browser`
+**Drag one referenced element to another** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"drag","ref":"e4","targetRef":"e6"}}
@@ -372,13 +372,13 @@ send a wheel event at an observed scrollable container.
 
 Alternatively use `ref` with `endX` and `endY`. Inspect the resulting state.
 
-**Drag between measured points** — tool: `bashkitten_browser`
+**Drag between measured points** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"drag_at","startX":120,"startY":240,"endX":380,"endY":240}}
 ```
 
-**Accept an observed JavaScript dialog** — tool: `bashkitten_browser`
+**Accept an observed JavaScript dialog** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"dialog_accept"}}
@@ -387,7 +387,7 @@ Alternatively use `ref` with `endX` and `endY`. Inspect the resulting state.
 For a prompt, include `text` when needed. This is not an OS file picker or a
 browser permission prompt. An action result can report `pendingDialog`.
 
-**Dismiss an observed JavaScript dialog** — tool: `bashkitten_browser`
+**Dismiss an observed JavaScript dialog** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":12,"kind":"dialog_dismiss"}}
@@ -395,7 +395,7 @@ browser permission prompt. An action result can report `pendingDialog`.
 
 ### Wait for a known condition
 
-**Wait for expected text** — tool: `bashkitten_browser`
+**Wait for expected text** — tool: `browser`
 
 ```json
 {"method":"wait","params":{"tabId":12,"for":"text","value":"Search results","timeout":10000}}
@@ -405,7 +405,7 @@ Text matching is case-sensitive substring matching. Check `matched`: `false`
 means the condition was not found before timeout, even if the tool did not
 throw. The default condition timeout on desktop is 2000 milliseconds.
 
-**Wait for an observed selector to exist** — tool: `bashkitten_browser`
+**Wait for an observed selector to exist** — tool: `browser`
 
 ```json
 {"method":"wait","params":{"tabId":12,"for":"selector","value":"main .results","timeout":10000}}
@@ -413,7 +413,7 @@ throw. The default condition timeout on desktop is 2000 milliseconds.
 
 This checks existence, not visibility or clickability. Inspect before acting.
 
-**Pause for a specific duration** — tool: `bashkitten_browser`
+**Pause for a specific duration** — tool: `browser`
 
 ```json
 {"method":"wait","params":{"tabId":12,"for":"time","value":250}}
@@ -424,7 +424,7 @@ pauses. There is no `networkidle` wait mode.
 
 ### Evaluate page JavaScript
 
-**Return a small value from the page** — tool: `bashkitten_browser`
+**Return a small value from the page** — tool: `browser`
 
 ```json
 {"method":"evaluate","params":{"tabId":12,"code":"return {title: document.title, url: location.href};"}}
@@ -438,7 +438,7 @@ Do not use evaluation to bypass protected UI, consent, or a denied browser grant
 
 ### Screenshots and coordinates
 
-**Show the tab and obtain an image plus a saved PNG** — tool: `bashkitten_screenshot`
+**Show the tab and obtain an image plus a saved PNG** — tool: `browser_screenshot`
 
 ```json
 {"tabId":12}
@@ -448,7 +448,7 @@ The helper calls `tabs.show`, captures the tab, saves a private PNG beside the
 Pi session, and returns an actual image tool block plus its `path`. It accepts
 only `tabId`; do not pass `fullPage`, `format` or other capture options to it.
 
-**Request a full-page image through the browser API** — tool: `bashkitten_browser`
+**Request a full-page image through the browser API** — tool: `browser`
 
 ```json
 {"method":"screenshot","params":{"tabId":12,"fullPage":true,"format":"png"}}
@@ -461,7 +461,7 @@ inline image and saved Pi path. Optional: `format:"png"|"jpeg"` (default PNG),
 it does not resize the browser viewport. `clip` uses document CSS coordinates
 and is ignored for full-page capture. An annotated capture takes a snapshot.
 
-**Measure the viewport before coordinate input** — tool: `bashkitten_browser`
+**Measure the viewport before coordinate input** — tool: `browser`
 
 ```json
 {"method":"evaluate","params":{"tabId":12,"code":"return {width: innerWidth, height: innerHeight, scrollX, scrollY};"}}
@@ -484,7 +484,7 @@ assume a remote browser shares the Pi host's filesystem. Use returned paths,
 not a guessed Downloads directory. The screenshot helper is different: it saves
 its copied image on the Pi host.
 
-**Print the page to PDF** — tool: `bashkitten_browser`
+**Print the page to PDF** — tool: `browser`
 
 ```json
 {"method":"pdf","params":{"tabId":12,"printBackground":true}}
@@ -493,7 +493,7 @@ its copied image on the Pi host.
 Returns a browser-host `path` and `bytes`. Optional: `landscape`,
 `printBackground` (default `true`) and `preferCSSPageSize` (default `false`).
 
-**Attach one existing browser-host file** — tool: `bashkitten_browser`
+**Attach one existing browser-host file** — tool: `browser`
 
 ```json
 {"method":"upload","params":{"tabId":12,"ref":"e4","file":"report.pdf"}}
@@ -504,7 +504,7 @@ exist inside the allowed working directory. Alternatively provide
 `files:["report.pdf","notes.txt"]`; multiple files require a multiple-file input.
 This selects files in the page; it does not automatically submit the form.
 
-**Click a download control and save the resulting file** — tool: `bashkitten_browser`
+**Click a download control and save the resulting file** — tool: `browser`
 
 ```json
 {"method":"download","params":{"tabId":12,"ref":"e4"}}
@@ -515,13 +515,13 @@ Optional `directory` must be an existing directory within the allowed working
 directory. The operation waits for a download and returns `path` and `filename`.
 After a timeout, inspect before retrying: a download may already have started.
 Desktop does not expose Android's `downloads.list/get` through this dispatcher;
-do not use `bashkitten_downloads` unless capabilities actually advertises them.
+do not use `browser_downloads` unless capabilities actually advertises them.
 
 ### Tab groups, history and bookmarks
 
 Use these only when relevant to the user's request; they affect the real browser.
 
-**List tab groups** — tool: `bashkitten_browser`
+**List tab groups** — tool: `browser`
 
 ```json
 {"method":"tab_groups","params":{"action":"list"}}
@@ -530,7 +530,7 @@ Use these only when relevant to the user's request; they affect the real browser
 Returns group records, including `groupId` and member `pageIds`. Group
 operations use `pages`, an array of numeric tab IDs, not a `tabIds` parameter.
 
-**Group two observed tabs** — tool: `bashkitten_browser`
+**Group two observed tabs** — tool: `browser`
 
 ```json
 {"method":"tab_groups","params":{"action":"create","pages":[12,18],"title":"Research"}}
@@ -539,7 +539,7 @@ operations use `pages`, an array of numeric tab IDs, not a `tabIds` parameter.
 Optional `color`. To append tabs to an existing group, use `action:"create"`
 with `pages` and an observed `groupId`; omit `title` in that case.
 
-**Update a group** — tool: `bashkitten_browser`
+**Update a group** — tool: `browser`
 
 ```json
 {"method":"tab_groups","params":{"action":"update","groupId":"GROUP_ID","title":"Sources","collapsed":false}}
@@ -547,19 +547,19 @@ with `pages` and an observed `groupId`; omit `title` in that case.
 
 Supply at least one of `title`, `color`, or `collapsed`. Use a returned group ID.
 
-**Remove tabs from their group without closing them** — tool: `bashkitten_browser`
+**Remove tabs from their group without closing them** — tool: `browser`
 
 ```json
 {"method":"tab_groups","params":{"action":"ungroup","pages":[12,18]}}
 ```
 
-**Close a group and its tabs** — tool: `bashkitten_browser`
+**Close a group and its tabs** — tool: `browser`
 
 ```json
 {"method":"tab_groups","params":{"action":"close","groupId":"GROUP_ID"}}
 ```
 
-**Read recent history entries** — tool: `bashkitten_browser`
+**Read recent history entries** — tool: `browser`
 
 ```json
 {"method":"history","params":{"action":"list","maxResults":20}}
@@ -569,7 +569,7 @@ Default action is `list`; default `maxResults` is 100. `action:"open"` also
 opens the native history sidebar. It does not turn the sidebar into an
 automatable page. There is no history-deletion method in this interface.
 
-**Find bookmarks** — tool: `bashkitten_browser`
+**Find bookmarks** — tool: `browser`
 
 ```json
 {"method":"bookmarks","params":{"action":"list","query":"documentation","maxResults":20}}
@@ -578,7 +578,7 @@ automatable page. There is no history-deletion method in this interface.
 Default action is `list`; default `maxResults` is 100. Filter by `query`, or
 use `url`/`tabId` for an exact URL. `action:"open"` also opens the native sidebar.
 
-**Bookmark the selected page** — tool: `bashkitten_browser`
+**Bookmark the selected page** — tool: `browser`
 
 ```json
 {"method":"bookmarks","params":{"action":"create","tabId":12,"folder":"toolbar"}}
@@ -587,7 +587,7 @@ use `url`/`tabId` for an exact URL. `action:"open"` also opens the native sideba
 Alternatively provide `url`. Optional `title`; `folder` is `menu`, `toolbar`,
 or `unfiled` (default). The result reports `created`; an existing URL can be reused.
 
-**Remove one observed bookmark** — tool: `bashkitten_browser`
+**Remove one observed bookmark** — tool: `browser`
 
 ```json
 {"method":"bookmarks","params":{"action":"remove","guid":"BOOKMARK_GUID"}}
@@ -603,7 +603,7 @@ historical log. Absence from the buffer is not proof an event never occurred.
 Use a narrow query first. Large or sensitive logs should not be copied wholesale
 into the conversation.
 
-**List recent console errors** — tool: `bashkitten_browser`
+**List recent console errors** — tool: `browser`
 
 ```json
 {"method":"list_console_messages","params":{"tabId":12,"level":"error","limit":20}}
@@ -613,13 +613,13 @@ Optional: `level`, `sinceMs` (relative age, not an epoch timestamp),
 `textContains`, `source` (exact URL), `limit` (default 50), `format:"text"|"json"`,
 `saveTo`, `preview`. Inspect returned `messages`, counts and `hasMore`.
 
-**Clear the tab’s captured console buffer** — tool: `bashkitten_browser`
+**Clear the tab’s captured console buffer** — tool: `browser`
 
 ```json
 {"method":"clear_console_messages","params":{"tabId":12}}
 ```
 
-**List failed network requests** — tool: `bashkitten_browser`
+**List failed network requests** — tool: `browser`
 
 ```json
 {"method":"list_network_requests","params":{"tabId":12,"statusMin":400,"limit":20,"detail":"summary"}}
@@ -630,7 +630,7 @@ Optional: `sinceMs`, `urlContains`, `method` (HTTP verb), `status`, `statusMin`,
 `sortBy:"timestamp"|"duration"|"status"`, `detail:"summary"|"full"`,
 `format:"text"|"json"`, `saveTo`, `preview`. Copy a returned request ID.
 
-**Inspect one captured request** — tool: `bashkitten_browser`
+**Inspect one captured request** — tool: `browser`
 
 ```json
 {"method":"get_network_request","params":{"tabId":12,"id":"REQUEST_ID"}}
@@ -652,13 +652,13 @@ Use for an authorized debugging task, not as the default way to click controls.
 A logpoint evaluates a JavaScript expression at an executable line; it does not
 pause the page. Use script URLs and logpoint IDs returned by these methods.
 
-**Enable page debugging** — tool: `bashkitten_browser`
+**Enable page debugging** — tool: `browser`
 
 ```json
 {"method":"enable_debugger","params":{"tabId":12}}
 ```
 
-**Find loaded scripts** — tool: `bashkitten_browser`
+**Find loaded scripts** — tool: `browser`
 
 ```json
 {"method":"list_scripts","params":{"tabId":12}}
@@ -667,7 +667,7 @@ pause the page. Use script URLs and logpoint IDs returned by these methods.
 Also enables debugging. Source-line hints may be incomplete; check
 `possibleLinesComplete` rather than assuming a complete executable-line map.
 
-**Read one script’s source** — tool: `bashkitten_browser`
+**Read one script’s source** — tool: `browser`
 
 ```json
 {"method":"get_script_source","params":{"tabId":12,"scriptUrl":"https://example.com/app.js"}}
@@ -676,7 +676,7 @@ Also enables debugging. Source-line hints may be incomplete; check
 Use an observed URL. Optional `saveTo` and `preview`; large source output may
 be saved automatically. Inspect source before choosing a logpoint line.
 
-**Install a logpoint at an observed executable line** — tool: `bashkitten_browser`
+**Install a logpoint at an observed executable line** — tool: `browser`
 
 ```json
 {"method":"set_logpoint","params":{"tabId":12,"url":"https://example.com/app.js","line":42,"expression":"({ready: document.readyState})"}}
@@ -686,13 +686,13 @@ be saved automatically. Inspect source before choosing a logpoint line.
 not an async function body with `return`. Retain the returned logpoint ID and
 check `installed`; zero does not establish a live installation.
 
-**Read a logpoint’s captured results** — tool: `bashkitten_browser`
+**Read a logpoint’s captured results** — tool: `browser`
 
 ```json
 {"method":"get_logpoint_results","params":{"tabId":12,"logpoint":"LOGPOINT_ID"}}
 ```
 
-**Remove the logpoint when finished** — tool: `bashkitten_browser`
+**Remove the logpoint when finished** — tool: `browser`
 
 ```json
 {"method":"remove_logpoint","params":{"tabId":12,"logpoint":"LOGPOINT_ID"}}

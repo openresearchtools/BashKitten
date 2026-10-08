@@ -43,7 +43,11 @@ async function register() {
   let current = settings();
   const baseSkills = [`skills/browser-${platform === 'termux' ? 'android' : 'linux'}/SKILL.md`, 'skills/web-search/SKILL.md'];
   const previousSkills = [...baseSkills, ...(platform === 'termux' ? ['skills/termux-display/SKILL.md'] : [])];
-  const skills = [...previousSkills, 'skills/subagents/SKILL.md'];
+  const previousAllSkills = [...previousSkills, 'skills/subagents/SKILL.md'];
+  const manifest = JSON.parse(await fs.readFile(path.join(integrationRoot, 'package.json'), 'utf8'));
+  const skills = manifest.bashkitten?.browserGuides
+    ? manifest.pi.skills.map(directory => directory.replace(/^\.\//, '') + '/SKILL.md')
+    : previousAllSkills;
   const installed = current.getPackages().find(item => matches(item, integrationRoot));
   if (!installed) {
     await packageCommand(runtime.cli, 'install', integrationRoot);
@@ -53,7 +57,7 @@ async function register() {
       skills,
     } : item));
     await current.flush();
-  } else if ([baseSkills, previousSkills].some(previous => JSON.stringify(installed.skills) === JSON.stringify(previous))) {
+  } else if ([baseSkills, previousSkills, previousAllSkills].some(previous => JSON.stringify(installed.skills) === JSON.stringify(previous))) {
     // Upgrade only our original managed selection; preserve user skill filters.
     current.setPackages(current.getPackages().map(item => item === installed ? { ...item, skills } : item));
     await current.flush();

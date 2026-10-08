@@ -22,6 +22,13 @@
   `Xvfb :N -screen 0 1280x800x24 -nolisten tcp`, then use `DISPLAY=:N`.
   Track its PID and stop that display when finished. `xdotool` can control
   programs on it. No Termux:X11 APK, root, proot or desktop session is required.
-- Browser/search controls are normal Pi package skills: `browser-android` and
-  `web-search`. Read them on demand. Browser control uses the installed
+- Browser/search controls are normal Pi package skills: `browser` and
+  `websearch`. Read them on demand. Browser control uses the installed
   BashKitten browser's native Android permission; never start a TCP key service.
+
+Node and npm on PATH are BashKitten’s private runtime. Pi settings, OAuth,
+extensions and sessions belong to {{PI_AGENT_DIR}}. Use `pi install` for Pi
+packages and ordinary `npm -g` for tools; their installs and caches stay inside
+that profile. Project npm dependencies remain in the selected project. Do not
+change the system Node/Pi installation for this environment. Use native
+`tool_search` to load the deferred browser, websearch and agents tools when needed.

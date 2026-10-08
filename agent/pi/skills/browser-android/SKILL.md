@@ -12,7 +12,7 @@ Use this skill for the **connected Android browser**, including a browser
 controlled remotely by Pi running on Linux. The agent host's OS does not select
 the skill. This is browser-page automation, not phone-wide Android UI control.
 
-`bashkitten_browser` is a Pi tool, not a shell executable. Send one object per
+`browser` is a Pi tool, not a shell executable. Send one object per
 call: `{"method":"METHOD","params":{...}}`. Omit `params` for methods without
 arguments. Do not send an array of commands or a JavaScript function call.
 
@@ -23,7 +23,7 @@ URLs, selectors, coordinates and download IDs with observed task values.
 
 ### Start here
 
-**Identify the connected browser** — tool: `bashkitten_browser`
+**Identify the connected browser** — tool: `browser`
 
 ```json
 {"method":"capabilities"}
@@ -33,7 +33,7 @@ Check `platform`, `methods`, authorization and foreground information. Use
 this guide for `android` or the help mapper's `termux` alias, not for `linux`.
 Pi adds `browserGuide`, an absolute skill path on the Pi host.
 
-**Get this guide when it is not already loaded** — tool: `bashkitten_browser`
+**Get this guide when it is not already loaded** — tool: `browser`
 
 ```json
 {"method":"help"}
@@ -57,7 +57,7 @@ that saved grant. Try `capabilities` first; do not tell the user to approve
 browser control unless the actual request reports that approval is needed.
 Revocation or a changed app signing identity requires renewed approval.
 
-**Find the user’s tab** — tool: `bashkitten_browser`
+**Find the user’s tab** — tool: `browser`
 
 ```json
 {"method":"tabs.list"}
@@ -73,7 +73,7 @@ another tab; list again rather than assuming its ID.
 
 1. **Choose:** retain the real tab ID and include `tabId` in every page call.
 2. **Inspect:** use `snapshot` for controls, `read` for text/links, and
-   `bashkitten_screenshot` for a canvas, video or other visual content.
+   `browser_screenshot` for a canvas, video or other visual content.
 3. **Act:** pass the current node's `reference` as `target`. Use `clear:true`
    when replacing text. Focus the intended field before keyboard-only input.
 4. **Verify:** take another snapshot or read the relevant state. Navigation and
@@ -82,7 +82,7 @@ another tab; list again rather than assuming its ID.
 
 ### From a snapshot to one action
 
-**Inspect the page** — tool: `bashkitten_browser`
+**Inspect the page** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":"TAB_ID"}}
@@ -92,7 +92,7 @@ The result contains a nested `root` tree. Find the relevant node by `role`
 and `name`; copy its opaque `reference` string. For example, a button node may
 have `role:"button"`, `name:"Search"` and `reference:"REFERENCE"`.
 
-**Click that observed button** — tool: `bashkitten_browser`
+**Click that observed button** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"click","target":"REFERENCE"}}
@@ -101,7 +101,7 @@ have `role:"button"`, `name:"Search"` and `reference:"REFERENCE"`.
 Pass only the reference string, not the whole node, a selector, an element
 name, or a desktop `e4` value. The parameter is **`target`**, not `ref`.
 
-**Verify the resulting page** — tool: `bashkitten_browser`
+**Verify the resulting page** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":"TAB_ID"}}
@@ -128,7 +128,7 @@ and action kinds are case-sensitive. Each example is independent.
 
 ### Tabs and navigation
 
-**Open a new ordinary tab** — tool: `bashkitten_browser`
+**Open a new ordinary tab** — tool: `browser`
 
 ```json
 {"method":"tabs.create","params":{"url":"https://example.com"}}
@@ -139,7 +139,7 @@ returned record's `id` as `tabId`. The initial URL can still be `about:blank`
 while navigation starts. Android create has no desktop `background`, `private`
 or group options. Onion navigation automatically uses Tor.
 
-**Show a tab** — tool: `bashkitten_browser`
+**Show a tab** — tool: `browser`
 
 ```json
 {"method":"tabs.show","params":{"tabId":"TAB_ID"}}
@@ -148,7 +148,7 @@ or group options. Onion navigation automatically uses Tor.
 Uses Android's normal foreground-activity rules. A screenshot requires this
 tab to be visible; the screenshot helper performs this call for you.
 
-**Close the intended tab** — tool: `bashkitten_browser`
+**Close the intended tab** — tool: `browser`
 
 ```json
 {"method":"tabs.close","params":{"tabId":"TAB_ID"}}
@@ -157,7 +157,7 @@ tab to be visible; the screenshot helper performs this call for you.
 Do not close unrelated user tabs. Keep a download's originating tab open
 until its file has been fetched; download access checks the tab association.
 
-**Navigate to a URL** — tool: `bashkitten_browser`
+**Navigate to a URL** — tool: `browser`
 
 ```json
 {"method":"navigate","params":{"tabId":"TAB_ID","url":"https://example.com"}}
@@ -166,31 +166,31 @@ until its file has been fetched; download access checks the tab association.
 Starts navigation and returns acknowledgement, not a ready-page snapshot.
 Wait for expected content or inspect again. Do not use `navigate.action` on Android.
 
-**Go back in browser history** — tool: `bashkitten_browser`
+**Go back in browser history** — tool: `browser`
 
 ```json
 {"method":"back","params":{"tabId":"TAB_ID"}}
 ```
 
-**Go forward in browser history** — tool: `bashkitten_browser`
+**Go forward in browser history** — tool: `browser`
 
 ```json
 {"method":"forward","params":{"tabId":"TAB_ID"}}
 ```
 
-**Reload the page** — tool: `bashkitten_browser`
+**Reload the page** — tool: `browser`
 
 ```json
 {"method":"reload","params":{"tabId":"TAB_ID"}}
 ```
 
-**Stop loading** — tool: `bashkitten_browser`
+**Stop loading** — tool: `browser`
 
 ```json
 {"method":"stop","params":{"tabId":"TAB_ID"}}
 ```
 
-**Enable desktop-site mode for this tab** — tool: `bashkitten_browser`
+**Enable desktop-site mode for this tab** — tool: `browser`
 
 ```json
 {"method":"tabs.setDesktopMode","params":{"tabId":"TAB_ID","enabled":true}}
@@ -199,7 +199,7 @@ Wait for expected content or inspect again. Do not use `navigate.action` on Andr
 `enabled` is a JSON boolean. Set it to `false` to disable the mode. Inspect
 after the change; do not treat a layout-changing setting as an observation.
 
-**Enable ad blocking for this tab** — tool: `bashkitten_browser`
+**Enable ad blocking for this tab** — tool: `browser`
 
 ```json
 {"method":"tabs.setAdblocking","params":{"tabId":"TAB_ID","enabled":true}}
@@ -210,7 +210,7 @@ user's task; then wait and reacquire references. List tabs to verify the setting
 
 ### Snapshots, content and frames
 
-**Inspect a bounded page tree** — tool: `bashkitten_browser`
+**Inspect a bounded page tree** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":"TAB_ID","maxNodes":200,"maxBytes":60000}}
@@ -220,7 +220,7 @@ These are Android's default node/byte limits. Optional `depth` limits depth.
 Check `truncated` and `embeddedFrameErrors` before concluding a control is absent.
 Android uses the DOM snapshot backend. There is no `mode:"interactive"` or `diff`.
 
-**Inspect an observed subtree** — tool: `bashkitten_browser`
+**Inspect an observed subtree** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":"TAB_ID","target":"REFERENCE","depth":6}}
@@ -229,7 +229,7 @@ Android uses the DOM snapshot backend. There is no `mode:"interactive"` or `diff
 The target must come from the current snapshot. This call replaces all prior
 references, not just those within that subtree.
 
-**Read page Markdown** — tool: `bashkitten_browser`
+**Read page Markdown** — tool: `browser`
 
 ```json
 {"method":"read","params":{"tabId":"TAB_ID","format":"markdown"}}
@@ -239,13 +239,13 @@ Formats: `markdown` (default), `text`, `links`. Optional `selector` scopes
 reading to its first match. Markdown options include `includeLinks` (default
 `true`), `includeImages`, and `viewportOnly`. Markdown/text results are strings.
 
-**Read text from an observed section** — tool: `bashkitten_browser`
+**Read text from an observed section** — tool: `browser`
 
 ```json
 {"method":"read","params":{"tabId":"TAB_ID","format":"text","selector":"main"}}
 ```
 
-**Extract links** — tool: `bashkitten_browser`
+**Extract links** — tool: `browser`
 
 ```json
 {"method":"read","params":{"tabId":"TAB_ID","format":"links"}}
@@ -254,7 +254,7 @@ reading to its first match. Markdown options include `includeLinks` (default
 Returns an array of `{text,href}` records. Android does not support desktop
 `read` formats `console` or `network`; use `console` for the console buffer.
 
-**Inspect a frame identified in the snapshot** — tool: `bashkitten_browser`
+**Inspect a frame identified in the snapshot** — tool: `browser`
 
 ```json
 {"method":"snapshot","params":{"tabId":"TAB_ID","frameId":123}}
@@ -275,31 +275,31 @@ All actions use `method:"act"`, `tabId`, and `kind`. Reference-based actions use
 For `click` and `click_at`, optional `button` is `"left"`, `"middle"` or `"right"`
 (default `"left"`), and `clickCount` defaults to `1`.
 
-**Click a referenced element** — tool: `bashkitten_browser`
+**Click a referenced element** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"click","target":"REFERENCE"}}
 ```
 
-**Click a measured point** — tool: `bashkitten_browser`
+**Click a measured point** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"click_at","x":120,"y":240}}
 ```
 
-**Hover over a referenced element** — tool: `bashkitten_browser`
+**Hover over a referenced element** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"hover","target":"REFERENCE"}}
 ```
 
-**Focus a field** — tool: `bashkitten_browser`
+**Focus a field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"focus","target":"REFERENCE"}}
 ```
 
-**Replace one observed field** — tool: `bashkitten_browser`
+**Replace one observed field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"fill","target":"REFERENCE","value":"browser documentation","clear":true}}
@@ -308,7 +308,7 @@ For `click` and `click_at`, optional `button` is `"left"`, `"middle"` or `"right
 Without `clear:true`, existing contents are not cleared. `fill`, `type` and
 `type_at` accept optional `delayMs` between typed characters.
 
-**Replace several observed fields in one call** — tool: `bashkitten_browser`
+**Replace several observed fields in one call** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"fill","fields":[{"target":"REFERENCE","value":"First value"},{"target":"OTHER_REFERENCE","value":"Second value"}],"clear":true}}
@@ -317,7 +317,7 @@ Without `clear:true`, existing contents are not cleared. `fill`, `type` and
 Use current references from the same frame. `clear` applies to the whole
 operation. `fields` is a fill feature, not a general command-batching facility.
 
-**Type into the already focused field** — tool: `bashkitten_browser`
+**Type into the already focused field** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"type","text":"Appended text"}}
@@ -326,13 +326,13 @@ operation. `fields` is a fill feature, not a general command-batching facility.
 Optional `clear:true` replaces the focused field instead. For a focused field
 in an embedded frame, keep the matching `frameId` on keyboard-only calls.
 
-**Click a measured field and replace its text** — tool: `bashkitten_browser`
+**Click a measured field and replace its text** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"type_at","x":120,"y":240,"text":"New value","clear":true}}
 ```
 
-**Press a key in the focused page control** — tool: `bashkitten_browser`
+**Press a key in the focused page control** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"press","key":"Enter"}}
@@ -343,19 +343,19 @@ Other common keys include `Tab`, `Escape`, `Backspace`, `Delete`, arrow keys,
 `Home`, `End`, `PageUp`, `PageDown` and `F1`–`F12`. This is not Android system-key
 or shell-command execution.
 
-**Set a checkbox to checked** — tool: `bashkitten_browser`
+**Set a checkbox to checked** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"check","target":"REFERENCE"}}
 ```
 
-**Set a checkbox to unchecked** — tool: `bashkitten_browser`
+**Set a checkbox to unchecked** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"uncheck","target":"REFERENCE"}}
 ```
 
-**Choose a native select option** — tool: `bashkitten_browser`
+**Choose a native select option** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"select","target":"REFERENCE","value":"gb"}}
@@ -364,7 +364,7 @@ or shell-command execution.
 Use an observed option value or its visible text. The result can include
 `selectedValues`. Use ordinary clicks for a custom dropdown when needed.
 
-**Scroll the page down** — tool: `bashkitten_browser`
+**Scroll the page down** — tool: `browser`
 
 ```json
 {"method":"act","params":{"tabId":"TAB_ID","kind":"scroll","direction":"down","amount":3}}
@@ -380,7 +380,7 @@ The Android allowlist does **not** include `hover_at`, `drag`, `drag_at`,
 
 ### Wait for a known condition
 
-**Wait for expected text** — tool: `bashkitten_browser`
+**Wait for expected text** — tool: `browser`
 
 ```json
 {"method":"wait","params":{"tabId":"TAB_ID","for":"text","value":"Search results","timeout":10000}}
@@ -390,7 +390,7 @@ Text matching is case-sensitive substring matching. The default Android
 condition timeout is 10000 milliseconds. `matched:false` means the condition
 was not found; do not continue as though it was true.
 
-**Wait for an observed selector to exist** — tool: `bashkitten_browser`
+**Wait for an observed selector to exist** — tool: `browser`
 
 ```json
 {"method":"wait","params":{"tabId":"TAB_ID","for":"selector","value":"main .results","timeout":10000}}
@@ -398,7 +398,7 @@ was not found; do not continue as though it was true.
 
 This tests existence, not visibility or clickability.
 
-**Pause for a specified duration** — tool: `bashkitten_browser`
+**Pause for a specified duration** — tool: `browser`
 
 ```json
 {"method":"wait","params":{"tabId":"TAB_ID","for":"time","value":250}}
@@ -409,7 +409,7 @@ blind sleeps. There is no `networkidle` wait mode.
 
 ### Evaluate page JavaScript
 
-**Return a small value from the page** — tool: `bashkitten_browser`
+**Return a small value from the page** — tool: `browser`
 
 ```json
 {"method":"evaluate","params":{"tabId":"TAB_ID","code":"return {title: document.title, url: location.href};"}}
@@ -423,7 +423,7 @@ the Android OS, browser chrome or a protected Agent view.
 
 ### Screenshots and coordinate mapping
 
-**Show the tab and obtain an image plus a saved PNG** — tool: `bashkitten_screenshot`
+**Show the tab and obtain an image plus a saved PNG** — tool: `browser_screenshot`
 
 ```json
 {"tabId":"TAB_ID"}
@@ -433,7 +433,7 @@ The helper shows the tab, captures it, saves a private PNG beside the Pi
 session, and returns an actual image tool block and its local `path`. Use
 that returned path with other agent tools. It accepts only `tabId`.
 
-**Read viewport dimensions** — tool: `bashkitten_browser`
+**Read viewport dimensions** — tool: `browser`
 
 ```json
 {"method":"viewport","params":{"tabId":"TAB_ID"}}
@@ -443,7 +443,7 @@ Returns CSS dimensions and scrolling information: `width`, `height`,
 `fullWidth`, `fullHeight`, `scrollX`, `scrollY`. It measures the viewport;
 it does not resize it.
 
-**Capture the already visible tab through the raw API** — tool: `bashkitten_browser`
+**Capture the already visible tab through the raw API** — tool: `browser`
 
 ```json
 {"method":"screenshot","params":{"tabId":"TAB_ID"}}
@@ -465,7 +465,7 @@ are not ordinary page controls.
 
 ### Downloads: accept, complete, fetch
 
-**List browser downloads using the helper** — tool: `bashkitten_downloads`
+**List browser downloads using the helper** — tool: `browser_downloads`
 
 ```json
 {"action":"list"}
@@ -475,7 +475,7 @@ Use the actual download `id`. Records include `id`, `tabId`, `name`, `mimeType`,
 `status`, and `size`. Only downloads associated with currently open ordinary
 tabs are exposed. Merely listing downloads does not start or accept one.
 
-**List downloads through the underlying API** — tool: `bashkitten_browser`
+**List downloads through the underlying API** — tool: `browser`
 
 ```json
 {"method":"downloads.list"}
@@ -483,7 +483,7 @@ tabs are exposed. Merely listing downloads does not start or accept one.
 
 This is the underlying method used by the helper. It takes no `tabId`.
 
-**Accept an observed download awaiting approval** — tool: `bashkitten_browser`
+**Accept an observed download awaiting approval** — tool: `browser`
 
 ```json
 {"method":"downloads.accept","params":{"tabId":"TAB_ID","downloadId":"DOWNLOAD_ID"}}
@@ -494,7 +494,7 @@ for a download the user authorized. Acceptance is not completion. List again
 to check its current state; do not invent a download ID or repeatedly click
 the initiating link.
 
-**Copy a completed browser download into Pi storage** — tool: `bashkitten_downloads`
+**Copy a completed browser download into Pi storage** — tool: `browser_downloads`
 
 ```json
 {"action":"fetch","downloadId":"DOWNLOAD_ID"}
@@ -505,20 +505,20 @@ Requires a completed download. Returns its real Pi-host `path`, sanitized
 browser is remote. Keep the originating tab open until this succeeds. A copied
 file is not automatically opened or executed.
 
-**Request the underlying completed-download transfer** — tool: `bashkitten_browser`
+**Request the underlying completed-download transfer** — tool: `browser`
 
 ```json
 {"method":"downloads.get","params":{"downloadId":"DOWNLOAD_ID"}}
 ```
 
 The raw method exposes transfer information; it does not itself give every
-caller a saved Pi-host file. Use `bashkitten_downloads` with `action:"fetch"`
+caller a saved Pi-host file. Use `browser_downloads` with `action:"fetch"`
 for that. Android has no desktop `download {ref:...}` or `upload` method.
 For a browser upload requiring the native picker, the user must select the file.
 
 ### Console and diagnostics
 
-**Read the captured console buffer** — tool: `bashkitten_browser`
+**Read the captured console buffer** — tool: `browser`
 
 ```json
 {"method":"console","params":{"tabId":"TAB_ID"}}
@@ -528,7 +528,7 @@ Returns recent captured console entries. This is not desktop
 `list_console_messages`; desktop filters and network/debugger methods are not
 part of Android's command surface. Missing entries do not prove no event occurred.
 
-**Clear the captured console buffer** — tool: `bashkitten_browser`
+**Clear the captured console buffer** — tool: `browser`
 
 ```json
 {"method":"clearConsole","params":{"tabId":"TAB_ID"}}
@@ -536,7 +536,7 @@ part of Android's command surface. Missing entries do not prove no event occurre
 
 Returns the number of cleared entries.
 
-**Inspect browser-control diagnostics** — tool: `bashkitten_browser`
+**Inspect browser-control diagnostics** — tool: `browser`
 
 ```json
 {"method":"diagnostics","params":{"tabId":"TAB_ID"}}
