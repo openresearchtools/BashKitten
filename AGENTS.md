@@ -33,6 +33,14 @@ Termux backend. Models remain separate downloads. No release path may depend on
 local build directories or unpublished workstation binaries. Node and Pi remain
 bundled in desktop/Termux packages. Local desktop/Android browser builds are for
 development and acceptance only.
+The latest runtime requirements use official upstream release tags and their
+exact peeled commits, never arbitrary branch commits. The daughter repository
+checks for newer upstream releases once daily and skips unchanged versions.
+Use readable upstream versions with explicit package revisions. Vulkan builds
+also provide CPU execution; do not build or download separate CPU artifacts.
+Keep CPU/GPU execution choices, with GPU use disabled explicitly in CPU mode.
+Show owned-workload CPU and, where real device counters permit, total CPU in
+the Android performance overlay. Sample only while the overlay is visible.
 The chat controls must show the effective model/reasoning selection, or Not set
 when absent, with compact widths. Android Agent power is a toggle beside the
 logo; Display, LocalAI and performance use compact matching icons.
