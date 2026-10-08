@@ -7,13 +7,15 @@ import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { getModelsDirectory } from '../models/settings.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, requireDesktop, runtimeInfo, checkRuntime, installRuntime, validateBinary } from './runtimes.mjs';
+import { localAIDir, requireLocalRuntime, runtimeInfo, checkRuntime, installRuntime, validateBinary } from './runtimes.mjs';
+import { platform } from '../platform/index.mjs';
+import { launchInference } from './launch.mjs';
 
 const configFile = path.join(localAIDir, 'config.json');
 const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
-const defaults = engine => ({ mode: 'managed', binary: '', backend: 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
-  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : { model: '', keepRunning: false, autoSend: true }) });
+const defaults = engine => ({ mode: 'managed', binary: '', backend: platform === 'termux' ? 'cpu' : 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
+  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket' } : { model: '', modelKind: 'whisper', keepRunning: false, autoSend: true }) });
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
 // Pi import and voice-message sending do not change the inference command.
 const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined });
@@ -22,6 +24,8 @@ async function readConfiguration() {
   if (saved) {
     if (saved.version !== 1) throw Error('Unsupported LocalAI configuration');
     if (saved.whisper.autoSend === undefined) saved.whisper.autoSend = true;
+    if (saved.whisper.modelKind === undefined) saved.whisper.modelKind = 'whisper';
+    saved.tts ||= defaults('tts');
     return saved;
   }
   // Preserve a prior explicitly enabled setup as Custom. Never install over it.
@@ -33,18 +37,24 @@ async function readConfiguration() {
     if (path.isAbsolute(legacy.model || '')) llama.argv = ['/usr/bin/llama-server', '--model', legacy.model, '--alias', legacy.alias || 'bashkitten-local', '--host', '127.0.0.1', '--port', '{port}', '--api-key-file', llama.keyFile,
       '--ctx-size', String(legacy.contextSize ?? 8192), '--gpu-layers', String(legacy.backend === 'cpu' ? 0 : legacy.gpuLayers ?? 'auto'), '--offline', '--jinja', ...(legacy.threads ? ['--threads', String(legacy.threads)] : [])];
   }
-  return { version: 1, llama, whisper: defaults('whisper') };
+  return { version: 1, llama, whisper: defaults('whisper'), tts: defaults('tts') };
 }
 function configuration(engine, value) {
-  if (!ids[engine] || !value || !['managed', 'custom'].includes(value.mode) || !['auto', 'cuda', 'vulkan', 'cpu'].includes(value.backend)) throw Error('Invalid LocalAI configuration');
+  if (![...Object.keys(ids), 'tts'].includes(engine) || !value || !['managed', 'custom'].includes(value.mode) || !['auto', 'cuda', 'vulkan', 'cpu'].includes(value.backend)) throw Error('Invalid LocalAI configuration');
   const result = { ...defaults(engine), ...value };
+  if (platform === 'termux' && !['cpu', 'vulkan'].includes(result.backend)) throw Error('Choose CPU or GPU (native Termux Vulkan)');
   if (!Number.isInteger(result.port) || result.port < 0 || result.port > 65535) throw Error('Use Automatic (0) or a valid loopback port');
   if (!cleanText(result.binary) || !path.isAbsolute(result.cwd || '') || !cleanText(result.cwd)) throw Error('Choose an executable and absolute working directory');
   if (!Array.isArray(result.argv) || !result.argv.every(cleanText)) throw Error('Launch command must be a JSON array of arguments');
   if (!result.env || typeof result.env !== 'object' || Array.isArray(result.env) || Object.entries(result.env).some(([key, value]) => !/^[A-Za-z_][A-Za-z_0-9]*$/.test(key) || !cleanText(value))) throw Error('Invalid command environment');
   if (engine === 'llama') {
     if (!cleanText(result.preset) || !path.isAbsolute(result.preset) || typeof result.startup !== 'boolean' || typeof result.importToPi !== 'boolean' || !cleanText(result.keyFile) || result.keyFile && !path.isAbsolute(result.keyFile)) throw Error('Choose a router INI, startup and coding-agent import options');
+  } else if (engine === 'tts') {
+    if (result.mode !== 'managed' || !['pocket', 'qwen3'].includes(result.modelKind) || !/^[a-z]{2,3}$/.test(result.language)) throw Error('Choose Pocket TTS or Qwen3-TTS and a language code');
+    for (const key of ['model', 'projector', 'voice']) if (!cleanText(result[key]) || result[key] && !path.isAbsolute(result[key])) throw Error('Choose absolute TTS model, projector and reference audio paths');
+    if (result.argv.length || Object.keys(result.env).length) throw Error('TTS uses the verified llama-tts command');
   } else {
+    if (!['whisper', 'parakeet'].includes(result.modelKind)) throw Error('Choose Whisper or Parakeet');
     if (typeof result.keepRunning !== 'boolean' || typeof result.autoSend !== 'boolean' || !cleanText(result.model) || result.model && !path.isAbsolute(result.model)) throw Error('Choose a whisper.cpp model and valid voice-message options');
     if (result.mode !== 'managed') throw Error('Whisper uses the verified managed runtime');
     if (Object.keys(result.env).length) throw Error('Whisper does not accept environment overrides that can retain audio');
@@ -83,14 +93,14 @@ export class LocalAI {
   constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); }
   exclusive(action) { const result = this.serial.then(action); this.serial = result.catch(() => {}); return result; }
   async initialize() {
-    requireDesktop(); await privateDir(localAIDir);
+    requireLocalRuntime(); await privateDir(localAIDir);
     const config = await readConfiguration();
     if (!await fs.stat(config.llama.preset).catch(() => null) && config.llama.preset === defaults('llama').preset) {
       await fs.writeFile(config.llama.preset, '# llama.cpp router presets. Model sections use their real paths.\n[*]\nctx-size = 8192\n', { mode: 0o600, flag: 'wx' });
     }
     await writeJson(configFile, config);
   }
-  async config() { requireDesktop(); return readConfiguration(); }
+  async config() { requireLocalRuntime(); return readConfiguration(); }
   async status() {
     const config = await this.config(), host = await this.services.status();
     const engines = {};
@@ -99,17 +109,18 @@ export class LocalAI {
       engines[engine] = { config: config[engine], runtime, service, url: service ? 'http://' + service.target.address : null,
         savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && !sameRuntimeConfig(this.runningConfig.get(engine), config[engine])), error: this.errors.get(engine) || '' };
     }
-    return { ...engines, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
+    return { ...engines, tts: { config: config.tts, runtime: await runtimeInfo('llama'), synthesis: this.synthesisState || { state: 'idle' } }, platform, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
   }
   async save(value) { return this.exclusive(() => this.saveConfiguration(value)); }
   async saveConfiguration({ engine, config: input, revision }) {
     const saved = await this.config();
     if (revision !== digest(JSON.stringify(saved))) throw Error('LocalAI changed. Refresh before saving.');
     const config = configuration(engine, input);
+    if (engine === 'tts') { saved.tts = config; await writeJson(configFile, saved); return this.status(); }
     if (config.mode === 'custom') {
       const verified = await validateBinary(engine, config.binary, config.backend, config.env); config.binary = verified.binary; config.libraries = verified.libraries;
     }
-    if (engine === 'whisper' && config.model) await this.model(config.model);
+    if (engine === 'whisper' && config.model) await this.model(config.model, config.modelKind);
     // Validate the effective command before saving whenever the runtime exists.
     if (config.mode === 'custom' || (await runtimeInfo(engine))?.binary) await this.command(engine, config, config.port || 1);
     saved[engine] = config; await writeJson(configFile, saved);
@@ -125,13 +136,19 @@ export class LocalAI {
   }
   async command(engine, config, port) {
     const runtime = await this.binary(engine, config);
+    if (engine === 'whisper' && config.modelKind === 'parakeet') {
+      if (config.argv.length || config.keepRunning) throw Error('Parakeet uses its on-demand stdin command; clear the custom command and Keep running');
+      const executable = path.join(path.dirname(runtime.binary), 'parakeet-cli');
+      await fs.access(executable, fs.constants.X_OK); await this.model(config.model, 'parakeet');
+      return { argv: [executable, '--model', config.model, '--file', '-', '--no-prints', ...(runtime.backend === 'cpu' ? ['--no-gpu'] : ['--device', runtime.devices.find(item => item.backend === runtime.backend).id])], cwd: config.cwd, env: {} };
+    }
     let argv = config.argv.length ? config.argv.map(value => value === '{port}' ? String(port) : value) : [runtime.binary, '--host', '127.0.0.1', '--port', String(port)];
     if (!config.argv.length) {
       if (engine === 'llama') {
         argv.push('--models-dir', await getModelsDirectory({ create: true }), '--models-preset', config.preset, '--offline', '--jinja');
         if (config.keyFile) argv.push('--api-key-file', config.keyFile);
         const device = runtime.devices.find(item => item.backend === runtime.backend);
-        argv.push('--device', device?.id || 'none', '--gpu-layers', runtime.backend === 'cpu' ? '0' : 'auto');
+        argv.push('--device', device?.id || 'none', '--gpu-layers', runtime.backend === 'cpu' ? '0' : platform === 'termux' ? '999' : 'auto');
       } else { argv.push('--model', config.model, '--language', 'auto', '--no-timestamps'); if (runtime.backend === 'cpu') argv.push('--no-gpu'); else argv.push('--device', runtime.devices.find(item => item.backend === runtime.backend).id); }
     }
     if (await fs.realpath(argv[0]) !== runtime.binary || argument(argv, '--host') !== '127.0.0.1' || argument(argv, '--port') !== String(port)) throw Error('The command must use the selected binary, --host 127.0.0.1 and --port {port}');
@@ -147,7 +164,7 @@ export class LocalAI {
       if (argument(argv, '--model') !== config.model) throw Error('Whisper command must use the selected model');
       if (runtime.backend === 'cpu' && !argv.includes('--no-gpu')) throw Error('The selected CPU command needs --no-gpu');
       if (runtime.backend !== 'cpu' && (argv.includes('--no-gpu') || !runtime.devices.some(device => device.backend === runtime.backend && device.id === (argument(argv, '--device') || '0')))) throw Error('The Whisper command must use the selected, available GPU device');
-      await this.model(config.model);
+      await this.model(config.model, config.modelKind);
     } else {
       const preset = argument(argv, '--models-preset') || config.env.LLAMA_ARG_MODELS_PRESET;
       if (preset && preset !== config.preset) throw Error('The command must use the selected router INI');
@@ -158,6 +175,7 @@ export class LocalAI {
   }
   async configureService(engine, { runtimeRequired = false } = {}) {
     const config = (await this.config())[engine], status = await this.services.status();
+    if (engine === 'whisper' && config.modelKind === 'parakeet') { if (runtimeRequired) throw Error('Parakeet starts on demand when you record a message'); return; }
     const existing = status.services.find(item => item.id === ids[engine]);
     const runtime = config.mode === 'custom' ? config.binary : (await runtimeInfo(engine))?.binary;
     if (!runtime || engine === 'whisper' && !config.model) { if (runtimeRequired) throw Error(`Configure ${engine} in LocalAI first`); return; }
@@ -260,18 +278,68 @@ export class LocalAI {
     } finally { await fs.rm(temporary, { force: true }); }
     return { file, content, revision: digest(content) };
   }
-  async model(file) {
+  async model(file, kind = 'whisper') {
     if (!file || !path.isAbsolute(file)) throw Error('Choose a whisper.cpp ggml model');
     const handle = await fs.open(file, 'r');
-    try { const bytes = Buffer.alloc(4); await handle.read(bytes, 0, 4, 0); if (bytes.readUInt32LE() !== 0x67676d6c) throw Error('This is not a whisper.cpp ggml model'); }
+    // Both upstream Whisper and Parakeet use GGML_FILE_MAGIC. Architecture
+    // compatibility is checked by the selected engine when loading the model.
+    try { const bytes = Buffer.alloc(4); await handle.read(bytes, 0, 4, 0); if (bytes.readUInt32LE() !== 0x67676d6c) throw Error('This is not a compatible ' + kind + ' model'); }
     finally { await handle.close(); }
   }
   async check(engine) { return checkRuntime(engine, (await this.config())[engine]); }
+  async useModel({ engine, file, kind, projector = '' }) { return this.exclusive(async () => {
+    if (!['llama', 'whisper', 'tts'].includes(engine) || !cleanText(file) || !path.isAbsolute(file)) throw Error('Choose a downloaded model');
+    await fs.access(file);
+    const saved = await this.config();
+    if (engine === 'llama') {
+      const ini = await this.ini({ file: saved.llama.preset });
+      const name = path.basename(file).replace(/\.gguf$/i, '');
+      if (/[\]\r\n]/.test(name) || /[\r\n]/.test(file + projector) || !/\.gguf$/i.test(file)) throw Error('Choose a GGUF filename representable in router INI');
+      if (ini.content.split(/\r?\n/).some(line => line.trim() === '[' + name + ']')) throw Error('This router entry already exists');
+      if (projector) { if (!path.isAbsolute(projector)) throw Error('Choose an absolute projector path'); await fs.access(projector); }
+      await this.ini({ file: ini.file, revision: ini.revision, content: ini.content + `\n[${name}]\nmodel = ${file}\n` + (projector ? `mmproj = ${projector}\n` : '') });
+      return this.status();
+    }
+    const next = { ...saved[engine], model: file, modelKind: kind };
+    if (engine === 'tts') next.projector = projector;
+    if (kind === 'parakeet') { next.argv = []; next.keepRunning = false; }
+    return this.saveConfiguration({ engine, config: next, revision: digest(JSON.stringify(saved)) });
+  }); }
+  async synthesize({ text, output }) {
+    if (this.stopping || this.synthesis) throw Error('Speech synthesis is busy or Agent is stopping');
+    if (!cleanText(text) || !text.trim() || !cleanText(output) || !path.isAbsolute(output) || !/\.wav$/i.test(output)) throw Error('Enter text and an absolute output WAV path');
+    const config = (await this.config()).tts;
+    const runtime = await this.binary('llama', config);
+    for (const file of [config.model, config.projector, config.voice]) { if (!file) throw Error('Choose a TTS model, its matching projector and reference voice'); await fs.access(file); }
+    if (await fs.stat(output).catch(error => { if (error.code !== 'ENOENT') throw error; return null; })) throw Error('The output file already exists; choose a new WAV filename');
+    const temporary = path.join(path.dirname(output), '.bashkitten-tts-' + randomUUID() + '.wav');
+    const executable = path.join(path.dirname(runtime.binary), 'llama-tts'); await fs.access(executable, fs.constants.X_OK);
+    const argv = [executable, '-m', config.model, '-mm', config.projector, '-p', text, '--tts-speaker-file', config.voice, '--output', temporary,
+      '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
+      ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
+      ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])];
+    const child = launchInference({ argv, cwd: config.cwd, env: {} }, { capture: false });
+    this.synthesis = child; this.synthesisState = { state: 'generating' };
+    const ended = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', code => code === 0 ? resolve() : reject(Error('Speech synthesis failed; check the runtime, matching model/projector and reference voice'))); });
+    this.synthesisFinished = (async () => {
+      try {
+        await ended;
+        const file = await fs.open(temporary, 'r');
+        try { const header = Buffer.alloc(12); await file.read(header, 0, 12, 0); if (header.toString('ascii', 0, 4) !== 'RIFF' || header.toString('ascii', 8, 12) !== 'WAVE' || (await file.stat()).size <= 44) throw Error('The TTS runtime did not produce valid WAV audio'); }
+        finally { await file.close(); }
+        // Do not replace an output created by another operation while generating.
+        await fs.link(temporary, output); this.synthesisState = { state: 'complete', output };
+      } catch (error) { this.synthesisState = { state: 'failed', error: error.message }; }
+      finally { await fs.rm(temporary, { force: true }); this.synthesis = null; }
+    })();
+    return this.status();
+  }
+  async cancelSynthesis() { if (this.synthesis) { this.synthesis.kill('SIGTERM'); await this.synthesisFinished; } return this.status(); }
   async install(job, { engine }) {
     const before = (await this.config())[engine];
     return installRuntime(job, { engine, config: before }, async (runtime, activate) => {
       await job.phase('Waiting for this runtime to stop before activating the update', 'waiting');
-      while (this.services.running.get(ids[engine])?.child || engine === 'whisper' && this.speech) {
+      while (this.services.running.get(ids[engine])?.child || engine === 'whisper' && this.speech || engine === 'llama' && this.synthesis) {
         job.checkCancellation();
         if (JSON.stringify((await this.config())[engine]) !== JSON.stringify(before)) throw Error('Runtime selection changed; update was not activated');
         await pause(250);
@@ -279,7 +347,7 @@ export class LocalAI {
       await this.exclusive(async () => {
         const config = await this.config(); job.checkCancellation();
         if (JSON.stringify(config[engine]) !== JSON.stringify(before) || config[engine].mode !== 'managed') throw Error('Runtime selection changed; update was not activated');
-        if (this.services.running.get(ids[engine])?.child) throw Error('The runtime started before update activation; retry after stopping it');
+        if (this.services.running.get(ids[engine])?.child || engine === 'llama' && this.synthesis) throw Error('The runtime started before update activation; retry after stopping it');
         await job.phase('Activating verified runtime'); await activate();
       });
     });
@@ -306,6 +374,11 @@ export class LocalAI {
     const check = () => { operation.controller.signal.throwIfAborted(); if (this.stopping || this.speech !== operation) throw Error('Dictation cancelled'); };
     operation.start = this.exclusive(async () => {
       check(); const config = (await this.config()).whisper; check();
+      if (config.modelKind === 'parakeet') {
+        await this.services.stop(ids.whisper); check();
+        const command = await this.command('whisper', config, config.port || 1); check();
+        return { kind: 'parakeet', command };
+      }
       operation.keepRunning = config.keepRunning;
       if (this.services.running.get(ids.whisper)?.child && !sameRuntimeConfig(this.runningConfig.get('whisper'), config)) await this.services.stop(ids.whisper);
       check(); await this.configureService('whisper', { runtimeRequired: true }); check();
@@ -315,6 +388,7 @@ export class LocalAI {
     });
     try {
       const whisper = await operation.start;
+      if (whisper.kind === 'parakeet') { check(); return { ...whisper, id }; }
       for (;;) {
         check();
         if (!this.services.running.get(ids.whisper)?.child) throw Error('Whisper stopped while loading');
@@ -338,5 +412,5 @@ export class LocalAI {
     })();
     return operation.release;
   }
-  async shutdown() { this.stopping = true; if (this.speech) await this.releaseSpeech(this.speech.id); }
+  async shutdown() { this.stopping = true; await this.cancelSynthesis(); if (this.speech) await this.releaseSpeech(this.speech.id); }
 }

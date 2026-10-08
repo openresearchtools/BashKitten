@@ -90,8 +90,8 @@ are inside Termux home, displayed as `~`.
   Linux Local uses Changes and native folder opening.
 - **Settings → Providers → Open an existing Pi session** adds a native session to
   the sidebar. Avoid opening the same session concurrently in another Pi client.
-- **Download models** saves selected Hugging Face files to the server's models
-  directory. Linux can use it with its managed llama.cpp runtime.
+- **Local → LocalAI → Models** saves selected Hugging Face files to the local
+  host's models directory. Android runs these models natively inside Termux.
 
 Pi supplies tools, extensions, skills, models and compaction. BashKitten uses its
 own Pi profile at `~/.local/share/bashkitten-pi/pi`, including provider/OAuth
@@ -100,6 +100,42 @@ session history. It does not import or update standalone Pi's `~/.pi/agent`.
 Use `pi install` for standalone Pi, or `bashkitten-pi install` for BashKitten.
 Browser and search skills ship in the integration package. The browser guide
 matches the authorized client platform.
+
+## Local models, dictation and speech
+
+**LocalAI** uses the same runtime controller, router INI and resumable downloader
+on Linux and Android/Termux. On Android, its chip icon is beside the Display
+monitor icon. Android offers **CPU** or **GPU (Vulkan)**; GPU sends all model
+layers to the selected native driver. An unavailable driver reports its error
+without changing the saved choice. Linux retains its CUDA/Vulkan/CPU choices.
+Custom llama binaries disable managed updates for that engine.
+
+Save the device/runtime choice, download its native runtime, then open **Models**.
+The verified list starts with the smallest files and includes Qwen3.5 0.8B, 2B
+and 4B, with Q4_0 and Q4_K_M choices. **Use** adds the actual downloaded path to
+the router INI; **Reload** applies it. **Keep router available while Agent is on**
+starts the server without eagerly loading models. The saved Pi import checkbox
+updates only BashKitten's owned provider; existing/default chat selections stay
+unchanged. Android path fields refer to Termux files, not Android shared storage.
+
+Whisper and Parakeet use the same single microphone beside Send. Click to record,
+then click again to transcribe. **Automatically send voice messages** defaults on;
+turn it off to append the transcript to the composer. Whisper uses its in-memory
+server endpoint; Parakeet uses its upstream stdin decoder and exits afterwards.
+Neither recording path stores audio. Parakeet has no always-running server option.
+
+**Speech synthesis** uses `llama-tts` from the managed llama.cpp runtime. Download
+a listed Pocket TTS or Qwen3-TTS model with its matching projector, select a
+reference voice recording, save, then enter text and a new output WAV path.
+Pocket currently offers its verified F16 pair; the official Qwen3-TTS 1.7B
+catalogue includes Q4_K_M and Q8_0. Other engines' similarly named model formats
+are not interchangeable. Generated speech is saved only to the requested output.
+
+Android's **Performance** gauge opens a closable native overlay. It reads device
+counters once per second only while visible, stopping when closed or backgrounded.
+RAM shows used/total GB to two decimal places. CPU/GPU percentages require counters
+that Android and the device driver permit the app to read; restricted counters
+show **—**, never a fabricated zero or the app's own usage presented as system use.
 
 ## Remotes and browser control
 

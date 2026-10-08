@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "verifiedAt": "2026-10-08",
+  "models": [
+    {
+      "repository": "unsloth/Qwen3.5-0.8B-GGUF",
+      "revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "Qwen3.5-0.8B-Q4_0.gguf",
+          "bytes": 507154688,
+          "sha256": "444406ddd926550c724ec18d5120a9d40ded44908a063b0e66e9a7e5464c652c",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q4_0.gguf"
+        },
+        {
+          "name": "Qwen3.5-0.8B-Q4_K_M.gguf",
+          "bytes": 532517120,
+          "sha256": "bd258782e35f7f458f8aced1adc053e6e92e89bc735ba3be89d38a06121dc517",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q4_K_M.gguf"
+        },
+        {
+          "name": "Qwen3.5-0.8B-Q8_0.gguf",
+          "bytes": 811843840,
+          "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf"
+        }
+      ]
+    },
+    {
+      "repository": "unsloth/Qwen3.5-2B-GGUF",
+      "revision": "f6d5376be1edb4d416d56da11e5397a961aca8ae",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "Qwen3.5-2B-Q4_0.gguf",
+          "bytes": 1214873856,
+          "sha256": "cd70221bebaee0503e0f6717e174250cd7825aa88438b3aabec9ad55731d9bb1",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_0.gguf"
+        },
+        {
+          "name": "Qwen3.5-2B-Q4_K_M.gguf",
+          "bytes": 1280835840,
+          "sha256": "aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q4_K_M.gguf"
+        },
+        {
+          "name": "Qwen3.5-2B-Q8_0.gguf",
+          "bytes": 2012012800,
+          "sha256": "1b04acba824817554f4ce23639bc8495ff70453b8fcb047900c731521021f2c1",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q8_0.gguf"
+        }
+      ]
+    },
+    {
+      "repository": "unsloth/Qwen3.5-4B-GGUF",
+      "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+      "license": "apache-2.0",
+      "files": [
+        {
+          "name": "Qwen3.5-4B-Q4_0.gguf",
+          "bytes": 2583221408,
+          "sha256": "298fcb5fe7a77ccc79745ae24751560c5ac56874caff4bb39b1f2055bd72b8bb",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_0.gguf"
+        },
+        {
+          "name": "Qwen3.5-4B-Q4_K_M.gguf",
+          "bytes": 2740937888,
+          "sha256": "00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf"
+        },
+        {
+          "name": "Qwen3.5-4B-Q8_0.gguf",
+          "bytes": 4482403488,
+          "sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q8_0.gguf"
+        }
+      ]
+    },
+    {
+      "repository": "ggml-org/parakeet-GGUF",
+      "revision": "35156454d1a39de06863303dd209fd2bed6ee079",
+      "license": "mit",
+      "files": [
+        {
+          "name": "ggml-parakeet-tdt-0.6b-v3-f16.bin",
+          "bytes": 1255897319,
+          "sha256": "833bffc9513b2cae867ee9e51633cfd11e4d51aaa5597c8ac02159385a2b426f",
+          "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-f16.bin"
+        },
+        {
+          "name": "ggml-parakeet-tdt-0.6b-v3-f32.bin",
+          "bytes": 2508463079,
+          "sha256": "b17956ca991a7f084c978a8a9d4c9785864260b6dd9b72f884344759d913ae7f",
+          "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-f32.bin"
+        },
+        {
+          "name": "ggml-parakeet-tdt-0.6b-v3-q4_0.bin",
+          "bytes": 355615679,
+          "sha256": "aa7fe2f5fb47d863ca23e8b1d490632d63a2599f515268b6d6bd656158dad45e",
+          "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-q4_0.bin"
+        },
+        {
+          "name": "ggml-parakeet-tdt-0.6b-v3-q4_k.bin",
+          "bytes": 415611879,
+          "sha256": "8b205b8b39c6535e153de6fb11c51db46125d45c4f16ba496fe41a0fe71b885e",
+          "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-q4_k.bin"
+        },
+        {
+          "name": "ggml-parakeet-tdt-0.6b-v3-q8_0.bin",
+          "bytes": 668757119,
+          "sha256": "4d64e9e96c2792186d072fde0034df0ad670cf680a2f53069052ead827fd600e",
+          "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
+        }
+      ]
+    },
+    {
+      "repository": "ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF",
+      "revision": "ca27d74bc954b73dadab5b71ca265d87fc861a7c",
+      "license": null,
+      "files": [
+        {
+          "name": "Qwen3-TTS-12Hz-1.7B-Base-Q4_K_M.gguf",
+          "bytes": 1035965280,
+          "sha256": "8d18c94acb2addd042f97da63c98be144eafa76d0d9495177eab65130cf85129",
+          "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/Qwen3-TTS-12Hz-1.7B-Base-Q4_K_M.gguf"
+        },
+        {
+          "name": "Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf",
+          "bytes": 1847874400,
+          "sha256": "ac7931aeb2e7aad1a6ed6602d353a5679c9d096b18ce8204ac730a8408d572e1",
+          "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf"
+        },
+        {
+          "name": "Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf",
+          "bytes": 3472593760,
+          "sha256": "0322c634ad5d3282524bc45bff030ab3f6f2a32ba14d5e7dace7eed75ecede46",
+          "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf"
+        },
+        {
+          "name": "mmproj-Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf",
+          "bytes": 446422912,
+          "sha256": "6fd65188839bcd6ecc91b277ad471e22a0edfada4699a0fe82f1165c18cfcce2",
+          "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/mmproj-Qwen3-TTS-12Hz-1.7B-Base-Q8_0.gguf"
+        },
+        {
+          "name": "mmproj-Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf",
+          "bytes": 669081472,
+          "sha256": "b9503e95e44705739cf82c15ce909b040b96a31ad79d02cf4dc5e1484399265d",
+          "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/mmproj-Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf"
+        }
+      ]
+    },
+    {
+      "repository": "EryriLabs/pocket-tts-GGUF",
+      "revision": "701bad4152d97b3755686a6c7a4cec8b752a3e6e",
+      "license": "cc-by-4.0",
+      "files": [
+        {
+          "name": "mmproj-pocket-tts-en.gguf",
+          "bytes": 59858080,
+          "sha256": "ccb1b6a55a7df0d4f96adff04ae3b9cd99c070edc98f6c84af5adb6d46a64cfc",
+          "url": "https://huggingface.co/EryriLabs/pocket-tts-GGUF/resolve/701bad4152d97b3755686a6c7a4cec8b752a3e6e/mmproj-pocket-tts-en.gguf"
+        },
+        {
+          "name": "pocket-tts-en.gguf",
+          "bytes": 159390816,
+          "sha256": "9cca37ab8f3da366a1864919214fbd545f45609d8f1167d1fb302cebea515d63",
+          "url": "https://huggingface.co/EryriLabs/pocket-tts-GGUF/resolve/701bad4152d97b3755686a6c7a4cec8b752a3e6e/pocket-tts-en.gguf"
+        }
+      ]
+    },
+    {
+      "repository": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "license": "mit",
+      "files": [
+        {
+          "name": "ggml-tiny-q5_1.bin",
+          "bytes": 32152673,
+          "sha256": "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q5_1.bin"
+        },
+        {
+          "name": "ggml-tiny.en-q5_1.bin",
+          "bytes": 32166155,
+          "sha256": "c77c5766f1cef09b6b7d47f21b546cbddd4157886b3b5d6d4f709e91e66c7c2b",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.en-q5_1.bin"
+        },
+        {
+          "name": "ggml-tiny-q8_0.bin",
+          "bytes": 43537433,
+          "sha256": "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny-q8_0.bin"
+        },
+        {
+          "name": "ggml-tiny.en-q8_0.bin",
+          "bytes": 43550795,
+          "sha256": "5bc2b3860aa151a4c6e7bb095e1fcce7cf12c7b020ca08dcec0c6d018bb7dd94",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.en-q8_0.bin"
+        },
+        {
+          "name": "ggml-base-q5_1.bin",
+          "bytes": 59707625,
+          "sha256": "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q5_1.bin"
+        },
+        {
+          "name": "ggml-base.en-q5_1.bin",
+          "bytes": 59721011,
+          "sha256": "4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en-q5_1.bin"
+        },
+        {
+          "name": "ggml-tiny.bin",
+          "bytes": 77691713,
+          "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin"
+        },
+        {
+          "name": "ggml-tiny.en.bin",
+          "bytes": 77704715,
+          "sha256": "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.en.bin"
+        },
+        {
+          "name": "ggml-base-q8_0.bin",
+          "bytes": 81768585,
+          "sha256": "c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base-q8_0.bin"
+        },
+        {
+          "name": "ggml-base.en-q8_0.bin",
+          "bytes": 81781811,
+          "sha256": "a4d4a0768075e13cfd7e19df3ae2dbc4a68d37d36a7dad45e8410c9a34f8c87e",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en-q8_0.bin"
+        },
+        {
+          "name": "ggml-base.bin",
+          "bytes": 147951465,
+          "sha256": "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin"
+        },
+        {
+          "name": "ggml-base.en.bin",
+          "bytes": 147964211,
+          "sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin"
+        },
+        {
+          "name": "ggml-small-q5_1.bin",
+          "bytes": 190085487,
+          "sha256": "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q5_1.bin"
+        },
+        {
+          "name": "ggml-small.en-q5_1.bin",
+          "bytes": 190098681,
+          "sha256": "bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en-q5_1.bin"
+        },
+        {
+          "name": "ggml-small-q8_0.bin",
+          "bytes": 264464607,
+          "sha256": "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small-q8_0.bin"
+        },
+        {
+          "name": "ggml-small.en-q8_0.bin",
+          "bytes": 264477561,
+          "sha256": "67a179f608ea6114bd3fdb9060e762b588a3fb3bd00c4387971be4d177958067",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en-q8_0.bin"
+        },
+        {
+          "name": "ggml-small.bin",
+          "bytes": 487601967,
+          "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin"
+        },
+        {
+          "name": "ggml-small.en.bin",
+          "bytes": 487614201,
+          "sha256": "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en.bin"
+        },
+        {
+          "name": "ggml-medium.bin",
+          "bytes": 1533763059,
+          "sha256": "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-medium.bin"
+        },
+        {
+          "name": "ggml-large-v3-turbo.bin",
+          "bytes": 1624555275,
+          "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin"
+        }
+      ]
+    }
+  ]
+}

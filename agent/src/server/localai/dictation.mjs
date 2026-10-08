@@ -1,6 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { randomUUID } from 'node:crypto';
 import { controlRequest } from '../control.mjs';
+import { launchInference } from './launch.mjs';
+
+async function parakeet(command, audio, signal) {
+  // Upstream reads -f - into its in-memory WAV decoder. The existing process
+  // guard disables core dumps and owns every child; audio never gets a path.
+  const child = launchInference(command, { signal });
+  const output = [];
+  child.stdout.on('data', chunk => output.push(chunk));
+  child.stdin.on('error', () => {});
+  const ended = new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('close', code => code === 0 ? resolve() : reject(Error('Parakeet transcription failed; check the selected model and device')));
+  });
+  try {
+    child.stdin.end(audio); await ended; signal.throwIfAborted();
+    const text = Buffer.concat(output).toString('utf8').trim();
+    if (!text) throw Error('Parakeet did not return a transcript');
+    return { text };
+  } finally {
+    if (child.exitCode === null) child.kill('SIGTERM');
+    for (const chunk of output) chunk.fill(0);
+  }
+}
 
 /** Authenticated operation only. No formBody, jobs, staging files or content logs. */
 export async function transcribe(req, res, watchAuthorization) {
@@ -20,6 +43,9 @@ export async function transcribe(req, res, watchAuthorization) {
     abort.signal.throwIfAborted();
     const ready = await controlRequest('whisper-acquire', { id });
     abort.signal.throwIfAborted();
+    if (ready.id === id && ready.kind === 'parakeet') {
+      const result = await parakeet(ready.command, audio, abort.signal); completed = true; return result;
+    }
     if (!/^http:\/\/127\.0\.0\.1:[0-9]+$/.test(ready.url) || ready.id !== id) throw Error('Whisper did not provide its owned endpoint');
     const form = new FormData();
     form.append('file', new Blob([audio], { type: 'audio/wav' }), 'recording.wav');

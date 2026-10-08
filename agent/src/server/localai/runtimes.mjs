@@ -14,12 +14,17 @@ const exec = promisify(execFile), repository = 'openresearchtools/bashkitten-loc
 export const localAIDir = path.join(dataDir, 'localai');
 export const runtimeDirectory = path.join(localAIDir, 'runtimes');
 const arch = { x64: 'amd64', arm64: 'arm64' }[process.arch];
+const runtimeOS = platform === 'termux' ? 'android' : 'linux';
 const executable = engine => engine === 'llama' ? 'llama-server' : 'whisper-server';
 const engineName = engine => { if (!['llama', 'whisper'].includes(engine)) throw Error('Unknown LocalAI engine'); return engine; };
-export function requireDesktop() { if (platform !== 'linux' || !arch) throw Error('LocalAI runtimes require Linux amd64 or arm64'); }
+export function requireLocalRuntime() { if (!arch) throw Error('LocalAI requires an x86_64 or ARM64 native runtime'); }
 export async function runtimeInfo(engine) { return readJson(path.join(runtimeDirectory, engineName(engine) + '.json'), null); }
 export async function preferredBackend(choice) {
-  requireDesktop();
+  requireLocalRuntime();
+  if (platform === 'termux') {
+    if (!['cpu', 'vulkan'].includes(choice)) throw Error('Choose CPU or GPU (native Termux Vulkan)');
+    return choice;
+  }
   if (!['auto', 'cuda', 'vulkan', 'cpu'].includes(choice)) throw Error('Select Auto, CUDA, Vulkan or CPU');
   if (choice !== 'auto') return choice;
   try {
@@ -53,12 +58,12 @@ async function releaseManifest(engine) {
   return { manifest, release };
 }
 export async function checkRuntime(engine, config) {
-  requireDesktop(); engineName(engine);
+  requireLocalRuntime(); engineName(engine);
   if (config.mode === 'custom') return { custom: true, binary: config.binary, updateAvailable: false };
   const { manifest, release } = await releaseManifest(engine);
   const backend = await preferredBackend(config.backend);
-  const artifact = manifest.artifacts.find(item => item.os === 'linux' && item.arch === arch && item.backend === backend);
-  if (!artifact || !/^[a-f0-9]{64}$/.test(artifact.sha256) || artifact.executable !== executable(engine)) throw Error(`No matching Linux ${arch} ${backend} runtime`);
+  const artifact = manifest.artifacts.find(item => item.os === runtimeOS && item.arch === arch && item.backend === backend);
+  if (!artifact || !/^[a-f0-9]{64}$/.test(artifact.sha256) || artifact.executable !== executable(engine)) throw Error(`No matching ${runtimeOS} ${arch} ${backend} runtime`);
   const asset = release.assets.find(item => item.name === artifact.file);
   if (!asset) throw Error('The runtime archive is missing');
   const installed = await runtimeInfo(engine);
@@ -67,14 +72,15 @@ export async function checkRuntime(engine, config) {
     updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed };
 }
 export async function validateBinary(engine, filename, backend, environment = {}) {
-  requireDesktop(); engineName(engine);
+  requireLocalRuntime(); engineName(engine);
+  if (platform === 'termux' && !['cpu', 'vulkan'].includes(backend)) throw Error('Choose CPU or GPU (native Termux Vulkan)');
   filename = await fs.realpath(filename);
   if ((await fs.stat(filename)).isDirectory()) filename = await fs.realpath(path.join(filename, executable(engine)));
   await fs.access(filename, fs.constants.X_OK);
   const file = await fs.open(filename, 'r');
   try {
     const bytes = Buffer.alloc(20); await file.read(bytes, 0, 20, 0);
-    if (bytes.readUInt32BE(0) !== 0x7f454c46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== (arch === 'arm64' ? 183 : 62)) throw Error('The runtime executable has the wrong Linux architecture');
+    if (bytes.readUInt32BE(0) !== 0x7f454c46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== (arch === 'arm64' ? 183 : 62)) throw Error('The runtime executable has the wrong native architecture');
   } finally { await file.close(); }
   const env = { ...process.env, ...environment };
   const { stdout, stderr } = await exec(filename, ['--help'], { env, timeout: 20000, maxBuffer: Infinity });
@@ -98,7 +104,7 @@ export async function validateBinary(engine, filename, backend, environment = {}
   return { binary: filename, backend: selectedBackend, devices, libraries: [...new Set(libraries)] };
 }
 export async function installRuntime(job, { engine, config, selection }, activate) {
-  requireDesktop(); engineName(engine);
+  requireLocalRuntime(); engineName(engine);
   if (config.mode !== 'managed') throw Error('Custom runtimes are not updated by BashKitten');
   const available = selection || await checkRuntime(engine, config);
   if (!available.updateAvailable) return;
@@ -131,7 +137,7 @@ export async function installRuntime(job, { engine, config, selection }, activat
     // Python's data filter rejects external links/devices and path traversal.
     await job.exec('python3', ['-c', 'import tarfile,sys\nwith tarfile.open(sys.argv[1]) as a:\n a.extractall(sys.argv[2],filter="data")', archive, extracted]);
     const record = await readJson(path.join(extracted, 'build.json'));
-    if (record.engine !== engine || record.arch !== arch || record.backend !== artifact.backend || record.sourceCommit !== available.sourceCommit) throw Error('Runtime build metadata does not match the selected release');
+    if ((record.os || 'linux') !== runtimeOS || record.engine !== engine || record.arch !== arch || record.backend !== artifact.backend || record.sourceCommit !== available.sourceCommit) throw Error('Runtime build metadata does not match the selected release');
     await fs.access(path.join(extracted, 'LICENSES.txt')); await fs.access(path.join(extracted, 'SOURCE.json'));
     const verified = await validateBinary(engine, path.join(extracted, 'bin', executable(engine)), config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend);
     const destination = path.join(runtimeDirectory, engine + '-' + available.release + '-' + artifact.backend + '-' + path.basename(staging).slice(10));

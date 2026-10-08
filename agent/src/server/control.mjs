@@ -22,6 +22,7 @@ import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake } from './access/wake.mjs';
 import { LocalAI } from './localai/localai.mjs';
+import { curatedModels, downloadPreset } from './localai/models.mjs';
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
 import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
@@ -129,7 +130,7 @@ async function serve() {
   });
   // The Display CLI imports this controller; load its implementation only in the manager.
   const display = platform === 'termux' ? new (await import('./platform/termux/display.mjs')).TermuxDisplay() : null;
-  const localAI = platform === 'linux' ? new LocalAI(stack.services) : null;
+  const localAI = new LocalAI(stack.services);
   if (localAI) await localAI.initialize();
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
@@ -281,9 +282,11 @@ async function serve() {
       return display.start();
     }
     if (command.startsWith('localai-')) {
-      if (!localAI) throw Error('LocalAI is available only on this Linux host');
       if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: job?.kind === 'localai-runtime' ? job : null }; }
       if (command === 'localai-save') return localAI.save(value);
+      if (command === 'localai-model-use') return localAI.useModel(value);
+      if (command === 'localai-synthesize') { if (!stack.ready || stopping) throw Error('Turn on Local before generating speech'); return localAI.synthesize(value); }
+      if (command === 'localai-synthesis-cancel') return localAI.cancelSynthesis();
       if (command === 'localai-ini') return localAI.ini(value);
       if (command === 'localai-check') return localAI.check(value.engine);
       if (command === 'localai-install') { if (stopping) throw Error('Agent is stopping'); return jobs.start('localai-runtime', { engine: value.engine }); }
@@ -297,7 +300,8 @@ async function serve() {
       throw Error('Unknown LocalAI action');
     }
     if (command.startsWith('native-models-')) {
-      if (!localAI) throw Error('Open LocalAI on a Linux host to manage models');
+      if (command === 'native-models-catalogue') return curatedModels();
+      if (command === 'native-models-preset') return downloadPreset(value.id);
       if (command === 'native-models-status') return downloadsStatus();
       if (command === 'native-models-settings') return saveModelSettings(value);
       if (command === 'native-models-search') return searchModels(value);

@@ -1,5 +1,16 @@
 # Remote connections, service tunnels and desktop lifetime
 
+8 October LocalAI extension: the user requested the same native LocalAI workflow
+on Android using native Termux CPU/Vulkan runtimes, a CPU/GPU-only mobile choice
+with all GPU layers, smallest-first Qwen 2B/4B and plain Q4 downloads, Whisper and
+Parakeet dictation, Pocket/Qwen3 `llama-tts`, and an on-demand native performance
+overlay. This supersedes the Linux-only LocalAI restriction below. The shared
+controller/catalogue/downloader now has source implementations for these flows;
+Android and desktop candidate builds and visible acceptance remain required.
+Parakeet uses the verified upstream CLI stdin decoder because `whisper-server`
+does not support that architecture. Its recordings remain in memory. Performance
+never substitutes app-only CPU usage for unavailable Android system counters.
+
 Requested 5 October 2026. **Status: plan, not implemented or accepted.** This
 extends the [browser integration plan](browser-integration-plan.md) and replaces
 its conflicting remote-export, llama relay and desktop-close requirements.
