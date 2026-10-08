@@ -87,7 +87,7 @@ export async function modelValues(config) {
     model: config.model, projector: config.projector || '', contextSize: config.contextSize, device: config.device || null,
     gpuLayers: cpu ? 0 : config.gpuLayers, fit: config.fit ? 'on' : 'off',
     idleMinutes: config.idleMinutes === 0 ? -1 : config.idleMinutes * 60,
-    flashAttention: config.flashAttention, cacheGpu: cpu ? 'false' : String(config.cacheGpu), projectorGpu: cpu ? 'false' : 'true', projectorDevice: cpu ? 'none' : config.device || null,
+    flashAttention: config.flashAttention, cacheGpu: cpu ? 'false' : String(config.cacheGpu), projectorGpu: cpu ? 'false' : 'true', projectorDevice: cpu ? 'none' : config.device.split(',')[0] || null,
   }, extra };
 }
 
