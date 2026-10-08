@@ -75,7 +75,9 @@ async function releaseManifest(engine) {
   // Android's native CPU/Vulkan releases are independent of the Linux CUDA
   // matrix. A mobile publication must not replace desktop's runtime catalogue.
   const prefix = (runtimeOS === 'android' ? 'android-' : '') + engine + '-';
-  const release = releases.find(item => !item.draft && item.tag_name.startsWith(prefix) && item.assets.some(asset => asset.name === 'manifest.json'));
+  // GitHub's release list order can differ from publication order for tags.
+  const release = releases.filter(item => !item.draft && item.tag_name.startsWith(prefix) && item.assets.some(asset => asset.name === 'manifest.json'))
+    .sort((a, b) => Date.parse(b.published_at || b.created_at) - Date.parse(a.published_at || a.created_at))[0];
   if (!release) throw Error(`No ${runtimeOS} ${engine} runtime release is published yet`);
   const asset = release.assets.find(asset => asset.name === 'manifest.json');
   const response = await fetch(downloadURL(asset.browser_download_url), { signal: AbortSignal.timeout(30000) });
