@@ -28,7 +28,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button power, location, hideAgent, display;
+    private final Button power, location, hideAgent;
+    private final ImageButton display, localAI;
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
@@ -64,11 +65,18 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
         location = barButton("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
-        display = barButton("Display", () -> {
+        display = barIcon("Display", R.drawable.ic_agent_display, () -> {
             if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
                 ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-display");
         });
-        bar.addView(display, new LayoutParams(dp(72), -1));
+        bar.addView(display, new LayoutParams(dp(40), -1));
+        localAI = barIcon("LocalAI", R.drawable.ic_agent_localai, () -> {
+            if (runtime.selected.equals("local")) new AgentLocalAIDialog().show(
+                ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-localai");
+        });
+        bar.addView(localAI, new LayoutParams(dp(40), -1));
+        bar.addView(barIcon("Performance", R.drawable.ic_agent_performance, () -> new AgentPerformanceDialog().show(
+            ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-performance")), new LayoutParams(dp(40), -1));
         power = barButton("Starting", () -> { if (runtime.isOnRequested() || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn(); });
         bar.addView(power, new LayoutParams(dp(90), -1));
         Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
@@ -130,6 +138,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try { b.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
         return button(b, label, action);
     }
+    private ImageButton barIcon(String label, int icon, Runnable action) {
+        androidx.appcompat.widget.AppCompatImageButton button = new androidx.appcompat.widget.AppCompatImageButton(activity);
+        button.setImageResource(icon); button.setContentDescription(label); button.setTooltipText(label);
+        button.setPadding(dp(8), dp(8), dp(8), dp(8));
+        TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary, android.R.attr.selectableItemBackgroundBorderless});
+        try { button.setImageTintList(theme.getColorStateList(0)); button.setBackground(theme.getDrawable(1)); } finally { theme.recycle(); }
+        button.setOnClickListener(ignored -> action.run()); return button;
+    }
     private Button button(String label, Runnable action) {
         MaterialButton b = new MaterialButton(activity);
         b.setCornerRadius(dp(24));
@@ -183,6 +199,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         power.setEnabled(!runtime.state.equals("stopping"));
         location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
         display.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
+        localAI.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
         connectionStatus.setText("Connecting to Agent…");
         boolean online = runtime.state.equals("on") || runtime.state.equals("login");
         if (runtime.session != null && runtime.session != attached) {

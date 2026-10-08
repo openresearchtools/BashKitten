@@ -111,6 +111,14 @@ public final class AgentShareActivity extends ProductActivity {
     private void services() {
         button("Back to Share Local", () -> { state.screen = "status"; render(); });
         JSONArray entries = state.services == null ? new JSONArray() : state.services.optJSONArray("services");
+        boolean llamaShared = false;
+        for (int i = 0; entries != null && i < entries.length(); i++) {
+            JSONObject service = entries.optJSONObject(i);
+            if (service != null && service.optString("id").equals("localai-llama")) llamaShared = service.optBoolean("enabled");
+        }
+        CheckBox shareLlama = new CheckBox(this); shareLlama.setText("Share llama.cpp"); shareLlama.setChecked(llamaShared); shareLlama.setEnabled(!state.busy); body.addView(shareLlama);
+        shareLlama.setOnCheckedChangeListener((view, enabled) -> state.shareLlama(enabled));
+        body.addView(text("Configure the same local router, models and runtime in Local → LocalAI.", 14));
         if (entries != null) for (int i = 0; i < entries.length(); i++) {
             JSONObject service = entries.optJSONObject(i);
             if (service == null) continue;
@@ -129,6 +137,7 @@ public final class AgentShareActivity extends ProductActivity {
                     else send.run();
                 });
             }
+            if (service.optString("id").startsWith("localai-")) continue;
             button("Edit", () -> { state.editService(service); render(); });
             button("Remove", () -> new MaterialAlertDialogBuilder(this).setTitle("Remove service?")
                 .setMessage("Stop and remove this service? Its files are kept.").setNegativeButton("Cancel", null)
@@ -321,6 +330,10 @@ public final class AgentShareActivity extends ProductActivity {
         void status(JSONObject result) { value = result; loaded = true; screen = "status"; code = ""; }
         void loadServices() { run("service-status", new JSONObject(), false, this::serviceStatus); }
         void serviceStatus(JSONObject result) { services = result; draft = null; screen = "services"; }
+        void shareLlama(boolean enabled) {
+            try { run("localai-share", new JSONObject().put("enabled", enabled), false, ignored -> loadServices()); }
+            catch (Exception failure) { failed("Configure llama.cpp in LocalAI before sharing it."); }
+        }
         void editService(JSONObject service) {
             try {
                 JSONObject command = service.optJSONObject("command"), target = service.optJSONObject("target");
