@@ -863,12 +863,12 @@
       nativeHost = window.bashkittenHost || null;
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
       $('#filesToggle').classList.toggle('hidden', !fileManagerAllowed);
-      $('#filesToggle').textContent = nativeLinux ? '±' : '▤';
-      $('#filesToggle').title = nativeLinux ? 'Changes' : 'Files and changes';
-      $('#filesToggle').setAttribute('aria-label', nativeLinux ? 'Show project changes' : 'Browse project files and changes');
-      $('#filesTab').classList.toggle('hidden', nativeLinux);
+      $('#filesToggle').textContent = '▤';
+      $('#filesToggle').title = 'Files and changes';
+      $('#filesToggle').setAttribute('aria-label', 'Browse project files and changes');
+      $('#filesTab').classList.remove('hidden');
       $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
-      if (initialized && !$('#filePanel').classList.contains('hidden')) setFileTab(nativeLinux ? 'changes' : fileTab);
+      if (initialized && !$('#filePanel').classList.contains('hidden')) setFileTab(fileTab);
       if (initialized) loadNotifications();
     }
     window.addEventListener('bashkitten-host-ready', configureNativeHost);
@@ -2099,7 +2099,7 @@
         const label = document.createElement('span');
         label.textContent = folderDisplayName(folder);
         heading.append(label);
-        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent=nativeLinux?'±':'▤'; browse.title=nativeLinux?'Show project changes':'Browse project files'; browse.setAttribute('aria-label',(nativeLinux?'Show changes in ':'Browse files in ')+folder); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
+        const browse = document.createElement('button'); browse.type='button'; browse.className='icon-button'; browse.textContent='▤'; browse.title='Browse project files'; browse.setAttribute('aria-label','Browse files in '+folder); browse.classList.add('file-manager-action');browse.classList.toggle('hidden',!fileManagerAllowed); browse.onclick=event=>{event.stopPropagation();openFiles(folder);setSidebar(false);}; heading.append(browse);
 
         if(folder)bindSessionContextMenu(heading,{cwd:folder,project:true});
         group.append(heading);
@@ -3339,7 +3339,7 @@
       try{await renderFileBranch($('#fileTree'),'',generation);}catch(error){if(generation===fileGeneration){$('#fileNotice').textContent=error.message;$('#fileTree').replaceChildren();}}
     }
     function setFileTab(tab) {
-      fileTab=nativeLinux?'changes':tab;
+      fileTab=tab;
       for(const name of ['files','changes']) {
         const selected=name===fileTab,button=$('#'+name+'Tab');
         button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1;
@@ -3457,7 +3457,7 @@
     $('#filesTab').onclick=()=>setFileTab('files');$('#changesTab').onclick=()=>setFileTab('changes');
     $('.file-tabs').onkeydown=event=>{
       if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;
-      event.preventDefault();setFileTab(nativeLinux||event.key==='End'?'changes':event.key==='Home'?'files':fileTab==='files'?'changes':'files');$('#'+fileTab+'Tab').focus();
+      event.preventDefault();setFileTab(event.key==='End'?'changes':event.key==='Home'?'files':fileTab==='files'?'changes':'files');$('#'+fileTab+'Tab').focus();
     };
     $('#filePathForm').onsubmit=event=>{event.preventDefault();const path=$('#filePath').value.trim();if(path)loadFileTree(path);};
     $('#fileUp').onclick=()=>{if(fileParent)loadFileTree(fileParent);};
@@ -3527,7 +3527,7 @@
         if(fileJob.status==='done'&&fileJob.operation==='archive'&&fileJob.autoDownload){fileJob.autoDownload=false;renderFileJob();$('#downloadFileJob').click();}
         if(wasRunning&&fileJob.status!=='running'){
           selectedFiles.clear();updateFileSelection();refreshProjectPanel();
-          if(root===fileRoot&&!nativeLinux)loadFileTree();
+          if(root===fileRoot)loadFileTree();
         }
         if(fileJob.status==='running'&&projectPanelVisible())fileJobTimer=setTimeout(pollFileJob,1000);
       }catch(error){
