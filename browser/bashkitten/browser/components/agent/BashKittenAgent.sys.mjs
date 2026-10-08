@@ -389,7 +389,11 @@ class AgentView {
       this.win.addEventListener("unload", () => cleanup().catch(console.error), { once: true });
       this.win.gBrowser.selectedTab = tab; this.browse();
       return { ok: true };
-    } catch (error) { await cleanup(); throw error; }
+    } catch (error) {
+      try { if (tab && !tab.closing) this.win.gBrowser.removeTab(tab, { animate: false }); }
+      finally { await cleanup(); }
+      throw error;
+    }
     finally { this.documentTransfers.delete(download); Services.obs.removeObserver(revoke, "bashkitten-agent-control-revoke"); }
   }
 
