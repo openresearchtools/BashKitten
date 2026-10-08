@@ -60,8 +60,11 @@ export class Services {
       const { session } = await pi.createAgentSession({ cwd, agentDir: piAgentDir, modelRuntime: runtime,
         settingsManager: settings, sessionManager: pi.SessionManager.inMemory(cwd), resourceLoader: loader,
         noTools: 'all', model: selected, thinkingLevel: thinking || undefined });
-      try { defaults = { model: session.model ? `${session.model.provider}/${session.model.id}` : '',
-        thinking: session.model ? session.thinkingLevel : '' }; }
+      try {
+        const selected = session.model;
+        const available = selected && !(selected.provider === 'unknown' && selected.id === 'unknown');
+        defaults = { model: available ? `${selected.provider}/${selected.id}` : '', thinking: available ? session.thinkingLevel : '' };
+      }
       finally { session.dispose(); }
     }
     return { models: models.map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
