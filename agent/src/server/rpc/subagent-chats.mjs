@@ -106,8 +106,13 @@ export class SubagentChats {
     }
     if (value.action === 'stop') {
       if (target.subagentParent !== source.id) throw Error('Only the direct parent can stop this subagent');
-      if (await this.running(target.id)) await workerRequest(target.id, '/shutdown', {});
-      return { id: target.id, state: 'stopped', message: 'Chat and history kept. The user can resume it.' };
+      return this.serial('worker:' + target.id, async () => {
+        if (await this.running(target.id)) await workerRequest(target.id, '/shutdown', {});
+        // A crashed/idle-exited worker still needs a durable Stop intent. A
+        // later peer message must become a held draft instead of restarting it.
+        else await writeJson(path.join(sessionDir(target.id), 'lifecycle.json'), { stopped: true });
+        return { id: target.id, state: 'stopped', message: 'Chat and history kept. The user can resume it.' };
+      });
     }
     throw Error('Unknown agent operation');
   }
