@@ -78,7 +78,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
                     state.downloads = result; JSONArray jobs = result.optJSONArray("jobs"); StringBuilder status = new StringBuilder();
                     for (int i = 0; jobs != null && i < jobs.length(); i++) { JSONObject job = jobs.optJSONObject(i); status.append(job.optString("repository")).append(" · ").append(job.optString("status")).append(String.format(Locale.getDefault(), " · %.1f / %.1f MB\n", job.optDouble("downloaded") / 1e6, job.optDouble("total") / 1e6)); }
                     progress.setText(status.toString());
-                } else progress.setText(statusText(result));
+                } else { state.value = result; progress.setText(statusText(result)); }
             }, error -> { state.polling = false; if (isResumed() && progress != null) progress.setText(error); });
         }
         main.postDelayed(poll, 2000);
@@ -136,7 +136,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         if (!engine.equals("llama")) choose("Device", new String[]{"cpu", "vulkan"}, new String[]{"CPU", "GPU (Vulkan, all layers)"}, config.optString("backend"), value -> put(config, "backend", value));
         if (config.optString("mode").equals("managed")) {
             button("Check runtime", () -> request("localai-check", object("engine", engine), result -> state.error = result.optString("version") + " · " + result.optString("backend") + (result.optBoolean("updateAvailable") ? " · Update available" : " · Up to date")));
-            button("Download / update runtime", () -> request("localai-install", object("engine", engine), result -> state.error = result.optString("phase")));
+            button("Download / update runtime", () -> request("localai-install", object("engine", engine), result -> state.error = ""));
             text(engine.equals("llama") ? "The Vulkan runtime supports CPU and GPU model presets. Select each model’s device below." : "Save a changed execution choice before downloading. The same Vulkan runtime supports CPU and GPU; GPU requires a working native driver.");
         }
         if (engine.equals("llama")) {
@@ -175,7 +175,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
             if (action.equals("reload")) new MaterialAlertDialogBuilder(requireContext()).setTitle("Reload engine?").setMessage("Active inference will end.").setPositiveButton("Reload", (d, w) -> dispatch.run()).setNegativeButton("Cancel", null).show(); else dispatch.run();
         });
         button("Models", () -> { state.section = "models"; render(); });
-        button("Cancel runtime download", () -> request("localai-cancel", new JSONObject(), result -> state.error = result.optString("phase")));
+        button("Cancel runtime download", () -> request("localai-cancel", new JSONObject(), result -> state.error = ""));
     }
     private void save(String engine, JSONObject draft) {
         try {
@@ -201,12 +201,12 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         for (String type : new String[]{"Q4_0", "Q8_0"}) button("Create Pocket " + type + " copy", () -> {
             String source = config.optString("model");
             if (!config.optString("modelKind").equals("pocket") || !source.toLowerCase(java.util.Locale.ROOT).endsWith(".gguf")) { state.error = "Select the original Pocket F16 model first"; render(); return; }
-            request("localai-quantize", object("file", source, "type", type, "output", source.substring(0, source.length() - 5) + "-" + type + ".gguf"), result -> state.error = result.optString("phase"));
+            request("localai-quantize", object("file", source, "type", type, "output", source.substring(0, source.length() - 5) + "-" + type + ".gguf"), result -> state.error = "");
         });
         JSONObject job = state.value.optJSONObject("job");
         if (job != null && job.optString("kind").equals("localai-quantize") && job.optString("status").equals("complete") && job.optJSONObject("result") != null) button("Use created Pocket model", () -> request("localai-model-use", object("engine", "tts", "file", job.optJSONObject("result").optString("file"), "kind", "pocket", "projector", config.optString("projector")), result -> { state.value = result; state.drafts.remove("tts"); }));
         button("Refresh status", () -> request("localai-status", new JSONObject(), result -> state.value = result));
-        button("Cancel quantization", () -> request("localai-cancel", new JSONObject(), result -> state.error = result.optString("phase")));
+        button("Cancel quantization", () -> request("localai-cancel", new JSONObject(), result -> state.error = ""));
         button("Models", () -> { state.section = "models"; render(); });
     }
     private void editINI(JSONObject file) {

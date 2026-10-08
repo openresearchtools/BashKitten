@@ -94,6 +94,7 @@ public final class AgentRouterModelsDialog extends AppCompatDialogFragment {
             if (state.original != null) input.put("originalName", state.original);
             call("localai-router-model-save", input, result -> {
                 state.models = result; state.original = state.name; state.error = "Saved. Reload the router to apply changes.";
+                if (!test) state.testMessage = state.error;
                 JSONArray models = result.optJSONArray("models"); for (int i = 0; models != null && i < models.length(); i++) if (models.optJSONObject(i).optString("name").equals(state.name)) state.draft = copy(models.optJSONObject(i).optJSONObject("config"));
                 if (test && visible()) startTest();
             });
