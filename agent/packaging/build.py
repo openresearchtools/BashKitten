@@ -313,7 +313,13 @@ def assemble(args):
             # Node, native guards and child_process must see the real ELF in
             # /proc/self/exe. Keep termux-exec's shebang handling, but use its
             # supported direct execution mode in GitHub/F-Droid Termux (SDK 28).
-            node_environment += 'export TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable\n'
+            # termux-exec caches this decision per process. Re-exec a system
+            # shell once so an inherited forced-linker setting cannot survive
+            # the export in an already-preloaded shell. Preserve its shebang
+            # support instead of stripping LD_PRELOAD from the environment.
+            node_environment += ('if [ "${TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE:-}" != disable ]; then\n'
+                                 '  export TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable\n'
+                                 '  exec /system/bin/sh "$0" "$@"\nfi\n')
         executable(app / 'node/bin/pi', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/rpc/launcher.mjs "$@"\n')
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:

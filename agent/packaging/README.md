@@ -107,6 +107,8 @@ Termux launchers use upstream termux-exec's
 `TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` for BashKitten and its children.
 This preserves the actual Node ELF in `process.execPath`, including under
 `RUN_COMMAND` and terminal environments with `LD_PRELOAD`. The supported
+launchers re-execute a system shell once when selecting this mode, because
+termux-exec caches its mode in an already-preloaded process. The supported
 GitHub/F-Droid Termux app targets SDK 28 and permits direct native execution;
 a variant whose Android policy forbids it is unsupported. The executable check
 does not silently substitute Android's linker or a system Node runtime.
