@@ -4,6 +4,7 @@
 // stdin; the upstream TTS CLI receives its requested prompt argument.
 import fs from 'node:fs';
 import { spawn } from 'node:child_process';
+import { engineEnvironment } from './environment.mjs';
 
 try {
   if (process.argv.at(-1) !== 'serve' || process.env.BASHKITTEN_GUARDED !== '1' || Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('Private inference worker only');
@@ -11,7 +12,7 @@ try {
   let command;
   try { command = JSON.parse(input.toString('utf8')); } finally { input.fill(0); }
   if (!Array.isArray(command.argv) || !command.argv.length || !command.argv.every(value => typeof value === 'string' && !value.includes('\0'))) throw Error('Invalid inference command');
-  const child = spawn(command.argv[0], command.argv.slice(1), { cwd: command.cwd, env: { ...process.env, ...command.env }, stdio: 'inherit' });
+  const child = spawn(command.argv[0], command.argv.slice(1), { cwd: command.cwd, env: engineEnvironment(command.env), stdio: 'inherit' });
   command = null;
   process.on('SIGTERM', () => { child.kill('SIGTERM'); });
   child.once('error', () => process.exit(1));

@@ -9,6 +9,7 @@ import { createWriteStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dataDir, privateDir, readJson, writeJson } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
+import { engineEnvironment } from './environment.mjs';
 
 const exec = promisify(execFile), repository = 'openresearchtools/bashkitten-localai';
 export const localAIDir = path.join(dataDir, 'localai');
@@ -37,7 +38,10 @@ export function describeRuntime(runtime) {
 export function managedRuntimeEnvironment(binary, overrides = {}) {
   if (!path.isAbsolute(binary || '')) throw Error('The managed runtime needs an absolute executable path');
   const directory = path.dirname(binary);
-  return { ...overrides, LD_LIBRARY_PATH: directory, GGML_BACKEND_PATH: directory };
+  // GGML_BACKEND_PATH names one out-of-tree library, not a search directory.
+  // Upstream already discovers bundled plugins beside the executable.
+  const { GGML_BACKEND_PATH, ...environment } = overrides;
+  return { ...environment, LD_LIBRARY_PATH: directory };
 }
 export async function preferredBackend(choice) {
   requireLocalRuntime();
@@ -105,7 +109,7 @@ export async function validateBinary(engine, filename, backend, environment = {}
     const bytes = Buffer.alloc(20); await file.read(bytes, 0, 20, 0);
     if (bytes.readUInt32BE(0) !== 0x7f454c46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== (arch === 'arm64' ? 183 : 62)) throw Error('The runtime executable has the wrong native architecture');
   } finally { await file.close(); }
-  const env = { ...process.env, ...environment };
+  const env = engineEnvironment(environment);
   const { stdout, stderr } = await exec(filename, ['--help'], { env, timeout: 20000, maxBuffer: Infinity });
   const help = stdout + stderr;
   for (const option of engine === 'llama' ? ['--models-preset', '--models-dir', '--host', '--port'] : ['--model', '--host', '--port', '--no-gpu']) if (!help.includes(option)) throw Error(`The selected runtime does not support ${option}`);
@@ -125,9 +129,9 @@ export async function validateBinary(engine, filename, backend, environment = {}
     ? await exec('/system/bin/linker64', ['--list', filename], { env, timeout: 10000 })
     : await exec('ldd', [filename], { env, timeout: 10000 });
   const libraries = [...new Set([...linked.stdout.matchAll(/(?:=>\s*)?(\/[^\s]+)\s*\(/g)].map(match => match[1]))];
-  for (const directory of new Set([path.dirname(filename), environment.GGML_BACKEND_PATH].filter(Boolean))) {
-    for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
-  }
+  if (environment.GGML_BACKEND_PATH) libraries.push(await fs.realpath(environment.GGML_BACKEND_PATH));
+  const directory = path.dirname(filename);
+  for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
   return { binary: filename, backend: selectedBackend, devices, libraries: [...new Set(libraries)], env: environment };
 }
 export async function installRuntime(job, { engine, config, selection }, activate) {

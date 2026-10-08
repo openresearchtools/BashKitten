@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { accessDir, binary } from './paths.mjs';
+import { engineEnvironment } from '../localai/environment.mjs';
 
 const stateFile = path.join(accessDir, 'hosting.json');
 const runningDir = path.join(accessDir, 'services');
@@ -200,12 +201,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     const entry = definition(await readJson(path.join(runningDir, id + '.json')));
     process.on('SIGTERM', () => process.exit(0)); process.on('SIGINT', () => process.exit(0));
     const args = entry.command.argv;
+    const env = localAI(id) ? engineEnvironment(entry.command.env) : { ...process.env, ...entry.command.env };
     // Scope units retain the existing guard's ancestry; detached user services
     // would otherwise survive a killed controller. Never expand arguments.
     const child = platform === 'linux'
       ? spawn('systemd-run', ['--user', '--scope', '--quiet', '--collect', '--no-ask-password', '--expand-environment=no', '--unit=' + unit(id),
-        '--description=BashKitten ' + entry.name, '--', ...args], { cwd: entry.command.cwd, env: { ...process.env, ...entry.command.env }, stdio: 'inherit' })
-      : spawn(args[0], args.slice(1), { cwd: entry.command.cwd, env: { ...process.env, ...entry.command.env }, stdio: 'inherit' });
+        '--description=BashKitten ' + entry.name, '--', ...args], { cwd: entry.command.cwd, env, stdio: 'inherit' })
+      : spawn(args[0], args.slice(1), { cwd: entry.command.cwd, env, stdio: 'inherit' });
     child.once('error', error => { console.error(error.message); process.exit(1); });
     child.once('close', (code, signal) => process.exit(code ?? (signal ? 1 : 0)));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
