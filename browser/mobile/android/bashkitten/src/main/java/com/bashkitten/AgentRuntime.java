@@ -820,6 +820,13 @@ public final class AgentRuntime {
         if (source != session || !desired || !state.equals("on")) { reply.accept("{\"error\":\"Agent connection is not active.\"}"); return; }
         try {
             JSONObject args = new JSONObject(json);
+            if (command.equals("view-file")) {
+                final int generation = operation;
+                final String address = url, choice = selected;
+                app.previews.open(source, args.getString("url"), () -> operation == generation && source == session &&
+                    desired && state.equals("on") && address.equals(url) && choice.equals(selected), reply);
+                return;
+            }
             if (command.equals("notify-turn")) { reply.accept(new JSONObject().put("result", notifyTurn(args)).toString()); return; }
             if (command.equals("sign-in")) { signIn(); reply.accept("{\"result\":true}"); return; }
             if (!command.equals("notification-settings")) throw new SecurityException("Unsupported browser action.");

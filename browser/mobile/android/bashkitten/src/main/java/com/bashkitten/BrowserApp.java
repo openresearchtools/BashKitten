@@ -39,6 +39,7 @@ public final class BrowserApp extends ContextWrapper {
     final CommandGateway commands;
     final AppCommandGateway appCommands;
     final FileTransfers transfers;
+    final DocumentPreviews previews;
     final TorManager tor;
     final SharedPreferences policies;
     public final Host host;
@@ -82,9 +83,11 @@ public final class BrowserApp extends ContextWrapper {
         transfers = new FileTransfers(this);
         appCommands = new AppCommandGateway(this);
         agent = new AgentRuntime(this);
+        previews = new DocumentPreviews(this);
         remoteControl = new RemoteBrowserControl(this);
     }
     public boolean isAgentVisible() { return agent.visible; }
+    public void previewTabsChanged(Set<String> ids) { previews.tabsChanged(ids); }
     public void showPendingApproval(android.app.Activity activity) {
         String ticket = grants.pendingTicket();
         if (ticket != null) activity.startActivity(new Intent(activity, GrantActivity.class)

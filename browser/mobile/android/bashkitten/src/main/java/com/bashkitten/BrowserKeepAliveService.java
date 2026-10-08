@@ -14,6 +14,7 @@ public final class BrowserKeepAliveService extends Service {
     public static boolean isActive() { return active; }
     @Override public IBinder onBind(Intent intent) { return null; }
     @Override public void onDestroy() {
+        BrowserApp.get(this).previews.close();
         if (wake != null && wake.isHeld()) wake.release();
         active = false; super.onDestroy();
     }

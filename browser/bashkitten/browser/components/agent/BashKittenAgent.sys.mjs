@@ -13,7 +13,11 @@ import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 const HTML = "http://www.w3.org/1999/xhtml";
 const CONTROLLER = "/usr/bin/bashkittenctl";
 const lazy = {};
-ChromeUtils.defineESModuleGetters(lazy, { BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs" });
+ChromeUtils.defineESModuleGetters(lazy, {
+  BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
+  Downloads: "resource://gre/modules/Downloads.sys.mjs",
+  ContextualIdentityService: "resource://gre/modules/ContextualIdentityService.sys.mjs",
+});
 const contexts = new Map();
 const ownedViews = new WeakMap();
 let actorRegistered = false;
@@ -21,6 +25,9 @@ let browserOwner;
 let adoptedLocal = false;
 let closingLocal = false;
 const localOperations = new Set();
+const documentCleanups = new Set();
+AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: remove temporary documents", () =>
+  Promise.allSettled([...documentCleanups].map(cleanup => cleanup())));
 
 let shuttingDown;
 function shutdown() {
@@ -158,6 +165,7 @@ class AgentView {
     this.win = win;
     this.doc = win.document;
     this.views = new Map();
+    this.documentTransfers = new Set();
     this.drafts = new Map();
     this.off = false;
     this.busy = false;
@@ -170,6 +178,7 @@ class AgentView {
   }
 
   async init() {
+    this.win.addEventListener("unload", () => this.cancelDocumentTransfers(), { once: true });
     AgentRemotes.importToPi = value => control("remote-pi-import", value);
     const doc = this.doc;
     this.win.windowUtils.loadSheetUsingURIString("chrome://browser/content/bashkitten/agent/agent.css", Ci.nsIStyleSheetService.AUTHOR_SHEET);
@@ -318,6 +327,72 @@ class AgentView {
     return file;
   }
 
+  cancelDocumentTransfers() {
+    for (const download of this.documentTransfers) download.cancel().catch(console.error);
+  }
+
+  async viewFile(browser, value) {
+    const entry = ownedViews.get(browser), global = browser.browsingContext.currentWindowGlobal;
+    const principal = global?.documentPrincipal, target = new URL(value, entry?.connection.url);
+    let revoked = false;
+    const current = () => !revoked && !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
+      browser.browsingContext.currentWindowGlobal === global;
+    if (!entry || !current() || !principal?.isContentPrincipal ||
+        principal.originNoSuffix !== target.origin || target.origin !== new URL(entry.connection.url).origin ||
+        principal.originAttributes.userContextId !== entry.connection.userContextId ||
+        target.username || target.password || target.search || target.hash ||
+        !/^\/api\/files\/previews\/[a-f0-9-]{36}\/content$/.test(target.pathname)) throw new Error("The prepared document is not in the selected Agent.");
+    const directory = Services.dirsvc.get("TmpD", Ci.nsIFile);
+    directory.append("bashkitten-preview"); directory.createUnique(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
+    let identity, tab, download, responseChannel, cleaned = false;
+    const cleanup = async () => {
+      if (cleaned) return; cleaned = true; revoked = true; documentCleanups.delete(cleanup);
+      if (download && !download.stopped) await download.cancel();
+      try { if (identity) lazy.ContextualIdentityService.remove(identity.userContextId); }
+      finally { await IOUtils.remove(directory.path, { recursive: true, ignoreAbsent: true }); }
+    };
+    documentCleanups.add(cleanup);
+    const revoke = (_subject, _topic, id) => { if (id === entry.connection.id) { revoked = true; download?.cancel().catch(console.error); } };
+    Services.obs.addObserver(revoke, "bashkitten-agent-control-revoke");
+    try {
+      const pending = PathUtils.join(directory.path, "document");
+      download = await lazy.Downloads.createDownload({
+        source: { url: target.href, loadingPrincipal: principal, cookieJarSettings: global.cookieJarSettings,
+          userContextId: entry.connection.userContextId,
+          adjustChannel(channel) {
+            if (!current()) throw new Error("The selected Agent changed.");
+            channel.QueryInterface(Ci.nsIHttpChannel).redirectionLimit = 0;
+            channel.setRequestHeader("Origin", target.origin, false);
+            channel.setRequestHeader("Accept-Encoding", "identity", false);
+            responseChannel = channel;
+          }, allowHttpStatus: (_download, status) => current() && status === 200 },
+        target: pending,
+      });
+      this.documentTransfers.add(download);
+      download.onchange = () => { if (!current() && !download.stopped) download.cancel().catch(console.error); };
+      await download.start();
+      if (!current() || cleaned) throw new Error("The selected Agent changed.");
+      const mime = responseChannel.getResponseHeader("Content-Type").split(";", 1)[0].trim().toLowerCase();
+      if (!["application/pdf", "text/html"].includes(mime)) throw new Error("The server did not return a prepared PDF or document.");
+      const length = responseChannel.getResponseHeader("Content-Length");
+      if (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)) ||
+          (await IOUtils.stat(pending)).size !== Number(length)) throw new Error("The prepared document has no complete file length.");
+      const file = PathUtils.join(directory.path, mime === "application/pdf" ? "document.pdf" : "document.html");
+      await IOUtils.move(pending, file);
+      if (!current() || cleaned) throw new Error("The selected Agent changed.");
+      identity = lazy.ContextualIdentityService.create("Document preview", "briefcase", "gray");
+      tab = this.win.gBrowser.addTab(PathUtils.toFileURI(file), {
+        userContextId: identity.userContextId, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
+        skipAnimation: true, relatedToCurrent: false,
+      });
+      tab.addEventListener("TabClose", () => cleanup().catch(console.error), { once: true });
+      this.win.addEventListener("unload", () => cleanup().catch(console.error), { once: true });
+      this.win.gBrowser.selectedTab = tab; this.browse();
+      return { ok: true };
+    } catch (error) { await cleanup(); throw error; }
+    finally { this.documentTransfers.delete(download); Services.obs.removeObserver(revoke, "bashkitten-agent-control-revoke"); }
+  }
+
   async chooseFolder(browser, { title, path } = {}) {
     const entry = ownedViews.get(browser);
     if (!entry?.local || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to choose a folder.");
@@ -349,6 +424,7 @@ class AgentView {
   }
 
   async choose(id) {
+    this.cancelDocumentTransfers();
     this.closeConnections();
     this.selection = id;
     this.localAIButton.hidden = Boolean(id);
@@ -410,6 +486,7 @@ class AgentView {
   }
 
   async stop() {
+    this.cancelDocumentTransfers();
     this.closeConnections();
     clearTimeout(this.timer);
     this.off = true;

@@ -32,6 +32,7 @@ export class BashKittenHostChild extends JSWindowActorChild {
           if (typeof command !== "string" || !args || typeof args !== "object" || Array.isArray(args)) {
             throw new Error("Invalid Agent host request");
           }
+          if (command === "view-file" && !this.document.hasValidTransientUserGestureActivation) throw new Error("Open the document from the Agent view");
           json = JSON.stringify(args);
           if (json.length > 200000) throw new Error("Agent host request too large");
         } catch (error) {
