@@ -5,6 +5,9 @@ Closing it or pausing the activity cancels scheduling, shuts down its worker and
 closes that view's private backend sampling session. It never starts a background
 monitoring service or starts the local Agent when it is off. The view formats
 native RAM/GPU readings and the local controller's workload CPU reading.
+When the device also permits a real whole-device CPU counter, the overlay adds
+a separate **Total CPU** row. Its absence never substitutes a workload number
+for the system total.
 
 RAM uses Android's `ActivityManager.MemoryInfo`: total memory minus available
 memory, displayed as used/total decimal GB. **Workload CPU** covers BashKitten's
@@ -42,6 +45,19 @@ on an eight-core device is therefore 12.5%, and all eight are 100%. Application
 affinity is not substituted for device CPU count. The native view formats two
 decimal places. Linux documents the process fields in
 [`proc_pid_stat(5)`](https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html).
+
+## Optional total CPU
+
+The native sampler also attempts the aggregate `/proc/stat` delta, excluding idle
+and I/O wait and avoiding double counting guest time. If that counter is not
+readable, the aggregate idle seconds from `/proc/uptime` can measure non-idle
+time using elapsed monotonic time and the actual online CPU count. This second
+counter includes I/O wait because uptime does not separate it. Neither reader
+uses load average, process affinity, or process CPU to invent a system total.
+It resets its baseline when counters regress or the online CPU set changes.
+Both readers run only during the visible overlay's existing sampling requests.
+On devices that deny both, the optional Total CPU row is absent. The separate
+Workload CPU row remains available when its owned process counters are readable.
 
 GPU readers use driver-specific units:
 
