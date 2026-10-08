@@ -93,9 +93,11 @@ are inside Termux home, displayed as `~`.
 - **Download models** saves selected Hugging Face files to the server's models
   directory. Linux can use it with its managed llama.cpp runtime.
 
-Pi supplies tools, extensions, skills, models and compaction. Its normal
-`~/.pi/agent` credentials and settings are retained. Use `pi install` for an
-independent Pi runtime, or `bashkitten-pi install` for the app's selected runtime.
+Pi supplies tools, extensions, skills, models and compaction. BashKitten uses its
+own Pi profile at `~/.local/share/bashkitten-pi/pi`, including provider/OAuth
+credentials, settings, models, extensions, packages, themes, prompts and native
+session history. It does not import or update standalone Pi's `~/.pi/agent`.
+Use `pi install` for standalone Pi, or `bashkitten-pi install` for BashKitten.
 Browser and search skills ship in the integration package. The browser guide
 matches the authorized client platform.
 
@@ -140,8 +142,12 @@ after force-stop. Reopening reconciles actual services. Explicit Turn off stays
 off during that app run; a fresh user launch defaults to Turn on.
 
 Server data defaults to `~/.local/share/bashkitten-pi/`;
-`BASHKITTEN_DATA_DIR` overrides it. `PI_CODING_AGENT_DIR` selects a native Pi
-profile. Pi keeps its session files; BashKitten stores sidebar metadata,
+`BASHKITTEN_DATA_DIR` overrides it, including the `pi/` profile beneath it.
+BashKitten sets Pi's supported directory environment variables for every SDK,
+CLI, package operation and worker; inherited standalone Pi directory overrides
+do not select its profile. No existing credentials or extensions are copied.
+Project-local Pi resources still belong to the selected project. Pi keeps its
+session files; BashKitten stores sidebar metadata,
 attachments and access-stack state separately. Removing a sidebar entry does not
 delete native Pi history or attachments.
 

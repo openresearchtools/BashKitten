@@ -6,6 +6,14 @@ import semver from 'semver';
 import { dataDir } from '../common.mjs';
 
 export const bundledRoot = fileURLToPath(new URL('../../../', import.meta.url));
+// Set Pi's supported profile boundary before importing its SDK or starting any
+// CLI/package worker. Keep HOME/cwd intact for ordinary project and shell access.
+export const piAgentDir = path.join(dataDir, 'pi');
+process.env.PI_CODING_AGENT_DIR = piAgentDir;
+process.env.PI_CODING_AGENT_SESSION_DIR = path.join(piAgentDir, 'sessions');
+// An inherited override must not redirect Pi's bundled resources to another
+// installation; selectedRuntime owns the executable and SDK together.
+delete process.env.PI_PACKAGE_DIR;
 export const runtimeFile = path.join(dataDir, 'runtime.json');
 export const maintenanceFile = path.join(dataDir, 'run/maintenance.json');
 export const appUpdateFile = path.join(dataDir, 'run/app-update.json');
@@ -49,6 +57,8 @@ export function selectedRuntime() {
   return { root, version: pkg.version, cli: path.join(agent, cli), agent: path.join(agent, 'dist/index.js'), ai: path.join(ai, 'dist/index.js'), previous: selection?.previous };
 }
 export async function loadPi() {
+  fs.mkdirSync(piAgentDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(piAgentDir, 0o700);
   const runtime = selectedRuntime();
   const [pi, ai] = await Promise.all([import(pathToFileURL(runtime.agent)), import(pathToFileURL(runtime.ai))]);
   return { ...runtime, pi, ai };

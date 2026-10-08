@@ -9,7 +9,7 @@ const providerRevisionFile = path.join(dataDir, 'provider-revision.json');
 export const providerRevision = () => readJson(providerRevisionFile, null);
 export const providersChanged = () => writeJson(providerRevisionFile, randomUUID());
 
-/** The same ModelRuntime and auth.json used by Pi's CLI, with no catalog network refresh. */
+/** Stock ModelRuntime in BashKitten's private Pi profile, with no catalog network refresh. */
 export class Services {
   attempt = null;
   async runtime() {

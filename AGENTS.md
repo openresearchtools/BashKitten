@@ -1,5 +1,24 @@
 # BashKitten · native Pi / Linux and Termux
 
+## Current 8 October work and verification
+
+The latest user request adds shared native Android/Linux LocalAI (llama.cpp,
+Whisper/Parakeet and llama-tts), Termux CPU/Vulkan selection, an on-demand Android
+performance overlay, and optional Pillama resumable llama.cpp streams. Preserve
+the intended Tor/Caddy/Authelia/Chisel encrypted route; no transport bypass.
+BashKitten owns a complete Pi profile under `$BASHKITTEN_DATA_DIR/pi`, including
+credentials, settings, packages, extensions and native sessions. Do not import or
+modify standalone Pi's profile. Use Pi's supported directory environment knobs.
+For architecture acceptance use fresh browser/backend/Pi profiles, with no copied
+old configuration. Latest verification instructions explicitly permit ADB for
+debugging and installation and direct Termux terminal access. Actual setup and
+acceptance still use the desktop BashKitten browser with Cuttlefish's web UI.
+Use stock Android 17 Cuttlefish with native KVM, 16 GiB RAM and at least 128 GiB
+userdata on the system SSD; keep build sources/caches in the separate Data-drive
+build repository, with 40 GiB desktop and Android x86_64 build budgets and P cores
+0–7. These instructions supersede conflicting older ADB/profile/storage rules
+below; do not claim emulator evidence verifies physical-device GPU behavior.
+
 This branch reuses BashKitten's browser UI with unmodified Pi 1.0.2
 (`cd32f7725fdbddbaecdff5b1e68491563394e0ca`). It contains no Rust backend or
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
