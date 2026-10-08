@@ -43,6 +43,11 @@ libdl, liblog and libandroid remain OS libraries. No global `LD_LIBRARY_PATH`
 is needed. Package launchers set `OPENSSL_CONF` to `node/etc/openssl.cnf`, an
 explicit default-provider configuration, so another Termux OpenSSL installation
 does not select this runtime's configuration. npm wrappers set it themselves.
+Termux wrappers also select upstream termux-exec's
+`TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable` so execution uses the actual
+Node ELF rather than making Android's dynamic linker the process executable.
+This is for the supported GitHub Termux target-SDK-28 environment; Android app
+variants that prohibit executing their private binaries must fail explicitly.
 Certificate verification remains enabled; Termux's CA and resolver data remain
 declared package dependencies.
 

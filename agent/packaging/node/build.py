@@ -131,6 +131,7 @@ def read_license(archive_path, suffixes):
 
 def npm_wrappers(root, platform):
     shell = '/system/bin/sh' if platform == 'termux' else '/bin/sh'
+    native_exec = 'export TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable\n' if platform == 'termux' else ''
     for command in ['npm', 'npx']:
         wrapper = root / 'bin' / command
         wrapper.unlink(missing_ok=True)
@@ -139,7 +140,7 @@ set -eu
 node_bin=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 export PATH="$node_bin:$PATH"
 export OPENSSL_CONF="$node_bin/../etc/openssl.cnf"
-exec "$node_bin/node" "$node_bin/../lib/node_modules/npm/bin/{command}-cli.js" "$@"
+{native_exec}exec "$node_bin/node" "$node_bin/../lib/node_modules/npm/bin/{command}-cli.js" "$@"
 ''')
         wrapper.chmod(0o755)
 
