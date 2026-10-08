@@ -49,7 +49,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         if (local() && state.value == null && !state.runtime.shareNeedsSetup()) request("localai-status", new JSONObject(), result -> state.value = result);
         main.postDelayed(poll, 2000);
     }
-    @Override public void onPause() { main.removeCallbacks(poll); super.onPause(); }
+    @Override public void onPause() { main.removeCallbacks(poll); if (childDialog != null) childDialog.dismiss(); super.onPause(); }
     @Override public void onStop() { state.runtime.detach(this); super.onStop(); }
     @Override public void onDestroyView() { body = null; progress = null; super.onDestroyView(); }
     @Override public void changed() { if (!local()) { if (childDialog != null) childDialog.dismiss(); dismissAllowingStateLoss(); } }
@@ -105,7 +105,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
             statusLine(lines, string(engine, "url"));
             if (engine.optBoolean("savedForNextStart")) lines.add("Saved changes apply on Reload");
         }
-        lines.add(runtime == null ? "Download the runtime to begin" : string(runtime, "version") + " · " + string(runtime, "selectedBackend"));
+        lines.add(runtime == null ? "Download the runtime to begin" : string(runtime, "version") + " · " + (state.section.equals("llama") ? string(runtime, "backend") + " runtime (per-model devices)" : string(engine.optJSONObject("config"), "backend")));
         JSONObject job = value.optJSONObject("job"), input = job == null ? null : job.optJSONObject("input");
         boolean relevant = state.section.equals(string(input, "engine"))
             || state.section.equals("tts") && (string(job, "kind").equals("localai-quantize") || string(input, "engine").equals("llama"));
@@ -131,27 +131,28 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         if (engine.equals("tts")) { tts(config); return; }
         if (engine.equals("llama")) {
             choose("Runtime", new String[]{"managed", "custom"}, new String[]{"Managed", "Custom binary"}, config.optString("mode"), value -> { put(config, "mode", value); render(); });
-            if (config.optString("mode").equals("custom")) field("Termux llama-server executable", config, "binary", false);
+            if (config.optString("mode").equals("custom")) backendPath("Termux llama-server executable", config, "binary", "file");
         }
-        choose("Device", new String[]{"cpu", "vulkan"}, new String[]{"CPU", "GPU (Vulkan, all layers)"}, config.optString("backend"), value -> put(config, "backend", value));
+        if (!engine.equals("llama")) choose("Device", new String[]{"cpu", "vulkan"}, new String[]{"CPU", "GPU (Vulkan, all layers)"}, config.optString("backend"), value -> put(config, "backend", value));
         if (config.optString("mode").equals("managed")) {
             button("Check runtime", () -> request("localai-check", object("engine", engine), result -> state.error = result.optString("version") + " · " + result.optString("backend") + (result.optBoolean("updateAvailable") ? " · Update available" : " · Up to date")));
             button("Download / update runtime", () -> request("localai-install", object("engine", engine), result -> state.error = result.optString("phase")));
-            text("Save a changed device choice before downloading. GPU requires a working native Termux Vulkan driver.");
+            text(engine.equals("llama") ? "The Vulkan runtime supports CPU and GPU model presets. Select each model’s device below." : "Save a changed execution choice before downloading. The same Vulkan runtime supports CPU and GPU; GPU requires a working native driver.");
         }
         if (engine.equals("llama")) {
-            field("Router INI path", config, "preset", false);
+            backendPath("Router INI path", config, "preset", "save");
+            button("Add / edit router models", () -> AgentRouterModelsDialog.create(config.optString("preset")).show(getChildFragmentManager(), "router-models"));
             button("Edit router INI", () -> request("localai-ini", object("file", config.optString("preset")), this::editINI));
             check("Keep router available while Agent is on (models load on demand)", config, "startup");
             check("Import this configuration into the coding agent", config, "importToPi");
             JSONObject imported = state.value.optJSONObject("import");
             if (imported != null) text("Pi import: " + imported.optString("state") + " " + string(imported, "error"));
-            field("Optional application API-key file", config, "keyFile", false);
+            backendPath("Optional application API-key file", config, "keyFile", "file");
         } else {
             choose("Speech model", new String[]{"whisper", "parakeet"}, new String[]{"Whisper", "Parakeet"}, config.optString("modelKind", "whisper"), value -> {
                 put(config, "modelKind", value); if (value.equals("parakeet")) { put(config, "argv", new JSONArray()); put(config, "keepRunning", false); } render();
             });
-            field("Termux model path", config, "model", false);
+            backendPath("Termux model path", config, "model", "file");
             text("Use Models to download and select a model. The chat microphone records, transcribes and sends on this device; audio stays in memory.");
             check("Automatically send voice messages", config, "autoSend");
             if (!config.optString("modelKind").equals("parakeet")) check("Keep Whisper running after transcription", config, "keepRunning");
@@ -161,7 +162,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
             field("Port (0 chooses an available port)", config, "port", false);
             field("Command: JSON arguments, {port} for the assigned port; [] uses the starter command", config, "argv", true);
         }
-        field("Working directory in Termux", config, "cwd", false);
+        backendPath("Working directory in Termux", config, "cwd", "folder");
         if (engine.equals("llama")) field("Environment (JSON object)", config, "env", true);
         JSONObject service = current.optJSONObject("service");
         if (service != null && service.optJSONObject("command") != null) {
@@ -189,8 +190,8 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         text("Uses llama-tts from the managed llama.cpp runtime. Download that runtime in the router section. Reference speech is required for both model families.");
         choose("Model family", new String[]{"pocket", "qwen3"}, new String[]{"Pocket TTS", "Qwen3-TTS"}, config.optString("modelKind"), value -> put(config, "modelKind", value));
         choose("Device", new String[]{"cpu", "vulkan"}, new String[]{"CPU", "GPU (Vulkan, all layers)"}, config.optString("backend"), value -> put(config, "backend", value));
-        field("Model GGUF", config, "model", false); field("Matching mmproj GGUF", config, "projector", false);
-        field("Reference voice audio path", config, "voice", false); field("Language code", config, "language", false);
+        backendPath("Model GGUF", config, "model", "file"); backendPath("Matching mmproj GGUF", config, "projector", "file");
+        backendPath("Reference voice audio path", config, "voice", "file"); field("Language code", config, "language", false);
         button("Save changes", () -> save("tts", config));
         EditText prompt = plainField("Text to speak", state.prompt, true, value -> state.prompt = value);
         plainField("New output WAV path in Termux", state.output, false, value -> state.output = value);
@@ -294,6 +295,10 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | (multiline ? InputType.TYPE_TEXT_FLAG_MULTI_LINE : 0));
         if (multiline) { input.setMinLines(3); input.setMaxLines(4); input.setTypeface(Typeface.MONOSPACE); }
         body.addView(input); input.addTextChangedListener(new TextWatcher() { public void beforeTextChanged(CharSequence s, int a, int c, int f) {} public void afterTextChanged(Editable s) {} public void onTextChanged(CharSequence s, int a, int b, int c) { changed.accept(s.toString()); } }); return input;
+    }
+    private void backendPath(String label, JSONObject config, String key, String kind) {
+        field(label, config, key, false);
+        button("Browse " + label, () -> childDialog = AgentLocalAIFilePicker.show(requireContext(), state.runtime, config.optString(key), kind, value -> { put(config, key, value); render(); }));
     }
     private void field(String label, JSONObject config, String key, boolean multiline) { plainField(label, config.optString(key), multiline, value -> put(config, key, value)); }
     private void check(String label, JSONObject config, String key) { CheckBox box = new CheckBox(body.getContext()); box.setText(label); box.setChecked(config.optBoolean(key)); body.addView(box); box.setOnCheckedChangeListener((view, checked) -> put(config, key, checked)); }
