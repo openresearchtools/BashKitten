@@ -20,6 +20,11 @@ const defaults = engine => ({ mode: 'managed', binary: '', backend: platform ===
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
 // Pi import and voice-message sending do not change the inference command.
 const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined });
+// A GPU archive also contains its CPU backend. Moving to a different GPU
+// archive requires an explicit download, but saving that choice must work first.
+const supportsManagedChoice = (runtime, config) => Boolean(runtime?.binary &&
+  (['cpu', 'auto'].includes(config.backend) || runtime.backend === config.backend));
+const downloadRequired = (engine, config) => Error(`Download the selected ${config.backend === 'auto' ? '' : config.backend + ' '}${engine} runtime in LocalAI first`);
 async function readConfiguration() {
   const saved = await readJson(configFile, null);
   if (saved) {
@@ -122,8 +127,10 @@ export class LocalAI {
       const verified = await validateBinary(engine, config.binary, config.backend, config.env); config.binary = verified.binary; config.libraries = verified.libraries;
     }
     if (engine === 'whisper' && config.model) await this.model(config.model, config.modelKind);
-    // Validate the effective command before saving whenever the runtime exists.
-    if (config.mode === 'custom' || (await runtimeInfo(engine))?.binary) await this.command(engine, config, config.port || 1);
+    // Save a new managed device choice before its matching download. Missing
+    // Whisper models also remain configurable; starting still requires both.
+    if ((config.mode === 'custom' || supportsManagedChoice(await runtimeInfo(engine), config)) &&
+        (engine !== 'whisper' || config.model)) await this.command(engine, config, config.port || 1);
     saved[engine] = config; await writeJson(configFile, saved);
     if (!this.services.running.get(ids[engine])?.child) await this.configureService(engine);
     if (engine === 'llama') await this.importProvider();
@@ -131,6 +138,7 @@ export class LocalAI {
   }
   async binary(engine, config) {
     const runtime = await runtimeInfo(engine);
+    if (config.mode === 'managed' && !supportsManagedChoice(runtime, config)) throw downloadRequired(engine, config);
     const file = config.mode === 'custom' ? config.binary : runtime?.binary;
     if (!file) throw Error(`Download the ${engine} runtime first`);
     const environment = config.mode === 'custom' ? config.env : managedRuntimeEnvironment(file, config.env);
@@ -182,8 +190,9 @@ export class LocalAI {
     const config = (await this.config())[engine], status = await this.services.status();
     if (engine === 'whisper' && config.modelKind === 'parakeet') { if (runtimeRequired) throw Error('Parakeet starts on demand when you record a message'); return; }
     const existing = status.services.find(item => item.id === ids[engine]);
-    const runtime = config.mode === 'custom' ? config.binary : (await runtimeInfo(engine))?.binary;
-    if (!runtime || engine === 'whisper' && !config.model) { if (runtimeRequired) throw Error(`Configure ${engine} in LocalAI first`); return; }
+    const ready = config.mode === 'custom' ? config.binary : supportsManagedChoice(await runtimeInfo(engine), config);
+    if (!ready) { if (runtimeRequired) throw downloadRequired(engine, config); return; }
+    if (engine === 'whisper' && !config.model) { if (runtimeRequired) throw Error('Choose a Whisper model in LocalAI first'); return; }
     const previousPort = existing ? Number(existing.target.address.split(':').at(-1)) : 0;
     const port = config.port || (this.services.running.get(ids[engine])?.child ? previousPort : await allocatePort(previousPort));
     const command = await this.command(engine, config, port);
