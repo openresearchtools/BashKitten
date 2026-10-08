@@ -124,6 +124,21 @@ input restored. Recording/stop/transcription handling ran, but successful speech
 dictation remains unverified. The point where silence entered was not measured;
 the cause is unconfirmed. No microphone recording was retained.
 
+One final bounded recheck used APK `8ecc1a1d16` and backend `1f2f83a9a3`.
+Before recording, the public sample was measured without saving audio: host
+virtual-source RMS was 5,414 in signed 16-bit units, and Android's stock
+`tinycap` received non-silent VirtIO input in both stereo (RMS 4,436) and mono
+(RMS 3,631). The desktop browser's capture ports were connected only to that
+virtual source. During the actual approved composer recording, Android
+AudioFlinger reported an active, non-silenced mono voice-recognition stream
+whose frame counter advanced, but its power history was near silent after a
+brief initial transient. Stop/transcribe returned three `[BLANK_AUDIO]` markers.
+This narrows the observed difference to the app recording path versus direct
+ALSA capture; it does not identify the cause or establish successful dictation
+or automatic sending. The unsent draft was cleared, Cuttlefish microphone
+released, automatic host input restored, and all temporary playback/capture
+processes stopped. No audio recording was retained.
+
 A subsequent multi-tool check found that the original 8,192-token context was
 too small for stock Pi's output budgeting: its 4,096-token safety reserve plus
 the roughly 4.5k-token prompt clamped the requested output to one token. Native
