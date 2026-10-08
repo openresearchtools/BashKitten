@@ -1685,6 +1685,10 @@
     }
 
     function setThinking(modelElement, target = $('#thinking')) {
+      if (modelElement.id === 'model') {
+        const label = modelElement.selectedOptions[0]?.textContent || 'Not set';
+        modelElement.style.width = `${label.length + 5}ch`;
+      }
       const model = models.find(value => `${value.provider}/${value.id}` === modelElement.value);
       const old = target.value;
       target.innerHTML = `<option value="" ${current && target.id === 'thinking' ? 'disabled' : ''}>Not set</option>` + (model?.thinking_levels || []).map(level => `<option value="${escapeHtml(level)}">${escapeHtml(level)}</option>`).join('');
