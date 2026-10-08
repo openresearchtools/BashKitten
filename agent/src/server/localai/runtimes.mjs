@@ -27,10 +27,10 @@ export function describeRuntime(runtime) {
   if (!runtime) return null;
   const { engine, version, upstreamVersion, sourceCommit, builderCommit, os, arch,
     backend, release, root, binary, selectedBackend, devices, executables,
-    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements } = runtime;
+    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements, capabilities } = runtime;
   return { engine, version, upstreamVersion, sourceCommit, builderCommit, os, arch,
     backend, release, root, binary, selectedBackend, devices, executables,
-    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements };
+    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements, capabilities };
 }
 // Scope native library/plugin lookup to this downloaded engine, never to the
 // controller's private Node or unrelated tool processes. Router model children
@@ -91,6 +91,7 @@ export async function checkRuntime(engine, config) {
   const backend = await preferredBackend(config.backend);
   const artifact = manifest.artifacts.find(item => item.os === runtimeOS && item.arch === arch && item.backend === backend);
   if (!artifact || !/^[a-f0-9]{64}$/.test(artifact.sha256) || artifact.executable !== executable(engine)) throw Error(`No matching ${runtimeOS} ${arch} ${backend} runtime`);
+  if (runtimeOS === 'android' && engine === 'llama' && (artifact.capabilities?.router !== true || artifact.capabilities?.subprocess !== true)) throw Error('The published Android llama.cpp runtime lacks required router subprocess support; check for an updated release');
   const asset = release.assets.find(item => item.name === artifact.file);
   if (!asset) throw Error('The runtime archive is missing');
   const installed = await runtimeInfo(engine);
@@ -169,6 +170,7 @@ export async function installRuntime(job, { engine, config, selection }, activat
     await job.exec('python3', ['-c', 'import tarfile,sys\nwith tarfile.open(sys.argv[1]) as a:\n a.extractall(sys.argv[2],filter="data")', archive, extracted]);
     const record = await readJson(path.join(extracted, 'build.json'));
     if ((record.os || 'linux') !== runtimeOS || record.engine !== engine || record.arch !== arch || record.backend !== artifact.backend || record.sourceCommit !== available.sourceCommit) throw Error('Runtime build metadata does not match the selected release');
+    if (runtimeOS === 'android' && engine === 'llama' && (record.capabilities?.router !== true || record.capabilities?.subprocess !== true)) throw Error('The Android llama.cpp archive lacks required router subprocess support');
     await fs.access(path.join(extracted, 'LICENSES.txt')); await fs.access(path.join(extracted, 'SOURCE.json'));
     const filename = path.join(extracted, 'bin', executable(engine));
     const verified = await validateBinary(engine, filename, config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend, managedRuntimeEnvironment(filename));
