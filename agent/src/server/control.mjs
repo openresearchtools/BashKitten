@@ -26,6 +26,7 @@ import { curatedModels, downloadPreset } from './localai/models.mjs';
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
 import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
+import { WorkloadPerformance, performanceUnavailable } from './performance.mjs';
 
 export const controlSocket = paths.control;
 const stateFile = path.join(dataDir, 'control.json');
@@ -118,6 +119,9 @@ async function serve() {
   let serial = Promise.resolve();
   let starting = false, stopping = false, lastError = state.error || null, restartPending = false, exiting = false;
   let browserOwner = null, browserWatcher = null, browserClosing = false;
+  // The existing subreaper owns all launched workloads, including detached Pi
+  // workers and router/model children; unrelated Termux/Pi processes are outside it.
+  const performance = new WorkloadPerformance({ pid: process.ppid, started: await processStart(process.ppid) });
   const manifestFile = path.join(bundledRoot, 'build-platform.json');
   const packageFile = (await readJson(manifestFile, null))?.installationStamp || manifestFile;
   const revision = (await readJson(packageFile, null))?.revision;
@@ -380,6 +384,10 @@ async function serve() {
       if (req.url === '/status') return json(res, await status());
       if (req.method !== 'POST') throw Error('Use POST for control actions');
       const value = await jsonBody(req);
+      // Sampling is local, read-only and on demand. It must not queue behind a
+      // model loading or package operation, and never starts/stops a workload.
+      if (req.url === '/performance-sample') return json(res, await performance.sample(value));
+      if (req.url === '/performance-close') return json(res, performance.close(value));
       if (req.url === '/llama-wait' || req.url === '/whisper-acquire') {
         if (!localAI || !state.web || stopping) throw Error('LocalAI is unavailable while Agent is off');
         const cancelled = new AbortController();
@@ -450,8 +458,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     try {
       const input = process.argv[3];
       const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin)).toString() || '{}') : input ? JSON.parse(input) : {};
-      if (command !== 'browser-shutdown') await ensureManager();
+      const performanceCommand = ['performance-sample', 'performance-close'].includes(command);
+      if (command !== 'browser-shutdown' && !performanceCommand) await ensureManager();
       const result = await controlRequest(command, command === 'status' ? undefined : value).catch(error => {
+        if (performanceCommand && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return command === 'performance-close' ? { ok: true } : performanceUnavailable('The local Agent is off');
         if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };
         throw error;
       });

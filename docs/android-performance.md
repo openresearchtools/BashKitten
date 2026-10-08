@@ -1,24 +1,47 @@
 # Android performance counters
 
-The native Performance overlay samples once per second while resumed. Closing
-it or pausing the activity cancels scheduling and shuts down its worker. It
-does not depend on an Agent session and never starts a background monitoring
-service. The view only formats the values returned by `PerformanceMonitor`.
+The native Performance overlay requests a sample once per second while resumed.
+Closing it or pausing the activity cancels scheduling, shuts down its worker and
+closes that view's private backend sampling session. It never starts a background
+monitoring service or starts the local Agent when it is off. The view formats
+native RAM/GPU readings and the local controller's workload CPU reading.
 
 RAM uses Android's `ActivityManager.MemoryInfo`: total memory minus available
-memory, displayed as used/total decimal GB. CPU and GPU require readable
-whole-device counters. A missing or forbidden counter produces **—**, not zero,
-process CPU usage, load average, clock frequency, or an inferred utilization.
-The first readable CPU sample displays **…** until a second sample is available.
+memory, displayed as used/total decimal GB. **Workload CPU** covers BashKitten's
+launched backend workloads, not whole-device CPU. GPU requires a readable driver
+utilization counter. A missing or forbidden counter produces **—**, not zero,
+load average, clock frequency, offloaded-layer count or inferred utilization.
+The first readable workload sample displays **…** until a second is available.
 
-CPU prefers the aggregate `/proc/stat` delta, excluding idle and I/O wait from
-busy time and avoiding double counting guest time. If that is unavailable, it
-tries the aggregate idle seconds in `/proc/uptime`, divided by elapsed monotonic
-time and the online CPU count from `/sys/devices/system/cpu/online`. This fallback
-measures non-idle time, including I/O wait because uptime does not separate it.
-It resets its baseline when the observed online CPU set changes or counters
-reset. It does not use the application's CPU affinity as the system CPU count.
-Linux documents the counters in its [CPU load guide](https://kernel.org/doc/html/latest/admin-guide/cpu-load.html).
+## Owned workload CPU
+
+The shared controller handles `performance-sample` and `performance-close` only
+on its private local socket. Each visible overlay has a new UUID and its own
+baseline. Requests do not start the manager, change process ownership, expose a
+remote API, or wait behind model loading/package operations. There is no sampler
+timer; abandoned baselines expire only during a later explicit sample request.
+
+The existing `runtime-guard` subreaper is the process-tree root. Its descendants
+include the controller, core/auth services, detached Pi workers and their tools
+and search commands, managed llama router/model subprocesses, Whisper/Parakeet,
+TTS, quantization, display commands and owned service scopes. Detached process
+groups remain descendants; orphaned children return to their existing subreaper.
+Unrelated Termux jobs and standalone Pi are excluded. Android's separate Gecko
+and other application UIDs, or externally managed inference servers, are outside
+this backend workload boundary.
+
+CPU uses the actual `utime`, `stime`, `cutime` and `cstime` fields from readable
+`/proc/PID/stat` records. Summing live-process and already-reaped-child CPU time
+retains completed child work without adding a live child twice. PID start time
+and parent identities are rechecked after collection; a reaped/reused/reparented
+record rejects the changing snapshot rather than inventing a utilization spike.
+Counters reset the baseline if they regress or the online CPU set changes.
+The delta is divided by `getconf CLK_TCK`, monotonic elapsed time, and the device's
+online CPU count from `/sys/devices/system/cpu/online`. One fully occupied core
+on an eight-core device is therefore 12.5%, and all eight are 100%. Application
+affinity is not substituted for device CPU count. The native view formats two
+decimal places. Linux documents the process fields in
+[`proc_pid_stat(5)`](https://man7.org/linux/man-pages/man5/proc_pid_stat.5.html).
 
 GPU readers use driver-specific units:
 
@@ -84,8 +107,11 @@ These are observations of this virtual gfxstream device, not a claim that
 Termux cannot read vendor GPU counters on physical phones. UsageStats describes
 application foreground/service time, not system CPU or GPU utilization.
 
-Consequently the code cannot promise CPU/GPU percentages on stock Android where
-the operating system withholds all supported device counters. RAM and overlay
-lifecycle remain independently testable. A native UI acceptance run is still
-required for each resulting APK; a successful Java compile or readable ADB
+Consequently those whole-device counters cannot provide a truthful system CPU
+percentage in this app context. The user's later 8 October instruction selected
+the owned workload CPU scope above instead; it does not reinterpret the denied
+system counter as zero. GPU remains unavailable when the driver supplies no
+readable supported counter. RAM and overlay lifecycle remain independently
+testable. The new workload command and resulting APK still require real Termux
+app-domain and native UI acceptance; a successful syntax check or readable ADB
 shell counter is not evidence of application access.
