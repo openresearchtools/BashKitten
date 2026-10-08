@@ -123,3 +123,17 @@ was cleared, the temporary audio source stopped and the original automatic host
 input restored. Recording/stop/transcription handling ran, but successful speech
 dictation remains unverified. The point where silence entered was not measured;
 the cause is unconfirmed. No microphone recording was retained.
+
+A subsequent multi-tool check found that the original 8,192-token context was
+too small for stock Pi's output budgeting: its 4,096-token safety reserve plus
+the roughly 4.5k-token prompt clamped the requested output to one token. Native
+history recorded `stopReason: length`; these one-word endings were not evidence
+of a model refusing to use tools. Pi and its budgeting were left unchanged.
+The native editor saved 32,768 context tokens and `threads=2` for the downloaded
+Qwen3.5 2B Q4_0 preset, then the normal confirmed Reload restarted the router.
+The model child's actual arguments contained both settings, and the chat showed
+the discovered 33k context. An ordinary arithmetic request completed with
+Reasoning Off, followed by the [subagent delivery check](pi-tools.md).
+New configuration/model defaults use 32,768 tokens; existing saved choices
+remain unchanged by upgrades. Only this disposable acceptance profile's old
+global 8k preset was explicitly aligned through its native INI editor.

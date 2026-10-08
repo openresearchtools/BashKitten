@@ -38,3 +38,21 @@ The normal managed skill selection upgrades to the new packaged paths. Explicit
 custom package skill filters are preserved. Architecture acceptance uses the
 fresh private BashKitten Pi profile requested on 8 October; standalone Pi and npm
 profiles are not imported.
+
+On 8 October, installed Android APK/backend `8ecc1a1d16` passed an actual
+subagent flow through the desktop BashKitten Cuttlefish UI. The managed r1
+llama.cpp router used Qwen3.5 2B Q4_0, explicit CPU, a 32,768-token context and
+two threads. The parent activated `agents` through stock `tool_search`, spawned
+Answerer and Questioner, and both children inherited its model and Reasoning Off.
+Questioner's peer question reached Answerer. Four separate completed Answerer
+turns each produced exactly one automatic parent report, verified with stock
+Pi's native session parser and the corresponding delivery metadata.
+
+The model did not autonomously complete the requested two-way protocol: it sent
+extra follow-ups and claimed a reverse reply without a matching tool call.
+Ordinary user prompts in the saved child chats then resumed both and explicitly
+requested that reply. Answerer's `send` returned accepted; Questioner received
+the matching message once, acknowledged it, and its completed turn reached the
+parent once. Both chats were stopped with the native Stop Pi control; read-only
+process inspection confirmed both workers had exited. This verifies the actual
+peer/report/stop transport with user steering, not autonomous model reliability.
