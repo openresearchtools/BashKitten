@@ -77,9 +77,13 @@ public final class SessionPdfFileSaver {
                 @Override
                 public GeckoResult<WebResponse> onValue(final WebResponse response) {
                   final int statusCode = response.statusCode != 0 ? response.statusCode : 200;
+                  // Local documents already have their bytes in this response.
+                  // Keep the blob URL so Android's normal download manager does
+                  // not reject an unsupported file/content fetch scheme.
+                  final boolean localDocument =
+                      originalUrl.startsWith("content://") || originalUrl.startsWith("file:");
                   return GeckoResult.fromValue(
-                      new WebResponse.Builder(
-                              originalUrl.startsWith("content://") ? url : originalUrl)
+                      new WebResponse.Builder(localDocument ? url : originalUrl)
                           .statusCode(statusCode)
                           .body(response.body)
                           .skipConfirmation(skipConfirmation)
