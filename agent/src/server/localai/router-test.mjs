@@ -52,7 +52,7 @@ export class RouterModelTest {
       for (;;) {
         check();
         try { catalog = await request(prepared, '/models', { signal }); break; }
-        catch (error) { check(); if (!error.loading && !['ECONNREFUSED', 'ECONNRESET'].includes(error.cause?.code)) throw error; }
+        catch (error) { check(); if (!error.loading && !['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET'].includes(error.cause?.code)) throw error; }
         await pause(250);
       }
       const models = catalog.data || catalog.models || [];
