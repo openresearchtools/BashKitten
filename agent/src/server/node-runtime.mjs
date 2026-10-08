@@ -12,7 +12,7 @@ const packaged = fs.existsSync(path.join(app, 'build-platform.json')) || fs.exis
 const bundledNode = path.join(app, 'node/bin/node');
 const bundledNpm = path.join(app, 'node/lib/node_modules/npm/bin/npm-cli.js');
 if (packaged) {
-  if (!fs.existsSync(bundledNode) || !fs.existsSync(bundledNpm) ||
+  if (!fs.existsSync(bundledNode) || !fs.existsSync(bundledNpm) || !fs.existsSync(path.join(app, 'node/bin/pi')) ||
       fs.realpathSync(process.execPath) !== fs.realpathSync(bundledNode)) {
     throw Error('BashKitten requires its bundled Node runtime. Reinstall the package and launch bashkittenctl or bashkitten-pi.');
   }
@@ -52,8 +52,24 @@ delete process.env.PI_PACKAGE_DIR;
 delete process.env.NODE_PATH;
 delete process.env.NODE_OPTIONS;
 const runtimeBin = packaged ? path.dirname(bundledNode) : path.dirname(process.execPath);
-process.env.PATH = [runtimeBin, path.join(npmPrefix, 'bin'), ...(process.env.PATH || '').split(path.delimiter)
-  .filter(value => value !== runtimeBin && value !== path.join(npmPrefix, 'bin'))].join(path.delimiter);
+// Installed builds ship an immutable pi launcher beside Node. Checkouts need
+// their own shim before the developer Node's bin, which may contain another Pi.
+let developmentBin;
+if (!packaged) {
+  developmentBin = path.join(piAgentDir, 'bin');
+  fs.mkdirSync(developmentBin, { recursive: true, mode: 0o700 });
+  const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+  const shell = process.platform === 'android' ? '/data/data/com.termux/files/usr/bin/sh' : '/bin/sh';
+  const contents = `#!${shell}\nexec ${quote(process.execPath)} ${quote(path.join(app, 'src/server/rpc/launcher.mjs'))} "$@"\n`;
+  const file = path.join(developmentBin, 'pi');
+  if (!fs.existsSync(file) || fs.readFileSync(file, 'utf8') !== contents) {
+    const temporary = file + '.' + process.pid + '.tmp';
+    fs.writeFileSync(temporary, contents, { mode: 0o700 }); fs.renameSync(temporary, file);
+  }
+}
+const ownedBins = [...(developmentBin ? [developmentBin] : []), runtimeBin, path.join(npmPrefix, 'bin')];
+process.env.PATH = [...ownedBins, ...(process.env.PATH || '').split(path.delimiter)
+  .filter(value => !ownedBins.includes(value))].join(path.delimiter);
 process.env.npm_node_execpath = process.execPath;
 if (packaged) {
   process.env.OPENSSL_CONF = path.join(app, 'node/etc/openssl.cnf');

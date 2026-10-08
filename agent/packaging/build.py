@@ -309,6 +309,7 @@ def assemble(args):
         installed_app = prefix + '/lib/bashkitten'
         node = installed_app + '/node/bin/node'
         node_environment = f'unset NODE_OPTIONS NODE_PATH\nexport OPENSSL_CONF={installed_app}/node/etc/openssl.cnf\n'
+        executable(app / 'node/bin/pi', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/rpc/launcher.mjs "$@"\n')
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
             executable(bin_dir / name, f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/{script} {extra} "$@"\n')

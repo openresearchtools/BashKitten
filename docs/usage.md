@@ -190,7 +190,9 @@ its cache at `pi/npm-cache/`, and the default global prefix at `pi/npm/` beneath
 the data directory. Inherited npm routing overrides and Node module/preload
 settings are cleared for child processes. Standalone `~/.npmrc`, system npm
 configuration and another Pi installation are not imported.
-The private runtime and `pi/npm/bin` are first on the Agent's PATH, so ordinary
+The private runtime, its `pi` launcher and `pi/npm/bin` are first on the Agent's
+PATH. `pi install` uses BashKitten's selected Pi runtime even when another Pi is
+installed on the host. Development checkouts supply an owned `pi/bin/pi` shim. Ordinary
 `npm install -g` installs tools privately. Pi's own user package manager installs
 extensions under `pi/npm/node_modules`; trusted project dependencies and project
 configuration still belong to the selected project. This is not a shell sandbox:
