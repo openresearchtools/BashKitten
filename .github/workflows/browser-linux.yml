@@ -12,6 +12,9 @@ name: Linux packages
       search_run:
         required: true
         type: string
+      node_run:
+        required: true
+        type: string
   workflow_call:
     inputs:
       warm_gkrust:
@@ -21,6 +24,9 @@ name: Linux packages
         required: true
         type: string
       search_run:
+        required: true
+        type: string
+      node_run:
         required: true
         type: string
     secrets:
@@ -43,5 +49,6 @@ jobs:
       warm_gkrust: ${{ inputs.warm_gkrust }}
       auth_run: ${{ inputs.auth_run }}
       search_run: ${{ inputs.search_run }}
+      node_run: ${{ inputs.node_run }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
