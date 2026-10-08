@@ -6,8 +6,8 @@ import { authorizeManagerPath } from './access.mjs';
 
 const images = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'ico']);
 const sheets = new Set(['xlsx', 'xls', 'xlsb', 'xlsm', 'xltx', 'xltm', 'xlt', 'ods', 'ots', 'fods', 'csv', 'tsv']);
-const office = new Set(['doc', 'docx', 'docm', 'dot', 'dotx', 'dotm', 'odt', 'ott', 'rtf',
-  'ppt', 'pptx', 'pptm', 'pot', 'potx', 'potm', 'pps', 'ppsx', 'ppsm', 'odp', 'otp', 'odg', 'otg']);
+const office = new Set(['doc', 'docx', 'docm', 'dot', 'dotx', 'dotm', 'odt', 'ott', 'odm', 'otm', 'oth', 'fodt', 'rtf',
+  'ppt', 'pptx', 'pptm', 'pot', 'potx', 'potm', 'pps', 'ppsx', 'ppsm', 'odp', 'otp', 'fodp', 'odg', 'otg', 'fodg']);
 const markdown = new Set(['md', 'markdown', 'mdown', 'mkd']);
 
 export function decodePreviewText(bytes, { sample = false } = {}) {
