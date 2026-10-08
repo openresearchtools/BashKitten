@@ -5,7 +5,6 @@ import os from 'node:os';
 import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
-import { getModelsDirectory } from '../models/settings.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
 import { localAIDir, requireLocalRuntime, runtimeInfo, checkRuntime, installRuntime, validateBinary } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
@@ -145,7 +144,10 @@ export class LocalAI {
     let argv = config.argv.length ? config.argv.map(value => value === '{port}' ? String(port) : value) : [runtime.binary, '--host', '127.0.0.1', '--port', String(port)];
     if (!config.argv.length) {
       if (engine === 'llama') {
-        argv.push('--models-dir', await getModelsDirectory({ create: true }), '--models-preset', config.preset, '--offline', '--jinja');
+        // One shared download root now also contains TTS GGUFs. Only explicit
+        // router entries are chat models; scanning that root would offer speech
+        // decoders/projectors to Pi as if they were language models.
+        argv.push('--models-preset', config.preset, '--offline', '--jinja');
         if (config.keyFile) argv.push('--api-key-file', config.keyFile);
         const device = runtime.devices.find(item => item.backend === runtime.backend);
         argv.push('--device', device?.id || 'none', '--gpu-layers', runtime.backend === 'cpu' ? '0' : platform === 'termux' ? '999' : 'auto');
