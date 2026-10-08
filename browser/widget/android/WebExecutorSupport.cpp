@@ -587,7 +587,9 @@ nsresult WebExecutorSupport::CreateStreamLoader(
         });
     auto reject =
         jni::GeckoResultCallback::CreateAndAttach([](jni::Object::Param) {});
-    signal->NativeThen(cancel, reject);
+    auto cancellationSignal =
+        java::GeckoResult::LocalRef(signal.Cast<java::GeckoResult>());
+    cancellationSignal->NativeThen(cancel, reject);
   }
 
   if (cancellation->IsCancelled()) {
