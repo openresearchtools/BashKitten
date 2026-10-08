@@ -76,7 +76,8 @@ export async function localAISettings(parent, control, win, isLocal) {
     }));
     const cancel = node('button', 'Cancel'); cancel.type = 'button'; cancel.onclick = () => finish(null); chooser.append(cancel);
     observer.observe(doc.documentElement, { childList: true, subtree: true });
-    try { pending = true; await browse(initial); } catch (error) { feedback.textContent = error.message; } finally { pending = false; }
+    pending = true;
+    void browse(initial).catch(error => { if (!finished) feedback.textContent = error.message; }).finally(() => { pending = false; });
     location.focus();
     return result;
   };
