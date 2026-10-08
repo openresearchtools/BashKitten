@@ -28,9 +28,12 @@ The PDF viewer toolbar and the Files-row PDF attachment download both failed on
 the original `8114c8dc01` APK. The toolbar passed a file URL to a download manager
 which rejects that scheme; the Files route was subject to the existing preference
 that opens PDF attachments inline. Source fixes `8bf082bbec` and `a7e0ed2c72`
-preserve the PDF Blob download and honor explicit attachment downloads. Their
-actual installed-APK recheck is pending; source review alone is not a passing
-download check.
+preserve the PDF Blob download and honor explicit attachment downloads. Both
+passed an actual installed `a7e0ed2c72` APK recheck: the Files row displayed
+**Saved Shared MIME specification.pdf**; the PDF toolbar displayed **Download
+completed** and the normal Downloads screen listed `document.pdf`. Both completed
+MediaStore files contained all 146,453 bytes and matched the source SHA-256
+`faa06a15d80b2a91a5c044712858cfe2929f8b37e35c6e9d1f79aa49a71dc018`.
 
 Cancellation while conversion is still running remains unverified: the small
 documents completed before the attempted cancellation. Desktop native Files
