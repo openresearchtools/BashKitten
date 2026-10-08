@@ -97,7 +97,9 @@ Pi supplies tools, extensions, skills, models and compaction. BashKitten uses it
 own Pi profile at `~/.local/share/bashkitten-pi/pi`, including provider/OAuth
 credentials, settings, models, extensions, packages, themes, prompts and native
 session history. It does not import or update standalone Pi's `~/.pi/agent`.
-Use `pi install` for standalone Pi, or `bashkitten-pi install` for BashKitten.
+Inside BashKitten's agent shells, `pi install` uses this private runtime and
+profile. From an ordinary terminal, use `bashkitten-pi install` for BashKitten;
+an independently installed `pi` keeps its own profile.
 Browser and search skills ship in the integration package. The browser guide
 matches the authorized client platform.
 
@@ -145,8 +147,8 @@ First use opens account creation and authenticator enrollment; verify a code
 before publishing starts. Existing accounts are reused. The panel then shows
 the address, connection QR and file export. Publishing defaults off, remembers
 your choice and keeps Local on loopback. **Stop publishing** disables remote
-access without interrupting Local. Android runs its local Termux Agent or
-connects to a Linux remote; it does not publish its own backend.
+access without interrupting Local. Android can run its local Termux Agent,
+publish it through **Share local**, or connect to an authorized remote.
 
 Remote connections still require the exported Tor authorization, enrolled TLS
 identity and account with a second factor. Exports omit passwords and factor
