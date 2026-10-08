@@ -16,8 +16,10 @@ overlay. This supersedes the Linux-only LocalAI restriction below. The shared
 controller/catalogue/downloader now has source implementations for these flows;
 Android and desktop candidate builds and visible acceptance remain required.
 Parakeet uses the verified upstream CLI stdin decoder because `whisper-server`
-does not support that architecture. Its recordings remain in memory. Performance
-never substitutes app-only CPU usage for unavailable Android system counters.
+does not support that architecture. Its recordings remain in memory. The latest
+8 October performance request shows owned BashKitten workload CPU, with separate
+total CPU only where the device permits a real counter. GPU remains unavailable
+when no real device counter is readable; system RAM remains used/total GB.
 
 Requested 5 October 2026. **Status: plan, not implemented or accepted.** This
 extends the [browser integration plan](browser-integration-plan.md) and replaces
