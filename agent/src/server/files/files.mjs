@@ -114,7 +114,7 @@ export async function sendFile(req, res, file, download = false, name = path.bas
     // Its own meta policy further restricts scripts; its document iframe remains
     // opaque. Raw repository HTML/SVG keeps the script-disabled sandbox below.
     const policy = artifact && generatedPreview && mimeType(file) === 'text/html'
-      ? "sandbox allow-scripts allow-downloads; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'self' about:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+      ? "sandbox allow-scripts allow-downloads allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'self' about:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
       : "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:";
     const headers = { 'Content-Type': mimeType(file), 'Content-Length': stat.size,
       'Content-Disposition': disposition(name, download), 'X-Content-Type-Options': 'nosniff',

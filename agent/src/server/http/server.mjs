@@ -17,7 +17,7 @@ import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
 import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments, editFile } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
-import { startFilePreview, filePreview, cancelFilePreview, sendFilePreview, closeFilePreviews, revokeRemotePreviews } from '../files/previews.mjs';
+import { prepareAndSendFile, closeFilePreviews, revokeRemotePreviews } from '../files/previews.mjs';
 import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
 import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
@@ -186,17 +186,14 @@ const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
 async function fileRequest(req, res, url, record) {
   const route = url.pathname, mutation = !['GET', 'HEAD'].includes(req.method);
-  if (route === '/api/files/previews') {
-    requireMethod(req, ['POST']);
-    return json(res, await startFilePreview(await jsonBody(req), close => auth.watch(record, close)), 202);
-  }
-  const preview = route.match(/^\/api\/files\/previews\/([a-f0-9-]{36})(?:\/(content|cancel))?$/);
-  if (preview) {
-    const [, id, action] = preview;
-    requireMethod(req, action === 'cancel' ? ['POST'] : action === 'content' ? ['GET', 'HEAD'] : ['GET']);
-    if (action === 'cancel') return json(res, cancelFilePreview(id));
-    if (action === 'content') return await sendFilePreview(req, res, id);
-    return json(res, filePreview(id));
+  if (route === '/api/files/previews/content') {
+    requireMethod(req, ['GET']);
+    if (url.searchParams.size !== 2 || url.searchParams.getAll('root').length !== 1 || url.searchParams.getAll('path').length !== 1) {
+      throw Object.assign(Error('Choose a file to view'), { status: 400 });
+    }
+    return await prepareAndSendFile(req, res, {
+      root: url.searchParams.get('root'), path: url.searchParams.get('path'),
+    }, close => auth.watch(record, close));
   }
   if (route === '/api/files/edit') {
     requireMethod(req, ['GET', 'POST']);
