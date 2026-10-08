@@ -8,7 +8,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, requireLocalRuntime, runtimeInfo, checkRuntime, installRuntime, validateBinary } from './runtimes.mjs';
+import { localAIDir, requireLocalRuntime, runtimeInfo, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
 import { launchInference } from './launch.mjs';
 
@@ -133,7 +133,8 @@ export class LocalAI {
     const runtime = await runtimeInfo(engine);
     const file = config.mode === 'custom' ? config.binary : runtime?.binary;
     if (!file) throw Error(`Download the ${engine} runtime first`);
-    return validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, config.env);
+    const environment = config.mode === 'custom' ? config.env : managedRuntimeEnvironment(file, config.env);
+    return validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, environment);
   }
   async command(engine, config, port) {
     const runtime = await this.binary(engine, config);
@@ -141,7 +142,7 @@ export class LocalAI {
       if (config.argv.length || config.keepRunning) throw Error('Parakeet uses its on-demand stdin command; clear the custom command and Keep running');
       const executable = path.join(path.dirname(runtime.binary), 'parakeet-cli');
       await fs.access(executable, fs.constants.X_OK); await this.model(config.model, 'parakeet');
-      return { argv: [executable, '--model', config.model, '--file', '-', '--no-prints', ...(runtime.backend === 'cpu' ? ['--no-gpu'] : ['--device', runtime.devices.find(item => item.backend === runtime.backend).id])], cwd: config.cwd, env: {} };
+      return { argv: [executable, '--model', config.model, '--file', '-', '--no-prints', ...(runtime.backend === 'cpu' ? ['--no-gpu'] : ['--device', runtime.devices.find(item => item.backend === runtime.backend).id])], cwd: config.cwd, env: runtime.env };
     }
     let argv = config.argv.length ? config.argv.map(value => value === '{port}' ? String(port) : value) : [runtime.binary, '--host', '127.0.0.1', '--port', String(port)];
     if (!config.argv.length) {
@@ -175,7 +176,7 @@ export class LocalAI {
       if (argument(argv, '--api-key') !== null && (config.keyFile || argument(argv, '--api-key-file'))) throw Error('Choose the direct application key or its key file, not both');
       if ((argument(argv, '--api-key-file') || config.env.LLAMA_ARG_API_KEY_FILE || '') !== config.keyFile) throw Error('The command and Pi import must use the same selected key file');
     }
-    return { argv, cwd: config.cwd, env: config.env };
+    return { argv, cwd: config.cwd, env: runtime.env };
   }
   async configureService(engine, { runtimeRequired = false } = {}) {
     const config = (await this.config())[engine], status = await this.services.status();
@@ -322,7 +323,7 @@ export class LocalAI {
       '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
       ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
       ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])];
-    const child = launchInference({ argv, cwd: config.cwd, env: {} }, { capture: false });
+    const child = launchInference({ argv, cwd: config.cwd, env: runtime.env }, { capture: false });
     this.synthesis = child; this.synthesisState = { state: 'generating' };
     const ended = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', code => code === 0 ? resolve() : reject(Error('Speech synthesis failed; check the runtime, matching model/projector and reference voice'))); });
     this.synthesisFinished = (async () => {

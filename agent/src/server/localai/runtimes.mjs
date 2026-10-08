@@ -19,6 +19,14 @@ const executable = engine => engine === 'llama' ? 'llama-server' : 'whisper-serv
 const engineName = engine => { if (!['llama', 'whisper'].includes(engine)) throw Error('Unknown LocalAI engine'); return engine; };
 export function requireLocalRuntime() { if (!arch) throw Error('LocalAI requires an x86_64 or ARM64 native runtime'); }
 export async function runtimeInfo(engine) { return readJson(path.join(runtimeDirectory, engineName(engine) + '.json'), null); }
+// Scope native library/plugin lookup to this downloaded engine, never to the
+// controller's private Node or unrelated tool processes. Router model children
+// inherit this same selection. System loader paths remain the OS defaults.
+export function managedRuntimeEnvironment(binary, overrides = {}) {
+  if (!path.isAbsolute(binary || '')) throw Error('The managed runtime needs an absolute executable path');
+  const directory = path.dirname(binary);
+  return { ...overrides, LD_LIBRARY_PATH: directory, GGML_BACKEND_PATH: directory };
+}
 export async function preferredBackend(choice) {
   requireLocalRuntime();
   if (platform === 'termux') {
@@ -102,9 +110,9 @@ export async function validateBinary(engine, filename, backend, environment = {}
   const linked = await exec('ldd', [filename], { env, timeout: 10000 });
   const libraries = [...new Set([...linked.stdout.matchAll(/(?:=>\s*)?(\/[^\s]+)\s*\(/g)].map(match => match[1]))];
   for (const directory of new Set([path.dirname(filename), environment.GGML_BACKEND_PATH].filter(Boolean))) {
-    for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
+    for (const entry of await fs.readdir(directory)) if (/^lib(?:ggml|llama|whisper|parakeet|mtmd)[^/]*\.so(?:\.[0-9]+)*$/.test(entry)) libraries.push(await fs.realpath(path.join(directory, entry)));
   }
-  return { binary: filename, backend: selectedBackend, devices, libraries: [...new Set(libraries)] };
+  return { binary: filename, backend: selectedBackend, devices, libraries: [...new Set(libraries)], env: environment };
 }
 export async function installRuntime(job, { engine, config, selection }, activate) {
   requireLocalRuntime(); engineName(engine);
@@ -142,7 +150,8 @@ export async function installRuntime(job, { engine, config, selection }, activat
     const record = await readJson(path.join(extracted, 'build.json'));
     if ((record.os || 'linux') !== runtimeOS || record.engine !== engine || record.arch !== arch || record.backend !== artifact.backend || record.sourceCommit !== available.sourceCommit) throw Error('Runtime build metadata does not match the selected release');
     await fs.access(path.join(extracted, 'LICENSES.txt')); await fs.access(path.join(extracted, 'SOURCE.json'));
-    const verified = await validateBinary(engine, path.join(extracted, 'bin', executable(engine)), config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend);
+    const filename = path.join(extracted, 'bin', executable(engine));
+    const verified = await validateBinary(engine, filename, config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend, managedRuntimeEnvironment(filename));
     const destination = path.join(runtimeDirectory, engine + '-' + available.release + '-' + artifact.backend + '-' + path.basename(staging).slice(10));
     await fs.rename(extracted, destination); inactive = destination;
     const next = { ...record, release: available.release, version: available.version, root: destination, binary: path.join(destination, 'bin', executable(engine)), selectedBackend: verified.backend, devices: verified.devices };

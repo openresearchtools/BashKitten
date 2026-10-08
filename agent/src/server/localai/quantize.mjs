@@ -4,7 +4,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pickerDirectory } from '../files/folders.mjs';
-import { runtimeInfo } from './runtimes.mjs';
+import { runtimeInfo, managedRuntimeEnvironment } from './runtimes.mjs';
 import { launchInference } from './launch.mjs';
 import { publishNewFile } from './files.mjs';
 
@@ -44,7 +44,7 @@ export async function quantizePocket(job, { file, type, output } = {}) {
     staging = await fs.mkdtemp(path.join(destination, '.bashkitten-quantize-'));
     const temporary = path.join(staging, 'model.gguf');
     await job.phase(`Creating Pocket ${type}; the original model and projector are preserved`);
-    const child = launchInference({ argv: [executable, file, temporary, type], cwd: destination, env: {} }, { capture: false });
+    const child = launchInference({ argv: [executable, file, temporary, type], cwd: destination, env: managedRuntimeEnvironment(runtime.binary) }, { capture: false });
     const cancellation = setInterval(() => { if (job.job.cancelRequested) child.kill('SIGTERM'); }, 250);
     try {
       await new Promise((resolve, reject) => {
