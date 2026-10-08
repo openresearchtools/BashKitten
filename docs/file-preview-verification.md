@@ -39,9 +39,13 @@ A later View → Cancel attempt used a larger external ODT made only from public
 project documentation. The native dialog closed, but read-only process inspection
 still found the worker and LibreOffice converter immediately afterwards. They
 subsequently exited and removed their scratch files. The existing Android fetch
-result had no cancellation delegate before response headers arrived, so this did
-not establish prompt conversion cancellation; its native fix requires a separate
-installed-build recheck.
+result had no cancellation delegate before response headers arrived. The native
+repair passed the same actual flow on installed APK/backend `8ecc1a1d16`: the
+guard, preview worker and LibreOffice process were observed running while the
+dialog displayed Preparing, then all were absent in the first process sample
+immediately after Cancel. The backend scratch directory was empty, the native
+preview cache contained no files, and no preview tab opened. The external ODT
+fixture was removed from the guest and workstation after this check.
 
 Desktop native Files interaction remains unverified because the available OS
 input path did not activate its controls. Parser coverage for additional supported
