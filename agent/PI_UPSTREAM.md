@@ -20,7 +20,7 @@ Only this native runtime pin applies to this branch. The old Rust port and its
 differential fixtures are available in Git history, outside the current tree.
 
 The complete unmodified pillama 0.4.0 source tree at
-`a34432ba51dbf79d509849df331a7093dbaca0bc` is in `pi/vendor/pillama/`, including
+`250d558ded87e6b389456a549adccf7168bbeb45` is in `pi/vendor/pillama/`, including
 its MIT license, dependency lock and build metadata. Exact tree/archive provenance
 is in `pi/vendor/pillama.upstream.json`. Packaging selects its declared runtime
 files from this tree; no pillama fetch or development/test payload is required.

@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/openresearchtools/pillama.git",
-  "commit": "a34432ba51dbf79d509849df331a7093dbaca0bc",
-  "tree": "47bf5d4691f41bb102803af60ded3c94d981a554",
-  "archive": "https://codeload.github.com/openresearchtools/pillama/tar.gz/a34432ba51dbf79d509849df331a7093dbaca0bc",
-  "sha256": "51fa58e9e1ce3af1828cd4a3953c25ec42d1df45363e54759ca7fcfe6640212f"
+  "commit": "250d558ded87e6b389456a549adccf7168bbeb45",
+  "tree": "d1efa52dfbf30465ca50493e329450e5e39a2153",
+  "archive": "https://codeload.github.com/openresearchtools/pillama/tar.gz/250d558ded87e6b389456a549adccf7168bbeb45",
+  "sha256": "d2477eb00a778f2936fb4aef1b162365406d7c0463b4aadd6f6a6274fbcbae14"
 }
