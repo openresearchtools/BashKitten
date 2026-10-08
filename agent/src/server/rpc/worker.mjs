@@ -187,6 +187,9 @@ async function launch() {
   });
   rpc.on('exit', () => {
     if (changing || stopping) return;
+    // Startup commands reject when Pi exits. Let the startup catch report that
+    // failure; the worker's HTTP server does not exist until launch succeeds.
+    if (!server) return;
     busy = compacting = false;
     emit({ type: 'notice', message: 'Pi stopped. Send a message to resume this session.' }, false);
     for (const res of clients) res.end('event: offline\ndata: {}\n\n');
