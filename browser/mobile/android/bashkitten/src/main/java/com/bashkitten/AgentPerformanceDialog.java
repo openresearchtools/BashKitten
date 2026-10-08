@@ -81,8 +81,11 @@ public final class AgentPerformanceDialog extends AppCompatDialogFragment {
     private void show(PerformanceMonitor.Sample reading, Double cpu, boolean pending, String reason) {
         String note = cpu == null && !pending ? "\n\nCPU: " + (reason.isEmpty() ? "Workload counter unavailable" : reason) : "";
         if (reading.gpu == null) note += "\n\nGPU counter unavailable to this Android app";
-        values.setText(String.format(Locale.getDefault(), "Workload CPU  %s\nGPU  %s\nSystem RAM  %.2f / %.2f GB%s",
-            pending ? "…" : percentage(cpu), percentage(reading.gpu), reading.used / 1e9, reading.total / 1e9, note));
+        String totalCpu = reading.totalCpu != null || reading.totalCpuPending
+            ? "\nTotal CPU  " + (reading.totalCpuPending ? "…" : percentage(reading.totalCpu)) : "";
+        if (!totalCpu.isEmpty() && reading.totalCpuIncludesIoWait) note += "\n\nTotal CPU includes I/O wait on this device";
+        values.setText(String.format(Locale.getDefault(), "Workload CPU  %s%s\nGPU  %s\nSystem RAM  %.2f / %.2f GB%s",
+            pending ? "…" : percentage(cpu), totalCpu, percentage(reading.gpu), reading.used / 1e9, reading.total / 1e9, note));
     }
     private static String percentage(Double value) { return value == null ? "—" : String.format(Locale.getDefault(), "%.2f%%", value); }
     @Override public void onPause() {
