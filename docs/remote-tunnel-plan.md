@@ -1,5 +1,13 @@
 # Remote connections, service tunnels and desktop lifetime
 
+Controlling verification update, 8 October: ADB is explicitly authorized for
+all Android setup, permissions, package installation and debugging; use direct
+Termux shell access for terminal work. Actual BashKitten feature acceptance uses
+the desktop app with Cuttlefish's web UI. Fresh architecture profiles, Android 17,
+native KVM/graphics, 16 GiB RAM and at least 128 GiB userdata on the system SSD
+replace the older no-ADB/manual-Settings-only and profile/storage instructions
+below. Those passages record historical gates, not current restrictions.
+
 8 October LocalAI extension: the user requested the same native LocalAI workflow
 on Android using native Termux CPU/Vulkan runtimes, a CPU/GPU-only mobile choice
 with all GPU layers, smallest-first Qwen 2B/4B and plain Q4 downloads, Whisper and

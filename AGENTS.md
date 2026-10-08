@@ -10,9 +10,12 @@ BashKitten owns a complete Pi profile under `$BASHKITTEN_DATA_DIR/pi`, including
 credentials, settings, packages, extensions and native sessions. Do not import or
 modify standalone Pi's profile. Use Pi's supported directory environment knobs.
 For architecture acceptance use fresh browser/backend/Pi profiles, with no copied
-old configuration. Latest verification instructions explicitly permit ADB for
-debugging and installation and direct Termux terminal access. Actual setup and
-acceptance still use the desktop BashKitten browser with Cuttlefish's web UI.
+old configuration. The latest 8 October instruction explicitly requires using
+ADB for Android setup, permissions, package installation and debugging, and
+direct Termux terminal access for shell/package work. Do not spend time clicking
+Android Settings or screenshotting Termux when these commands can do the setup.
+Use the desktop BashKitten browser with Cuttlefish's web UI for actual BashKitten
+feature interaction and acceptance, rather than custom backend function calls.
 Use stock Android 17 Cuttlefish with native KVM, 16 GiB RAM and at least 128 GiB
 userdata on the system SSD; keep build sources/caches in the separate Data-drive
 build repository, with 40 GiB desktop and Android x86_64 build budgets and P cores
@@ -207,25 +210,24 @@ Keep Argon2id, Origin/CSRF checks, private
 storage permissions and filesystem path confinement. Do not expose provider credentials in browser
 status, logs or URLs. Disable startup catalog/update traffic and telemetry.
 
-Use Node >=22.19, plus ripgrep and fd. Keep BashKitten-owned test suites,
+Use the bundled Node runtime, plus ripgrep and fd. Keep BashKitten-owned test suites,
 fixtures, instrumentation apps, probes and test dependencies outside this
 repository and all application/release artifacts. Verify production builds on
 Linux and disposable Android devices with external tools. Never seed production
-profiles with test providers or chats. Use stock, hardware-accelerated Cuttlefish
-with 64 GiB userdata for Android testing. The user explicitly rejected a separate
+profiles with test providers or chats. Use stock, hardware-accelerated Android 17
+Cuttlefish with 16 GiB RAM and at least 128 GiB userdata on the system SSD.
+The user explicitly rejected a separate
 16 KB software-emulated guest; do not recreate it or change the stock kernel.
 Keep build-time 16 KB alignment checks and report runtime coverage accurately.
 External checks must reserve isolated ports,
 stop all their owned processes in cleanup, and verify normal-profile startup too.
-The user's latest verification requirement is manual interaction through the
-visible Cuttlefish Android UI and normal system dialogs, as clarified on
-23 September. Do not add or run BashKitten-owned scripted tests. Install and use
-the apps as an ordinary Android user: no ADB, root commands, bootloader changes,
-developer-option workarounds, seeded setup state or hidden permission changes.
-On 25 September the user explicitly authorized turning off Android's child-process
-restrictions. Use the visible Settings → Developer options → Disable child process
-restrictions toggle for this one exception. Do not enable debugging, use ADB/root,
-change other developer settings or claim this is an unchanged-default device.
+The 8 October instructions replace the old September prohibition on ADB and
+command-based Android setup. Use ADB and direct Termux commands for setup,
+permissions, package operations and debugging. Disabling Android child-process
+restrictions is authorized. Do not describe this as an unchanged-default device.
+Do not add or run BashKitten-owned scripted product tests. Use the real app UI
+for feature acceptance, reserving screenshots for visible state that needs
+verification; use fresh capture filenames and correct viewport coordinates.
 Build and artifact-integrity checks are not evidence of that user flow. Continue
 through the builds and manual flows, fixing discovered failures; a dispatched
 build is not completion. Label Cuttlefish results accurately, without claiming

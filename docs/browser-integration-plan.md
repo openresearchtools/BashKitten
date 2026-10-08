@@ -1,5 +1,15 @@
 # BashKitten browser integration plan
 
+Controlling verification update, 8 October: use ADB for Android setup,
+permissions, installation and debugging, and direct Termux shell access for
+package/terminal work. Use BashKitten's desktop browser and Cuttlefish web UI
+for actual feature interaction. Fresh architecture-acceptance profiles are
+required; do not import old configuration. Cuttlefish uses Android 17, native
+KVM/graphics, 16 GiB RAM and at least 128 GiB userdata on the system SSD.
+The older no-ADB, manual-Settings-only, 64 GiB and preserve-test-profile passages
+below are historical and do not control this work. Node/npm are now bundled
+privately on Linux and Termux, with an isolated complete BashKitten Pi profile.
+
 Proposed architecture, 22 September 2026. This records the new requested
 direction; it does not claim that the migration is implemented or tested.
 The 5 October implementation constraints in `remote-tunnel-plan.md` apply:
