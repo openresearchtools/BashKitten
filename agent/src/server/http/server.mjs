@@ -341,7 +341,8 @@ async function handler(req, res) {
       requireMethod(req, ['GET']);
       const id = url.searchParams.get('session');
       const native = id && await running(id) ? await workerRequest(id, '/models') : null;
-      return json(res, { models: await services.models(native?.models), defaultModel: config.default_model, defaultThinking: config.default_thinking });
+      return json(res, await services.catalog(native?.models, { cwd: config.default_cwd || os.homedir(),
+        model: config.default_model, thinking: config.default_thinking }));
     }
     if (route === '/api/services') { requireMethod(req, ['GET']); return json(res, { services: await services.list(), login: services.state() }); }
     if (route === '/api/services/login-status') { requireMethod(req, ['GET']); return json(res, { login: services.state() }); }

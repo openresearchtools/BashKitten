@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { piAgentDir } from '../node-runtime.mjs';
 
 const providerRevisionFile = path.join(dataDir, 'provider-revision.json');
 export const providerRevision = () => readJson(providerRevisionFile, null);
@@ -43,12 +44,30 @@ export class Services {
       ]
     }));
   }
-  async models(models) {
-    const { ai: { getSupportedThinkingLevels } } = await loadPi();
-    models ||= (await this.runtime()).getAvailableSnapshot();
-    return models.map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
-      contextWindow: m.contextWindow, input: m.input,
-      available: true, thinking_levels: getSupportedThinkingLevels(m) }));
+  async catalog(models, { cwd, model = '', thinking = '' }) {
+    const { pi, ai: { getSupportedThinkingLevels, clampThinkingLevel } } = await loadPi();
+    const runtime = await this.runtime();
+    const settings = pi.SettingsManager.create(cwd, piAgentDir, { projectTrusted: false });
+    models ||= runtime.getAvailableSnapshot();
+    const separator = model.indexOf('/');
+    const selected = separator > 0 ? runtime.getModel(model.slice(0, separator), model.slice(separator + 1)) : undefined;
+    let defaults = { model, thinking };
+    if (!model || selected) {
+      // Ask stock Pi to resolve its defaults without a worker, prompt, resource
+      // discovery or durable session. Live workers remain authoritative later.
+      const loader = new pi.DefaultResourceLoader({ cwd, agentDir: piAgentDir, settingsManager: settings,
+        noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true });
+      const { session } = await pi.createAgentSession({ cwd, agentDir: piAgentDir, modelRuntime: runtime,
+        settingsManager: settings, sessionManager: pi.SessionManager.inMemory(cwd), resourceLoader: loader,
+        noTools: 'all', model: selected, thinkingLevel: thinking || undefined });
+      try { defaults = { model: session.model ? `${session.model.provider}/${session.model.id}` : '',
+        thinking: session.model ? session.thinkingLevel : '' }; }
+      finally { session.dispose(); }
+    }
+    return { models: models.map(m => ({ id: m.id, provider: m.provider, name: `${m.name || m.id} · ${m.provider}`,
+      contextWindow: m.contextWindow, input: m.input, available: true,
+      default_thinking: clampThinkingLevel(m, settings.getModelThinkingLevel(m.provider, m.id) ?? settings.getDefaultThinkingLevel() ?? 'medium'),
+      thinking_levels: getSupportedThinkingLevels(m) })), defaultModel: defaults.model, defaultThinking: defaults.thinking };
   }
   state() {
     if (!this.attempt) return null;
