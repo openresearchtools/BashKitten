@@ -231,7 +231,14 @@ export async function localAISettings(parent, control, win, isLocal) {
       context.value = config.contextSize ?? 0; layers.value = config.gpuLayers ?? 'auto'; fit.checked = config.fit !== false;
       cacheGpu.checked = config.cacheGpu !== false; flash.value = config.flashAttention || 'auto'; extra.value = config.extra || '';
       const choices = [['none', 'CPU'], ['', 'Engine default'], ...catalogue.devices.map(item => [item.id, item.label || item.id])];
-      if (config.device && !choices.some(([id]) => id === config.device)) choices.push([config.device, config.device + ' (saved; not currently available)']);
+      for (const backend of ['cuda', 'vulkan']) {
+        const devices = catalogue.devices.filter(item => item.backend === backend);
+        if (devices.length > 1) choices.push([devices.map(item => item.id).join(','), 'All ' + backend.toUpperCase() + ' GPUs']);
+      }
+      if (config.device && !choices.some(([id]) => id === config.device)) {
+        const available = config.device.split(',').every(id => catalogue.devices.some(item => item.id === id));
+        choices.push([config.device, config.device + (available ? ' (saved selection)' : ' (saved; not currently available)')]);
+      }
       device.replaceChildren(...choices.map(([id, label]) => { const option = node('option', label); option.value = id; return option; })); device.value = config.device ?? '';
       deviceNote.textContent = catalogue.deviceError || '';
       const minutes = String(config.idleMinutes ?? 0); customIdle.value = minutes;
