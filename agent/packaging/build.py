@@ -340,9 +340,9 @@ if [ ! -f "$runtime/ready" ]; then
   touch "$runtime/ready"
 fi
 printf '%s\\n' '{managed}' > "$runtime/managed.json"
-if ! command -v pi >/dev/null 2>&1 && [ ! -e '{prefix}/bin/pi' ] && [ ! -L '{prefix}/bin/pi' ]; then
-  ln -s bashkitten-pi '{prefix}/bin/pi'
-fi
+# Retire only the exact global alias created by older BashKitten packages.
+# Private agent shells use node/bin/pi; never replace an independent Pi.
+if [ "$(readlink '{prefix}/bin/pi')" = bashkitten-pi ]; then rm '{prefix}/bin/pi'; fi
 mkdir -p '{Path(installation).parent}'
 cp '{installed_app}/build-platform.json' '{installation}.tmp'
 chmod 644 '{installation}.tmp'

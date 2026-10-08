@@ -39,13 +39,15 @@ change SELinux, use root, or depend on an ADB session.
 ## Cuttlefish coverage, 8 October 2026
 
 On the stock-kernel Android 17 Cuttlefish guest used for development,
-`run-as com.termux` could read the online CPU list (`0-7`), but `/proc/stat`,
+both `run-as com.termux` and a command launched by Termux's actual
+`RunCommandService` could read the online CPU list (`0-7`), but `/proc/stat`,
 `/proc/uptime`, `/proc/loadavg`, `/proc/schedstat` and cgroup CPU counters were
 permission denied. KGSL and the known Pixel Mali paths were absent. The guest
-uses the virtual gfxstream GPU, not either of those physical drivers. These
-observations establish the limitation of that read-only debug context; they do
-not establish physical Pixel or Qualcomm runtime coverage. The installed release
-BashKitten APK does not permit `run-as`.
+uses the virtual gfxstream GPU, not either of those physical drivers. The
+service-launched command ran in `untrusted_app_27`, the real Termux application
+domain, rather than `runas_app`. These observations establish the limitation of
+that app context; they do not establish physical Pixel or Qualcomm runtime
+coverage. The installed release BashKitten APK does not permit `run-as`.
 
 Consequently the code cannot promise CPU/GPU percentages on stock Android where
 the operating system withholds all supported device counters. RAM and overlay
