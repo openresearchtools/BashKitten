@@ -303,6 +303,20 @@ def main():
             downloads = list(pool.map(lambda item: fetch(item, cache), sources))
         (source / 'archives').mkdir()
         for item, downloaded in zip(sources, downloads):
+            if args.platform == 'termux' and item == record['dependency_sources']['libc++']:
+                # Preserve only the permissive runtime input we redistribute, not
+                # unrelated NDK host tools with their own source obligations.
+                ndk = source / 'libcxx-ndk-input'
+                ndk.mkdir()
+                triple = 'x86_64-linux-android' if args.architecture == 'x86_64' else 'aarch64-linux-android'
+                member = 'android-ndk-r30/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/' + triple + '/libc++_shared.so'
+                with zipfile.ZipFile(downloaded) as contents:
+                    (ndk / 'libc++_shared.so').write_bytes(contents.read(member))
+                    (ndk / 'NOTICE').write_bytes(contents.read('android-ndk-r30/NOTICE'))
+                    (ndk / 'LLVM-NOTICE').write_bytes(contents.read('android-ndk-r30/toolchains/llvm/prebuilt/linux-x86_64/NOTICE'))
+                (ndk / 'provenance.json').write_text(json.dumps({**item, 'archive_member': member,
+                    'member_sha256': sha256(ndk / 'libc++_shared.so')}, indent=2) + '\n')
+                continue
             # Content-addressed filenames avoid collisions and preserve upstream compressed inputs.
             os.link(downloaded, source / 'archives' / downloaded.name)
         (source / 'sources.json').write_text(json.dumps(sources, indent=2) + '\n')

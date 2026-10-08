@@ -18,9 +18,10 @@ SHA256 sidecars and `SHA256SUMS`. Downloads are content addressed and verified
 against the checked-in lock. The source artifact preserves the builder, lock,
 complete npm JavaScript distribution and notices, complete Node source,
 Termux recipes and patches, and dependency source archives. The permissively
-licensed libc++ runtime is taken from the original NDK r30 distribution, which
-is retained with its complete upstream NOTICE; that input is a binary NDK
-distribution, not a claim to contain LLVM's entire source repository.
+licensed libc++ runtime is taken from the original NDK r30 distribution. Its
+original library, complete upstream NOTICE, LLVM notice and exact extraction
+provenance are retained. Unrelated NDK host executables are not redistributed;
+this input does not claim to contain LLVM's entire source repository.
 
 ## Pins and provenance
 
