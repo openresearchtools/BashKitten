@@ -8,7 +8,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, requireLocalRuntime, runtimeInfo, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment } from './runtimes.mjs';
+import { localAIDir, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
 import { launchInference } from './launch.mjs';
 
@@ -112,10 +112,10 @@ export class LocalAI {
     const engines = {};
     for (const engine of Object.keys(ids)) {
       const runtime = await runtimeInfo(engine), service = host.services.find(item => item.id === ids[engine]);
-      engines[engine] = { config: config[engine], runtime, service, url: service ? 'http://' + service.target.address : null,
+      engines[engine] = { config: config[engine], runtime: describeRuntime(runtime), service, url: service ? 'http://' + service.target.address : null,
         savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && !sameRuntimeConfig(this.runningConfig.get(engine), config[engine])), error: this.errors.get(engine) || '' };
     }
-    return { ...engines, tts: { config: config.tts, runtime: await runtimeInfo('llama'), synthesis: this.synthesisState || { state: 'idle' } }, platform, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
+    return { ...engines, tts: { config: config.tts, runtime: describeRuntime(await runtimeInfo('llama')), synthesis: this.synthesisState || { state: 'idle' } }, platform, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
   }
   async save(value) { return this.exclusive(() => this.saveConfiguration(value)); }
   async saveConfiguration({ engine, config: input, revision }) {

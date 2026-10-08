@@ -19,6 +19,18 @@ const executable = engine => engine === 'llama' ? 'llama-server' : 'whisper-serv
 const engineName = engine => { if (!['llama', 'whisper'].includes(engine)) throw Error('Unknown LocalAI engine'); return engine; };
 export function requireLocalRuntime() { if (!arch) throw Error('LocalAI requires an x86_64 or ARM64 native runtime'); }
 export async function runtimeInfo(engine) { return readJson(path.join(runtimeDirectory, engineName(engine) + '.json'), null); }
+// Native UI status needs the installed selection, not CMake commands or full
+// readelf reports. Those remain in build.json/SOURCE.json beside the runtime.
+// In particular, Termux truncates PendingIntent output beyond 100 KiB.
+export function describeRuntime(runtime) {
+  if (!runtime) return null;
+  const { engine, version, upstreamVersion, sourceCommit, builderCommit, os, arch,
+    backend, release, root, binary, selectedBackend, devices, executables,
+    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements } = runtime;
+  return { engine, version, upstreamVersion, sourceCommit, builderCommit, os, arch,
+    backend, release, root, binary, selectedBackend, devices, executables,
+    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements };
+}
 // Scope native library/plugin lookup to this downloaded engine, never to the
 // controller's private Node or unrelated tool processes. Router model children
 // inherit this same selection. System loader paths remain the OS defaults.
@@ -80,7 +92,7 @@ export async function checkRuntime(engine, config) {
   const installed = await runtimeInfo(engine);
   return { version: manifest.upstreamVersion, sourceCommit: manifest.sourceCommit, release: release.tag_name,
     backend, artifact: { ...artifact, url: downloadURL(asset.browser_download_url).href },
-    updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed };
+    updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed: describeRuntime(installed) };
 }
 export async function validateBinary(engine, filename, backend, environment = {}) {
   requireLocalRuntime(); engineName(engine);
