@@ -30,7 +30,7 @@ async function snapshot(job) {
     const before = await handle.stat({ bigint: true });
     if (!before.isFile()) throw Error('Choose a regular file');
     output = await fs.open(input, 'wx', 0o600);
-    await pipeline(handle.createReadStream({ autoClose: false }), output.createWriteStream({ autoClose: false }), { signal: abort.signal });
+    await pipeline(handle.createReadStream({ autoClose: false }), output.createWriteStream(), { signal: abort.signal });
     const after = await handle.stat({ bigint: true });
     if (before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.size !== after.size) throw Error('The file changed while opening; choose View again');
     await authorizeManagerPath(descriptor);
