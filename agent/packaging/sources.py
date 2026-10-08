@@ -11,6 +11,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
+from build import checked_archive
 import subprocess
 import tarfile
 
@@ -19,11 +21,14 @@ ROOT = AGENT.parent
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('output', type=Path)
 parser.add_argument('--revision', default='HEAD')
+parser.add_argument('--node-sources', type=Path, required=True)
+parser.add_argument('--cache', type=Path)
 args = parser.parse_args()
 revision = subprocess.check_output(['git', 'rev-parse', args.revision], cwd=ROOT, text=True).strip()
 def tracked(name): return subprocess.check_output(['git', 'show', revision + ':' + name], cwd=ROOT)
 lock = json.loads(tracked('agent/package-lock.json'))
-cache = AGENT / 'work/sources'; cache.mkdir(parents=True, exist_ok=True)
+cache_root = args.cache or (args.output.resolve().parent / 'bashkitten-source-cache')
+cache = cache_root / 'npm'; cache.mkdir(parents=True, exist_ok=True)
 args.output.mkdir(parents=True, exist_ok=True)
 records = {}
 for location, value in lock['packages'].items():
@@ -67,7 +72,8 @@ with tarfile.open(args.output / ('bashkitten-dependency-source-' + revision[:12]
     archive.add(pi_source, arcname='dependencies/' + pi_source.name)
     for component in components: archive.add(cache / component['file'], arcname='dependencies/' + component['file'])
 # Native sources and license supplements omitted from npm distributions.
-extra_cache = AGENT / 'work/license-sources'
+extra_cache = cache_root / 'native'
+extra_cache.mkdir(parents=True, exist_ok=True)
 with tarfile.open(args.output / ('bashkitten-native-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
     for value in json.loads(tracked('agent/licenses/source-archives.json')):
         file = extra_cache / value['file']
@@ -108,3 +114,17 @@ with tarfile.open(args.output / ('bashkitten-android-dependency-source-' + revis
     android_inventory.write_text(json.dumps(android_manifest, indent=2) + '\n')
     archive.add(android_inventory, arcname='android-dependencies/components.json')
 print('Collected', len(components), 'integrity-verified dependency archives, Pi upstream source and BashKitten source at', revision)
+
+# These source bundles come from the same pinned Node component jobs as the
+# runtime payloads. Retain all four targets, including native Termux libraries.
+node_sources = []
+for target in ['linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64']:
+    name = 'node-source-' + target + '.tar.gz'
+    matches = list(args.node_sources.rglob(name))
+    if len(matches) != 1:
+        raise ValueError('Missing or ambiguous private Node source: ' + target)
+    file = matches[0]
+    digest = checked_archive(file)
+    shutil.copy2(file, args.output / name)
+    node_sources.append({'target': target, 'file': name, 'sha256': digest})
+(args.output / 'node-source-components.json').write_text(json.dumps(node_sources, indent=2) + '\n')

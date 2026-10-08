@@ -15,6 +15,10 @@ an account with two-factor authentication. Turning Agent off stops its services;
 closing the Linux browser also stops its local Agent. Closing the Android
 browser leaves Termux work running until Agent is turned off.
 
+BashKitten includes private Node/npm and Pi data. Pi extensions and `npm -g`
+installs made by its Agent stay in BashKitten’s data directory; ordinary project
+dependencies remain in the selected project.
+
 Android setup includes battery-access prompts for background Agent work. For
 local Termux on Android 14+, enable **Developer options → Disable child process
 restrictions** and keep Developer options enabled. Setup links to Android Settings;

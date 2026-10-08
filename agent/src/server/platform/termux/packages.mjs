@@ -1,3 +1,4 @@
+import { npmCommand, npmArgs } from '../../node-runtime.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sourceResult, checkPi, installPi, atIdle } from '../../updates/runtime.mjs';
@@ -23,7 +24,7 @@ export async function packageInventory() {
   let npm = [], npmError;
   try {
     let output;
-    try { ({ stdout: output } = await exec('npm', ['ls', '--global', '--depth=0', '--json', '--offline', '--update-notifier=false'], { timeout: 15000, maxBuffer: Infinity })); }
+    try { ({ stdout: output } = await exec(npmCommand, npmArgs(['ls', '--global', '--depth=0', '--json', '--offline', '--update-notifier=false']), { timeout: 15000, maxBuffer: Infinity })); }
     catch (error) { if (error.code !== 1 || !error.stdout) throw error; output = error.stdout; }
     const value = JSON.parse(output);
     npm = Object.entries(value.dependencies || {}).map(([name, item]) => ({ name, version: item.version || 'Unknown' }));
@@ -54,7 +55,7 @@ export async function updatePackages(job) {
   });
   await job.step('apt-upgrade', 'Updating Termux packages', () => atIdle(job, async () => {
     const simulation = await apt(job, ['-s', 'full-upgrade']);
-    if (/^Remv (bashkitten|nodejs-lts|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(simulation)) throw Error('APT would remove a required BashKitten package; inspect the transaction before proceeding');
+    if (/^Remv (bashkitten|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(simulation)) throw Error('APT would remove a required BashKitten package; inspect the transaction before proceeding');
     await apt(job, ['--download-only', '-y', 'full-upgrade']);
     await apt(job, ['-y', 'full-upgrade']);
   }));

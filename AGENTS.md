@@ -245,7 +245,14 @@ Firefox/Mozilla product, support and promotional links and controls for removed
 services. Remove those affordances while preserving working browser functions,
 DevTools, normal extension support and mandatory offline license attribution.
 The native apps are browsers and the separate server is part of BashKitten:
-its .deb bundles Pi/npm dependencies; Node, Termux and OS libraries are external.
+its .deb bundles private Node 24 LTS/npm, Pi and their dependencies. Termux and
+remaining declared OS libraries are external. The 8 October user request
+supersedes the earlier external-Node design: installed launchers must use the
+bundled native Node ELF, never silently fall back to a system runtime. npm's
+prefix, cache, userconfig and globalconfig belong beneath BashKitten's private
+Pi profile. Preserve HOME and project cwd; ordinary project dependencies remain
+project-local and agent `npm -g` installs go into the private prefix. Do not copy
+standalone Pi/npm settings or credentials into fresh profiles.
 Use the browser's native menus and appearance settings. About contains separate
 engine and bundled-component license buttons, available without login or backend.
 Do not restore the duplicate Agent shell menu or standalone web About/licenses.

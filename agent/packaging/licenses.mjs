@@ -88,6 +88,32 @@ async function searchInventory(root, expectedTarget) {
   return records;
 }
 
+async function nodeInventory(root, target, architecture) {
+  const runtime = path.join(root, 'node'), manifest = await json(path.join(runtime, 'manifest.json'));
+  if (manifest.schema !== 1 || manifest.platform !== target || manifest.architecture !== architecture) throw Error('Node runtime target mismatch');
+  const records = await arrayInventory(path.join(runtime, 'licenses.json'), 'Node / npm');
+  for (const name of ['Node.js', 'npm']) {
+    if (!records.some(value => value.name === name && value.version === (name === 'npm' ? manifest.npm_version : manifest.node_version))) throw Error('Missing bundled runtime notices: ' + name);
+  }
+  if (!Array.isArray(manifest.packages) || !manifest.packages.length) throw Error('Missing Node runtime dependency inventory');
+  for (const item of manifest.packages) {
+    if (!records.some(value => value.name === item.name && value.version === item.version)) throw Error('Missing bundled Node dependency notices: ' + item.name);
+  }
+  async function checkNpmTree(directory) {
+    const entries = await fs.readdir(directory, { withFileTypes: true }).catch(error => { if (error.code === 'ENOENT') return []; throw error; });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      const folder = path.join(directory, entry.name);
+      if (entry.name.startsWith('@')) { await checkNpmTree(folder); continue; }
+      const pkg = await json(path.join(folder, 'package.json'));
+      if (!records.some(value => value.name === pkg.name && value.version === pkg.version)) throw Error('Missing private npm dependency notices: ' + pkg.name + '@' + pkg.version);
+      await checkNpmTree(path.join(folder, 'node_modules'));
+    }
+  }
+  await checkNpmTree(path.join(runtime, 'lib/node_modules/npm/node_modules'));
+  return records;
+}
+
 export async function collectLicenses(root, { target, version, browser } = {}) {
   root = path.resolve(root);
   if (!['linux', 'termux'].includes(target)) throw Error('Choose the linux or termux package target');
@@ -107,19 +133,20 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
     ['Torkitten configuration patterns', 'Apache-2.0', ['NOTICE', 'TORKITTEN-LICENSE']],
   ]));
   records.push(...await searchInventory(root, auth.target));
+  records.push(...await nodeInventory(root, target, auth.architecture));
   const integration = await json(path.join(root, 'pi/package.json'));
   records.push(...await sourceNotices(path.join(root, 'pi'), 'Pi integration', [
     [integration.name, integration.license, ['LICENSE', 'NOTICE']],
     ['pillama', 'MIT', ['vendor/pillama/NOTICE', 'vendor/pillama/LICENSE'],
-      { version: '0.2.1', source: 'https://github.com/openresearchtools/pillama/tree/e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f' }],
+      { version: '0.4.0', source: 'https://github.com/openresearchtools/pillama/tree/fefa5a90c5f5f6eead52e9de9a3a698d2ea48f67' }],
   ]));
   if (target === 'linux') {
     if (!browser) throw Error('The complete Linux package requires its built browser license inventory');
     records.push(...await arrayInventory(path.join(path.resolve(browser), 'notices/licenses.json'), 'Browser'));
   } else if (browser) throw Error('The Termux package does not bundle the Android browser');
   const external = target === 'termux'
-    ? 'Termux, Node.js, Python, Git, GitHub CLI and the declared Termux packages are installed separately, not embedded in this package. Each is governed by its own package license and accompanying notices. The Android BashKitten browser is a separate APK with its own offline About and licenses.'
-    : 'Node.js, Python, GTK, operating-system graphics/audio libraries, Git, GitHub CLI and other declared system dependencies are installed separately. They retain their own package licenses and notices. Optional llama.cpp is installed as its own APT package, with its own native dependency notices; GPU drivers and model weights are not bundled here.';
+    ? 'Termux, Python, Git, GitHub CLI and the declared Termux packages are installed separately, not embedded in this package. Each is governed by its own package license and accompanying notices. The Android BashKitten browser is a separate APK with its own offline About and licenses.'
+    : 'Python, GTK, operating-system graphics/audio libraries, Git, GitHub CLI and other declared system dependencies are installed separately. They retain their own package licenses and notices. Optional LocalAI runtimes are downloaded separately with their own native dependency notices; GPU drivers and model weights are not bundled here.';
   records.push(record({ name: 'External platform packages', license: 'Separate package licenses', text: external }, 'Platform', 'external'));
   // Keep distinct versions and changed texts even when names coincide across modules.
   const unique = new Map();

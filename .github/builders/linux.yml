@@ -20,6 +20,9 @@ run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
       search_run:
         required: true
         type: string
+      node_run:
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
@@ -105,8 +108,9 @@ jobs:
       env:
         AUTH_RUN: ${{ inputs.auth_run }}
         SEARCH_RUN: ${{ inputs.search_run }}
+        NODE_RUN: ${{ inputs.node_run }}
       run: |
-        for item in "auth:$AUTH_RUN:auth-$BROWSER_TARGET" "search:$SEARCH_RUN:search-runtime-$BROWSER_TARGET"; do
+        for item in "auth:$AUTH_RUN:auth-$BROWSER_TARGET" "search:$SEARCH_RUN:search-runtime-$BROWSER_TARGET" "node:$NODE_RUN:node-runtime-$BROWSER_TARGET"; do
           IFS=: read -r target run artifact <<< "$item"
           while ! gh api "repos/openresearchtools/bashkitten/actions/runs/$run/artifacts?per_page=100" --jq '.artifacts[] | select(.expired == false) | .name' | grep -Fxq "$artifact"; do
             status=$(gh api "repos/openresearchtools/bashkitten/actions/runs/$run" --jq '.status')
@@ -121,6 +125,7 @@ jobs:
           --architecture "$BROWSER_ARCH" --output "$RUNNER_TEMP/package" \
           --auth-archive "$RUNNER_TEMP/companion/auth/auth-$BROWSER_TARGET.tar.gz" \
           --search-archive "$RUNNER_TEMP/companion/search/search-runtime-$BROWSER_TARGET.tar.zst" \
+          --node-archive "$RUNNER_TEMP/companion/node/node-runtime-$BROWSER_TARGET.tar.gz" \
           --browser-dir "$RUNNER_TEMP/browser/stage"
       working-directory: source/bashkitten
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

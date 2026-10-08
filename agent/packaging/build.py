@@ -68,6 +68,34 @@ def extract(archive, destination):
             contents.extractall(destination, filter='data')
 
 
+
+def install_node(archive, app, platform, architecture):
+    digest = checked_archive(archive)
+    with tempfile.TemporaryDirectory(prefix='node-input-', dir=app.parent) as incoming:
+        extract(archive, Path(incoming))
+        require({p.name for p in Path(incoming).iterdir()} == {'node'}, 'Unexpected Node archive root')
+        shutil.move(str(Path(incoming) / 'node'), app / 'node')
+    root = app / 'node'
+    metadata = read_json(root / 'manifest.json')
+    require(metadata.get('schema') == 1 and metadata.get('platform') == platform and
+            metadata.get('architecture') == architecture, 'Native Node target mismatch')
+    for executable_name in ['node', 'npm', 'npx']:
+        require(os.access(root / 'bin' / executable_name, os.X_OK), f'Missing private {executable_name}')
+    with (root / 'bin/node').open('rb') as stream:
+        require(stream.read(4) == b'\x7fELF', 'Bundled Node must be the actual native ELF, not a wrapper')
+    require((root / 'etc/openssl.cnf').is_file(), 'Missing private Node OpenSSL configuration')
+    package = read_json(root / 'lib/node_modules/npm/package.json')
+    require(package.get('name') == 'npm' and package.get('version') == metadata.get('npm_version'), 'Bundled npm identity mismatch')
+    pinned = read_json(ROOT / 'packaging/node/lock.json')[platform]
+    require(metadata.get('node_version') == pinned['node_version'] and metadata.get('npm_version') == pinned['npm_version'],
+            'Node/npm versions differ from the committed component lock')
+    require((root / 'include/node/node.h').is_file() and (root / 'include/node/config.gypi').is_file(),
+            'Bundled Node requires matching native-addon headers')
+    for name in ['npm-cli.js', 'npx-cli.js']:
+        require((root / 'lib/node_modules/npm/bin' / name).is_file(), f'Missing private {name}')
+    require(isinstance(metadata.get('depends'), list), 'Node component must declare external OS dependencies')
+    return {'archive': archive.name, 'sha256': digest, 'metadata': metadata}
+
 def key_values(path):
     return dict(line.split('=', 1) for line in path.read_text().splitlines()
                 if '=' in line and not line.lstrip().startswith('#'))
@@ -256,6 +284,7 @@ def assemble(args):
         search_meta = read_json(app / 'search/runtime/manifest.json')
         require(search_meta['target'] == target, 'Native search target mismatch')
         components = {
+            'node': install_node(args.node_archive, app, args.target, args.architecture),
             'auth': {'archive': args.auth_archive.name, 'sha256': auth_hash, 'metadata': auth_meta},
             'search': {'archive': args.search_archive.name, 'sha256': search_hash, 'metadata': search_meta},
         }
@@ -276,14 +305,15 @@ def assemble(args):
         write_json(app / 'build-platform.json', stamp)
         write_json(app / 'runtime-default.json', {'root': runtime, 'version': pi_version})
         bin_dir = stage / prefix.lstrip('/') / 'bin'
-        node = prefix + '/bin/node'
         installed_app = prefix + '/lib/bashkitten'
+        node = installed_app + '/node/bin/node'
+        node_environment = f'unset NODE_OPTIONS NODE_PATH\nexport OPENSSL_CONF={installed_app}/node/etc/openssl.cnf\n'
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
-            executable(bin_dir / name, f'#!{shell}\nexec {node} {installed_app}/src/server/{script} {extra} "$@"\n')
+            executable(bin_dir / name, f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/{script} {extra} "$@"\n')
         if termux:
-            executable(bin_dir / 'bashkitten-display', f'#!{shell}\nexec {node} {installed_app}/src/server/platform/termux/display.mjs "$@"\n')
-        executable(bin_dir / 'bashkitten-manager', f'#!{shell}\nexport BASHKITTEN_ATTACHED_MANAGER=1\n'
+            executable(bin_dir / 'bashkitten-display', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/platform/termux/display.mjs "$@"\n')
+        executable(bin_dir / 'bashkitten-manager', f'#!{shell}\n{node_environment}export BASHKITTEN_ATTACHED_MANAGER=1\n'
                    f'while :; do\n  {node} {installed_app}/src/server/control.mjs serve\n  code=$?\n'
                    '  [ "$code" -eq 75 ] || exit "$code"\n  sleep 1\ndone\n')
         (bin_dir / 'bashkitten-search').symlink_to('../lib/bashkitten/search/bashkitten-search')
@@ -322,11 +352,11 @@ fi
             profile.parent.mkdir(parents=True)
             profile.write_text('export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1\n'
                                'export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1\n')
-        base_deps = (['nodejs-lts (>= 22.19)', 'python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar',
+        base_deps = (['python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar',
                       'x11-repo', 'termux-x11-nightly', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
-                     ['nodejs (>= 22.19)', 'npm', 'python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
+                     ['python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
                       'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1', 'libdbusmenu-glib4', 'libdbusmenu-gtk3-4', 'libgomp1', 'libstdc++6', 'libvulkan1'])
-        depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'])
+        depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'], components['node']['metadata']['depends'])
         replacements = '' if termux else 'Replaces: bashkitten-desktop\nBreaks: bashkitten-desktop\nProvides: bashkitten-desktop\n'
         doc = stage / prefix.lstrip('/') / 'share/doc/bashkitten'
         doc.mkdir(parents=True)
@@ -356,6 +386,7 @@ def main():
     parser.add_argument('--browser-dir', type=Path)
     parser.add_argument('--auth-archive', type=Path, required=True)
     parser.add_argument('--search-archive', type=Path, required=True)
+    parser.add_argument('--node-archive', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stage-dir', type=Path)
     args = parser.parse_args()

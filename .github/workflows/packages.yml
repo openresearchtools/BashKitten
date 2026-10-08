@@ -25,6 +25,8 @@ jobs:
     uses: ./.github/workflows/auth-native.yml
   search:
     uses: ./.github/workflows/search-native.yml
+  node:
+    uses: ./.github/workflows/node-native.yml
   browser_arm64:
     if: ${{ !inputs.native_only }}
     uses: ./.github/workflows/remote-browser.yml
@@ -53,6 +55,7 @@ jobs:
     needs:
     - auth
     - search
+    - node
     runs-on: ubuntu-24.04
     env:
       PI_TELEMETRY: '0'
@@ -75,12 +78,17 @@ jobs:
       with:
         name: search-runtime-termux-${{ matrix.architecture }}
         path: inputs/search
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: node-runtime-termux-${{ matrix.architecture }}
+        path: inputs/node
     - name: Assemble native Termux package
       run: |
         python3 agent/packaging/build.py termux \
           --architecture ${{ matrix.architecture }} --output dist \
           --auth-archive inputs/auth/auth-termux-${{ matrix.architecture }}.tar.gz \
-          --search-archive inputs/search/search-runtime-termux-${{ matrix.architecture }}.tar.zst
+          --search-archive inputs/search/search-runtime-termux-${{ matrix.architecture }}.tar.zst \
+          --node-archive inputs/node/node-runtime-termux-${{ matrix.architecture }}.tar.gz
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: bashkitten-termux-${{ matrix.architecture }}-candidate
@@ -88,6 +96,7 @@ jobs:
         if-no-files-found: error
         compression-level: 0
   sources:
+    needs: node
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -96,8 +105,12 @@ jobs:
     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
       with:
         node-version: '24'
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        pattern: node-runtime-*
+        path: node-inputs
     - name: Collect exact product and locked npm source
-      run: python3 agent/packaging/sources.py "$RUNNER_TEMP/sources"
+      run: python3 agent/packaging/sources.py "$RUNNER_TEMP/sources" --node-sources node-inputs --cache "$RUNNER_TEMP/source-cache"
     - name: Collect retained adblock corresponding source
       run: |
         python3 -I -B browser/bashkitten/scripts/blocker_asset_provenance.py build \
@@ -115,6 +128,7 @@ jobs:
     needs:
     - auth
     - search
+    - node
     - browser_arm64
     - browser_amd64
     - android

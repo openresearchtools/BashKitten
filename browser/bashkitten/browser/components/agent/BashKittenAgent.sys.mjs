@@ -1031,7 +1031,7 @@ class AgentView {
     const { content } = this.dialog("Bundled component licenses");
     try {
       const records = await IOUtils.readJSON("/usr/lib/bashkitten/licenses.json");
-      content.append(html(this.doc, "p", {}, "Full notices for the bundled browser, Agent, Pi, search and authentication components. Node, Python and Linux system libraries retain their separately installed package licenses."));
+      content.append(html(this.doc, "p", {}, "Full notices for the bundled browser, Agent, private Node/npm, Pi, search and authentication components. Python and Linux system libraries retain their separately installed package licenses."));
       for (const record of records) {
         const detail = html(this.doc, "details");
         detail.append(html(this.doc, "summary", {}, [record.name, record.version, record.license].filter(Boolean).join(" · ")));

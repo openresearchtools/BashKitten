@@ -1,3 +1,4 @@
+import { npmCommand, npmArgs, npmPrefix } from '../node-runtime.mjs';
 import fs from 'node:fs/promises';
 import { selectPlatformPackages } from './platform-packages.mjs';
 import path from 'node:path';
@@ -21,13 +22,13 @@ export async function sourceResult(source, operation) {
 export async function checkPi() {
   return sourceResult('pi', async () => {
     const runtime = selectedRuntime();
-    const { stdout } = await exec('npm', ['view', '@earendil-works/pi-coding-agent@latest', 'version', 'engines', 'dist.integrity', '--json'], { timeout: 45000, maxBuffer: Infinity });
+    const { stdout } = await exec(npmCommand, npmArgs(['--prefix', npmPrefix, 'view', '@earendil-works/pi-coding-agent@latest', 'version', 'engines', 'dist.integrity', '--json']), { timeout: 45000, maxBuffer: Infinity });
     const latest = JSON.parse(stdout);
     if (!semver.valid(latest.version)) throw Error('npm returned an invalid Pi version');
     const compatible = !latest.engines?.node || semver.satisfies(process.version, latest.engines.node);
     return { installed: runtime.version, latest: latest.version, compatible: compatible ? latest.version : runtime.version,
       updateAvailable: compatible && semver.gt(latest.version, runtime.version), upstreamAvailable: semver.gt(latest.version, runtime.version),
-      reason: compatible ? null : `Pi ${latest.version} needs Node ${latest.engines.node}. Update system packages first.` };
+      reason: compatible ? null : `Pi ${latest.version} needs Node ${latest.engines.node}. Update BashKitten first.` };
   });
 }
 export async function updateStatus() {
@@ -94,7 +95,7 @@ export async function installPi(job) {
       dependencies: { '@earendil-works/pi-coding-agent': available.latest, '@earendil-works/pi-ai': available.latest } });
     // npm records exact resolved versions and integrity in the new lock. The
     // running installation stays untouched until the native API check passes.
-    await job.exec('npm', ['install', '--prefix', temporary, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--loglevel=http']);
+    await job.exec(npmCommand, npmArgs(['install', '--prefix', temporary, '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--loglevel=http']));
     await selectPlatformPackages(temporary);
     await job.phase(`Checking Pi ${available.latest}`);
     const agent = 'file://' + path.join(temporary, 'node_modules/@earendil-works/pi-coding-agent/dist/');

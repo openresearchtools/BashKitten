@@ -17,6 +17,9 @@ run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
       search_run:
         required: true
         type: string
+      node_run:
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
@@ -175,8 +178,9 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
         SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
+        NODE_RUN: ${{ inputs.node_run || github.run_id }}
       run: |
-        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH"; do
+        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH"; do
           IFS=: read -r target run artifact <<< "$item"
           ready=false
           for attempt in $(seq 1 60); do
@@ -191,6 +195,7 @@ jobs:
         python3 agent/packaging/android-notices.py --architecture "$TERMUX_ARCH" \
           --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-$TERMUX_ARCH.tar.gz" \
           --search-archive "$RUNNER_TEMP/companion/search/search-runtime-termux-$TERMUX_ARCH.tar.zst" \
+          --node-archive "$RUNNER_TEMP/companion/node/node-runtime-termux-$TERMUX_ARCH.tar.gz" \
           --output "$BASHKITTEN_COMPANION_LICENSES"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Assemble the release browser

@@ -7,13 +7,14 @@ import shutil
 import subprocess
 import tempfile
 
-from build import checked_archive, extract
+from build import checked_archive, extract, install_node
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--architecture', choices=['aarch64', 'x86_64'], default='aarch64')
 parser.add_argument('--auth-archive', type=Path, required=True)
 parser.add_argument('--search-archive', type=Path, required=True)
+parser.add_argument('--node-archive', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
 cpu = 'x64' if args.architecture == 'x86_64' else 'arm64'
@@ -31,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
         shutil.copytree(ROOT / name, stage / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'runtime'))
     subprocess.run(['npm', 'ci', '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=' + cpu], check=True)
     subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', cpu], check=True)
+    install_node(args.node_archive, stage, 'termux', args.architecture)
     extract(args.auth_archive, stage / 'auth')
     extract(args.search_archive, stage)
     if json.loads((stage / 'auth/share/metadata/runtime.json').read_text())['target'] != target:

@@ -10,12 +10,19 @@ name: Android browser candidate
         description: Successful native-search run containing native search artifacts for both Termux architectures
         required: true
         type: string
+      node_run:
+        description: Successful Node runtime run containing both Termux architectures
+        required: true
+        type: string
   workflow_call:
     inputs:
       auth_run:
         default: ''
         type: string
       search_run:
+        default: ''
+        type: string
+      node_run:
         default: ''
         type: string
     secrets:
@@ -35,5 +42,6 @@ jobs:
       target: ${{ matrix.target }}
       auth_run: ${{ inputs.auth_run }}
       search_run: ${{ inputs.search_run }}
+      node_run: ${{ inputs.node_run }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}

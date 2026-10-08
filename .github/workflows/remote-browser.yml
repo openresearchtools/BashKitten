@@ -11,6 +11,9 @@ name: Collect a separate browser build
       search_run:
         default: ''
         type: string
+      node_run:
+        default: ''
+        type: string
       warm_gkrust:
         default: false
         type: boolean
@@ -34,8 +37,9 @@ jobs:
         BROWSER_TARGET: ${{ inputs.target }}
         AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
         SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
+        NODE_RUN: ${{ inputs.node_run || github.run_id }}
         WARM_GKRUST: ${{ inputs.warm_gkrust }}
-      run: python3 agent/packaging/remote-browser.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/component" --auth-run "$AUTH_RUN" --search-run "$SEARCH_RUN" --warm-gkrust "$WARM_GKRUST"
+      run: python3 agent/packaging/remote-browser.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/component" --auth-run "$AUTH_RUN" --search-run "$SEARCH_RUN" --node-run "$NODE_RUN" --warm-gkrust "$WARM_GKRUST"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: ${{ inputs.target == 'android' && 'bashkitten-android-candidate' || format('bashkitten-{0}-candidate', inputs.target) }}

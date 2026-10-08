@@ -122,6 +122,9 @@ def main():
             raise ValueError('Duplicate or unexpected package architecture')
         if stamp.get('revision') != revision or stamp.get('architecture') != architecture:
             raise ValueError('Package build provenance mismatch')
+        node = stamp.get('components', {}).get('node', {}).get('metadata', {})
+        if node.get('architecture') != architecture or not node.get('node_version') or not node.get('npm_version'):
+            raise ValueError('Package is missing its private Node/npm component')
         architectures.add(architecture)
         packages.append({**fields, **copy(file), 'build': stamp})
     if architectures != {'amd64', 'arm64', 'aarch64', 'x86_64'}:
@@ -131,7 +134,7 @@ def main():
         if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip|jar)$', file.name):
             sources.append(copy(file))
     names = [value['asset'] for value in sources]
-    for token in ('bashkitten-source-', 'dependency-source-', 'auth', 'search', 'blocker', 'android-library-source'):
+    for token in ('bashkitten-source-', 'dependency-source-', 'auth', 'search', 'node-source-', 'blocker', 'android-library-source'):
         if not any(token in name for name in names):
             raise ValueError('Missing corresponding source bundle: ' + token)
     # Share the README's warning instead of allowing release notes to imply

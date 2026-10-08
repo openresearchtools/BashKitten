@@ -6,14 +6,8 @@ import semver from 'semver';
 import { dataDir } from '../common.mjs';
 
 export const bundledRoot = fileURLToPath(new URL('../../../', import.meta.url));
-// Set Pi's supported profile boundary before importing its SDK or starting any
-// CLI/package worker. Keep HOME/cwd intact for ordinary project and shell access.
-export const piAgentDir = path.join(dataDir, 'pi');
-process.env.PI_CODING_AGENT_DIR = piAgentDir;
-process.env.PI_CODING_AGENT_SESSION_DIR = path.join(piAgentDir, 'sessions');
-// An inherited override must not redirect Pi's bundled resources to another
-// installation; selectedRuntime owns the executable and SDK together.
-delete process.env.PI_PACKAGE_DIR;
+export { piAgentDir } from '../node-runtime.mjs';
+import { piAgentDir } from '../node-runtime.mjs';
 export const runtimeFile = path.join(dataDir, 'runtime.json');
 export const maintenanceFile = path.join(dataDir, 'run/maintenance.json');
 export const appUpdateFile = path.join(dataDir, 'run/app-update.json');

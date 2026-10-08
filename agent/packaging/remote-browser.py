@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--auth-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--search-run', default=os.environ.get('GITHUB_RUN_ID', ''))
+    parser.add_argument('--node-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--warm-gkrust', choices=['true', 'false'], default='false')
     args = parser.parse_args()
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
@@ -39,10 +40,10 @@ def main():
     request = f'{os.environ["GITHUB_RUN_ID"]}-{os.environ.get("GITHUB_RUN_ATTEMPT", "1")}-{args.target}'
     title = f'BashKitten {source} / {request}'
     inputs = {'source_sha': source, 'request_id': request}
-    for run in (args.auth_run, args.search_run):
+    for run in (args.auth_run, args.search_run, args.node_run):
         if not re.fullmatch('[0-9]+', run):
             raise ValueError('Build requires the source component run IDs')
-    inputs.update(auth_run=args.auth_run, search_run=args.search_run)
+    inputs.update(auth_run=args.auth_run, search_run=args.search_run, node_run=args.node_run)
     if not args.target.startswith('android'):
         inputs['warm_gkrust'] = args.warm_gkrust
     endpoint = f'repos/{repository}/actions/workflows/build.yml'

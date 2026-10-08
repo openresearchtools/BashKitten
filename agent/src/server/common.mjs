@@ -7,7 +7,8 @@ import { createWriteStream } from 'node:fs';
 import { pipeline } from 'node:stream/promises';
 import multipart from 'busboy';
 
-export const dataDir = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
+import { dataDir } from './node-runtime.mjs';
+export { dataDir };
 export const sessionsDir = path.join(dataDir, 'sessions');
 export const randomToken = () => randomBytes(32).toString('hex');
 export const digest = value => createHash('sha256').update(value).digest('hex');

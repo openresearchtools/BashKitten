@@ -182,6 +182,23 @@ Server data defaults to `~/.local/share/bashkitten-pi/`;
 BashKitten sets Pi's supported directory environment variables for every SDK,
 CLI, package operation and worker; inherited standalone Pi directory overrides
 do not select its profile. No existing credentials or extensions are copied.
+Installed desktop and Termux packages bundle their own Node 24 LTS and npm.
+Their launchers and all Pi workers use that native executable; a missing private
+runtime is an installation error. A development checkout uses its current Node.
+BashKitten-owned npm configuration lives at `pi/npm-config/{user,global}.npmrc`,
+its cache at `pi/npm-cache/`, and the default global prefix at `pi/npm/` beneath
+the data directory. Inherited npm routing overrides and Node module/preload
+settings are cleared for child processes. Standalone `~/.npmrc`, system npm
+configuration and another Pi installation are not imported.
+The private runtime and `pi/npm/bin` are first on the Agent's PATH, so ordinary
+`npm install -g` installs tools privately. Pi's own user package manager installs
+extensions under `pi/npm/node_modules`; trusted project dependencies and project
+configuration still belong to the selected project. This is not a shell sandbox:
+explicit package arguments and normal project `.npmrc` files retain npm behavior.
+Native npm addons use the bundled headers and private `npm-cache/node-gyp`
+cache. Node/npm itself is updated with BashKitten, while the package panel's npm updates
+cover tools in the private global prefix.
+
 Project-local Pi resources still belong to the selected project. Pi keeps its
 session files; BashKitten stores sidebar metadata,
 attachments and access-stack state separately. Removing a sidebar entry does not
@@ -191,7 +208,7 @@ delete native Pi history or attachments.
 
 Source lives under `agent/src/web/`, `agent/src/server/`, `browser/` and `auth/`.
 Install locked Node dependencies from `agent/` with `npm ci --ignore-scripts`
-(Node >=22.19). A checkout alone does not supply native authentication/search
+(Node 24 LTS recommended; minimum 22.19). A checkout alone does not supply native authentication/search
 binaries. Use complete packages for ordinary setup; `bashkittenctl start`,
 `status` and `stop` control a packaged standalone server.
 
@@ -202,3 +219,10 @@ boundaries. Verification material stays outside product source and artifacts.
 Agent code is [AGPL-3.0-only](../LICENSE). Browser and dependency licenses retain
 their own terms. Full notices are available offline in browser About and in
 [third-party notices](../agent/THIRD_PARTY_NOTICES.md).
+
+Pocket TTS downloads use the verified F16 model and matching projector. After
+selecting that original model in Speech synthesis, **Create Pocket Q4_0 copy** or
+**Create Pocket Q8_0 copy** produces a smaller sibling file with the managed
+`llama-quantize`. It preserves the original and refuses to replace an existing
+output. Refresh status, then **Use created Pocket model** to select it. The
+projector stays the same; cancellation and Agent off stop the conversion.

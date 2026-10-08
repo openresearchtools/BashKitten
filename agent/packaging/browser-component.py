@@ -17,7 +17,7 @@ def fingerprint(target):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
                   'agent/packaging/release_version.py',
-                  'agent/packaging/licenses.mjs', 'agent/packaging/termux/search',
+                  'agent/packaging/licenses.mjs', 'agent/packaging/node', 'agent/packaging/termux/search',
                   'agent/src/server/licenses.mjs',
                   'agent/package.json', 'agent/package-lock.json', 'agent/LICENSE',
                   'agent/PI_UPSTREAM.md', 'agent/THIRD_PARTY_NOTICES.md',
