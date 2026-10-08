@@ -43,8 +43,8 @@ public final class AgentPerformanceDialog extends AppCompatDialogFragment {
             main.post(() -> {
                 if (active != generation || worker != executor || !isResumed() || values == null) return;
                 values.setText(String.format(Locale.getDefault(), "CPU  %s\nGPU  %s\nRAM  %.2f / %.2f GB%s",
-                    percentage(reading.cpu), percentage(reading.gpu), reading.used / 1e9, reading.total / 1e9,
-                    reading.cpu == null || reading.gpu == null ? "\n\n— Counter unavailable to this Android app" : ""));
+                    reading.cpuPending ? "…" : percentage(reading.cpu), percentage(reading.gpu), reading.used / 1e9, reading.total / 1e9,
+                    (reading.cpu == null && !reading.cpuPending) || reading.gpu == null ? "\n\n— Counter unavailable to this Android app" : ""));
                 main.postDelayed(poll, 1000);
             });
         });
