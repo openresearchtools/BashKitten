@@ -1971,3 +1971,38 @@ remote authority revocation while helper shutdown completes asynchronously.
 Local trust operations retain their own serialization, separate from remote I/O;
 ready remote mappings stay connected. JavaScript syntax and whitespace checks
 passed. Installed remote-failure-to-Local switching still needs manual verification.
+
+### 8 October native Termux publishing and Android remote acceptance
+
+Stock Android 17 x86_64 Cuttlefish with native KVM ran the native Termux host and
+Android client on the same guest. The host package was `ab825a34e2`; the installed
+APK was `a7e0ed2c72`, built with the unchanged native Gecko/client libraries and
+the persistent development signing key. This is development acceptance, not a
+publisher-signed release or cross-device/desktop transport result.
+
+Actual native Share Local enrollment previously exposed two startup failures:
+private Node's OpenSSL configuration used the reserved `default` provider section,
+and Valkey's x86 processor-clock regex aborted on Bionic. The corrected Node
+recipe (`a990f72f89`) passed all four component targets in Actions `37796926713`.
+The narrow Termux x86_64 recipe uses upstream's documented `NO_PROCESSOR_CLOCK`
+(`c17ba8aa89`), with the actual compile flag asserted; focused Actions
+`37798490793` passed. Pristine Valkey, Tor, Caddy and Chisel source was preserved.
+The installed retry completed account creation, real TOTP enrollment and
+Publishing is on, without changing the intended transport.
+
+The subsequent real client flow used Share Local's **Download QR image**, the
+normal Android image picker and local password decryption. The genuine Authelia
+page accepted username/password, Remember me, a current authenticator code and
+explicit consent. The protected Remote Agent then loaded. Native connections
+showed **Connected**, and its authenticated Services page showed **Agent —
+Running · Target reachable**. Caddy, the native host helper, Valkey, Authelia and
+publisher Tor remained running while Remote was selected. No privileged
+first-factor call, fabricated cookie, direct transport or local authentication
+substitute was used. Returning to Local selected the normal local Agent.
+
+A previously scaled 346×768 screen capture was rejected as an unreadable QR;
+the original exported PNG imported successfully. Actual camera capture, remembered
+restart/token expiry, interruption/recovery, remote manager revocation and
+cross-device/Linux client flows remain separate acceptance gates. This result
+establishes the same-guest encrypted QR → Tor/TLS/mTLS → Authelia/TOTP/consent →
+Chisel → protected Agent path; it does not establish physical-phone GPU behavior.
