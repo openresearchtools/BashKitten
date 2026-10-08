@@ -93,7 +93,7 @@ export async function localAISettings(parent, control, win, isLocal) {
       const current = state[engine], config = current.config;
       const section = node('details'); section.open = engine === 'llama'; section.className = 'connection-card';
       section.append(node('summary', engine === 'llama' ? 'llama.cpp' : 'Whisper dictation'));
-      engineStatus[engine] = node('p', [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, current.runtime?.selectedBackend].filter(Boolean).join(' · '));
+      engineStatus[engine] = node('p', [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, engine === 'llama' ? current.runtime?.backend && current.runtime.backend + ' runtime (per-model device)' : current.runtime?.selectedBackend].filter(Boolean).join(' · '));
       section.append(engineStatus[engine]);
       if (engine === 'whisper') section.append(node('p', 'Loads on demand for microphone messages on this Agent, including connected phones. Audio stays in memory and is discarded after transcription.'));
       const mode = select(section, 'Runtime', engine === 'llama' ? [['managed', 'Managed'], ['custom', 'Custom binary']] : [['managed', 'Managed']], config.mode);
@@ -393,7 +393,7 @@ export async function localAISettings(parent, control, win, isLocal) {
         const latest = await call('localai-status');
         for (const engine of ['llama', 'whisper']) {
           const current = latest[engine];
-          if (engineStatus[engine]?.isConnected) engineStatus[engine].textContent = [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, current.runtime?.selectedBackend].filter(Boolean).join(' · ');
+          if (engineStatus[engine]?.isConnected) engineStatus[engine].textContent = [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, engine === 'llama' ? current.runtime?.backend && current.runtime.backend + ' runtime (per-model device)' : current.runtime?.selectedBackend].filter(Boolean).join(' · ');
         }
         if (importNode?.isConnected) importNode.textContent = ['Pi import: ' + latest.import.state, latest.import.provider, latest.import.endpoint, latest.import.error].filter(Boolean).join(' · ');
         if (progressNode?.isConnected) progressNode.textContent = latest.job ? [latest.job.phase, latest.job.progress?.downloaded ? `${(latest.job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', latest.job.error].filter(Boolean).join(' · ') : '';
