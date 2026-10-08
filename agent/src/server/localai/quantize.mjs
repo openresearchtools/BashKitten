@@ -44,7 +44,7 @@ export async function quantizePocket(job, { file, type, output } = {}) {
     staging = await fs.mkdtemp(path.join(destination, '.bashkitten-quantize-'));
     const temporary = path.join(staging, 'model.gguf');
     await job.phase(`Creating Pocket ${type}; the original model and projector are preserved`);
-    const child = launchInference({ argv: [executable, file, temporary, type], cwd: destination, env: managedRuntimeEnvironment(runtime.binary) }, { capture: false });
+    const child = launchInference({ argv: [executable, file, temporary, type], cwd: destination, env: managedRuntimeEnvironment(runtime.binary, {}, 'cpu') }, { capture: false });
     const cancellation = setInterval(() => { if (job.job.cancelRequested) child.kill('SIGTERM'); }, 250);
     try {
       await new Promise((resolve, reject) => {

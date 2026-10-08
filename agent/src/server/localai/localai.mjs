@@ -141,7 +141,7 @@ export class LocalAI {
     if (config.mode === 'managed' && !supportsManagedChoice(runtime, config)) throw downloadRequired(engine, config);
     const file = config.mode === 'custom' ? config.binary : runtime?.binary;
     if (!file) throw Error(`Download the ${engine} runtime first`);
-    const environment = config.mode === 'custom' ? config.env : managedRuntimeEnvironment(file, config.env);
+    const environment = config.mode === 'custom' ? config.env : managedRuntimeEnvironment(file, config.env, config.backend);
     return validateBinary(engine, file, config.backend === 'auto' && runtime?.selectedBackend && config.mode === 'managed' ? runtime.selectedBackend : config.backend, environment);
   }
   async command(engine, config, port) {

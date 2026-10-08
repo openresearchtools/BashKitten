@@ -27,30 +27,30 @@ export function describeRuntime(runtime) {
   if (!runtime) return null;
   const { engine, version, upstreamVersion, sourceCommit, builderCommit, os, arch,
     backend, release, root, binary, selectedBackend, devices, executables,
-    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements, capabilities } = runtime;
+    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements, capabilities, upstreamRelease, packageRevision } = runtime;
   return { engine, version, upstreamVersion, sourceCommit, builderCommit, os, arch,
     backend, release, root, binary, selectedBackend, devices, executables,
-    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements, capabilities };
+    minimumAndroidApi, minimumGlibc, systemPackages, cudaRequirements, capabilities, upstreamRelease, packageRevision };
 }
 // Scope native library/plugin lookup to this downloaded engine, never to the
 // controller's private Node or unrelated tool processes. Router model children
 // inherit this same selection. System loader paths remain the OS defaults.
-export function managedRuntimeEnvironment(binary, overrides = {}) {
+export function managedRuntimeEnvironment(binary, overrides = {}, executionBackend = 'auto') {
   if (!path.isAbsolute(binary || '')) throw Error('The managed runtime needs an absolute executable path');
   const directory = path.dirname(binary);
   // GGML_BACKEND_PATH names one out-of-tree library, not a search directory.
   // Upstream already discovers bundled plugins beside the executable.
   const { GGML_BACKEND_PATH, ...environment } = overrides;
-  return { ...environment, LD_LIBRARY_PATH: directory };
+  return { ...environment, LD_LIBRARY_PATH: directory, ...(executionBackend === 'cpu' ? { GGML_VK_VISIBLE_DEVICES: '', CUDA_VISIBLE_DEVICES: '' } : {}) };
 }
 export async function preferredBackend(choice) {
   requireLocalRuntime();
   if (platform === 'termux') {
     if (!['cpu', 'vulkan'].includes(choice)) throw Error('Choose CPU or GPU (native Termux Vulkan)');
-    return choice;
+    return 'vulkan';
   }
   if (!['auto', 'cuda', 'vulkan', 'cpu'].includes(choice)) throw Error('Select Auto, CUDA, Vulkan or CPU');
-  if (choice !== 'auto') return choice;
+  if (choice !== 'auto') return choice === 'cpu' ? 'vulkan' : choice;
   try {
     const [{ stdout: driver }, { stdout: libraries }] = await Promise.all([
       exec('nvidia-smi', ['--query-gpu=driver_version,name', '--format=csv,noheader'], { timeout: 10000 }),
@@ -76,14 +76,20 @@ async function releaseManifest(engine) {
   // matrix. A mobile publication must not replace desktop's runtime catalogue.
   const prefix = (runtimeOS === 'android' ? 'android-' : '') + engine + '-';
   // GitHub's release list order can differ from publication order for tags.
-  const release = releases.filter(item => !item.draft && item.tag_name.startsWith(prefix) && item.assets.some(asset => asset.name === 'manifest.json'))
+  const release = releases.filter(item => !item.draft && item.tag_name.startsWith(prefix) && /^.+-r[1-9][0-9]*$/.test(item.tag_name.slice(prefix.length)) && item.assets.some(asset => asset.name === 'manifest.json'))
     .sort((a, b) => Date.parse(b.published_at || b.created_at) - Date.parse(a.published_at || a.created_at))[0];
-  if (!release) throw Error(`No ${runtimeOS} ${engine} runtime release is published yet`);
+  if (!release) throw Error(`No ${runtimeOS} ${engine} runtime built from an upstream release is published yet`);
   const asset = release.assets.find(asset => asset.name === 'manifest.json');
   const response = await fetch(downloadURL(asset.browser_download_url), { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw Error(`Runtime manifest returned HTTP ${response.status}`);
   const manifest = await response.json();
   if (manifest.version !== 1 || manifest.engine !== engine || !/^[a-f0-9]{40}$/.test(manifest.sourceCommit) || !Array.isArray(manifest.artifacts) || manifest.release !== release.tag_name) throw Error('Invalid LocalAI runtime manifest');
+  const upstream = manifest.upstreamRelease, upstreamRepo = engine === 'llama' ? 'llama.cpp' : 'whisper.cpp';
+  if (!upstream || !/^[A-Za-z0-9._-]+$/.test(upstream.tag || '') || upstream.commit !== manifest.sourceCommit
+      || !/^[a-f0-9]{40}$/.test(upstream.tagObject || '') || !Number.isSafeInteger(upstream.releaseId) || upstream.releaseId <= 0
+      || upstream.url !== `https://github.com/ggml-org/${upstreamRepo}/releases/tag/${upstream.tag}`
+      || manifest.upstreamVersion !== upstream.tag || !Number.isSafeInteger(manifest.packageRevision) || manifest.packageRevision < 1
+      || release.tag_name !== `${prefix}${upstream.tag}-r${manifest.packageRevision}`) throw Error('Runtime metadata does not identify an exact upstream release');
   return { manifest, release };
 }
 export async function checkRuntime(engine, config) {
@@ -93,12 +99,13 @@ export async function checkRuntime(engine, config) {
   const backend = await preferredBackend(config.backend);
   const artifact = manifest.artifacts.find(item => item.os === runtimeOS && item.arch === arch && item.backend === backend);
   if (!artifact || !/^[a-f0-9]{64}$/.test(artifact.sha256) || artifact.executable !== executable(engine)) throw Error(`No matching ${runtimeOS} ${arch} ${backend} runtime`);
+  if (artifact.capabilities?.cpu !== true || !Array.isArray(artifact.capabilities.executionBackends) || !artifact.capabilities.executionBackends.includes('cpu') || !artifact.capabilities.executionBackends.includes(backend)) throw Error('The runtime archive does not support the requested CPU/GPU execution modes');
   if (runtimeOS === 'android' && engine === 'llama' && (artifact.capabilities?.router !== true || artifact.capabilities?.subprocess !== true)) throw Error('The published Android llama.cpp runtime lacks required router subprocess support; check for an updated release');
   const asset = release.assets.find(item => item.name === artifact.file);
   if (!asset) throw Error('The runtime archive is missing');
   const installed = await runtimeInfo(engine);
-  return { version: manifest.upstreamVersion, sourceCommit: manifest.sourceCommit, release: release.tag_name,
-    backend, artifact: { ...artifact, url: downloadURL(asset.browser_download_url).href },
+  return { version: `${manifest.upstreamVersion} · r${manifest.packageRevision}`, upstreamRelease: manifest.upstreamRelease, packageRevision: manifest.packageRevision, sourceCommit: manifest.sourceCommit, release: release.tag_name,
+    backend: config.backend === 'cpu' ? 'cpu' : backend, packageBackend: backend, artifact: { ...artifact, url: downloadURL(asset.browser_download_url).href },
     updateAvailable: installed?.release !== release.tag_name || installed?.backend !== backend, installed: describeRuntime(installed) };
 }
 export async function validateBinary(engine, filename, backend, environment = {}) {
@@ -112,15 +119,16 @@ export async function validateBinary(engine, filename, backend, environment = {}
     const bytes = Buffer.alloc(20); await file.read(bytes, 0, 20, 0);
     if (bytes.readUInt32BE(0) !== 0x7f454c46 || bytes[4] !== 2 || bytes[5] !== 1 || bytes.readUInt16LE(18) !== (arch === 'arm64' ? 183 : 62)) throw Error('The runtime executable has the wrong native architecture');
   } finally { await file.close(); }
+  environment = { ...environment, ...(backend === 'cpu' ? { GGML_VK_VISIBLE_DEVICES: '', CUDA_VISIBLE_DEVICES: '' } : {}) };
   const env = engineEnvironment(environment);
   const { stdout, stderr } = await exec(filename, ['--help'], { env, timeout: 20000, maxBuffer: Infinity });
   const help = stdout + stderr;
   for (const option of engine === 'llama' ? ['--models-preset', '--models-dir', '--host', '--port'] : ['--model', '--host', '--port', '--no-gpu']) if (!help.includes(option)) throw Error(`The selected runtime does not support ${option}`);
   let devices = [], selectedBackend = backend;
-  if (engine === 'llama') {
+  if (engine === 'llama' && backend !== 'cpu') {
     const listed = await exec(filename, ['--list-devices'], { env, timeout: 30000, maxBuffer: Infinity });
     devices = [...(listed.stdout + listed.stderr).matchAll(/(CUDA\d+|Vulkan\d+):\s*([^\n]+)/g)].map(([, id, name]) => ({ id, name, backend: id.startsWith('CUDA') ? 'cuda' : 'vulkan' }));
-  } else if (backend !== 'cpu') {
+  } else if (engine === 'whisper' && backend !== 'cpu') {
     const result = await exec('python3', [fileURLToPath(new URL('./devices.py', import.meta.url)), path.dirname(filename)], { env, timeout: 30000, maxBuffer: Infinity });
     devices = JSON.parse(result.stdout);
   }
@@ -172,10 +180,13 @@ export async function installRuntime(job, { engine, config, selection }, activat
     await job.exec('python3', ['-c', 'import tarfile,sys\nwith tarfile.open(sys.argv[1]) as a:\n a.extractall(sys.argv[2],filter="data")', archive, extracted]);
     const record = await readJson(path.join(extracted, 'build.json'));
     if ((record.os || 'linux') !== runtimeOS || record.engine !== engine || record.arch !== arch || record.backend !== artifact.backend || record.sourceCommit !== available.sourceCommit) throw Error('Runtime build metadata does not match the selected release');
+    if (record.capabilities?.cpu !== true || !Array.isArray(record.capabilities.executionBackends) || !record.capabilities.executionBackends.includes('cpu') || !record.capabilities.executionBackends.includes(artifact.backend)
+        || record.packageRevision !== available.packageRevision || ['tag', 'commit', 'url', 'releaseId', 'tagObject'].some(key => record.upstreamRelease?.[key] !== available.upstreamRelease[key])) throw Error('Runtime archive does not match its upstream release and execution capabilities');
     if (runtimeOS === 'android' && engine === 'llama' && (record.capabilities?.router !== true || record.capabilities?.subprocess !== true)) throw Error('The Android llama.cpp archive lacks required router subprocess support');
     await fs.access(path.join(extracted, 'LICENSES.txt')); await fs.access(path.join(extracted, 'SOURCE.json'));
     const filename = path.join(extracted, 'bin', executable(engine));
-    const verified = await validateBinary(engine, filename, config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend, managedRuntimeEnvironment(filename));
+    const executionBackend = config.backend === 'cpu' ? 'cpu' : config.backend === 'auto' && artifact.backend === 'vulkan' ? 'auto' : artifact.backend;
+    const verified = await validateBinary(engine, filename, executionBackend, managedRuntimeEnvironment(filename, {}, executionBackend));
     const destination = path.join(runtimeDirectory, engine + '-' + available.release + '-' + artifact.backend + '-' + path.basename(staging).slice(10));
     await fs.rename(extracted, destination); inactive = destination;
     const next = { ...record, release: available.release, version: available.version, root: destination, binary: path.join(destination, 'bin', executable(engine)), selectedBackend: verified.backend, devices: verified.devices };
