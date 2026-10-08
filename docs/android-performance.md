@@ -49,6 +49,41 @@ domain, rather than `runas_app`. These observations establish the limitation of
 that app context; they do not establish physical Pixel or Qualcomm runtime
 coverage. The installed release BashKitten APK does not permit `run-as`.
 
+The permission audit also exercised the actual Termux service before and after
+these authorized ADB grants, without modifying the APK or kernel:
+
+```sh
+adb shell pm grant com.termux android.permission.DUMP
+adb shell pm grant com.termux android.permission.PACKAGE_USAGE_STATS
+adb shell cmd appops set com.termux GET_USAGE_STATS allow
+```
+
+Package-manager output confirmed both permissions and the app-op. After the
+grants, `dumpsys activity -h` worked from Termux, demonstrating that the grants
+were effective. However, `dumpsys cpuinfo` and `dumpsys cpu_monitor` still returned
+`Can't find service`; audit logs recorded SELinux `find` denials from
+`untrusted_app_27` to `cpuinfo_service` and `cpu_monitor_service`. Direct
+`/proc/stat`, `/proc/uptime`, CPU pressure and cgroup reads remained forbidden.
+The ActivityManager dump did not supply aggregate CPU totals. Android requires
+both the permission and app-op for these diagnostic dumps; an app-op alone does
+not suffice. See [DumpUtils](https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-17.0.0_r1/core/java/com/android/internal/util/DumpUtils.java).
+
+The installed Termux `top` was a wrapper around `/system/bin/top`. It displayed
+`800%cpu` and `800%idle` on the eight-core guest even though `/proc/stat` was
+unreadable. Android's [Toybox source](https://android.googlesource.com/platform/external/toybox/+/refs/tags/android-17.0.0_r1/toys/posix/ps.c)
+only fills the aggregate statistics after a successful read, then calculates
+idle ticks as potential ticks minus measured busy ticks. Its all-idle header in
+this restricted context is therefore not evidence of a working system counter;
+the visible process rows also cover only processes accessible to Termux.
+
+ADB shell could read `cpuinfo`, but its observed report spanned five minutes and
+ended over a minute before the command. That privileged, stale report cannot
+establish a fresh one-second app reading. The guest's devfreq directory was
+empty, its KGSL/Mali counters absent, and its GPU service dump failed from Termux.
+These are observations of this virtual gfxstream device, not a claim that
+Termux cannot read vendor GPU counters on physical phones. UsageStats describes
+application foreground/service time, not system CPU or GPU utilization.
+
 Consequently the code cannot promise CPU/GPU percentages on stock Android where
 the operating system withholds all supported device counters. RAM and overlay
 lifecycle remain independently testable. A native UI acceptance run is still
