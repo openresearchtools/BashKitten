@@ -83,22 +83,43 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
         }
         main.postDelayed(poll, 2000);
     }
+    private static String string(JSONObject value, String key) {
+        return value == null || value.isNull(key) ? "" : value.optString(key);
+    }
+    private static void statusLine(List<String> lines, String value) { if (!value.isEmpty()) lines.add(value); }
     private String statusText(JSONObject value) {
-        JSONObject job = value.optJSONObject("job");
-        if (job != null && !job.optString("phase").isEmpty()) return job.optString("phase") + "\n" + job.optString("error");
         JSONObject engine = value.optJSONObject(state.section);
         if (engine == null) return "";
-        if (state.section.equals("tts")) { JSONObject synthesis = engine.optJSONObject("synthesis"); return synthesis == null ? "" : synthesis.optString("state") + "\n" + synthesis.optString("output") + synthesis.optString("error"); }
-        JSONObject service = engine.optJSONObject("service"), runtime = engine.optJSONObject("runtime");
-        return (service == null ? "Not running" : service.optString("state") + " " + service.optString("error")) + "\n" + engine.optString("url", "")
-            + (runtime == null ? "\nDownload the runtime to begin" : "\n" + runtime.optString("version") + " · " + runtime.optString("selectedBackend"))
-            + (engine.optBoolean("savedForNextStart") ? "\nSaved changes apply on Reload" : "");
+        List<String> lines = new ArrayList<>();
+        JSONObject runtime = engine.optJSONObject("runtime");
+        if (state.section.equals("tts")) {
+            JSONObject synthesis = engine.optJSONObject("synthesis");
+            statusLine(lines, string(synthesis, "state"));
+            statusLine(lines, string(synthesis, "output"));
+            statusLine(lines, string(synthesis, "error"));
+        } else {
+            JSONObject service = engine.optJSONObject("service");
+            statusLine(lines, service == null ? "Not running" : string(service, "state"));
+            statusLine(lines, string(service, "error"));
+            statusLine(lines, string(engine, "error"));
+            statusLine(lines, string(engine, "url"));
+            if (engine.optBoolean("savedForNextStart")) lines.add("Saved changes apply on Reload");
+        }
+        lines.add(runtime == null ? "Download the runtime to begin" : string(runtime, "version") + " · " + string(runtime, "selectedBackend"));
+        JSONObject job = value.optJSONObject("job"), input = job == null ? null : job.optJSONObject("input");
+        boolean relevant = state.section.equals(string(input, "engine"))
+            || state.section.equals("tts") && (string(job, "kind").equals("localai-quantize") || string(input, "engine").equals("llama"));
+        if (relevant && !string(job, "status").equals("complete")) {
+            statusLine(lines, string(job, "phase"));
+            statusLine(lines, string(job, "error"));
+        }
+        return String.join("\n", lines);
     }
     private void render() {
         if (body == null || !isAdded() || !local()) return;
         body.removeAllViews();
         if (state.runtime.shareNeedsSetup()) { text("Set up Termux Local before configuring local models."); button("Set up Local", () -> { state.runtime.turnOn(); dismiss(); }); return; }
-        choose("Section", new String[]{"llama", "whisper", "tts", "models"}, new String[]{"llama.cpp router", "Whisper / Parakeet", "Speech synthesis", "Models"}, state.section, value -> { state.section = value; render(); });
+        choose("Section", new String[]{"llama", "whisper", "tts", "models"}, new String[]{"llama.cpp router", "Whisper / Parakeet", "Speech synthesis", "Models"}, state.section, value -> { state.section = value; state.error = ""; render(); });
         progress = text(state.value == null ? "Loading LocalAI…" : statusText(state.value));
         if (!state.error.isEmpty()) text(state.error);
         if (state.value == null) { button("Refresh", () -> request("localai-status", new JSONObject(), result -> state.value = result)); return; }
@@ -124,7 +145,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
             check("Keep router available while Agent is on (models load on demand)", config, "startup");
             check("Import this configuration into the coding agent", config, "importToPi");
             JSONObject imported = state.value.optJSONObject("import");
-            if (imported != null) text("Pi import: " + imported.optString("state") + " " + imported.optString("error"));
+            if (imported != null) text("Pi import: " + imported.optString("state") + " " + string(imported, "error"));
             field("Optional application API-key file", config, "keyFile", false);
         } else {
             choose("Speech model", new String[]{"whisper", "parakeet"}, new String[]{"Whisper", "Parakeet"}, config.optString("modelKind", "whisper"), value -> {
@@ -161,7 +182,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
             config.put("port", Integer.parseInt(config.optString("port", "0")));
             if (config.opt("argv") instanceof String) config.put("argv", new JSONArray(config.getString("argv")));
             if (config.opt("env") instanceof String) config.put("env", new JSONObject(config.getString("env")));
-            request("localai-save", object("engine", engine, "config", config, "revision", state.value.optString("revision")), result -> { state.value = result; state.drafts.remove(engine); state.error = "Saved. Reload applies command changes."; });
+            request("localai-save", object("engine", engine, "config", config, "revision", state.value.optString("revision")), result -> { state.value = result; state.drafts.remove(engine); state.error = engine.equals("tts") ? "Saved. The next synthesis uses these settings." : engine.equals("whisper") ? "Saved. The next recording uses these settings." : "Saved. Reload applies command changes."; });
         } catch (Exception error) { state.error = error.getMessage(); render(); }
     }
     private void tts(JSONObject config) {
@@ -234,7 +255,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
             JSONArray jobs = state.downloads.optJSONArray("jobs");
             for (int i = 0; jobs != null && i < jobs.length(); i++) {
                 JSONObject job = jobs.optJSONObject(i); text(job.optString("repository") + " · " + job.optString("status"));
-                if (!job.optString("error").isEmpty()) text(job.optString("error"));
+                if (!string(job, "error").isEmpty()) text(string(job, "error"));
                 JSONArray files = job.optJSONArray("files");
                 for (int j = 0; files != null && j < files.length(); j++) { JSONObject file = files.optJSONObject(j); text(file.optString("path") + String.format(Locale.getDefault(), " · %.1f / %.1f MB", file.optDouble("downloaded") / 1e6, file.optDouble("size") / 1e6)); }
                 if (job.optString("status").equals("complete")) {
@@ -243,7 +264,7 @@ public final class AgentLocalAIDialog extends AppCompatDialogFragment implements
                         JSONArray required = preset.optJSONArray("files"); List<String> paths = new ArrayList<>();
                         for (int k = 0; k < required.length(); k++) for (int n = 0; n < files.length(); n++) { JSONObject file = files.optJSONObject(n); if (file.optString("path").equals(required.optString(k)) && file.optString("status").equals("complete")) paths.add(job.optString("directory") + "/" + file.optString("outputPath")); }
                         if (paths.size() != required.length()) continue;
-                        button("Use " + preset.optString("title"), () -> request("localai-model-use", object("engine", preset.optString("engine"), "kind", preset.optString("kind"), "file", paths.get(0), "projector", paths.size() > 1 ? paths.get(1) : ""), result -> { state.value = result; state.drafts.remove(preset.optString("engine")); state.error = "Model selected. Reload the router to apply a new entry."; }));
+                        button("Use " + preset.optString("title"), () -> request("localai-model-use", object("engine", preset.optString("engine"), "kind", preset.optString("kind"), "file", paths.get(0), "projector", paths.size() > 1 ? paths.get(1) : ""), result -> { state.value = result; state.drafts.remove(preset.optString("engine")); state.error = preset.optString("engine").equals("llama") ? "Model selected. Reload the router to apply a new entry." : preset.optString("engine").equals("whisper") ? "Speech model selected. The next recording uses it." : "Speech model and projector selected. Set a reference voice in Speech synthesis."; }));
                     }
                 } else if (!job.optString("status").equals("cancelled")) for (String action : new String[]{"pause", "resume", "cancel"}) button(action + " download", () -> request("native-models-action", object("id", job.optString("id"), "action", action), result -> state.error = "Download " + action));
             }
