@@ -1,7 +1,7 @@
-pillama 0.2.1 — MIT
+pillama 0.4.0 — MIT
 Source: https://github.com/openresearchtools/pillama
-Commit: e37e76a2d4b3c8f9e5287d003d50eddc4b5a7e7f
-Imported 4 October 2026.
+Commit: fefa5a90c5f5f6eead52e9de9a3a698d2ea48f67
+Imported 8 October 2026.
 
 The complete upstream source tree, including its dependency lock and development
 metadata, is unmodified. Its provenance is recorded in ../pillama.upstream.json.
