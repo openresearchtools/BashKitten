@@ -48,7 +48,7 @@ Object.assign(process.env, {
   PI_CODING_AGENT_SESSION_DIR: path.join(piAgentDir, 'sessions'),
   npm_config_prefix: npmPrefix,
   npm_config_cache: cache,
-  npm_config_devdir: path.join(cache, 'node-gyp'),
+  npm_package_config_node_gyp_devdir: path.join(cache, 'node-gyp'),
   npm_config_userconfig: userconfig,
   npm_config_globalconfig: globalconfig,
   npm_config_update_notifier: 'false',
@@ -81,7 +81,7 @@ process.env.npm_node_execpath = process.execPath;
 if (packaged) {
   process.env.OPENSSL_CONF = path.join(app, 'node/etc/openssl.cnf');
   process.env.npm_execpath = bundledNpm;
-  process.env.npm_config_nodedir = path.join(app, 'node');
+  process.env.npm_package_config_node_gyp_nodedir = path.join(app, 'node');
 }
 
 // Package controls always select the bundled CLI in installed builds. A source
