@@ -1,5 +1,14 @@
 # Remote connections, service tunnels and desktop lifetime
 
+Controlling local-environment extension, 10 October: see the
+[native environments and Display plan](native-environments-display-plan.md).
+It replaces the separate Termux:X11 APK/external viewer with an embedded local
+Display tab and adds local Linux container desktops, native hierarchy/settings
+and independent container/viewer lifetimes. Display is local Termux and local
+containers only; saved remotes retain this document's encrypted Agent/service
+route. Its expressly requested CPU display fallback does not authorize a
+transport/authentication fallback. This extension is planned, not implemented.
+
 Controlling verification update, 8 October: ADB is explicitly authorized for
 all Android setup, permissions, package installation and debugging; use direct
 Termux shell access for terminal work. Actual BashKitten feature acceptance uses

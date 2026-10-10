@@ -1,0 +1,658 @@
+# BashKitten native environments, desktop and Display plan
+
+Requested and researched 10 October 2026. **Status: implementation plan only.**
+No application code, package, installed runtime or working user flow is delivered
+by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
+and the pinned sources below; integration and acceptance remain future work.
+
+This is the controlling plan for the requested native sidebar, local containers,
+embedded Termux:X11 and shared XFCE desktop. It supersedes conflicting separate
+X11 APK, external Display window, folder-only chat grouping and display-rendering
+restrictions in the [browser plan](browser-integration-plan.md) and
+[remote plan](remote-tunnel-plan.md). Other requirements in those plans remain.
+The explicitly requested CPU display fallback does not authorize fallback in
+Tor transport, authentication, AI runtimes or unrelated features.
+
+**Latest clarification:** Display is for **local Termux and local containers
+only**. Saved remotes keep agent chats and their existing service connections;
+this plan does not add remote desktop streaming. Local container connections
+use private Unix sockets. Publishing a container as a remote uses the existing
+Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
+
+## 1. Result the user should get
+
+- One scrollable, browser-owned sidecar lists Local, named container environments
+  and saved remotes, with projects and chats beneath their owning environment.
+  Its selector offers the existing remote connection flow and, on Linux, creation
+  of a container. Environment names, project names and chat titles are editable.
+- Selecting a chat opens the existing shared chat UI. The native hierarchy owns
+  navigation; the web UI becomes the opened chat, retaining transcript, composer,
+  reasoning/tool streaming, subagents, Files/Changes and existing chat functions.
+- Display opens a special native tab: Termux:X11 on Android, or the selected
+  local container desktop on Linux. No separate Termux:X11 APK or desktop GTK
+  viewer window is required. Browser tabs and the protected Agent remain distinct.
+- Creating a Linux container opens a preparation view with real installation
+  output. The saved Containerfile and ordinary Podman launch configuration remain
+  editable by the user or Local agent. GUI helpers edit that same configuration.
+- Each container has its own BashKitten installation and private Pi profile.
+  Its agent/browser runtime stays available while the container runs. Closing a
+  Display tab or browser window does not stop the container. Each container has
+  its own startup toggle and settings for launch configuration, existing ports,
+  media/input integration and remote sharing.
+- Termux runs the same customized XFCE experience without containers. Apps open
+  maximized by default. An optional split-screen setting enables a taskbar
+  **Two app mode** action and one draggable divider between the two apps.
+- The desktop customization package provides PeGPU's scaling functions directly,
+  a plain dark appearance matching BashKitten, Thunar and Xfce Terminal. PeGPU's
+  initialization scripts and the old Buzzard shell/CUA stack are not imported.
+
+Product UI, executable/package names and new configuration use **BashKitten**.
+Keep original donor names in licenses, copyright notices and provenance.
+“Container VM” here means a persistent Podman desktop environment sharing the
+host kernel; it is not a new hypervisor or a separately booted guest kernel.
+
+## 2. Audited starting points
+
+| Source | Verified starting point | Reuse or required change |
+| --- | --- | --- |
+| BashKitten | `a39f8b1d1ab8ab0ee202a5bb174f905578e83333` | Existing private controllers, protected Agent, per-session Pi workers, native remotes, display launcher and packaging. |
+| [BuzzardOS, podman branch](https://github.com/openresearchtools/BuzzardOS/tree/6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0) | `6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0`, inspected in `buzzardospodman` | Persistent external rootfs, native runtime setup, private display/media gateways, settings and sudo bridge. Its current desktop is Sway-based and its host viewer is Wayland/GTK/DMA-BUF-only; those are not the requested final frontend. |
+| [Termux:X11](https://github.com/termux/termux-x11/tree/fa3a8b430e2896a19f44c99a9cb056254615ae06) | Official nightly resolves to `fa3a8b430e2896a19f44c99a9cb056254615ae06` | Reusable `lorie` Android library, native X server/rendering, input and loader. Pin the exact commit and native dependency gitlinks; do not build a moving nightly reference. |
+| [PeGPU v0.1.106](https://github.com/openresearchtools/PEGPU/tree/aae5382fae02eaeb97ceeb7fcaa531f88009b081) | `aae5382fae02eaeb97ceeb7fcaa531f88009b081` | MIT scaling helper. Relevant scaling/package-choice files match inspected HEAD `8ecbb5d4fad90f7e74dd29351c37c4de9aada84b`. Actual apps are Thunar and `xfce4-terminal`, not Nautilus. |
+| [XFCE Docklike](https://gitlab.xfce.org/panel-plugins/xfce4-docklike-plugin/-/tree/xfce4-docklike-plugin-0.5.1) | `1b53c5c722604fb517ee392d664782f08de11597` | Small external panel plugin suitable for the requested taskbar action with a narrow patch. Stock task buttons do not expose a verified arbitrary menu-extension hook. |
+| [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
+
+Research checkouts and notes are outside the product tree under
+`/home/user/Bashkitten-Research/graphics-2026-10-10/`. The plan's source links and
+pins are portable; implementation must not depend on that workstation directory.
+
+## 3. Native module and ownership
+
+Keep the integration in a product-owned Display module with thin platform hosts.
+On Android it hosts an Android View; on Linux it presents native frame buffers
+through Gecko's existing graphics facilities. This requires maintained native
+integration, not merely a normal WebExtension. Do not fork Firefox's entire tab,
+input or rendering architecture or promise zero work on future Firefox updates.
+
+The small browser-facing contract is: open/select/attach a display by environment
+ID; supply the measured content viewport and focus; deliver input; detach on
+tab closure; report readiness/failure. Explicit backend Start/Stop remain separate
+controller actions. Ordinary web content cannot supply a socket path, command,
+FD or native environment identity. Use existing native permission and controller
+boundaries, with connection-generation checks for late asynchronous replies.
+
+```text
+Browser-owned sidecar
+  Local / container / saved remote
+       ├── project + chat reference -> protected shared chat view -> stock Pi
+       └── Display (local targets only)
+             Android: native View <-> private Binder/FD handoff <-> Termux X11
+             Linux:   native frame view <-> private guest gateway
+                                          <-> rootful Xwayland <-> XFCE/apps
+
+Local container administration: native controller -> private Podman + crun
+Local guest Agent:               private Unix endpoint -> existing Agent service
+Published guest Agent/services:  existing authorized Tor/Chisel/Caddy/Authelia route
+```
+
+Do not mount the host's real X11/Wayland session, D-Bus session or unrestricted
+PipeWire socket merely to show a guest desktop. Reuse the donor's private guest
+endpoints and explicit media bridges. Each container has its own endpoint and
+ownership record; one shared top-level directory can contain these endpoints,
+but one container must not acquire another container's control channel.
+
+The Display view can appear in native tab navigation without becoming an
+arbitrary web page or a second copy of the Agent UI. Browser automation continues
+to exclude protected Agent/authentication views. Display input is focused only
+on the selected native surface; browsing retains normal browser shortcuts and
+input when that surface is hidden.
+
+## 4. Sidebar, projects and stock Pi identity
+
+Current `agent/src/web/web_ui.html::renderSessionSidebar` groups sessions by
+`cwd`. Current rename already uses the worker's stock Pi `set_session_name` RPC.
+Retain that operation; independently named project grouping is new metadata.
+
+Use the existing native connection catalogue and session metadata rather than
+introducing another transcript database:
+
+| Identity | Meaning and owner |
+| --- | --- |
+| Environment ID | Stable native catalogue identity for Local, a local container or a saved remote; separate from its editable name and current socket/port. |
+| Project ID | Stable grouping record on the owning backend, with an editable name. It does not replace a working directory. |
+| Chat reference | Environment ID plus the existing BashKitten session ID; backend resolves its existing native Pi session reference. |
+| Chat title | Pi's native session name through supported RPC; existing metadata is only its UI index. |
+
+Projects group chats within an environment. Moving a chat between projects updates
+its grouping reference, not its Pi JSONL path, working directory, credentials,
+running process or history. It does not transfer a session to another machine.
+Keep subagent parent/child references and queue/edit ownership intact. Future
+calling hooks resolve the same stable environment/chat references; display names
+must never become call-routing keys. Calling, contact, STT/TTS and phone-hook
+implementation remain the separate calling work, not additions to this feature.
+
+Native controls call the existing session operations through the selected
+backend's authorized connection. Project metadata operations use that same
+authorization. Remote names/titles are untrusted text and confer no native
+authority. Preserve the remote file-manager permission independently of chat
+listing/grouping; renaming a project is not permission to browse its filesystem.
+
+The native sidecar is scrollable and keeps the selected chat, expansion and
+scroll position when session status changes. Desktop uses its sidebar; Android
+uses the corresponding narrow-screen native drawer. Retain pagination and
+asynchronous loading so an unavailable environment does not freeze Local or
+another environment. A stopped/disconnected environment stays named and shows
+its actual state rather than disappearing or silently selecting a different one.
+
+Migrate existing `cwd` groups into named grouping metadata without altering
+session history or automatically starting every worker. Remove the superseded
+web hierarchy and its duplicate navigation handlers once native navigation is
+wired; preserve chat-specific controls, folder selection and Files/Changes.
+Keep the native draft/checkpoint behavior across chat and environment changes.
+
+## 5. Linux container runtime and editable launch configuration
+
+### Build and installation
+
+Reuse the **podman branch** of BuzzardOS, not older Sway/VM donor copies.
+Current donor packaging bundles crun 1.29.1 at
+`f0d911de5587342cfeb16473bf32ecdfeaf25957` but depends on distro Podman/Buildah.
+Building and packaging BashKitten's own Podman is therefore new work. Its current
+package script also hardcodes amd64; add native Linux amd64 and arm64 outputs.
+
+Pin an official Podman release and matching required helpers after checking the
+donor's actual usage: conmon, networking/storage helpers and any Buildah operations
+that remain. Package private executables and explicit helper paths so runtime
+behavior does not accidentally switch to an unrelated system installation.
+Ship the full local Podman engine with build support, not `podman-remote`; a
+separate Buildah executable is needed only if retained code actually calls it.
+Give Podman private storage/runroot/configuration paths so it neither adopts
+unrelated containers nor modifies the user's global container configuration.
+Keep host kernel, user-namespace/subuid/subgid, `newuidmap`/`newgidmap` and device
+requirements explicit; packaging Podman does not remove those OS prerequisites.
+Missing prerequisites produce a
+specific setup error, not an alternate runtime.
+
+Provision a persistent Debian rootfs from the tracked Containerfile, with XFCE,
+the customization package, Thunar, Xfce Terminal, Xwayland, native BashKitten and
+the actual required guest services/libraries. Pin the Debian base release/digest
+and record package/source provenance. Reuse optional NVIDIA/device integration
+from the donor with compatible host drivers and architecture checks; do not
+present GPU access as guaranteed merely because a checkbox was selected.
+
+Retain donor rootfs persistence deliberately: it currently uses an external
+writable rootfs bind at `/` with an empty `--rootfs` runtime anchor, not ordinary
+image-overlay persistence. Keep package installations and user files across
+container stop/start and browser upgrades. Do not replace that model by accident
+when importing the Containerfile/build code. Preserve numeric ownership, ACLs and
+xattrs through native Podman namespace operations, without recursive startup
+chown. Changing UID/GID mapping for an existing rootfs needs deliberate ownership
+handling; it is not an ordinary harmless launch-flag edit. Host-side `podman exec`
+must use appropriate numeric users because the empty anchor cannot resolve guest
+account names.
+
+### One configuration the UI and agent both edit
+
+The canonical launch definition contains the real Podman executable, argument
+array, environment and working directory, plus the Containerfile/rootfs paths
+and startup preference. Show it as the normal Podman command/configuration in
+the native settings editor. Use real paths and Podman options, not a new command
+language. Launch the recorded executable/arguments directly; a shell is used
+only when the saved command explicitly chooses one.
+
+GPU, port and existing media/input helpers modify that same saved configuration.
+Preserve arguments they do not own. Do not regenerate and overwrite an agent's
+custom command on every start. Validate syntax, ownership/endpoint consistency
+and installed executable availability before launch; show the actual process
+error if the saved command fails. Keep saved configuration separate from transient
+PIDs, live sockets and generated credentials. For an unchanged definition, use
+native start/stop on the same persistent container. Apply changed creation
+arguments at an explicit stopped boundary, preserving its rootfs and identity;
+do not rebuild or replace a running environment when settings are saved.
+Use the upstream [Podman command options](https://docs.podman.io/en/latest/markdown/podman-run.1.html)
+and [rootless setup requirements](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md)
+as the implementation contract, checked against the pinned release.
+
+Local Pi can inspect and edit these files through its normal tools to help the
+user configure an environment. Guest Pi operates inside its guest. Termux Pi
+retains direct package installation and its existing display configuration;
+there is no Android Podman UI or Android container installation path.
+
+### Provisioning and lifecycle
+
+Creation starts a backend provisioning operation and immediately opens the
+native preparation view. Stream actual Containerfile/build/package stdout and
+stderr with current phase and eventual exit status; never fabricate progress
+percentages. The view can close and later reconnect to the same operation without
+blocking browser navigation or restarting the build. A cancelled/failed creation
+must not appear Ready or launch a partially installed desktop.
+
+Use package installation and persistent configuration to establish the desktop.
+At runtime, launch the packaged executables/session services directly. Do not
+source PeGPU's provisioning scripts or reinstall/reset XFCE settings every boot.
+One intentional user-editable Termux display command remains supported; this
+does not authorize importing PeGPU's shell initialization machinery.
+
+Separate the container's service lifetime from its viewer. Detached Podman and
+the owned per-environment display/backend services must not inherit the browser
+window's death guard. Reuse native process/service ownership; do not duplicate Pi
+supervision. The guest's BashKitten backend and ordinary browser/control runtime
+are started with the environment and kept available while it is on, even when
+no Display view is attached. The private gateway must also survive: keeping only
+the container alive is insufficient if its Wayland server exits and kills guest
+Xwayland/X clients. Detachment must not send an xdg close or stop Xwayland; the
+owned display service retains protocol/frame lifetime while the browser presenter
+is absent. Reopening attaches to the existing instance.
+
+| Action | Required effect |
+| --- | --- |
+| Close/hide Display or close browser window | Detach the viewer; keep container, guest desktop, guest BashKitten and work running. |
+| Select another environment/chat | Change the view; do not stop the previous environment. |
+| Per-container startup enabled | Start that saved environment when BashKitten starts, without duplicate instances; Off prevents automatic starts and does not stop an already-running container. |
+| Explicit container Stop | Stop that environment's owned runtime safely, preserving rootfs, Pi sessions and configuration. |
+| Host Local Agent Off | Retain its existing host-local meaning; do not accidentally kill every container through inherited group ownership. |
+| Browser shutdown/reopen | Release client connections and reattach to surviving container ownership; never treat closing a guest browser window as container Stop. |
+
+Do not change unrelated independent CLI processes or existing remote service
+lifetimes. Container startup preference is separate from host browser login
+autostart and from a guest's individual published-service startup settings.
+
+### Passwordless virtual sudo, including interactive commands
+
+Bring the later donor bridge, not an early pipe-only version. In
+`guest/sudo-bridge/src/{main,transport}.rs`, the transport introduced at
+`75b423830f5af94c9037c47b681ec457d6db6ddf` handles PTYs, redirected standard FDs,
+signals, terminal resize and suspend/resume. Preserve its integration with the
+guest's real sudo semantics. The audited donor currently defaults to password
+authentication; BashKitten must explicitly select the requested passwordless
+guest policy and validate it with `visudo`.
+
+The requested result is both agent `sudo -n apt ...` and interactive terminal
+sudo/package programs working without a guest password. Container root remains
+inside the donor's rootless user namespace. Do not confuse passwordless guest
+sudo with host sudo, or silently add Podman `--privileged`, host root access or
+host namespace sharing. Do not carry donor whole-host privileged commands into
+the bridge's guest-root operation.
+
+## 6. Desktop display on Wayland and X11 hosts
+
+Use one XFCE/X11 guest desktop on both host types. Run **rootful Xwayland** inside
+the guest against the private display gateway, with XFCE/Xfwm managing the X11
+desktop. Rootful means a single X root desktop window, not root privileges.
+This replaces the donor's guest Sway shell; it does not import its Sway/wlroots
+automation or rewrite wlroots into an X11 renderer.
+
+The host browser's X11/Wayland backend and the private guest Wayland protocol are
+separate choices. A private Wayland server can receive the rootful Xwayland
+desktop while Firefox itself runs on X11. Remove the donor's mandatory real host
+Wayland-socket requirement and its separate GTK viewer; do not mount that socket
+into the guest as a shortcut. The existing Linux browser build is GTK with X11
+and optional Wayland support; make both explicit build requirements for this
+delivery, with an artifact/run check for each backend.
+
+The first implementation gate must prove rootful Xwayland speaks the subset
+supported by the adapted private gateway. Retain frame timing, buffer ownership,
+resize, keyboard mapping, pointer and clipboard behavior needed by this desktop.
+Drive its dimensions from the actual browser tab's drawable area, including
+changes caused by browser chrome/sidebars, rather than a fixed host-screen size.
+The donor currently lacks `wl_output`, rejects an empty DMA-BUF format list and
+has Sway-specific bootstrap sizing. Supply actual output/scale/configure semantics
+and allow a DRM-free software start. Negotiate GPU formats from the native
+Firefox receiver rather than a required host Wayland connection. Do not assume
+the donor's Sway-only client assumptions automatically fit Xwayland.
+
+### GPU and CPU frame paths
+
+| Path | Required implementation |
+| --- | --- |
+| GPU | Retain DMA-BUF negotiation, formats/modifiers, fence/release lifetimes and device selection. Deliver frames to a small native Gecko receiver rather than GTK `DmabufTextureBuilder`. Verify actual import on both host backends and relevant drivers. |
+| CPU fallback | Accept validated primary `wl_shm` buffers, copy/map their pixels safely into a native Gecko software surface and present them in the same tab. Launch rootful Xwayland with its supported `-shm` option and use Mesa software rendering for guest GL where needed. |
+
+Current Buzzard `guest_display.rs` advertises `wl_shm` for some uses but rejects
+primary software frames, and `GuestFrame` carries only DMA-BUF. Its commit
+`dd0dd7ce65af7716543e39f04ae9c4308e523bae` removed the earlier `ShmFrame` path.
+Use that history as a reference, review its validation/lifetimes, and implement
+the CPU path in the new Firefox receiver. Reverting one donor commit alone is
+not a working BashKitten display integration.
+
+Gecko already has `DMABufSurface`, DMA-BUF image support, `ImageContainer` and
+`SourceSurfaceImage`; investigate those existing interfaces for the narrow
+receiver. They are engine integration points, not a ready-made external-desktop
+tab API. Validate FD ownership, stride/size, texture release, graphics-process
+loss, resize and hidden-view behavior before committing to the final adapter.
+
+The requested fallback activates when the accelerated display path cannot start,
+with truthful software-rendering status and the original error available. Do not
+overwrite the saved GPU configuration. A renderer failure after apps are running
+must not silently destroy their X server/session to retry; report any required
+display restart. A fully software-only start must work without a DRM render node
+or a host Wayland compositor. Podman itself does not render pixels and has no
+single flag that replaces this work.
+
+The [Xwayland manual](https://manpages.debian.org/trixie/xwayland/Xwayland.1.en.html)
+documents rootful geometry and `-shm`; Mesa documents
+[`LIBGL_ALWAYS_SOFTWARE`](https://docs.mesa3d.org/envvars.html#libgl-environment-variables).
+These establish available mechanisms, not the performance or GPU compatibility
+of a finished product. CPU rendering does not promise that every game, Vulkan
+application or CUDA application will work or run quickly.
+
+## 7. Android: embed Termux:X11 without a companion X11 APK
+
+Keep `com.bashkitten`, its current signer and independent Android UID. Shared UID
+with Termux is unnecessary for Binder/FD transfer and would require matching
+Termux's signer. Any supported installed `com.termux` remains usable through the
+existing real UID/signing-identity approval flow.
+
+Bundle the pinned `lorie` Java/resources/AIDL and native `libXlorie.so` in the
+BashKitten APK for arm64-v8a and x86_64. It is an Android library but not a
+drop-in isolated View: `LorieView`, input helpers and `MainActivity` currently
+depend on the upstream Activity/Application. Extract a narrow frontend host
+interface, preserving upstream native rendering and input. Supply Fenix's real
+Activity, lifecycle, preferences, insets and focus through that adapter. Do not
+merge the standalone launcher/Application manifest wholesale or place a foreign
+Activity inside a browser tab.
+
+The server continues to execute **under Termux's UID**. Upstream's Termux
+`app_process` loader reads classes and `libXlorie.so` from the installed APK.
+Its official loader hardcodes `com.termux.x11` and its signer, so ship a paired
+BashKitten Termux loader from the same pinned source targeting `com.bashkitten`
+and the existing BashKitten signer. The APK owns these native code payloads;
+the Termux package owns the matching launcher plus desktop/runtime dependencies.
+Detect a mismatched APK/loader pair and show the necessary package update.
+
+Reuse the existing `bashkitten-display` backend owner, readiness checks, explicit
+Start/Stop and user-editable launch command. Replace only the separate-APK
+download/detection and external Open X11 path with native Display attachment.
+Use the existing private browser/Termux IPC to hand off `ParcelFileDescriptor`
+connections by adding a narrowly typed FD operation to its authorized Binder
+bridge. Its existing JSON command method cannot carry that descriptor unchanged.
+Do not accept arbitrary broadcast-supplied privileged binders.
+Upstream's reconnect knock listener binds `INADDR_ANY`, separately from X11 TCP.
+Replace discovery with the private handoff so embedding does not introduce a
+LAN listener; `-nolisten tcp` alone does not address that listener.
+
+Check 16 KiB ELF LOAD alignment and APK native-library zip alignment for
+`libXlorie.so`, plus real `app_process` loading from both ABI packages. These
+build checks do not establish 16 KiB-page runtime coverage on stock Cuttlefish.
+
+### Actual tab viewport and input
+
+- Reuse upstream `LorieView`, touchpad/direct-touch behavior, mouse buttons,
+  wheel/hover, hardware keys/modifiers, IME composition, extra keys and clipboard
+  handling. Route them only to the selected/focused Display surface.
+- Size the X display from the measured tab content rectangle after browser
+  chrome, cutouts, system bars, extra-key controls and current IME insets. Use
+  one inset owner so Fenix and the embedded view do not subtract them twice.
+- Wire upstream `setContentInsets`, viewport/input-transform updates and native
+  window-change notification. Select dynamic/native resolution and keyboard
+  resizing deliberately: the upstream keyboard-resize preference is not on by
+  default. Opening the keyboard shrinks the desktop; dismissing it restores it.
+- Recompute on orientation/window changes and update pointer coordinates from
+  that same drawable rectangle. Preserve the desktop process and session.
+- Hide/close releases the surface, input capture, held keys and view listeners;
+  it does not stop Termux's desktop. Reopen creates/reinitializes the view and
+  attaches to the same backend. Explicit Display Stop and whole-Agent Off retain
+  their owned-process meaning. Display failure does not terminate Pi chat work.
+
+Keep headless Xvfb behavior separate. Do not require root, ADB, Shizuku, shared
+UID or privileged system-key permissions in the shipped user flow. Development
+setup/debugging still uses the authorized ADB/direct Termux workflow. Android
+16/17 behavior and physical-device GPU support require actual acceptance.
+
+## 8. Shared XFCE customization package
+
+Package the customization as a BashKitten `.deb` for Debian guests and a native
+Bionic Termux package built from the same source. Reuse upstream XFCE/Xfwm and
+the actual PeGPU apps: **Thunar + Xfce Terminal**. Nautilus is not XFCE's file
+manager and is not what the inspected PeGPU setup installs. Do not pull in an
+extra GNOME desktop stack on the assumption that the donor used it.
+
+The package owns the small panel adaptation, event-driven layout/divider helper,
+scaling module, settings and appearance assets. Native package dependencies and
+normal desktop/session registration start those components. First-run defaults
+are applied once to the owned desktop profile, then user changes persist. No
+PeGPU account assumptions, login-time install scripts or repeated settings reset.
+
+### Maximized apps and optional two-app layout
+
+Keep stock Xfwm window management. Maximize normal resizable application windows
+within the desktop workarea; preserve dialogs, file pickers, popups, tooltips,
+panel windows and explicit fullscreen behavior. Do not force a modal dialog to
+fill the desktop or claim a non-resizable application accepts arbitrary geometry.
+
+Use one narrowly adapted upstream Docklike panel module, installed under a
+BashKitten identity instead of replacing distro plugin files. In its taskbar
+context menu, add exactly the requested **Two app mode** action, enabled by the
+split-screen setting. Capture the current main window before the menu steals
+focus, and use the clicked app's actual selected window when it has several.
+Reject identical, closed or ineligible windows. If both applications' minimum
+sizes cannot fit the workarea, report that constraint and retain the current
+layout rather than declaring a successful split.
+
+An event-driven helper unmaximizes that pair, requests adjacent workarea-sized
+rectangles and owns one small draggable divider. Dragging resizes both windows,
+respecting frame extents, minimum sizes and size increments. Use native window
+APIs/EWMH requests, not shell processes per drag event. Verify actual geometry
+after asynchronous requests. Selecting a third app returns it to the normal
+maximized view and removes the divider. Disabling split mode or closing one
+member removes the divider and maximizes the remaining app. This adds no third
+layout mode or extra button.
+
+Use window/open/close/state and RandR/workarea events. Recalculate after tab
+resize, phone keyboard/rotation or scale changes, preserving the split proportion
+where both apps' size limits allow. Runtime XIDs are not durable identifiers.
+`libxfce4windowing` offers useful window/events APIs, but the inspected X11
+geometry wrapper skips negative coordinates; use an explicit-mask native EWMH
+operation where needed rather than assuming that wrapper covers every geometry.
+The custom pair/divider behavior is new implementation, not a stock XFCE setting.
+
+### Direct PeGPU scaling reuse
+
+Reuse the MIT functions in
+[`Resources/Guest/scaling-app/src/pegpu_scaling.py`](https://github.com/openresearchtools/PEGPU/blob/aae5382fae02eaeb97ceeb7fcaa531f88009b081/Resources/Guest/scaling-app/src/pegpu_scaling.py):
+profiles, normalization, scale planning, changed-value XFConf writes, cursor
+resources, transaction and saved selection. Wire them into the customization's
+settings code directly. Preserve their license and provenance.
+
+The implementation coordinates Xft DPI, GDK integer factor, cursor/icons, panel,
+desktop icons and titlebar sizing. Its profiles cover 100–300% in 25% steps.
+It uses `xrandr` for discovery, not framebuffer fractional resampling. Do not
+describe it as universal per-monitor fractional scaling. Remove donor assumptions
+such as `:0` meaning 200%, fixed `panel-1`, a hardcoded guest user or Linux-only
+prefix/bus paths. Target the owned desktop's actual settings and session bus.
+
+Apply current-session XSettings/Xfconf changes and make future app launch
+environment agree with the saved choice. Environment variables cannot change
+inside already-running processes; apps that cache scale may require relaunch.
+Avoid the donor's unconditional shell `xfwm4 --replace`; use live settings where
+supported and retain a session-owned restart only if acceptance proves necessary.
+Preserve two-app geometry through a scale change.
+
+Use BashKitten's actual dark semantic colors for GTK/Xfwm/panel and terminal/file
+manager defaults. The inspected palette includes `#1e1e1e`, `#292929`, `#fafafa`
+and `#c8c8c8`; compare against the built browser before finalizing assets. Use a
+plain dark background, without new wallpaper/effects or appearance controls.
+
+## 9. Agent desktop control and native boundaries
+
+Use upstream X11 tools: xdotool/XTEST for pointer/key/window operations, an X11
+screenshot implementation such as scrot, and AT-SPI for apps that expose a tree.
+Provide the correct owned `DISPLAY`, X authority and session D-Bus environment
+to that environment's agent. Keep one concise environment/skill description of
+the actual installed tools; do not bring the Sway/wlroots CUA implementation,
+seat controller or a new agent runtime into BashKitten.
+
+XTEST input and X11 screenshots are display-wide authority, not per-window
+security. AT-SPI coverage depends on the app; it is not created by XFCE for every
+custom-rendered UI. Targeted `xdotool --window` events may differ from normal
+focused XTEST input. Acceptance must check real focus, coordinates and results.
+
+Keep the native protected Agent outside the controlled desktop surface. On
+Android it is outside Termux's X server. For containers, host-native sidecar/chat
+owns the Agent view while the guest runs its own backend and ordinary browser
+windows. Embedded-container operation must not create a second protected Agent
+surface inside the X11 display exposed to unrestricted capture/input. Reuse the
+existing browser/Agent separation: embedded-container browser wiring must route
+Agent/auth activation to the host's protected frontend through the private
+connection, rather than opening it inside the controlled X server. This is a
+required native integration change, not a label applied to guest windows. Verify
+it before enabling desktop CUA; a window-name filter alone is not sufficient.
+Do not expose the host's entire desktop as the guest's X server to avoid this work.
+
+## 10. Per-environment sockets, settings and remote sharing
+
+Mount only each guest's allocated private runtime endpoint directory into that
+guest. Extend the existing native local connection adapter to select its Unix
+endpoint and credential source, reusing the shared Agent service/session code.
+Do not expose general container administration to web JavaScript or infer native
+trust from an HTTP Host header or a loopback source address. The native browser
+adapts the Unix service into its existing protected document loader locally;
+this is not a Tor connection or a new remotely reachable listener. The Agent
+HTTP backend already listens on a Unix socket, but Caddy currently supplies its
+trusted proxy context and the browser uses HTTPS, instance identity and Secure
+cookies. Preserve origin/cookie/CSRF rules, SSE, uploads/downloads and native
+credential delivery in the per-environment adapter. A Unix peer is not by itself
+an authenticated Agent, and a browser cannot navigate directly to that socket.
+Verify UID-mapping-aware access: a guest-owned mode-0600 socket can be owned by a
+subordinate UID on the host. Establish an explicit owned endpoint handoff/access
+path without making the socket world-readable or assuming a private directory
+alone solves its permissions.
+
+The container settings button opens native settings for that exact environment:
+saved launch/Containerfile configuration, startup toggle, existing port mappings,
+media/PipeWire/input integration and remote sharing. Reuse the donor's supported
+controls and endpoint ownership; do not import unrelated desktop-shell features.
+Keep media device selection/permissions distinct from the display's input stream.
+The donor uses separate host/guest PipeWire graphs with per-machine loopback TCP
+media endpoints, not a raw shared PipeWire socket. Preserve that existing media
+mechanism and device choices; the requested private Unix link is for local
+environment/control/display access, not a claim that donor media is already UDS.
+
+The guest is its own BashKitten host. Its remote publishing has its own existing
+identity/account/service definitions and uses the normal Share Local workflow
+through the private local controller connection. Put that setup in the container
+settings instead of creating a second remote-management web API. Local socket
+access never weakens the published listener's TLS/mTLS/Authelia authorization.
+Saved remotes continue using their current allowed service IDs and file-manager
+policy. An offline container never becomes a reason to use another transport.
+
+No remote Display service, video protocol, VNC/RDP/WebRTC transport or reverse X11
+forwarding is included, following the user's explicit local-only clarification.
+
+## 11. Source layout, updates and license delivery
+
+Use the existing one-product repository and component-build workflow:
+
+| Location/seam | Planned responsibility |
+| --- | --- |
+| `browser/bashkitten/browser/components/agent/` | Linux native sidebar/selection, private environment connection adapter and reuse of existing service settings/draft ownership. |
+| Product-owned browser Display component | Small Linux Gecko frame/input host and special-tab lifecycle. Keep graphics glue separate from environment/session code. |
+| `browser/mobile/android/bashkitten/` plus narrow Fenix host/tab hooks | Native sidebar and embedded X11 View; replace `AgentDisplayDialog` external-app path, reuse `AgentRuntime` and Termux connection approval. |
+| `agent/src/server/control.mjs`, platform adapters and new environment module | Native container setup/config/lifecycle, private guest sockets and streamable preparation status. No new remote administration routes. |
+| `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
+| `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
+| Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging. |
+| Tracked third-party source + external patch series | Exact Termux:X11/native gitlinks, retained Buzzard code, PeGPU scaling, panel dependency and licenses. |
+| Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
+
+Paths for new modules are proposed; reuse an existing owner rather than creating
+parallel controllers with the same job. Keep upstream imports pristine with
+small named patches/adapters and exact provenance. Preserve Firefox's existing
+compact source-history/update process. Do not import donor Git ancestry or a
+second full browser tree just to get these components.
+
+Build Linux amd64/arm64 and Android/Termux aarch64/x86_64 components with their
+correct libc, ABI, prefixes and native dependencies. A Linux `.deb` cannot be
+installed into native Termux simply because both use the Debian archive format.
+Termux's source recipes already include Docklike, Thunar, Xfce Terminal, PyGObject,
+xdotool, scrot and AT-SPI components; their presence is a packaging starting point,
+not runtime acceptance of this customization.
+
+Retain component-artifact/compiler caches; key new component artifacts by source,
+patches, toolchain and architecture so changing a panel helper does not rebuild
+unrelated Gecko/native engines. Final release packages must use the same tracked
+recipes in GitHub Actions and carry checksums/provenance; no workstation-only
+library, package repository or executable path may enter a release.
+
+Keep full offline notices and corresponding source. Termux:X11 declares GPLv3;
+its input code and native dependencies retain their individual notices. PeGPU's
+scaling module is MIT, Docklike is GPL-3.0-or-later, and XFCE components have
+their own licenses. Do not relabel retained dependencies as AGPL-only or erase
+donor attribution while removing product branding. Inventory actual linked and
+packaged dependencies, including Podman/crun/helpers and X11 gitlinks; fail
+packaging if required texts/source are missing. Preserve the testing-release
+warning and existing application signing identity.
+
+For upgrades, preserve user-written launch configuration and desktop settings.
+Update an untouched generated Termux default to the new private loader, but do
+not regex-rewrite arbitrary user scripts. Show the needed edit for custom commands.
+Remove BashKitten's separate-X11-APK dependency/path; leave an independently
+installed Termux:X11 and its command alone. Use fresh profiles for architecture
+acceptance and separately check preservation with an explicit upgrade case.
+
+## 12. Pi update and the Durable distinction
+
+Add a focused dependency-update step from current
+`@earendil-works/pi-coding-agent`/`pi-ai` 1.0.2 to the latest verified official
+release, currently **1.1.0** at `abe508e1b89912adde45528136c3221eb69acdd7`.
+Recheck the latest official release when implementation begins, pin its exact
+commit/packages/lock integrity and update `agent/PI_UPSTREAM.md`. Check supported
+RPC, ModelRuntime, extension/deferred-tool and subagent APIs against that release
+before updating adapters. Preserve bundled Node and the entire private
+`$BASHKITTEN_DATA_DIR/pi` profile, including npm configuration and extension paths.
+
+Upstream announced [Pi Durable on 1 October](https://earendil.com/posts/pi-durable/),
+and its [v1.1.0 package documentation](https://github.com/earendil-works/pi/blob/v1.1.0/packages/durable/README.md)
+still calls it experimental. The verified latest Pi release date is 7 October,
+not 10 October. Record the requested update without assuming that upgrading the
+coding-agent package converts existing RPC/JSONL sessions to Durable storage.
+This plan preserves stock sessions; it does not authorize a separate harness or
+history migration. Verify the new release's session restore, effective model and
+reasoning, fork, streaming and subagent communication in the existing integration.
+
+## 13. Ordered implementation and acceptance gates
+
+Implement in focused, reviewable commits on main, with relevant checks and pushes.
+Do not dispatch large browser builds before proving the new native boundaries
+and compiling the changed components. A passing build is not feature acceptance.
+
+| Gate | Work | Required evidence before proceeding |
+| --- | --- | --- |
+| 1. Sources and runtime contracts | Pin donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Reproducible component inputs, no unexpected system runtime selection; Pi API/packaging checks. |
+| 2. Native Display feasibility | Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real view attachment, input and resize. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK. |
+| 3. Persistent environments | Containerfile, live preparation, saved Podman config, lifetime/startup, guest BashKitten and interactive passwordless sudo. | Install/create/start/stop/reopen with persistent files, safe PTY/redirection/signal behavior and actual backend readiness. |
+| 4. Shared desktop package | Maximize policy, two-app taskbar action/divider, direct scaling and dark appearance for Linux/Termux. | Real apps, dialogs, input, geometry and scale changes on both platforms. |
+| 5. Native hierarchy | Environments/projects/chats, rename/move, selected-chat web view, existing subagent/draft/session ownership. | Existing histories/cwd unchanged by grouping; asynchronous multi-environment navigation and no duplicate sidebar. |
+| 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
+| 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
+
+Use ADB/direct Termux for Android setup, installation, permissions and debugging;
+use the desktop BashKitten browser with Cuttlefish's web UI for actual feature
+interaction. Keep external probes/evidence outside product source/artifacts.
+Do not add BashKitten-owned scripted product tests. Use stock Android 17 native
+KVM Cuttlefish with the existing 16 GiB/128 GiB SSD configuration, fresh browser,
+backend and Pi profiles for architecture acceptance, and real devices for claims
+about physical GPU behavior. Android 16 coverage must be recorded separately.
+
+| Manual case | Expected result |
+| --- | --- |
+| Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside BashKitten with no X11 companion APK and no shipped root/ADB requirement. |
+| Android input/viewport | Real GUI app accepts hardware modifiers, Unicode/composing IME, touch/mouse/scroll; keyboard shrink/restore and portrait/landscape maintain correct pointer coordinates. |
+| Android lifetime | Tab close/reopen, browser background/recreation and rotation preserve the desktop; Stop/Agent Off stop only their owned processes; display crash leaves chats usable. |
+| Linux preparation/config | Visible real package output while the browser stays usable; edited launch flags take effect; invalid config shows the real error without another runtime. |
+| Linux persistence/startup | Guest-installed packages, files and Pi work survive viewer/browser-window close and later attachment; per-container startup on/off behaves independently. |
+| Host rendering | Same guest works in X11-host and Wayland-host sessions; deliberately unavailable acceleration selects the actual software path without modifying saved GPU choice. |
+| GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
+| Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
+| XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
+| Scaling | Saved profiles update owned XFCE settings and new app launches; browser palette matches; restart-needed apps are reported truthfully; no startup script resets user edits. |
+| Projects/sessions | Create/rename projects, rename chats, move chats, retain subagents and reconnect; same native Pi history and cwd, correct effective model/reasoning and draft/queue ownership. |
+| Local vs remote | Container socket works without Tor; publishing and a real saved-remote client still use existing encrypted/authenticated route; remote has no Display streaming option. |
+| CUA scope | Screenshot/input/accessibility target the guest/Termux desktop and actual apps; host native Agent/auth UI and unrelated host desktop are not exposed by the new display connection. |
+| Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |
+
+Record the exact candidate commit, platform, renderer and result for every gate.
+The unproven engineering points are the Linux native frame receiver/gateway
+adaptation, Android host-interface extraction, paired-window layout and the
+complete private Podman/helper packaging. They are concrete implementation work,
+not functionality claimed by this research plan.

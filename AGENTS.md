@@ -1,5 +1,19 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 10 October native environments and Display plan
+
+The requested next architecture is recorded in
+[docs/native-environments-display-plan.md](docs/native-environments-display-plan.md).
+Read it before implementing that work. It is a researched plan, not an
+implementation or acceptance claim. It specifies embedded Termux:X11 without a
+separate X11 APK, Linux Podman/crun environments, a native environment/project/chat
+sidecar, shared XFCE customization and the requested CPU display fallback.
+Display is **local Termux and local containers only**, as explicitly clarified;
+saved remotes retain the existing encrypted Agent/service route. The plan
+supersedes older display/frontend/lifetime requirements only where stated, and
+does not authorize transport/authentication fallbacks or a Pi reimplementation.
+Its Pi release update is planned; the current runtime pin below is unchanged.
+
 ## Current 8 October work and verification
 
 The latest user request adds shared native Android/Linux LocalAI (llama.cpp,

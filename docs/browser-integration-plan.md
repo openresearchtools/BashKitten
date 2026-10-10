@@ -1,5 +1,14 @@
 # BashKitten browser integration plan
 
+Controlling extension, 10 October: the
+[native environments and Display plan](native-environments-display-plan.md)
+specifies the requested native environment/project/chat sidecar, local Linux
+Podman/crun desktops, embedded Termux:X11 and shared XFCE customization. Display
+is local Termux/local containers only. Its explicit CPU rendering fallback and
+independent container/viewer lifetimes supersede conflicting older passages here;
+remote transport/authentication rules remain unchanged. This is planned work,
+not an implemented-feature claim.
+
 Controlling verification update, 8 October: use ADB for Android setup,
 permissions, installation and debugging, and direct Termux shell access for
 package/terminal work. Use BashKitten's desktop browser and Cuttlefish web UI
