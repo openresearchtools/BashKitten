@@ -13,6 +13,9 @@ restrictions in the [browser plan](browser-integration-plan.md) and
 The latest sidecar specification also replaces the large Local/remote selector
 and global Agent power placement with listed backends and per-backend controls;
 project membership is optional.
+The Android Phone module and MCP-to-CLI port are part of this same plan in
+[section 12](#12-android-phone-control-and-the-mcp-port), including optional
+Accessibility, enforceable feature switches and owned-Pi session authorization.
 The explicitly requested CPU display fallback does not authorize fallback in
 Tor transport, authentication, AI runtimes or unrelated features.
 
@@ -85,6 +88,12 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   persistent extraction, `.deb` installation with dependency resolution and
   passwordless guest sudo, and adding applications/launchers to the Start menu.
   Explicit user-created desktop shortcuts remain available; none are preseeded.
+- Android's native top bar also has **Phone** beside **+**. Its simple settings
+  panel controls a backend module bundled into the main APK: master On/Off,
+  independent feature switches, then optional Accessibility-dependent switches.
+  Local BashKitten-owned Pi sessions use the `phoneuse` CLI/skill. Disabled
+  features have no active handlers, collection or command exposure; camera and
+  microphone control are removed from this module. No companion APK is needed.
 
 Product UI, executable/package names and new configuration use **BashKitten**.
 Keep original donor names in licenses, copyright notices and provenance.
@@ -1237,6 +1246,7 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/server/control.mjs`, platform adapters and new environment module | Native container setup/config/lifecycle, private guest sockets and streamable preparation status. No new remote administration routes. |
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
+| Android native Phone module, owned Pi worker launch and Termux CLI/skill packaging | Adapt the pinned MCP donor into a main-APK backend, native feature policy, worker-scoped authorization and clean `phoneuse` CLI. No companion APK or exposed MCP catalog. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
 | Product-owned BashKitten OS source/package | Shared XFCE taskbar, maximized search/pins/app-grid launcher, initially pinned BashKitten OS settings app, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
@@ -1360,6 +1370,13 @@ and helper code are AGPL-3.0-or-later. Preserve those component
 notices and corresponding source instead of copying donor branding/dependencies
 unrelated to the requested functions.
 
+The [no-telemetry requirement](#no-telemetry-across-bundled-components) applies to
+every component and transitive runtime dependency in this table and package
+inventory, including Podman/crun, the spreadsheet viewer and Phone fork. Extend
+source/license review with runtime network/logging review and external traffic
+checks. No telemetry, external diagnostic logs or developer callbacks may ship;
+unexplained reporting or missing review blocks release preparation.
+
 For upgrades, preserve user-written launch configuration and desktop settings.
 Update an untouched generated Termux default to the new private loader, but do
 not regex-rewrite arbitrary user scripts. Show the needed edit for custom commands.
@@ -1367,7 +1384,371 @@ Remove BashKitten's separate-X11-APK dependency/path; leave an independently
 installed Termux:X11 and its command alone. Use fresh profiles for architecture
 acceptance and separately check preservation with an explicit upgrade case.
 
-## 12. Pi update and the Durable distinction
+## 12. Android Phone control and the MCP port
+
+Requested 10 October 2026. **Status: implementation plan only.** Bundle the
+Android control backend into the **main BashKitten APK**, as explicitly selected
+by the user. A native Phone panel controls an optional backend module; Termux
+agents use a small CLI and the `phoneuse` Pi skill. No companion APK is required.
+
+It covers device control, not the separate calling/contact/voice-hook feature.
+It does not change the protected Agent boundary, remote authentication, or the
+Tor/Caddy/Authelia/Chisel route. Write only the integration and controls needed
+here; reuse existing native controllers, Termux approval and packaging.
+
+### Phone panel
+
+Add a compact **Phone** button to the main native Android top bar beside **+**,
+using the existing icon style. It opens the native Phone settings panel. This
+button does not belong to the XFCE taskbar or the opened-chat web UI.
+
+The panel contains one primary **On/Off** switch, independent feature switches,
+then a divider and Accessibility-dependent switches. Master and new feature
+switches default Off. Switching the master Off retains the user's choices but
+makes every feature inactive. A later On restores only those saved choices whose
+required Android access is currently available; it does not grant permissions.
+
+Accessibility is optional. Its section stays greyed out until Android access is
+enabled and the service is connected, with a concise explanation and the normal
+Android settings route. Notification access and other missing grants have their
+own availability indications and user-initiated Android permission flows. Never
+require Accessibility to start notification, storage or other independent work.
+No root, ADB, Shizuku, shared UID or default-assistant role is required by users.
+
+The proposed grouping below keeps the donor's useful operations under separate
+controls without reproducing its MCP settings UI. Final command names can remain
+short, but every operation must have an explicit owner in this table.
+
+| Panel section | Switch | Operations and access |
+| --- | --- | --- |
+| Independent | Applications and links | List visible launchable apps and request app/validated URI opening. Respect package visibility and background-launch rules. No unrestricted intent dispatcher. |
+| Independent | Notifications | Read current notifications, open, dismiss, snooze, invoke an available action and reply through a current text RemoteInput action. Requires Notification access and a connected listener, not Accessibility. |
+| Independent | Files and sharing | List/read/write/append/replace/download/delete within granted locations and receive deliberate Android shares. Retain per-location read/write/delete policy and SAF/URI/MediaStore ownership checks. Do not import public web-share links. |
+| Independent | Clipboard | Write using application context; read only when Android actually permits it. Accessibility must not be an artificial prerequisite or a claimed bypass of clipboard restrictions. |
+| Independent | Location | On-demand location through the native FOSS provider and granted access. The inspected donor requires precise location; do not silently claim approximate-only support or add continuous tracking. |
+| Accessibility | Screen and elements | Read screen/tree state, inspect/find/wait for nodes and request a screenshot. Capture additionally requires the service's screenshot capability; no MediaProjection fallback. |
+| Accessibility | Touch and element actions | Tap, long/double tap, swipe, scroll, pinch/custom gestures and supported node actions. |
+| Accessibility | Text and keys | Append/insert/replace/clear text and supported key input through the available Accessibility input connection. |
+| Accessibility | Navigation | Back, Home, Recents, notification shade, quick settings and keyboard dismissal. Opening the notification shade is distinct from reading notifications. |
+
+Android provides broad service grants; the switches are additional BashKitten
+authorization. Existing browser permissions never make a switched-off Phone
+feature available. Ordinary notification replies do not require SMS/contacts
+access and cannot send to arbitrary recipients outside a current reply action.
+Respect Android's sensitive-notification redaction and work-profile restrictions.
+
+### Fork and source provenance
+
+Start from [Android Remote Control MCP v1.12.0](https://github.com/danielealbano/android-remote-control-mcp/releases/tag/v1.12.0),
+release commit `3777403d148283c5a18a3e8122ff819da4eed808`, the release exercised by
+the `mcp` thread. Preserve its MIT `LICENSE.md`, including the original copyright
+**2026–2027 Daniele Salvatore Albano**, and dependency notices. BashKitten's own
+code remains under its existing license; do not relabel the donor's files.
+
+Import the original pinned source and provenance into a clearly identified
+adapted component directory in a focused commit. Follow with separate commits
+removing unneeded parts and adapting retained Android providers to this module.
+Record that this is a maintained BashKitten fork; do not automatically overwrite
+it with mainstream donor updates. Preserve original source through the import
+commit and source delivery, without compiling a second donor app. Keep original
+and modified file provenance clear and ship full offline notices/source archives.
+
+The research also inspected main commit
+`16f39717ce0969aa81a4ec132ba1cad861ba46cc`. Its HTTP transport differs from the
+tested release. Treat those findings as an audit checklist, checking each
+against the release source; do not describe main as the tested release.
+
+Remove from the shipped module:
+
+- MCP server/catalog/SDK and generic `call`, `schema`, `tools` passthroughs from
+  the research prototype. Retain useful Android providers behind typed commands.
+- All camera/microphone commands, providers, recording/audio options, schemas,
+  settings, permission requests and dependencies used only by those features,
+  including donor CameraX bindings. Check the merged APK manifest. Browser
+  WebRTC/dictation permissions independently needed elsewhere remain separate
+  and confer no Phone CLI authority to capture camera or microphone input.
+- Donor app screens/onboarding, global Accessibility startup gate, OAuth/server
+  configuration UI, remote icon fetching and its standalone product lifecycle.
+- Cloudflare/ngrok transports and native payloads, public/LAN share URLs, event
+  forwarding/webhooks, Claude channel plugin, location/geofence/Wi-Fi event
+  channels, donor GitHub update jobs and boot paths that start disabled services.
+- Persistent donor tool/activity logs and content logging. Return useful local
+  errors without storing notification text, screenshots, UI trees, clipboard,
+  files, credentials or command payloads in diagnostic history.
+
+The donor's `close_app` uses
+[`killBackgroundProcesses`](https://developer.android.com/reference/android/app/ActivityManager#killBackgroundProcesses(java.lang.String)),
+which cannot kill other apps on Android 14+;
+omit that unsupported command for the Android 16/17 target. Opening an activity
+can be blocked even when the call returns normally. Report a request as requested
+or unconfirmed unless its outcome is actually known; never announce success
+merely because `startActivity` returned. See Android's
+[background activity rules](https://developer.android.com/guide/components/activities/secure-bal).
+
+### Backend authorization and lifecycle
+
+Use one native policy owner shared by UI, command dispatch and Android service
+entrypoints. Save policy in BashKitten's private Android data. Only the native
+user settings flow changes it; the CLI cannot enable itself, grant permissions
+or rewrite policy. Missing, corrupt or unknown policy/capabilities mean Off.
+
+An operation is available only when **master On + its feature On + current
+Android grant + live service readiness + existing caller/surface authorization**
+all hold. Check this when discovering a command, accepting it and immediately
+before effects or releasing sensitive results. Check compound operations against
+every capability they use; switching off screen reading cannot be bypassed by
+a node wait, and switching off Files cannot be bypassed by a shared URI.
+
+Maintain a small explicit command-to-feature table with lazy provider factories.
+Disabled providers are not instantiated; their handlers are not registered.
+Do not reproduce the donor's default-on denylist, eager provider injection or
+permission snapshot at server startup. Reconcile grant/service changes live,
+without requiring an app restart or reusing a stale authorization decision.
+
+**Off means inactive, undiscoverable and unusable**, not just a hidden button:
+
+- Remove the feature from CLI help, capabilities, completions and command lookup.
+  Cached clients, guessed command names, aliases and raw backend requests are
+  still denied by the native policy. No alternate MCP/intent/debug path remains.
+- Stop admitting work immediately; invalidate its policy generation, cancel
+  queued work/waits, detach observers, stop sampling and release owned handlers
+  and transient sensitive caches. Reject late results. Work already dispatched
+  to another app cannot be undone; do not claim cancellation reversed an action.
+- Master Off closes the Phone command listener and invalidates its credentials.
+  It must not stop ordinary browser, Termux Pi, dictation or remote services.
+- Notification, Accessibility, share-receiver and restart callbacks consult the
+  same policy **before extracting or caching content**. OS callbacks may create
+  a minimal service entrypoint even while Off; it must remain inert and must not
+  initialize feature handlers. APK code and manifest declarations still exist.
+- Where supported, unbind the unused notification listener; only request rebind
+  after the feature is enabled and the user grant still exists. Accessibility
+  events/caches must also stop when no dependent feature is active. Do not claim
+  that a feature toggle silently revokes Android's user-granted special access.
+- Boot, sticky/null-intent restart, package replacement and task removal cannot
+  resurrect disabled features. Reconnected services recompute current policy.
+
+Android documents notification connection readiness and
+[unbind/rebind APIs](https://developer.android.com/reference/android/service/notification/NotificationListenerService).
+The donor currently receives/caches notifications independently of its command
+server; merely stopping that server would not satisfy Off. Accessibility tree
+caches and share receivers need the same treatment.
+
+### CLI and Pi integration
+
+Use this path, without a web UI relay for each command:
+
+```text
+Local Termux Pi -> bundled Node phoneuse CLI -> authenticated local transport
+               -> Phone backend module in BashKitten APK -> Android APIs
+```
+
+Package the CLI with BashKitten's native Termux runtime and use its private
+bundled Node. Reuse the approved Termux/native-controller setup to deliver the
+dynamic endpoint and credential privately. Termux and BashKitten keep separate
+UIDs; matching signatures or filesystem access are not assumed. The research
+verified literal localhost between those UIDs, not an Android cross-UID Unix
+socket. No third application or repeated companion pairing is introduced.
+
+#### Restrict access to BashKitten-owned Pi sessions
+
+Only live **local BashKitten-owned Pi workers**, including their owned subagents,
+may obtain Phone authorization. Installing the CLI, knowing the port, sharing
+Termux's UID, using a particular executable name or setting `BASHKITTEN_*`
+environment variables is not authentication. Standalone Pi, an ordinary Termux
+shell, other Android apps, websites and remote/container Pi sessions receive no
+Phone grant. No new per-chat permission UI is needed for this requirement.
+
+Reuse the existing trusted native/Termux controller and worker lifecycle to
+authorize a worker when it starts. Mint a random short-lived opaque credential
+bound to the installation/backend instance, native Pi session, worker incarnation
+and policy generation. Deliver it privately only to that worker's Pi process
+and its tool subprocesses; never install a reusable all-session Phone token in
+a general CLI configuration file or shell startup environment. Keep the native
+credential-issuing authority out of the CLI and ordinary Pi environment.
+
+Android owns the active-grant registry. Registration and renewal require the
+trusted worker owner over its private controller path, not generic Termux
+approval or a CLI-provided session/PID. The current `BASHKITTEN_INSTANCE_TOKEN`
+is inherited by Pi and cannot serve as the Phone grant-issuing authority. Keep
+that authority separate and explicitly exclude it from inherited Pi/command
+environments. Each subagent worker receives its own scoped grant.
+
+The CLI receives its worker authorization through the owned process environment
+or private worker IPC supported by the existing launch path. Environment names
+and session IDs are only routing metadata; an unguessable validated grant is
+still required. Do not patch Pi or infer trust from a supplied PID. Renew only
+through the authenticated owner while the worker is alive; revoke on worker
+stop/replacement, controller disconnection, reset or master Off. Expiry fails
+closed if a crash prevents clean revocation. Feature revocation takes effect
+immediately through the native live policy, without waiting for token expiry.
+Do not replay commands when reauthorizing. Reopening a chat with a new worker
+requires a new grant; there is no transferable saved chat credential.
+
+Use the existing `http/server.mjs` worker creation and `rpc/worker.mjs`/`rpc.mjs`
+launch/lifecycle seams. `adoptSession()` can change the native session while the
+Pi process stays alive. Rebind/rotate its Phone authority through that owner
+transition, invalidate old-session work/results and let CLI requests obtain the
+current grant through private worker IPC. A spawn-time `BASHKITTEN_SESSION_ID`
+or static environment credential must not determine later session identity.
+Native backend restart invalidates registrations; only the trusted live owner
+can re-register. Never turn a stale command into an automatic retry.
+
+Check the grant and its current worker/session scope on every request, including
+help/discovery and result delivery. A guessed session ID or a grant from a stopped
+worker must never authorize another session. Request origin/IP and the CLI's own
+checks are not security boundaries. Any ordinary app can try localhost; it must
+be rejected without valid authorization. Android Settings/Phone policy cannot
+be changed with the same command credential.
+
+This enforces **BashKitten session authorization**, with an explicit platform
+limit: all programs inside Termux share its Android UID. Files, environments,
+worker IPC and process inspection are not a strong isolation boundary against
+malicious same-UID code or a credential deliberately leaked by an authorized
+agent. Pi's shell commands/extensions also execute within its authority. Do not
+claim cryptographic proof of the caller being the Pi binary or sandbox isolation
+from hostile Termux programs; that would require a different execution/UID
+boundary, outside this plan. Per-worker grants still prevent unprovisioned normal
+callers and other Android UIDs from using Phone and limit credential lifetime.
+This distinction follows Android's
+[UID-based application sandbox](https://source.android.com/docs/security/app-sandbox);
+our inference for Termux is that programs sharing its UID do not receive separate
+Android application sandboxes merely because they are different executables.
+
+#### Local transport and command contract
+
+Reuse the existing authenticated local controller transport where practical;
+keep any necessary dedicated Phone listener bound only to literal `127.0.0.1`
+on a discovered port. Use a small versioned typed request/reply contract, no MCP
+server or generic RPC framework. Authorize the worker's Phone grant against
+the same live feature policy; never reuse provider credentials or expose a
+credential in argv, URLs, logs, web pages or ordinary browser storage. Keep
+Termux endpoint/worker IPC metadata private (directories 0700, files 0600); avoid
+persistent command tokens. Rotate/invalidate on reset, installation identity
+change and master Off. Reject unauthenticated requests, web-origin requests and
+unexpected protocol/content types. Do not
+follow redirects, resolve arbitrary controller hosts or fall back to LAN/tunnels.
+
+Provide concise `phoneuse status`, `phoneuse capabilities` and feature-specific
+help plus typed subcommands for enabled groups. Master Off reports unavailable;
+it does not start the service. Help/capabilities expose only currently effective
+commands. Detailed help is read on demand; no full MCP schemas enter Pi context.
+
+The small `phoneuse` skill uses stock Pi skill discovery and ordinary shell/read
+tools. Its initial guide explains status, enabled-capability discovery, concise
+results, permission errors and cancellation; it does not carry a permanent
+catalog of disabled operations. Keep recipes in capability-filtered CLI help.
+No Pi patch, custom loader or automatically registered MCP tools are needed.
+Install only into BashKitten's private Pi environment; preserve native Pi tools
+and the standalone user's Pi configuration. This plan does not silently grant
+remote backends a new phone-control endpoint.
+
+Return structured small results and truthful unavailable/denied/cancelled errors.
+Stream file data and put requested screenshots into private transient files,
+returning paths instead of flooding context with base64. Support deadlines and
+cancellation. Never blindly retry side-effecting commands after a timeout;
+an unknown delivery result is not proof that an action did not happen.
+
+### Preserve the control boundary
+
+The main APK can reach its own components and holds permissions for unrelated
+features. Do not expose arbitrary intent actions/components/services/broadcasts,
+extras, reflection, shell execution or the prototype's generic tool invocation.
+Keep app/URI opening typed and validated. Apply the same policy and protected
+surface rules to notification PendingIntents, sharing and downloads. Remove
+the donor's permissive TLS option; storage/network requests must follow their
+existing authorized scope and cannot invoke private controller endpoints.
+
+Phone control must preserve the existing protected Agent/browser/native-settings
+automation boundary. Enforce it before screenshots, tree reads and actions,
+including focus/window changes between inspection and action. The skill alone
+is not an enforcement mechanism. Do not expose credentials or let an agent
+toggle its own Phone access through Accessibility or a private native intent.
+Honor Android secure-window restrictions; no screenshot/control fallback bypass.
+
+### Nonblocking implementation
+
+Implement this as a native backend module in the main APK with lifecycle-bound
+background work. The Phone UI only submits settings changes and displays status.
+Keep network, storage, tree processing, screenshots, serialization and teardown
+off the browser/UI thread; Android callbacks do only the minimum platform work
+before handing off. Do not import the donor's blocking service shutdown path.
+
+Use ordinary supported Android service lifecycles and an accurately declared
+foreground-service type/notification where required by the selected work. Do
+not attach location permission or a location foreground service to notification
+control. Missing service eligibility produces an accurate unavailable state,
+not a hidden keepalive loop. No collection, periodic permission polling or
+background work exists for disabled features. Phone control must remain responsive
+under a slow provider, many notifications, service death and rapid toggle changes.
+
+### No telemetry across bundled components
+
+The requirement applies to **every built or bundled component and its runtime
+dependencies**, including the Phone fork, SheetJS/spreadsheet viewer, Podman/crun,
+guest customization, browser, Node/Pi and native libraries. No analytics, remote
+crash reports, external logs, developer callbacks, unsolicited remote assets or
+donor update/discovery traffic. User-requested browsing, model/provider calls,
+downloads and existing explicit update flows retain their intended behavior;
+they must not carry hidden diagnostic/content reporting.
+
+Extend existing component source/license manifests with reviewed network/logging
+behavior and the exact removal/configuration patches. Inspect sources and actual
+packaged binaries, APK classes/native libraries, JS and transitive dependencies.
+Remove unused reporters and callbacks; any retained upstream code path must be
+disabled in the shipped configuration and unable to activate through inherited
+donor defaults. Keep full license attribution even when removing product code.
+
+In the Phone donor, review `EventDispatcherImpl`, `EventChannelService`, tunnel
+providers/native payloads, `UpdateCheckScheduler`, `GithubReleaseChecker`, OAuth
+`ClientIconUrl`, the channel plugin and `ServerLogRepositoryImpl`/segmented store.
+Local donor logging is not evidence of developer uploads, but sensitive content
+logging must also be removed. Existing Firefox telemetry preferences alone do
+not establish compliance for the expanded package.
+
+Use the existing packaging/license/source collectors and external traffic
+observation during fresh-profile startup, idle, representative features, errors
+and shutdown. Missing review/attribution, unexplained network reporting or
+sensitive payload logs block release. This is a required release gate, not a
+claim that the current whole product has already passed an audit.
+
+### Implementation sequence and acceptance
+
+1. Import the pinned donor source/licenses, then strip unused code in focused
+   commits. Record the main-APK ownership, retained providers and command map.
+2. Implement native policy/lazy lifecycle and private CLI transport together,
+   with every entrypoint sharing the gate. Add the simple Phone panel and
+   permission/status handling; remove replaced donor entrypoints.
+3. Package the Termux CLI and concise `phoneuse` guide; deliver full licenses,
+   sources and architecture-correct artifacts through normal release builds.
+4. Complete the following acceptance on fresh Android 16/17 profiles using the
+   real BashKitten UI for user flows. ADB is appropriate for setup/debugging and
+   external negative checks, never a requirement of the delivered user flow.
+
+| Check | Required result |
+| --- | --- |
+| Main APK setup | One Phone panel, no companion install; normal user approval routes, no Accessibility prerequisite for independent features. Ordinary browser/Pi startup works with Phone Off. |
+| Only owned Pi sessions | A live owned local worker succeeds; standalone Pi, ordinary Termux shell without a grant, another Android UID, guessed session/PID, expired/revoked grant, old worker incarnation and remote/container sessions are refused. No general-shell/profile credential exists. Record the same-UID trust limitation rather than claiming those checks isolate hostile Termux code. |
+| Session transitions | Fork/adopt a session without restarting Pi, renew the grant and restart the native backend. Only the authenticated current owner can update authorization; old-session requests/results fail and normal commands resume under the new binding without replay. |
+| Notifications without Accessibility | Read and reply through a current notification; revoke access and observe immediate refusal without restart. Notification shade control remains unavailable. |
+| Each feature Off | With wider APK grants still present, no handler/provider/observer/cache collection, help exposure or effect through direct/stale/alias/compound calls. Turning Notifications Off stops callback extraction, not merely HTTP access. |
+| Master Off and restart | Stop/invalidate the Phone endpoint and queued work, clear transient state, preserve other app services. Boot, service death, package update and late callbacks do not restore disabled work. |
+| Accessibility transitions | Independent features continue without it; dependent options grey out and pending work fails safely on disconnection/revocation. Re-enable only through actual user grant and current policy. |
+| Boundaries and removals | No camera/microphone or generic intent/MCP backdoor; protected Agent/settings cannot be read or controlled. No unauthenticated, ordinary-web or unintended network path reaches the module. |
+| Platform outcomes | Background launch reports observed/unknown/denied state accurately; invalid RemoteInput, restricted clipboard, inaccessible URI and unavailable location are real errors, not simulated success. |
+| Responsiveness | Slow requests, screenshots, service cleanup and repeated toggles do not freeze native UI, chat, browsing or Display. Cancellation releases owned resources without replaying actions. |
+| Release contents | Correct sources/licenses, private bundled Node, concise skill discovery, no secrets or test artifacts; no unsolicited external reporting from any bundled component. |
+
+The `mcp` thread's scratch research is under
+`/run/media/user/Data/Repositories/bashkitten-android-control-research/2026-10-10/`.
+Its `RESEARCH_RESULT.txt` and `reports/` establish notification read/reply from
+the actual Termux UID with Accessibility disabled on Android 17 Cuttlefish,
+and live notification-access revocation. Its CLI still used MCP internally,
+the donor APK targeted SDK 34, and setup used research commands. Those results
+support feasibility; they do not verify this rewritten module, production user
+setup, current-target Android 16/17 behavior or physical OEM devices. Keep all
+probes/fixtures outside the product repository and label those limits accurately.
+
+## 13. Pi update and the Durable distinction
 
 Add a focused dependency-update step from current
 `@earendil-works/pi-coding-agent`/`pi-ai` 1.0.2 to the latest verified official
@@ -1387,7 +1768,7 @@ This plan preserves stock sessions; it does not authorize a separate harness or
 history migration. Verify the new release's session restore, effective model and
 reasoning, fork, streaming and subagent communication in the existing integration.
 
-## 13. Ordered implementation and acceptance gates
+## 14. Ordered implementation and acceptance gates
 
 Implement in focused, reviewable commits on main, with relevant checks and pushes.
 Do not dispatch large browser builds before proving the new native boundaries
@@ -1401,7 +1782,8 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 4. BashKitten OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, bottom taskbar, maximized search/pins/app-grid Start menu, no dock/default shortcuts, maximize/two-app behavior, direct scaling and exact Gnozzard styling; Linux Thunar installation/registration. | Matching responsive layouts and working settings on Linux/Termux, preserved later pin/unpin choices, real apps/dialogs/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and user wallpaper. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
-| 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
+| 7. Phone module and CLI | Main-APK MCP port, native master/feature policy, optional Accessibility, owned-Pi worker grants, Termux CLI and `phoneuse` skill. | Complete section 12's user-flow and denial checks; no camera/microphone commands, companion APK, exposed MCP catalog or reusable general-shell token. |
+| 8. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling and every bundled component's network/logging audit. | Installed native user flows plus recorded missing hardware coverage; no unexplained telemetry/developer callbacks or release claim based on a dispatched build. |
 
 Use ADB/direct Termux for Android setup, installation, permissions and debugging;
 use the desktop BashKitten browser with Cuttlefish's web UI for actual feature

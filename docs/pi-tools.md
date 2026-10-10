@@ -8,6 +8,15 @@ using the same metadata as the sidecar, without copying history, loading it
 eagerly, starting workers or sending messages. This is planned work; the
 installed-tool inventory below is not a claim that `chats` is already shipped.
 
+The same plan's [Phone module section](native-environments-display-plan.md#12-android-phone-control-and-the-mcp-port)
+adds the Termux `phoneuse` CLI and a concise normally discovered Pi skill.
+Only live local BashKitten-owned Pi workers receive scoped Phone authorization;
+the native Android module enforces master/feature/grant policy on every request.
+The guide directs agents to current enabled-capability help instead of loading
+an MCP catalog or describing disabled commands. Accessibility stays optional;
+the Phone CLI has no camera/microphone control. This is planned work, bundled
+into the main APK with the CLI in Termux, not an installed capability yet.
+
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's
 `deferred` exposure. Its built-in `tool_search` is activated without replacing

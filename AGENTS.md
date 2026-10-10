@@ -13,6 +13,23 @@ saved remotes retain the existing encrypted Agent/service route. The plan
 supersedes older display/frontend/lifetime requirements only where stated, and
 does not authorize transport/authentication fallbacks or a Pi reimplementation.
 Its Pi release update is planned; the current runtime pin below is unchanged.
+The same plan's section 12 contains the whole Android Phone/MCP-to-CLI port.
+Bundle its backend module into the main APK; no companion APK. Add Phone beside
+the native top-bar +, with master On/Off, independent feature switches, then
+optional Accessibility-dependent switches greyed out when unavailable. Off must
+remove handlers/discovery and stop collection, with native checks on every path
+regardless of wider APK grants. Remove all Phone camera/microphone control and
+generic intent/MCP bypasses. Expose a concise `phoneuse` CLI/skill only through
+live local BashKitten-owned Pi worker authorization, with native grant registry,
+short leases, revocation and correct fork/session adoption. Do not use a general
+Termux/profile token or the inherited instance token as grant-issuing authority.
+State the same-Termux-UID trust limitation accurately; do not claim hostile-code
+isolation. Keep all work nonblocking. Import pinned MIT donor source/licenses,
+then strip/adapt in focused commits; no automatic donor replacement. Audit every
+bundled component/transitive runtime dependency for telemetry, external logs and
+developer callbacks, including SheetJS and Podman; remove such reporting and
+require source/artifact/traffic verification before release. These are planned
+requirements, not claims that the module or expanded audit is already complete.
 Machine rootfs/configuration and durable runtime storage belong under the existing
 `$BASHKITTEN_DATA_DIR`, with user-chosen names mapped to stable machine directories.
 Retain lifecycle/deletion helpers. Implementation acceptance must include an
