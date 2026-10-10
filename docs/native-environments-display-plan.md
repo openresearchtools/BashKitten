@@ -58,11 +58,16 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   maximized by default. An optional split-screen setting enables a taskbar
   **Two app mode** action and one draggable divider between the two apps.
   Both platforms use one normal bottom taskbar with a Start/applications menu
-  and running-window buttons. Omit the extra launcher dock, pinned app shortcuts
-  and default desktop shortcut icons from the packaged layout.
+  and running-window buttons. Start opens a maximized application launcher:
+  search at the top, pinned apps beneath, one divider, then all remaining apps
+  in an alphabetical left-to-right wrapping icon/title grid. It adapts to phone,
+  tablet and desktop sizes and scrolls vertically. Omit the extra launcher dock,
+  pinned taskbar shortcuts and default desktop shortcut icons.
 - The desktop customization package provides PeGPU's scaling functions directly,
-  a plain dark appearance matching BashKitten, Thunar and Xfce Terminal. PeGPU's
-  initialization scripts and the old Buzzard shell/CUA stack are not imported.
+  Gnozzard's exact dark/orange palette for the taskbar, background, Start menu
+  and Thunar, plus Xfce Terminal. Preserve later user wallpaper/appearance
+  choices. PeGPU's initialization scripts and the old Buzzard shell/CUA stack
+  are not imported.
 - Linux container desktops also retain Gnozzard's application installation and
   registration functions through Thunar: AppImage running with or without
   persistent extraction, `.deb` installation with dependency resolution and
@@ -101,9 +106,8 @@ delete donor repositories/history as part of writing or implementing this plan.
 | [crun 1.30.1](https://github.com/containers/crun/releases/tag/1.30.1) | `079ff6a7a16d029460af882f9ea44674e6a510b6` | Latest official stable release verified 10 October 2026; supersedes the donor's older crun pin for this implementation. |
 | [Termux:X11](https://github.com/termux/termux-x11/tree/fa3a8b430e2896a19f44c99a9cb056254615ae06) | Official nightly resolves to `fa3a8b430e2896a19f44c99a9cb056254615ae06` | Reusable `lorie` Android library, native X server/rendering, input and loader. Pin the exact commit and native dependency gitlinks; do not build a moving nightly reference. |
 | [PeGPU v0.1.106](https://github.com/openresearchtools/PEGPU/tree/aae5382fae02eaeb97ceeb7fcaa531f88009b081) | `aae5382fae02eaeb97ceeb7fcaa531f88009b081` | MIT scaling helper. Relevant scaling/package-choice files match inspected HEAD `8ecbb5d4fad90f7e74dd29351c37c4de9aada84b`. Actual apps are Thunar and `xfce4-terminal`, not Nautilus. |
-| [Gnozzard](https://github.com/openresearchtools/gnozzard/tree/59ca6d56ef147dea820381036838e76645074d0e) | `59ca6d56ef147dea820381036838e76645074d0e`, checked against GitHub main | Application installer/registration helper and exact secondary-click behavior; adapt its Nautilus/GNOME integration to Thunar/XFCE and Polkit installation to passwordless guest sudo. GPL-3.0-or-later. |
+| [Gnozzard](https://github.com/openresearchtools/gnozzard/tree/59ca6d56ef147dea820381036838e76645074d0e) | `59ca6d56ef147dea820381036838e76645074d0e`, checked against GitHub main | Installer/registration and search/pin behavior, exact dark/orange palette and persistent wallpaper defaults; adapt to Thunar/XFCE and the requested maximized grid. Code/CSS GPL-3.0-or-later; retained folder artwork has its own LGPL-3.0-only notices. |
 | [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist for the normal bottom taskbar. Its per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
-| [Garcon 4.20.0](https://gitlab.xfce.org/xfce/garcon/-/tree/garcon-4.20.0) | `16e9e527161aaf09d2756b5e318df58b53116aeb` | XFCE Applications menu implementation; narrow Linux menu patch for Gnozzard-style managed-entry actions. Reused menu code is LGPL-2.0-or-later. |
 | [SheetJS CE v0.20.3](https://git.sheetjs.com/sheetjs/sheetjs/src/tag/v0.20.3) | `8a7cfd47bde8258c0d91df6a737bf0136699cdf8` | Existing `xlsx` spreadsheet parser; official annotated release tag peeled to this commit. Vendor the source and matching official release distribution with Apache-2.0/component notices. |
 | [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
 
@@ -773,20 +777,21 @@ the actual PeGPU apps: **Thunar + Xfce Terminal**. Nautilus is not XFCE's file
 manager and is not what the inspected PeGPU setup installs. Do not pull in an
 extra GNOME desktop stack on the assumption that the donor used it.
 
-The package owns the small panel adaptation, event-driven layout/divider helper,
-scaling module, settings and appearance assets. Native package dependencies and
-normal desktop/session registration start those components. First-run defaults
+The package owns the small panel adaptation, maximized application launcher,
+event-driven layout/divider helper, scaling module, settings and appearance
+assets. Native package dependencies and normal desktop/session registration
+start those components. First-run defaults
 are applied once to the owned desktop profile, then user changes persist. No
 PeGPU account assumptions, login-time install scripts or repeated settings reset.
 
 ### One bottom taskbar on both platforms
 
 Ship the same layout on native Termux and Linux containers: one full-width
-horizontal panel along the bottom edge, with XFCE's built-in applications menu
-as Start and ordinary labelled Window Buttons for running applications. Remove
+horizontal panel along the bottom edge, with a Start button for the launcher
+below and ordinary labelled Window Buttons for running applications. Remove
 the default secondary launcher dock and its file-manager/terminal/other app
-shortcuts; do not add pinned launchers
-to the taskbar. The packaged desktop has no default shortcut icons. Applications
+shortcuts; do not add pinned launchers to the taskbar. Pins belong inside the
+Start menu only. The packaged desktop has no default shortcut icons. Applications
 remain available through the Start menu, and open windows through the taskbar.
 An explicit **Add to Desktop** action may create the user's chosen shortcut;
 that does not restore the default launchers, device/home/trash icons or dock.
@@ -796,6 +801,67 @@ startup scripts. Apply it as the owned profile's first-run default and preserve
 later user edits. Keep the panel at the bottom through viewport resize, keyboard
 appearance, rotation and scaling, and reserve its workarea so maximized/split
 windows do not cover it. There is no second top panel or floating dock.
+
+### Maximized Start menu: search, pins and application grid
+
+On both Termux and Linux, clicking Start opens one launcher covering the desktop's
+available workarea above the bottom taskbar. It looks maximized within the
+Display viewport; it does not fullscreen the host browser or cover native chat
+navigation. Use the actual resized workarea, including rotation and keyboard
+changes. Keep this launcher out of the app-maximize/two-app policy and tasklist
+so opening it does not rearrange the user's applications.
+
+The layout is, from top to bottom:
+
+1. One simple **Search applications** field, initially focused.
+2. A **Pinned** block of clickable icons with titles, in saved pin order.
+3. One horizontal divider.
+4. All remaining visible applications, alphabetically by displayed name, flowing
+   left to right and then onto the next row, each with a clickable icon/title.
+
+The search stays at the top; the content area containing pins and remaining
+apps scrolls vertically when needed. Both grids reflow to the available width
+without horizontal overflow or an arbitrary app-count limit. With no pins, omit
+the empty block/divider as Gnozzard does. Long titles remain readable with normal
+wrapping/ellipsis and accessible full names. A single click/tap launches the
+selected app and closes the menu. Start again or Escape closes it and returns
+focus to the previous app; preserve normal touch scrolling and keyboard use.
+
+Reuse Gnozzard's `ApplicationsMenu`/`ApplicationRow` data and action behavior from
+`extension/gnozzard@openresearchtools/extension.js`: visible installed desktop
+entries, simple case-insensitive name/description matching, short 90 ms search
+debounce, alphabetical ordering and saved desktop-ID pins. Its pinned search
+currently matches names only; use the same simple name/description match for
+both blocks here. Pins appear only in their own block, not twice in the menu.
+**Pin/Unpin** stores the ordered ID list per environment, initially empty;
+renaming an entry preserves its ID/pin and explicit deletion removes its pin.
+Unavailable entries are omitted without wiping saved selections on a transient
+refresh failure. Clear search on close; retain pins across relaunch and upgrades.
+Keep the donor's applicable AppImage/launcher management actions in the icon's
+secondary-click menu, backed by the same helper used from Thunar.
+
+The donor currently renders a narrow vertical popup with search/pins at the
+bottom. The requested top-search, maximized grid is new frontend work. Implement
+one small native GTK launcher in the shared customization package, using
+[GtkFlowBox](https://docs.gtk.org/gtk3/class.FlowBox.html) and a scrolled content
+area for responsive icon layout, existing GIO desktop-entry launching and
+[AppInfoMonitor](https://docs.gtk.org/gio/class.AppInfoMonitor.html) for installed
+application changes. Respect desktop visibility rules and actual native Termux
+prefixes. Reuse the package's GTK/PyGObject dependencies; do not import GNOME
+Shell actors, replace XFCE/Xfwm or create a second desktop shell.
+
+The panel button only opens/toggles that one launcher process; scanning files,
+reading/decoding icons and helper operations cannot run in the panel/browser
+UI thread. Keep launcher input/scroll/close responsive too: load metadata/icons
+asynchronously, apply results in small UI batches, coalesce search updates and
+discard stale results after closing or changing the query. App changes mark the
+catalogue dirty; refresh when shown, with no hidden polling or background grid
+rebuild. Use normal toolkit windows/process ownership, not a new service framework.
+
+This replaces the earlier stock Applications-menu/Garcon menu-patch proposal.
+The new launcher directly owns its requested context actions; do not build two
+Start menus or retain an unused Garcon fork. Stock Window Buttons and the narrow
+Two app mode patch remain the taskbar implementation.
 
 ### Maximized apps and optional two-app layout
 
@@ -858,10 +924,39 @@ Avoid the donor's unconditional shell `xfwm4 --replace`; use live settings where
 supported and retain a session-owned restart only if acceptance proves necessary.
 Preserve two-app geometry through a scale change.
 
-Use BashKitten's actual dark semantic colors for GTK/Xfwm/panel and terminal/file
-manager defaults. The inspected palette includes `#1e1e1e`, `#292929`, `#fafafa`
-and `#c8c8c8`; compare against the built browser before finalizing assets. Use a
-plain dark background, without new wallpaper/effects or appearance controls.
+### Gnozzard dark/orange appearance and persistent wallpaper
+
+Use the exact Gnozzard palette from
+[`extension/gnozzard@openresearchtools/stylesheet.css`](https://github.com/openresearchtools/gnozzard/blob/59ca6d56ef147dea820381036838e76645074d0e/extension/gnozzard@openresearchtools/stylesheet.css)
+and [`data/90_gnozzard.gschema.override`](https://github.com/openresearchtools/gnozzard/blob/59ca6d56ef147dea820381036838e76645074d0e/data/90_gnozzard.gschema.override):
+
+| Role | Color |
+| --- | --- |
+| Taskbar/panel | `#282828` |
+| Start menu surface | `#222222` |
+| Initial plain desktop background | `#202225` |
+| Hover | `#3f3f3f` |
+| Orange focus/selection/active indicator | `#ff7139` |
+| Normal / subdued text | `#ffffff` / `#c8c8c8` |
+| Text on orange | `#181818` |
+
+Apply this consistently to the panel, launcher, GTK/Xfwm decoration and Thunar
+styling in both environments. Bring the donor's orange folder artwork where
+used, preserving its original notices and existing Adwaita/hicolor inheritance;
+its SVG shades are `#ff7139`, `#ff9b73`, `#d94e17`, `#ffb397` and `#ffc8b2`.
+Gnozzard supplies shell CSS and icons, not a ready-made Thunar/GTK body theme:
+the small GTK3/Xfwm adaptation is part of our package. Do not substitute the
+earlier Firefox-gray palette or another approximate orange.
+
+Preserve Gnozzard's defaults-only wallpaper principle: it supplies an initial
+solid background through schema defaults and does not overwrite the user's
+desktop wallpaper during launch. Translate that to packaged XFCE defaults,
+seeding only unset values in the owned desktop profile. Thereafter the user's
+chosen image, image placement and appearance settings remain authoritative.
+Opening Start/Display, launching apps, scaling, rotation, desktop restart and
+package upgrades must not clear or repaint over that choice. Do not copy the
+donor's unrelated lock-screen handling or run settings-reset shell scripts.
+Use XFCE's existing background/settings controls; no new wallpaper manager.
 
 ### Linux application installation and registration
 
@@ -901,6 +996,24 @@ failed/cancelled extraction cleans up its temporary output. Preserve `APPIMAGE`,
 automatically after a normal launch fails. Register the MIME/open handler so
 ordinary opening and registered menu entries use the same helper and saved mode.
 
+Preserve the donor's detailed rules, not just its action labels:
+
+- Keep the original file in place and validate it on every launch, even when
+  extracted. Reuse an existing extraction without silently refreshing it when
+  the original changes. An invalid existing extraction is an error, never a
+  reason to fall back to raw execution or re-extract over the user's files.
+- Raw launch uses the original's parent as cwd. Extracted launch uses the
+  extraction directory and sets `APPIMAGE` to the original path, `APPDIR` to
+  the extraction and `OWD` to the original's parent.
+- Reuse the first valid sorted top-level desktop entry's literal arguments as
+  Gnozzard does: discard field-code tokens, turn `%%` into `%` and strip embedded
+  `--no-sandbox` unless the explicit marker permits it. This applies to extracted
+  AppImage arguments; normal `.desktop` launching below retains GIO field codes.
+- The explicit no-sandbox action writes the private, user-owned, non-symlink,
+  empty mode-0600 `.no-sandbox` marker. Later ordinary or Extract and Run launches
+  preserve that choice. The donor does not display an extra approval dialog;
+  do not invent one from its tooltip wording.
+
 Direct operation needs the guest's working FUSE runtime/device integration;
 reuse only the necessary Buzzard FUSE helpers and verify rootless Podman access.
 An unavailable direct path reports its error; extraction remains a user-selected
@@ -928,25 +1041,33 @@ a CLI-only package does not get an invented GUI application entry.
 and icon directories, with stable BashKitten-owned entry identities, correct
 Exec escaping, atomic updates and desktop-database refresh. AppImage registration
 points to the user's file; it does not silently relocate/copy the application.
+AppImage entry identity follows the original path, and re-registering preserves
+its chosen name. Local `.desktop` registration keeps a wrapper referring to the
+original launcher; GIO executes that original with forwarded targets so its
+field-code/location behavior survives. Preserve the donor's handling of relative
+sibling icons. Rename updates the menu name and an existing matching managed
+desktop copy, without renaming the source, changing entry identity or losing pins.
 Keep Gnozzard's **Rename…**, **Delete from Applications** for managed entries and
 **Add to Desktop** for application entries, adapted to the XFCE menu. Removing
 a managed menu entry removes only that registration/owned icon, not the source
-AppImage, extracted application or installed Debian package. Preserve unrelated
-menu entries and user files. Explicit desktop copies use XFCE's launcher trust
-and execution behavior rather than assuming Nautilus's `metadata::trusted` alone
+AppImage, extracted application, installed Debian package or previously created
+desktop copy. **Add to Desktop** also registers the AppImage/local launcher in
+Applications, matching Gnozzard; do not substitute Buzzard's desktop-only variant.
+Preserve unrelated menu entries and user files. Explicit desktop copies use
+XFCE's launcher trust and execution behavior rather than assuming Nautilus's
+`metadata::trusted` alone
 is sufficient. Keep desktop file/launcher rendering available, seed no shortcuts
 and hide special default icons such as Home, filesystem, trash and devices.
 Explicitly created shortcuts then appear without restoring those defaults.
-Do not import Gnozzard's pinning/taskbar UI as part of this application-management
-work.
 
-XFCE's applications-menu plugin delegates to Garcon. Its stock right-click
-editing and `.desktop`-declared actions are not the required generic management
-menu. Carry a narrow Linux patch at `garcon-gtk/garcon-gtk-menu.c` menu-item and
-submenu construction/activation, passing the actual desktop-entry identity to
-the same BashKitten helper. Retain normal launch behavior; show rename/removal
-only for validated managed entries. Keep this patch with its exact source pin
-and LGPL-2.0-or-later notice, not a replacement Start menu or imported GNOME UI.
+Inside the maximized Start launcher, retain **Open**, **Extract and Run** and
+**Extract and Run --no-sandbox** for managed AppImages as well as **Pin/Unpin**,
+**Add to Desktop**, and managed-entry **Rename…/Delete from Applications**.
+Pass the actual validated desktop-entry identity to the shared helper. Linux
+installation/extraction actions stay Linux-only; the shared Termux launcher
+still offers normal installed-app launching/search/pins. Pins in this menu do
+not add launchers to the taskbar. No Garcon context-menu patch is needed after
+replacing the earlier stock-popup design with this launcher.
 
 Keep Thunar/menu callbacks short: start the helper asynchronously, then perform
 inspection, icon extraction, package operations and database updates outside
@@ -1039,7 +1160,7 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
-| Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging; Linux guest Thunar application installation and registration adapted from Gnozzard/Buzzard. |
+| Product-owned desktop customization source/package | Shared XFCE taskbar, maximized search/pins/app-grid launcher, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
 | Tracked external component source + patch series | Release source trees for Podman/crun and required helpers, embedded Termux:X11/native dependencies, XFCE custom components, spreadsheet/other JS components, patches, exact provenance and licenses. |
 | Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
@@ -1075,7 +1196,7 @@ already-selected official Termux:X11 nightly is pinned to its exact source and
 native dependencies; this does not authorize arbitrary branch builds elsewhere.
 
 Apply this to Podman, crun and every helper/library we compile or bundle, as well
-as embedded X11, the patched XFCE/Garcon components, reused scaling/installer
+as embedded X11, the patched XFCE panel, native launcher and reused scaling/installer
 code, private Node/Pi and bundled JavaScript/parser/viewer dependencies. Preserve
 the corresponding dependency locks and vendor the required dependency sources
 or integrity-verified source archives in the same tracked component layout.
@@ -1155,8 +1276,9 @@ donor attribution while removing product branding. Inventory actual linked and
 packaged dependencies, including Podman/crun/helpers and X11 gitlinks; fail
 packaging if required texts/source are missing. Preserve the testing-release
 warning and existing application signing identity.
-The reused Gnozzard helper/integration code is GPL-3.0-or-later; Buzzard's Thunar
-integration and helper code are AGPL-3.0-or-later. Preserve those component
+The reused Gnozzard helper/integration/menu/CSS code is GPL-3.0-or-later and its
+retained orange folder artwork is LGPL-3.0-only; Buzzard's Thunar integration
+and helper code are AGPL-3.0-or-later. Preserve those component
 notices and corresponding source instead of copying donor branding/dependencies
 unrelated to the requested functions.
 
@@ -1198,7 +1320,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
-| 4. Shared desktop package | One bottom taskbar/Start menu without launcher dock or default shortcuts, maximize policy, two-app action/divider, direct scaling and dark appearance for Linux/Termux; Linux Thunar app installation/registration. | Matching fresh-profile layouts plus real apps, dialogs, input, geometry and scale changes; direct/extracted AppImages, guest passwordless APT and menu/shortcut management. |
+| 4. Shared desktop package | One bottom taskbar and maximized search/pins/app-grid Start menu, no dock/default shortcuts, maximize/two-app behavior, direct scaling and exact Gnozzard dark/orange styling with persistent wallpaper; Linux Thunar installation/registration. | Matching responsive layouts on Linux/Termux, search/pin persistence, real apps/dialogs/input/geometry/scaling; donor launch rules, passwordless APT, menu/shortcut management and preserved user wallpaper. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
@@ -1248,10 +1370,12 @@ without confusing that development disk with the product machine data layout.
 | Display module/process boundary | Verify a separate renderer PID for the native viewport; interrupt/terminate that child and confirm other tabs/chat remain usable and guest work survives. Reattach a fresh renderer. Audit that Firefox changes remain confined to the documented module integration hooks. |
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
-| XFCE layout | Fresh Termux and Linux desktops have the same single bottom taskbar/Start menu and normal running-window buttons, with no extra dock, pinned launchers or default desktop shortcuts. Menu launch/window switching work; resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
+| XFCE layout | Fresh Termux and Linux desktops have the same single bottom taskbar/Start button and normal running-window buttons, with no extra dock, pinned taskbar launchers or default desktop shortcuts. Window switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
+| Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
-| Scaling | Saved profiles update owned XFCE settings and new app launches; browser palette matches; restart-needed apps are reported truthfully; no startup script resets user edits. |
+| Scaling | Saved profiles update owned XFCE settings and new app launches; launcher reflows and the exact Gnozzard palette remains consistent; restart-needed apps are reported truthfully; no startup script resets user edits. |
+| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |
 | Project working directory | Create a project through the modal on each backend, then create multiple chats beneath it without another folder prompt and verify their actual Pi cwd. Cancel leaves no project; missing/inaccessible directories report an error. Standalone new chats retain current behavior; reopening or regrouping existing chats preserves their recorded cwd. |
@@ -1259,7 +1383,7 @@ without confusing that development disk with the product machine data layout.
 | Local vs remote | Container socket works without Tor; publishing and a real saved-remote client still use existing encrypted/authenticated route; remote has no Display streaming option. |
 | CUA scope | Screenshot/input/accessibility target the guest/Termux desktop and actual apps; host native Agent/auth UI and unrelated host desktop are not exposed by the new display connection. |
 | Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |
-| Source/license completeness | Reconcile each actual artifact's direct/transitive components with tracked source, exact release commits, locks, patches and full notices. Include Podman/crun/helpers, SheetJS/other JS, X11/XFCE/Garcon and donor assets. A missing source/license or mismatched cache blocks release; offline About/package notices and matching published source archives work on every target. |
+| Source/license completeness | Reconcile each actual artifact's direct/transitive components with tracked source, exact release commits, locks, patches and full notices. Include Podman/crun/helpers, SheetJS/other JS, X11/XFCE/launcher and Gnozzard code/CSS/folder artwork. A missing source/license or mismatched cache blocks release; offline About/package notices and matching published source archives work on every target. |
 
 Record the exact candidate commit, platform, renderer and result for every gate.
 The unproven engineering points are the Linux native frame receiver/gateway

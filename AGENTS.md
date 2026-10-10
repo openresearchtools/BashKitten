@@ -45,10 +45,19 @@ history locations; another backend requires an existing authorized access path,
 not a new cross-machine discovery service.
 The shared XFCE customization defaults to one normal bottom taskbar with a
 Start/applications menu and running-window buttons on both Termux and Linux.
-Remove the extra launcher dock, pinned app shortcuts and default desktop icons;
+Remove the extra launcher dock, pinned taskbar shortcuts and default desktop icons;
 use the stock tasklist with a narrow Two app mode patch, not a Docklike layout.
 Apply defaults once, preserve user edits, and keep the bottom workarea correct
 through keyboard/rotation/resize/scaling changes.
+Start opens one maximized native launcher within the Display desktop workarea:
+top search, ordered persistent pinned apps, one divider, then remaining apps in
+an alphabetical left-to-right wrapping icon/title grid with vertical scrolling.
+Reuse Gnozzard's simple search/pin/launch actions and exact dark/orange colors
+for panel, Start, desktop defaults and Thunar. Preserve user wallpaper/placement
+and appearance changes across launch, scaling, rotation, restart and upgrades.
+This replaces the earlier built-in popup/Garcon patch and Firefox-gray palette;
+pins belong inside Start, not the taskbar. All loading/search/helper work remains
+nonblocking. Use the shared GTK package, not GNOME Shell or a second desktop shell.
 Linux container desktops also get Gnozzard-equivalent application actions in
 Thunar/XFCE: direct/persistently extracted AppImages, explicit no-sandbox mode,
 `.desktop` launcher registration, `.deb` installation through passwordless guest
@@ -57,6 +66,10 @@ Reuse the donor helper functions and Buzzard's Thunar integration with one
 implementation; no GNOME/Nautilus dependency, host installation or native Termux
 Debian-package path. Keep all work off UI threads and preserve user custom actions.
 No shortcuts/dock are preseeded; explicit Add to Desktop remains available.
+Preserve Gnozzard's complete AppImage original-path, extraction-reuse, arguments,
+no-sandbox-marker and registration/rename rules; Add to Desktop also registers
+in Applications. Keep normal `.desktop` source/field-code behavior and all
+applicable menu actions, using one helper shared with Thunar.
 Track in this repository the release sources for everything we build/bundle,
 including private Podman/crun/helpers and SheetJS/other JavaScript components.
 Use latest official releases within the selected supported line, exact peeled
