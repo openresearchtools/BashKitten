@@ -37,6 +37,12 @@ Project creation uses a modal folder picker on its owning backend and stores the
 selected working directory. New chats under that project inherit it automatically;
 standalone chat folder/default logic stays unchanged. Regrouping or reopening an
 existing chat never rewrites its native Pi cwd/history.
+Add a concise, normally discovered `chats` Pi skill with one deferred read-only
+list/search/read adapter. Reuse sidecar project/title/session mappings and Pi's
+native history parser; no duplicate transcript store, background index, worker
+startup or cross-chat messaging as a side effect of lookup. Explain backend-local
+history locations; another backend requires an existing authorized access path,
+not a new cross-machine discovery service.
 Merge needed BuzzardOS code directly into BashKitten; do not maintain a separate
 Buzzard product boundary. Write only necessary code, reuse existing helpers and
 owners, remove replaced paths and preserve source attribution/licenses.

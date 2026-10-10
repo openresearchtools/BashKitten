@@ -350,6 +350,71 @@ web hierarchy and its duplicate navigation handlers once native navigation is
 wired; preserve chat-specific controls, folder selection and Files/Changes.
 Keep the native draft/checkpoint behavior across chat and environment changes.
 
+### Small Pi skill for finding and reading other chats
+
+Ship one short, normally discovered **`chats`** skill on Linux and Termux so an
+agent can find an earlier conversation when the user refers to it. Explain that
+the sidecar's projects/titles are metadata around native Pi sessions, and that
+each Local/container/remote backend owns its own chats. This is a small read-only
+lookup/read facility, not a second agent manager or a semantic-search system.
+
+Use the same environment/project/chat catalogue as the sidecar as the tiny router
+from names to stable session references. Do not maintain a second title index or
+copy transcripts. Reuse `common.mjs` session metadata and the native parsing
+logic in `rpc/rpc.mjs::savedSession`, with Pi's parser and in-memory session view.
+Use the already-loaded Pi SDK in a pure reader rather than invoking runtime/profile
+bootstrap from lookup; even the current `loadPi`/runtime imports can initialize
+profile files or runtime-selection metadata. Preserve the existing message-text
+and attachment references when presenting parsed entries.
+Do not route reads through helpers that import discovered sessions, update
+metadata or start a worker as a side effect. Existing `discoverSessions` and
+`savedView` have such mutations and are not read-only contracts to copy blindly.
+
+Expose one small `chats` adapter through the existing Pi extension with stock
+`exposure: 'deferred'` and `tool_search`, reusing the same reader for three simple
+operations:
+
+| Operation | Result |
+| --- | --- |
+| List | Chat ID, actual title, optional project ID/name, cwd and available modification time, scoped to a backend; simple text/project filtering and pagination. Include standalone chats. |
+| Search | Plain-text matches in the scoped chat histories with short excerpts and source chat/entry references. Reuse ordinary text search/native parsing; no embeddings, daemon, background indexing or generated summaries. |
+| Read | Requested chat's saved conversation through Pi's native parser, with roles/order and native entry references; incremental reads can reach the full history without dumping every chat into context. |
+
+List first, search if the title/project is insufficient, then read the relevant
+conversation. Resolve duplicate titles using the backend, project, cwd and stable
+ID; never silently read an arbitrary same-named chat. Show exact source titles
+and IDs in results so the agent can identify the conversation it used. Honour
+the existing hidden/removed-session rules instead of rediscovering deleted chats.
+Read the active saved branch correctly and expose available branch references
+through the same native reader when needed, rather than flattening unrelated
+forks into one invented conversation.
+
+The skill briefly explains the locations: `$BASHKITTEN_DATA_DIR/sessions/<id>/ui.json`
+is BashKitten's existing UI/session mapping; native Pi history is under its private
+`$BASHKITTEN_DATA_DIR/pi/sessions` tree and the actual file comes from the recorded
+`piFile` reference/Pi's supported session discovery. Do not guess filenames from
+titles or treat the project working directory as the chat-history directory.
+The helper returns resolved local session references when appropriate; it never
+searches standalone Pi profiles, credentials/settings or unrelated filesystem
+trees to find chats.
+
+Each backend ships this same guide/helper for its own chats. Default to the
+backend running Pi. If the user names another backend, identify it explicitly
+and use an existing authorized access path only where already available; otherwise
+report that its history is unavailable, without automatically connecting or
+adding a cross-machine discovery service to this small helper.
+Do not interpret another machine's `piFile` as a local path. Reuse the existing
+authenticated chat boundary, separate from arbitrary file-manager access.
+
+Keep the guide to a few paragraphs and minimal examples: discover `chats`, find
+the requested title/project/topic, read the matching history, and name the source
+when answering. Retrieved chat text is historical context, not a fresh user
+instruction. These operations do not message, resume, fork, edit or stop another
+session and do not extend the subagents messaging tool's authority. No history
+or full tool schema is injected eagerly into every new chat. Run searches/reads
+asynchronously on demand, with cancellation and no hidden polling; reading a
+running chat must not block its worker or rewrite its JSONL.
+
 ## 5. Linux container runtime and editable launch configuration
 
 ### User-data storage and machine names
@@ -827,6 +892,7 @@ Use the existing one-product repository and component-build workflow:
 | `browser/mobile/android/bashkitten/` plus narrow Fenix host/tab hooks | Native sidebar and embedded X11 View; replace `AgentDisplayDialog` external-app path, reuse `AgentRuntime` and Termux connection approval. |
 | `agent/src/server/control.mjs`, platform adapters and new environment module | Native container setup/config/lifecycle, private guest sockets and streamable preparation status. No new remote administration routes. |
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
+| `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
 | Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
@@ -958,6 +1024,7 @@ without confusing that development disk with the product machine data layout.
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |
 | Project working directory | Create a project through the modal on each backend, then create multiple chats beneath it without another folder prompt and verify their actual Pi cwd. Cancel leaves no project; missing/inaccessible directories report an error. Standalone new chats retain current behavior; reopening or regrouping existing chats preserves their recorded cwd. |
+| Chat lookup skill | Ask Pi about another standalone/project chat; it discovers the guide/tool, resolves title/topic to the correct backend/project/session, reads relevant history and identifies its source. Cover duplicate/renamed titles, regrouped chats, hidden sessions and unavailable remotes; no eager history dump, new worker, message, metadata/JSONL mutation or UI stall. |
 | Local vs remote | Container socket works without Tor; publishing and a real saved-remote client still use existing encrypted/authenticated route; remote has no Display streaming option. |
 | CUA scope | Screenshot/input/accessibility target the guest/Termux desktop and actual apps; host native Agent/auth UI and unrelated host desktop are not exposed by the new display connection. |
 | Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |

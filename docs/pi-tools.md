@@ -1,5 +1,13 @@
 # Packaged Pi tools and skills
 
+Planned addition, 10 October: the
+[native environments plan](native-environments-display-plan.md#small-pi-skill-for-finding-and-reading-other-chats)
+adds a concise `chats` skill and one stock-deferred read-only list/search/read
+adapter. It resolves backend/project/chat names to existing native Pi sessions
+using the same metadata as the sidecar, without copying history, loading it
+eagerly, starting workers or sending messages. This is planned work; the
+installed-tool inventory below is not a claim that `chats` is already shipped.
+
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's
 `deferred` exposure. Its built-in `tool_search` is activated without replacing
