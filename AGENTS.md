@@ -43,6 +43,12 @@ native history parser; no duplicate transcript store, background index, worker
 startup or cross-chat messaging as a side effect of lookup. Explain backend-local
 history locations; another backend requires an existing authorized access path,
 not a new cross-machine discovery service.
+The shared XFCE customization defaults to one normal bottom taskbar with a
+Start/applications menu and running-window buttons on both Termux and Linux.
+Remove the extra launcher dock, pinned app shortcuts and default desktop icons;
+use the stock tasklist with a narrow Two app mode patch, not a Docklike layout.
+Apply defaults once, preserve user edits, and keep the bottom workarea correct
+through keyboard/rotation/resize/scaling changes.
 Merge needed BuzzardOS code directly into BashKitten; do not maintain a separate
 Buzzard product boundary. Write only necessary code, reuse existing helpers and
 owners, remove replaced paths and preserve source attribution/licenses.

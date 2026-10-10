@@ -57,6 +57,9 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - Termux runs the same customized XFCE experience without containers. Apps open
   maximized by default. An optional split-screen setting enables a taskbar
   **Two app mode** action and one draggable divider between the two apps.
+  Both platforms use one normal bottom taskbar with a Start/applications menu
+  and running-window buttons. Omit the extra launcher dock, pinned app shortcuts
+  and default desktop shortcut icons from the packaged layout.
 - The desktop customization package provides PeGPU's scaling functions directly,
   a plain dark appearance matching BashKitten, Thunar and Xfce Terminal. PeGPU's
   initialization scripts and the old Buzzard shell/CUA stack are not imported.
@@ -91,7 +94,7 @@ delete donor repositories/history as part of writing or implementing this plan.
 | [BuzzardOS, podman branch](https://github.com/openresearchtools/BuzzardOS/tree/6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0) | `6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0`, inspected in `buzzardospodman` | Persistent external rootfs, native runtime setup, private display/media gateways, settings and sudo bridge. Its current desktop is Sway-based and its host viewer is Wayland/GTK/DMA-BUF-only; those are not the requested final frontend. |
 | [Termux:X11](https://github.com/termux/termux-x11/tree/fa3a8b430e2896a19f44c99a9cb056254615ae06) | Official nightly resolves to `fa3a8b430e2896a19f44c99a9cb056254615ae06` | Reusable `lorie` Android library, native X server/rendering, input and loader. Pin the exact commit and native dependency gitlinks; do not build a moving nightly reference. |
 | [PeGPU v0.1.106](https://github.com/openresearchtools/PEGPU/tree/aae5382fae02eaeb97ceeb7fcaa531f88009b081) | `aae5382fae02eaeb97ceeb7fcaa531f88009b081` | MIT scaling helper. Relevant scaling/package-choice files match inspected HEAD `8ecbb5d4fad90f7e74dd29351c37c4de9aada84b`. Actual apps are Thunar and `xfce4-terminal`, not Nautilus. |
-| [XFCE Docklike](https://gitlab.xfce.org/panel-plugins/xfce4-docklike-plugin/-/tree/xfce4-docklike-plugin-0.5.1) | `1b53c5c722604fb517ee392d664782f08de11597` | Small external panel plugin suitable for the requested taskbar action with a narrow patch. Stock task buttons do not expose a verified arbitrary menu-extension hook. |
+| [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist for the normal bottom taskbar. Its per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
 | [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
 
 Research checkouts and notes are outside the product tree under
@@ -754,6 +757,22 @@ normal desktop/session registration start those components. First-run defaults
 are applied once to the owned desktop profile, then user changes persist. No
 PeGPU account assumptions, login-time install scripts or repeated settings reset.
 
+### One bottom taskbar on both platforms
+
+Ship the same layout on native Termux and Linux containers: one full-width
+horizontal panel along the bottom edge, with XFCE's built-in applications menu
+as Start and ordinary labelled Window Buttons for running applications. Remove
+the default secondary launcher dock and its file-manager/terminal/other app
+shortcuts; do not add pinned launchers
+to the taskbar. The packaged desktop has no default shortcut icons. Applications
+remain available through the Start menu, and open windows through the taskbar.
+
+This layout belongs to the shared desktop customization package, not platform
+startup scripts. Apply it as the owned profile's first-run default and preserve
+later user edits. Keep the panel at the bottom through viewport resize, keyboard
+appearance, rotation and scaling, and reserve its workarea so maximized/split
+windows do not cover it. There is no second top panel or floating dock.
+
 ### Maximized apps and optional two-app layout
 
 Keep stock Xfwm window management. Maximize normal resizable application windows
@@ -761,11 +780,15 @@ within the desktop workarea; preserve dialogs, file pickers, popups, tooltips,
 panel windows and explicit fullscreen behavior. Do not force a modal dialog to
 fill the desktop or claim a non-resizable application accepts arbitrary geometry.
 
-Use one narrowly adapted upstream Docklike panel module, installed under a
-BashKitten identity instead of replacing distro plugin files. In its taskbar
-context menu, add exactly the requested **Two app mode** action, enabled by the
-split-screen setting. Capture the current main window before the menu steals
-focus, and use the clicked app's actual selected window when it has several.
+Use stock XFCE Window Buttons/tasklist with one narrow tracked source patch to
+its per-window context menu for exactly the requested **Two app mode** action,
+enabled by the split-screen setting. Build that panel component through the
+owned Linux/Termux package recipes, retaining its normal taskbar behavior. The
+inspected `plugins/tasklist/tasklist-widget.c` constructs these menus internally;
+the public plugin-menu API does not supply this per-window hook. Do not ship the
+previously proposed Docklike alternative or create a second taskbar. Capture the
+current main window before the menu steals focus, and use the clicked app's
+actual selected window when it has several, including grouped-window submenus.
 Reject identical, closed or ineligible windows. If both applications' minimum
 sizes cannot fit the workarea, report that constraint and retain the current
 layout rather than declaring a successful split.
@@ -795,8 +818,10 @@ profiles, normalization, scale planning, changed-value XFConf writes, cursor
 resources, transaction and saved selection. Wire them into the customization's
 settings code directly. Preserve their license and provenance.
 
-The implementation coordinates Xft DPI, GDK integer factor, cursor/icons, panel,
-desktop icons and titlebar sizing. Its profiles cover 100–300% in 25% steps.
+The implementation coordinates Xft DPI, GDK integer factor, cursor/icons, panel
+and titlebar sizing. Preserve desktop-icon sizing only if the user enables those
+icons; applying scale must not restore the removed dock or shortcuts. Its
+profiles cover 100–300% in 25% steps.
 It uses `xrandr` for discovery, not framebuffer fractional resampling. Do not
 describe it as universal per-monitor fractional scaling. Remove donor assumptions
 such as `:0` meaning 200%, fixed `panel-1`, a hardcoded guest user or Linux-only
@@ -912,7 +937,7 @@ second full browser tree just to get these components.
 Build Linux amd64/arm64 and Android/Termux aarch64/x86_64 components with their
 correct libc, ABI, prefixes and native dependencies. A Linux `.deb` cannot be
 installed into native Termux simply because both use the Debian archive format.
-Termux's source recipes already include Docklike, Thunar, Xfce Terminal, PyGObject,
+Termux's source recipes already include XFCE panel, Thunar, Xfce Terminal, PyGObject,
 xdotool, scrot and AT-SPI components; their presence is a packaging starting point,
 not runtime acceptance of this customization.
 
@@ -924,8 +949,9 @@ library, package repository or executable path may enter a release.
 
 Keep full offline notices and corresponding source. Termux:X11 declares GPLv3;
 its input code and native dependencies retain their individual notices. PeGPU's
-scaling module is MIT, Docklike is GPL-3.0-or-later, and XFCE components have
-their own licenses. Do not relabel retained dependencies as AGPL-only or erase
+scaling module is MIT; the XFCE panel/tasklist is GPL-2.0-or-later and its
+`libxfce4panel` library is LGPL-2.1-or-later. Other XFCE components retain their
+own licenses. Do not relabel retained dependencies as AGPL-only or erase
 donor attribution while removing product branding. Inventory actual linked and
 packaged dependencies, including Podman/crun/helpers and X11 gitlinks; fail
 packaging if required texts/source are missing. Preserve the testing-release
@@ -969,7 +995,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 1. Sources and runtime contracts | Pin donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Reproducible component inputs, no unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
-| 4. Shared desktop package | Maximize policy, two-app taskbar action/divider, direct scaling and dark appearance for Linux/Termux. | Real apps, dialogs, input, geometry and scale changes on both platforms. |
+| 4. Shared desktop package | One bottom taskbar/Start menu without launcher dock or default shortcuts, maximize policy, two-app action/divider, direct scaling and dark appearance for Linux/Termux. | Matching fresh-profile layouts plus real apps, dialogs, input, geometry and scale changes on both platforms. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
@@ -1019,6 +1045,7 @@ without confusing that development disk with the product machine data layout.
 | Display module/process boundary | Verify a separate renderer PID for the native viewport; interrupt/terminate that child and confirm other tabs/chat remain usable and guest work survives. Reattach a fresh renderer. Audit that Firefox changes remain confined to the documented module integration hooks. |
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
+| XFCE layout | Fresh Termux and Linux desktops have the same single bottom taskbar/Start menu and normal running-window buttons, with no extra dock, pinned launchers or default desktop shortcuts. Menu launch/window switching work; resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; browser palette matches; restart-needed apps are reported truthfully; no startup script resets user edits. |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
