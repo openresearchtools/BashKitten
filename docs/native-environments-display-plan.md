@@ -34,6 +34,9 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - Creating a Linux container opens a preparation view with real installation
   output. The saved Containerfile and ordinary Podman launch configuration remain
   editable by the user or Local agent. GUI helpers edit that same configuration.
+  Its user-chosen name maps to its own machine directory under BashKitten's
+  existing user-data root, including the rootfs and all durable machine state.
+  Retain the machine lifecycle helpers, including explicit machine deletion.
 - Each container has its own BashKitten installation and private Pi profile.
   Its agent/browser runtime stays available while the container runs. Closing a
   Display tab or browser window does not stop the container. Each container has
@@ -69,10 +72,33 @@ pins are portable; implementation must not depend on that workstation directory.
 ## 3. Native module and ownership
 
 Keep the integration in a product-owned Display module with thin platform hosts.
-On Android it hosts an Android View; on Linux it presents native frame buffers
-through Gecko's existing graphics facilities. This requires maintained native
-integration, not merely a normal WebExtension. Do not fork Firefox's entire tab,
-input or rendering architecture or promise zero work on future Firefox updates.
+**It is a native viewport hosted like a tab, with its display frontend/rendering
+in its own child process, separate from the browser UI process.** A worker thread
+inside the UI process alone does not meet this requirement. On Android the host
+embeds the child-owned native surface; on Linux it presents child-produced native
+frame buffers through Gecko's existing graphics facilities. The browser owns tab
+chrome, selection and the viewport slot, not the desktop renderer's execution.
+
+Make the module reusable when rebasing to future Firefox versions. Keep its
+display protocol, child-process renderer, input mapping and backend adapters in
+one product-owned source/build module. Restrict Firefox/Fenix changes to small,
+documented hooks for registering the native tab/viewport, lifecycle/focus/resize,
+process launch/exit and asynchronous IPC/surface attachment. Keep those hooks as
+a reviewable integration patch set; do not scatter desktop implementation across
+tabbrowser, networking, layout, Agent web UI and general Gecko process selection.
+Future upgrades should primarily adapt that small host contract and rebuild the
+module, rather than port the feature by rewriting large parts of Firefox.
+
+Use existing Gecko process/IPC/compositor machinery where it fits, preserving
+ordinary tabs' process model and isolation. The exact native child launch and
+surface integration must be proven in the first gate; a normal WebExtension or
+setting a tab attribute does not automatically provide it. Firefox distinguishes
+content and helper/GPU processes, so this native renderer need not masquerade as
+an ordinary web document to get its own process. See upstream's
+[process model](https://firefox-source-docs.mozilla.org/dom/ipc/process_model.html)
+and [IPC documentation](https://firefox-source-docs.mozilla.org/ipc/index.html).
+This is a maintained native module with narrow integration seams, not a promise
+that upstream internal APIs never change.
 
 The small browser-facing contract is: open/select/attach a display by environment
 ID; supply the measured content viewport and focus; deliver input; detach on
@@ -87,7 +113,8 @@ Browser-owned sidecar
        ├── project + chat reference -> protected shared chat view -> stock Pi
        └── Display (local targets only)
              Android: native View <-> private Binder/FD handoff <-> Termux X11
-             Linux:   native frame view <-> private guest gateway
+                      (child renderer; browser hosts its viewport surface)
+             Linux:   viewport <-> renderer child <-> private guest gateway
                                           <-> rootful Xwayland <-> XFCE/apps
 
 Local container administration: native controller -> private Podman + crun
@@ -106,6 +133,58 @@ arbitrary web page or a second copy of the Agent UI. Browser automation continue
 to exclude protected Agent/authentication views. Display input is focused only
 on the selected native surface; browsing retains normal browser shortcuts and
 input when that surface is hidden.
+
+Keep three lifetimes explicit: browser tab host, its disposable renderer child,
+and the persistent Termux/container desktop service. A child crash or hang shows
+an error for that view while other tabs, Agent and sidecar remain usable. Closing
+the tab cancels its IPC and releases/terminates only that child and presentation
+resources. It does not kill the Termux server or container gateway/Xwayland/Pi.
+Reopening can attach a fresh renderer to the same running desktop. Pass only the
+selected display's typed messages and required descriptors to the child, not
+general native controllers, remote credentials or unrestricted browser state.
+
+### Nonblocking UI, including the native Display surface
+
+This is a requirement for every feature in this plan, not only installation or
+backend jobs. The browser UI, native Display tab/window, sidecar and shared chat
+must remain interactive while an environment is busy, slow, unavailable or
+producing expensive frames. Moving a desktop into a native View does not exempt
+its rendering path from this requirement.
+
+- Keep filesystem/rootfs work, Podman/package operations, process launch/waits,
+  socket/Binder I/O, display handshakes, frame copying/conversion/import and GPU
+  fence waits off Android's UI thread and Firefox's main/UI event loop. Backend
+  controllers also dispatch long or CPU-heavy work asynchronously so one machine
+  cannot stall other requests. Reuse upstream render/worker threads inside the
+  separate renderer child and normal asynchronous compositor interfaces;
+  do not synchronously wait for a worker
+  result from the UI thread.
+- UI-thread work is limited to bounded input/state/layout updates and scheduling
+  presentation. Use asynchronous completion with attachment/environment generation
+  checks so a late frame or operation cannot update a closed tab or the wrong
+  machine. Report preparing/reconnecting/errors in that surface without blocking
+  the rest of the browser.
+- Bound in-flight frame ownership to the renderer's buffer lifecycle and apply
+  backpressure. Prefer the latest presentable frame rather than accumulating an
+  unbounded backlog or copying stale frames on the UI thread. Preserve buffer
+  release/fence correctness and ordered key/button transitions. Coalesce resize
+  and redraw work without blocking input or silently losing a final key release.
+- A blocked GPU, missing frame, stalled guest or disconnected IPC must not stop
+  tab switching/closing, sidebar/chat interaction or browser window resizing.
+  Detachment and cancellation return immediately to the UI while owned teardown
+  finishes asynchronously. Preserve the specified independent guest lifetime.
+  Hidden/detached views stop unnecessary presentation work; the retained gateway
+  still services the guest protocol and releases buffers correctly.
+- Apply the same asynchronous ownership to create/start/stop/restart/delete,
+  settings reads/saves, project operations and live installation output. Progress
+  delivery must not flood the UI event loop, and one pending operation must not
+  serialize unrelated environments or browser navigation behind it.
+
+Verify responsiveness in the actual product under active provisioning, mapped
+rootfs deletion, rapid frame updates, software rendering, resize/rotation and a
+deliberately stalled display/backend. Confirm that chat, navigation, tab closure
+and cancellation still work. An asynchronous API name or a successful build is
+not evidence of responsive behavior.
 
 ## 4. Sidebar, projects and stock Pi identity
 
@@ -151,6 +230,35 @@ wired; preserve chat-specific controls, folder selection and Files/Changes.
 Keep the native draft/checkpoint behavior across chat and environment changes.
 
 ## 5. Linux container runtime and editable launch configuration
+
+### User-data storage and machine names
+
+Use the existing resolved `$BASHKITTEN_DATA_DIR` for machine storage, alongside
+BashKitten's local configuration. Its current default in
+`agent/src/server/node-runtime.mjs` is `~/.local/share/bashkitten-pi`; honor a
+configured data root rather than inventing another global machine directory.
+Keep all durable rootfs, machine configuration, creation state and private Podman
+storage beneath that root. Installed helper executables remain in their normal
+package-owned paths; temporary sockets/process state use the existing private
+runtime mechanism and are not another location for persistent machine data.
+
+Store each machine under `$BASHKITTEN_DATA_DIR/machines/<machine-id>/`, with its
+`rootfs/`, saved Containerfile/launch configuration and durable metadata there.
+The catalogue maps the user-chosen machine name to this stable ID and directory.
+Use the same name in the selector, sidebar and machine settings; resolve actions
+by ID, never by treating an entered name as a filesystem path or shell argument.
+Handle duplicate names explicitly within the local machine catalogue. Renaming
+updates this mapping without moving a live rootfs or changing Pi/session identity.
+The mapped directory remains inspectable by Local Pi through the normal config.
+
+Place shared private Podman image/build storage under the same BashKitten data
+root, separately from per-machine directories so deleting one machine cannot
+erase another machine's data or shared cache. A guest's own BashKitten/Pi data
+lives inside its rootfs and is not an alias of the host's Local Pi profile.
+The donor term “external rootfs” means external to Podman's image overlay; in
+BashKitten it still lives inside this user-data layout. Do not keep donor
+arbitrary machine directories, repository/build folders or system VM-image
+locations as the default product storage model.
 
 ### Build and installation
 
@@ -250,12 +358,30 @@ is absent. Reopening attaches to the existing instance.
 | Select another environment/chat | Change the view; do not stop the previous environment. |
 | Per-container startup enabled | Start that saved environment when BashKitten starts, without duplicate instances; Off prevents automatic starts and does not stop an already-running container. |
 | Explicit container Stop | Stop that environment's owned runtime safely, preserving rootfs, Pi sessions and configuration. |
+| Explicit Delete machine | Confirm the named machine and its stored data, stop its owned runtime, remove its container definition and private machine directory, then remove its catalogue entry. This is distinct from Stop or closing a view. |
 | Host Local Agent Off | Retain its existing host-local meaning; do not accidentally kill every container through inherited group ownership. |
 | Browser shutdown/reopen | Release client connections and reattach to surviving container ownership; never treat closing a guest browser window as container Stop. |
 
 Do not change unrelated independent CLI processes or existing remote service
 lifetimes. Container startup preference is separate from host browser login
 autostart and from a guest's individual published-service startup settings.
+
+Retain the donor's applicable create/start/stop/restart/remove helpers behind the
+native machine controls and the same controller used by Local Pi. Deletion must
+hold the machine lifecycle lock to prevent concurrent start/delete operations,
+use the resolved machine ID and ownership record, disable its startup and remote
+publishing, close its owned display/media/control endpoints and stop its workers
+before removing storage. Unmount its owned bind mounts before removing the
+rootfs; never follow a guest symlink or traverse a user-shared host directory as
+part of deletion. Use native namespace-aware removal for mapped rootfs ownership.
+Keep unrelated machines, host Local Pi data, shared caches and external mounted
+folders intact. If cleanup fails, retain enough registered state to show the
+actual failure and retry the same deletion; do not report success while leaving
+an active container or erase the ownership record first. Include guest files,
+packages and its private Pi history in the deletion confirmation.
+Reuse the donor helpers in `host/crates/buzzardos/src/operations.rs` and
+`host/crates/wb-core/src/podman.rs`, but correct the donor's unregister-before-
+tree-cleanup order; a failed removal must remain visible and recoverable.
 
 ### Passwordless virtual sudo, including interactive commands
 
@@ -317,7 +443,9 @@ not a working BashKitten display integration.
 
 Gecko already has `DMABufSurface`, DMA-BUF image support, `ImageContainer` and
 `SourceSurfaceImage`; investigate those existing interfaces for the narrow
-receiver. They are engine integration points, not a ready-made external-desktop
+cross-process receiver. Keep display protocol handling and expensive frame work
+in the module's child process, with only necessary attachment/compositor glue in
+the browser. These are engine integration points, not a ready-made external-desktop
 tab API. Validate FD ownership, stride/size, texture release, graphics-process
 loss, resize and hidden-view behavior before committing to the final adapter.
 
@@ -347,10 +475,34 @@ Bundle the pinned `lorie` Java/resources/AIDL and native `libXlorie.so` in the
 BashKitten APK for arm64-v8a and x86_64. It is an Android library but not a
 drop-in isolated View: `LorieView`, input helpers and `MainActivity` currently
 depend on the upstream Activity/Application. Extract a narrow frontend host
-interface, preserving upstream native rendering and input. Supply Fenix's real
-Activity, lifecycle, preferences, insets and focus through that adapter. Do not
+interface, preserving upstream native rendering and input. Fenix's Activity
+stays in the browser process; it cannot be passed as an object to the renderer
+child. Supply host-owned actions, lifecycle, preferences, insets and focus through
+the small typed IPC adapter, with a child-owned window context. Do not
 merge the standalone launcher/Application manifest wholesale or place a foreign
 Activity inside a browser tab.
+
+The proposed Android host is a non-exported bound service in an application-private
+`:display` process. It owns the adapted `lorie` view hierarchy and native renderer;
+the browser owns only its tab and a `SurfaceView` slot. Use Android's supported
+[`SurfaceControlViewHost`](https://developer.android.com/reference/android/view/SurfaceControlViewHost)
+to expose a `SurfacePackage` over the private Binder contract, embedding it with
+`setChildSurfacePackage`. This supplies a separate address space; it is not a
+claim that the native service inherits Firefox's web-content sandbox. Keep child
+process startup minimal rather than initializing another browser UI there.
+
+Forward viewport, configuration, selection/focus and input-host tokens deliberately.
+Configuration forwarding alone does not resize the child: invoke its layout
+operation with the actual measured bounds. Preserve Android's input/IME routing
+instead of inventing a second keyboard protocol. The first gate must prove nested
+`LorieView` surface composition, browser overlays/z-order, focus/input transfer,
+IME composition/resize, pointer capture, clipboard and rotation on this boundary.
+Releasing the browser's `SurfacePackage`, releasing the child's view host and
+unbinding the service have different owners; clean each without issuing backend
+Stop. See [surface lifecycle](https://developer.android.com/reference/android/view/SurfaceControlViewHost.SurfacePackage)
+and [private service processes](https://developer.android.com/guide/topics/manifest/service-element#proc).
+The API provides the mechanism; this integration remains to be implemented and
+verified, including renderer-child crash/hang containment and reattachment.
 
 The server continues to execute **under Termux's UID**. Upstream's Termux
 `app_process` loader reads classes and `libXlorie.so` from the installed APK.
@@ -546,7 +698,7 @@ Use the existing one-product repository and component-build workflow:
 | Location/seam | Planned responsibility |
 | --- | --- |
 | `browser/bashkitten/browser/components/agent/` | Linux native sidebar/selection, private environment connection adapter and reuse of existing service settings/draft ownership. |
-| Product-owned browser Display component | Small Linux Gecko frame/input host and special-tab lifecycle. Keep graphics glue separate from environment/session code. |
+| Product-owned browser Display component | Separate renderer child, small Linux Gecko surface/input host, typed asynchronous IPC and special-tab lifecycle. Keep a narrow version-adapter boundary for future Firefox updates. |
 | `browser/mobile/android/bashkitten/` plus narrow Fenix host/tab hooks | Native sidebar and embedded X11 View; replace `AgentDisplayDialog` external-app path, reuse `AgentRuntime` and Termux connection approval. |
 | `agent/src/server/control.mjs`, platform adapters and new environment module | Native container setup/config/lifecycle, private guest sockets and streamable preparation status. No new remote administration routes. |
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
@@ -619,8 +771,8 @@ and compiling the changed components. A passing build is not feature acceptance.
 | Gate | Work | Required evidence before proceeding |
 | --- | --- | --- |
 | 1. Sources and runtime contracts | Pin donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Reproducible component inputs, no unexpected system runtime selection; Pi API/packaging checks. |
-| 2. Native Display feasibility | Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real view attachment, input and resize. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK. |
-| 3. Persistent environments | Containerfile, live preparation, saved Podman config, lifetime/startup, guest BashKitten and interactive passwordless sudo. | Install/create/start/stop/reopen with persistent files, safe PTY/redirection/signal behavior and actual backend readiness. |
+| 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
+| 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
 | 4. Shared desktop package | Maximize policy, two-app taskbar action/divider, direct scaling and dark appearance for Linux/Termux. | Real apps, dialogs, input, geometry and scale changes on both platforms. |
 | 5. Native hierarchy | Environments/projects/chats, rename/move, selected-chat web view, existing subagent/draft/session ownership. | Existing histories/cwd unchanged by grouping; asynchronous multi-environment navigation and no duplicate sidebar. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
@@ -634,6 +786,29 @@ KVM Cuttlefish with the existing 16 GiB/128 GiB SSD configuration, fresh browser
 backend and Pi profiles for architecture acceptance, and real devices for claims
 about physical GPU behavior. Android 16 coverage must be recorded separately.
 
+### Required native X11 host VM
+
+As part of implementation verification, install **virt-manager/libvirt/QEMU-KVM**
+and create a dedicated Debian or Ubuntu Linux test VM with an actual **Xorg/X11
+desktop session**. A Debian XFCE installation is a suitable planned target;
+select an image/session that really provides Xorg. Install the candidate native
+Linux BashKitten package inside that VM and run its local Podman container and
+embedded XFCE Display there. From the product's perspective this Linux VM is
+the host system; its Podman environments are ordinary Linux containers and do
+not require nested KVM. This test VM is external development infrastructure,
+not another backend offered by BashKitten or a product dependency on virt-manager.
+
+Verify and record the actual login session type, Xorg server, browser window
+backend and renderer. A browser using Xwayland under a Wayland login does not
+satisfy this X11-host gate. Exercise the real native sidebar, machine creation,
+display/input/resize, lifetime/reopen, scaling/split-screen, sudo and deletion
+flows in the VM. Prove the software path when acceleration is unavailable and
+the accelerated path when the VM's virtual graphics supports it. Keep the
+separate Wayland-host check. Virtual GPU results establish only that virtual
+configuration; physical GPU/NVIDIA coverage stays separate. Store the test VM
+and verification material outside the product repository/release artifacts,
+without confusing that development disk with the product machine data layout.
+
 | Manual case | Expected result |
 | --- | --- |
 | Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside BashKitten with no X11 companion APK and no shipped root/ADB requirement. |
@@ -641,7 +816,11 @@ about physical GPU behavior. Android 16 coverage must be recorded separately.
 | Android lifetime | Tab close/reopen, browser background/recreation and rotation preserve the desktop; Stop/Agent Off stop only their owned processes; display crash leaves chats usable. |
 | Linux preparation/config | Visible real package output while the browser stays usable; edited launch flags take effect; invalid config shows the real error without another runtime. |
 | Linux persistence/startup | Guest-installed packages, files and Pi work survive viewer/browser-window close and later attachment; per-container startup on/off behaves independently. |
+| Machine storage/name/delete | Default and configured BashKitten data roots contain the rootfs/configuration/state; chosen names resolve to the correct stable directory; rename preserves work; deletion removes only the selected machine and its owned data, preserving other machines/shared caches/host-mounted folders. |
 | Host rendering | Same guest works in X11-host and Wayland-host sessions; deliberately unavailable acceleration selects the actual software path without modifying saved GPU choice. |
+| Native X11 host VM | Installed candidate runs its local container Display inside a virt-manager-managed Debian/Ubuntu VM logged into real Xorg; session/backend/renderer and the native product flows above are recorded. Xwayland-on-Wayland alone is insufficient. |
+| UI responsiveness, including Display | During provisioning/deletion, expensive GPU/software frames, resize/rotation and stalled display/backend I/O, chat/sidebar/navigation/tab close remain usable; no synchronous frame/fence/process wait blocks the UI. Detached views release work asynchronously without stopping their guest. |
+| Display module/process boundary | Verify a separate renderer PID for the native viewport; interrupt/terminate that child and confirm other tabs/chat remain usable and guest work survives. Reattach a fresh renderer. Audit that Firefox changes remain confined to the documented module integration hooks. |
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |

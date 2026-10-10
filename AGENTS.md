@@ -13,6 +13,19 @@ saved remotes retain the existing encrypted Agent/service route. The plan
 supersedes older display/frontend/lifetime requirements only where stated, and
 does not authorize transport/authentication fallbacks or a Pi reimplementation.
 Its Pi release update is planned; the current runtime pin below is unchanged.
+Machine rootfs/configuration and durable runtime storage belong under the existing
+`$BASHKITTEN_DATA_DIR`, with user-chosen names mapped to stable machine directories.
+Retain lifecycle/deletion helpers. Implementation acceptance must include an
+installed native Linux candidate in a virt-manager-managed Debian/Ubuntu VM using
+a real Xorg login session, as well as the separate Wayland-host checks.
+All operations must remain nonblocking, including the native Display tab/window:
+no rootfs/process/IPC/frame/GPU-fence work may synchronously stall the UI thread.
+Verify navigation/chat/tab-close responsiveness under load and stalled displays.
+The custom Display tab is a reusable native viewport module with its own renderer
+child process, not just a background thread in the browser UI process. Keep
+Firefox/Fenix patches limited to documented lifecycle/focus/resize/IPC/surface
+hooks so future Firefox upgrades adapt a small integration layer. Renderer-child
+failure/closure must not stop the persistent Termux/container desktop or Pi work.
 
 ## Current 8 October work and verification
 
