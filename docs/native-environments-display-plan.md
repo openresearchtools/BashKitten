@@ -1202,17 +1202,150 @@ validation and bounded/streaming work consistent with the rest of this plan.
 
 ## 9. Agent desktop control and native boundaries
 
-Use upstream X11 tools: xdotool/XTEST for pointer/key/window operations, an X11
-screenshot implementation such as scrot, and AT-SPI for apps that expose a tree.
-Provide the correct owned `DISPLAY`, X authority and session D-Bus environment
-to that environment's agent. Keep one concise environment/skill description of
-the actual installed tools; do not bring the Sway/wlroots CUA implementation,
-seat controller or a new agent runtime into BashKitten.
+### One shared skill with backend-specific names
+
+Add one concise shared XFCE desktop-use guide, curated into **`termux-use`** for
+Pi inside BashKitten's native Termux backend and **`computer-use`** for Pi inside
+a BashKitten-managed container desktop. Only the name, short description and
+backend setup reference differ; keep one maintained workflow and supporting
+scripts. This is planned work, not an already installed skill.
+
+| Pi execution environment | Discovered desktop-use skill |
+| --- | --- |
+| BashKitten-owned native Termux backend | `termux-use`, controlling that backend's XFCE desktop |
+| BashKitten-managed container backend | `computer-use`, controlling that container's XFCE desktop |
+| Ordinary Linux host, standalone Pi, or other unmanaged backend | Neither guide |
+
+Choose from where Pi actually executes, not the connected browser's OS or the
+selected client tab. A remote connection does not grant host Pi a container
+skill; a Pi already running inside an eligible backend retains its own guide
+when accessed remotely. Never load both aliases or add either guide to ordinary
+host Pi's initial context. Discovery initially adds only stock skill metadata;
+Pi reads the instructions when desktop interaction is needed.
+
+Reuse `agent/packaging/pi-skills.py`, the private Pi integration and stock Pi
+package/resource discovery. Resolve the execution role before registering the
+owned skill package/default selection through `ensureIntegration()`. Curate
+role-specific manifests/selections: Termux includes its guide, managed container
+provisioning includes its guide, and ordinary Linux host staging/defaults include
+neither. Keep canonical/nonselected references outside automatic discovery. Use
+stock package skill filters and global skill-disable behavior, preserving user
+opt-outs and unrelated/custom skills; no custom loader, new tool catalog or Pi
+patch. A container skill/data overlay must not require a separate Firefox build.
+
+Do not substitute the installed Pi 1.0.2 `resources_discover` hook for filtered
+registration: its returned paths can bypass package exclusions and `--no-skills`.
+The existence of that API/example alone does not establish the required behavior.
+Recheck normal package/discovery contracts during the planned Pi update.
+
+The current platform adapter distinguishes Termux from Linux but not a managed
+container from a host. Supply the execution role through owned container
+provisioning/backend lifecycle and its stable machine identity. `DISPLAY`,
+`/.dockerenv`, an arbitrary name or a browser connection is not this identity.
+Unknown roles expose neither guide. Reconcile discovery on startup/reload and
+do not leave an old managed selection exposed in an ineligible profile. This
+is skill placement, not a sandbox preventing someone manually reading a file.
+
+### Use the ordinary XFCE tool stack
+
+Use [xdotool](https://github.com/jordansissel/xdotool) with XTEST for pointer,
+keyboard, focus and window operations; **scrot** for fresh X11 screenshots; and
+**AT-SPI** to read accessibility trees where applications expose them. Use stock
+Pi shell execution and image/file reading. No MCP server, dedicated model,
+screen-watching daemon or Sway/wlroots CUA/seat controller is needed.
+
+Ship one small read-only tree-inspection script with the shared skill, using
+Python/PyGObject's `gi.repository.Atspi` rather than making the agent repeatedly
+write D-Bus traversal code. GNOME documents the
+[direct introspection bindings](https://gnome.pages.gitlab.gnome.org/at-spi2-core/devel-docs/atspi-python-stack.html)
+and [accessible object API](https://gnome.pages.gitlab.gnome.org/at-spi2-core/libatspi/class.Accessible.html).
+It needs only application/window listing and inspection of a selected
+application/subtree: names, roles, states, exposed text and component bounds.
+Keep input in xdotool; do not grow this into a second automation service.
+
+Install the native tools and bindings with the desktop dependency setup for
+both architectures. The inspected Termux recipes at
+`e446fad09f58f4355c8f45243ea831cf3545af47` include
+[AT-SPI with introspection](https://github.com/termux/termux-packages/blob/e446fad09f58f4355c8f45243ea831cf3545af47/packages/at-spi2-core/build.sh),
+PyGObject, xdotool and scrot; packaging availability is not proof of a working
+session. Use the correct native Linux or Bionic packages, retain complete source
+and licenses under section 11, and record the actual installed versions. Verify
+scrot captures the complete owned rootful Xwayland/X11 desktop; do not assume
+rootless host-Xwayland behavior supplies that framebuffer.
+
+### Bind commands to the owning desktop session
+
+The existing desktop owner must provide the actual `DISPLAY`, applicable
+`XAUTHORITY`, session `DBUS_SESSION_BUS_ADDRESS` and AT-SPI bus context. Termux's
+current Display owner records only `DISPLAY`; a `dbus-launch` child does not
+automatically pass its bus back to a separately launched Pi worker. Extend that
+owner's private context/command handoff, tied to the backend and desktop
+generation, rather than adding a second desktop launcher or automation daemon.
+
+Resolve the current context before each operation through that existing owner.
+Refresh after desktop restart even when Pi stays running. Do not scrape unrelated
+processes, create a separate D-Bus session for inspection, export host credentials
+globally, use `xhost +`, or default to `:0`/another container after failure. A
+stopped, missing or stale desktop is unavailable. `termux-display` remains the
+Termux setup/launch guide; `termux-use` covers interaction after it is running.
+Container creation/launch settings remain with the existing machine owner.
+
+Run screenshots, inspection and input commands in short-lived child processes
+with cancellation/deadlines, outside browser/UI threads. An unresponsive app's
+AT-SPI calls must not hang the desktop or a native controller. Read only on
+request: no hidden tree polling, screenshots, global event listeners or content
+logs. Save requested captures/tree output privately; return paths and concise
+previews, preserving the complete requested output or reporting incomplete
+inspection explicitly. Clean up owned temporary files after use, without
+deleting user-requested saved artifacts.
+
+### What the skill teaches Pi
+
+Keep the shipped instructions short, with examples using the packaged versions:
+
+1. Check the owning desktop's readiness and current context, then identify the
+   intended window (`xdotool search`, window title/class and geometry). Do not
+   select the first ambiguous match or infer coordinates from an unseen screen.
+2. Inspect the target's AT-SPI tree when available. Distinguish a missing bridge,
+   stalled/disconnected bus and an app with no useful tree. GTK/Qt and custom
+   widgets vary; neither XFCE nor AT-SPI guarantees coverage for every app.
+3. Capture a fresh screenshot to a unique private path with scrot and read it
+   with Pi's image-reading tool. Coordinates are pixels of the captured guest
+   framebuffer, not the host browser window or resized screenshot preview.
+4. Activate/verify the intended window before input. Show short examples of
+   `xdotool windowactivate --sync`, `mousemove --sync`, `click`, wheel scrolling,
+   `mousedown`/move/`mouseup`, `key` and `type`. Release held buttons/modifiers
+   on cancellation; do not leave a drag or key held after command failure.
+5. Use current exposed bounds or observed screenshot coordinates for clicks.
+   Re-inspect after scrolling, focus changes, window moves, scaling, tab resize,
+   phone rotation or keyboard insets. Stale tree objects/coordinates are not
+   durable selectors. No invented tree or OCR-as-accessibility claim.
+6. Verify the result with the next relevant tree read or screenshot. A successful
+   command exit does not establish that the app completed the intended action.
+   Use bounded waits for the actual state rather than repeated blind clicks.
+
+Screenshot-based interaction and tree inspection are both explicit supported
+methods. Say which is being used when an app lacks useful accessibility data;
+do not silently treat a broken AT-SPI setup as successful inspection. The shared
+X11 desktop has one pointer/focus: agents/subagents must coordinate actions on
+the same desktop, not assume independent virtual seats. Ordinary terminal/file
+work should continue through shell/file tools without screenshotting terminals.
 
 XTEST input and X11 screenshots are display-wide authority, not per-window
 security. AT-SPI coverage depends on the app; it is not created by XFCE for every
 custom-rendered UI. Targeted `xdotool --window` events may differ from normal
 focused XTEST input. Acceptance must check real focus, coordinates and results.
+The upstream [xdotool manual](https://github.com/jordansissel/xdotool/blob/main/xdotool.pod)
+documents this distinction; teach focused input instead of presenting directed
+SendEvent as universally supported.
+
+### Preserve native boundaries and verify discovery
+
+`termux-use` controls the Termux X11 desktop, not Android applications. It does
+not need Android Accessibility or enable `phoneuse`. The existing `browser`
+skill remains for authorized browser tabs; desktop use does not relax its
+protected Agent/authentication boundary. Host Wayland versus X11 does not select
+different skills: the controlled environment is the same owned XFCE/X11 desktop.
 
 Keep the native protected Agent outside the controlled desktop surface. On
 Android it is outside Termux's X server. For containers, host-native sidecar/chat
@@ -1225,6 +1358,17 @@ connection, rather than opening it inside the controlled X server. This is a
 required native integration change, not a label applied to guest windows. Verify
 it before enabling desktop CUA; a window-name filter alone is not sufficient.
 Do not expose the host's entire desktop as the guest's X server to avoid this work.
+
+Acceptance must show the correctly named guide in fresh Termux and managed
+container Pi profiles, and neither name in ordinary host/unmanaged remote Pi.
+Check startup/reload, user opt-outs and subagents without duplicating metadata.
+Explicit package-skill exclusion and `--no-skills` must leave the guide unloaded.
+In the real Pi UI, exercise app/window selection, fresh capture, focus, typing,
+click/scroll/drag and result verification; inspect a supporting GTK/Qt app and
+an app without a useful tree. Verify two-container isolation, stopped/restarted
+desktop context, changed resolution, a stalled accessibility client and absent
+protected Agent surfaces. Repeat native X11-host/Wayland-host container and
+Termux acceptance; no claim that recipe presence alone proves those flows.
 
 ## 10. Per-environment sockets, settings and remote sharing
 

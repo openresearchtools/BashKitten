@@ -20,6 +20,18 @@ The port retains device tools/controls only. It has no donor provider connection
 or MCP server/client/protocol underneath the CLI; existing Pi continues to own
 model/provider configuration and agent execution.
 
+The [desktop-use skill plan](native-environments-display-plan.md#one-shared-skill-with-backend-specific-names)
+adds one shared XFCE guide named `termux-use` in the owned Termux backend and
+`computer-use` in managed containers. Role-specific package registration and
+stock skill filters select only that backend's guide; ordinary Linux
+host/unmanaged Pi gets neither, and user exclusions/`--no-skills` are respected.
+It teaches
+xdotool input, scrot screenshots and available AT-SPI trees through stock shell
+and image/file tools. Keep the actual desktop X11/D-Bus context current, with
+no new CUA/MCP server. This is planned work; the installed inventory below is
+unchanged. `termux-display` remains setup/launch guidance, and Android device
+control remains the separately authorized `phoneuse` feature.
+
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's
 `deferred` exposure. Its built-in `tool_search` is activated without replacing

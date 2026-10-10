@@ -64,6 +64,14 @@ native history parser; no duplicate transcript store, background index, worker
 startup or cross-chat messaging as a side effect of lookup. Explain backend-local
 history locations; another backend requires an existing authorized access path,
 not a new cross-machine discovery service.
+Plan one shared XFCE desktop-use skill, named `termux-use` inside the owned
+Termux backend and `computer-use` inside managed containers. Stock Pi discovery
+must expose neither on ordinary Linux hosts/unmanaged backends; select by Pi's
+execution role, not browser platform or DISPLAY. Use xdotool, scrot and a small
+read-only AT-SPI/PyGObject tree inspector, with current owned X11/D-Bus context.
+Teach inspect/capture, focus, input and verification with fresh coordinates;
+no Sway CUA import, MCP server or hidden polling. Preserve the protected Agent
+outside the controlled X server and keep Android `phoneuse` separate.
 Name the shared desktop customization BashKitten OS, with a BashKittenOS `.deb`
 and native Termux counterpart (`bashkitten-os` package identifier). Install its
 BashKitten OS settings app in Applications and pin it by default in new desktop
