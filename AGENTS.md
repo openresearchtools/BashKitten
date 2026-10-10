@@ -43,9 +43,10 @@ native history parser; no duplicate transcript store, background index, worker
 startup or cross-chat messaging as a side effect of lookup. Explain backend-local
 history locations; another backend requires an existing authorized access path,
 not a new cross-machine discovery service.
-The shared XFCE customization defaults to one normal bottom taskbar with a
-text-only Applications button and running-window buttons only, on both Termux
-and Linux. Remove the XFCE menu icon without adding a replacement logo; no
+The shared XFCE customization defaults to one normal bottom taskbar with an
+Applications button with the existing BashKitten icon and running-window buttons
+only, on both Termux and Linux. Replace the XFCE icon with the proportionally
+sized kitten-with-glasses branding, superseding the earlier text-only choice; no
 clock/date, network/audio/power/status widgets, tray, workspace switcher or
 Show Desktop button. Underlying services remain available.
 Remove the extra launcher dock, pinned taskbar shortcuts and default desktop icons;
@@ -60,8 +61,8 @@ for panel, Start, desktop defaults and Thunar. Preserve user wallpaper/placement
 and appearance changes across launch, scaling, rotation, restart and upgrades.
 The default wallpaper is #202225 with the existing transparent BashKitten logo
 centered proportionally: shrink to fit when needed, never exceed its native
-1254 × 1254 resolution. Keep the Applications button text-only and preserve any
-subsequent user-selected wallpaper.
+1254 × 1254 resolution. Preserve any subsequent user-selected wallpaper;
+the small Applications-button logo remains separate from wallpaper selection.
 This replaces the earlier built-in popup/Garcon patch and Firefox-gray palette;
 pins belong inside Start, not the taskbar. All loading/search/helper work remains
 nonblocking. Use the shared GTK package, not GNOME Shell or a second desktop shell.

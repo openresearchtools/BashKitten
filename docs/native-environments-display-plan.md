@@ -57,8 +57,8 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - Termux runs the same customized XFCE experience without containers. Apps open
   maximized by default. An optional split-screen setting enables a taskbar
   **Two app mode** action and one draggable divider between the two apps.
-  Both platforms use one bottom taskbar containing only a text-only
-  **Applications** button and running-window buttons: no XFCE menu icon,
+  Both platforms use one bottom taskbar containing only an **Applications**
+  button with the BashKitten icon and running-window buttons: no XFCE menu icon,
   clock/date, network/status widgets or system tray. Applications opens a
   maximized application launcher:
   search at the top, pinned apps beneath, one divider, then all remaining apps
@@ -791,10 +791,13 @@ PeGPU account assumptions, login-time install scripts or repeated settings reset
 ### One bottom taskbar on both platforms
 
 Ship the same layout on native Termux and Linux containers: one full-width
-horizontal panel along the bottom edge containing only a text-only
-**Applications** button for the launcher below and ordinary labelled Window
-Buttons for running applications. Remove the XFCE icon from the Applications
-button; do not replace it with another logo. Include no clock/date, network,
+horizontal panel along the bottom edge containing only an **Applications** button
+with the existing BashKitten icon for the launcher below and ordinary labelled
+Window Buttons for running applications. Replace the XFCE menu icon with the
+current kitten-with-glasses branding, keeping the Applications label. Size the
+icon proportionally for the panel and its scale, using the existing branding
+assets. This supersedes the earlier text-only button requirement on both Termux
+and Linux. Include no clock/date, network,
 audio, battery/power, notification/status tray, workspace switcher, Show Desktop
 or other panel widget. This changes panel contents, not the underlying services.
 Remove the default secondary launcher dock and its file-manager/terminal/other app
@@ -966,8 +969,8 @@ shrink it proportionally to fit a smaller
 viewport, but never stretch, crop, tile or upscale it to fill a larger screen.
 Use the original asset rather than enlarging a small generated app icon. Perform
 any default-wallpaper sizing off the UI thread and only while this managed
-default is selected. The logo belongs to the wallpaper; the Applications button
-remains text-only.
+default is selected. The Applications button uses a small panel-sized version
+of the same BashKitten branding independently of the wallpaper.
 
 Preserve Gnozzard's defaults-only wallpaper principle: it supplies an initial
 solid background through schema defaults and does not overwrite the user's
@@ -1392,7 +1395,7 @@ without confusing that development disk with the product machine data layout.
 | Display module/process boundary | Verify a separate renderer PID for the native viewport; interrupt/terminate that child and confirm other tabs/chat remain usable and guest work survives. Reattach a fresh renderer. Audit that Firefox changes remain confined to the documented module integration hooks. |
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
-| XFCE layout | Fresh Termux and Linux desktops have one bottom taskbar containing only a text-only Applications button and normal running-window buttons. No XFCE/replacement menu icon, clock/date, network or other status widget, tray, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Window switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
+| XFCE layout | Fresh Termux and Linux desktops have one bottom taskbar containing only an Applications button with the proportionally sized BashKitten icon and normal running-window buttons. No XFCE menu icon, clock/date, network or other status widget, tray, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Window switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
 | Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
