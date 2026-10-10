@@ -43,6 +43,15 @@ native history parser; no duplicate transcript store, background index, worker
 startup or cross-chat messaging as a side effect of lookup. Explain backend-local
 history locations; another backend requires an existing authorized access path,
 not a new cross-machine discovery service.
+Name the shared desktop customization BashKitten OS, with a BashKittenOS `.deb`
+and native Termux counterpart (`bashkitten-os` package identifier). Install its
+BashKitten OS settings app in Applications and pin it by default in new desktop
+profiles. Reuse existing scaling/two-app settings; retain later user pin/unpin
+choices. This is the customization package within BashKitten, not a separate OS.
+Automatically match guest display resolution to the actual Firefox Display tab
+viewport on desktop and Android, including window/sidebar resizing, rotation
+and keyboard insets. Preserve the user's independent desktop scaling choice;
+reuse the Buzzard resize flow and embedded Termux:X11's native resize machinery.
 The shared XFCE customization defaults to one normal bottom taskbar with an
 Applications button with the existing BashKitten icon and running-window buttons
 only, on both Termux and Linux. Replace the XFCE icon with the proportionally

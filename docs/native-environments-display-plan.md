@@ -65,13 +65,21 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   in an alphabetical left-to-right wrapping icon/title grid. It adapts to phone,
   tablet and desktop sizes and scrolls vertically. Omit the extra launcher dock,
   pinned taskbar shortcuts and default desktop shortcut icons.
-- The desktop customization package provides PeGPU's scaling functions directly,
-  Gnozzard's exact dark/orange palette for the taskbar, background, Start menu
+- The desktop customization is named **BashKitten OS**, packaged as its own
+  `.deb` (for example `BashKittenOS.deb`) and native Termux counterpart. Its
+  **BashKitten OS** settings app appears in Applications and is pinned by default,
+  providing the requested scaling and desktop settings. The package provides
+  PeGPU's scaling functions directly, Gnozzard's exact dark/orange palette for
+  the taskbar, background, Start menu
   and Thunar, plus Xfce Terminal. The default desktop background is the same
   dark color with the existing BashKitten logo centered, never enlarged beyond
   its native image resolution. Preserve later user wallpaper/appearance choices.
   PeGPU's initialization scripts and the old Buzzard shell/CUA stack are not
   imported.
+- Display resolution automatically follows the actual Firefox tab's drawable
+  size on Linux and Android, including host-window resize, phone rotation and
+  keyboard appearance. The user's desktop scaling choice remains independent
+  of that automatic resolution; no manual resolution selection is required.
 - Linux container desktops also retain Gnozzard's application installation and
   registration functions through Thunar: AppImage running with or without
   persistent extraction, `.deb` installation with dependency resolution and
@@ -156,6 +164,24 @@ tab closure; report readiness/failure. Explicit backend Start/Stop remain separa
 controller actions. Ordinary web content cannot supply a socket path, command,
 FD or native environment identity. Use existing native permission and controller
 boundaries, with connection-generation checks for late asynchronous replies.
+
+**Automatic display resolution:** the native tab host is the source of the
+current drawable size, not a saved monitor resolution or the browser's outer
+window size. Forward actual tab/window/sidebar/inset changes asynchronously to
+the selected environment. On Linux, adapt Buzzard's native-window resize flow
+to Firefox's tab and propagate it through the private gateway to rootful
+Xwayland/XRandR. On Android, retain Termux:X11's native view/window-change flow
+inside our embedded tab, including keyboard shrink/restore and rotation. Update
+the guest's actual screen dimensions and matching input-coordinate transform;
+stretching an unchanged desktop bitmap does not satisfy this requirement.
+
+Coalesce rapid changes, keep geometry/frame replies tied to the current view,
+and ignore stale or zero-sized hidden-tab measurements. Reattachment uses the
+new tab's actual size without restarting the desktop/apps. Keep the saved
+BashKitten OS UI/font scaling independent: a resize must not reset scale, pins,
+wallpaper or app state. Recompute the panel workarea, maximized/split windows and
+launcher grid from the accepted dimensions. No UI-thread wait, polling loop or
+manual resolution selection is needed for this normal flow.
 
 ```text
 Browser-owned sidecar
@@ -773,20 +799,45 @@ UID or privileged system-key permissions in the shipped user flow. Development
 setup/debugging still uses the authorized ADB/direct Termux workflow. Android
 16/17 behavior and physical-device GPU support require actual acceptance.
 
-## 8. Shared XFCE customization package
+## 8. BashKitten OS: shared XFCE customization package
 
-Package the customization as a BashKitten `.deb` for Debian guests and a native
-Bionic Termux package built from the same source. Reuse upstream XFCE/Xfwm and
-the actual PeGPU apps: **Thunar + Xfce Terminal**. Nautilus is not XFCE's file
+Name this shared desktop customization **BashKitten OS**. Package it as
+`BashKittenOS.deb` (with release version/architecture suffixes where required)
+for Debian guests and as a native Bionic Termux `.deb` built from the same
+source. Use the normal lowercase package identifier `bashkitten-os` in package
+metadata. These are platform-specific packages, not interchangeable binaries.
+This names the customization and its settings app within BashKitten; it does not
+introduce a separate distribution, browser or bootable OS. Reuse upstream
+XFCE/Xfwm and the actual PeGPU apps: **Thunar + Xfce Terminal**. Nautilus is not XFCE's file
 manager and is not what the inspected PeGPU setup installs. Do not pull in an
 extra GNOME desktop stack on the assumption that the donor used it.
 
 The package owns the small panel adaptation, maximized application launcher,
 event-driven layout/divider helper, scaling module, settings and appearance
 assets. Native package dependencies and normal desktop/session registration
-start those components. First-run defaults
-are applied once to the owned desktop profile, then user changes persist. No
+start those components. First-run defaults are applied once to the owned
+desktop profile, then user changes persist. No
 PeGPU account assumptions, login-time install scripts or repeated settings reset.
+
+### BashKitten OS settings application
+
+Install one native **BashKitten OS** application entry with the existing
+BashKitten icon. It opens this environment's customization settings, including
+the PeGPU-derived scaling controls and the requested optional two-app layout
+setting. Reuse the same settings/helper implementation described below; do not
+add a second configuration store or duplicate controls. Ordinary XFCE appearance
+and wallpaper settings continue to work and retain user changes. Container
+lifecycle, launch commands and remote sharing stay in their existing native
+sidecar Settings rather than being duplicated in this guest desktop app.
+
+Seed this application's stable desktop-entry ID into the Start launcher's
+ordered pins when the desktop profile is first initialized, on both Linux and
+Termux. Other applications remain unpinned until chosen by the user. Preserve
+the user's later pin order or explicit unpin across restart and upgrades; do
+not reinsert it on every launch. The settings app is still listed/searchable
+when unpinned. Its own app/menu entry and settings operations must remain
+responsive, with expensive work delegated asynchronously as elsewhere in the
+desktop package.
 
 ### One bottom taskbar on both platforms
 
@@ -844,8 +895,9 @@ entries, simple case-insensitive name/description matching, short 90 ms search
 debounce, alphabetical ordering and saved desktop-ID pins. Its pinned search
 currently matches names only; use the same simple name/description match for
 both blocks here. Pins appear only in their own block, not twice in the menu.
-**Pin/Unpin** stores the ordered ID list per environment, initially empty;
-renaming an entry preserves its ID/pin and explicit deletion removes its pin.
+**Pin/Unpin** stores the ordered ID list per environment, initially containing
+only the **BashKitten OS** settings app. Renaming an entry preserves its ID/pin
+and explicit deletion removes its pin.
 Unavailable entries are omitted without wiping saved selections on a transient
 refresh failure. Clear search on close; retain pins across relaunch and upgrades.
 Keep the donor's applicable AppImage/launcher management actions in the icon's
@@ -917,7 +969,8 @@ Reuse the MIT functions in
 [`Resources/Guest/scaling-app/src/pegpu_scaling.py`](https://github.com/openresearchtools/PEGPU/blob/aae5382fae02eaeb97ceeb7fcaa531f88009b081/Resources/Guest/scaling-app/src/pegpu_scaling.py):
 profiles, normalization, scale planning, changed-value XFConf writes, cursor
 resources, transaction and saved selection. Wire them into the customization's
-settings code directly. Preserve their license and provenance.
+**BashKitten OS** settings application directly. Preserve their license and
+provenance.
 
 The implementation coordinates Xft DPI, GDK integer factor, cursor/icons, panel
 and titlebar sizing, including any explicitly user-created desktop shortcuts.
@@ -1185,7 +1238,7 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
-| Product-owned desktop customization source/package | Shared XFCE taskbar, maximized search/pins/app-grid launcher, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
+| Product-owned BashKitten OS source/package | Shared XFCE taskbar, maximized search/pins/app-grid launcher, initially pinned BashKitten OS settings app, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
 | Tracked external component source + patch series | Release source trees for Podman/crun and required helpers, embedded Termux:X11/native dependencies, XFCE custom components, spreadsheet/other JS components, patches, exact provenance and licenses. |
 | Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
@@ -1345,7 +1398,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
-| 4. Shared desktop package | One bottom taskbar and maximized search/pins/app-grid Start menu, no dock/default shortcuts, maximize/two-app behavior, direct scaling and exact Gnozzard dark/orange styling with persistent wallpaper; Linux Thunar installation/registration. | Matching responsive layouts on Linux/Termux, search/pin persistence, real apps/dialogs/input/geometry/scaling; donor launch rules, passwordless APT, menu/shortcut management and preserved user wallpaper. |
+| 4. BashKitten OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, bottom taskbar, maximized search/pins/app-grid Start menu, no dock/default shortcuts, maximize/two-app behavior, direct scaling and exact Gnozzard styling; Linux Thunar installation/registration. | Matching responsive layouts and working settings on Linux/Termux, preserved later pin/unpin choices, real apps/dialogs/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and user wallpaper. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
@@ -1392,10 +1445,12 @@ without confusing that development disk with the product machine data layout.
 | Host rendering | Same guest works in X11-host and Wayland-host sessions; deliberately unavailable acceleration selects the actual software path without modifying saved GPU choice. |
 | Native X11 host VM | Installed candidate runs its local container Display inside a virt-manager-managed Debian/Ubuntu VM logged into real Xorg; session/backend/renderer and the native product flows above are recorded. Xwayland-on-Wayland alone is insufficient. |
 | UI responsiveness, including Display | During provisioning/deletion, expensive GPU/software frames, resize/rotation and stalled display/backend I/O, chat/sidebar/navigation/tab close remain usable; no synchronous frame/fence/process wait blocks the UI. Detached views release work asynchronously without stopping their guest. |
+| Automatic resolution | Resize the Linux host window and Firefox tab via sidebar/chrome changes on X11 and Wayland; on Android rotate and show/hide the keyboard. Verify guest X screen dimensions change to match the actual tab drawable area, with correct pointer coordinates, panel/workarea, launcher and app geometry. Switch away/reopen without a zero-size resize or desktop restart; preserve the selected UI scale and avoid merely stretching a fixed framebuffer. |
 | Display module/process boundary | Verify a separate renderer PID for the native viewport; interrupt/terminate that child and confirm other tabs/chat remain usable and guest work survives. Reattach a fresh renderer. Audit that Firefox changes remain confined to the documented module integration hooks. |
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
 | XFCE layout | Fresh Termux and Linux desktops have one bottom taskbar containing only an Applications button with the proportionally sized BashKitten icon and normal running-window buttons. No XFCE menu icon, clock/date, network or other status widget, tray, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Window switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
+| BashKitten OS settings | Correct native package installs the BashKitten OS application/icon and seeds its Start pin once. Open it to change scaling/two-app settings in the owning environment; operations stay responsive and persisted. Unpin/reorder it, restart and upgrade: the user's choice survives, and the app remains searchable. Host/container-sharing controls are not duplicated here. |
 | Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
