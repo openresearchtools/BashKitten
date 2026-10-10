@@ -14,6 +14,10 @@ supersedes older display/frontend/lifetime requirements only where stated, and
 does not authorize transport/authentication fallbacks or a Pi reimplementation.
 Its Pi release update is planned; the current runtime pin below is unchanged.
 The same plan's section 12 contains the whole Android Phone/MCP-to-CLI port.
+This is a device-tools/controls port only: no donor MCP server/client/protocol,
+provider connections, API-key/account/model setup or client onboarding. Existing
+Pi owns all model/provider connections; Phone exposes only our authenticated CLI
+path to the retained Android controls.
 Bundle its backend module into the main APK; no companion APK. Add Phone beside
 the native top-bar +, with master On/Off, independent feature switches, then
 optional Accessibility-dependent switches greyed out when unavailable. Off must

@@ -16,6 +16,9 @@ The guide directs agents to current enabled-capability help instead of loading
 an MCP catalog or describing disabled commands. Accessibility stays optional;
 the Phone CLI has no camera/microphone control. This is planned work, bundled
 into the main APK with the CLI in Termux, not an installed capability yet.
+The port retains device tools/controls only. It has no donor provider connections
+or MCP server/client/protocol underneath the CLI; existing Pi continues to own
+model/provider configuration and agent execution.
 
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's

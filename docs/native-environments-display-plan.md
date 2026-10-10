@@ -1424,6 +1424,14 @@ Android control backend into the **main BashKitten APK**, as explicitly selected
 by the user. A native Phone panel controls an optional backend module; Termux
 agents use a small CLI and the `phoneuse` Pi skill. No companion APK is required.
 
+**Scope: port the device tools and controls only.** BashKitten's existing Pi
+integration is the caller and continues to own model/provider connections,
+credentials and agent execution. The Phone module must not implement an MCP
+server/client, MCP session/protocol layer, provider connection setup, model
+selection, API-key/account UI or donor client onboarding. Its authenticated
+local transport serves only our Pi CLI and the native Android controls; it is
+not a repackaged MCP endpoint or a connection to an external AI service.
+
 It covers device control, not the separate calling/contact/voice-hook feature.
 It does not change the protected Agent boundary, remote authentication, or the
 Tor/Caddy/Authelia/Chisel route. Write only the integration and controls needed
@@ -1480,7 +1488,7 @@ code remains under its existing license; do not relabel the donor's files.
 
 Import the original pinned source and provenance into a clearly identified
 adapted component directory in a focused commit. Follow with separate commits
-removing unneeded parts and adapting retained Android providers to this module.
+removing unneeded parts and adapting retained native Android operations to this module.
 Record that this is a maintained BashKitten fork; do not automatically overwrite
 it with mainstream donor updates. Preserve original source through the import
 commit and source delivery, without compiling a second donor app. Keep original
@@ -1494,7 +1502,11 @@ against the release source; do not describe main as the tested release.
 Remove from the shipped module:
 
 - MCP server/catalog/SDK and generic `call`, `schema`, `tools` passthroughs from
-  the research prototype. Retain useful Android providers behind typed commands.
+  the research prototype. Retain useful native Android actions behind typed
+  commands; do not retain MCP transport underneath the CLI.
+- Donor provider/client connection integrations, account/API-key configuration,
+  model selection and connection onboarding. Our existing Pi provider setup
+  remains the sole model connection path; the Phone module needs none of these.
 - All camera/microphone commands, providers, recording/audio options, schemas,
   settings, permission requests and dependencies used only by those features,
   including donor CameraX bindings. Check the merged APK manifest. Browser
@@ -1767,6 +1779,7 @@ claim that the current whole product has already passed an audit.
 | Master Off and restart | Stop/invalidate the Phone endpoint and queued work, clear transient state, preserve other app services. Boot, service death, package update and late callbacks do not restore disabled work. |
 | Accessibility transitions | Independent features continue without it; dependent options grey out and pending work fails safely on disconnection/revocation. Re-enable only through actual user grant and current policy. |
 | Boundaries and removals | No camera/microphone or generic intent/MCP backdoor; protected Agent/settings cannot be read or controlled. No unauthenticated, ordinary-web or unintended network path reaches the module. |
+| Controls-only port | Packaged Phone code and dependencies contain only the retained Android controls, native authorization and our CLI integration. No MCP SDK/server/client/protocol, donor provider connections or AI-account/model setup; model calls still belong to existing Pi. |
 | Platform outcomes | Background launch reports observed/unknown/denied state accurately; invalid RemoteInput, restricted clipboard, inaccessible URI and unavailable location are real errors, not simulated success. |
 | Responsiveness | Slow requests, screenshots, service cleanup and repeated toggles do not freeze native UI, chat, browsing or Display. Cancellation releases owned resources without replaying actions. |
 | Release contents | Correct sources/licenses, private bundled Node, concise skill discovery, no secrets or test artifacts; no unsolicited external reporting from any bundled component. |
