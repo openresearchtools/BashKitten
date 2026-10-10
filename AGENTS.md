@@ -44,7 +44,10 @@ startup or cross-chat messaging as a side effect of lookup. Explain backend-loca
 history locations; another backend requires an existing authorized access path,
 not a new cross-machine discovery service.
 The shared XFCE customization defaults to one normal bottom taskbar with a
-Start/applications menu and running-window buttons on both Termux and Linux.
+text-only Applications button and running-window buttons only, on both Termux
+and Linux. Remove the XFCE menu icon without adding a replacement logo; no
+clock/date, network/audio/power/status widgets, tray, workspace switcher or
+Show Desktop button. Underlying services remain available.
 Remove the extra launcher dock, pinned taskbar shortcuts and default desktop icons;
 use the stock tasklist with a narrow Two app mode patch, not a Docklike layout.
 Apply defaults once, preserve user edits, and keep the bottom workarea correct
