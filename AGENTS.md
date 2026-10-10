@@ -26,6 +26,16 @@ child process, not just a background thread in the browser UI process. Keep
 Firefox/Fenix patches limited to documented lifecycle/focus/resize/IPC/surface
 hooks so future Firefox upgrades adapt a small integration layer. Renderer-child
 failure/closure must not stop the persistent Termux/container desktop or Pi work.
+The native sidecar lists Local, every container and saved remotes directly, each
+with projects and optional ungrouped chats. Replace the large backend dropdown
+with one + for Connect remote/Create container (Linux only). Move power to each
+backend heading; container headings also have Settings and a window/Display
+button opening their full native viewport. Remote headings have connection
+on/off/disconnect/delete only, no Display path/button or settings. Remote Off
+disconnects the client, not the remote host. Impose no arbitrary container count.
+Merge needed BuzzardOS code directly into BashKitten; do not maintain a separate
+Buzzard product boundary. Write only necessary code, reuse existing helpers and
+owners, remove replaced paths and preserve source attribution/licenses.
 
 ## Current 8 October work and verification
 

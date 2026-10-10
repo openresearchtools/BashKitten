@@ -10,6 +10,9 @@ embedded Termux:X11 and shared XFCE desktop. It supersedes conflicting separate
 X11 APK, external Display window, folder-only chat grouping and display-rendering
 restrictions in the [browser plan](browser-integration-plan.md) and
 [remote plan](remote-tunnel-plan.md). Other requirements in those plans remain.
+The latest sidecar specification also replaces the large Local/remote selector
+and global Agent power placement with listed backends and per-backend controls;
+project membership is optional.
 The explicitly requested CPU display fallback does not authorize fallback in
 Tor transport, authentication, AI runtimes or unrelated features.
 
@@ -22,15 +25,21 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 ## 1. Result the user should get
 
 - One scrollable, browser-owned sidecar lists Local, named container environments
-  and saved remotes, with projects and chats beneath their owning environment.
-  Its selector offers the existing remote connection flow and, on Linux, creation
-  of a container. Environment names, project names and chat titles are editable.
+  and saved remotes, with projects and ungrouped chats beneath each backend.
+  One **+** offers **Connect to remote** and, on Linux, **Create container VM**.
+  Remove the large Local/remote/container dropdown. Environment names, project
+  names and chat titles are editable; no chat is required to belong to a project.
+  There is no arbitrary limit on the number of containers a user can create.
 - Selecting a chat opens the existing shared chat UI. The native hierarchy owns
   navigation; the web UI becomes the opened chat, retaining transcript, composer,
   reasoning/tool streaming, subagents, Files/Changes and existing chat functions.
 - Display opens a special native tab: Termux:X11 on Android, or the selected
   local container desktop on Linux. No separate Termux:X11 APK or desktop GTK
   viewer window is required. Browser tabs and the protected Agent remain distinct.
+  Each container heading has a compact window/Display button that opens its full
+  viewport tab, alongside Settings and that container's on/off toggle. Remotes
+  have no Display path/button or settings button; their controls concern only
+  connection on/off, disconnect and deletion of the saved remote.
 - Creating a Linux container opens a preparation view with real installation
   output. The saved Containerfile and ordinary Podman launch configuration remain
   editable by the user or Local agent. GUI helpers edit that same configuration.
@@ -53,6 +62,23 @@ Product UI, executable/package names and new configuration use **BashKitten**.
 Keep original donor names in licenses, copyright notices and provenance.
 “Container VM” here means a persistent Podman desktop environment sharing the
 host kernel; it is not a new hypervisor or a separately booted guest kernel.
+
+### Implementation discipline: merge only the needed code
+
+Write only the code needed to deliver these specified functions. Bring the
+applicable BuzzardOS code directly into BashKitten and adapt its existing owners,
+helpers and APIs; do not maintain it as a second product, require a separate
+Buzzard installation/release, or build an elaborate compatibility/framework layer
+to preserve its former product boundary. This is the requested product merge.
+Retain the exact donor provenance and licenses while using BashKitten naming.
+
+Reuse existing controllers and upstream facilities; keep new code limited to
+the missing integration, native viewport/process boundary and requested behavior.
+Remove replaced dropdowns, duplicate controls and superseded implementation paths
+instead of running both designs. The Display module's narrow Firefox integration
+is required for maintenance, not a reason to introduce a generic plugin system,
+extra abstraction layers, options or features. Do not change unrelated work or
+delete donor repositories/history as part of writing or implementing this plan.
 
 ## 2. Audited starting points
 
@@ -110,7 +136,7 @@ boundaries, with connection-generation checks for late asynchronous replies.
 ```text
 Browser-owned sidecar
   Local / container / saved remote
-       ├── project + chat reference -> protected shared chat view -> stock Pi
+       ├── chat (optional project) -> protected shared chat view -> stock Pi
        └── Display (local targets only)
              Android: native View <-> private Binder/FD handoff <-> Termux X11
                       (child renderer; browser hosts its viewport surface)
@@ -188,6 +214,61 @@ not evidence of responsive behavior.
 
 ## 4. Sidebar, projects and stock Pi identity
 
+### Backend headings and navigation
+
+The sidecar itself is the backend list; selecting a chat or Display view selects
+its owning backend. There is no second large backend dropdown to keep in sync.
+The single **+** entry starts the existing remote-connection flow or local Linux
+container creation. Android offers remote connection and retains Local Termux;
+it does not offer unsupported container creation.
+
+```text
++  -> Connect to remote / Create container VM (Linux)
+Local                         [on/off] [local settings] [Display on Termux]
+  Ungrouped chat
+  Project
+    Chat
+Container name                [on/off] [Settings] [window/Display]
+  Ungrouped chat
+  Project
+    Chat
+Another container             [on/off] [Settings] [window/Display]
+  Projects and/or ungrouped chats
+Remote name                   [connect/disconnect] [disconnect/delete actions]
+  Projects and/or ungrouped chats
+```
+
+This is a structural sketch, not a requirement to print the word “Ungrouped” or
+add another heading for each individual chat. Keep controls compact and aligned
+on each backend title row, using the existing matching icon design. The window
+button opens/selects that container's full native Display viewport tab, not a
+thumbnail or an embedded panel in the chat transcript; it does not force OS
+fullscreen. Local Android's equivalent opens Termux Display. Linux Local does
+not gain an unrelated host-desktop capture path.
+
+| Backend row | Controls and ownership |
+| --- | --- |
+| Local | Its own on/off toggle and existing local settings/actions; Display only for Local Termux. Off stops Local's owned Agent/Pi/services/display/wake-lock group without stopping containers or disconnecting independent remotes. |
+| Each local container | Its own on/off toggle, Settings and window/Display button. On/Off starts/stops that environment; Settings retains its config/startup/ports/media/sharing and lifecycle/deletion helpers. |
+| Each saved remote | Connection on/off and saved-connection disconnect/delete actions only. No Display endpoint/button or remote settings button. Off disconnects this client's existing tunnel/mappings; it does not stop or power off the remote host. Delete forgets the saved connection through the existing removal flow, not the remote machine or its data. |
+
+Use one remote toggle as the normal connect/disconnect action; if Disconnect also
+appears in the existing row actions, it invokes that same operation. Do not add
+duplicate standalone controls for the same action. Move the current global Agent
+toggle to its owning backend heading and remove its superseded placement. Keep
+container management accessible when Local Pi is off. Per-backend power is
+separate from per-container startup preference and the application's existing
+Quit behavior. Show actual starting/stopping/connected/error state asynchronously;
+an Off backend remains listed with its saved identity. Already loaded remote chat
+metadata may remain visible without implying that its disconnected state is live.
+
+Remote rows do not become host-management surfaces. Preserve the existing
+authorized remote Agent/service transport and its boundaries without adding a
+generic settings entry to those rows. Local/container Share Local remains in
+its owning native settings, as specified below.
+
+### Optional projects and native session identity
+
 Current `agent/src/web/web_ui.html::renderSessionSidebar` groups sessions by
 `cwd`. Current rename already uses the worker's stock Pi `set_session_name` RPC.
 Retain that operation; independently named project grouping is new metadata.
@@ -198,11 +279,13 @@ introducing another transcript database:
 | Identity | Meaning and owner |
 | --- | --- |
 | Environment ID | Stable native catalogue identity for Local, a local container or a saved remote; separate from its editable name and current socket/port. |
-| Project ID | Stable grouping record on the owning backend, with an editable name. It does not replace a working directory. |
+| Project ID | Optional stable grouping record on the owning backend, with an editable name. An absent project ID means a chat directly under that backend; it does not replace a working directory. |
 | Chat reference | Environment ID plus the existing BashKitten session ID; backend resolves its existing native Pi session reference. |
 | Chat title | Pi's native session name through supported RPC; existing metadata is only its UI index. |
 
-Projects group chats within an environment. Moving a chat between projects updates
+Projects optionally group chats within an environment. Users can create a chat
+directly under Local, a container or a remote without creating/selecting a
+project. Moving a chat into, between or out of projects updates only
 its grouping reference, not its Pi JSONL path, working directory, credentials,
 running process or history. It does not transfer a session to another machine.
 Keep subagent parent/child references and queue/edit ownership intact. Future
@@ -222,8 +305,14 @@ uses the corresponding narrow-screen native drawer. Retain pagination and
 asynchronous loading so an unavailable environment does not freeze Local or
 another environment. A stopped/disconnected environment stays named and shows
 its actual state rather than disappearing or silently selecting a different one.
+Support as many container records as the user creates without a product-imposed
+count limit; incrementally render/load the list rather than doing unbounded work
+on the UI thread. Actual available disk, memory and OS resources still govern
+whether another environment can start, with the real error shown.
 
-Migrate existing `cwd` groups into named grouping metadata without altering
+Preserve explicit existing project associations, but do not turn every `cwd`
+into a mandatory project. Chats with no explicit association remain directly
+under their backend. Keep working-folder metadata independently, without altering
 session history or automatically starting every worker. Remove the superseded
 web hierarchy and its duplicate navigation handlers once native navigation is
 wired; preserve chat-specific controls, folder selection and Files/Changes.
@@ -245,7 +334,7 @@ runtime mechanism and are not another location for persistent machine data.
 Store each machine under `$BASHKITTEN_DATA_DIR/machines/<machine-id>/`, with its
 `rootfs/`, saved Containerfile/launch configuration and durable metadata there.
 The catalogue maps the user-chosen machine name to this stable ID and directory.
-Use the same name in the selector, sidebar and machine settings; resolve actions
+Use the same name in the backend heading and machine settings; resolve actions
 by ID, never by treating an entered name as a filesystem path or shell argument.
 Handle duplicate names explicitly within the local machine catalogue. Renaming
 updates this mapping without moving a live rootfs or changing Pi/session identity.
@@ -358,8 +447,10 @@ is absent. Reopening attaches to the existing instance.
 | Select another environment/chat | Change the view; do not stop the previous environment. |
 | Per-container startup enabled | Start that saved environment when BashKitten starts, without duplicate instances; Off prevents automatic starts and does not stop an already-running container. |
 | Explicit container Stop | Stop that environment's owned runtime safely, preserving rootfs, Pi sessions and configuration. |
+| Container heading toggle Off/On | Invoke that same container Stop/Start owner, independent of Local and other backend toggles; preserve saved data and configuration. |
 | Explicit Delete machine | Confirm the named machine and its stored data, stop its owned runtime, remove its container definition and private machine directory, then remove its catalogue entry. This is distinct from Stop or closing a view. |
-| Host Local Agent Off | Retain its existing host-local meaning; do not accidentally kill every container through inherited group ownership. |
+| Local heading toggle Off | Stop only its owned Local group; do not kill containers or disconnect independent remote rows through inherited global power ownership. |
+| Remote heading toggle Off | Disconnect that client's remote connection/mappings without stopping the remote host; retain its saved connection until Delete is explicitly chosen. |
 | Browser shutdown/reopen | Release client connections and reattach to surviving container ownership; never treat closing a guest browser window as container Stop. |
 
 Do not change unrelated independent CLI processes or existing remote service
@@ -543,8 +634,9 @@ build checks do not establish 16 KiB-page runtime coverage on stock Cuttlefish.
   that same drawable rectangle. Preserve the desktop process and session.
 - Hide/close releases the surface, input capture, held keys and view listeners;
   it does not stop Termux's desktop. Reopen creates/reinitializes the view and
-  attaches to the same backend. Explicit Display Stop and whole-Agent Off retain
-  their owned-process meaning. Display failure does not terminate Pi chat work.
+  attaches to the same backend. Explicit Display Stop and the Local heading's
+  Agent Off retain their Local owned-process meaning. Display failure does not
+  terminate Pi chat work.
 
 Keep headless Xvfb behavior separate. Do not require root, ADB, Shizuku, shared
 UID or privileged system-key permissions in the shipped user flow. Development
@@ -670,7 +762,8 @@ subordinate UID on the host. Establish an explicit owned endpoint handoff/access
 path without making the socket world-readable or assuming a private directory
 alone solves its permissions.
 
-The container settings button opens native settings for that exact environment:
+The Settings button on each container's sidecar heading opens native settings
+for that exact environment:
 saved launch/Containerfile configuration, startup toggle, existing port mappings,
 media/PipeWire/input integration and remote sharing. Reuse the donor's supported
 controls and endpoint ownership; do not import unrelated desktop-shell features.
@@ -704,12 +797,17 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
 | Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging. |
-| Tracked third-party source + external patch series | Exact Termux:X11/native gitlinks, retained Buzzard code, PeGPU scaling, panel dependency and licenses. |
+| Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
+| Tracked external component source + patch series | Exact Termux:X11/native gitlinks, PeGPU scaling, panel dependency and licenses. |
 | Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
 
 Paths for new modules are proposed; reuse an existing owner rather than creating
-parallel controllers with the same job. Keep upstream imports pristine with
-small named patches/adapters and exact provenance. Preserve Firefox's existing
+parallel controllers with the same job. Merge needed Buzzard functions directly
+and maintain the resulting code as part of BashKitten; do not retain its duplicate
+product shell, branding, configuration/update machinery or separate build/release
+requirements. Keep original attribution and a record of the source being merged.
+For external components such as Termux:X11, XFCE and Podman/crun, retain pristine
+upstream source with small named patches/adapters and exact provenance. Preserve Firefox's existing
 compact source-history/update process. Do not import donor Git ancestry or a
 second full browser tree just to get these components.
 
@@ -774,7 +872,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
 | 4. Shared desktop package | Maximize policy, two-app taskbar action/divider, direct scaling and dark appearance for Linux/Termux. | Real apps, dialogs, input, geometry and scale changes on both platforms. |
-| 5. Native hierarchy | Environments/projects/chats, rename/move, selected-chat web view, existing subagent/draft/session ownership. | Existing histories/cwd unchanged by grouping; asynchronous multi-environment navigation and no duplicate sidebar. |
+| 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects and ungrouped chats, rename/move, selected-chat web view. | Existing histories/cwd unchanged by grouping; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
 
@@ -813,7 +911,7 @@ without confusing that development disk with the product machine data layout.
 | --- | --- |
 | Android fresh install | Termux setup installs native dependencies/paired loader; Display opens inside BashKitten with no X11 companion APK and no shipped root/ADB requirement. |
 | Android input/viewport | Real GUI app accepts hardware modifiers, Unicode/composing IME, touch/mouse/scroll; keyboard shrink/restore and portrait/landscape maintain correct pointer coordinates. |
-| Android lifetime | Tab close/reopen, browser background/recreation and rotation preserve the desktop; Stop/Agent Off stop only their owned processes; display crash leaves chats usable. |
+| Android lifetime | Tab close/reopen, browser background/recreation and rotation preserve the desktop; Stop/Local heading Off stop only their owned processes; display crash leaves chats usable and independent remotes stay connected. |
 | Linux preparation/config | Visible real package output while the browser stays usable; edited launch flags take effect; invalid config shows the real error without another runtime. |
 | Linux persistence/startup | Guest-installed packages, files and Pi work survive viewer/browser-window close and later attachment; per-container startup on/off behaves independently. |
 | Machine storage/name/delete | Default and configured BashKitten data roots contain the rootfs/configuration/state; chosen names resolve to the correct stable directory; rename preserves work; deletion removes only the selected machine and its owned data, preserving other machines/shared caches/host-mounted folders. |
@@ -825,7 +923,8 @@ without confusing that development disk with the product machine data layout.
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; browser palette matches; restart-needed apps are reported truthfully; no startup script resets user edits. |
-| Projects/sessions | Create/rename projects, rename chats, move chats, retain subagents and reconnect; same native Pi history and cwd, correct effective model/reasoning and draft/queue ownership. |
+| Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
+| Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |
 | Local vs remote | Container socket works without Tor; publishing and a real saved-remote client still use existing encrypted/authenticated route; remote has no Display streaming option. |
 | CUA scope | Screenshot/input/accessibility target the guest/Termux desktop and actual apps; host native Agent/auth UI and unrelated host desktop are not exposed by the new display connection. |
 | Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |

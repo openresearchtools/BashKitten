@@ -8,6 +8,10 @@ and independent container/viewer lifetimes. Display is local Termux and local
 containers only; saved remotes retain this document's encrypted Agent/service
 route. Its expressly requested CPU display fallback does not authorize a
 transport/authentication fallback. This extension is planned, not implemented.
+The latest sidecar specification replaces the large connection selector with
+listed backends and one + entry. Remote rows expose connection on/off and
+disconnect/delete only, no Display/settings; Off disconnects this client rather
+than stopping the remote host. Local/container controls remain independently owned.
 
 Controlling verification update, 8 October: ADB is explicitly authorized for
 all Android setup, permissions, package installation and debugging; use direct

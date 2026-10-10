@@ -8,6 +8,10 @@ is local Termux/local containers only. Its explicit CPU rendering fallback and
 independent container/viewer lifetimes supersede conflicting older passages here;
 remote transport/authentication rules remain unchanged. This is planned work,
 not an implemented-feature claim.
+Its latest sidecar specification replaces the large backend selector/global
+power placement: listed Local/containers/remotes, optional projects/ungrouped
+chats, per-backend toggles, container Settings/Display and one + entry. Remote
+rows have connection/disconnect/delete controls only, no Display/settings.
 
 Controlling verification update, 8 October: use ADB for Android setup,
 permissions, installation and debugging, and direct Termux shell access for
