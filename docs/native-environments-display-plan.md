@@ -63,6 +63,11 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - The desktop customization package provides PeGPU's scaling functions directly,
   a plain dark appearance matching BashKitten, Thunar and Xfce Terminal. PeGPU's
   initialization scripts and the old Buzzard shell/CUA stack are not imported.
+- Linux container desktops also retain Gnozzard's application installation and
+  registration functions through Thunar: AppImage running with or without
+  persistent extraction, `.deb` installation with dependency resolution and
+  passwordless guest sudo, and adding applications/launchers to the Start menu.
+  Explicit user-created desktop shortcuts remain available; none are preseeded.
 
 Product UI, executable/package names and new configuration use **BashKitten**.
 Keep original donor names in licenses, copyright notices and provenance.
@@ -94,7 +99,9 @@ delete donor repositories/history as part of writing or implementing this plan.
 | [BuzzardOS, podman branch](https://github.com/openresearchtools/BuzzardOS/tree/6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0) | `6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0`, inspected in `buzzardospodman` | Persistent external rootfs, native runtime setup, private display/media gateways, settings and sudo bridge. Its current desktop is Sway-based and its host viewer is Wayland/GTK/DMA-BUF-only; those are not the requested final frontend. |
 | [Termux:X11](https://github.com/termux/termux-x11/tree/fa3a8b430e2896a19f44c99a9cb056254615ae06) | Official nightly resolves to `fa3a8b430e2896a19f44c99a9cb056254615ae06` | Reusable `lorie` Android library, native X server/rendering, input and loader. Pin the exact commit and native dependency gitlinks; do not build a moving nightly reference. |
 | [PeGPU v0.1.106](https://github.com/openresearchtools/PEGPU/tree/aae5382fae02eaeb97ceeb7fcaa531f88009b081) | `aae5382fae02eaeb97ceeb7fcaa531f88009b081` | MIT scaling helper. Relevant scaling/package-choice files match inspected HEAD `8ecbb5d4fad90f7e74dd29351c37c4de9aada84b`. Actual apps are Thunar and `xfce4-terminal`, not Nautilus. |
+| [Gnozzard](https://github.com/openresearchtools/gnozzard/tree/59ca6d56ef147dea820381036838e76645074d0e) | `59ca6d56ef147dea820381036838e76645074d0e`, checked against GitHub main | Application installer/registration helper and exact secondary-click behavior; adapt its Nautilus/GNOME integration to Thunar/XFCE and Polkit installation to passwordless guest sudo. GPL-3.0-or-later. |
 | [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist for the normal bottom taskbar. Its per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
+| [Garcon 4.20.0](https://gitlab.xfce.org/xfce/garcon/-/tree/garcon-4.20.0) | `16e9e527161aaf09d2756b5e318df58b53116aeb` | XFCE Applications menu implementation; narrow Linux menu patch for Gnozzard-style managed-entry actions. Reused menu code is LGPL-2.0-or-later. |
 | [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
 
 Research checkouts and notes are outside the product tree under
@@ -766,6 +773,8 @@ the default secondary launcher dock and its file-manager/terminal/other app
 shortcuts; do not add pinned launchers
 to the taskbar. The packaged desktop has no default shortcut icons. Applications
 remain available through the Start menu, and open windows through the taskbar.
+An explicit **Add to Desktop** action may create the user's chosen shortcut;
+that does not restore the default launchers, device/home/trash icons or dock.
 
 This layout belongs to the shared desktop customization package, not platform
 startup scripts. Apply it as the owned profile's first-run default and preserve
@@ -819,8 +828,8 @@ resources, transaction and saved selection. Wire them into the customization's
 settings code directly. Preserve their license and provenance.
 
 The implementation coordinates Xft DPI, GDK integer factor, cursor/icons, panel
-and titlebar sizing. Preserve desktop-icon sizing only if the user enables those
-icons; applying scale must not restore the removed dock or shortcuts. Its
+and titlebar sizing, including any explicitly user-created desktop shortcuts.
+Applying scale must not restore the removed dock or default icons. Its
 profiles cover 100–300% in 25% steps.
 It uses `xrandr` for discovery, not framebuffer fractional resampling. Do not
 describe it as universal per-monitor fractional scaling. Remove donor assumptions
@@ -838,6 +847,102 @@ Use BashKitten's actual dark semantic colors for GTK/Xfwm/panel and terminal/fil
 manager defaults. The inspected palette includes `#1e1e1e`, `#292929`, `#fafafa`
 and `#c8c8c8`; compare against the built browser before finalizing assets. Use a
 plain dark background, without new wallpaper/effects or appearance controls.
+
+### Linux application installation and registration
+
+Bring Gnozzard's existing application-management functions into the Linux guest
+customization package, using XFCE and Thunar. This applies inside each selected
+container, not to installing packages on the host or Debian binaries in native
+Termux. Both Linux amd64 and arm64 guests use their actual package architecture.
+
+The audited Gnozzard sources are
+[`integrations/nautilus/gnozzard.py`](https://github.com/openresearchtools/gnozzard/blob/59ca6d56ef147dea820381036838e76645074d0e/integrations/nautilus/gnozzard.py),
+[`helper/gnozzard`](https://github.com/openresearchtools/gnozzard/blob/59ca6d56ef147dea820381036838e76645074d0e/helper/gnozzard)
+and `helper/gnozzard-deb-installer`; its GNOME extension supplies the associated
+Applications-menu actions. BuzzardOS already adapts the five AppImage actions
+to Thunar in `guest/assets/thunar-uca.xml` and merges their owned IDs without
+discarding other custom actions in `guest/shortcut-helper/src/thunar.rs`.
+Reuse that Thunar integration and Gnozzard's relevant helper functions directly
+under BashKitten names. Keep one implementation of validation, extraction,
+launching and registration, not parallel Gnozzard/Buzzard helpers or stores.
+Do not import GNOME Shell, Nautilus, their extensions or the donor desktop shell.
+
+Preserve these secondary-click actions for one applicable local file, with
+format validation in the helper rather than trusting only the filename:
+
+| Selected file | Thunar actions and behavior |
+| --- | --- |
+| `.AppImage` / `.appimage` | **Run AppImage**; **Extract and Run AppImage (Persistent)**; **Extract and Run --no-sandbox**; **Add AppImage to Applications**; **Add AppImage to Desktop**. |
+| `.desktop` | **Run Desktop Launcher**; **Add Launcher to Applications**; **Add Launcher to Desktop**. Preserve the launcher's arguments, field-code handling and appropriate icon through the existing desktop-entry parser/launcher. |
+| `.deb` | **Install Debian Package…**. Show the actual package/version and Install/Cancel confirmation, install with APT dependency resolution, and report the actual result. |
+
+**AppImages.** Preserve Gnozzard's mode behavior: ordinary Run executes the
+AppImage without extraction when no persistent directory exists; once explicitly
+extracted, subsequent launches reuse the adjacent `<AppImage>.extracted/AppRun`.
+Extraction uses `unsquashfs`, a temporary sibling directory and atomic completion;
+failed/cancelled extraction cleans up its temporary output. Preserve `APPIMAGE`,
+`APPDIR`, working directory and application arguments. The explicitly selected
+`--no-sandbox` action retains the donor's per-extraction marker; never turn it on
+automatically after a normal launch fails. Register the MIME/open handler so
+ordinary opening and registered menu entries use the same helper and saved mode.
+
+Direct operation needs the guest's working FUSE runtime/device integration;
+reuse only the necessary Buzzard FUSE helpers and verify rootless Podman access.
+An unavailable direct path reports its error; extraction remains a user-selected
+action. Do not silently add host privilege or silently switch modes. Adapt the
+donors' Wayland launch hints to the actual XFCE X11 session, preserving explicit
+user overrides. If any Buzzard validator is reused, replace its x86-64-only
+Type-2 assumption with validation for the actual supported guest architecture
+and AppImage format. Gnozzard recognizes Type 1/2 headers but its persistent
+extractor expects SquashFS; report unsupported formats accurately rather than
+claiming either donor handles every AppImage. Do not add CPU emulation.
+
+**Debian packages.** Replace Gnozzard's `pkexec`/`PKEXEC_UID` entry point with the
+already-planned guest sudo bridge and its passwordless policy. Run the validated
+local package through guest `sudo -n apt-get install -y -- <absolute-path>`;
+do not use host APT or `dpkg -i` without dependency resolution. Retain file/package
+validation and adapt caller ownership checks to the guest caller rather than
+depending on Polkit environment variables. Normal package confirmation is not
+a password prompt. Stream real APT output asynchronously in the guest UI; if a
+package needs interactive input, use the existing guest terminal/PTY path.
+Respect APT locks and report dependency, architecture and installation errors.
+Installed package launchers become available through normal XDG menu discovery;
+a CLI-only package does not get an invented GUI application entry.
+
+**Applications and optional shortcuts.** Use the guest user's XDG applications
+and icon directories, with stable BashKitten-owned entry identities, correct
+Exec escaping, atomic updates and desktop-database refresh. AppImage registration
+points to the user's file; it does not silently relocate/copy the application.
+Keep Gnozzard's **Rename…**, **Delete from Applications** for managed entries and
+**Add to Desktop** for application entries, adapted to the XFCE menu. Removing
+a managed menu entry removes only that registration/owned icon, not the source
+AppImage, extracted application or installed Debian package. Preserve unrelated
+menu entries and user files. Explicit desktop copies use XFCE's launcher trust
+and execution behavior rather than assuming Nautilus's `metadata::trusted` alone
+is sufficient. Keep desktop file/launcher rendering available, seed no shortcuts
+and hide special default icons such as Home, filesystem, trash and devices.
+Explicitly created shortcuts then appear without restoring those defaults.
+Do not import Gnozzard's pinning/taskbar UI as part of this application-management
+work.
+
+XFCE's applications-menu plugin delegates to Garcon. Its stock right-click
+editing and `.desktop`-declared actions are not the required generic management
+menu. Carry a narrow Linux patch at `garcon-gtk/garcon-gtk-menu.c` menu-item and
+submenu construction/activation, passing the actual desktop-entry identity to
+the same BashKitten helper. Retain normal launch behavior; show rename/removal
+only for validated managed entries. Keep this patch with its exact source pin
+and LGPL-2.0-or-later notice, not a replacement Start menu or imported GNOME UI.
+
+Keep Thunar/menu callbacks short: start the helper asynchronously, then perform
+inspection, icon extraction, package operations and database updates outside
+Thunar, the panel and browser UI threads. Surface progress and real errors,
+including cancellation; stopping a package operation must use APT's normal
+process handling, not kill it and claim rollback. Install/merge owned Thunar
+actions once and on package upgrade by stable IDs, preserving unrelated user
+actions; system defaults alone are insufficient when a user `uca.xml` exists.
+Retain the donors' source/licenses and relevant dependencies only. Do not carry
+arbitrary desktop-file/icon size quotas into the product; retain actual format
+validation and bounded/streaming work consistent with the rest of this plan.
 
 ## 9. Agent desktop control and native boundaries
 
@@ -919,7 +1024,7 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
-| Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging. |
+| Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging; Linux guest Thunar application installation and registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
 | Tracked external component source + patch series | Exact Termux:X11/native gitlinks, PeGPU scaling, panel dependency and licenses. |
 | Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
@@ -956,6 +1061,10 @@ donor attribution while removing product branding. Inventory actual linked and
 packaged dependencies, including Podman/crun/helpers and X11 gitlinks; fail
 packaging if required texts/source are missing. Preserve the testing-release
 warning and existing application signing identity.
+The reused Gnozzard helper/integration code is GPL-3.0-or-later; Buzzard's Thunar
+integration and helper code are AGPL-3.0-or-later. Preserve those component
+notices and corresponding source instead of copying donor branding/dependencies
+unrelated to the requested functions.
 
 For upgrades, preserve user-written launch configuration and desktop settings.
 Update an untouched generated Termux default to the new private loader, but do
@@ -995,7 +1104,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 1. Sources and runtime contracts | Pin donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Reproducible component inputs, no unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
-| 4. Shared desktop package | One bottom taskbar/Start menu without launcher dock or default shortcuts, maximize policy, two-app action/divider, direct scaling and dark appearance for Linux/Termux. | Matching fresh-profile layouts plus real apps, dialogs, input, geometry and scale changes on both platforms. |
+| 4. Shared desktop package | One bottom taskbar/Start menu without launcher dock or default shortcuts, maximize policy, two-app action/divider, direct scaling and dark appearance for Linux/Termux; Linux Thunar app installation/registration. | Matching fresh-profile layouts plus real apps, dialogs, input, geometry and scale changes; direct/extracted AppImages, guest passwordless APT and menu/shortcut management. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
@@ -1047,6 +1156,7 @@ without confusing that development disk with the product machine data layout.
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
 | XFCE layout | Fresh Termux and Linux desktops have the same single bottom taskbar/Start menu and normal running-window buttons, with no extra dock, pinned launchers or default desktop shortcuts. Menu launch/window switching work; resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
+| Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; browser palette matches; restart-needed apps are reported truthfully; no startup script resets user edits. |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |

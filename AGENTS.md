@@ -49,6 +49,14 @@ Remove the extra launcher dock, pinned app shortcuts and default desktop icons;
 use the stock tasklist with a narrow Two app mode patch, not a Docklike layout.
 Apply defaults once, preserve user edits, and keep the bottom workarea correct
 through keyboard/rotation/resize/scaling changes.
+Linux container desktops also get Gnozzard-equivalent application actions in
+Thunar/XFCE: direct/persistently extracted AppImages, explicit no-sandbox mode,
+`.desktop` launcher registration, `.deb` installation through passwordless guest
+sudo with APT dependencies, and Applications menu/optional desktop shortcuts.
+Reuse the donor helper functions and Buzzard's Thunar integration with one
+implementation; no GNOME/Nautilus dependency, host installation or native Termux
+Debian-package path. Keep all work off UI threads and preserve user custom actions.
+No shortcuts/dock are preseeded; explicit Add to Desktop remains available.
 Merge needed BuzzardOS code directly into BashKitten; do not maintain a separate
 Buzzard product boundary. Write only necessary code, reuse existing helpers and
 owners, remove replaced paths and preserve source attribution/licenses.
