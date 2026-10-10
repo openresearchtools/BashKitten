@@ -97,11 +97,14 @@ delete donor repositories/history as part of writing or implementing this plan.
 | --- | --- | --- |
 | BashKitten | `a39f8b1d1ab8ab0ee202a5bb174f905578e83333` | Existing private controllers, protected Agent, per-session Pi workers, native remotes, display launcher and packaging. |
 | [BuzzardOS, podman branch](https://github.com/openresearchtools/BuzzardOS/tree/6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0) | `6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0`, inspected in `buzzardospodman` | Persistent external rootfs, native runtime setup, private display/media gateways, settings and sudo bridge. Its current desktop is Sway-based and its host viewer is Wayland/GTK/DMA-BUF-only; those are not the requested final frontend. |
+| [Podman v6.1.3](https://github.com/podman-container-tools/podman/releases/tag/v6.1.3) | `85b994955e0b4e30fbce9c8351cab85676140ede` | Latest official stable release verified 10 October 2026; vendor its release source and build the private local engine for both Linux architectures. |
+| [crun 1.30.1](https://github.com/containers/crun/releases/tag/1.30.1) | `079ff6a7a16d029460af882f9ea44674e6a510b6` | Latest official stable release verified 10 October 2026; supersedes the donor's older crun pin for this implementation. |
 | [Termux:X11](https://github.com/termux/termux-x11/tree/fa3a8b430e2896a19f44c99a9cb056254615ae06) | Official nightly resolves to `fa3a8b430e2896a19f44c99a9cb056254615ae06` | Reusable `lorie` Android library, native X server/rendering, input and loader. Pin the exact commit and native dependency gitlinks; do not build a moving nightly reference. |
 | [PeGPU v0.1.106](https://github.com/openresearchtools/PEGPU/tree/aae5382fae02eaeb97ceeb7fcaa531f88009b081) | `aae5382fae02eaeb97ceeb7fcaa531f88009b081` | MIT scaling helper. Relevant scaling/package-choice files match inspected HEAD `8ecbb5d4fad90f7e74dd29351c37c4de9aada84b`. Actual apps are Thunar and `xfce4-terminal`, not Nautilus. |
 | [Gnozzard](https://github.com/openresearchtools/gnozzard/tree/59ca6d56ef147dea820381036838e76645074d0e) | `59ca6d56ef147dea820381036838e76645074d0e`, checked against GitHub main | Application installer/registration helper and exact secondary-click behavior; adapt its Nautilus/GNOME integration to Thunar/XFCE and Polkit installation to passwordless guest sudo. GPL-3.0-or-later. |
 | [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist for the normal bottom taskbar. Its per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
 | [Garcon 4.20.0](https://gitlab.xfce.org/xfce/garcon/-/tree/garcon-4.20.0) | `16e9e527161aaf09d2756b5e318df58b53116aeb` | XFCE Applications menu implementation; narrow Linux menu patch for Gnozzard-style managed-entry actions. Reused menu code is LGPL-2.0-or-later. |
+| [SheetJS CE v0.20.3](https://git.sheetjs.com/sheetjs/sheetjs/src/tag/v0.20.3) | `8a7cfd47bde8258c0d91df6a737bf0136699cdf8` | Existing `xlsx` spreadsheet parser; official annotated release tag peeled to this commit. Vendor the source and matching official release distribution with Apache-2.0/component notices. |
 | [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
 
 Research checkouts and notes are outside the product tree under
@@ -464,12 +467,24 @@ Current donor packaging bundles crun 1.29.1 at
 Building and packaging BashKitten's own Podman is therefore new work. Its current
 package script also hardcodes amd64; add native Linux amd64 and arm64 outputs.
 
-Pin an official Podman release and matching required helpers after checking the
-donor's actual usage: conmon, networking/storage helpers and any Buildah operations
-that remain. Package private executables and explicit helper paths so runtime
+For the implementation, use the latest official release sources recorded above:
+Podman **v6.1.3** and crun **1.30.1**, each at its exact peeled commit. Recheck
+official releases when importing them; do not inherit the donor's older version
+or replace a release with branch HEAD. Track those source trees in this repo as
+specified in section 11. Pin matching required helpers after checking the donor's
+actual usage: conmon, networking/storage helpers and any Buildah operations that
+remain. Package private executables and explicit helper paths so runtime
 behavior does not accidentally switch to an unrelated system installation.
 Ship the full local Podman engine with build support, not `podman-remote`; a
 separate Buildah executable is needed only if retained code actually calls it.
+Podman v6.1.3 includes its Go dependency `vendor/`; retain that tree, `go.mod`,
+`go.sum` and `vendor/modules.txt` and use its declared Go 1.26.0 toolchain.
+For crun 1.30.1, materialize `libocispec` at
+`872b8b0b7ccb1a121601ede0dcac8c6b8a1008a6`, including its `image-spec` at
+`26647a49f642c7d22a1cd3aa0a48e4650a542269` and `runtime-spec` at
+`d64c1d945da7cf6970061c7c9ff4391fafdf2a15`. A top-level source archive alone
+omits those required nested trees. Resolve its actual json-c and selected native
+library dependencies from this release's build configuration.
 Give Podman private storage/runroot/configuration paths so it neither adopts
 unrelated containers nor modifies the user's global container configuration.
 Keep host kernel, user-namespace/subuid/subgid, `newuidmap`/`newgidmap` and device
@@ -1026,7 +1041,7 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
 | Product-owned desktop customization source/package | Shared XFCE panel/layout/scaling/theme implementation with Linux and Termux packaging; Linux guest Thunar application installation and registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
-| Tracked external component source + patch series | Exact Termux:X11/native gitlinks, PeGPU scaling, panel dependency and licenses. |
+| Tracked external component source + patch series | Release source trees for Podman/crun and required helpers, embedded Termux:X11/native dependencies, XFCE custom components, spreadsheet/other JS components, patches, exact provenance and licenses. |
 | Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
 
 Paths for new modules are proposed; reuse an existing owner rather than creating
@@ -1038,6 +1053,85 @@ For external components such as Termux:X11, XFCE and Podman/crun, retain pristin
 upstream source with small named patches/adapters and exact provenance. Preserve Firefox's existing
 compact source-history/update process. Do not import donor Git ancestry or a
 second full browser tree just to get these components.
+
+### Track every component we build and ship
+
+The source must be **in this repository**, not just named in a download recipe,
+linked to a sibling checkout or available in a workstation cache. Import upstream
+release trees into the relevant existing component directory, with no nested
+`.git` directory or imported upstream ancestry. Materialize required submodule
+sources at their pinned gitlinks; an unresolved gitlink is not a complete source
+snapshot. Keep pristine external source and small named patches separate. Direct
+donor code merged into BashKitten retains its original pin/notices and a record
+of our changes.
+
+Use the latest official released version when adding/updating a component, within
+the product's explicitly selected supported line (such as Node LTS/Firefox ESR).
+Record upstream URL, readable version/tag, exact peeled commit, source checksum,
+license/NOTICE paths, patches and build recipe. Annotated tag-object IDs are not
+commit pins. Release jobs build the committed selection; they must not resolve
+`main`, `master`, `latest`, moving tags or version ranges at build time. The
+already-selected official Termux:X11 nightly is pinned to its exact source and
+native dependencies; this does not authorize arbitrary branch builds elsewhere.
+
+Apply this to Podman, crun and every helper/library we compile or bundle, as well
+as embedded X11, the patched XFCE/Garcon components, reused scaling/installer
+code, private Node/Pi and bundled JavaScript/parser/viewer dependencies. Preserve
+the corresponding dependency locks and vendor the required dependency sources
+or integrity-verified source archives in the same tracked component layout.
+Retain the release's exact transitive dependency graph, including upstream-locked
+commit-derived versions; do not independently advance every nested dependency
+or substitute arbitrary commits of our own.
+Keep generated `node_modules`, build outputs, credentials and personal runtime
+data out of Git. Ordinary declared distro dependencies remain package-managed,
+with their package/source provenance recorded; if we begin building or embedding
+one, it becomes part of this source inventory. The existing AI-engine daughter
+repository remains the build owner for downloadable AI runtimes, with matching
+release manifests/source/licenses consumed by BashKitten.
+
+**Spreadsheet example:** the present preview code imports SheetJS CE `xlsx`
+0.20.3 on the backend and renders the existing read-only grid. Currently
+`agent/package.json`/lock refer to the official CDN tarball and
+`agent/packaging/sources.py` collects it during release preparation. That is not
+yet the requested in-repository source. Import its verified release tree and
+matching release tarball, point packaging/dependency resolution to the tracked
+copy, and keep lock integrity, full source and notices. The
+[official installation guide](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/)
+documents this vendoring path and identifies its CDN as authoritative; do not
+substitute the stale npm `xlsx` package or an unrelated spreadsheet widget.
+
+Extend the existing component metadata, license collectors and source-packaging
+scripts rather than adding a parallel registry. A clean checkout must resolve
+product component sources from these tracked inputs. Make missing source,
+unrecorded build-time source downloads, pin/checksum mismatches or missing license
+texts fail release preparation. Reuse caches only when their source/patch/lock/
+toolchain/architecture identities match. Publish matching source archives from
+the same revision as each binary release.
+
+### Complete licenses in the expanded product
+
+Inventory what is actually shipped in the APK, Linux/Termux packages and provided
+container environment, including compiled-in/transitive native libraries,
+JavaScript bundles, fonts/icons/themes and retained donor assets. Ship full
+license and applicable NOTICE/copyright texts, modification notices and source
+provenance for those exact versions; a short SPDX name or upstream URL alone is
+insufficient. Preserve upstream multi-license/component distinctions.
+
+Extend the existing **offline About engine and bundled-component licenses** and
+package notice/source outputs to cover every added component. The license view
+must work without login, a running backend or a network connection. Include the
+guest customization/runtime notices in its installed packages and make the
+container component inventory available through the existing license surface;
+retain distro package copyright files. Reconcile the installed artifact inventory
+against the generated notices/source manifests on every target, and fail the
+release if a shipped component has no complete attribution/source record. This
+requirement covers existing bundled libraries as well as the new desktop work.
+For the verified runtime pins, retain Podman's Apache-2.0 text and compiled
+dependency notices; crun's GPL-2.0-or-later executable and LGPL-2.1-or-later
+libcrun notices; libocispec's GPLv3 text with its parser-skeleton exception;
+the OCI specifications' Apache-2.0 notices; and the included BLAKE3
+CC0-1.0/Apache-2.0 license choices. Inventory actual selected linkage rather
+than assigning the top-level project's license to all of its dependencies.
 
 Build Linux amd64/arm64 and Android/Termux aarch64/x86_64 components with their
 correct libc, ABI, prefixes and native dependencies. A Linux `.deb` cannot be
@@ -1101,7 +1195,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 
 | Gate | Work | Required evidence before proceeding |
 | --- | --- | --- |
-| 1. Sources and runtime contracts | Pin donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Reproducible component inputs, no unexpected system runtime selection; Pi API/packaging checks. |
+| 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
 | 4. Shared desktop package | One bottom taskbar/Start menu without launcher dock or default shortcuts, maximize policy, two-app action/divider, direct scaling and dark appearance for Linux/Termux; Linux Thunar app installation/registration. | Matching fresh-profile layouts plus real apps, dialogs, input, geometry and scale changes; direct/extracted AppImages, guest passwordless APT and menu/shortcut management. |
@@ -1165,6 +1259,7 @@ without confusing that development disk with the product machine data layout.
 | Local vs remote | Container socket works without Tor; publishing and a real saved-remote client still use existing encrypted/authenticated route; remote has no Display streaming option. |
 | CUA scope | Screenshot/input/accessibility target the guest/Termux desktop and actual apps; host native Agent/auth UI and unrelated host desktop are not exposed by the new display connection. |
 | Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |
+| Source/license completeness | Reconcile each actual artifact's direct/transitive components with tracked source, exact release commits, locks, patches and full notices. Include Podman/crun/helpers, SheetJS/other JS, X11/XFCE/Garcon and donor assets. A missing source/license or mismatched cache blocks release; offline About/package notices and matching published source archives work on every target. |
 
 Record the exact candidate commit, platform, renderer and result for every gate.
 The unproven engineering points are the Linux native frame receiver/gateway

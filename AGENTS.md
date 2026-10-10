@@ -57,6 +57,15 @@ Reuse the donor helper functions and Buzzard's Thunar integration with one
 implementation; no GNOME/Nautilus dependency, host installation or native Termux
 Debian-package path. Keep all work off UI threads and preserve user custom actions.
 No shortcuts/dock are preseeded; explicit Add to Desktop remains available.
+Track in this repository the release sources for everything we build/bundle,
+including private Podman/crun/helpers and SheetJS/other JavaScript components.
+Use latest official releases within the selected supported line, exact peeled
+commits and source checksums; builds consume committed pins, never moving refs.
+Materialize required dependency sources, keep patches/locks/provenance and full
+licenses/notices, and preserve the compact Firefox history policy. Extend the
+existing offline About/package license and matching source-archive delivery to
+all direct/transitive components in the expanded app and container packages.
+Missing source, provenance or full license texts must block release preparation.
 Merge needed BuzzardOS code directly into BashKitten; do not maintain a separate
 Buzzard product boundary. Write only necessary code, reuse existing helpers and
 owners, remove replaced paths and preserve source attribution/licenses.
