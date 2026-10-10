@@ -65,6 +65,10 @@ and native Termux counterpart (`bashkitten-os` package identifier). Install its
 BashKitten OS settings app in Applications and pin it by default in new desktop
 profiles. Reuse existing scaling/two-app settings; retain later user pin/unpin
 choices. This is the customization package within BashKitten, not a separate OS.
+Its settings include a persistent per-environment Dark/Light preference for
+applications to read through standard session/toolkit/portal settings. Keep
+BashKitten OS's own dark/orange colors and user wallpaper unchanged; do not alter
+the host's preference or force all apps dark with global theme overrides.
 Automatically match guest display resolution to the actual Firefox Display tab
 viewport on desktop and Android, including window/sidebar resizing, rotation
 and keyboard insets. Preserve the user's independent desktop scaling choice;

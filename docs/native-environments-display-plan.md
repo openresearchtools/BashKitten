@@ -833,7 +833,8 @@ PeGPU account assumptions, login-time install scripts or repeated settings reset
 Install one native **BashKitten OS** application entry with the existing
 BashKitten icon. It opens this environment's customization settings, including
 the PeGPU-derived scaling controls and the requested optional two-app layout
-setting. Reuse the same settings/helper implementation described below; do not
+setting, plus the application Dark/Light preference below. Reuse the same
+settings/helper implementation described below; do not
 add a second configuration store or duplicate controls. Ordinary XFCE appearance
 and wallpaper settings continue to work and retain user changes. Container
 lifecycle, launch commands and remote sharing stay in their existing native
@@ -847,6 +848,38 @@ not reinsert it on every launch. The settings app is still listed/searchable
 when unpinned. Its own app/menu entry and settings operations must remain
 responsive, with expensive work delegated asynchronously as elsewhere in the
 desktop package.
+
+### Dark and Light preference for applications
+
+Add a simple **Dark / Light** choice to BashKitten OS settings on both Linux
+containers and Termux. This is the desktop session's advertised system/application
+preference; BashKitten OS's own dark/orange panel, Start menu, settings styling,
+Thunar customization, icons and wallpaper keep their existing colors. Changing
+the preference must not recolor or reset those assets or change the host Linux
+or Android system setting. Applications decide whether to follow the preference.
+
+Persist the choice per environment using the existing settings owner. Default
+new unset profiles to Dark; retain a saved choice across session restarts and
+package upgrades. No automatic/scheduled mode or additional theme editor is
+requested.
+
+Expose the choice through the standard
+[XDG Settings portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Settings.html):
+`org.freedesktop.appearance` / `color-scheme`, with unsigned value **1 for Dark**
+and **2 for Light**, and emit `SettingChanged` on a user change. Use the session's
+XFCE/toolkit settings integration and a matching native portal backend; verify
+the pinned backend exports this preference on both Linux and Termux. Reuse or
+narrowly adapt that settings path, without pulling in a GNOME desktop or adding
+a parallel preferences daemon/store. Keep its dependencies in the source/license
+inventory. The guest session owns this value, not a forwarded host portal.
+
+Keep toolkit preference paths consistent with that saved choice while preserving
+the explicitly styled BashKitten surfaces. Scope our custom styling to its
+intended components; do not force all third-party apps dark through a global
+`GTK_THEME`, broad CSS override or theme reset that defeats Light. Apply changes
+asynchronously through settings notifications, with no polling or app restarts
+forced by BashKitten. Apps that do not follow system appearance can retain their
+own theme; do not promise universal live switching.
 
 ### One bottom taskbar on both platforms
 
@@ -1833,6 +1866,7 @@ without confusing that development disk with the product machine data layout.
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
 | XFCE layout | Fresh Termux and Linux desktops have one bottom taskbar containing only an Applications button with the proportionally sized BashKitten icon and normal running-window buttons. No XFCE menu icon, clock/date, network or other status widget, tray, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Window switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
 | BashKitten OS settings | Correct native package installs the BashKitten OS application/icon and seeds its Start pin once. Open it to change scaling/two-app settings in the owning environment; operations stay responsive and persisted. Unpin/reorder it, restart and upgrade: the user's choice survives, and the app remains searchable. Host/container-sharing controls are not duplicated here. |
+| Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. BashKitten's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. |
 | Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. |
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
