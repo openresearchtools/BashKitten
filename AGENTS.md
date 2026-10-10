@@ -58,6 +58,10 @@ an alphabetical left-to-right wrapping icon/title grid with vertical scrolling.
 Reuse Gnozzard's simple search/pin/launch actions and exact dark/orange colors
 for panel, Start, desktop defaults and Thunar. Preserve user wallpaper/placement
 and appearance changes across launch, scaling, rotation, restart and upgrades.
+The default wallpaper is #202225 with the existing transparent BashKitten logo
+centered proportionally: shrink to fit when needed, never exceed its native
+1254 × 1254 resolution. Keep the Applications button text-only and preserve any
+subsequent user-selected wallpaper.
 This replaces the earlier built-in popup/Garcon patch and Firefox-gray palette;
 pins belong inside Start, not the taskbar. All loading/search/helper work remains
 nonblocking. Use the shared GTK package, not GNOME Shell or a second desktop shell.

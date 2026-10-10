@@ -67,9 +67,11 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   pinned taskbar shortcuts and default desktop shortcut icons.
 - The desktop customization package provides PeGPU's scaling functions directly,
   Gnozzard's exact dark/orange palette for the taskbar, background, Start menu
-  and Thunar, plus Xfce Terminal. Preserve later user wallpaper/appearance
-  choices. PeGPU's initialization scripts and the old Buzzard shell/CUA stack
-  are not imported.
+  and Thunar, plus Xfce Terminal. The default desktop background is the same
+  dark color with the existing BashKitten logo centered, never enlarged beyond
+  its native image resolution. Preserve later user wallpaper/appearance choices.
+  PeGPU's initialization scripts and the old Buzzard shell/CUA stack are not
+  imported.
 - Linux container desktops also retain Gnozzard's application installation and
   registration functions through Thunar: AppImage running with or without
   persistent extraction, `.deb` installation with dependency resolution and
@@ -940,7 +942,7 @@ and [`data/90_gnozzard.gschema.override`](https://github.com/openresearchtools/g
 | --- | --- |
 | Taskbar/panel | `#282828` |
 | Start menu surface | `#222222` |
-| Initial plain desktop background | `#202225` |
+| Initial desktop background behind the centered BashKitten logo | `#202225` |
 | Hover | `#3f3f3f` |
 | Orange focus/selection/active indicator | `#ff7139` |
 | Normal / subdued text | `#ffffff` / `#c8c8c8` |
@@ -954,11 +956,25 @@ Gnozzard supplies shell CSS and icons, not a ready-made Thunar/GTK body theme:
 the small GTK3/Xfwm adaptation is part of our package. Do not substitute the
 earlier Firefox-gray palette or another approximate orange.
 
+The default XFCE wallpaper on both platforms uses that `#202225` background and
+the current transparent kitten-with-glasses logo from
+`browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png`
+(1254 × 1254 source pixels), preserving its branding license. Center it horizontally
+and vertically with its aspect ratio intact. Keep the chosen display size at or
+below the original dimensions in physical pixels, including at high DPI;
+shrink it proportionally to fit a smaller
+viewport, but never stretch, crop, tile or upscale it to fill a larger screen.
+Use the original asset rather than enlarging a small generated app icon. Perform
+any default-wallpaper sizing off the UI thread and only while this managed
+default is selected. The logo belongs to the wallpaper; the Applications button
+remains text-only.
+
 Preserve Gnozzard's defaults-only wallpaper principle: it supplies an initial
 solid background through schema defaults and does not overwrite the user's
 desktop wallpaper during launch. Translate that to packaged XFCE defaults,
-seeding only unset values in the owned desktop profile. Thereafter the user's
-chosen image, image placement and appearance settings remain authoritative.
+seeding our centered-logo default only in an unset owned desktop profile.
+Thereafter the user's chosen image, image placement and appearance settings
+remain authoritative.
 Opening Start/Display, launching apps, scaling, rotation, desktop restart and
 package upgrades must not clear or repaint over that choice. Do not copy the
 donor's unrelated lock-screen handling or run settings-reset shell scripts.
@@ -1381,7 +1397,7 @@ without confusing that development disk with the product machine data layout.
 | XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; launcher reflows and the exact Gnozzard palette remains consistent; restart-needed apps are reported truthfully; no startup script resets user edits. |
-| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. |
+| Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. The default wallpaper centers the existing BashKitten logo proportionally over #202225, shrinking when needed and never exceeding its 1254 × 1254 native pixels, including on high-DPI/large screens. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |
 | Project working directory | Create a project through the modal on each backend, then create multiple chats beneath it without another folder prompt and verify their actual Pi cwd. Cancel leaves no project; missing/inaccessible directories report an error. Standalone new chats retain current behavior; reopening or regrouping existing chats preserves their recorded cwd. |
