@@ -33,6 +33,10 @@ backend heading; container headings also have Settings and a window/Display
 button opening their full native viewport. Remote headings have connection
 on/off/disconnect/delete only, no Display path/button or settings. Remote Off
 disconnects the client, not the remote host. Impose no arbitrary container count.
+Project creation uses a modal folder picker on its owning backend and stores the
+selected working directory. New chats under that project inherit it automatically;
+standalone chat folder/default logic stays unchanged. Regrouping or reopening an
+existing chat never rewrites its native Pi cwd/history.
 Merge needed BuzzardOS code directly into BashKitten; do not maintain a separate
 Buzzard product boundary. Write only necessary code, reuse existing helpers and
 owners, remove replaced paths and preserve source attribution/licenses.

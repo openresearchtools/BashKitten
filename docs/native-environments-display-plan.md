@@ -30,6 +30,9 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   Remove the large Local/remote/container dropdown. Environment names, project
   names and chat titles are editable; no chat is required to belong to a project.
   There is no arbitrary limit on the number of containers a user can create.
+  Creating a project opens a folder-picker modal to choose its working directory;
+  new chats created under that project inherit the directory automatically.
+  Standalone chats retain their current folder-selection/default behavior.
 - Selecting a chat opens the existing shared chat UI. The native hierarchy owns
   navigation; the web UI becomes the opened chat, retaining transcript, composer,
   reasoning/tool streaming, subagents, Files/Changes and existing chat functions.
@@ -279,7 +282,7 @@ introducing another transcript database:
 | Identity | Meaning and owner |
 | --- | --- |
 | Environment ID | Stable native catalogue identity for Local, a local container or a saved remote; separate from its editable name and current socket/port. |
-| Project ID | Optional stable grouping record on the owning backend, with an editable name. An absent project ID means a chat directly under that backend; it does not replace a working directory. |
+| Project ID | Optional stable record on the owning backend, with an editable name and selected working directory for new chats. An absent project ID means a standalone chat directly under that backend. Existing sessions retain their own recorded cwd. |
 | Chat reference | Environment ID plus the existing BashKitten session ID; backend resolves its existing native Pi session reference. |
 | Chat title | Pi's native session name through supported RPC; existing metadata is only its UI index. |
 
@@ -292,6 +295,35 @@ Keep subagent parent/child references and queue/edit ownership intact. Future
 calling hooks resolve the same stable environment/chat references; display names
 must never become call-routing keys. Calling, contact, STT/TTS and phone-hook
 implementation remain the separate calling work, not additions to this feature.
+
+### Project creation and inherited working directory
+
+Creating a project opens a modal folder picker using the existing working-folder
+browsing/validation code. The user selects a directory on the **owning backend**:
+Local's filesystem, the selected container's filesystem or the selected remote's
+filesystem. A host path is not substituted for a guest or remote path. Save the
+validated directory with the project's ID/name; cancelling the modal creates no
+project. This selects an existing working directory, not a requirement to create
+a repository, clone one or install dependencies.
+
+New chats created under that project automatically use its saved directory as
+the cwd passed to the existing stock Pi new-session flow. Do not ask the user to
+choose it again or silently use the backend's standalone default instead. Recheck
+that the directory is still permitted and usable when creating the chat; show
+the actual error if it has disappeared or is inaccessible, with no substituted
+directory. Keep folder listing/validation asynchronous and cancellable, using
+the selected backend's existing authorization and platform folder scope.
+Keep Termux choices within writable home directories and Linux choices within
+home/explicitly configured project roots. The remote folder picker retains the
+existing file-manager permission and live revocation checks; project creation
+does not bypass them. Save/create validates the exact directory without the
+folder browser's optional nearest-parent fallback.
+
+Standalone chats keep exactly the current new-chat folder/default logic. Opening
+an existing chat restores Pi's recorded cwd. Moving an existing chat into or out
+of a project remains a grouping operation and does not rewrite that session's
+cwd/history; automatic directory inheritance applies to **new** project chats.
+Project creation does not change the backend's global default working directory.
 
 Native controls call the existing session operations through the selected
 backend's authorized connection. Project metadata operations use that same
@@ -872,7 +904,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
 | 4. Shared desktop package | Maximize policy, two-app taskbar action/divider, direct scaling and dark appearance for Linux/Termux. | Real apps, dialogs, input, geometry and scale changes on both platforms. |
-| 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects and ungrouped chats, rename/move, selected-chat web view. | Existing histories/cwd unchanged by grouping; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
+| 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling. | Installed native user flows plus recorded missing hardware coverage; no release claim based on a dispatched build. |
 
@@ -925,6 +957,7 @@ without confusing that development disk with the product machine data layout.
 | Scaling | Saved profiles update owned XFCE settings and new app launches; browser palette matches; restart-needed apps are reported truthfully; no startup script resets user edits. |
 | Sidecar/backend controls | One + routes to remote setup or Linux container creation; every container heading opens its own full Display tab and Settings; individual toggles affect only their backend; remotes have no Display/settings; no large selector or artificial machine-count cap. |
 | Projects/sessions | Create chats with no project on every backend; create/rename projects, rename chats, move chats into/between/out of projects, retain subagents and reconnect; same native Pi history/cwd and correct effective model/reasoning/draft/queue ownership. |
+| Project working directory | Create a project through the modal on each backend, then create multiple chats beneath it without another folder prompt and verify their actual Pi cwd. Cancel leaves no project; missing/inaccessible directories report an error. Standalone new chats retain current behavior; reopening or regrouping existing chats preserves their recorded cwd. |
 | Local vs remote | Container socket works without Tor; publishing and a real saved-remote client still use existing encrypted/authenticated route; remote has no Display streaming option. |
 | CUA scope | Screenshot/input/accessibility target the guest/Termux desktop and actual apps; host native Agent/auth UI and unrelated host desktop are not exposed by the new display connection. |
 | Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |
