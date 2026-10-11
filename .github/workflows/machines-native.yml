@@ -1,0 +1,144 @@
+name: Native environments components
+'on':
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    env:
+      GOTELEMETRY: 'off'
+      DO_NOT_TRACK: '1'
+      RUSTUP_TOOLCHAIN: 1.96.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: agent/machines/vendor/podman/source/go.sum
+      - name: Install native component build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config libcap-dev libseccomp-dev libsystemd-dev libjson-c-dev meson ninja-build libprotobuf-dev protobuf-compiler libgpgme-dev libapparmor-dev libbpf-dev libxkbcommon-dev libdrm-dev libgbm-dev libegl-dev libgles-dev python3 dpkg-dev
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/machines-cache
+            ${{ runner.temp }}/display-cache
+          key: native-environments-${{ matrix.architecture }}-${{ hashFiles('agent/packaging/machines/**', 'agent/machines/vendor/**/source.json', 'agent/machines/license-supplements/**', 'browser/bashkitten/display/**') }}
+          restore-keys: native-environments-${{ matrix.architecture }}-
+      - name: Build private engine and display from tracked sources
+        run: |
+          python3 agent/packaging/machines/build.py --architecture ${{ matrix.architecture }} --work "$RUNNER_TEMP/machines-cache" --output "$RUNNER_TEMP/machines" --jobs 2
+          python3 browser/bashkitten/display/build.py --work-dir "$RUNNER_TEMP/display-cache" --output "$RUNNER_TEMP/display"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: machines-runtime-linux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/machines/
+          if-no-files-found: error
+          compression-level: 0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: display-runtime-linux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/display/
+          if-no-files-found: error
+          compression-level: 0
+  guest:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: amd64
+            runner: ubuntu-24.04
+          - architecture: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/guest-cache
+          key: guest-native-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/machines/guest/**', 'agent/machines/build-guest.py') }}
+          restore-keys: guest-native-${{ matrix.architecture }}-
+      - name: Build guest packages against the pinned Debian guest ABI
+        env:
+          ARCH: ${{ matrix.architecture }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          rustup toolchain install 1.96.0 --profile minimal
+          image=$(python3 -c 'import json; print(json.load(open("agent/machines/image-base.json"))["image"])')
+          mkdir -p "$RUNNER_TEMP/guest-cache" "$RUNNER_TEMP/guest-packages"
+          docker run --rm --network=bridge -v "$GITHUB_WORKSPACE:/source:ro" -v "$RUNNER_TEMP/guest-cache:/cache" -v "$RUNNER_TEMP/guest-packages:/output" -v "$HOME/.rustup:/rustup:ro" -v "$HOME/.cargo/bin:/rust-bin:ro" -e ARCH -e SOURCE_COMMIT -e RUSTUP_HOME=/rustup -e RUSTUP_TOOLCHAIN=1.96.0 "$image" sh -ec '
+            export DEBIAN_FRONTEND=noninteractive PATH=/rust-bin:$PATH
+            apt-get update
+            apt-get install -y --no-install-recommends build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev gobject-introspection libgirepository1.0-dev libdisplay-info-dev
+            version=$(cat /source/browser/bashkitten/config/version.txt)
+            python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$version" --source-commit "$SOURCE_COMMIT" --output /output --build-dir /cache/os --jobs 2
+            python3 /source/agent/machines/build-guest.py --architecture "$ARCH" --version "$version" --revision "$SOURCE_COMMIT" --output /output --work /cache/guest
+          '
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: guest-packages-linux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/guest-packages/
+          if-no-files-found: error
+          compression-level: 0
+  termux_os:
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [aarch64, x86_64]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/termux-os
+          key: termux-os-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/packaging/termux/os.py', 'agent/packaging/node/lock.json') }}
+          restore-keys: termux-os-${{ matrix.architecture }}-
+      - name: Build native Termux desktop customization
+        run: python3 agent/packaging/termux/os.py --architecture ${{ matrix.architecture }} --work "$RUNNER_TEMP/termux-os" --output "$RUNNER_TEMP/packages"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: os-termux-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/packages/
+          if-no-files-found: error
+          compression-level: 0
+  termux_display:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build loader paired with the established APK publisher
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-37.0' 'build-tools;37.0.0'
+          signer=$(python3 -c 'import sys;sys.path.insert(0,"agent/packaging");from release import CERT;print(CERT)')
+          python3 browser/mobile/android/bashkitten/display/loader/build.py \
+            --jdk "$JAVA_HOME_17_X64" --android-jar "$ANDROID_HOME/platforms/android-37.0/android.jar" \
+            --d8 "$ANDROID_HOME/build-tools/37.0.0/d8" --package com.bashkitten --signer "$signer" --output "$RUNNER_TEMP/loader"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: display-loader-termux
+          path: |
+            ${{ runner.temp }}/loader/bashkitten-x11
+            ${{ runner.temp }}/loader/bashkitten-x11-loader.jar
+            ${{ runner.temp }}/loader/manifest.json
+            ${{ runner.temp }}/loader/licenses/
+          if-no-files-found: error
+          compression-level: 0

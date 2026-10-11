@@ -4,6 +4,7 @@
 set -euo pipefail
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
 root=$(cd "$(dirname "$0")/../.." && pwd)
+source "$root/auth/build/go-env.sh"
 output=$(realpath -m "${1:?output directory required}")
 test -d "${ANDROID_HOME:?Android SDK required}/platforms/android-31"
 test -f "${ANDROID_NDK_HOME:?Android NDK required}/source.properties"

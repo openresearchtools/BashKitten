@@ -5,6 +5,7 @@ set -euo pipefail
 source_dir=$(realpath "${1:?source directory required}")
 output=$(realpath -m "${2:?output executable required}")
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+source "$root/auth/build/go-env.sh"
 commit=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["authelia"]["commit"])' "$root/auth/upstreams.lock.json")
 version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["authelia"]["version"])' "$root/auth/upstreams.lock.json")
 cd "$source_dir"

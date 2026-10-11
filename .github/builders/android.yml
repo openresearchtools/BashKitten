@@ -20,6 +20,9 @@ run-name: BashKitten ${{ inputs.source_sha }} / ${{ inputs.request_id }}
       node_run:
         required: true
         type: string
+      environments_run:
+        required: true
+        type: string
 permissions:
   contents: read
   actions: read
@@ -156,7 +159,7 @@ jobs:
     - name: Build the native remote client
       run: |
         export ANDROID_HOME="$MOZBUILD_STATE_PATH/android-sdk-linux"
-        "$ANDROID_HOME/cmdline-tools/20.0/bin/sdkmanager" 'platforms;android-31'
+        "$ANDROID_HOME/cmdline-tools/20.0/bin/sdkmanager" 'platforms;android-31' 'cmake;3.22.1'
         bash auth/build/remote-android.sh "$RUNNER_TEMP/remote-android"
         echo "BASHKITTEN_REMOTE_CLIENT_DIR=$RUNNER_TEMP/remote-android" >> "$GITHUB_ENV"
       if: (success()) && steps.component.outputs.hit != 'true'
@@ -179,8 +182,9 @@ jobs:
         AUTH_RUN: ${{ inputs.auth_run || github.run_id }}
         SEARCH_RUN: ${{ inputs.search_run || github.run_id }}
         NODE_RUN: ${{ inputs.node_run || github.run_id }}
+        ENVIRONMENTS_RUN: ${{ inputs.environments_run || github.run_id }}
       run: |
-        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH"; do
+        for item in "auth:$AUTH_RUN:auth-termux-$TERMUX_ARCH" "search:$SEARCH_RUN:search-runtime-termux-$TERMUX_ARCH" "node:$NODE_RUN:node-runtime-termux-$TERMUX_ARCH" "display:$ENVIRONMENTS_RUN:display-loader-termux" "os:$ENVIRONMENTS_RUN:os-termux-$TERMUX_ARCH"; do
           IFS=: read -r target run artifact <<< "$item"
           ready=false
           for attempt in $(seq 1 60); do
@@ -196,6 +200,8 @@ jobs:
           --auth-archive "$RUNNER_TEMP/companion/auth/auth-termux-$TERMUX_ARCH.tar.gz" \
           --search-archive "$RUNNER_TEMP/companion/search/search-runtime-termux-$TERMUX_ARCH.tar.zst" \
           --node-archive "$RUNNER_TEMP/companion/node/node-runtime-termux-$TERMUX_ARCH.tar.gz" \
+          --termux-display-dir "$RUNNER_TEMP/companion/display" \
+          --os-package "$(find "$RUNNER_TEMP/companion/os" -maxdepth 1 -name '*.deb')" \
           --output "$BASHKITTEN_COMPANION_LICENSES"
       if: (success()) && steps.component.outputs.hit != 'true'
     - name: Assemble the release browser

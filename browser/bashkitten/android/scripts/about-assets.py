@@ -5,6 +5,7 @@ import argparse
 import json
 import importlib.util
 import os
+import re
 from pathlib import Path
 import subprocess
 
@@ -18,6 +19,31 @@ companion = Path(os.environ['BASHKITTEN_COMPANION_LICENSES'])
 records = json.loads(companion.read_text())
 if not isinstance(records, list) or not records:
     raise SystemExit('The companion package license inventory is empty')
+# Native in-APK adaptations do not appear in Maven's dependency inventory.
+def source_notice(name, directory, metadata, extra=()):
+    paths = sorted(p for p in directory.rglob('*') if p.is_file() and
+                   re.match(r'^(licen[cs]e|copying|notice|copyright|ftl|gpl)([._-]|$)', p.name, re.I))
+    paths.extend(extra)
+    if not paths:
+        raise SystemExit('Missing full native module license: ' + name)
+    text = '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)
+    records.append({'name': name, 'license': 'See individual component licenses',
+                    'text': json.dumps(metadata, indent=2) + '\n\n' + text})
+
+phone = root / 'agent/native/phone-control'
+source_notice('BashKitten Phone controls — adapted Android controls', phone,
+              json.loads((phone / 'ORIGIN.json').read_text()))
+phony = root / 'agent/vendor/phony'
+source_notice('BashKitten Telephony — adapted Phony', phony,
+              json.loads((phony / 'UPSTREAM.json').read_text()),
+              [root / 'browser/mobile/android/bashkitten/telephony/NOTICE'])
+x11 = root / 'browser/bashkitten/vendor/termux-x11'
+x11_pin = json.loads((x11 / 'source.json').read_text())
+records.append({'name': 'Termux:X11 — embedded native Display adaptation', 'license': 'GPL-3.0-only',
+                'text': json.dumps(x11_pin, indent=2) + '\n\n' + (x11 / 'source/LICENSE').read_text()})
+for dependency in x11_pin['dependencies']:
+    source_notice('Embedded Display: ' + dependency['path'].rsplit('/', 1)[-1],
+                  x11 / 'source' / dependency['path'], dependency)
 remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
 remote_licenses = remote / 'share/licenses/remote-client'
 remote_modules = json.loads((remote / 'share/metadata/remote-client-go-modules.json').read_text())

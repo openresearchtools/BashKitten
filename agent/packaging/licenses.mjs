@@ -114,7 +114,7 @@ async function nodeInventory(root, target, architecture) {
   return records;
 }
 
-export async function collectLicenses(root, { target, version, browser } = {}) {
+export async function collectLicenses(root, { target, version, browser, 'backend-only': backendOnly } = {}) {
   root = path.resolve(root);
   if (!['linux', 'termux'].includes(target)) throw Error('Choose the linux or termux package target');
   const auth = await json(path.join(root, 'auth/share/metadata/runtime.json'));
@@ -137,16 +137,31 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
   const integration = await json(path.join(root, 'pi/package.json'));
   const pillama = await json(path.join(root, 'pi/vendor/pillama/package.json'));
   const pillamaSource = await json(path.join(root, 'pi/vendor/pillama.upstream.json'));
+  const usageSource = await json(path.join(root, 'pi/vendor/pi-codex-usage.upstream.json'));
+  if (!/^[0-9a-f]{40}$/.test(usageSource.commit) || usageSource.repository !== 'https://github.com/llblab/pi-codex-usage') throw Error('Invalid ChatGPT usage donor pin');
   if (!/^[0-9a-f]{40}$/.test(pillamaSource.commit) || pillamaSource.repository !== 'https://github.com/openresearchtools/pillama.git') throw Error('Invalid bundled Pillama source pin');
   records.push(...await sourceNotices(path.join(root, 'pi'), 'Pi integration', [
     [integration.name, integration.license, ['LICENSE', 'NOTICE']],
     ['pillama', 'MIT', ['vendor/pillama/NOTICE', 'vendor/pillama/LICENSE'],
       { version: pillama.version, source: `${pillamaSource.repository.slice(0, -4)}/tree/${pillamaSource.commit}` }],
+    ['pi-codex-usage — adapted usage status', 'MIT', ['vendor/pi-codex-usage/LICENSE'],
+      { version: usageSource.release, source: `${usageSource.repository}/tree/${usageSource.commit}` }],
   ]));
   if (target === 'linux') {
     if (!browser) throw Error('The complete Linux package requires its built browser license inventory');
     records.push(...await arrayInventory(path.join(path.resolve(browser), 'notices/licenses.json'), 'Browser'));
-  } else if (browser) throw Error('The Termux package does not bundle the Android browser');
+    if (!backendOnly) {
+      records.push(...await arrayInventory(path.join(root, 'machines/licenses.json'), 'Private container runtime'));
+      records.push(...await arrayInventory(path.join(root, 'machines/guest-licenses.json'), 'Container desktop'));
+      records.push(...await arrayInventory(path.join(root, 'display/licenses.json'), 'Display'));
+    }
+  } else {
+    if (browser) throw Error('The Termux package does not bundle the Android browser');
+    records.push(...await sourceNotices(path.join(root, 'display/licenses'), 'Embedded Display loader', [
+      ['Termux:X11 — adapted paired shell loader', 'GPL-3.0-only', ['Termux-X11-GPL-3.0.txt', 'NOTICE']],
+    ]));
+    records.push(...await arrayInventory(path.join(root, 'os-licenses.json'), 'Termux desktop'));
+  }
   const external = target === 'termux'
     ? 'Termux, Python, Git, GitHub CLI and the declared Termux packages are installed separately, not embedded in this package. Each is governed by its own package license and accompanying notices. The Android BashKitten browser is a separate APK with its own offline About and licenses.'
     : 'Python, GTK, operating-system graphics/audio libraries, Git, GitHub CLI and other declared system dependencies are installed separately. They retain their own package licenses and notices. Optional LocalAI runtimes are downloaded separately with their own native dependency notices; GPU drivers and model weights are not bundled here.';
@@ -163,7 +178,7 @@ export async function collectLicenses(root, { target, version, browser } = {}) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { target: { type: 'string' }, version: { type: 'string' }, browser: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { target: { type: 'string' }, version: { type: 'string' }, browser: { type: 'string' }, 'backend-only': { type: 'boolean' } } });
   if (positionals.length !== 1) throw Error('Usage: licenses.mjs APP_ROOT --target linux|termux [--browser BUILT_BROWSER] [--version VERSION]');
   const records = await collectLicenses(positionals[0], values);
   console.log(`Collected ${records.length} full component notices for ${values.target}`);

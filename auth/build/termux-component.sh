@@ -41,11 +41,7 @@ cleanup() {
   return "$status"
 }
 trap cleanup EXIT
-git -C "$work" init -q
-git -C "$work" remote add origin https://github.com/termux/termux-packages.git
-git -C "$work" fetch -q --depth=1 origin "${pin[0]}"
-git -C "$work" checkout -q --detach FETCH_HEAD
-[[ $(git -C "$work" rev-parse HEAD) == "${pin[0]}" ]]
+python3 "$root/auth/build/retained-sources.py" termux --commit "${pin[0]}" --output "$work"
 package="bashkitten-$component-native"
 mkdir -p "$work/packages/$package" "$work/bashkitten-sources/$component"
 cp -a "$recipe/." "$work/packages/$package/"

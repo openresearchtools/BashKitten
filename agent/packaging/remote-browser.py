@@ -33,6 +33,7 @@ def main():
     parser.add_argument('--auth-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--search-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--node-run', default=os.environ.get('GITHUB_RUN_ID', ''))
+    parser.add_argument('--environments-run', default=os.environ.get('GITHUB_RUN_ID', ''))
     parser.add_argument('--warm-gkrust', choices=['true', 'false'], default='false')
     args = parser.parse_args()
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
@@ -44,6 +45,9 @@ def main():
         if not re.fullmatch('[0-9]+', run):
             raise ValueError('Build requires the source component run IDs')
     inputs.update(auth_run=args.auth_run, search_run=args.search_run, node_run=args.node_run)
+    if not re.fullmatch('[0-9]+', args.environments_run):
+        raise ValueError('Build requires native environment component run ID')
+    inputs['environments_run'] = args.environments_run
     if not args.target.startswith('android'):
         inputs['warm_gkrust'] = args.warm_gkrust
     endpoint = f'repos/{repository}/actions/workflows/build.yml'

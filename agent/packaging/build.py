@@ -96,6 +96,138 @@ def install_node(archive, app, platform, architecture):
     require(isinstance(metadata.get('depends'), list), 'Node component must declare external OS dependencies')
     return {'archive': archive.name, 'sha256': digest, 'metadata': metadata}
 
+
+def install_machines(args, app, revision, version):
+    require(args.machines_archive is not None, 'Linux desktop packages require --machines-archive')
+    digest = checked_archive(args.machines_archive)
+    with tempfile.TemporaryDirectory(prefix='machines-input-', dir=app.parent) as incoming:
+        extract(args.machines_archive, Path(incoming))
+        require({p.name for p in Path(incoming).iterdir()} == {'machines'}, 'Unexpected machine runtime archive root')
+        shutil.move(str(Path(incoming) / 'machines'), app / 'machines')
+    root = app / 'machines'; metadata = read_json(root / 'manifest.json')
+    require(metadata.get('schema') == 1 and metadata.get('platform') == 'linux' and
+            metadata.get('architecture') == args.architecture, 'Private Podman target mismatch')
+    require(metadata.get('sourceCommit') == revision, 'Machine runtime must be prepared for this source revision')
+    helpers = ['podman', 'rootlessport', 'crun', 'conmon', 'netavark', 'aardvark-dns',
+               'pasta', 'passt', 'pesto', 'fusermount3', 'fuse-overlayfs', 'catatonit']
+    if args.architecture == 'amd64': helpers += ['passt.avx2', 'pasta.avx2']
+    for name in helpers:
+        require(os.access(root / 'bin' / name, os.X_OK) and
+                sha(root / 'bin' / name) == metadata['executables'].get(name), 'Missing/mismatched private helper: ' + name)
+    require(metadata.get('libraries') and 'libfuse3.so.4' in metadata['libraries'],
+            'Private FUSE library is required')
+    for name, digest in metadata['libraries'].items():
+        require(Path(name).name == name and sha(root / 'lib' / name) == digest,
+                'Missing/mismatched private library: ' + name)
+    require((root / 'licenses.json').is_file() and isinstance(metadata.get('depends'), list),
+            'Machine runtime requires licenses and external dependency metadata')
+    for name in ['image', 'libexec']:
+        require((ROOT / 'machines' / name).is_dir(), 'Missing machine integration payload: ' + name)
+        shutil.copytree(ROOT / 'machines' / name, root / name, dirs_exist_ok=True,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    for name in ['NOTICE', 'image-base.json']:
+        shutil.copy2(ROOT / 'machines' / name, root / name)
+    require(args.guest_packages is not None, 'Linux desktop packages require matching --guest-packages')
+    packages = root / 'image/packages'; packages.mkdir(parents=True, exist_ok=True)
+    expected = {'bashkitten-backend', 'bashkitten-os', 'bashkitten-machines-guest'}
+    found = {}; records = []; guest_licenses = []
+    for deb in sorted(args.guest_packages.rglob('*.deb')):
+        fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture'], text=True)
+        info = dict(line.split(': ', 1) for line in fields.splitlines())
+        name = info['Package']
+        require(name in expected and name not in found, 'Unexpected or duplicate guest package: ' + name)
+        require(info['Version'] == version and info['Architecture'] == args.architecture,
+                'Guest package version/architecture mismatch: ' + name)
+        provenance = read_json(Path(str(deb) + '.json'))
+        require(provenance.get('revision', provenance.get('sourceCommit')) == revision,
+                'Guest package source revision mismatch: ' + name)
+        checksum = sha(deb)
+        if provenance.get('sha256'):
+            require(provenance['sha256'] == checksum, 'Guest package checksum mismatch: ' + name)
+        else:
+            require(Path(str(deb) + '.sha256').read_text().split()[0] == checksum,
+                    'Guest package checksum mismatch: ' + name)
+        shutil.copy2(deb, packages / deb.name); found[name] = deb.name
+        records.append({'package': name, 'file': deb.name, 'sha256': checksum, 'provenance': provenance})
+        if name != 'bashkitten-backend':
+            with tempfile.TemporaryDirectory(prefix='guest-notices-', dir=app.parent) as extracted:
+                run(['dpkg-deb', '-x', str(deb), extracted])
+                notice_root = Path(extracted) / ('usr/share/bashkitten-os' if name == 'bashkitten-os'
+                                                else 'usr/share/doc/bashkitten-machines-guest')
+                notices = sorted(p for p in notice_root.rglob('*') if p.is_file() and
+                                 (re.search(r'license|licence|copying|copyright|notice', p.name, re.I)))
+                require(notices, 'Missing full guest package license texts: ' + name)
+                guest_licenses.append({'name': name, 'version': version, 'source':
+                    'https://github.com/openresearchtools/bashkitten/tree/' + revision,
+                    'text': '\n\n'.join(str(p.relative_to(notice_root)) + '\n' + p.read_text() for p in notices)})
+    require(set(found) == expected, 'Guest image needs backend, BashKitten OS and guest-service packages')
+    write_json(packages / 'manifest.json', {'schema': 1, 'revision': revision,
+               'architecture': args.architecture, 'version': version, 'packages': records})
+    write_json(root / 'guest-licenses.json', guest_licenses)
+    return {'archive': args.machines_archive.name, 'sha256': digest, 'metadata': metadata}
+
+
+def install_display(args, app, revision):
+    require(args.display_archive is not None, 'Linux desktop packages require --display-archive')
+    digest = checked_archive(args.display_archive)
+    with tempfile.TemporaryDirectory(prefix='display-input-', dir=app.parent) as incoming:
+        extract(args.display_archive, Path(incoming))
+        require({p.name for p in Path(incoming).iterdir()} == {'display'}, 'Unexpected Display archive root')
+        shutil.move(str(Path(incoming) / 'display'), app / 'display')
+    metadata = read_json(app / 'display/manifest.json')
+    require(metadata.get('architecture') == args.architecture and metadata.get('sourceCommit') == revision,
+            'Display component target/source revision mismatch')
+    require(sha(app / 'display/bashkitten-display') == metadata.get('binarySha256'), 'Display executable checksum mismatch')
+    require(isinstance(metadata.get('depends'), list), 'Display must declare native dependencies')
+    (app / 'browser/runtime/display').symlink_to('../../display')
+    return {'archive': args.display_archive.name, 'sha256': digest, 'metadata': metadata}
+
+
+def install_termux_display(args, app, revision, bin_dir):
+    require(args.termux_display_dir is not None, 'Termux requires the paired --termux-display-dir component')
+    source = args.termux_display_dir
+    metadata = read_json(source / 'manifest.json')
+    require(metadata.get('sourceCommit') == revision and metadata.get('package') == 'com.bashkitten',
+            'Termux Display loader package/source revision mismatch')
+    # The same publisher certificate is enforced against final APKs by release.py.
+    from release import CERT
+    signer = CERT
+    if args.development_signing:
+        development = read_json(args.development_signing)
+        require(development.get('publisher_signed') is False and re.fullmatch('[a-f0-9]{64}', development.get('certificate_sha256', '')),
+                'Development pairing requires the explicit local signing receipt')
+        signer = development['certificate_sha256']
+    require(metadata.get('signerSha256') == signer, 'Termux Display loader is paired with a different APK signer')
+    for name in ['bashkitten-x11', 'bashkitten-x11-loader.jar']:
+        require(sha(source / name) == metadata['sha256'].get(name), 'Display loader checksum mismatch: ' + name)
+    display = app / 'display'; display.mkdir(exist_ok=True)
+    shutil.copy2(source / 'bashkitten-x11-loader.jar', display / 'bashkitten-x11-loader.jar')
+    shutil.copytree(source / 'licenses', display / 'licenses')
+    shutil.copy2(source / 'manifest.json', display / 'manifest.json')
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source / 'bashkitten-x11', bin_dir / 'bashkitten-x11')
+    return {'metadata': metadata, 'developmentOnly': bool(args.development_signing)}
+
+
+def collect_termux_os(deb, app, revision, architecture, version):
+    require(deb is not None and deb.is_file(), 'Termux requires matching --os-package')
+    fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture'], text=True)
+    info = dict(line.split(': ', 1) for line in fields.splitlines())
+    require(info == {'Package': 'bashkitten-os', 'Version': version + '-1', 'Architecture': architecture},
+            'Termux OS package target/version mismatch')
+    metadata = read_json(Path(str(deb) + '.json'))
+    require(metadata.get('sourceCommit') == revision and metadata.get('sha256') == sha(deb),
+            'Termux OS package source/hash mismatch')
+    with tempfile.TemporaryDirectory(prefix='termux-os-notices-', dir=app.parent) as temporary:
+        run(['dpkg-deb', '-x', str(deb), temporary])
+        root = Path(temporary) / 'data/data/com.termux/files/usr/share/bashkitten-os'
+        paths = sorted(p for p in root.rglob('*') if p.is_file() and
+                       re.search(r'license|licence|copying|copyright|notice', p.name, re.I))
+        require(paths, 'Termux OS package lacks full license texts')
+        write_json(app / 'os-licenses.json', [{'name': 'BashKitten OS', 'version': version + '-1',
+            'text': '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)}])
+    return metadata
+
 def key_values(path):
     return dict(line.split('=', 1) for line in path.read_text().splitlines()
                 if '=' in line and not line.lstrip().startswith('#'))
@@ -211,6 +343,7 @@ def package_browser(args, app, stage, version, auth):
 
 def assemble(args):
     termux = args.target == 'termux'
+    require(not termux or not args.backend_only, '--backend-only is a native Linux guest package')
     require(args.architecture in (['aarch64', 'x86_64'] if termux else ['amd64', 'arm64']), 'Architecture does not match target')
     require(not termux or args.browser_dir is None, 'The Termux package does not include an Android browser')
     target = args.target + '-' + args.architecture
@@ -236,12 +369,20 @@ def assemble(args):
         stage = Path(temporary) / 'root'
         app = stage / prefix.lstrip('/') / 'lib/bashkitten'
         app.mkdir(parents=True)
-        for folder in ['src/server', 'src/web', 'reference', 'licenses', 'pi']:
+        for folder in ['src/server', 'src/web', 'src/phone', 'reference', 'licenses', 'pi']:
             require((ROOT / folder).is_dir(), f'Missing product payload: {folder}')
             shutil.copytree(ROOT / folder, app / folder,
-                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama') if folder == 'pi'
+                            ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'pillama', 'pi-codex-usage') if folder == 'pi'
                             else shutil.ignore_patterns('__pycache__', '*.pyc'))
         run(['python3', str(ROOT / 'packaging/pi-skills.py'), str(app / 'pi'), args.target])
+        usage_notice = app / 'pi/vendor/pi-codex-usage/LICENSE'
+        usage_notice.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / 'pi/vendor/pi-codex-usage/LICENSE', usage_notice)
+        for role in ['termux-use', 'computer-use']:
+            guide = app / 'pi/desktop-guides' / role / 'SKILL.md'
+            guide.parent.mkdir(parents=True, exist_ok=True)
+            original = (REPOSITORY / 'os/skills/desktop-use/SKILL.md').read_text()
+            guide.write_text(original.replace('name: desktop-use', 'name: ' + role))
         # Keep the complete upstream tree in source releases; install only its
         # declared runtime files, without upstream tests or development tools.
         pillama = ROOT / 'pi/vendor/pillama'
@@ -261,7 +402,12 @@ def assemble(args):
             shutil.copy2(source, app / 'search' / name)
         for name in ['package.json', 'package-lock.json', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'PI_UPSTREAM.md']:
             shutil.copy2(ROOT / name, app / name)
-        command = ['npm', 'ci', '--prefix', str(app), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
+        spreadsheet = app / 'vendor/sheetjs'; spreadsheet.mkdir(parents=True)
+        shutil.copy2(ROOT / 'vendor/sheetjs/xlsx-0.20.3.tgz', spreadsheet / 'xlsx-0.20.3.tgz')
+        npm_cache = Path(temporary) / 'npm-cache'
+        run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(npm_cache)])
+        command = ['npm', 'ci', '--prefix', str(app), '--cache', str(npm_cache), '--offline',
+                   '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund',
                    '--os=' + ('android' if termux else 'linux'), '--cpu=' + ('x64' if args.architecture in {'amd64', 'x86_64'} else 'arm64')]
         require(int(subprocess.check_output(['npm', '--version'], text=True).split('.')[0]) >= 10,
                 'Use npm >=10 for explicit target dependency selection')
@@ -289,9 +435,17 @@ def assemble(args):
             'auth': {'archive': args.auth_archive.name, 'sha256': auth_hash, 'metadata': auth_meta},
             'search': {'archive': args.search_archive.name, 'sha256': search_hash, 'metadata': search_meta},
         }
+        if termux:
+            components['display'] = install_termux_display(args, app, revision, stage / prefix.lstrip('/') / 'bin')
+            components['os'] = collect_termux_os(args.os_package, app, revision, args.architecture, version)
         if not termux:
             components['browser'] = package_browser(args, app, stage, version, auth)
+        if not termux and not args.backend_only:
+            components['machines'] = install_machines(args, app, revision, version)
+            components['display'] = install_display(args, app, revision)
         collector = ['node', str(ROOT / 'packaging/licenses.mjs'), str(app), '--target', args.target, '--version', version]
+        if args.backend_only:
+            collector += ['--backend-only']
         if not termux:
             collector += ['--browser', str(app / 'browser')]
         run(collector)
@@ -320,12 +474,18 @@ def assemble(args):
             node_environment += ('if [ "${TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE:-}" != disable ]; then\n'
                                  '  export TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable\n'
                                  '  exec /system/bin/sh "$0" "$@"\nfi\n')
+            node_environment += 'export BASHKITTEN_EXECUTION_ROLE=termux\n'
+        elif args.backend_only:
+            node_environment += 'export BASHKITTEN_EXECUTION_ROLE=container\n'
+        else:
+            node_environment += 'unset BASHKITTEN_EXECUTION_ROLE\n'
         executable(app / 'node/bin/pi', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/rpc/launcher.mjs "$@"\n')
         for name, script, extra in [('bashkittenctl', 'control.mjs', ''), ('bashkitten-web', 'control.mjs', 'start'),
                                     ('bashkitten-pi', 'rpc/launcher.mjs', '')]:
             executable(bin_dir / name, f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/{script} {extra} "$@"\n')
         if termux:
             executable(bin_dir / 'bashkitten-display', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/server/platform/termux/display.mjs "$@"\n')
+            executable(bin_dir / 'phoneuse', f'#!{shell}\n{node_environment}exec {node} {installed_app}/src/phone/phoneuse.mjs "$@"\n')
         executable(bin_dir / 'bashkitten-manager', f'#!{shell}\n{node_environment}export BASHKITTEN_ATTACHED_MANAGER=1\n'
                    f'while :; do\n  {node} {installed_app}/src/server/control.mjs serve\n  code=$?\n'
                    '  [ "$code" -eq 75 ] || exit "$code"\n  sleep 1\ndone\n')
@@ -366,12 +526,15 @@ fi
             profile.write_text('export PI_TELEMETRY=0 PI_OFFLINE=1 GH_TELEMETRY=0 DO_NOT_TRACK=1\n'
                                'export GH_NO_UPDATE_NOTIFIER=1 GH_NO_EXTENSION_UPDATE_NOTIFIER=1\n')
         base_deps = (['python', 'git', 'gh', 'ripgrep', 'fd', 'ca-certificates', 'curl', 'coreutils', 'unzip', 'zip', 'tar',
-                      'x11-repo', 'termux-x11-nightly', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
+                      'x11-repo', 'xkeyboard-config', 'xorg-server-xvfb', 'xorg-xprop', 'xdotool', 'xfce4', 'mesa', 'gtk3', 'dbus', 'libreoffice', 'ttf-dejavu'] if termux else
                      ['python3', 'git', 'gh', 'ripgrep', 'fd-find', 'ca-certificates', 'curl', 'unzip', 'zip', 'tar',
                       'libasound2t64 | libasound2', 'libdbus-glib-1-2', 'libgtk-3-0t64 | libgtk-3-0', 'libx11-xcb1', 'libdbusmenu-glib4', 'libdbusmenu-gtk3-4', 'libgomp1', 'libstdc++6', 'libvulkan1',
                       'libreoffice-writer', 'libreoffice-impress', 'libreoffice-draw', 'fonts-dejavu-core'])
-        depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'], components['node']['metadata']['depends'])
-        replacements = '' if termux else 'Replaces: bashkitten-desktop\nBreaks: bashkitten-desktop\nProvides: bashkitten-desktop\n'
+        depends = dependencies(base_deps, auth_meta['dependencies'], search_meta['depends'], components['node']['metadata']['depends'],
+                               components.get('machines', {}).get('metadata', {}).get('depends', []),
+                               components.get('display', {}).get('metadata', {}).get('depends', []),
+                               [f'bashkitten-os (= {version}-1)'] if termux else [])
+        replacements = '' if termux or args.backend_only else 'Replaces: bashkitten-desktop\nBreaks: bashkitten-desktop\nProvides: bashkitten-desktop\n'
         doc = stage / prefix.lstrip('/') / 'share/doc/bashkitten'
         doc.mkdir(parents=True)
         for name in ['LICENSE', 'PI_UPSTREAM.md', 'THIRD_PARTY_NOTICES.md', 'licenses.json', 'build-platform.json']:
@@ -380,13 +543,14 @@ fi
         write_json(app / 'build-platform.json', stamp)
         shutil.copy2(app / 'build-platform.json', doc / 'build-platform.json')
         size = sum(p.stat().st_size for p in stage.rglob('*') if p.is_file() and not p.is_symlink()) // 1024
-        (control / 'control').write_text(f'Package: bashkitten\nVersion: {package_version}\nArchitecture: {args.architecture}\n'
+        package_name = 'bashkitten-backend' if args.backend_only else 'bashkitten'
+        (control / 'control').write_text(f'Package: {package_name}\nVersion: {package_version}\nArchitecture: {args.architecture}\n'
             'Maintainer: openresearchtools <openresearchtools@gmail.com>\n'
             f'Depends: {", ".join(depends)}\nInstalled-Size: {size}\n{replacements}Section: web\nPriority: optional\n'
             'Homepage: https://bashkitten.com\nDescription: BashKitten browser and native Pi agent\n'
             + (' Native Termux backend, search, authentication and browser controls.\n' if termux else
                ' Firefox-based browser, native Pi backend, search and authentication.\n'))
-        asset = output / f'bashkitten_{package_version}_{args.architecture}.deb'
+        asset = output / f'{package_name}_{package_version}_{args.architecture}.deb'
         run(['dpkg-deb', '--root-owner-group', '-Zzstd', '-z10', '--build', str(stage), str(asset)],
             env={**os.environ, 'SOURCE_DATE_EPOCH': epoch})
         write_json(output / (asset.name + '.json'), {**stamp, 'asset': asset.name, 'sha256': sha(asset), 'depends': depends})
@@ -401,6 +565,13 @@ def main():
     parser.add_argument('--auth-archive', type=Path, required=True)
     parser.add_argument('--search-archive', type=Path, required=True)
     parser.add_argument('--node-archive', type=Path, required=True)
+    parser.add_argument('--machines-archive', type=Path)
+    parser.add_argument('--display-archive', type=Path)
+    parser.add_argument('--termux-display-dir', type=Path)
+    parser.add_argument('--os-package', type=Path)
+    parser.add_argument('--development-signing', type=Path, help='Local acceptance only: explicit APK signing receipt; release rejects this pairing')
+    parser.add_argument('--guest-packages', type=Path)
+    parser.add_argument('--backend-only', action='store_true')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--stage-dir', type=Path)
     args = parser.parse_args()

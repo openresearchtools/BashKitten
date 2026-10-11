@@ -15,7 +15,9 @@ export DO_NOT_TRACK=1 GOTELEMETRY=off GOTOOLCHAIN=local PNPM_DISABLE_SELF_UPDATE
 export NPM_CONFIG_AUDIT=false NPM_CONFIG_FUND=false NPM_CONFIG_UPDATE_NOTIFIER=false
 (
   cd "$work/source/web"
-  pnpm install --frozen-lockfile --ignore-scripts
+  store="${BASHKITTEN_PNPM_STORE:-${RUNNER_TEMP:-/tmp}/bashkitten-pnpm-store}"
+  python3 "$root/auth/build/retained-sources.py" frontend --lock pnpm-lock.yaml
+  pnpm install --offline --trust-lockfile --store-dir "$store" --frozen-lockfile --ignore-scripts
   pnpm build
   pnpm licenses list --prod --json > "$work/frontend-licenses.json"
 )

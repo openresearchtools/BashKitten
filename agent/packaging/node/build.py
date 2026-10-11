@@ -31,6 +31,14 @@ def sha256(path):
 
 def fetch(record, cache):
     name = record['url'].rsplit('/', 1)[-1]
+    tracked = HERE.parents[1] / 'vendor/node' / (record['sha256'] + '-' + name)
+    if tracked.is_file():
+        if sha256(tracked) != record['sha256']:
+            raise RuntimeError('Committed Node source checksum mismatch: ' + name)
+        return tracked
+    source_index = json.loads((HERE.parents[1] / 'vendor/node/sources.json').read_text())['components']
+    if any(item['url'] == record['url'] for item in source_index):
+        raise RuntimeError('Required committed Node source is missing: ' + name)
     result = cache / (record['sha256'] + '-' + name)
     if result.exists() and sha256(result) == record['sha256']:
         return result
@@ -324,9 +332,18 @@ def main():
                     (ndk / 'LLVM-NOTICE').write_bytes(contents.read('android-ndk-r30/toolchains/llvm/prebuilt/linux-x86_64/NOTICE'))
                 (ndk / 'provenance.json').write_text(json.dumps({**item, 'archive_member': member,
                     'member_sha256': sha256(ndk / 'libc++_shared.so')}, indent=2) + '\n')
+                retained = HERE.parents[1] / 'vendor/node/libcxx'
+                inventory = json.loads((retained / 'retained.json').read_text())
+                if sha256(retained / 'SHA256SUMS') != inventory['inventorySha256']:
+                    raise RuntimeError('NDK runtime source inventory mismatch')
+                for line in (retained / 'SHA256SUMS').read_text().splitlines():
+                    expected, relative = line.split('  ', 1)
+                    if sha256(retained / relative) != expected:
+                        raise RuntimeError('NDK runtime source changed: ' + relative)
+                shutil.copytree(retained, source / 'libcxx-corresponding-source')
                 continue
             # Content-addressed filenames avoid collisions and preserve upstream compressed inputs.
-            os.link(downloaded, source / 'archives' / downloaded.name)
+            shutil.copy2(downloaded, source / 'archives' / downloaded.name)
         (source / 'sources.json').write_text(json.dumps(sources, indent=2) + '\n')
         (source / 'component.json').write_text(json.dumps(metadata, indent=2) + '\n')
         source_output = args.output / f'node-source-{identity}.tar.gz'

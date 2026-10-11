@@ -12,6 +12,10 @@ TERMUX_PKG_DEPENDS="python, openssl"
 TERMUX_PKG_BUILD_IN_SRC=true
 TERMUX_PKG_AUTO_UPDATE=false
 
+termux_step_get_source() {
+	python3 "$BASHKITTEN_SOURCE_ROOT/agent/search/build/termux-inputs.py" "$TERMUX_PKG_SRCDIR"
+}
+
 termux_step_pre_configure() {
 	termux_setup_rust
 	export CARGO_BUILD_TARGET="$CARGO_TARGET_NAME"
@@ -37,7 +41,7 @@ termux_step_pre_configure() {
 termux_step_configure() { :; }
 
 termux_step_make() {
-	cargo build --locked --release --target "$CARGO_TARGET_NAME" -p primp-python
+	cargo build --frozen --offline --release --target "$CARGO_TARGET_NAME" -p primp-python
 }
 
 termux_step_make_install() {

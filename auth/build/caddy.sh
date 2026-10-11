@@ -3,6 +3,7 @@ set -euo pipefail
 target=${1:?target required}
 output=$(realpath -m "${2:?output directory required}")
 root=$(cd "$(dirname "$0")/../.." && pwd)
+source "$root/auth/build/go-env.sh"
 [[ ${GITHUB_ACTIONS:-} == true ]] || { echo 'Native builds run in GitHub Actions.' >&2; exit 2; }
 if [[ $target == termux-aarch64 || $target == termux-x86_64 ]]; then
   exec "$root/auth/build/termux-component.sh" caddy "$output" "${target#termux-}"

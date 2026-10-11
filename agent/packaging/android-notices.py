@@ -7,7 +7,7 @@ import shutil
 import subprocess
 import tempfile
 
-from build import checked_archive, extract, install_node
+from build import checked_archive, extract, install_node, install_termux_display, collect_termux_os
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -15,6 +15,9 @@ parser.add_argument('--architecture', choices=['aarch64', 'x86_64'], default='aa
 parser.add_argument('--auth-archive', type=Path, required=True)
 parser.add_argument('--search-archive', type=Path, required=True)
 parser.add_argument('--node-archive', type=Path, required=True)
+parser.add_argument('--termux-display-dir', type=Path, required=True)
+parser.add_argument('--os-package', type=Path, required=True)
+parser.add_argument('--development-signing', type=Path)
 parser.add_argument('--output', type=Path, required=True)
 args = parser.parse_args()
 cpu = 'x64' if args.architecture == 'x86_64' else 'arm64'
@@ -30,9 +33,16 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
         shutil.copy2(ROOT / name, stage / name)
     for name in ('licenses', 'pi', 'search', 'src/server/models/third_party'):
         shutil.copytree(ROOT / name, stage / name, ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'runtime'))
-    subprocess.run(['npm', 'ci', '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=' + cpu], check=True)
+    (stage / 'vendor/sheetjs').mkdir(parents=True)
+    shutil.copy2(ROOT / 'vendor/sheetjs/xlsx-0.20.3.tgz', stage / 'vendor/sheetjs/xlsx-0.20.3.tgz')
+    cache = stage / 'npm-cache'
+    subprocess.run(['python3', str(ROOT / 'packaging/npm-sources.py'), '--cache', str(cache)], check=True)
+    subprocess.run(['npm', 'ci', '--offline', '--cache', str(cache), '--prefix', str(stage), '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund', '--os=android', '--cpu=' + cpu], check=True)
     subprocess.run(['node', str(ROOT / 'src/server/updates/platform-packages.mjs'), str(stage), 'android', cpu], check=True)
     install_node(args.node_archive, stage, 'termux', args.architecture)
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    install_termux_display(args, stage, revision, stage / 'bin')
+    collect_termux_os(args.os_package, stage, revision, args.architecture, version)
     extract(args.auth_archive, stage / 'auth')
     extract(args.search_archive, stage)
     if json.loads((stage / 'auth/share/metadata/runtime.json').read_text())['target'] != target:

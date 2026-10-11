@@ -27,6 +27,8 @@ jobs:
     uses: ./.github/workflows/search-native.yml
   node:
     uses: ./.github/workflows/node-native.yml
+  environments:
+    uses: ./.github/workflows/machines-native.yml
   browser_arm64:
     if: ${{ !inputs.native_only }}
     uses: ./.github/workflows/remote-browser.yml
@@ -56,6 +58,7 @@ jobs:
     - auth
     - search
     - node
+    - environments
     runs-on: ubuntu-24.04
     env:
       PI_TELEMETRY: '0'
@@ -82,13 +85,23 @@ jobs:
       with:
         name: node-runtime-termux-${{ matrix.architecture }}
         path: inputs/node
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: display-loader-termux
+        path: inputs/display
+    - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: os-termux-${{ matrix.architecture }}
+        path: inputs/os
     - name: Assemble native Termux package
       run: |
         python3 agent/packaging/build.py termux \
           --architecture ${{ matrix.architecture }} --output dist \
           --auth-archive inputs/auth/auth-termux-${{ matrix.architecture }}.tar.gz \
           --search-archive inputs/search/search-runtime-termux-${{ matrix.architecture }}.tar.zst \
-          --node-archive inputs/node/node-runtime-termux-${{ matrix.architecture }}.tar.gz
+          --node-archive inputs/node/node-runtime-termux-${{ matrix.architecture }}.tar.gz \
+          --termux-display-dir inputs/display \
+          --os-package "$(find inputs/os -maxdepth 1 -name '*.deb')"
     - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
         name: bashkitten-termux-${{ matrix.architecture }}-candidate
@@ -134,6 +147,7 @@ jobs:
     - android
     - termux
     - sources
+    - environments
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1

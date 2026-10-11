@@ -112,8 +112,29 @@ def main():
                'buildRun': manifest.get('build_run') or args.run or os.environ.get('GITHUB_RUN_ID')}
         apps.append(app)
     packages = []
+    auxiliary = []
+    auxiliary_keys = set()
     architectures = set()
     for file in sorted(args.candidates.rglob('*.deb')):
+        name = subprocess.check_output(['dpkg-deb', '-f', str(file), 'Package'], text=True).strip()
+        if name != 'bashkitten':
+            fields = dict(line.split(': ', 1) for line in subprocess.check_output(
+                ['dpkg-deb', '-f', str(file), 'Package', 'Version', 'Architecture'], text=True).splitlines())
+            architecture = fields['Architecture']
+            if name not in {'bashkitten-os', 'bashkitten-machines-guest'} or architecture not in {'amd64', 'arm64', 'aarch64', 'x86_64'}:
+                raise ValueError('Unexpected auxiliary package: ' + file.name)
+            expected = version + '-1' if architecture in {'aarch64', 'x86_64'} else version
+            if fields['Version'] != expected:
+                raise ValueError('Auxiliary package version mismatch: ' + file.name)
+            metadata = json.loads(Path(str(file) + '.json').read_text())
+            if metadata.get('sourceCommit', metadata.get('revision')) != revision:
+                raise ValueError('Auxiliary source revision mismatch: ' + file.name)
+            digest = metadata.get('sha256') or Path(str(file) + '.sha256').read_text().split()[0]
+            if digest != sha(file) or (name, architecture) in auxiliary_keys:
+                raise ValueError('Auxiliary checksum/identity mismatch: ' + file.name)
+            auxiliary_keys.add((name, architecture))
+            auxiliary.append({**fields, **copy(file), 'build': metadata})
+            continue
         fields, stamp = package(file)
         architecture = fields['Architecture']
         if fields['Package'] != 'bashkitten' or fields['Version'] != package_version:
@@ -125,10 +146,21 @@ def main():
         node = stamp.get('components', {}).get('node', {}).get('metadata', {})
         if node.get('architecture') != architecture or not node.get('node_version') or not node.get('npm_version'):
             raise ValueError('Package is missing its private Node/npm component')
+        if architecture in {'aarch64', 'x86_64'}:
+            if stamp.get('components', {}).get('display', {}).get('developmentOnly'):
+                raise ValueError('Local development APK pairing cannot be published')
+            display = stamp.get('components', {}).get('display', {}).get('metadata', {})
+            if display.get('signerSha256') != CERT or display.get('package') != 'com.bashkitten' or display.get('sourceCommit') != revision:
+                raise ValueError('Termux Display is not paired with these APKs')
+        elif not all(name in stamp.get('components', {}) for name in ['machines', 'display']):
+            raise ValueError('Desktop package is missing native environment components')
         architectures.add(architecture)
         packages.append({**fields, **copy(file), 'build': stamp})
     if architectures != {'amd64', 'arm64', 'aarch64', 'x86_64'}:
         raise ValueError('All four complete native packages are required')
+    required_auxiliary = {('bashkitten-os', arch) for arch in architectures} | {('bashkitten-machines-guest', arch) for arch in ['amd64', 'arm64']}
+    if auxiliary_keys != required_auxiliary:
+        raise ValueError('All architecture-matched desktop customization and guest packages are required')
     sources = []
     for file in sorted(args.candidates.rglob('*')):
         if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip|jar)$', file.name):
@@ -153,7 +185,7 @@ def main():
     (args.output / 'release-notes.md').write_text(notes)
     result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
-              'apps': apps, 'packages': packages, 'sources': sources}
+              'apps': apps, 'packages': packages + auxiliary, 'sources': sources}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
     (args.output / 'SHA256SUMS').write_text(''.join(
         sha(file) + '  ' + file.name + '\n' for file in sorted(args.output.iterdir()) if file.name != 'SHA256SUMS'))
