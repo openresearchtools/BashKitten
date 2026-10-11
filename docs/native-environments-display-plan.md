@@ -3442,3 +3442,24 @@ setup and background autostart remain independent Configuration settings, and
 the desktop Quit/crash ownership rules are unchanged. Verify both platforms,
 including switching between Display and ordinary tabs, narrow layouts, keyboard
 insets, re-opening the preserved desktop and unrelated containers remaining open.
+
+### Android Updates destination and matching Termux packages — 11 October 2026
+
+Move package management out of General settings into **Updates** in Android's
+Configuration menu. The user explicitly replaced the proposed “Termux Packages”
+title with “Updates”. Combine the Android application update check/download and
+Termux package update controls there; reuse the existing progress and package
+operations instead of introducing a second updater. The user installs the new
+APK through Android's normal installer. On launch after an APK update,
+automatically reconcile BashKitten's Termux packages to the versions matching
+that installed application, showing update progress when needed. Include checks
+and updates for the general Termux APT packages in the same destination.
+
+Use the published release/nightly APT metadata and the installed APK's matching
+package requirements. Do not select an unrelated newer/older backend or depend
+on development build directories. Reuse the existing safe package transaction,
+running-work coordination and truthful failure reporting. Checks, downloads,
+installation and progress must remain nonblocking for browser UI. Desktop
+packages remain entirely managed by system APT; remove its embedded package
+update controls rather than adding a second desktop updater. Preserve source
+and license delivery in the existing browser About/settings.
