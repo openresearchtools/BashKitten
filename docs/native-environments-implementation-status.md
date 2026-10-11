@@ -17,26 +17,37 @@ are additional mandatory amendments. Their source is integrated in `fb867067e4`;
 the combined `3c35d56d7c` Android/Termux/Linux development packages were built
 and installed. Whole-feature acceptance remains in progress.
 
-The next desktop candidate `780540ddf7` is installed on the Wayland host and
-real Xorg VM. Android 16/17 now have the matched `75b5054c31` APK and Termux
-package, including the corrected X11 loader; normal installation sets its
-required `0400` mode and package audits are clean. Both candidate source
-collections passed. Actual native engine/component producers and source-equality
-checks remain recorded separately; these are development packages, not a release
-or whole-feature acceptance claim.
+The current combined development candidate is
+`0cf34b8857d8d6faef040ca1135038bded74618c`, installed on the native Wayland
+host, real Xorg VM and Android 16/17. Both Android installations have its matched
+Termux backend and the separately installed BashKitten OS component from
+`6a8fe303ce`. Normal installation sets the paired X11 loader to `0400`.
+The desktop package also contains OS `6a8fe303ce`, the newly built private engine
+from `136d077c9f`, the Linux lifetime guard from `9ffeedb41d` and a guest package
+refreshed at `0cf34b8857` with the unchanged corrected `19e9e2702d` sudo binary.
+The Android guard producer is `bb8061b0b9`; actual native Gecko producer
+`609e82c200` and loader producer `780540ddf7` remain recorded separately through
+exact source-equality checks. Full corresponding-source collection, package
+checksums and expanded offline notices passed for this candidate. These are
+build/source results, not release or whole-feature acceptance.
 
-Android 17's installed Phone use page now lists the controls directly with
-rounded switches. Actual taps enable Apps, and master Off retains that selected
-choice while disabling the options. Unavailable Accessibility options remain
-visible and disabled. The page closes to Agent normally. A system-dark change
-exposed a stale theme read from the paused main activity: the page remained light
-despite its own dark configuration. `9ffeedb41d` corrects the activity/theme source;
-Java/Kotlin compilation and independent review passed, with installed retest still
-pending. Desktop Autostart rendered matching rounded
-controls in both light and dark, and the original host appearance was restored.
-The later user correction to separate General/Providers pages and remove the
-legacy web source/license footer is committed in `520600a6a6`, after these
-installed candidates. Existing Firefox notice/source delivery is retained.
+Actual `0cf34b8857` Wayland and Android 17 checks show separate General and
+Providers pages, no old App/Providers subtab strip or legacy web footer, and
+matching rounded fields/buttons/switches in light and dark. Firefox About and
+package source/notice delivery remain available. The host appearance was restored
+to its original default; Android 17 night mode was restored to `no` (light).
+Android 17's Phone use page also passes the installed dark-theme retest for
+`9ffeedb41d`. Apps can be enabled; master Off retains that choice and disables
+the feature controls. Unavailable Accessibility options remain disabled, and
+closing the page returns to Agent. These presentation/settings checks do not
+establish the full tool authorization or revocation matrix.
+
+Android 16's matched update was verified before handoff. Actual `0cf34b8857`
+checks now show the truthful enabled-but-not-started Messages guidance and the
+correct **Notification reply** label on its saved RemoteInput turn. The gateway
+was then started through its normal switch for continued acceptance. Earlier
+Android 16 observations retain their original revisions rather than becoming
+automatic retests of this candidate.
 
 Android 16's earlier `3c35d56d7c` actual Pi session successfully discovered
 Phone controls and listed apps. Published llama and Whisper runtimes were
@@ -47,22 +58,37 @@ discoverable app commands after Apps was switched Off, and actual attempted
 telephony and speech remain unaccepted.
 `1286217ca6` corrects discovery wording to show the actual spaced CLI commands.
 
-The Xorg `780540ddf7` checks include close-to-tray/reopen, custom-command
+The current Xorg `0cf34b8857` candidate separately opens General and Providers,
+keeps the settings view free of the composer/footer, and remains usable during
+fresh container preparation. A General setting persisted through Done/reopen and
+was restored after the check. The fresh `Xorg0cf3` machine completes creation in
+5m26s, opens its software-rendered native Display and passes launcher/search,
+noninteractive sudo, interactive Terminal input and redirected-I/O checks.
+Closing the browser window during preparation leaves materialization running;
+tray activation restores the same browser and the guest reaches running.
+Ctrl-Z during `sudo -n cat` displays `^Z` without returning an ordinary shell
+prompt. That observed job-control failure is with the OS owner; `fg` and the rest
+of the PTY/signal/resize matrix remain unaccepted. A retained older
+`3c35d56d7c` guest still fails browser/backend readiness after startup and remains
+under diagnosis; its rootfs/package was not silently replaced. That retained-guest
+failure does not invalidate the separate
+fresh-machine result or establish an upgrade pass.
+
+Earlier Xorg `780540ddf7` checks include close-to-tray/reopen, custom-command
 startup/removal, renderer-child crash/reopen, browser force-quit with Local On
 and Off, and Unicode/image clipboard transfer through the native controls.
 Observed application workloads stopped on browser death, but a legacy shared
-Podman namespace helper survived. `bb8061b0b9` introduces privately owned
-namespace lifetime; its native helper must be rebuilt and tested. Other actual
-guest blockers are persistent LocalAI startup without a systemd user manager,
-missing Thunar installation actions, panel workarea after resize and interactive
-sudo input corruption. The first two have source fixes `0ce8b11dcb` and
-`a264aff54c`; `f650600966` repairs panel reservation ordering and `19e9e2702d`
-repairs identification of the real controlling terminal. Independent source
-reviews and actual component compilation passed; installed retests remain open.
-Retained guests still use
-their earlier OS package, which is not silently relabelled as the newer package.
-That retained guest additionally passed actual launcher search/scroll/pin/unpin,
-Manage window size Off/On, preserved Two app mode choice, and scaling changes.
+Podman namespace helper survived. The private namespace/lifetime and bundled
+catatonit repairs are now compiled and packaged in `0cf34b8857`; their complete
+installed Quit/crash/unrelated-Podman matrix remains open. Persistent guest
+LocalAI startup, Thunar installation actions and panel workarea after resize
+have source/component fixes in this package; their corresponding installed
+retests remain separate gates. The old interactive-sudo corruption is superseded
+by the fresh-machine input result above; the separate job-control failure remains
+open.
+The retained older guest previously passed launcher search/scroll/pin/unpin,
+Manage window size Off/On, preserved Two app mode choice and scaling changes;
+those remain evidence for that recorded package only.
 
 The previous `3c35d56d7c` desktop package was installed on the Wayland host and
 real Xorg VM, with matching APK and Termux packages on Android 16/17.
@@ -131,8 +157,10 @@ separate from the existing Display action that opens the desktop. The installed
 Wayland `0753b2edfc` Configuration menu shows Local AI, Notifications, Remote
 Connections, Telephone, Performance, Providers and General settings, without a
 Phone/Computer Use entry. Android 17's installed menu has Display setup and Phone
-use. These are menu checks, not a retest of every destination. The subsequent
-right-hand Display/gear/menu placement in `c9f4572d5c` is source-only so far.
+use. These are menu checks, not a retest of every destination. At that checkpoint,
+the subsequent right-hand Display/gear/menu placement in
+`c9f4572d5c` had only source evidence; later installed presentation checks are
+recorded above, with the complete rotation/keyboard matrix still open.
 
 Installed Xorg checks passed the flat hierarchy, corrected icons, wide/narrow
 sidebar behavior, draft preservation and Providers/General navigation. A real
@@ -170,13 +198,16 @@ atomic/read-only, but its read-only package payload then failed ordinary Termux
 dpkg upgrade during deferred writeback. `ef6057afa0` follows the donor's correct
 installation pattern: payload `0600`, changed immediately to `0400` in postinst.
 Android 16 was left with a fully installed/auditable prior backend after cleanup.
-The corrected normal upgrade and Display retest remain required; this loader
-repair needs package assembly, not an APK/native rebuild or policy override.
+The subsequent normal `3c35d56d7c`/`75b5054c31` upgrades and Android 17
+rendered Display result above supersede this installation blocker. The current
+`0cf34b8857` package retains that normal postinst permission handling; broader
+input/resize/lifetime acceptance remains open.
 
 Android 16's `0753b2edfc` Phone controls page exposed a 63-pixel settings touch
 offset. `c9f4572d5c` moves system insets to GeckoView's parent so rendering and
-input share an origin. The narrow Java compilation passed; installed verification
-remains pending. With the observed offset compensated during diagnosis, Phone
+input share an origin. The narrow Java compilation passed. Later normal Android
+17 control taps are recorded above; the full Android 16 input/rotation matrix
+remains open. With the observed offset compensated during the earlier diagnosis, Phone
 master Off retained saved feature choices and disabled their controls; optional
 Accessibility groups stayed unavailable without its grant. Notification permission
 was requested normally, and absent Android Auto was reported honestly. This is
@@ -192,9 +223,10 @@ the required installed Quit/force-kill/crash matrix for the new implementation.
 
 `87c53d93da` removes the unused Adjust reporting dependency and retains complete
 JNA 5.18.1 sources and full native/libffi notices; retained archive/license hashes
-pass. The installed APK still contains its previous dependencies until rebuilt.
-The Plotters full-grant repair in `7b2bc1e56c` also requires refreshed search
-artifact notices/source. Complete artifact and network-traffic audits remain open.
+pass. Those fixes are now present in the `0cf34b8857` artifacts: Adjust and its
+signer library are absent, JNA has complete offline grants/source, and refreshed
+search artifacts carry all three full Plotters grants. Complete network-traffic
+and all-architecture release acceptance remain open.
 
 `fb867067e4` adds the unified Autostart page and individual startup hooks,
 config-based custom commands under the existing owner, and selected-container
@@ -206,8 +238,10 @@ protection includes startup and machine configuration/storage. Display setup can
 manage a background desktop while Local is Off; its viewport retains ordinary
 browser tab navigation. Shared/native JavaScript and embedded script syntax,
 75-source Android Java compilation, Kotlin checks and source review passed.
-These are source/compiler checks; startup, callback and Display user flows still
-need the next installed candidate. The frozen plan's scope is unchanged.
+Those source/compiler checks preceded the installed candidates above. Specific
+startup/Display observations are recorded at their actual revisions; the full
+startup, provider callback and selected-container matrix remains open. The frozen
+plan's scope is unchanged.
 
 Actual installed observations:
 
@@ -249,9 +283,9 @@ Actual installed observations:
 - Container creation displays real preparation output while other UI remains
   usable. The explicit stock-panel conflict and missing schema compiler are fixed
   by `c64c0ccff0`; `bed281f5a5` repairs materialization from a stopped container
-  export. Installed retry now reaches materialization after the required restart,
-  but guest startup and the complete Display/OS path remain blocked pending the
-  corrected guest package's fresh installed run.
+  export. The later fresh `0cf34b8857` machine completes preparation and opens
+  Display as recorded above. Retained-guest startup and the full Display/OS
+  matrix remain open; the earlier materialization-only result is historical.
 - The Android sidebar's floating popup, pink buttons and ambiguous icons failed
   the user's design review. `acfa9df6ba` restores the flat sidebar and embeds it
   below the toolbar. The user's final direction is a BashKitten logo/sidebar,
@@ -285,26 +319,31 @@ Checkpoint receipts are under `/run/media/user/Data/BashkittenBuild/`:
 
 | Record | Confirmed scope |
 | --- | --- |
+| `acceptance/combined-0cf3/host-install.json`, `settings-presentation.json` and screenshots | Exact current Wayland install; separate General/Providers, no legacy footer, rounded light/dark presentation and original appearance restored. |
+| `verification/android17-0cf3/installation.json` and General/Providers/Phone screenshots | Exact matched Android 17 APK/backend plus OS `6a8fe303ce`; current presentation and Phone use dark-theme/settings observations above. |
+| `verification/android16-0cf3/installation.json` and `input-integrity.json` | Matched Android 16 update verified; app stopped for its acceptance owner, not a complete feature retest. |
+| `acceptance/xorg-vm-control/candidate-0cf3-ui.json` and `0cf3-*` screenshots | Current Xorg settings, fresh-machine Display/input, close-to-tray during preparation and partial sudo evidence; retained-guest startup and Ctrl-Z job-control failures kept separate. |
+| `verification/combined-desktop-0cf3.json`, `android-termux-handoff-0cf3.json` and `source-release-0cf3.json` | Exact package checksums, source/static-asset/native component reconciliation and complete matching source collection; not whole installed or traffic acceptance. |
 | `acceptance/xorg-vm-control/candidate-e375-ui.json` | Actual settings, safe legacy-update refusal/reboot retry, CPU LocalAI load/unload, subagent parent/child/cwd delivery, Markdown/Raw, DOCX/PDF and CSV preview/download cases; explicit partial/pending limits. |
 | `acceptance/shared-settings-e375/host-localai.png` | Actual Wayland shared Local AI page rendering. |
 | `acceptance/shared-settings-0753/host-install.json` and `host-configuration-menu.json` | Exact Wayland installed package and corrected native Configuration menu; underlying chat selector options in the raw accessibility array are not menu entries. |
 | `verification/android16-e375/installation.json` | Matched APK/backend installation, normal setup and actual empty-chat/Phone controls rendering; remaining cases listed. |
 | `verification/phone-watch-feedback/diagnosis.json` and `verification/termux-package-a807.json` | Watcher cause, focused source repair and exact installed-package input hashes; not phone functionality acceptance. |
 | `verification/phone-watch-feedback/android17-a807/summary.json` and `idle-samples.json`, plus `acceptance/shared-settings-e375/android17-restart.png` | Actual Android 17 Local Off/On, old-group exit/new ready state, matched installed watcher source and short idle diagnostic; no endurance or Phone-flow acceptance. Earlier install/idle records alone were passive diagnostics. |
-| `verification/guest-launch-component-739e.json` and `verification/guest-desktop-package-0753.json` | Rebuilt guest launcher/source equality and actual nested guest in the latest desktop DEB; fresh guest flow pending. |
+| `verification/guest-launch-component-739e.json` and `verification/guest-desktop-package-0753.json` | Historical rebuilt guest launcher/source equality and actual nested guest in the `0753b2edfc` DEB; later fresh-machine observations are recorded above. |
 | `verification/shared-settings-desktop-package-0753.json` and `verification/settings-phone-use-only-20261011/source-check.json` | Actual packaged settings source and focused Android-only Phone use removal review; not installed acceptance. |
 
 | Area | Source integration | Installed acceptance |
 | --- | --- | --- |
-| Android Display / paired Termux loader | Separate renderer and approved UID/FD bridge committed; both native ABIs, AIDL, main Java and narrow Fenix Kotlin integration compile | Pending |
-| Linux Display / persistent gateway | Native module committed; Rust/C++ component compilation and software/Intel/NVIDIA frame, resize and reattachment checks pass | Pending Wayland and real Xorg |
-| Container lifecycle / private Podman | Persistent machine owner, isolated engine configuration, guest lifecycle/sudo and desktop context implemented | Partial Xorg: legacy-update refusal/reboot retry/materialization observed; corrected guest startup and full lifecycle pending |
+| Android Display / paired Termux loader | Separate renderer and approved UID/FD bridge committed; matched current APK/backend/OS installed | Partial Android 17 rendered viewport/navigation; input/resize/lifetime matrix pending |
+| Linux Display / persistent gateway | Native module committed; current native helper/package source checks pass | Partial actual Xorg fresh-machine Display/input; complete Wayland/Xorg matrix pending |
+| Container lifecycle / private Podman | Persistent owner, private engine/namespace lifetime, guest lifecycle/sudo and desktop context packaged in `0cf34b8857` | Fresh Xorg creation/Display/interactive input pass; retained-guest startup and Ctrl-Z failures open; full lifecycle pending |
 | Native sidecar / projects / chats | Android hierarchy committed; desktop hierarchy, project folder ownership and private container connection integrated | Partial Xorg project/cwd/move/draft and one subagent completion path; Android/full matrix pending |
-| BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Pending desktop feature flows on Termux/Linux |
-| Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; Android-only configuration | Android 16 settings rendering observed; feature commands/authorization/revocation pending |
+| BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Partial Xorg launcher/settings/input observations; remaining Termux/Linux desktop matrix open |
+| Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; Android-only configuration | Android 16 earlier Apps discovery/list and feature-Off denial; current Android 17 themes/master-choice retention observed; complete authorization/revocation matrix pending |
 | Telephony / contacts / messages / voicemail | Native library, private gateway, confirmed call speech, encrypted remote hooks and shared question delivery committed; integrated Java compilation passes | Pending |
 | Pi release / usage / ask_user | Pi 1.1.0, selected-account usage and deferred questions integrated using stock APIs | Pending |
-| Sources / licensing / telemetry / packages | Exact source imports retained; offline auth/search consumers, matching package inputs and transitive notice collection being checked | Pending full artifact/traffic verification |
+| Sources / licensing / telemetry / packages | `0cf34b8857` package/source checks and expanded offline notice collection pass with distinct native producers retained | Full architecture, traffic and installed release acceptance pending |
 
 Cuttlefish remains on stock Android 17 build 16373615 with native KVM, 16 GiB RAM
 and 128 GiB SSD userdata. The separate libvirt test VM
@@ -324,8 +363,9 @@ microphone acceptance.
 Daughter Actions run 38148970357 published Whisper r2 for the required target
 matrix, including the pinned Silero VAD helper/model. The downloaded Android
 x86_64 helper passed framing, speech/silence probability and clean shutdown
-checks under the actual Termux UID. The fresh acceptance profile has no selected
-runtime; selecting r2 and configuring phone STT/TTS through the new candidate remain
+checks under the actual Termux UID. At that earlier checkpoint, the fresh
+acceptance profile had no selected runtime. Later Android 16 LocalAI setup is
+recorded above; integrated phone STT/TTS and the full runtime/model matrix remain
 mandatory. No AI engine was built on this workstation.
 
 Detailed component records are retained outside the repository under
