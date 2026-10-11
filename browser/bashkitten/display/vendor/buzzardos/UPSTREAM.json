@@ -13,6 +13,7 @@
     "host/crates/buzzardos-display/src/guest_display.rs": "015ec3568bc7b2211d3855864293fd5fa78a18b0c0fe8579313dc728f2f085bb",
     "host/crates/buzzardos-display/src/gateway.rs": "fbb672aa4f283e64f6285a9931747349632884c9cb1a69ee05cfdebcf7289a88",
     "host/crates/buzzardos-display/src/keyboard.rs": "4c780981c0f13e7cfa3147254ecacec32b823616c6e269e4bf56e4d7bf796250",
-    "host/crates/buzzardos-display/src/drm_syncobj.rs": "df27967490916a18cabe82c25b5a28f2c15a1d09d1dc0a93944d2937058baa2a"
+    "host/crates/buzzardos-display/src/drm_syncobj.rs": "df27967490916a18cabe82c25b5a28f2c15a1d09d1dc0a93944d2937058baa2a",
+    "tests/fixtures/xkb-settings-contract.json": "f381e27aef9ade5b06c3b46843d5183d364366c127fe90e781dc1cea5297b4a3"
   }
 }
