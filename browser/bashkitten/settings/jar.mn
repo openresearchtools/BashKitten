@@ -14,3 +14,4 @@ toolkit.jar:
   content/bashkitten-settings/settings.css (settings.css)
   content/bashkitten-settings/share-local.mjs (share-local.mjs)
   content/bashkitten-settings/ui.mjs (ui.mjs)
+  content/bashkitten-settings/updates.mjs (updates.mjs)

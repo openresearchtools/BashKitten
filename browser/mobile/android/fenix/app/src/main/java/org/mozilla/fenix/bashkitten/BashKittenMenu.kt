@@ -51,6 +51,7 @@ class BashKittenMenuDialog : BottomSheetDialogFragment() {
                                     Triple("telephone", "Telephone", agentR.drawable.ic_agent_phone),
                                     Triple("performance", "Performance", agentR.drawable.ic_agent_performance),
                                     Triple("providers", "Providers", iconsR.drawable.mozac_ic_extension_24),
+                                    Triple("updates", "Updates", iconsR.drawable.mozac_ic_download_24),
                                     Triple("general", "General", iconsR.drawable.mozac_ic_settings_24),
                                 )
                                 for ((section, title, icon) in rows) {

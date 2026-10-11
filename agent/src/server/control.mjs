@@ -11,9 +11,9 @@ import { dataDir, sessionDir, privateDir, readMeta, readJson, writeJson, json, j
 import { platform } from './platform/index.mjs';
 import { nativeFile } from './platform/linux/files.mjs';
 import { Jobs } from './updates/jobs.mjs';
-import { installPi, rollbackPi, updateStatus, atIdle } from './updates/runtime.mjs';
+import { updateStatus, atIdle } from './updates/runtime.mjs';
 import { bundledRoot } from './rpc/runtime.mjs';
-import { checkPackages, updatePackages, recoverPackages, refreshApt, apt, packageInventory } from './platform/termux/packages.mjs';
+import { apt } from './platform/termux/packages.mjs';
 import { pendingNotifications, acknowledgeNotifications, notificationSettings } from './rpc/notifications.mjs';
 import { claimInstance, processStart } from './instance.mjs';
 import { ensureIntegration } from './rpc/integration.mjs';
@@ -171,9 +171,7 @@ async function serve() {
   };
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
-  const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
-    'refresh-lists': async job => { const result = await refreshApt(job); if (result.error) throw Error(result.error); },
-    'update-pi': installPi, 'rollback-pi': rollbackPi, 'recover-packages': recoverPackages,
+  const jobs = new Jobs({ 'reload-services': reloadServices,
     ...(localAI ? { 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
   });
   await jobs.init();
@@ -426,16 +424,12 @@ async function serve() {
       }
       return stack.services.action(value, { remote: true });
     }
-    if (command === 'package-inventory') return packageInventory();
+    if (['package-status', 'package-job', 'package-cancel', 'package-inventory'].includes(command))
+      throw Error(platform === 'termux' ? 'Manage package updates in Android Configuration → Updates' : 'Manage desktop packages through the system APT package manager');
     if (command === 'notifications') return { notifications: await pendingNotifications() };
     if (command === 'notification-settings') return notificationSettings(value.settings);
     if (command === 'notifications-ack') { await acknowledgeNotifications(value.keys); return { ok: true }; }
-    if (command === 'package-cancel') { await jobs.cancel(); return status(); }
-    if (command === 'package-job') {
-      if (stopping) throw Error('Agent is stopping');
-      const current = await jobs.status();
-      await jobs.start(value.retry ? current?.kind : value.kind, value.retry ? current?.input : value.input || {}, Boolean(value.retry));
-    } else if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
+    if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
       if (command === 'stop' || command === 'shutdown') {
         if (command === 'shutdown') shutdownRequested = true;
         await turnOff();

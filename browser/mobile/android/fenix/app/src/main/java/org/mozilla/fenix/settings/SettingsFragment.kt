@@ -51,15 +51,6 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
             isIconSpaceReserved = false
         }
         preferenceScreen.addPreference(category)
-        category.addPreference(Preference(requireContext()).apply {
-            title = "Packages"
-            summary = "Manage the local Agent's Termux, APT and Pi packages"
-            isIconSpaceReserved = false
-            setOnPreferenceClickListener {
-                (activity as? HomeActivity)?.bashKittenAgentPanel?.packages()
-                true
-            }
-        })
         if (BrowserApp.get(requireContext()).agent.selected != "local") category.addPreference(Preference(requireContext()).apply {
             title = "Remote Agent browser control"
             summary = "Allow or disconnect the remote Agent's access to ordinary browser tabs"
@@ -96,7 +87,7 @@ class SettingsFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment 
             }
         })
         requirePreference<Preference>(R.string.pref_key_about).parent?.addPreference(Preference(requireContext()).apply {
-            title = "Check for browser update"
+            title = "Updates"
             isIconSpaceReserved = false
             setOnPreferenceClickListener {
                 (activity as? HomeActivity)?.bashKittenAgentPanel?.checkBrowserUpdate()

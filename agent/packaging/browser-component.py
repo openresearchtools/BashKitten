@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import zipfile
+
+from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET
 
 ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = 'agent/packaging/browser-component.py'
@@ -20,7 +23,7 @@ def fingerprint(target, legacy_verifier=None):
     if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
-                  'agent/packaging/release_version.py',
+                  'agent/packaging/release_version.py', 'agent/packaging/release.py',
                   'agent/packaging/licenses.mjs', 'agent/packaging/node', 'agent/packaging/termux/search',
                   'agent/src/server/licenses.mjs',
                   'agent/package.json', 'agent/package-lock.json', 'agent/LICENSE',
@@ -36,6 +39,7 @@ def fingerprint(target, legacy_verifier=None):
                   'agent/packaging/termux/os.py', '.github/workflows/machines-native.yml',
                   'agent/src/server/access/NOTICE', 'agent/src/server/access/TORKITTEN-LICENSE',
                   'agent/src/server/models/third_party', 'agent/src/server/updates/platform-packages.mjs',
+                  'agent/src/server/platform/termux/updates-bootstrap.mjs',
                   '.github/workflows/auth-native.yml', '.github/workflows/search-native.yml']
     else:
         paths += ['.github/builders/linux.yml', 'agent/packaging/linux/prepare-runner.sh',
@@ -98,6 +102,14 @@ def verify(directory, target, digest):
         apks = list(directory.glob('*.apk'))
         if len(apks) != 1 or manifest.get('apks', {}).get(apks[0].name) is None:
             raise ValueError('Expected one recorded production APK')
+        with zipfile.ZipFile(apks[0]) as archive:
+            pairing = validate_termux_update(json.loads(archive.read(TERMUX_UPDATE_ASSET)),
+                                             abi=manifest['architecture'])
+            if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
+                raise ValueError('APK update bootstrap does not match its paired manifest')
+        expected_source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+        if pairing['sourceCommit'] != expected_source or pairing['sourceCommit'] != manifest['source']:
+            raise ValueError('APK resources must be reassembled for this revision’s Termux packages')
         matching_input(directory, target, manifest.get('browser_input_sha256'), digest, manifest['source'])
     else:
         manifest = dict(line.split('=', 1) for line in (directory / 'browser-artifact-manifest.txt').read_text().splitlines())
@@ -179,6 +191,14 @@ def restore(directory, target, digest):
             evidence = completed_producer(repository, run, target)
             if not evidence:
                 continue
+            if target.startswith('android'):
+                # The APK carries exact companion package expectations. A
+                # different assembly revision needs new APK resources, even
+                # when unchanged Gecko objects remain in the compiler cache.
+                source = re.match(r'^BashKitten ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+                if not source or source[1] != current:
+                    continue
             legacy = None
             expected = digest
             if artifact['name'] != name:

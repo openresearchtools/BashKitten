@@ -364,9 +364,7 @@ async function handler(req, res) {
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack'].includes(value.command)) throw Error('Unknown control action');
-      if (value.command === 'package-job' && (value.kind === 'localai-runtime' || value.retry && (await controlRequest('status')).packages?.job?.kind === 'localai-runtime')) throw Error('Manage LocalAI in the native desktop panel');
-      if (value.command === 'package-cancel' && (await controlRequest('status')).packages?.job?.kind === 'localai-runtime') throw Error('Manage LocalAI in the native desktop panel');
+      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'notifications', 'notifications-ack'].includes(value.command)) throw Error('Unknown control action');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
     }
     if (route === '/api/dictation/capability') {

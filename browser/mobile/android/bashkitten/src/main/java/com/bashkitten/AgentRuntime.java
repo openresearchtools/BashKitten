@@ -25,6 +25,7 @@ public final class AgentRuntime {
     public interface Listener { void changed(); }
     final BrowserApp app;
     public final TermuxConnection termux;
+    final UpdatesController updates;
     final PhoneVoiceGateway phoneVoice;
     private final SecretStore identities;
     private final SecretStore remoteStore;
@@ -74,6 +75,7 @@ public final class AgentRuntime {
         localControlRequested = app.policies.getBoolean("agent.localControlRequested", false);
         termuxSetupAttempted = app.policies.getBoolean("agent.termuxSetupAttempted", false);
         phoneVoice = new PhoneVoiceGateway(app, this);
+        updates = new UpdatesController(app, this);
     }
     private <T> void stored(Callable<T> work, Consumer<T> done, Consumer<String> failure) {
         storage.execute(() -> {
@@ -88,7 +90,11 @@ public final class AgentRuntime {
     }
     public void attach(GeckoRuntime engine, Listener listener) {
         this.engine = engine; listeners.add(listener);
-        if (!launched) { launched = true; startConfigured(); }
+        if (!launched) {
+            launched = true;
+            if (localSetupReady()) updates.ensureMatching();
+            startConfigured();
+        }
         else listener.changed();
     }
     public void observe(Listener listener) { listeners.add(listener); }
@@ -153,6 +159,21 @@ public final class AgentRuntime {
                     message -> { startupRemotes.remove(id); startupFailed("remote:" + id, message); });
             }
         }, message -> startupFailed("remotes", message));
+    }
+    Runnable afterPackageUpdate() {
+        final int generation = backgroundOperation;
+        final String installation = termux.installationId();
+        return () -> {
+            // An explicit APT operation stopped the old controller. A later Off
+            // or reinstallation revokes this restoration of requested work.
+            if (generation != backgroundOperation || !localSetupReady() || !installation.equals(termux.installationId())) return;
+            if (localControlRequested) {
+                if (selected.equals("local")) { if (desired) turnOn(); }
+                else startBackgroundLocal();
+            }
+            startBackgroundServices();
+            phoneVoice.restoreStartup();
+        };
     }
     private void startBackgroundLocal() {
         if (!batteryExempt(app.getPackageName()) || !batteryExempt(TermuxConnection.PACKAGE)) {
@@ -472,8 +493,22 @@ public final class AgentRuntime {
         connection.request(client -> client.phone(action, value, identity), done, failure);
     }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
-        try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
-        catch (Exception exception) { fail.accept("Unable to send service command."); }
+        Runnable send = () -> {
+            try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
+            catch (Exception exception) { fail.accept("Unable to send service command."); }
+        };
+        // Stopping remains available during maintenance. All starts/settings use
+        // the installed APK's matched native Termux package, never an older pair.
+        if (name.equals("stop") || name.equals("shutdown") || !localSetupReady()) { send.run(); return; }
+        final int generation = operation, background = backgroundOperation;
+        final String installation = termux.installationId();
+        updates.ensureMatching().whenComplete((ignored, error) -> app.main.post(() -> {
+            if (generation != operation || background != backgroundOperation || !localSetupReady() || !installation.equals(termux.installationId())) {
+                fail.accept("The service request changed while packages were updating."); return;
+            }
+            if (error == null) send.run();
+            else fail.accept("Termux packages need attention in Configuration → Updates: " + error.getMessage());
+        }));
     }
     boolean shareNeedsSetup() {
         if (!desired || !termuxSetupAttempted || !termux.permissionGranted()

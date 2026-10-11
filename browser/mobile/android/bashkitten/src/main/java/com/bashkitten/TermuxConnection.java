@@ -130,6 +130,31 @@ public final class TermuxConnection {
         execute(script, new String[] { command }, input, timeout, done, fail);
     }
 
+    /** Runs only the fixed updater shipped by this APK, never caller-provided UI code. */
+    void updates(String module, JSONObject input, Consumer<JSONObject> done, Consumer<String> fail) {
+        try {
+            byte[] bytes = java.security.MessageDigest.getInstance("SHA-256").digest(module.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder digest = new StringBuilder();
+            for (byte value : bytes) digest.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+            String node = PREFIX + "/lib/bashkitten/node/bin/node";
+            // A real private file lets the job owner detach and survive this
+            // Activity/process. Hash-addressed APK bytes are never hotpatched.
+            String script = "set -eu; umask 077; "
+                + "test -x " + shellQuote(node) + "; "
+                + "directory=\"${BASHKITTEN_DATA_DIR:-$HOME/.local/share/bashkitten-pi}/updates/apk\"; "
+                + "mkdir -p -- \"$directory\"; chmod 700 -- \"$directory\"; file=\"$directory/$2.mjs\"; "
+                + "if ! printf '%s  %s\\n' \"$2\" \"$file\" | sha256sum -c - >/dev/null 2>&1; then "
+                + "temporary=$(mktemp \"$directory/.update.XXXXXXXX\"); trap 'rm -f -- \"$temporary\"' EXIT; "
+                + "printf '%s' \"$1\" >\"$temporary\"; chmod 600 -- \"$temporary\"; "
+                + "printf '%s  %s\\n' \"$2\" \"$temporary\" | sha256sum -c - >/dev/null; "
+                + "mv -f -- \"$temporary\" \"$file\"; trap - EXIT; fi; "
+                + "unset NODE_OPTIONS NODE_PATH; export BASHKITTEN_EXECUTION_ROLE=termux TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable "
+                + "OPENSSL_CONF=" + shellQuote(PREFIX + "/lib/bashkitten/node/etc/openssl.cnf") + "; "
+                + "exec /system/bin/sh -c 'exec \"$1\" \"$2\"' bashkitten-updates " + shellQuote(node) + " \"$file\"";
+            execute(script, new String[] { module, digest.toString() }, input.toString(), 60000, done, fail);
+        } catch (Exception error) { fail.accept(message(error, "Unable to prepare the package updater.")); }
+    }
+
     private void requirePermission() {
         if (!installed()) throw new IllegalStateException("Install and open Termux to finish its initial setup.");
         if (!permissionGranted()) throw new IllegalStateException("Allow BashKitten to run commands in Termux.");
