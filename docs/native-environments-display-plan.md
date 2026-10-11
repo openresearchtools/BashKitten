@@ -13,6 +13,10 @@ restrictions in the [browser plan](browser-integration-plan.md) and
 The latest sidecar specification also replaces the large Local/remote selector
 and global Agent power placement with listed backends and per-backend controls;
 project membership is optional.
+The later 11 October desktop decision keeps one workplace with maximized main
+windows, adds a **Manage window size** switch, and restores an application tray
+at the right of the bottom taskbar. This supersedes the earlier no-tray rule;
+dialogs and parent-owned auxiliary windows keep normal Xfwm behavior.
 The Android Phone module and MCP-to-CLI port are part of this same plan in
 [section 12](#12-android-phone-control-and-the-mcp-port), including optional
 Accessibility, enforceable feature switches and owned-Pi session authorization.
@@ -65,12 +69,17 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   Display tab or browser window does not stop the container. Each container has
   its own startup toggle and settings for launch configuration, existing ports,
   media/input integration and remote sharing.
-- Termux runs the same customized XFCE experience without containers. Apps open
-  maximized by default. An optional split-screen setting enables a taskbar
+- Termux runs the same customized XFCE experience without containers. Use one
+  workplace by default, with normal main windows maximized inside the workarea.
+  Parent-owned dialogs and other auxiliary windows may float above them.
+  **Manage window size** in BashKitten OS settings defaults On; Off gives normal
+  XFCE sizing/placement without our maximization or split enforcement.
+  An optional split-screen setting enables a taskbar
   **Two app mode** action and one draggable divider between the two apps.
   Both platforms use one bottom taskbar containing only an **Applications**
-  button with the BashKitten icon and running-window buttons: no XFCE menu icon,
-  clock/date, network/status widgets or system tray. Applications opens a
+  button with the BashKitten icon, running-window buttons and an application
+  tray at the right: no XFCE menu icon, clock/date or preseeded network/status
+  widgets. Applications opens a
   maximized application launcher:
   search at the top, pinned apps beneath, one divider, then all remaining apps
   in an alphabetical left-to-right wrapping icon/title grid. It adapts to phone,
@@ -155,7 +164,7 @@ delete donor repositories/history as part of writing or implementing this plan.
 | [Termux:X11](https://github.com/termux/termux-x11/tree/fa3a8b430e2896a19f44c99a9cb056254615ae06) | Official nightly resolves to `fa3a8b430e2896a19f44c99a9cb056254615ae06` | Reusable `lorie` Android library, native X server/rendering, input and loader. Pin the exact commit and native dependency gitlinks; do not build a moving nightly reference. |
 | [PeGPU v0.1.106](https://github.com/openresearchtools/PEGPU/tree/aae5382fae02eaeb97ceeb7fcaa531f88009b081) | `aae5382fae02eaeb97ceeb7fcaa531f88009b081` | MIT scaling helper. Relevant scaling/package-choice files match inspected HEAD `8ecbb5d4fad90f7e74dd29351c37c4de9aada84b`. Actual apps are Thunar and `xfce4-terminal`, not Nautilus. |
 | [Gnozzard](https://github.com/openresearchtools/gnozzard/tree/59ca6d56ef147dea820381036838e76645074d0e) | `59ca6d56ef147dea820381036838e76645074d0e`, checked against GitHub main | Installer/registration and search/pin behavior, exact dark/orange palette and persistent wallpaper defaults; adapt to Thunar/XFCE and the requested maximized grid. Code/CSS GPL-3.0-or-later; retained folder artwork has its own LGPL-3.0-only notices. |
-| [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist for the normal bottom taskbar. Its per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
+| [XFCE panel](https://gitlab.xfce.org/xfce/xfce4-panel/-/tree/xfce4-panel-4.20.7) | `f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5` | Stock Window Buttons/tasklist and right-aligned systray supporting StatusNotifier and legacy XEmbed. Per-window menus need a narrow source patch for Two app mode; the public plugin menu API is not a per-window extension hook. |
 | [SheetJS CE v0.20.3](https://git.sheetjs.com/sheetjs/sheetjs/src/tag/v0.20.3) | `8a7cfd47bde8258c0d91df6a737bf0136699cdf8` | Existing `xlsx` spreadsheet parser; official annotated release tag peeled to this commit. Vendor the source and matching official release distribution with Apache-2.0/component notices. |
 | [Pi v1.1.0](https://github.com/earendil-works/pi/releases/tag/v1.1.0) | Published 7 October 2026; `abe508e1b89912adde45528136c3221eb69acdd7` | Planned update from current v1.0.2. Durable is a separate experimental package, not an automatic change to BashKitten's stock RPC sessions. |
 
@@ -215,8 +224,10 @@ Coalesce rapid changes, keep geometry/frame replies tied to the current view,
 and ignore stale or zero-sized hidden-tab measurements. Reattachment uses the
 new tab's actual size without restarting the desktop/apps. Keep the saved
 BashKitten OS UI/font scaling independent: a resize must not reset scale, pins,
-wallpaper or app state. Recompute the panel workarea, maximized/split windows and
-launcher grid from the accepted dimensions. No UI-thread wait, polling loop or
+wallpaper or app state. Recompute the panel workarea and launcher grid from the
+accepted dimensions. Apply our main-window/split reflow only while **Manage
+window size** is On; stock Xfwm's own resize/maximization behavior still works
+while Off. No UI-thread wait, polling loop or
 manual resolution selection is needed for this normal flow.
 
 ```text
@@ -860,8 +871,9 @@ PeGPU account assumptions, login-time install scripts or repeated settings reset
 
 Install one native **BashKitten OS** application entry with the existing
 BashKitten icon. It opens this environment's customization settings, including
-the PeGPU-derived scaling controls and the requested optional two-app layout
-setting, plus the application Dark/Light preference below. Reuse the same
+the PeGPU-derived scaling controls, **Manage window size**, the requested
+optional two-app layout setting, and the application Dark/Light preference below.
+Reuse the same
 settings/helper implementation described below; do not
 add a second configuration store or duplicate controls. Ordinary XFCE appearance
 and wallpaper settings continue to work and retain user changes. Container
@@ -912,15 +924,18 @@ own theme; do not promise universal live switching.
 ### One bottom taskbar on both platforms
 
 Ship the same layout on native Termux and Linux containers: one full-width
-horizontal panel along the bottom edge containing only an **Applications** button
-with the existing BashKitten icon for the launcher below and ordinary labelled
-Window Buttons for running applications. Replace the XFCE menu icon with the
+horizontal panel along the bottom edge containing an **Applications** button
+with the existing BashKitten icon for the launcher below, ordinary labelled
+Window Buttons for running applications, and an **application system tray at
+the right edge**. The tasklist uses the remaining space; use the panel's normal
+expanding layout/spacer rather than fixed pixel placement. Replace the XFCE menu icon with the
 current kitten-with-glasses branding, keeping the Applications label. Size the
 icon proportionally for the panel and its scale, using the existing branding
 assets. This supersedes the earlier text-only button requirement on both Termux
-and Linux. Include no clock/date, network,
-audio, battery/power, notification/status tray, workspace switcher, Show Desktop
-or other panel widget. This changes panel contents, not the underlying services.
+and Linux. Include no clock/date, preseeded network/audio/battery/power applets,
+workspace switcher, Show Desktop or other panel widget. The requested application
+tray is the explicit exception to the earlier no-status/tray requirement. This
+changes panel contents, not the underlying services.
 Remove the default secondary launcher dock and its file-manager/terminal/other app
 shortcuts; do not add pinned launchers to the taskbar. Pins belong inside the
 Start menu only. The packaged desktop has no default shortcut icons. Applications
@@ -933,6 +948,42 @@ startup scripts. Apply it as the owned profile's first-run default and preserve
 later user edits. Keep the panel at the bottom through viewport resize, keyboard
 appearance, rotation and scaling, and reserve its workarea so maximized/split
 windows do not cover it. There is no second top panel or floating dock.
+
+Use the pinned panel's stock
+[**Status Tray Plugin** (`systray`)](https://github.com/xfce-mirror/xfce4-panel/blob/f4e21b14a389fa6b7cc4fd756cb92e0a822ed3e5/plugins/systray/meson.build), retaining its
+StatusNotifier/AppIndicator and legacy XEmbed implementations in
+`plugins/systray/`. One tray handles both; do not add a second indicator plugin,
+new tray protocol or hardcoded application allowlist. Installed applications
+that publish supported tray items get their normal icon/actions, including
+BashKitten running automatically in a container. Preserve native item menus,
+activation, user hide/reorder choices and sizing through panel/viewport changes.
+Do not start extra status applets just to populate the tray; a user-installed
+or deliberately launched application's tray icon remains allowed.
+
+The tray belongs to the owning XFCE X server/session bus. Never forward the
+host's session bus/tray or another container's indicators into it. A tray host
+only displays icons actually registered by running applications; it must not
+invent a BashKitten icon for an unrepresented headless Node process. The current
+`browser/widget/gtk/BashKittenTray.cpp` item is tied to a browser `nsWindow` and
+owned by `DesktopLifetime.sys.mjs`; it does not automatically appear on a guest's
+private bus. Add the necessary small guest-side BashKitten indicator, reusing
+the existing status/lifetime and narrow activation path, so automatic container
+startup registers one real item with truthful status and existing actions.
+Use normal session/service registration rather than new startup shell scripts.
+Bind its status/actions to the guest backend identity. **Open** activates that
+backend through the authorized native host path, not a second protected Agent
+page inside the controlled X server. An explicit **Quit/Stop** targets the guest
+BashKitten service owner, never the host-global browser Quit callback or another
+backend, and does not delete/stop the container itself. Container lifecycle
+remains with its existing sidecar owner. Closing/restarting the indicator or an
+ordinary browser window does not stop guest services or the container. Reconnect
+or panel restart must not duplicate or silently restart an explicitly stopped
+backend/browser. Preserve the existing container and protected-Agent boundaries.
+
+Use existing asynchronous registration and native panel behavior; item discovery,
+icon loading and actions cannot block browser/settings UI. Verify both tray
+protocols on Linux and Termux; desktop BashKitten's native tray is the Linux
+case, while Termux shows supported native X11 applications' tray items.
 
 ### Maximized Start menu: search, pins and application grid
 
@@ -998,14 +1049,48 @@ Two app mode patch remain the taskbar implementation.
 
 ### Maximized apps and optional two-app layout
 
-Keep stock Xfwm window management. Maximize normal resizable application windows
-within the desktop workarea; preserve dialogs, file pickers, popups, tooltips,
-panel windows and explicit fullscreen behavior. Do not force a modal dialog to
-fill the desktop or claim a non-resizable application accepts arbitrary geometry.
+Keep stock Xfwm window management and **one workplace by default** on Linux and
+Termux. Do not create a workplace per app/window, migrate windows between
+workplaces automatically or import Gnozzard's automatic overflow allocation.
+This is window arrangement within the owned desktop, not separate input seats
+for agents. Existing/user-edited XFCE workplace settings survive upgrades.
+
+Add persistent per-environment **Manage window size**, default **On** in new
+profiles, to BashKitten OS settings. While On, maximize eligible normal,
+resizable main windows when opened/activated, inside the actual desktop workarea
+above the taskbar. Explicit two-app members retain their split rectangles when
+activated. Full workarea size means normal maximization, not fullscreen hiding
+the panel. Use type/transient/state/size hints and the selected main-window
+identity; never infer a new independent app solely from a title or PID.
+
+Reuse Gnozzard's [normal-window/transient eligibility principle](https://github.com/openresearchtools/gnozzard/blob/59ca6d56ef147dea820381036838e76645074d0e/extension/gnozzard@openresearchtools/tiling.js#L151)
+with stock Xfwm's parent/group-modal handling. Preserve dialogs, file pickers,
+parent-owned auxiliary windows, utilities, popups, tooltips, menus, panel/launcher
+windows and explicit fullscreen behavior. These may appear above their parent
+at their natural size without being maximized, counted as another main window
+or dissolving a pair. Follow declared parent/type/modal relationships even when
+the dialog is hosted by another process. In-window dialogs remain entirely the
+application's UI. Independent normal document windows, including a second window
+of the same application, remain eligible main windows. Do not force a modal or
+non-resizable application into arbitrary geometry; an oversized dialog can
+overlap the two-app split rather than clipping away its controls.
+
+**Off** stops our maximize/resize/reflow enforcement, cancels pending layout
+requests, removes the divider and disables our **Two app mode** action. Release
+layout ownership without closing/minimizing apps, changing their workplace,
+resetting their geometry or replacing Xfwm. Existing positions remain ordinary
+XFCE windows the user can resize, maximize, unmaximize or move normally; new
+windows follow normal XFCE/app placement. Do not undo a user's subsequent resize
+through a stale callback. Preserve the saved two-app preference but keep its
+setting inactive while management is Off. On reenables policy for current
+eligible main windows without restarting apps or restoring a stale old pair.
+Scaling, tray, appearance and automatic guest resolution remain independent;
+turning management Off does not disable those features.
 
 Use stock XFCE Window Buttons/tasklist with one narrow tracked source patch to
 its per-window context menu for exactly the requested **Two app mode** action,
-enabled by the split-screen setting. Build that panel component through the
+enabled only when both **Manage window size** and the split-screen setting are
+On. Build that panel component through the
 owned Linux/Termux package recipes, retaining its normal taskbar behavior. The
 inspected `plugins/tasklist/tasklist-widget.c` constructs these menus internally;
 the public plugin-menu API does not supply this per-window hook. Do not ship the
@@ -1020,12 +1105,17 @@ An event-driven helper unmaximizes that pair, requests adjacent workarea-sized
 rectangles and owns one small draggable divider. Dragging resizes both windows,
 respecting frame extents, minimum sizes and size increments. Use native window
 APIs/EWMH requests, not shell processes per drag event. Verify actual geometry
-after asynchronous requests. Selecting a third app returns it to the normal
-maximized view and removes the divider. Disabling split mode or closing one
-member removes the divider and maximizes the remaining app. This adds no third
+after asynchronous requests. Selecting a third eligible **main window** returns
+it to the normal maximized view and removes the divider; activating a dialog,
+file picker, menu, tray, launcher or divider does not. While size management is
+On, disabling split mode or closing one member removes the divider and maximizes
+the remaining app. Switching size management Off follows the relinquish-without-
+reflow rule above instead. This adds no third
 layout mode or extra button.
 
-Use window/open/close/state and RandR/workarea events. Recalculate after tab
+Use window/open/close/state and RandR/workarea events while management is On;
+coalesce asynchronous updates and reject stale events after toggling Off.
+Recalculate after tab
 resize, phone keyboard/rotation or scale changes, preserving the split proportion
 where both apps' size limits allow. Runtime XIDs are not durable identifiers.
 `libxfce4windowing` offers useful window/events APIs, but the inspected X11
@@ -1455,7 +1545,7 @@ Use the existing one-product repository and component-build workflow:
 | Android product-owned telephony library module and existing native/Termux service owners | Import the pinned Phony source/licenses, then reduce it to managed Telecom calls, contact setup, keypad events and the authenticated Pi voice gateway. Same APK and Phone panel, independent of `phoneuse`; no Mozilla core changes. |
 | `agent/pi` extensions, existing RPC worker/status/queue and notification outbox | Narrow ChatGPT usage adapter with terminal/web status; deferred `ask_user` plus concise `ask-user` skill and durable question resolution. Reuse native Pi APIs and existing chat/phone delivery owners. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
-| Product-owned BashKitten OS source/package | Shared XFCE taskbar, maximized search/pins/app-grid launcher, initially pinned BashKitten OS settings app, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
+| Product-owned BashKitten OS source/package | Shared XFCE taskbar with right application tray and guest BashKitten indicator, maximized search/pins/app-grid launcher, initially pinned settings app with Manage window size, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
 | Tracked external component source + patch series | Release source trees for Podman/crun and required helpers, embedded Termux:X11/native dependencies, XFCE custom components, spreadsheet/other JS components, patches, exact provenance and licenses. |
 | Existing packaging/component builders | Private Podman/crun/helper builds, embedded X11 in the BashKitten APK and paired Termux loader, desktop packages, source/notices and architecture checks. |
@@ -2798,7 +2888,7 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
 | 3. Persistent environments | User-data machine storage/name mapping, Containerfile, live preparation, saved Podman config, lifecycle/deletion/startup, guest BashKitten and interactive passwordless sudo. | Install/create/rename/start/stop/reopen/delete with correct data ownership, safe PTY/redirection/signal behavior and actual backend readiness. |
-| 4. BashKitten OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, bottom taskbar, maximized search/pins/app-grid Start menu, no dock/default shortcuts, maximize/two-app behavior, direct scaling and exact Gnozzard styling; Linux Thunar installation/registration. | Matching responsive layouts and working settings on Linux/Termux, preserved later pin/unpin choices, real apps/dialogs/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and user wallpaper. |
+| 4. BashKitten OS package | Shared `.deb`/native Termux packaging and initially pinned settings app, single-workplace default, Manage window size, bottom taskbar/right application tray, maximized search/pins/app-grid Start, no dock/default shortcuts, main-window maximize/two-app behavior, scaling and Gnozzard styling; Linux Thunar actions. | Matching responsive Linux/Termux layouts, On/Off behavior and parent-dialog exclusions, both tray protocols and guest BashKitten icon/activation, preserved user choices, real apps/input/scaling; donor launch rules, passwordless APT, menu/shortcut management and wallpaper. |
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Phone module and CLI | Main-APK MCP port, native master/feature policy, optional Accessibility, owned-Pi worker grants, Termux CLI and `phoneuse` skill. | Complete section 12's user-flow and denial checks; no camera/microphone commands, companion APK, exposed MCP catalog or reusable general-shell token. |
@@ -2852,11 +2942,12 @@ without confusing that development disk with the product machine data layout.
 | Display module/process boundary | Verify a separate renderer PID for the native viewport; interrupt/terminate that child and confirm other tabs/chat remain usable and guest work survives. Reattach a fresh renderer. Audit that Firefox changes remain confined to the documented module integration hooks. |
 | GPU limits | Actual supported devices and optional NVIDIA path verified; no physical-GPU claim from Cuttlefish, no guaranteed CUDA/game support from software rendering. |
 | Sudo | Noninteractive `sudo -n` package work, interactive PTY programs and `sudoedit` work; redirected input/output, interrupt, Ctrl-Z/`fg`, terminal resize and terminal restoration remain correct; no host privilege gained. |
-| XFCE layout | Fresh Termux and Linux desktops have one bottom taskbar containing only an Applications button with the proportionally sized BashKitten icon and normal running-window buttons. No XFCE menu icon, clock/date, network or other status widget, tray, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Window switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
-| BashKitten OS settings | Correct native package installs the BashKitten OS application/icon and seeds its Start pin once. Open it to change scaling/two-app settings in the owning environment; operations stay responsive and persisted. Unpin/reorder it, restart and upgrade: the user's choice survives, and the app remains searchable. Host/container-sharing controls are not duplicated here. |
+| XFCE layout | Fresh Termux and Linux desktops have one workplace and one bottom taskbar with Applications/kitten icon, normal running-window buttons and right-aligned application tray. No XFCE menu icon, clock/date, preseeded network/audio/power widgets, workspace switcher, Show Desktop, dock, pinned taskbar launcher or default desktop shortcut. Switching, resize, keyboard, rotation and scaling preserve the bottom workarea. Relaunch does not reset user edits. |
+| Application tray | Real StatusNotifier/AppIndicator and legacy XEmbed applications appear with working activation/menus; newly installed apps require no allowlist. Automatic guest BashKitten startup supplies exactly one real guest indicator, accurate status and the existing protected host activation path. Panel restart, browser closure, explicit Quit, icon hide/reorder and resizing behave correctly; no shared host bus, duplicate runtime, second protected Agent in the guest, injected system applets or UI stalls. |
+| BashKitten OS settings | Correct native package installs the application/icon and seeds its Start pin once. Manage window size defaults On; Off relinquishes layout and disables Two app mode while retaining its saved preference. Scaling/appearance/tray remain independent. Changes are responsive and persist across restart/upgrade; pin/unpin choices survive. Host/container-sharing controls are not duplicated here. |
 | Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. BashKitten's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. |
 | Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. |
-| XFCE behavior | App maximization, dialogs, taskbar pairing, divider drag, third app, pair member closing, disabled split mode, minimum sizes and viewport resize behave as specified. |
+| XFCE behavior | Normal main windows maximize within the workarea; in-app modals, separate/late parent dialogs, file pickers, utilities, menus and fullscreen keep native behavior and do not dissolve a pair. Independent same-app windows remain main windows. Check pairing/drag, third main-window activation, member close, minimum sizes and viewport changes. Toggle management Off during queued resize/drag: divider disappears, pending enforcement stops, user moves/resizes normally, and no stale callback reapplies layout. On resumes without restarting apps or resurrecting a stale pair; no automatic extra workplace allocation. |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; launcher reflows and the exact Gnozzard palette remains consistent; restart-needed apps are reported truthfully; no startup script resets user edits. |
 | Appearance/wallpaper persistence | Panel/menu/Thunar/default background use the recorded Gnozzard dark/orange colors on both platforms. The default wallpaper centers the existing BashKitten logo proportionally over #202225, shrinking when needed and never exceeding its 1254 × 1254 native pixels, including on high-DPI/large screens. Set a user wallpaper and placement through XFCE, then reopen Start/Display, rotate/resize, change scale, restart the desktop and upgrade the package; the saved image/placement and user appearance changes remain. No copied lock-screen override. |

@@ -142,6 +142,18 @@ and native Termux counterpart (`bashkitten-os` package identifier). Install its
 BashKitten OS settings app in Applications and pin it by default in new desktop
 profiles. Reuse existing scaling/two-app settings; retain later user pin/unpin
 choices. This is the customization package within BashKitten, not a separate OS.
+Use one XFCE workplace by default, not one per application. Add persistent
+per-environment Manage window size, initially On: maximize eligible resizable
+normal main windows within the workarea, while preserving Gnozzard-style
+transient/type exclusions and Xfwm's parent/group-modal handling. Dialogs, file
+pickers, utilities, menus, tray/launcher and in-app modals do not maximize or
+dissolve a split; independent same-app main windows remain eligible. Off removes
+the divider and all custom sizing enforcement, disables Two app mode while
+retaining its saved choice, and leaves normal XFCE/app placement and user control.
+Do not reset existing geometry or let stale callbacks reapply it. On resumes
+without restarting apps or restoring a stale pair. Only another eligible main
+window ends the active pair; size hints/fullscreen remain respected. Keep this
+nonblocking and independent of scaling, appearance and display-resolution changes.
 Its settings include a persistent per-environment Dark/Light preference for
 applications to read through standard session/toolkit/portal settings. Keep
 BashKitten OS's own dark/orange colors and user wallpaper unchanged; do not alter
@@ -152,10 +164,22 @@ and keyboard insets. Preserve the user's independent desktop scaling choice;
 reuse the Buzzard resize flow and embedded Termux:X11's native resize machinery.
 The shared XFCE customization defaults to one normal bottom taskbar with an
 Applications button with the existing BashKitten icon and running-window buttons
-only, on both Termux and Linux. Replace the XFCE icon with the proportionally
-sized kitten-with-glasses branding, superseding the earlier text-only choice; no
-clock/date, network/audio/power/status widgets, tray, workspace switcher or
-Show Desktop button. Underlying services remain available.
+plus an application tray at the right, on both Termux and Linux. Replace the XFCE
+icon with the proportionally sized kitten-with-glasses branding, superseding
+the earlier text-only choice; no
+clock/date, preseeded network/audio/power/status applets, workspace switcher or
+Show Desktop button. This latest tray requirement supersedes the earlier no-tray
+rule. Use the pinned stock systray plugin for StatusNotifier and legacy XEmbed,
+with no app allowlist or second tray plugin; preserve user item/menu/hide/order
+choices. Each tray uses its own guest X server/session bus, never the host bus.
+The existing BashKitten tray is browser-window-owned; add the small guest-side
+indicator needed for automatic container startup, with truthful status and the
+existing authorized activation/lifetime path. Its Open targets that guest;
+explicit Quit/Stop targets only its BashKitten service owner, never host-global
+Quit or container deletion/shutdown. Indicator closure must not stop services.
+Do not create a second protected
+Agent in the controlled guest just to obtain its icon. Panel/window closure must
+not stop the container. Underlying services remain available.
 Remove the extra launcher dock, pinned taskbar shortcuts and default desktop icons;
 use the stock tasklist with a narrow Two app mode patch, not a Docklike layout.
 Apply defaults once, preserve user edits, and keep the bottom workarea correct
