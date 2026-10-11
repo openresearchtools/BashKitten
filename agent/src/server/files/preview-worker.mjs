@@ -94,7 +94,13 @@ async function run(job) {
     else if (kind === 'pdf' || kind === 'image') await fs.rename(input, job.output);
     else if (kind === 'sheet') {
       const { default: XLSX } = await import('xlsx');
-      const workbook = XLSX.read(await fs.readFile(input), { type: 'buffer', dense: true, cellHTML: false, cellText: true, bookVBA: false });
+      const bytes = await fs.readFile(input);
+      // SheetJS treats BOM-free CSV buffers as single-byte text. Decode only
+      // delimited text here; binary workbooks keep their own format encoding.
+      const delimited = ['.csv', '.tsv'].includes(path.extname(job.name).toLowerCase());
+      const data = delimited ? decodePreviewText(bytes) : bytes;
+      if (data === null) throw Error('This CSV or TSV is not supported Unicode text; use Download');
+      const workbook = XLSX.read(data, { type: delimited ? 'string' : 'buffer', dense: true, cellHTML: false, cellText: true, bookVBA: false });
       abort.signal.throwIfAborted();
       await renderPreview({ kind, name: job.name, workbook }, job.output);
     } else {
