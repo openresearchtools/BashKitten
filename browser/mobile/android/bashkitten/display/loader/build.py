@@ -9,6 +9,7 @@ import shutil
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 import zipfile
 
 HERE = Path(__file__).resolve().parent
@@ -39,9 +40,14 @@ def build(args):
     jar = args.output / 'loader-classes.jar'
     with zipfile.ZipFile(jar, 'w') as archive:
         for file in sorted(classes.rglob('*.class')): archive.write(file, str(file.relative_to(classes)))
-    subprocess.run([str(args.d8), '--release', '--min-api', '31', '--lib', str(args.android_jar),
-                    '--output', str(args.output / 'bashkitten-x11-loader.jar'), str(jar)], check=True,
-                   env={**os.environ, 'JAVA_HOME': str(args.jdk), 'PATH': str(args.jdk / 'bin') + os.pathsep + os.environ.get('PATH', '')})
+    with tempfile.TemporaryDirectory(prefix='loader-dex-', dir=args.output) as temporary:
+        loader = Path(temporary) / 'bashkitten-x11-loader.jar'
+        subprocess.run([str(args.d8), '--release', '--min-api', '31', '--lib', str(args.android_jar),
+                        '--output', str(loader), str(jar)], check=True,
+                       env={**os.environ, 'JAVA_HOME': str(args.jdk), 'PATH': str(args.jdk / 'bin') + os.pathsep + os.environ.get('PATH', '')})
+        # Publish a complete read-only JAR; Android rejects writable DEX files.
+        loader.chmod(0o400)
+        loader.replace(args.output / loader.name)
     command = args.output / 'bashkitten-x11'
     command.write_text('''#!/data/data/com.termux/files/usr/bin/sh
 # Paired native Display loader; no extra APK, signing relationship with Termux or LAN transport.
