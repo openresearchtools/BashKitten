@@ -16,6 +16,7 @@ public final class BrowserApp extends ContextWrapper {
     public interface Provider { BrowserApp bashKitten(); }
     public interface Host {
         GeckoRuntime runtime();
+        boolean privateBrowsing();
         void openDisplay(String environmentId);
         void closeDisplay();
         Tab create(String owner, String contextId);

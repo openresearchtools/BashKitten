@@ -28,6 +28,7 @@ import mozilla.components.lib.state.ext.flow
 import mozilla.components.feature.tabs.WindowFeature
 import org.mozilla.fenix.FenixApplication
 import org.mozilla.fenix.HomeActivity
+import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.geckoview.GeckoView
 import com.bashkitten.BrowserApp
 import com.bashkitten.display.DisplayTabs
@@ -35,6 +36,7 @@ import com.bashkitten.display.DisplayTabs
 class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Host {
     private val components get() = application.components
     override fun runtime() = components.core.geckoRuntime
+    override fun privateBrowsing() = components.appStore.state.mode == BrowsingMode.Private
     private var activity = WeakReference<Activity>(null)
     private val windows = WindowFeature(components.core.store, components.useCases.tabsUseCases)
 
