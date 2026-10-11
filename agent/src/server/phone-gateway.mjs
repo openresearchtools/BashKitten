@@ -49,7 +49,15 @@ export class PhoneGateway {
     await new Promise((resolve,reject)=>{this.server.once('error',reject);this.server.listen(0,'127.0.0.1',resolve);});this.require(context);
     const native=await this.native(context,'ready',{});this.require(context);if(!native.ok)throw Error('Phone native owner did not authenticate readiness');
     await this.dispatch('phone.register',{...context.identity,name:'Local'},context.identity);this.require(context);
-    for(const directory of [path.join(dataDir,'notifications'),path.join(dataDir,'phone/live')]){await privateDir(directory);this.require(context);const observer=watch(directory,()=>this.flush(context));observer.on('error',()=>{});(context.watchers||=[]).push(observer);}
+    for(const directory of [path.join(dataDir,'notifications'),path.join(dataDir,'phone/live')]){
+      await privateDir(directory);this.require(context);
+      const observer=watch(directory,(_event,name)=>{
+        // Atomic writes publish a final JSON filename. Directory permission and
+        // temporary-file changes do not represent a new outbox entry.
+        if(name===null||/^[a-f0-9]{64}\.json$/.test(String(name)))this.flush(context);
+      });
+      observer.on('error',()=>{});(context.watchers||=[]).push(observer);
+    }
     this.flush(context);return {port:this.server.address().port,generation:value.generation,backendId:'local'};
   }
   async handle(context,request){
@@ -69,15 +77,30 @@ export class PhoneGateway {
     const response=read(socket,context.key);socket.once('connect',()=>write(socket,context.key,envelope));
     const reply=await response;this.require(context);if(reply.id!==envelope.id||reply.nonce!==envelope.nonce)throw Error('Phone response identity mismatch');return open(context.key,reply);
   }
-  flush(context){const run=this.delivery.then(async()=>{
-    if(!this.current(context))return;const result=await this.dispatch('phone.pending',{},context.identity);this.require(context);
-    for(const update of result.updates||[]){const answer=await this.native(context,update.resolvedEventId?'resolved':'withdraw',update);this.require(context);if(!answer.ok)throw Error(answer.error||'Phone state update failed');await this.dispatch('phone.update-ack',{eventId:update.eventId},context.identity);this.require(context);}
-    for(const message of result.live||[]){await this.native(context,'live',message);this.require(context);await this.dispatch('phone.live-ack',{key:message.key},context.identity);this.require(context);}
-    for(const event of result.events||[]){const answer=await this.native(context,'deliver',event);this.require(context);await this.dispatch('phone.ack',{eventId:event.eventId,state:answer.ok?answer.result.state:'failed'},context.identity);this.require(context);}
-  });this.delivery=run.catch(()=>{});}
+  flush(context){
+    if(!this.current(context))return;
+    context.dirty=true;
+    if(context.flushing)return;
+    context.flushing=true;
+    const run=this.delivery.then(async()=>{
+      // Many filesystem notifications can describe one atomic write. Retain a
+      // single rescan rather than an unbounded queue of delivery promises.
+      while(this.current(context)&&context.dirty){
+        context.dirty=false;
+        const result=await this.dispatch('phone.pending',{},context.identity);this.require(context);
+        for(const update of result.updates||[]){const answer=await this.native(context,update.resolvedEventId?'resolved':'withdraw',update);this.require(context);if(!answer.ok)throw Error(answer.error||'Phone state update failed');await this.dispatch('phone.update-ack',{eventId:update.eventId},context.identity);this.require(context);}
+        for(const message of result.live||[]){await this.native(context,'live',message);this.require(context);await this.dispatch('phone.live-ack',{key:message.key},context.identity);this.require(context);}
+        for(const event of result.events||[]){const answer=await this.native(context,'deliver',event);this.require(context);await this.dispatch('phone.ack',{eventId:event.eventId,state:answer.ok?answer.result.state:'failed'},context.identity);this.require(context);}
+      }
+    });
+    this.delivery=run.catch(()=>{}).finally(()=>{
+      context.flushing=false;
+      if(this.current(context)&&context.dirty)this.flush(context);
+    });
+  }
   async disable(){const context=this.context;try{if(context){await this.dispatch('phone.disable',{},context.identity);this.require(context);}}finally{await this.close();}}
   async close(){
-    const old=this.context;this.context=null;this.epoch++;for(const observer of old?.watchers||[])observer.close();
+    const old=this.context;this.context=null;this.epoch++;if(old)old.dirty=false;for(const observer of old?.watchers||[])observer.close();
     for(const controller of this.pending.values())controller.abort();this.pending.clear();for(const socket of this.sockets)socket.destroy();this.sockets.clear();
     if(this.server){this.server.close();this.server=null;}this.speech.close();old?.key.fill(0);
   }
