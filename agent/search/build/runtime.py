@@ -19,6 +19,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 LOCK = ROOT / "runtime-lock.json"
 LICENSE = re.compile(r"^(licen[cs]es?|copying|copyright|notices?|authors|ofl)(?:[._-].*)?$", re.I)
+LICENSE_REFERENCE = re.compile(rb"(?:\.{1,2}/)+\S+")
 
 
 def digest(path: Path) -> str:
@@ -142,6 +143,10 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
         unique = {}
         for path in paths:
             for filename, content in notices(path):
+                # Some crates package a relative LICENSE reference as plain text.
+                # Keep that pristine source, but require a full pinned supplement.
+                if LICENSE_REFERENCE.fullmatch(content.strip()):
+                    continue
                 unique.setdefault(hashlib.sha256(content).hexdigest(), (filename, content))
         if not unique:
             raise RuntimeError(f"missing license texts for {name} {version}")

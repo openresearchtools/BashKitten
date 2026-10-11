@@ -996,6 +996,39 @@
         "commit": "b7e65f9a4c317494cce2d18ea02b3d6eaaea7985",
         "path": "LICENSE-MIT"
       }
+    ],
+    "plotters@0.3.7": [
+      {
+        "filename": "plotters-0.3.7-LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/plotters-rs/plotters/cb7791f6814024d85aa6f9968e73051a4b295bf0/LICENSE",
+        "sha256": "cab8ff38785be68c4c914b6a01f871711b7c983e98c8f5c5f7057e31c46fe05c",
+        "size": 1091,
+        "repository": "https://github.com/plotters-rs/plotters",
+        "commit": "cb7791f6814024d85aa6f9968e73051a4b295bf0",
+        "path": "LICENSE"
+      }
+    ],
+    "plotters-backend@0.3.7": [
+      {
+        "filename": "plotters-0.3.7-LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/plotters-rs/plotters/cb7791f6814024d85aa6f9968e73051a4b295bf0/LICENSE",
+        "sha256": "cab8ff38785be68c4c914b6a01f871711b7c983e98c8f5c5f7057e31c46fe05c",
+        "size": 1091,
+        "repository": "https://github.com/plotters-rs/plotters",
+        "commit": "cb7791f6814024d85aa6f9968e73051a4b295bf0",
+        "path": "LICENSE"
+      }
+    ],
+    "plotters-svg@0.3.7": [
+      {
+        "filename": "plotters-0.3.7-LICENSE.txt",
+        "url": "https://raw.githubusercontent.com/plotters-rs/plotters/cb7791f6814024d85aa6f9968e73051a4b295bf0/LICENSE",
+        "sha256": "cab8ff38785be68c4c914b6a01f871711b7c983e98c8f5c5f7057e31c46fe05c",
+        "size": 1091,
+        "repository": "https://github.com/plotters-rs/plotters",
+        "commit": "cb7791f6814024d85aa6f9968e73051a4b295bf0",
+        "path": "LICENSE"
+      }
     ]
   }
 }
