@@ -2,77 +2,256 @@
 package com.bashkitten.telephony;
 
 import android.Manifest;
-import android.app.*;
+import android.app.Activity;
 import android.content.*;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.net.Uri;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
-import android.view.*;
+import android.text.InputType;
+import android.view.View;
+import android.view.WindowManager;
 import android.widget.*;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SwitchCompat;
 import org.json.*;
 import java.util.*;
 import java.util.function.Consumer;
+import static com.bashkitten.telephony.PhoneSettingsUi.*;
 
-/** Setup-only native UI. All state/storage/Telecom/model work belongs to the async owner. */
+/** Setup-only native UI. State, storage, Telecom and speech remain with the async owner. */
 public final class PhonePanel {
     private PhonePanel() { }
-    public static void show(Activity activity, View controls) {
-        TelephonyRuntime owner=TelephonyRuntime.get(activity);
-        ScrollView scroll=new ScrollView(activity);LinearLayout panel=new LinearLayout(activity);panel.setOrientation(LinearLayout.VERTICAL);int padding=(int)(16*activity.getResources().getDisplayMetrics().density);panel.setPadding(padding,padding,padding,padding);scroll.addView(panel);
-        TextView status=new TextView(activity);panel.addView(status);
-        LinearLayout telephony=new LinearLayout(activity);telephony.setOrientation(LinearLayout.VERTICAL);panel.addView(telephony);
-        LinearLayout backends=new LinearLayout(activity);backends.setOrientation(LinearLayout.VERTICAL);
-        final boolean[] rendered={false}, syncing={false};
-        Map<String,Switch> switches=new HashMap<>();Map<String,Spinner> selectors=new HashMap<>();Map<String,String[]> options=new HashMap<>();
-        Consumer<JSONObject> observer=value->{
-            if(activity.isFinishing()||activity.isDestroyed())return;
-            JSONObject settings=value.optJSONObject("settings");if(settings==null){status.setText(value.optString("error"));return;}
-            status.setText(value.optString("error").isBlank()?(value.optBoolean("connected")?"Phone backend connected":"Phone backend unavailable; connect this phone's Termux service"):value.optString("error"));
-            if(!rendered[0]){
-                rendered[0]=true;
-                switches.put("telephony",toggle(activity,telephony,"Telephony",settings.optBoolean("telephony"),enabled->{
-                    if(syncing[0])return;
-                    if(enabled&&activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},7328);
-                    owner.configure(TelephonyRuntime.json("telephony",enabled));
-                }));
-                switches.put("messages",toggle(activity,telephony,"Replyable messages",settings.optBoolean("messages"),enabled->{
-                    if(syncing[0])return;
-                    if(enabled&&Build.VERSION.SDK_INT>=33&&activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},7329);
-                    owner.configure(TelephonyRuntime.json("messages",enabled));
-                }));
-                button(activity,telephony,"Calling account setup",()->owner.setupAccount().whenComplete((result,error)->activity.runOnUiThread(()->{if(error!=null){status.setText(error.getMessage());return;}try{activity.startActivity(new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS));}catch(RuntimeException missing){status.setText("Calling account settings are unavailable on this device");}})));
-                button(activity,telephony,"Check calling readiness",()->owner.readiness().whenComplete((ready,error)->activity.runOnUiThread(()->status.setText(error!=null?error.getMessage():ready.optBoolean("accountEnabled")&&ready.optBoolean("microphone")&&ready.optBoolean("gateway")?"Calling account and microphone are ready; LocalAI is checked on connection":"Calling unavailable. "+ready.optString("reason")+" Account enabled: "+ready.optBoolean("accountEnabled")+"; microphone: "+ready.optBoolean("microphone")+"; gateway: "+ready.optBoolean("gateway")))));
-                button(activity,telephony,"Call agent",()->{if(activity.checkSelfPermission(Manifest.permission.CALL_PHONE)!=PackageManager.PERMISSION_GRANTED){activity.requestPermissions(new String[]{Manifest.permission.CALL_PHONE},7330);return;}owner.call(null);});
-                button(activity,telephony,"Add Kitten contact",()->contact(activity,owner,null,status));
-                button(activity,telephony,"Open LocalAI",owner::openLocalAI);
-                options.put("ordinaryDefault",new String[]{"off","call-in","messages","calls"});selectors.put("ordinaryDefault",choose(activity,telephony,"New ordinary chats",new String[]{"Off","Call-in only","Messages","Calls"},new String[]{"off","call-in","messages","calls"},settings.optString("ordinaryDefault","off"),s->owner.configure(TelephonyRuntime.json("ordinaryDefault",s))));
-                options.put("callDefault",new String[]{"call-in","messages","calls"});selectors.put("callDefault",choose(activity,telephony,"New chats started by call",new String[]{"Call-in only","Messages","Calls"},new String[]{"call-in","messages","calls"},settings.optString("callDefault","calls"),s->owner.configure(TelephonyRuntime.json("callDefault",s))));
-                options.put("recent",new String[]{"1","2","3","4","5","6","7","8","9"});selectors.put("recent",choose(activity,telephony,"Recent chats to announce",new String[]{"1","2","3","4","5","6","7","8","9"},new String[]{"1","2","3","4","5","6","7","8","9"},String.valueOf(settings.optInt("recent",5)),s->owner.configure(TelephonyRuntime.json("recent",Integer.parseInt(s)))));
-                options.put("finish",new String[]{"hash","silence","either"});selectors.put("finish",choose(activity,telephony,"Finish dictation",new String[]{"#","Silence","Either"},new String[]{"hash","silence","either"},settings.optString("finish","either"),s->owner.configure(TelephonyRuntime.json("finish",s))));
-                EditText silence=new EditText(activity);silence.setInputType(android.text.InputType.TYPE_CLASS_NUMBER|android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);silence.setHint("Silence after speech, seconds");silence.setText(String.valueOf(settings.optDouble("silenceSeconds",4)));telephony.addView(silence);
-                button(activity,telephony,"Save silence duration",()->{try{owner.configure(TelephonyRuntime.json("silenceSeconds",Double.parseDouble(silence.getText().toString())));}catch(NumberFormatException error){silence.setError("Use a positive number of seconds");}});
-                TextView auto=new TextView(activity);auto.setText("For sideloaded Android Auto messaging, enable Allow unknown sources in Android Auto developer settings. Auto controls its own listen/reply review.");telephony.addView(auto);
-                telephony.addView(backends);
-                View divider=new View(activity);divider.setBackgroundColor(0xff808080);panel.addView(divider,new LinearLayout.LayoutParams(-1,1));if(controls!=null)panel.addView(controls);
+    public static void show(Activity activity, View controls) { new Panel(activity, controls).show(); }
+
+    private static final class Panel {
+        final Activity activity;
+        final Context context;
+        final View controls;
+        final TelephonyRuntime owner;
+        final Set<AlertDialog> children = new HashSet<>();
+        JSONObject state = new JSONObject();
+        boolean syncing, closed;
+        SwitchCompat calls, messages;
+        TextView status;
+        Panel(Activity activity, View controls) {
+            this.activity = activity; this.controls = controls;
+            context = controls == null ? activity : controls.getContext();
+            owner = TelephonyRuntime.get(activity);
+        }
+        boolean alive() { return !closed && !activity.isFinishing() && !activity.isDestroyed(); }
+        JSONObject settings() { JSONObject result = state.optJSONObject("settings"); return result == null ? new JSONObject() : result; }
+        void show() {
+            LinearLayout body = body(context);
+            calls = toggle(body, "Calls", false, enabled -> {
+                if (syncing) return;
+                if (enabled && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                    activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 7328);
+                owner.configure(TelephonyRuntime.json("telephony", enabled));
+            });
+            boolean supported = Build.VERSION.SDK_INT >= 35 && activity.getSystemService(TelecomManager.class) != null
+                && activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELECOM);
+            calls.setEnabled(false);
+            if (!supported) text(body, "Calls aren't supported on this device.");
+            action(body, "Call setup", this::callSetup).setEnabled(supported);
+            action(body, "Call settings", () -> deliverySettings(true));
+            action(body, "Contacts and voicemail", this::contacts);
+            divider(body);
+            messages = toggle(body, "Messages", false, enabled -> {
+                if (syncing) return;
+                if (enabled && Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                    activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 7329);
+                owner.configure(TelephonyRuntime.json("messages", enabled));
+            });
+            messages.setEnabled(false);
+            action(body, "Message settings", () -> deliverySettings(false));
+            status = text(body, "Loading…");
+            divider(body); if (controls != null) body.addView(controls);
+            Consumer<JSONObject> observer = value -> {
+                if (!alive()) return;
+                state = value; JSONObject saved = value.optJSONObject("settings");
+                if (saved == null) { status.setText(value.optString("error", "Loading…")); return; }
+                syncing = true;
+                try { calls.setChecked(saved.optBoolean("telephony")); messages.setChecked(saved.optBoolean("messages")); }
+                finally { syncing = false; }
+                calls.setEnabled(supported || saved.optBoolean("telephony")); messages.setEnabled(true);
+                String error = value.optString("error");
+                String message = !error.isBlank() ? error : (saved.optBoolean("telephony") || saved.optBoolean("messages")) && !value.optBoolean("connected") ? "Turn on Local to connect your chats." : "";
+                status.setText(message); status.setVisibility(message.isBlank() ? View.GONE : View.VISIBLE);
+            };
+            AlertDialog dialog = PhoneSettingsUi.show(body, "Phone");
+            dialog.setOnDismissListener(ignored -> {
+                closed = true; owner.unobserve(observer);
+                for (AlertDialog child : new ArrayList<>(children)) child.dismiss();
+            });
+            owner.observe(observer);
+        }
+        AlertDialog child(LinearLayout body, String title) { return track(PhoneSettingsUi.show(body, title)); }
+        AlertDialog track(AlertDialog dialog) {
+            children.add(dialog); dialog.setOnDismissListener(ignored -> children.remove(dialog));
+            if (dialog.getWindow() != null) dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+            return dialog;
+        }
+        void callSetup() {
+            LinearLayout body = body(context);
+            TextView ready = text(body, settings().optBoolean("telephony") ? "Checking setup…" : "Turn on Calls to set up calling.");
+            android.widget.Button account = action(body, "Set up calling account", () -> owner.setupAccount().whenComplete((value, error) -> activity.runOnUiThread(() -> {
+                if (!alive() || !ready.isAttachedToWindow()) return;
+                if (error != null) { ready.setText(error.getMessage()); return; }
+                try { activity.startActivity(new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS)); }
+                catch (RuntimeException missing) { ready.setText("Calling account settings aren't available on this device."); }
+            })));
+            account.setEnabled(settings().optBoolean("telephony"));
+            action(body, "Check setup", () -> checkReady(ready));
+            action(body, "Call agent", () -> {
+                if (activity.checkSelfPermission(Manifest.permission.CALL_PHONE) != PackageManager.PERMISSION_GRANTED) {
+                    activity.requestPermissions(new String[]{Manifest.permission.CALL_PHONE}, 7330); return;
+                }
+                owner.call(null);
+            }).setEnabled(settings().optBoolean("telephony") && state.optBoolean("connected"));
+            if (activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                action(body, "Allow microphone", () -> activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 7328));
+            action(body, "Voice settings", owner::openLocalAI);
+            AlertDialog dialog = child(body, "Call setup");
+            Consumer<JSONObject> observer = value -> {
+                if (alive() && dialog.isShowing() && !value.optString("error").isBlank()) ready.setText(value.optString("error"));
+            };
+            android.view.ViewTreeObserver.OnWindowFocusChangeListener focus = focused -> { if (focused) checkReady(ready); };
+            ready.getViewTreeObserver().addOnWindowFocusChangeListener(focus); owner.observe(observer);
+            dialog.setOnDismissListener(ignored -> {
+                children.remove(dialog); owner.unobserve(observer);
+                if (ready.getViewTreeObserver().isAlive()) ready.getViewTreeObserver().removeOnWindowFocusChangeListener(focus);
+            });
+            if (settings().optBoolean("telephony")) checkReady(ready);
+        }
+        void checkReady(TextView target) {
+            owner.readiness().whenComplete((ready, error) -> activity.runOnUiThread(() -> {
+                if (!alive() || !target.isAttachedToWindow()) return;
+                if (error != null) { target.setText(error.getMessage()); return; }
+                List<String> missing = new ArrayList<>();
+                if (!settings().optBoolean("telephony")) missing.add("Turn on Calls.");
+                if (!ready.optString("reason").isBlank()) missing.add(ready.optString("reason"));
+                else if (!ready.optBoolean("accountEnabled")) missing.add("Enable BashKitten in calling account settings.");
+                if (!ready.optBoolean("microphone")) missing.add("Allow microphone access to speak during calls.");
+                if (!ready.optBoolean("gateway")) missing.add("Turn on Local to connect your chats.");
+                target.setText(missing.isEmpty() ? "Calling is set up. Speech models are checked when you call." : String.join("\n", missing));
+            }));
+        }
+        void deliverySettings(boolean calling) {
+            LinearLayout body = body(context); JSONObject saved = settings(), draft = new JSONObject();
+            choose(body, "Updates for new chats", new String[]{"Off", "Only when I call", "Messages", "Calls"}, new String[]{"off", "call-in", "messages", "calls"}, saved.optString("ordinaryDefault", "off"), value -> TelephonyRuntime.put(draft, "ordinaryDefault", value));
+            EditText pause;
+            if (calling) {
+                choose(body, "Updates for chats started by phone", new String[]{"Only when I call", "Messages", "Calls"}, new String[]{"call-in", "messages", "calls"}, saved.optString("callDefault", "calls"), value -> TelephonyRuntime.put(draft, "callDefault", value));
+                choose(body, "Recent chats to read out", new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, new String[]{"1", "2", "3", "4", "5", "6", "7", "8", "9"}, String.valueOf(saved.optInt("recent", 5)), value -> TelephonyRuntime.put(draft, "recent", Integer.parseInt(value)));
+                divider(body);
+                TextView label = text(body, "Stop recording after");
+                pause = new EditText(context); pause.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+                pause.setText(String.valueOf(saved.optDouble("silenceSeconds", 4))); pause.setSingleLine(true);
+                pause.setId(View.generateViewId()); label.setLabelFor(pause.getId()); body.addView(pause, new LinearLayout.LayoutParams(-1, -2));
+                text(body, "Seconds without speech");
+                choose(body, "Finish speaking", new String[]{"Press #", "Pause", "Pause or press #"}, new String[]{"hash", "silence", "either"}, saved.optString("finish", "either"), value -> {
+                    TelephonyRuntime.put(draft, "finish", value); pause.setEnabled(!value.equals("hash"));
+                });
+                pause.setEnabled(!saved.optString("finish", "either").equals("hash"));
+            } else {
+                pause = null;
+                action(body, "Android Auto", this::androidAuto);
             }
-            syncing[0]=true;
-            try { for(Map.Entry<String,Switch> entry:switches.entrySet())entry.getValue().setChecked(settings.optBoolean(entry.getKey()));
-                for(Map.Entry<String,Spinner> entry:selectors.entrySet()){String selected=String.valueOf(settings.opt(entry.getKey()));entry.getValue().setTag(selected);int index=Arrays.asList(options.get(entry.getKey())).indexOf(selected);if(index>=0)entry.getValue().setSelection(index);}
-            } finally { syncing[0]=false; }
-            backends.removeAllViews();JSONObject list=value.optJSONObject("backends");JSONObject mailbox=value.optJSONObject("mailbox");if(list!=null)for(String id:TelephonyRuntime.keys(list)){
-                JSONObject backend=list.optJSONObject(id);if(backend.optBoolean("revoked"))continue;
-                TextView title=new TextView(activity);title.setText(backend.optString("name"));backends.addView(title);
-                button(activity,backends,"Add contact",()->contact(activity,owner,id,status));
-                toggle(activity,backends,"Divert calls to voicemail",backend.optBoolean("divert"),enabled->owner.divert(id,enabled));
-                button(activity,backends,"View voicemail",()->{StringBuilder text=new StringBuilder();if(mailbox!=null)for(String key:TelephonyRuntime.keys(mailbox)){JSONObject item=mailbox.optJSONObject(key);if(id.equals(item.optString("backendId")))text.append(item.optString("title","Chat")).append(item.optBoolean("replied")?" · Replied":"").append(item.has("questionStatus")?" · "+item.optString("questionStatus"):"").append("\n").append(item.optString("text")).append("\n\n");}ScrollView view=new ScrollView(activity);TextView content=new TextView(activity);content.setText(text.length()==0?"No voicemail":text.toString());content.setTextIsSelectable(true);view.addView(content);new AlertDialog.Builder(activity).setTitle("Voicemail · "+backend.optString("name")).setView(view).setPositiveButton("Close",null).show();});
-                button(activity,backends,"Clear voicemail",()->new AlertDialog.Builder(activity).setMessage("Clear this backend's voicemail? Pi chat history stays available.").setNegativeButton("Cancel",null).setPositiveButton("Clear",(d,w)->owner.clearMailbox(id)).show());
+            TextView error = text(body, ""); error.setVisibility(View.GONE);
+            AlertDialog dialog = track(PhoneSettingsUi.dialog(body, calling ? "Call settings" : "Message settings").setNegativeButton("Cancel", null).setPositiveButton("Save", null).show());
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+                if (pause != null) {
+                    try {
+                        double seconds = Double.parseDouble(pause.getText().toString());
+                        if (!Double.isFinite(seconds) || seconds <= 0) throw new NumberFormatException();
+                        if (seconds != saved.optDouble("silenceSeconds", 4)) TelephonyRuntime.put(draft, "silenceSeconds", seconds);
+                    } catch (NumberFormatException invalid) { pause.setError("Enter a number greater than zero"); return; }
+                }
+                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
+                owner.configure(draft).whenComplete((value, failure) -> activity.runOnUiThread(() -> {
+                    if (!alive() || !dialog.isShowing()) return;
+                    if (failure == null) dialog.dismiss();
+                    else { error.setText(failure.getMessage()); error.setVisibility(View.VISIBLE); dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true); }
+                }));
+            });
+        }
+        void androidAuto() {
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                String packageName = "com.google.android.projection.gearhead";
+                Intent launch = activity.getPackageManager().getLaunchIntentForPackage(packageName);
+                boolean installed;
+                try { activity.getPackageManager().getPackageInfo(packageName, 0); installed = true; }
+                catch (PackageManager.NameNotFoundException missing) { installed = false; }
+                Intent settings = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + packageName));
+                boolean hasSettings = installed && settings.resolveActivity(activity.getPackageManager()) != null;
+                boolean available = installed;
+                activity.runOnUiThread(() -> {
+                    if (!alive()) return;
+                    if (launch != null) {
+                        try { activity.startActivity(launch); return; }
+                        catch (ActivityNotFoundException | SecurityException unavailable) { /* Use the supported settings route below. */ }
+                    }
+                    LinearLayout help = body(context);
+                    text(help, available ? "Android Auto doesn't offer a direct settings shortcut on this device." : "Android Auto isn't installed on this device.");
+                    text(help, "Listen and reply in Android Auto's notifications. In Android Auto developer settings, allow unknown sources for this sideloaded app.");
+                    if (hasSettings) action(help, "Open app settings", () -> {
+                        try { activity.startActivity(settings); }
+                        catch (ActivityNotFoundException | SecurityException unavailable) { text(help, "App settings aren't available."); }
+                    });
+                    child(help, "Android Auto");
+                });
+            }).exceptionally(error -> {
+                activity.runOnUiThread(() -> {
+                    if (!alive()) return;
+                    LinearLayout help = body(context); text(help, "Android Auto settings aren't available."); child(help, "Android Auto");
+                }); return null;
+            });
+        }
+        void contacts() {
+            LinearLayout body = body(context); TextView result = text(body, ""); result.setVisibility(View.GONE);
+            action(body, "Add Kitten contact", () -> contact(null, result));
+            LinearLayout list = new LinearLayout(context); list.setOrientation(LinearLayout.VERTICAL); body.addView(list);
+            AlertDialog dialog = child(body, "Contacts and voicemail");
+            Consumer<JSONObject> observer = value -> {
+                if (!alive() || !dialog.isShowing()) return;
+                list.removeAllViews(); JSONObject backends = value.optJSONObject("backends"), mailbox = value.optJSONObject("mailbox");
+                if (backends == null) return;
+                for (String id : TelephonyRuntime.keys(backends)) {
+                    JSONObject backend = backends.optJSONObject(id); if (backend == null || backend.optBoolean("revoked")) continue;
+                    divider(list); text(list, backend.optString("name", "BashKitten")).setTextSize(16);
+                    action(list, "Add contact", () -> contact(id, result));
+                    toggle(list, "Send calls to voicemail", backend.optBoolean("divert"), enabled -> owner.divert(id, enabled));
+                    action(list, "View voicemail", () -> mailbox(backend.optString("name", "BashKitten"), id, mailbox));
+                    action(list, "Clear voicemail", () -> {
+                        AlertDialog confirm = new com.google.android.material.dialog.MaterialAlertDialogBuilder(context)
+                            .setTitle("Clear voicemail?").setMessage("Clear voicemail for " + backend.optString("name", "BashKitten") + "? Your chats will stay available.")
+                            .setNegativeButton("Cancel", null).setPositiveButton("Clear", (d, which) -> owner.clearMailbox(id)).show(); track(confirm);
+                    });
+                }
+            };
+            dialog.setOnDismissListener(ignored -> { children.remove(dialog); owner.unobserve(observer); }); owner.observe(observer);
+        }
+        void contact(String id, TextView result) {
+            owner.contact(id).whenComplete((intent, error) -> activity.runOnUiThread(() -> {
+                if (!alive() || !result.isAttachedToWindow()) return;
+                if (error != null) { result.setText(error.getMessage()); result.setVisibility(View.VISIBLE); return; }
+                try { activity.startActivity(intent); }
+                catch (ActivityNotFoundException missing) { result.setText("No contact editor is available."); result.setVisibility(View.VISIBLE); }
+            }));
+        }
+        void mailbox(String name, String id, JSONObject mailbox) {
+            LinearLayout body = body(context); StringBuilder content = new StringBuilder();
+            if (mailbox != null) for (String key : TelephonyRuntime.keys(mailbox)) {
+                JSONObject item = mailbox.optJSONObject(key);
+                if (item == null || !id.equals(item.optString("backendId"))) continue;
+                content.append(item.optString("title", "Chat")).append(item.optBoolean("replied") ? " · Replied" : "");
+                if (item.has("questionStatus")) content.append(" · ").append(item.optString("questionStatus"));
+                content.append('\n').append(item.optString("text")).append("\n\n");
             }
-        };
-        AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("Phone").setView(scroll).setPositiveButton("Close",null).create();dialog.setOnDismissListener(d->owner.unobserve(observer));dialog.show();owner.observe(observer);
+            text(body, content.length() == 0 ? "No voicemail" : content.toString()).setTextIsSelectable(true);
+            child(body, "Voicemail · " + name);
+        }
     }
-    private static void contact(Activity activity,TelephonyRuntime owner,String id,TextView status){owner.contact(id).whenComplete((intent,error)->activity.runOnUiThread(()->{if(error!=null){status.setText(error.getMessage());return;}try{activity.startActivity(intent);}catch(ActivityNotFoundException unavailable){status.setText("No contact editor is available");}}));}
-    private static void button(Activity activity,LinearLayout parent,String label,Runnable action){Button button=new Button(activity);button.setText(label);button.setOnClickListener(v->action.run());parent.addView(button);}
-    private static Switch toggle(Activity activity,LinearLayout parent,String label,boolean value,Consumer<Boolean> changed){Switch view=new Switch(activity);view.setText(label);view.setChecked(value);view.setOnCheckedChangeListener((button,enabled)->changed.accept(enabled));parent.addView(view);return view;}
-    private static Spinner choose(Activity activity,LinearLayout parent,String title,String[] labels,String[] values,String current,Consumer<String> changed){TextView label=new TextView(activity);label.setText(title);parent.addView(label);Spinner spinner=new Spinner(activity);ArrayAdapter<String> adapter=new ArrayAdapter<>(activity,android.R.layout.simple_spinner_dropdown_item,labels);spinner.setAdapter(adapter);int index=Arrays.asList(values).indexOf(current);spinner.setSelection(Math.max(0,index));parent.addView(spinner);spinner.setTag(current);spinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View view,int position,long id){String value=values[position];if(value.equals(spinner.getTag()))return;spinner.setTag(value);changed.accept(value);}public void onNothingSelected(AdapterView<?> p){}});return spinner;}
 }

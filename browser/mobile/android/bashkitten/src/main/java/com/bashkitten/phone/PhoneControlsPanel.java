@@ -2,31 +2,93 @@
 package com.bashkitten.phone;
 
 import android.Manifest;
-import android.app.*;
+import android.app.Activity;
 import android.content.*;
 import android.provider.Settings;
 import android.view.View;
-import android.widget.*;
+import android.widget.LinearLayout;
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.widget.SwitchCompat;
+import com.bashkitten.R;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import static com.bashkitten.telephony.PhoneSettingsUi.*;
 
 /** Native-only policy controls. No CLI command can change these settings. */
 public final class PhoneControlsPanel {
-    private static final class Binding {final Activity activity;final PhonePolicy policy;final LinearLayout root;Binding(Activity a,PhonePolicy p,LinearLayout r){activity=a;policy=p;root=r;}}
-    public static View build(Activity activity){
-        PhonePolicy policy=PhoneControlsRuntime.get(activity).policy;LinearLayout root=new LinearLayout(activity);root.setOrientation(LinearLayout.VERTICAL);root.setTag(new Binding(activity,policy,root));Runnable update=()->refresh(root);
-        android.view.ViewTreeObserver.OnWindowFocusChangeListener focus=focused->{if(focused)refresh(root);};
-        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View view){policy.observe(update);root.getViewTreeObserver().addOnWindowFocusChangeListener(focus);refresh(root);}public void onViewDetachedFromWindow(View view){policy.unobserve(update);if(root.getViewTreeObserver().isAlive())root.getViewTreeObserver().removeOnWindowFocusChangeListener(focus);}});
-        refresh(root);return root;
+    private PhoneControlsPanel() { }
+    private static final class Binding {
+        final Activity activity; final PhonePolicy policy; final LinearLayout root;
+        AlertDialog detail;
+        Binding(Activity activity, LinearLayout root) {
+            this.activity = activity; this.root = root; policy = PhoneControlsRuntime.get(activity).policy;
+        }
     }
-    public static void refresh(View view){if(!(view.getTag() instanceof Binding))return;Binding b=(Binding)view.getTag();b.root.removeAllViews();
-        TextView heading=new TextView(b.activity);heading.setText("Phone controls");heading.setTextSize(18);b.root.addView(heading);
-        Switch master=new Switch(b.activity);master.setText("Phone controls");master.setChecked(b.policy.master());master.setOnCheckedChangeListener((button,value)->{b.policy.setMaster(value);refresh(view);});b.root.addView(master);
-        TextView connection=new TextView(b.activity);connection.setText(!b.policy.master()?"Off":PhoneControlsRuntime.get(b.activity).connected()?"Local Agent connected":"Waiting for the local Agent connection");b.root.addView(connection);
-        for(PhonePolicy.Feature feature:PhonePolicy.Feature.values()){
-            if(feature==PhonePolicy.Feature.SCREEN){View divider=new View(b.activity);divider.setBackgroundColor(0xff777777);b.root.addView(divider,new LinearLayout.LayoutParams(-1,1));TextView label=new TextView(b.activity);label.setText("Optional Accessibility controls");b.root.addView(label);Button permission=new Button(b.activity);permission.setText("Accessibility settings");permission.setOnClickListener(v->b.activity.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));b.root.addView(permission);}
-            Switch option=new Switch(b.activity);String unavailable=b.policy.unavailable(feature);option.setText(feature.label+(unavailable.isEmpty()?"":" — "+unavailable));option.setChecked(b.policy.selected(feature));option.setEnabled(b.policy.master()&&(!feature.accessibility||unavailable.isEmpty()));option.setOnCheckedChangeListener((button,value)->{b.policy.setSelected(feature,value);});b.root.addView(option);
-            if(feature==PhonePolicy.Feature.NOTIFICATIONS){Button permission=new Button(b.activity);permission.setText("Notification access");permission.setOnClickListener(v->b.activity.startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));b.root.addView(permission);}
-            if(feature==PhonePolicy.Feature.FILES){Button locations=new Button(b.activity);locations.setText("Granted file locations");locations.setOnClickListener(v->b.activity.startActivity(new Intent(b.activity,PhoneFilesActivity.class)));b.root.addView(locations);}
-            if(feature==PhonePolicy.Feature.LOCATION){Button permission=new Button(b.activity);permission.setText("Allow precise location");permission.setOnClickListener(v->b.activity.requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION,Manifest.permission.ACCESS_FINE_LOCATION},8612));b.root.addView(permission);}
+    public static View build(Activity activity) {
+        Context context = new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).getContext();
+        LinearLayout root = new LinearLayout(context); root.setOrientation(LinearLayout.VERTICAL);
+        Binding binding = new Binding(activity, root); root.setTag(binding); Runnable update = () -> refresh(root);
+        android.view.ViewTreeObserver.OnWindowFocusChangeListener focus = focused -> { if (focused) refresh(root); };
+        root.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            public void onViewAttachedToWindow(View view) {
+                binding.policy.observe(update); root.getViewTreeObserver().addOnWindowFocusChangeListener(focus); refresh(root);
+            }
+            public void onViewDetachedFromWindow(View view) {
+                binding.policy.unobserve(update);
+                if (root.getViewTreeObserver().isAlive()) root.getViewTreeObserver().removeOnWindowFocusChangeListener(focus);
+                if (binding.detail != null) binding.detail.dismiss();
+            }
+        });
+        refresh(root); return root;
+    }
+    public static void refresh(View view) {
+        if (!(view.getTag() instanceof Binding)) return;
+        Binding binding = (Binding) view.getTag(); binding.root.removeAllViews();
+        toggle(binding.root, "Phone controls", binding.policy.master(), binding.policy::setMaster);
+        action(binding.root, "Allowed actions", () -> showActions(binding));
+        if (binding.policy.master() && !PhoneControlsRuntime.get(binding.activity).connected())
+            text(binding.root, "Turn on Local to let your agent use phone controls.");
+    }
+    private static void showActions(Binding binding) {
+        if (binding.detail != null) { binding.detail.show(); return; }
+        LinearLayout body = body(binding.root.getContext());
+        Runnable update = () -> renderActions(binding, body);
+        update.run(); AlertDialog dialog = show(body, "Allowed actions"); binding.detail = dialog;
+        android.view.ViewTreeObserver.OnWindowFocusChangeListener focus = focused -> { if (focused) update.run(); };
+        body.getViewTreeObserver().addOnWindowFocusChangeListener(focus); binding.policy.observe(update);
+        dialog.setOnDismissListener(ignored -> {
+            binding.policy.unobserve(update);
+            if (body.getViewTreeObserver().isAlive()) body.getViewTreeObserver().removeOnWindowFocusChangeListener(focus);
+            binding.detail = null;
+        });
+    }
+    private static void renderActions(Binding binding, LinearLayout body) {
+        body.removeAllViews();
+        if (!binding.policy.master()) text(body, "Turn on Phone controls to use these actions.");
+        for (PhonePolicy.Feature feature : PhonePolicy.Feature.values()) {
+            if (feature == PhonePolicy.Feature.SCREEN) {
+                divider(body); text(body, "Accessibility").setTextSize(16);
+                if (!binding.policy.unavailable(feature).isEmpty()) text(body, "Allow Accessibility access to use the actions below.");
+                action(body, "Accessibility settings", () -> binding.activity.startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+            }
+            String label;
+            switch (feature) {
+                case APPS: label = "Apps and links"; break;
+                case SCREEN: label = "Read screen"; break;
+                case TOUCH: label = "Touch and gestures"; break;
+                case TEXT: label = "Typing"; break;
+                default: label = feature.label;
+            }
+            String unavailable = binding.policy.unavailable(feature);
+            SwitchCompat option = toggle(body, label, binding.policy.selected(feature), enabled -> binding.policy.setSelected(feature, enabled));
+            option.setEnabled(binding.policy.master() && (!feature.accessibility || unavailable.isEmpty()));
+            if (feature == PhonePolicy.Feature.NOTIFICATIONS) {
+                if (!unavailable.isEmpty()) text(body, "Notification access is needed.");
+                action(body, "Notification access", () -> binding.activity.startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+            }
+            if (feature == PhonePolicy.Feature.FILES)
+                action(body, "Allowed folders", () -> binding.activity.startActivity(new Intent(binding.activity, PhoneFilesActivity.class)));
+            if (feature == PhonePolicy.Feature.LOCATION && !unavailable.isEmpty())
+                action(body, "Allow precise location", () -> binding.activity.requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, 8612));
         }
     }
 }
