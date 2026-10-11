@@ -15,7 +15,7 @@ async function parakeet(command, audio, signal) {
     child.once('close', code => code === 0 ? resolve() : reject(Error('Parakeet transcription failed; check the selected model and device')));
   });
   try {
-    child.stdin.end(audio); await ended; signal.throwIfAborted();
+    child.stdin.end(audio); await ended; signal?.throwIfAborted();
     const text = Buffer.concat(output).toString('utf8').trim();
     if (!text) throw Error('Parakeet did not return a transcript');
     return { text };
@@ -25,41 +25,49 @@ async function parakeet(command, audio, signal) {
   }
 }
 
-/** Authenticated operation only. No formBody, jobs, staging files or content logs. */
-export async function transcribe(req, res, watchAuthorization) {
-  if (req.headers['content-type'] !== 'audio/wav') throw Error('Dictation requires PCM WAV audio');
-  const id = randomUUID(), abort = new AbortController(), chunks = [];
-  let audio, completed = false;
-  const cancel = () => { abort.abort(); void controlRequest('whisper-release', { id }).catch(() => {}); };
-  res.once('close', cancel);
-  const stopWatching = watchAuthorization(cancel);
+/** Shared memory-only transcription for protected web dictation and native calls. */
+export async function transcribeAudio(audio, { signal, acquire = id => controlRequest('whisper-acquire', { id }),
+  release = (id, completed) => controlRequest('whisper-release', { id, completed }) } = {}) {
+  const id = randomUUID(); let completed = false;
+  const cancel = () => { void release(id, false).catch(() => {}); };
+  signal?.addEventListener('abort', cancel, { once: true });
   try {
-    for await (const chunk of req) { abort.signal.throwIfAborted(); chunks.push(chunk); }
-    audio = Buffer.concat(chunks); for (const chunk of chunks) chunk.fill(0); chunks.length = 0;
     if (audio.length < 44 || audio.toString('ascii', 0, 4) !== 'RIFF' || audio.toString('ascii', 8, 12) !== 'WAVE' ||
         audio.toString('ascii', 12, 16) !== 'fmt ' || audio.readUInt32LE(16) !== 16 || audio.readUInt16LE(20) !== 1 ||
         audio.readUInt16LE(22) !== 1 || audio.readUInt32LE(24) !== 16000 || audio.readUInt16LE(34) !== 16 ||
         audio.toString('ascii', 36, 40) !== 'data' || audio.readUInt32LE(40) !== audio.length - 44 || audio.readUInt32LE(4) !== audio.length - 8) throw Error('Invalid mono 16 kHz PCM recording');
-    abort.signal.throwIfAborted();
-    const ready = await controlRequest('whisper-acquire', { id });
-    abort.signal.throwIfAborted();
+    signal?.throwIfAborted();
+    const ready = await acquire(id); signal?.throwIfAborted();
     if (ready.id === id && ready.kind === 'parakeet') {
-      const result = await parakeet(ready.command, audio, abort.signal); completed = true; return result;
+      const result = await parakeet(ready.command, audio, signal); completed = true; return result;
     }
     if (!/^http:\/\/127\.0\.0\.1:[0-9]+$/.test(ready.url) || ready.id !== id) throw Error('Whisper did not provide its owned endpoint');
     const form = new FormData();
     form.append('file', new Blob([audio], { type: 'audio/wav' }), 'recording.wav');
     form.append('response_format', 'json'); form.append('temperature', '0');
-    const response = await fetch(ready.url + '/inference', { method: 'POST', body: form, signal: abort.signal, redirect: 'error' });
+    const response = await fetch(ready.url + '/inference', { method: 'POST', body: form, signal, redirect: 'error' });
     if (!response.ok) { await response.body?.cancel(); throw Error(`Whisper transcription failed (HTTP ${response.status})`); }
     const result = await response.json();
     if (typeof result.text !== 'string') throw Error('Whisper returned an invalid transcript');
-    abort.signal.throwIfAborted();
-    completed = true;
+    signal?.throwIfAborted(); completed = true;
     return { text: result.text.trim() };
+  } finally { signal?.removeEventListener('abort', cancel); await release(id, completed); }
+}
+
+/** Authenticated operation only. No formBody, jobs, staging files or content logs. */
+export async function transcribe(req, res, watchAuthorization) {
+  if (req.headers['content-type'] !== 'audio/wav') throw Error('Dictation requires PCM WAV audio');
+  const abort = new AbortController(), chunks = [];
+  let audio;
+  const cancel = () => abort.abort();
+  res.once('close', cancel);
+  const stopWatching = watchAuthorization(cancel);
+  try {
+    for await (const chunk of req) { abort.signal?.throwIfAborted(); chunks.push(chunk); }
+    audio = Buffer.concat(chunks); for (const chunk of chunks) chunk.fill(0); chunks.length = 0;
+    return await transcribeAudio(audio, { signal: abort.signal });
   } finally {
     res.off('close', cancel); stopWatching(); abort.abort();
     audio?.fill(0); for (const chunk of chunks) chunk.fill(0);
-    await controlRequest('whisper-release', { id, completed });
   }
 }
