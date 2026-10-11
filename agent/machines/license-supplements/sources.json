@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "components": [
+    {
+      "name": "tonic-prost-build",
+      "version": "0.14.6",
+      "repository": "https://github.com/hyperium/tonic",
+      "commit": "6cb6056b5a748bc5a29bd48f4602dbc4e552bb7d",
+      "license": "MIT",
+      "source_archive_sha256": "fda70544fcfd11ca052ac1e7cafd3ca82d2b2bd6d0df260549a754f52bc6ed6b",
+      "files": [
+        {
+          "path": "tonic-prost-build@0.14.6/LICENSE",
+          "sha256": "e24a56698aa6feaf3a02272b3624f9dc255d982970c5ed97ac4525a95056a5b3"
+        }
+      ]
+    },
+    {
+      "name": "tonic-prost",
+      "version": "0.14.6",
+      "repository": "https://github.com/hyperium/tonic",
+      "commit": "6cb6056b5a748bc5a29bd48f4602dbc4e552bb7d",
+      "license": "MIT",
+      "source_archive_sha256": "fda70544fcfd11ca052ac1e7cafd3ca82d2b2bd6d0df260549a754f52bc6ed6b",
+      "files": [
+        {
+          "path": "tonic-prost@0.14.6/LICENSE",
+          "sha256": "e24a56698aa6feaf3a02272b3624f9dc255d982970c5ed97ac4525a95056a5b3"
+        }
+      ]
+    },
+    {
+      "name": "etherparse",
+      "version": "0.19.0",
+      "repository": "https://github.com/JulianSchmid/etherparse",
+      "commit": "b76f71ac3e26755398d8ae966f5da99aac99c028",
+      "license": "MIT OR Apache-2.0",
+      "source_archive_sha256": "28f9d3d07b606c5ac6e242c9caebbff2a62b50f6ad1e5aaa29055eafe9ca5277",
+      "files": [
+        {
+          "path": "etherparse@0.19.0/LICENSE-APACHE",
+          "sha256": "affcd3a3acd2a70d6405c6a5088413da8f97b91f5074ae313fbaa2ec4b45b19f"
+        },
+        {
+          "path": "etherparse@0.19.0/LICENSE-MIT",
+          "sha256": "4be7e6a9b3e7293807bbebfd081941c2d87fa445733e1ad0a9fc6efbc4f3029a"
+        }
+      ]
+    }
+  ]
+}
