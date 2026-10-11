@@ -3201,3 +3201,40 @@ backend ownership, nonblocking behavior or acceptance requirements.
 
 The original protected baseline remains unchanged. These are implementation
 requirements from the user, not a claim that the revised installed UI passes.
+
+### Later 11 October correction: separate BashKitten settings and hierarchy
+
+The user's subsequent decision replaces the native Firefox menu insertion
+described above. Use three clear controls: the BashKitten logo, a BashKitten
+settings gear, and the existing native Firefox three-line menu. Keep Firefox's
+menu for browser functions. The separate gear menu uses the same native menu
+presentation and contains Local AI, Notifications, Phone/Computer Use, Remote
+Connections, Telephone and Performance, plus Providers and general agent
+settings. Remove duplicate entries for Providers/general settings elsewhere.
+Render setting details in Gecko web views, reusing the existing native owners
+and protected local control paths; never grant local management authority to
+remote-served chat documents or add public management HTTP routes. Desktop's
+Agent title/tab becomes BashKitten with its settings gear beside it; remove the
+duplicate Agent/LocalAI/menu header inside the BashKitten pane.
+
+The logo toggles the sidebar. On wide layouts the sidebar stays beside the
+selected chat; on narrow layouts selecting a chat shows that chat and closes
+the sidebar. Pressing the logo again closes the sidebar. Its exact visual
+reference is the captured Codex sidebar: flat rows, subtle selection, clear
+section headings and indentation, repeated for the environments rather than
+new cards or a redesigned navigation surface.
+
+Use Local, Containers (desktop only), then Remotes as the outer sections.
+Each environment has Projects and Chats sections. Project chats are indented
+beneath their project; standalone chats are unindented. Contextual add controls
+create projects, chats within a project, or standalone chats respectively.
+Containers' add control opens creation/configuration; Remotes' add control
+connects another remote. Keep per-environment On/Off controls. On mobile put a
+PC/Display button at the top of the sidebar for local Termux; on desktop each
+container title has its Display icon beside the power control. Preserve the
+existing container settings/lifecycle controls and remote-only restrictions.
+
+These later placement and hierarchy decisions supersede their conflicting
+earlier presentation instructions, including the temporary rule reserving every
+plus icon for connections. The underlying feature scope, protected baseline and
+whole-plan acceptance requirements remain unchanged.
