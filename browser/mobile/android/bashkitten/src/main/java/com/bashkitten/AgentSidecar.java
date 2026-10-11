@@ -210,7 +210,7 @@ public final class AgentSidecar {
             group.addView(expand);
             Button projectTitle = button(project.optString("name"), () -> { if (!collapsed.remove(expansionKey)) collapsed.add(expansionKey); render(); });
             projectTitle.setTextSize(13); projectTitle.setTextColor(muted); group.addView(projectTitle, new LinearLayout.LayoutParams(0, dp(34), 1));
-            group.addView(icon("New chat in " + project.optString("name"), R.drawable.ic_agent_add, () -> navigate(id, "new", value("projectId", projectId), true)));
+            group.addView(icon("New chat in " + project.optString("name"), R.drawable.ic_agent_new_chat, () -> navigate(id, "new", value("projectId", projectId), true)));
             group.addView(icon("Project actions", R.drawable.ic_agent_more, () -> select(id, () -> projectActions(id, project)))); body.addView(group);
             if (!collapsed.contains(expansionKey)) for (int j = 0; j < chats.length(); j++) { JSONObject chat = chats.optJSONObject(j); if (projectId.equals(chat.optString("projectId")) && !ids.contains(chat.optString("subagentParent"))) chat(id, chat, chats, projects, 1, new HashSet<>()); }
         }

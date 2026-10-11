@@ -29,9 +29,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button location, hideAgent;
+    private final Button hideAgent, localAI;
     private final SwitchCompat power;
-    private final ImageButton display, localAI;
+    private final ImageButton location, display;
     private final AgentSidecar sidecar;
     private final GeckoView view;
     private final ScrollView setup;
@@ -79,25 +79,27 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             if (!checked || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn();
             updatePower();
         });
-        bar.addView(barIcon("Environments, projects and chats", R.drawable.ic_agent_sidebar, sidecar::toggle), new LayoutParams(dp(40), -1));
-        location = barButton("+", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class).putExtra("connectOnly", true))); location.setContentDescription("Connect to remote"); bar.addView(location, new LayoutParams(dp(40), -1));
+        bar.addView(barIcon("Chats", R.drawable.ic_agent_sidebar, sidecar::toggle), new LayoutParams(dp(40), -1));
+        location = barIcon("Add connection", R.drawable.ic_agent_add, () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class).putExtra("connectOnly", true))); bar.addView(location, new LayoutParams(dp(40), -1));
         display = barIcon("Display", R.drawable.ic_agent_display, () -> {
             if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
                 ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-display");
         });
         // Display and power belong to the Local backend heading.
-        localAI = barIcon("LocalAI", R.drawable.ic_agent_localai, () -> {
+        localAI = barButton("AI", () -> {
             if (runtime.selected.equals("local")) new AgentLocalAIDialog().show(
                 ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-localai");
         });
+        localAI.setContentDescription("LocalAI"); localAI.setTooltipText("LocalAI");
         bar.addView(localAI, new LayoutParams(dp(40), -1));
         bar.addView(barIcon("Phone", R.drawable.ic_agent_phone, () -> com.bashkitten.telephony.PhonePanel.show(
             activity, com.bashkitten.phone.PhoneControlsPanel.build(activity))), new LayoutParams(dp(40), -1));
         bar.addView(barIcon("Performance", R.drawable.ic_agent_performance, () -> new AgentPerformanceDialog().show(
             ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-performance")), new LayoutParams(dp(40), -1));
-        Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
+        bar.addView(new View(activity), new LayoutParams(0, 1, 1));
+        ImageButton menu = barIcon("Browser menu", R.drawable.ic_agent_browser_menu, openBrowserMenu); bar.addView(menu, new LayoutParams(dp(48), -1));
         FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); chatContent.addView(body, new FrameLayout.LayoutParams(-1, -1));
         connectionStatus = text();
@@ -136,6 +138,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                     Math.max(0, i.top - content.getPaddingTop()),
                     Math.max(0, i.right - content.getPaddingRight()),
                     Math.max(0, i.bottom - content.getPaddingBottom()));
+                layoutPanels();
             }
             return insets;
         });
@@ -187,14 +190,18 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     public boolean isShownAgent() { return shown && !browserUi; }
     public void toggle() { if (shown) showBrowser(); else showAgent(); }
     private void layoutPanels() {
-        boolean sideBySide = !browserUi && split && !shown && getResources().getConfiguration().screenWidthDp >= 600;
+        int availableWidth = getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp);
+        boolean sideBySide = !browserUi && split && !shown && availableWidth >= dp(600);
+        // Fixed touch targets need 296dp, or 336dp with the split-only Hide
+        // control. Keep both panes usable without clipping the Agent toolbar.
+        float agentShare = Math.max(.46f, Math.min(1f, (dp(336) + agent.getPaddingLeft() + agent.getPaddingRight()) / (float) Math.max(1, availableWidth)));
         boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
         if (!agentVisible) sidecar.close();
         hideAgent.setVisibility(sideBySide ? VISIBLE : GONE);
-        agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
+        agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? agentShare : 0));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
-        browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
+        browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? 1f - agentShare : 1));
         runtime.visible = agentVisible;
         if (microphone != null) microphone.changed();
         if (runtime.session != null) runtime.session.setActive(agentVisible);
@@ -215,6 +222,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     public void destroy() { destroyed = true; sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
+    @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); if (w != oldw) layoutPanels(); }
     private void updatePower() {
         boolean stopping = runtime.state.equals("stopping"), stopFailed = runtime.state.equals("stop-failed");
         // The switch controls the complete Agent group for Local and Remote.
