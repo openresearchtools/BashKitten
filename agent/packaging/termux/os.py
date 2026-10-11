@@ -18,6 +18,8 @@ def main():
     member.name=member.name[len(prefix):]
     if member.name:source.extract(member,framework,filter='data')
  recipe=framework/'x11-packages/bashkitten-os';recipe.mkdir(parents=True,exist_ok=True);shutil.copy2(ROOT/'os/packaging/termux/build.sh',recipe/'build.sh')
+ cache=work/'build-cache';cache.mkdir(exist_ok=True)
+ data=work/'data';data.mkdir(exist_ok=True)
  container='bashkitten-os-'+a.architecture
  ndk_pin=json.loads((ROOT/'agent/packaging/node/lock.json').read_text())['termux']['dependency_sources']['libc++']
  ndk_archive=work/'android-ndk-r30-linux.zip'
@@ -29,9 +31,9 @@ def main():
  if not (ndk/'source.properties').is_file():subprocess.run(['unzip','-q',str(ndk_archive),'-d',str(work)],check=True)
  image=json.loads((ROOT/'auth/build/termux-toolchain.json').read_text())['builderImage']
  env={**os.environ,'TERMUX_BUILDER_IMAGE_NAME':image,'CONTAINER_NAME':container,
-  'TERMUX_DOCKER_RUN_EXTRA_ARGS':'--volume '+str(ROOT)+':/bashkitten:ro --volume '+str(ndk)+':/home/builder/lib/android-ndk-r30:ro',
+  'TERMUX_DOCKER_RUN_EXTRA_ARGS':'--volume '+str(ROOT)+':/bashkitten:ro --volume '+str(ndk)+':/home/builder/lib/android-ndk-r30:ro --volume '+str(cache)+':/home/builder/.termux-build:rw --volume '+str(data)+':/data:rw',
   'TERMUX_DOCKER_EXEC_EXTRA_ARGS':'--env BASHKITTEN_SOURCE_ROOT=/bashkitten --env GOTELEMETRY=off --env DO_NOT_TRACK=1'}
- subprocess.run(['./scripts/run-docker.sh','./build-package.sh','-I','-a',a.architecture,'bashkitten-os'],cwd=framework,env=env,check=True)
+ subprocess.run(['./scripts/run-docker.sh','./build-package.sh','-I','-f','-a',a.architecture,'bashkitten-os'],cwd=framework,env=env,check=True)
  version=(ROOT/'browser/bashkitten/config/version.txt').read_text().strip()+'-1';deb=framework/'output'/f'bashkitten-os_{version}_{a.architecture}.deb'
  if not deb.is_file():raise ValueError('Missing native Termux OS package')
  out.mkdir(parents=True,exist_ok=True);target=out/deb.name;shutil.copy2(deb,target)
