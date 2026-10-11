@@ -1,0 +1,111 @@
+{
+  "name": "Termux:X11",
+  "upstream": "https://github.com/termux/termux-x11",
+  "version": "nightly-2026-10-06",
+  "tag": "nightly",
+  "releaseId": 397927753,
+  "releaseUrl": "https://github.com/termux/termux-x11/releases/tag/nightly",
+  "commit": "fa3a8b430e2896a19f44c99a9cb056254615ae06",
+  "gitArchiveSha256": "be61a3bd5ea464992c6803c633069d59076d849cfb9e1145eff0f945958709c1",
+  "license": "GPL-3.0-only (top-level); individual source notices retained",
+  "source": "source",
+  "dependencies": [
+    {
+      "path": "lorie/src/main/cpp/libtirpc",
+      "url": "https://github.com/alisw/libtirpc",
+      "commit": "5ca4ca92f629d9d83e83544b9239abaaacf0a527",
+      "gitArchiveSha256": "a2942195347dc699881921edc0a416695fff645bc32a2926ae1172a4829422bf"
+    },
+    {
+      "path": "lorie/src/main/cpp/pixman",
+      "url": "https://gitlab.freedesktop.org/pixman/pixman.git",
+      "commit": "9cc163c9da0fb4da430641715313d95a6ec466d9",
+      "gitArchiveSha256": "e89f1d049602bfbad28ef116bc7bb6be5252331bf1c103152bbe105bcc9cbc17"
+    },
+    {
+      "path": "lorie/src/main/cpp/libfontenc",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libfontenc.git",
+      "commit": "780d1f6f192a331de7b298a96e23ebc44d2a884b",
+      "gitArchiveSha256": "73d19027624f07c6b58f223b57f45c08465cf0c4fbda4539ab37daee7efd4d0c"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxau",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxau.git",
+      "commit": "a9c65683e68b3a4349afee5d7673b393fb924d2e",
+      "gitArchiveSha256": "9e2f55dd96dd436f7c65e43c70b6ef77a250b9d2d4462a05722e4c95c18e7a4d"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxdmcp",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxdmcp.git",
+      "commit": "1192d3bc407348ff316bd3bffc791b3ac73f591b",
+      "gitArchiveSha256": "dac7dc433fbd1b4ff6494e8b62f368582088eb7efcc50497e9d1a97fb9a62c6a"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxfont",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxfont.git",
+      "commit": "975cc6526e892c6fad8fa49d0fef58565fbaa003",
+      "gitArchiveSha256": "e95e677a1d963bc8dec1f68d0422caf332f2f291ba28941697173f51b16348ca"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxkbfile",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxkbfile.git",
+      "commit": "42e5dedd7fd3c7c73f3870a8751893c03c1afc69",
+      "gitArchiveSha256": "252762f1447aa2d707994e2c2f2da18df7d617e9040705f76b3401fc9c1370b6"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxshmfence",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxshmfence.git",
+      "commit": "89f064748554e11832a3ec783945e1f4c7fe846e",
+      "gitArchiveSha256": "7ee455aa734925aee13946e364d81b00385eb29c2bceb4f31a966f6a7cbc592b"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxtrans",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxtrans.git",
+      "commit": "cf05ba4a10c90da2c63805a5375e983b174e28b0",
+      "gitArchiveSha256": "1bde67955ab7d5b64f96966abd10c26bd4d17d4dd7c852269a05138f8fc064ae"
+    },
+    {
+      "path": "lorie/src/main/cpp/libepoxy",
+      "url": "https://github.com/anholt/libepoxy",
+      "commit": "c84bc9459357a40e46e2fec0408d04fbdde2c973",
+      "gitArchiveSha256": "bd602cf72497cc02b8ce5726715b10d957642aa0e22840f2c7541149fe3f07f8"
+    },
+    {
+      "path": "lorie/src/main/cpp/libxcvt",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libxcvt.git",
+      "commit": "dd8631c61465cc0de5e476c7a98e56528d62b163",
+      "gitArchiveSha256": "4ae84dd13f3e816687357e957bd1b47651e9eda2a7818dec1944a754fd1cb602"
+    },
+    {
+      "path": "lorie/src/main/cpp/libx11",
+      "url": "https://gitlab.freedesktop.org/xorg/lib/libx11.git",
+      "commit": "6c75545a1deb51f5903992c52af6bc35cc9bc103",
+      "gitArchiveSha256": "2f889c0fc5f863afe3d66f7b2817cc90e9df14107fd19d5be66a48748a249798"
+    },
+    {
+      "path": "lorie/src/main/cpp/xorgproto",
+      "url": "https://gitlab.freedesktop.org/xorg/proto/xorgproto.git",
+      "commit": "6d3907b6d5dc4aa7d7ee6ee5d7d8714e7466630b",
+      "gitArchiveSha256": "80101425496b60b2f6eeb712b1c07c4dc4f94058bcc9953b6627115069fbece2"
+    },
+    {
+      "path": "lorie/src/main/cpp/xkbcomp",
+      "url": "https://gitlab.freedesktop.org/xorg/app/xkbcomp.git",
+      "commit": "2c7789785981ad1fce3858c726615b49293f7de0",
+      "gitArchiveSha256": "ab292b4b520b47b27b58adadbc12c8817532206d77bf61c2752cd684fb200fcb"
+    },
+    {
+      "path": "lorie/src/main/cpp/xserver",
+      "url": "https://gitlab.freedesktop.org/xorg/xserver.git",
+      "commit": "65d790bd208ec380b196eb98f144abb0b32e334d",
+      "gitArchiveSha256": "7aeb4484b9e23facd8b3eeeec388b18b8e3a12553f6fb59897e738a2367d880d"
+    },
+    {
+      "path": "lorie/src/main/cpp/bzip2",
+      "url": "https://gitlab.com/bzip2/bzip2.git",
+      "commit": "6a8690fc8d26c815e798c588f796eabe9d684cf0",
+      "gitArchiveSha256": "a720711f84adceed2729cd23142537613fac924bf70ca58ef8bd7d28df6b7079"
+    }
+  ],
+  "modifications": []
+}
