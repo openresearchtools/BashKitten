@@ -27,6 +27,7 @@ termux_step_get_source() {
 }
 termux_step_configure() {
     export LDFLAGS="${LDFLAGS:-} -Wl,-z,max-page-size=16384 -lm"
+    termux_setup_glib_cross_pkg_config_wrapper
     termux_setup_meson
     export BASHKITTEN_MESON="$TERMUX_MESON"
     # Source paths refer only to this CI checkout, never a workstation runtime.
