@@ -1,0 +1,40 @@
+From: BashKitten contributors
+Subject: [PATCH] rootless: require the configured private pause helper
+
+Podman v6.1.3 hardcodes its C pause-helper path independently of Makefile
+LIBEXECPODMAN and Go's install prefix. Require the BashKitten build's explicit
+catatonit path and fail if it cannot execute; do not use host catatonit or an
+unreported substitute. This modification retains Podman's Apache-2.0 terms.
+
+--- a/pkg/rootless/rootless_linux.c
++++ b/pkg/rootless/rootless_linux.c
+@@ -26,6 +26,10 @@
+ #define ETC_PREEXEC_HOOKS "/etc/containers/pre-exec-hooks"
+ #define LIBEXECPODMAN "/usr/libexec/podman"
+ 
++#ifndef BASHKITTEN_CATATONIT
++#error "The private catatonit path must be configured by the BashKitten build"
++#endif
++
+ #ifndef FD_NSFS_ROOT
+ /* Copied from /usr/include/linux/fcntl.h.  */
+ #define FD_NSFS_ROOT -10003
+@@ -525,14 +529,10 @@
+   for (i = 0; sig[i]; i++)
+     sigaction (sig[i], &act, NULL);
+ 
+-  /* Attempt to execv catatonit to keep the pause process alive.  */
+-  execl (LIBEXECPODMAN "/catatonit", "catatonit", "-P", NULL);
+-  execl ("/usr/bin/catatonit", "catatonit", "-P", NULL);
+-  /* and if the catatonit executable could not be found, fallback here... */
+-
+-  prctl (PR_SET_NAME, "podman pause", NULL, NULL, NULL);
+-  while (1)
+-    pause ();
++  /* BashKitten owns this helper; never adopt a host installation.  */
++  execl (BASHKITTEN_CATATONIT, "catatonit", "-P", NULL);
++  fprintf (stderr, "cannot execute private catatonit %s: %m\n", BASHKITTEN_CATATONIT);
++  _exit (EXIT_FAILURE);
+ }
+ 
+ static char **

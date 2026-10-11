@@ -23,3 +23,11 @@ packaged fusermount3 path and report its spawn error without trying a host
 installation. The named patch is retained under patches/libfuse; lib/mount.c
 and this adaptation retain that file's GNU LGPLv2 terms. Original libfuse source
 and full license texts remain in vendor/libfuse.
+
+Private Podman 6.1.3 modification, 11 October 2026: the rootless pause process
+requires the configured packaged catatonit executable. It never searches the
+host's catatonit paths or silently substitutes another pause implementation.
+The named patch is retained under patches/podman and the private path is supplied
+by the tracked build recipe. Original source and full Apache-2.0 notices remain
+in vendor/podman; the modification retains those terms. Package provenance records
+the patch checksum and build recipe checksum alongside the original release pin.
