@@ -23,6 +23,13 @@ def fingerprint(target):
                   'agent/PI_UPSTREAM.md', 'agent/THIRD_PARTY_NOTICES.md',
                   'agent/licenses', 'agent/pi/package.json', 'agent/pi/LICENSE',
                   'agent/pi/NOTICE', 'agent/search',
+                  'agent/pi/vendor/pillama/package.json', 'agent/pi/vendor/pillama/LICENSE',
+                  'agent/pi/vendor/pillama/NOTICE', 'agent/pi/vendor/pillama.upstream.json',
+                  'agent/pi/vendor/pi-codex-usage/LICENSE', 'agent/pi/vendor/pi-codex-usage.upstream.json',
+                  'os/NOTICE', 'os/licenses', 'os/upstream/sources.json', 'os/packaging',
+                  ':(glob)os/upstream/**/COPYING*', ':(glob)os/upstream/**/LICENSE*',
+                  ':(glob)os/upstream/**/NOTICE*', ':(glob)os/upstream/**/THIRD_PARTY*',
+                  'agent/packaging/termux/os.py', '.github/workflows/machines-native.yml',
                   'agent/src/server/access/NOTICE', 'agent/src/server/access/TORKITTEN-LICENSE',
                   'agent/src/server/models/third_party', 'agent/src/server/updates/platform-packages.mjs',
                   '.github/workflows/auth-native.yml', '.github/workflows/search-native.yml']
