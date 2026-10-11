@@ -202,7 +202,11 @@ def install_termux_display(args, app, revision, bin_dir):
     for name in ['bashkitten-x11', 'bashkitten-x11-loader.jar']:
         require(sha(source / name) == metadata['sha256'].get(name), 'Display loader checksum mismatch: ' + name)
     display = app / 'display'; display.mkdir(exist_ok=True)
-    shutil.copy2(source / 'bashkitten-x11-loader.jar', display / 'bashkitten-x11-loader.jar')
+    loader = display / 'bashkitten-x11-loader.jar'
+    shutil.copy2(source / 'bashkitten-x11-loader.jar', loader)
+    # Preserve the donor's read-only loader requirement in the installed payload,
+    # independently of intermediate artifact-copy permissions. Termux dpkg keeps it.
+    loader.chmod(0o400)
     shutil.copytree(source / 'licenses', display / 'licenses')
     shutil.copy2(source / 'manifest.json', display / 'manifest.json')
     bin_dir.mkdir(parents=True, exist_ok=True)

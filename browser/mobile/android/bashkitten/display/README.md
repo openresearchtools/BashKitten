@@ -40,8 +40,14 @@ GPU worker. Closing/switching tabs never sends Display Stop to Termux.
 Termux's UID. The generated loader checks the actual publisher SHA-256 and exact
 Display protocol version, with no environment override. Its small recipe in
 `loader/build.py` produces the command, dex JAR, manifest/checksums and notices.
-Package the JAR at `usr/lib/bashkitten/display/bashkitten-x11-loader.jar` and
-command at `usr/bin/bashkitten-x11`; source/signing identity mismatch is an error.
+Package the JAR at `usr/lib/bashkitten/display/bashkitten-x11-loader.jar` with
+read-only mode `0400`, and the command at `usr/bin/bashkitten-x11` with mode
+`0755`; source/signing identity mismatch is an error. Both the loader recipe and
+Termux package assembly set this JAR mode: Android's dynamic-code loading policy
+rejects writable DEX/JAR files before the loader runs. Ordinary Termux dpkg
+installation preserves it, including upgrades; no launch-time chmod or platform
+compatibility override is needed. This retains the pristine donor companion
+package's read-only loader requirement.
 
 `DisplayPublisher` reuses the existing BrowserCommand one-shot discovery and
 UID-verified Binder endpoint. `DISPLAY_REGISTER` accepts a typed source only from
