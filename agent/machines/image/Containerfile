@@ -15,7 +15,8 @@ RUN apt-get update && apt-get install --yes --no-install-recommends \
     /tmp/bashkitten-packages/*.deb && \
     (getent group user >/dev/null || groupadd --gid 1000 user) && \
     (id user >/dev/null 2>&1 || useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash user) && \
-    install -d -o user -g user -m 0700 /home/user/.local/share/bashkitten-pi && \
+    install -d -o user -g user -m 0700 \
+        /home/user/.local /home/user/.local/share /home/user/.local/share/bashkitten-pi && \
     /usr/lib/bashkitten/machines/bin/sudo-policy enable-passwordless && visudo -c && \
     runuser -u user -- env BASHKITTEN_EXECUTION_ROLE=container dbus-run-session -- /usr/bin/bashkitten-os initialize && \
     systemctl enable bashkitten-desktop.service bashkitten-sudo.socket bashkitten-fusermount.socket && \
