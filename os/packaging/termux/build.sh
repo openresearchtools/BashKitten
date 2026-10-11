@@ -24,6 +24,9 @@ termux_step_get_source() {
     cp -a "$BASHKITTEN_SOURCE_ROOT/os/." "$TERMUX_PKG_SRCDIR/repo/os/"
     cp "$BASHKITTEN_SOURCE_ROOT/agent/packaging/build.py" "$TERMUX_PKG_SRCDIR/repo/agent/packaging/"
     cp "$BASHKITTEN_SOURCE_ROOT/browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png" "$TERMUX_PKG_SRCDIR/repo/browser/bashkitten/browser/branding/assets/"
+    for size in 48 64 128 256; do
+        cp "$BASHKITTEN_SOURCE_ROOT/browser/bashkitten/browser/branding/default${size}.png" "$TERMUX_PKG_SRCDIR/repo/browser/bashkitten/browser/branding/"
+    done
 }
 termux_step_configure() {
     export LDFLAGS="${LDFLAGS:-} -Wl,-z,max-page-size=16384 -lm"
