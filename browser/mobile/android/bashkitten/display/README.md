@@ -14,13 +14,21 @@ The adapted GPL files retain attribution; new BashKitten integration is AGPL.
 
 `DisplayTabs.open(Activity, "local")` opens/selects the one Android native tab
 and requests the existing local Display owner to start. Explicit Stop remains
-in Local settings. Fenix changes are limited to:
+in Display setup. `DisplayTabs.toggle` closes an existing viewport tab without
+sending Stop or revoking its backend, and opens it when absent. The native
+toolbar marks that actual tab state, including while the Agent is selected.
+Fenix changes are limited to:
 
 - `FenixAgentHost`: native context identity, tab creation/selection/closure, and
-  exclusion from ordinary browser automation. Navigating the address bar opens
-  an ordinary tab without inheriting a native capability.
+  exclusion from ordinary browser automation. Any browser navigation opens an
+  ordinary tab without inheriting a native capability.
+- `DisplayToolbar` and the existing toolbar wrappers: an address-free native
+  Display row with the logo, active Display toggle, Configuration and Firefox's
+  existing tab/menu action objects. Ordinary and custom-tab address bars are
+  unchanged; the native tab strip and menu retain their existing handlers.
 - `FenixDisplayViewport`: selected-tab lifecycle and the measured content bounds,
-  excluding browser toolbars and the current IME. It does not execute/render X11.
+  excluding the actual measured browser chrome and current IME. It does not
+  execute/render X11.
 - `BaseBrowserFragment`: create/dispose that host and supply toolbar bounds.
 - `FenixApplication`: minimal `:display` startup, without Gecko or telemetry.
 
