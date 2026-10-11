@@ -63,9 +63,10 @@ async def run():
     children=[]
     browser_task=None
     async def browser_runtime():
-        profile=DATA/'browser';profile.mkdir(exist_ok=True,mode=0o700)
         while not stopped.is_set():
-            child=await launch('/usr/bin/bashkitten','--no-remote','--profile',profile)
+            # The guest HOME already isolates the product's single profile.
+            # BashKitten deliberately rejects Firefox's profile/instance flags.
+            child=await launch('/usr/bin/bashkitten')
             code=await child.wait()
             children.remove(child)
             if not stopped.is_set():
