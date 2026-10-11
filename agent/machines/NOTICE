@@ -1,0 +1,19 @@
+BashKitten machine lifecycle and guest services
+
+The external-rootfs Podman lifecycle, native guest sudo/PTY and AppImage FUSE
+bridges, and separate-graph PipeWire/GStreamer media mechanisms derive from
+Open Research Tools' BuzzardOS podman branch, commit
+6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0.
+Original source selection, full license, notices and source checksums are in
+upstream/buzzard-runtime. Those retained components are AGPL-3.0-or-later.
+
+Modified for BashKitten in October 2026: private stable user-data machine
+storage; async Node controller and independent user-service lifetime; explicit
+private Podman/helper paths; recoverable cleanup-before-unregister deletion;
+rootful Xwayland/XFCE instead of Sway; guest BashKitten and private TLS Unix
+handoff; passwordless guest policy; renamed guest paths; optional media bridges
+owned by the environment rather than its viewer. No donor application shell,
+separate product/updater or host-privilege command path is retained.
+
+Original BashKitten modules are AGPL-3.0-only where so marked. Component license
+texts and original copyright notices remain applicable; do not relabel donors.

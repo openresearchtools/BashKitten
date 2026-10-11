@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Base manifest and provenance: ../image-base.json. Guest .debs are produced by
+# this same release's component workflow; never resolve a workstation artifact.
+FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
+ENV DEBIAN_FRONTEND=noninteractive
+COPY packages/ /tmp/bashkitten-packages/
+RUN apt-get update && apt-get install --yes --no-install-recommends \
+    ca-certificates systemd systemd-sysv dbus-user-session sudo passwd \
+    xfce4-session xfwm4 xfdesktop4 xfce4-settings xfce4-panel thunar xfce4-terminal \
+    xwayland xauth xclip x11-utils x11-xserver-utils xdotool scrot python3 python3-gi \
+    gir1.2-atspi-2.0 at-spi2-core pipewire pipewire-pulse wireplumber \
+    gstreamer1.0-tools gstreamer1.0-pipewire gstreamer1.0-pulseaudio \
+    gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+    libgl1-mesa-dri mesa-vulkan-drivers fuse3 libfuse2t64 \
+    /tmp/bashkitten-packages/*.deb && \
+    (getent group user >/dev/null || groupadd --gid 1000 user) && \
+    (id user >/dev/null 2>&1 || useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash user) && \
+    install -d -o user -g user -m 0700 /home/user/.local/share/bashkitten-pi && \
+    /usr/lib/bashkitten/machines/bin/sudo-policy enable-passwordless && visudo -c && \
+    runuser -u user -- dbus-run-session -- /usr/bin/bashkitten-os initialize && \
+    systemctl enable bashkitten-desktop.service bashkitten-sudo.socket bashkitten-fusermount.socket && \
+    mkdir -p /usr/share/bashkitten && \
+    dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\t${source:Package}\t${source:Version}\n' > /usr/share/bashkitten/machine-packages.tsv && \
+    cp /tmp/bashkitten-packages/manifest.json /usr/share/bashkitten/guest-components.json && \
+    rm -rf /tmp/bashkitten-packages /var/lib/apt/lists/* && \
+    truncate --size=0 /etc/machine-id
+STOPSIGNAL SIGRTMIN+3
+CMD ["/usr/lib/bashkitten/machines/bin/bashkitten-init"]

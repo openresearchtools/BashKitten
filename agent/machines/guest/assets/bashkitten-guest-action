@@ -1,0 +1,51 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Narrow native guest indicator actions; never shut down the container/host."""
+import http.client
+import json
+import os
+import socket
+import sys
+import uuid
+from pathlib import Path
+
+class Controller(http.client.HTTPConnection):
+    def connect(self):
+        self.sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+        self.sock.settimeout(self.timeout)
+        self.sock.connect('/run/bashkitten-host/agent/control.sock')
+
+def call(command):
+    connection=Controller('localhost',timeout=30)
+    try:
+        connection.request('POST','/'+command,body=b'{}',headers={'Content-Type':'application/json'})
+        response=connection.getresponse()
+        value=json.loads(response.read())
+        if response.status!=200:
+            raise RuntimeError(value.get('error','Guest service request failed'))
+        return value
+    finally:
+        connection.close()
+
+def main():
+    action=sys.argv[1] if len(sys.argv)==2 else ''
+    if action not in ['status','open','stop']:
+        raise SystemExit('Expected status, open or stop')
+    if action=='open':
+        # The host resolves this owned directory to its immutable machine ID.
+        # It never accepts an executable, URL, token or alternate backend here.
+        path=Path('/run/bashkitten-host/open.json')
+        temp=path.with_suffix('.tmp')
+        temp.write_text(json.dumps({'schema':1,'id':str(uuid.uuid4()),'action':'open'})+'\n')
+        temp.chmod(0o600);temp.replace(path)
+    elif action=='stop':
+        call('stop')
+    try:
+        status=call('status');web=status.get('web',{})
+        result={'running':web.get('status')=='running','state':web.get('status'),'error':web.get('error')}
+    except (ConnectionError,FileNotFoundError):
+        result={'running':False,'state':'stopped','error':None}
+    print(json.dumps(result))
+
+if __name__=='__main__':
+    main()

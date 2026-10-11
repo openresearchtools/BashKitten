@@ -1,0 +1,15 @@
+[Unit]
+Description=BashKitten AppImage mount handoff socket
+
+[Socket]
+ListenStream=/run/bashkitten/fusermount.sock
+SocketUser=user
+SocketGroup=user
+SocketMode=0600
+Accept=yes
+RemoveOnStop=yes
+FlushPending=yes
+MaxConnections=128
+
+[Install]
+WantedBy=sockets.target
