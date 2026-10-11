@@ -59,7 +59,7 @@ public final class AgentRemotesActivity extends ProductActivity {
             EditText password = new EditText(this); password.setSingleLine();
             password.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
             password.setSaveEnabled(false); password.setFreezesText(false); password.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-            passwordDialog = new MaterialAlertDialogBuilder(this).setTitle("Connection password")
+            passwordDialog = new MaterialAlertDialogBuilder(this, R.style.BashKittenSidecarDialogTheme).setTitle("Connection password")
                 .setMessage((state.error.isEmpty() ? "" : state.error + "\n\n") + "Use the host’s account password to decrypt the image. Then sign in on the host’s Authelia page.")
                 .setView(password).setNegativeButton("Cancel", (dialog, which) -> finish())
                 .setPositiveButton("Connect", (dialog, which) -> {

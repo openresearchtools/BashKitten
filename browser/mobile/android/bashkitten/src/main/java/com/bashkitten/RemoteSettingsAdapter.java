@@ -173,7 +173,7 @@ public final class RemoteSettingsAdapter implements AutoCloseable {
                 EditText input = new EditText(activity); input.setSingleLine();
                 input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
                 input.setSaveEnabled(false); input.setFreezesText(false); input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-                keyDialog = new MaterialAlertDialogBuilder(activity).setTitle("Service API key")
+                keyDialog = new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("Service API key")
                     .setMessage("Enter a replacement key. Save an empty value to clear the saved key.").setView(input)
                     .setNegativeButton("Cancel", (dialog, which) -> done(result, object("cancelled", true)))
                     .setPositiveButton("Save", (dialog, which) -> {

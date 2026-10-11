@@ -1,15 +1,30 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-:root { color-scheme: light dark; --background:#f9f9fb; --surface:#fff; --text:#15141a; --muted:#5b5b66; --line:#cfcfd8; --hover:#ededf0; --accent:#0060df; font:message-box; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --background:#2b2a33; --surface:#42414d; --text:#fbfbfe; --muted:#cfcfd8; --line:#5b5b66; --hover:#52525e; --accent:#00ddff; } }
-:root[data-theme="dark"] { color-scheme:dark; --background:#2b2a33; --surface:#42414d; --text:#fbfbfe; --muted:#cfcfd8; --line:#5b5b66; --hover:#52525e; --accent:#00ddff; }
+/* Match agent/src/web/web_ui.html. Native info.theme selects the browser's
+   effective scheme, including a browser choice different from the system. */
+:root {
+  color-scheme:light dark;
+  --background:light-dark(#f3f3f3,#1e1e1e);
+  --surface:light-dark(#fff,#2b2b2b);
+  --text:light-dark(#242426,#e8e8e8);
+  --muted:light-dark(#66666b,#a6a6aa);
+  --line:light-dark(#c8c8cc,#48484d);
+  --hover:light-dark(#e5e5e7,#333337);
+  --accent:light-dark(#5f5f65,#a0a0a5);
+  --shadow:light-dark(#0002,#0006);
+  --radius-control:12px;
+  --radius-card:24px;
+  --radius-pill:999px;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+:root[data-theme="dark"] { color-scheme:dark; }
 :root[data-theme="light"] { color-scheme:light; }
 * { box-sizing:border-box; }
 [hidden] { display:none !important; }
-body { margin:0; background:var(--background); color:var(--text); font:14px/1.5 system-ui,sans-serif; }
+body { margin:0; background:var(--background); color:var(--text); font-size:14px; line-height:1.5; }
 main { width:min(100%,780px); margin-inline:auto; padding:24px; }
-h1 { margin:0; font-size:22px; font-weight:600; }
-h2 { font-size:18px; }
-h3 { font-size:16px; }
+h1 { margin:0; font-size:20px; font-weight:600; }
+h2 { font-size:20px; }
+h3 { font-size:15px; }
 p { overflow-wrap:anywhere; }
 .page-heading { display:flex; align-items:flex-start; gap:12px; margin-bottom:20px; }
 .page-heading > div { flex:1; min-width:0; }
@@ -19,26 +34,31 @@ p { overflow-wrap:anywhere; }
 #page-status:empty, [role="status"]:empty, [role="alert"]:empty { display:none; }
 #page-status, [role="status"], [role="alert"] { overflow-wrap:anywhere; white-space:pre-wrap; }
 button,input,select,textarea { font:inherit; color:inherit; }
-button { min-height:32px; padding:5px 12px; margin:4px 6px 4px 0; border:1px solid var(--line); border-radius:5px; background:var(--surface); cursor:pointer; }
-button:hover { background:var(--hover); }
-button:disabled, input:disabled, select:disabled { opacity:.55; cursor:default; }
+button { min-height:32px; padding:7px 10px; margin:4px 6px 4px 0; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--hover); font-size:12px; cursor:pointer; }
+button:hover { border-color:var(--muted); }
+button:disabled, input:disabled, select:disabled, textarea:disabled { opacity:.52; cursor:default; }
 :is(button,input,select,textarea):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-input:not([type="checkbox"]):not([type="radio"]),select,textarea { min-width:0; width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:4px; background:var(--surface); }
-label { display:grid; gap:5px; margin:12px 0; }
+input:not([type="checkbox"]):not([type="radio"]),select,textarea { min-width:0; width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface); color:var(--text); }
+label { display:grid; gap:5px; margin:12px 0; color:var(--muted); font-size:12px; }
 label:has(>input:is([type="checkbox"],[type="radio"])) { display:flex; align-items:center; gap:9px; }
 input:is([type="checkbox"],[type="radio"]) { flex:none; width:16px; height:16px; margin:0; accent-color:var(--accent); }
-textarea { resize:vertical; }
+input[type="checkbox"] { appearance:none; width:30px; height:18px; border:1px solid var(--line); border-radius:var(--radius-pill); background-color:var(--line); background-image:radial-gradient(circle,var(--surface) 5px,transparent 5.5px); background-size:16px 16px; background-position:left center; background-repeat:no-repeat; cursor:pointer; }
+input[type="checkbox"]:checked { border-color:var(--accent); background-color:var(--accent); background-position:right center; }
+label:has(>input:disabled) { opacity:.52; cursor:default; }
+label:has(>input:disabled) > input { opacity:1; }
+textarea { resize:vertical; border-radius:var(--radius-control); }
 details { margin-block:12px; }
-summary { cursor:pointer; font-weight:600; padding-block:6px; }
-.connection-card { border:1px solid var(--line); border-radius:7px; padding:14px; margin-block:16px; }
+summary { cursor:pointer; font-weight:600; padding-block:6px; border-radius:var(--radius-control); }
+.connection-card { border:1px solid var(--line); border-radius:var(--radius-card); padding:14px; margin-block:16px; }
 .connection-card > :first-child { margin-top:0; }
 .connection-card > :last-child { margin-bottom:0; }
 pre { white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:24rem; font-size:12px; }
 hr { border:0; border-top:1px solid var(--line); margin-block:22px; }
 .actions { display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; }
-dialog { width:min(480px,calc(100% - 32px)); max-height:calc(100% - 32px); overflow:auto; padding:22px; border:1px solid var(--line); border-radius:8px; background:var(--background); color:var(--text); }
-dialog::backdrop { background:#0006; }
-dialog h2 { margin-top:0; }
+dialog { width:min(480px,calc(100% - 32px)); max-height:calc(100% - 32px); overflow:auto; padding:22px; border:1px solid var(--line); border-radius:var(--radius-card); background:var(--surface); color:var(--text); box-shadow:0 24px 80px var(--shadow); }
+dialog::backdrop { background:#0008; }
+dialog h2 { margin-top:0; font-size:18px; }
 dl { display:grid; grid-template-columns:auto 1fr; gap:12px 24px; font-variant-numeric:tabular-nums; }
 dd { margin:0; overflow-wrap:anywhere; }
 @media (max-width:480px) { main { padding:16px; } h1 { font-size:20px; } .connection-card { padding:12px; } }
+@media (forced-colors:active) { input[type="checkbox"] { appearance:auto; width:18px; } }

@@ -47,7 +47,7 @@ final class AgentChoicePrompt {
         boolean multiple = prompt.type == ChoicePrompt.Type.MULTIPLE;
         ArrayList<String> labels = new ArrayList<>();
         for (Row row : rows) labels.add(row.label);
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity).setTitle(prompt.title);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle(prompt.title);
         ListView list = new ListView(builder.getContext());
         list.setChoiceMode(multiple ? ListView.CHOICE_MODE_MULTIPLE : ListView.CHOICE_MODE_SINGLE);
         list.setAdapter(new ArrayAdapter<String>(builder.getContext(), multiple

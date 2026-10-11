@@ -81,7 +81,7 @@ final class AgentMicrophone implements GeckoSession.PermissionDelegate {
         rememberRequest(); mediaRequest = callback;
         String host = runtime.selected.equals("local") ? "Local Agent" : URI.create(runtime.url).getHost();
         try {
-            dialog = new MaterialAlertDialogBuilder(activity)
+            dialog = new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme)
                 .setTitle("Allow microphone?")
                 .setMessage("Allow " + host + " to use your microphone for this recording? Audio is sent to this Agent for transcription.")
                 .setPositiveButton("Allow", (ignored, which) -> {
