@@ -5,7 +5,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.ClipData;
 import android.content.ClipboardManager;
-import android.content.res.TypedArray;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -102,10 +102,11 @@ public final class AgentSettingsActivity extends ProductActivity {
         super.onConfigurationChanged(next); if (configured) event(object("type", "theme", "data", object("theme", theme())));
     }
     private String theme() {
-        Activity owner = app == null ? null : app.agent.activity.get();
-        TypedArray values = (owner == null ? this : owner).obtainStyledAttributes(new int[]{android.R.attr.colorBackground});
-        try { int color = values.getColor(0, 0xffffffff); return androidx.core.graphics.ColorUtils.calculateLuminance(color) < .4 ? "dark" : "light"; }
-        finally { values.recycle(); }
+        // This activity's AppCompat configuration already honors Firefox's
+        // Light/Dark/System choice. A paused HomeActivity may still have its old resources.
+        boolean dark = app.host.privateBrowsing() ||
+            (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        return dark ? "dark" : "light";
     }
     private CompletableFuture<JSONObject> request(String method, JSONObject params) {
         CompletableFuture<JSONObject> result = new CompletableFuture<>();
