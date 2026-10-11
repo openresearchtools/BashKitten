@@ -5,6 +5,13 @@ No application code, package, installed runtime or working user flow is delivere
 by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
 
+**Implementation mandate:** every feature in this plan is equally required.
+Implement and integrate the complete scope before the first full BashKitten
+main-app candidate builds, then test all features, fix blockers across the
+scope and batch the next builds. Independent component builds can iterate
+earlier and faster. Section 17 defines this execution rule; feature order is
+not permission to omit or defer work.
+
 This is the controlling plan for the requested native sidebar, local containers,
 embedded Termux:X11 and shared XFCE desktop. It supersedes conflicting separate
 X11 APK, external Display window, folder-only chat grouping and display-rendering
@@ -153,6 +160,14 @@ is required for maintenance, not a reason to introduce a generic plugin system,
 extra abstraction layers, options or features. Do not change unrelated work or
 delete donor repositories/history as part of writing or implementing this plan.
 
+All specified features, supporting integration, packaging and acceptance are
+mandatory. An optional user-facing feature or default-Off switch still requires
+its complete implementation. Do not substitute a partial milestone, placeholder,
+disconnected UI or a smaller feature selection for the requested delivery. This
+does not expand scope to ideas explicitly excluded/deferred by this plan or
+restore superseded requirements. Use the parallel work and batched-build rules
+in section 17 rather than a full-app build/test cycle per feature.
+
 ## 2. Audited starting points
 
 | Source | Verified starting point | Reuse or required change |
@@ -193,8 +208,10 @@ Future upgrades should primarily adapt that small host contract and rebuild the
 module, rather than port the feature by rewriting large parts of Firefox.
 
 Use existing Gecko process/IPC/compositor machinery where it fits, preserving
-ordinary tabs' process model and isolation. The exact native child launch and
-surface integration must be proven in the first gate; a normal WebExtension or
+ordinary tabs' process model and isolation. Check the exact native child launch
+and surface boundary early through isolated module/probe work, then verify the
+real integration in the first complete-scope app candidate under section 17.
+A normal WebExtension or
 setting a tab attribute does not automatically provide it. Firefox distinguishes
 content and helper/GPU processes, so this native renderer need not masquerade as
 an ordinary web document to get its own process. See upstream's
@@ -711,9 +728,11 @@ into the guest as a shortcut. The existing Linux browser build is GTK with X11
 and optional Wayland support; make both explicit build requirements for this
 delivery, with an artifact/run check for each backend.
 
-The first implementation gate must prove rootful Xwayland speaks the subset
-supported by the adapted private gateway. Retain frame timing, buffer ownership,
-resize, keyboard mapping, pointer and clipboard behavior needed by this desktop.
+Early component checks must prove rootful Xwayland speaks the subset supported
+by the adapted private gateway; verify its actual Firefox integration in the
+complete-scope candidate, not a separate Display-only full-app build. Retain frame
+timing, buffer ownership, resize, keyboard mapping, pointer and clipboard behavior
+needed by this desktop.
 Drive its dimensions from the actual browser tab's drawable area, including
 changes caused by browser chrome/sidebars, rather than a fixed host-screen size.
 The donor currently lacks `wl_output`, rejects an empty DMA-BUF format list and
@@ -761,6 +780,35 @@ application or CUDA application will work or run quickly.
 
 ## 7. Android: embed Termux:X11 without a companion X11 APK
 
+### Release import and recorded module adaptation
+
+Begin with a **dedicated pristine source-import commit** from the selected
+official Termux:X11 release/nightly, at its exact resolved source commit.
+The researched baseline is `fa3a8b430e2896a19f44c99a9cb056254615ae06` from the
+official nightly in section 2; confirm and record the selected release identity,
+tag, peeled commit and source checksum when importing. Any deliberate pin update
+must be recorded before adaptation, never resolved from a moving tag during a
+build. Include full licenses/copyrights/notices and materialize required native
+dependency sources at their exact gitlinks, with their individual provenance.
+
+Record the unmodified donor baseline before any stripping, renaming or host
+changes, as with the Phony and Phone-control donor imports. Follow with focused
+commits that extract/adapt the reusable Display module, trim unneeded standalone
+app paths, pair the Termux loader, replace discovery with private IPC and connect
+the narrow browser host interface. Mark modifications and retain attribution.
+History must show what was imported, retained, removed and changed; do not begin
+with an already edited source dump whose relationship to upstream is unclear.
+
+Use section 11's tracked pristine source plus named patches/adapters, retaining
+the import baseline in BashKitten's compact commit history. Do not import donor
+Git ancestry, nested `.git` directories or another Firefox source tree. The
+result remains the reusable native module described in section 3, with its own
+renderer process and small documented Firefox/Fenix integration hooks. This is
+a source/history requirement, not permission to merge the donor app wholesale
+or replace the module automatically with later upstream snapshots.
+
+### Native module and paired loader
+
 Keep `com.bashkitten`, its current signer and independent Android UID. Shared UID
 with Termux is unnecessary for Binder/FD transfer and would require matching
 Termux's signer. Any supported installed `com.termux` remains usable through the
@@ -789,7 +837,8 @@ process startup minimal rather than initializing another browser UI there.
 Forward viewport, configuration, selection/focus and input-host tokens deliberately.
 Configuration forwarding alone does not resize the child: invoke its layout
 operation with the actual measured bounds. Preserve Android's input/IME routing
-instead of inventing a second keyboard protocol. The first gate must prove nested
+instead of inventing a second keyboard protocol. Early component probes and
+subsequent complete-scope app acceptance must cover nested
 `LorieView` surface composition, browser overlays/z-order, focus/input transfer,
 IME composition/resize, pointer capture, clipboard and rotation on this boundary.
 Releasing the browser's `SurfacePackage`, releasing the child's view host and
@@ -1559,6 +1608,9 @@ For external components such as Termux:X11, XFCE and Podman/crun, retain pristin
 upstream source with small named patches/adapters and exact provenance. Preserve Firefox's existing
 compact source-history/update process. Do not import donor Git ancestry or a
 second full browser tree just to get these components.
+For embedded Termux:X11, section 7 requires the pristine official release source
+import as its own commit before the focused module/loader/host adaptation commits;
+keep that sequence as reviewable provenance, as for the Phone donor modules.
 
 ### Track every component we build and ship
 
@@ -2877,13 +2929,118 @@ This plan preserves stock sessions; it does not authorize a separate harness or
 history migration. Verify the new release's session restore, effective model and
 reasoning, fork, streaming and subagent communication in the existing integration.
 
-## 17. Ordered implementation and acceptance gates
+## 17. Complete-scope implementation, batched builds and acceptance
 
-Implement in focused, reviewable commits on main, with relevant checks and pushes.
-Do not dispatch large browser builds before proving the new native boundaries
-and compiling the changed components. A passing build is not feature acceptance.
+**Every specified feature is equally important and must be implemented, built
+and tested.** Ordering expresses real dependencies, not priority or permission
+to leave later sections unfinished. Complete work in focused, reviewable commits
+on main with the relevant checks and pushes. Source integration, a dispatched
+build and a passing build are different from installed feature acceptance.
 
-| Gate | Work | Required evidence before proceeding |
+### Parallel ownership and available agents
+
+The execution environment checked on **11 October 2026** exposes **ten concurrent
+agent slots including the coordinator: nine subagent slots**. The live roster
+and available collaboration tools were checked; this is capacity, not a
+requirement to occupy all slots. Recheck availability when implementation starts
+or the execution environment changes, and report a changed limit honestly.
+
+Assign independent features to subagents when their boundaries permit useful
+parallel work. Suitable boundaries include Android Display/paired loader, Linux
+Display/gateway, container runtime/lifecycle, BashKitten OS/XFCE, native
+sidecar/projects/chats, Phone controls/CLI, telephony/messages/speech, Pi
+usage/questions, and source/package integration. Combine or split these as
+dependencies and workload require; this is not a fixed nine-agent assignment.
+Use available capacity for independent fixes and verification as well as initial
+implementation. Do not manufacture work or leave unnecessary agents running.
+
+Set interface contracts and one owner for shared files, native bridges, session
+state and build/package wiring before concurrent edits. Integrate finished work
+continuously, review interactions and resolve conflicts without overwriting
+another workstream. Pi contracts, permission checks, UI ownership and event
+delivery must agree across features; independently compiling fragments are not
+an integrated implementation. The coordinator owns the whole-scope completion
+check and shared candidate, rather than declaring success when one subagent ends.
+
+### Existing build environment and unfinished work
+
+Reuse the environment from **Set up Bashkitten build environment**, local thread
+`01a11b1e-1ac8-7d61-859a-eeab97f02315`. Read its relevant handoff, failures and
+unfinished checks at implementation start, together with the separate build
+workspace's `/run/media/user/Data/BashkittenBuild/README.md`,
+`config/verification.json` and applicable `acceptance/` records. Reconcile those
+records against the current source, installed artifacts and this plan; historical
+success, a queued candidate or an old README summary is not current acceptance.
+Preserve the established build directories, caches, launch helpers and resource
+budgets rather than setting up another competing build environment.
+
+Carry unfinished setup, failed existing features and missing acceptance into
+the same per-feature blocker record and parallel implementation/fix batches.
+They must be resolved alongside the new features, not left behind as work from
+another thread. In particular, the earlier Android composer dictation check
+returned `[BLANK_AUDIO]` despite measured audio reaching Android; its cause and
+successful end-to-end speech input remained unverified in the saved record.
+Recheck and fix that path, and reconcile the earlier candidate completion and
+installed file-viewer coverage, without assuming any of these remain unchanged
+or are already fixed. Preserve the latest architecture decisions when repairing
+older work. Keep host credentials solely in private local storage outside all
+repositories, build inputs, artifacts, documentation and logs.
+
+### Required build and verification cycle
+
+1. **Implement and integrate every feature.** Finish the requested code and
+   wiring across all sections, including native UI/IPC, resources, manifests,
+   dependencies, package recipes and matching companion components. Keep a
+   per-feature completion/blocker record against this plan's requirements and
+   acceptance cases; broad workstream labels must not conceal missing subfeatures.
+   Before the first full Android/Linux main-app builds, review the integrated
+   source for the complete scope. No feature stub or “wire after this build”
+   item may pass that checkpoint. Feature code being present is not yet proof
+   of runtime correctness; that is established after installing the candidate.
+2. **Build smaller components during implementation where useful.** Compile
+   modules and iterate independently buildable XFCE, Termux, native helpers and
+   packages without waiting for unrelated features. Use early source/API checks
+   and isolated native probes for uncertain interfaces. These checks do not
+   authorize a preliminary full BashKitten build containing only Display, Phone
+   or another subset. They also do not replace installed product acceptance.
+   Downloadable AI runtimes still build only in the daughter GitHub Actions;
+   their existing build ownership is unchanged.
+3. **Build the first integrated main-app candidates with all features included.**
+   Use a recorded shared source revision and matching component pins for the
+   required Android/Linux target matrix. Reuse the existing architecture build
+   directories, compiler/dependency caches and agreed CPU/memory budgets. Keep
+   independently runnable work moving while long builds execute; do not consume
+   capacity with duplicate builds of unchanged inputs.
+4. **Install and test across the complete feature set.** Exercise every reachable
+   acceptance case, collecting failures from all workstreams. A blocker in one
+   feature does not stop testing unrelated features. Record cases blocked by
+   that failure and resume them once repaired. Preserve required fresh-profile,
+   actual-app UI, native X11-host, Wayland-host and Android coverage; do not mark
+   unavailable or untested coverage as passing.
+5. **Fix blockers across features, then batch the next necessary full builds.**
+   Parallelize independent fixes, integrate and check them together, and rebuild
+   affected main apps once for that batch. Iterate independently rebuildable
+   packages sooner when no main-app rebuild is needed. If a build/startup failure
+   blocks further testing, combine all fixes that can be established before the
+   next usable candidate rather than waiting for impossible downstream results.
+   Do not restart a 40–60+ minute full build after each isolated fix while other
+   known independent fixes still need implementation.
+6. **Repeat whole-scope acceptance until complete.** Recheck repaired flows and
+   affected integrations, finish previously blocked cases and retain evidence
+   against the actual candidate revision. Completion requires all planned
+   features and required acceptance, with no unresolved implementation blockers;
+   “build queued,” “one feature works” or unverified hardware claims are not
+   completion. Explicitly report any remaining external verification limitation.
+
+The required sequence is **parallel complete-scope implementation → integrated
+full builds → test all features → fix across features → batched rebuilds →
+repeat acceptance**. Full main-app builds can take 40 minutes to an hour or more;
+do not implement/build/test one feature and only then start implementing the next.
+This rule supersedes any earlier wording suggesting a serial full-app build for
+each numbered feature gate. The following table is a mandatory coverage
+checklist, not a serial execution schedule or permission to defer features.
+
+| Required workstream | Work | Acceptance evidence |
 | --- | --- | --- |
 | 1. Sources and runtime contracts | Track all built/bundled component source, official release commits, donor subsets, licenses and private Podman/helper matrix; update Pi through supported APIs. | Clean-checkout builds consume tracked source/locks; no floating refs, missing source/notices or unexpected system runtime selection; Pi API/packaging checks. |
 | 2. Native Display feasibility | Reusable module and own renderer child; Android adapted `lorie` + paired loader; Linux rootful Xwayland/XFCE + private gateway + native Firefox receiver. | Real cross-process viewport attachment/input/resize and child-failure containment. Linux GPU **and** software frames on X11/Wayland; Android UID/FD boundary and no separate X11 APK; small documented Firefox integration patch set. |
@@ -2896,13 +3053,33 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 9. Usage and questions | Narrow Pi subscription usage/status adapter and deferred nonblocking questions with one web/call/notification/mailbox resolution owner. | Sections 14–15's selected-account/window checks, immediate tool return, idle/busy/deadline-during-review/late-reply/race/Stop/reconnect cases; no Pi patches or duplicate delivery. |
 | 10. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling and every bundled component's network/logging audit. | Installed native user flows plus recorded missing hardware coverage; no unexplained telemetry/developer callbacks or release claim based on a dispatched build. |
 
-Use ADB/direct Termux for Android setup, installation, permissions and debugging;
-use the desktop BashKitten browser with Cuttlefish's web UI for actual feature
-interaction. Keep external probes/evidence outside product source/artifacts.
-Do not add BashKitten-owned scripted product tests. Use stock Android 17 native
-KVM Cuttlefish with the existing 16 GiB/128 GiB SSD configuration, fresh browser,
-backend and Pi profiles for architecture acceptance, and real devices for claims
-about physical GPU behavior. Android 16 coverage must be recorded separately.
+### Required testing through the installed apps
+
+**Full acceptance means using BashKitten itself on both Android and desktop.**
+Exercise the installed Android candidate through Cuttlefish's web UI opened in
+the **desktop BashKitten browser**. Exercise the installed Linux candidate's own
+native controls, Agent, ordinary tabs and embedded Display on the Wayland host
+and in the real Xorg test VM below. Test every feature and its integrations from
+the user's entry points through the visible result, including setup, toggles,
+input, errors, cancellation, reopen and persistence where applicable. Check
+navigation, chats and tab closure under load and stalled displays as required
+by the nonblocking rules. UI appearance alone does not prove the operation ran.
+
+Use ADB/direct Termux for Android setup, installation, permissions and debugging,
+and backend/native logs or focused probes to diagnose failures. These supplement
+the real product flows; direct backend calls, shell success, standalone donor
+apps, compilation or package checks cannot replace actual-app acceptance. After
+a fix, repeat the affected user flow in the installed candidate and finish the
+remaining whole-scope coverage before declaring completion. Record the exact
+app/backend revisions and the result or blocker for each case.
+
+Keep external probes/evidence outside product source/artifacts. Do not add
+BashKitten-owned scripted product tests. Use stock Android 17 native KVM
+Cuttlefish with the existing 16 GiB/128 GiB SSD configuration and fresh browser,
+backend and Pi profiles for architecture acceptance. Android 16, physical-device
+GPU/OEM and Android Auto coverage remain separately identified requirements;
+Cuttlefish results cannot stand in for them. Report unavailable coverage
+explicitly rather than inferring a pass.
 
 ### Required native X11 host VM
 
@@ -2960,7 +3137,8 @@ without confusing that development disk with the product machine data layout.
 | Upgrade/package | Both ABIs use matching loader/APK/native libraries; existing custom commands/settings preserved; standalone Termux:X11 untouched; full licenses/source accessible offline. |
 | Source/license completeness | Reconcile each actual artifact's direct/transitive components with tracked source, exact release commits, locks, patches and full notices. Include Podman/crun/helpers, SheetJS/other JS, X11/XFCE/launcher and Gnozzard code/CSS/folder artwork. A missing source/license or mismatched cache blocks release; offline About/package notices and matching published source archives work on every target. |
 
-Record the exact candidate commit, platform, renderer and result for every gate.
+Record the exact candidate commit, platform, renderer and result for every
+required workstream and its acceptance cases.
 The unproven engineering points are the Linux native frame receiver/gateway
 adaptation, Android host-interface extraction, paired-window layout and the
 complete private Podman/helper packaging. They are concrete implementation work,

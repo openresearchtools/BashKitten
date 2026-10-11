@@ -13,6 +13,51 @@ saved remotes retain the existing encrypted Agent/service route. The plan
 supersedes older display/frontend/lifetime requirements only where stated, and
 does not authorize transport/authentication fallbacks or a Pi reimplementation.
 Its Pi release update is planned; the current runtime pin below is unchanged.
+All features in this plan are equally mandatory, including user-optional or
+default-Off functions and their integration, packaging and acceptance. Implement
+and integrate the complete feature scope before the first full BashKitten
+Android/Linux candidate builds. Then test all features, fix blockers across
+workstreams, batch the next necessary full builds and repeat until complete.
+Do not run a 40–60+ minute full build/test cycle for one feature before starting
+the next. Independently buildable XFCE/Termux/modules/helpers can be compiled
+and iterated earlier/faster; these checks do not replace full product acceptance
+or permit a partial main-app candidate. Keep AI-runtime builds in daughter CI.
+Section 17 is a mandatory coverage checklist and shared implementation/build/
+test/fix cycle, not a serial feature-gate schedule. Track every feature and
+subfeature; stubs, unconnected controls, dispatched builds or one working feature
+do not establish completion. Keep required verification and unresolved blockers
+visible rather than dropping features to finish a milestone.
+Full feature acceptance must use the installed BashKitten apps: Android through
+Cuttlefish's web UI in the desktop BashKitten browser, plus the native Linux
+candidate on Wayland and inside the required real-Xorg test VM. Exercise all
+user flows and integrations, including nonblocking behavior under load; backend
+calls, shell checks, donor probes and successful builds do not replace this.
+Use ADB/direct Termux for setup and diagnosis, then repeat the repaired product
+flows. Record actual candidate revisions, failures and missing coverage honestly.
+At implementation start, read the relevant unfinished work and failures in
+the local thread **Set up Bashkitten build environment**
+(`01a11b1e-1ac8-7d61-859a-eeab97f02315`) and the separate
+`/run/media/user/Data/BashkittenBuild` README/verification/acceptance records.
+Reuse that build environment and caches. Reconcile historical evidence against
+current source and installations, and fix remaining setup/product blockers
+alongside this plan's features in the same batched cycle. The saved Android
+dictation failure is explicitly outstanding evidence to revisit, not a pass.
+Keep host credentials in private local storage outside repositories, build
+inputs, artifacts, documentation and logs.
+The 11 October execution environment reports ten concurrent agents including
+the coordinator, giving nine subagent slots. Use as many as useful across clear
+feature/file/interface boundaries, not all nine constantly; recheck capacity at
+implementation start. Coordinate shared-file ownership, integrate continuously
+and parallelize independent fixes/verification as well as implementation.
+Embedded Termux:X11 starts with its selected official release/nightly's exact
+commit in a dedicated pristine source-import commit, full licenses/notices,
+checksums and materialized pinned dependency sources. Only subsequent focused
+commits strip/adapt the reusable module, paired loader, private IPC and narrow
+browser hooks, marking changes and preserving attribution. Keep the original
+baseline recoverable in BashKitten history and use the existing pristine-source/
+named-patch layout. Never import an already modified anonymous dump, upstream
+Git ancestry, nested repository or a second Firefox tree; builds never follow
+a moving nightly tag. This follows the Phone donor import/adaptation discipline.
 The same plan's section 12 contains the whole Android Phone/MCP-to-CLI port.
 This is a device-tools/controls port only: no donor MCP server/client/protocol,
 provider connections, API-key/account/model setup or client onboarding. Existing
