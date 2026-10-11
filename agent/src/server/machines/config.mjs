@@ -53,13 +53,16 @@ export async function prepareStorage() {
     'policy.json': JSON.stringify({ default: [{ type: 'insecureAcceptAnything' }] }) + '\n',
   };
   for (const [name, text] of Object.entries(files)) await fs.writeFile(path.join(config, name), text, { mode: 0o600 });
+  try { await fs.writeFile(path.join(config,'auth.json'),'{}\n',{flag:'wx',mode:0o600}); }
+  catch(error) { if(error.code!=='EEXIST')throw error; }
 }
-export const podmanEnvironment = () => ({ ...process.env,
+export const podmanEnvironment = () => ({ ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$)/.test(key))),
   CONTAINERS_CONF: path.join(storageRoot, 'config/containers.conf'),
   CONTAINERS_STORAGE_CONF: path.join(storageRoot, 'config/storage.conf'),
   CONTAINERS_REGISTRIES_CONF: path.join(storageRoot, 'config/registries.conf'),
   CONTAINERS_REGISTRIES_CONF_DIR: path.join(storageRoot, 'config/registries.d'),
   CONTAINERS_POLICY_JSON: path.join(storageRoot, 'config/policy.json'),
+  REGISTRY_AUTH_FILE: path.join(storageRoot,'config/auth.json'),
 });
 export function mount(source, destination, readOnly = false) {
   const q = value => /[,"\n]/.test(value) ? '"' + value.replaceAll('"', '""') + '"' : value;
@@ -87,7 +90,7 @@ export function validate(config, id) {
   if (typeof config.autostart !== 'boolean') throw Error('Startup must be On or Off');
   const c = config.launch;
   if (!c || !path.isAbsolute(c.executable || '') || !path.isAbsolute(c.cwd || '') || !Array.isArray(c.arguments) || c.arguments.some(a => typeof a !== 'string' || a.includes('\0'))) throw Error('Launch needs an absolute executable, working directory and argument array');
-  if (Object.keys(c.environment || {}).some(key => /^CONTAINERS_|^CONTAINER_HOST$|^BASHKITTEN_DATA_DIR$/.test(key))) throw Error('Keep the private machine storage and control environment');
+  if (Object.keys(c.environment || {}).some(key => /^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$|BASHKITTEN_DATA_DIR$)/.test(key))) throw Error('Keep the private machine storage and control environment');
   if (!c.environment || typeof c.environment !== 'object' || Array.isArray(c.environment) || Object.entries(c.environment).some(([k,v]) => !/^[A-Za-z_][A-Za-z_0-9]*$/.test(k) || typeof v !== 'string' || v.includes('\0'))) throw Error('Launch environment must contain valid string variables');
   const args = c.arguments;
   if (args.some(a => /^--(?:root|runroot|storage-driver|storage-opt|connection|url|remote)(?:=|$)/.test(a))) throw Error('Keep the private local Podman storage and engine');

@@ -17,14 +17,14 @@ export default function chatGPTUsage(pi) {
       const auth = await selectedUsageAuth(ctx);
       if (current !== generation) return;
       if (!auth) { identity = null; publish(ctx, ctx.model && ['openai', 'openai-codex'].includes(ctx.model.provider) ? { status: 'unavailable', observedAt: Date.now(), buckets: [] } : null); return; }
-      if (identity !== auth.key) { identity = auth.key; publish(ctx, null); }
+      if (identity !== auth.identity) { identity = auth.identity; publish(ctx, null); }
       const result = await cachedUsage(auth, process.env.BASHKITTEN_DATA_DIR, signal);
       if (current !== generation || signal.aborted) return;
       // Logout/account change may occur during the request. Resolve through Pi
       // once more and discard the old identity's response without publishing it.
       const latest = await selectedUsageAuth(ctx);
       if (current !== generation) return;
-      if (latest?.key !== auth.key) { identity = null; publish(ctx, null); return; }
+      if (latest?.identity !== auth.identity) { identity = null; publish(ctx, null); return; }
       publish(ctx, result);
     })().catch(() => { if (current === generation && !signal.aborted) publish(ctx, { status: 'unavailable', observedAt: Date.now(), buckets: [] }); })
       .finally(() => { if (current === generation) inflight = null; });
