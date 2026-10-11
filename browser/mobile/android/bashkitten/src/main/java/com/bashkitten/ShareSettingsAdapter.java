@@ -52,7 +52,9 @@ public final class ShareSettingsAdapter {
             try {
                 if (method.equals("share-local-setup")) {
                     if (runtime.selected.equals("local")) runtime.turnOn(); else runtime.select("local");
-                    result.complete(new JSONObject()); activity.finish(); return;
+                    BrowserApp app = BrowserApp.get(activity);
+                    activity.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true));
+                    result.complete(new JSONObject()); app.main.post(activity::finish); return;
                 }
                 if (method.equals("share-status") && runtime.shareNeedsSetup()) { result.complete(object("needsSetup", true)); return; }
                 authorize();
