@@ -1,6 +1,6 @@
 # BashKitten · native Pi / Linux and Termux
 
-## 10 October native environments and Display plan
+## 10–11 October native environments and Display plan
 
 The requested next architecture is recorded in
 [docs/native-environments-display-plan.md](docs/native-environments-display-plan.md).
@@ -16,13 +16,14 @@ Its Pi release update is planned; the current runtime pin below is unchanged.
 The same plan's section 12 contains the whole Android Phone/MCP-to-CLI port.
 This is a device-tools/controls port only: no donor MCP server/client/protocol,
 provider connections, API-key/account/model setup or client onboarding. Existing
-Pi owns all model/provider connections; Phone exposes only our authenticated CLI
+Pi owns all model/provider connections; Phone controls expose our authenticated CLI
 path to the retained Android controls.
 Bundle its backend module into the main APK; no companion APK. Add Phone beside
-the native top-bar +, with master On/Off, independent feature switches, then
+the native top-bar +. Its panel starts with Telephony On/Off and calling/contact
+setup, then a divider and Phone controls On/Off, independent control switches, then
 optional Accessibility-dependent switches greyed out when unavailable. Off must
 remove handlers/discovery and stop collection, with native checks on every path
-regardless of wider APK grants. Remove all Phone camera/microphone control and
+regardless of wider APK grants. Remove all `phoneuse` camera/microphone control and
 generic intent/MCP bypasses. Expose a concise `phoneuse` CLI/skill only through
 live local BashKitten-owned Pi worker authorization, with native grant registry,
 short leases, revocation and correct fork/session adoption. Do not use a general
@@ -34,6 +35,41 @@ bundled component/transitive runtime dependency for telemetry, external logs and
 developer callbacks, including SheetJS and Podman; remove such reporting and
 require source/artifact/traffic verification before release. These are planned
 requirements, not claims that the module or expanded audit is already complete.
+Section 13 merges the earlier calling/contact plan into this plan and supersedes
+its companion-APK design. Import Phony v2.6 at its exact release commit with full
+GPL notices, mark changes, then strip scheduling, fake-call UI, external triggers
+and other unused code in focused commits. Keep a small native telephony library
+module in the main APK, using supported Android 16/17 managed Telecom, contact/
+recents callback and keypad APIs; no Mozilla core changes, separate APK, required
+telephony hardware, root/ADB/Shizuku or default-assistant role for users. All setup,
+call, transport and speech work is nonblocking. Telephony and Phone controls have
+independent master switches; cold Contacts/Recents binds must honor Telephony Off.
+Use the tested SIP-shaped Kitten contact and normal contact editor, without
+contacts/call-log access. Termux hooks reach the native module through the
+authenticated private gateway; no per-call Gecko relay or broad worker token.
+Call speech runs on the phone through its Termux LocalAI, including remote chats;
+remote text/control stays on the existing Tor/Chisel/Caddy/Authelia route. Add the
+requested Connect to phone registration and per-chat Phone hook after Subagents.
+Call-origin work/replies enable the hook; ordinary chats default Off. Finals and
+questions share one deduplicated invitation owner; hangup does not stop Pi work.
+Foreground/lifetime readiness and unsupported ROMs must be reported honestly;
+the earlier probes are not integrated BashKitten/OEM/Android Auto acceptance.
+Section 14 plans one narrow Pi ChatGPT usage extension based on pinned MIT
+`llblab/pi-codex-usage` source. Use Pi's selected subscription OAuth/account,
+without credential scraping, own refresh, account fallback or a Codex process.
+Show actual available weekly/short windows and labelled remaining percentages
+in Pi's terminal and the web UI, beside Pillama. Weekly reset has date/time;
+five-hour reset has time only. Missing/failed data is unavailable or explicitly
+stale. Preserve actual durations/buckets, coalesce async requests and keep status
+out of transcripts; verify the source-observed endpoint against the updated Pi.
+Section 15 plans a deferred `ask_user` tool and short `ask-user` skill. Return a
+pending question immediately; show choices/custom reply inline while Pi works.
+Use one backend resolution owner, a 120-second optional-question deadline and
+attributed answer/expiry delivery through the existing queue and stock Pi RPC.
+No reply means proceed with the best long-term solution, never permission approval.
+Honor Stop/Off, session/fork identity, durable deduplication and held ambiguous
+crash deliveries. Phone and chat resolve the same question; an enabled Phone
+hook delivers questions as well as finals, without duplicate turns or rings.
 Machine rootfs/configuration and durable runtime storage belong under the existing
 `$BASHKITTEN_DATA_DIR`, with user-chosen names mapped to stable machine directories.
 Retain lifecycle/deletion helpers. Implementation acceptance must include an
@@ -52,8 +88,9 @@ with projects and optional ungrouped chats. Replace the large backend dropdown
 with one + for Connect remote/Create container (Linux only). Move power to each
 backend heading; container headings also have Settings and a window/Display
 button opening their full native viewport. Remote headings have connection
-on/off/disconnect/delete only, no Display path/button or settings. Remote Off
-disconnects the client, not the remote host. Impose no arbitrary container count.
+on/off/disconnect/delete and the requested Connect to phone registration, no
+Display path/button or settings. Remote Off disconnects the client, not the remote
+host. Impose no arbitrary container count.
 Project creation uses a modal folder picker on its owning backend and stores the
 selected working directory. New chats under that project inherit it automatically;
 standalone chat folder/default logic stays unchanged. Regrouping or reopening an

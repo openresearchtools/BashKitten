@@ -1,6 +1,6 @@
 # BashKitten native environments, desktop and Display plan
 
-Requested and researched 10 October 2026. **Status: implementation plan only.**
+Requested and researched 10–11 October 2026. **Status: implementation plan only.**
 No application code, package, installed runtime or working user flow is delivered
 by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
@@ -16,6 +16,12 @@ project membership is optional.
 The Android Phone module and MCP-to-CLI port are part of this same plan in
 [section 12](#12-android-phone-control-and-the-mcp-port), including optional
 Accessibility, enforceable feature switches and owned-Pi session authorization.
+The 11 October additions bring the earlier calling/contact research into
+[section 13](#13-native-telephony-contacts-and-call-hooks), with telephony in
+the main APK, followed by [ChatGPT usage status](#14-chatgpt-usage-and-reset-status)
+and [nonblocking questions](#15-nonblocking-agent-questions). These supersede
+the earlier calling plan's companion-APK design; no separate calling plan needs
+to be implemented alongside this one.
 The explicitly requested CPU display fallback does not authorize fallback in
 Tor transport, authentication, AI runtimes or unrelated features.
 
@@ -45,7 +51,8 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   Each container heading has a compact window/Display button that opens its full
   viewport tab, alongside Settings and that container's on/off toggle. Remotes
   have no Display path/button or settings button; their controls concern only
-  connection on/off, disconnect and deletion of the saved remote.
+  connection on/off, disconnect and deletion of the saved remote, plus the
+  explicitly requested **Connect to phone** registration described below.
 - Creating a Linux container opens a preparation view with real installation
   output. The saved Containerfile and ordinary Podman launch configuration remain
   editable by the user or Local agent. GUI helpers edit that same configuration.
@@ -88,12 +95,24 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   persistent extraction, `.deb` installation with dependency resolution and
   passwordless guest sudo, and adding applications/launchers to the Start menu.
   Explicit user-created desktop shortcuts remain available; none are preseeded.
-- Android's native top bar also has **Phone** beside **+**. Its simple settings
-  panel controls a backend module bundled into the main APK: master On/Off,
-  independent feature switches, then optional Accessibility-dependent switches.
-  Local BashKitten-owned Pi sessions use the `phoneuse` CLI/skill. Disabled
-  features have no active handlers, collection or command exposure; camera and
-  microphone control are removed from this module. No companion APK is needed.
+- Android's native top bar also has **Phone** beside **+**. Its settings show
+  **Telephony On/Off** and calling/contact setup first, then a divider and
+  **Phone controls On/Off**, independent control switches and the optional
+  Accessibility-dependent section. Both backend modules are in the main APK.
+  Local BashKitten-owned Pi sessions use the `phoneuse` CLI/skill for enabled
+  controls; that CLI has no camera/microphone commands. Telephony uses the
+  normal Android call screen, contacts, recents and keypad, with phone-side
+  speech processing and an optional per-chat Phone hook for finals/questions.
+  Neither feature enables the other; no companion APK is needed.
+- Pi's terminal and the web chat show a compact ChatGPT subscription-usage line
+  alongside the existing Pillama status: actual weekly/short windows where
+  available, clearly labelled remaining percentage and reset time. Weekly
+  resets include date and time; a five-hour window shows reset time only.
+- Pi can ask an optional question with choices and a custom reply in the chat
+  while continuing its work. Answers arrive as ordinary attributed follow-ups;
+  unanswered questions expire with an explicit instruction to proceed with the
+  best long-term solution. A chat's enabled Phone hook also delivers questions
+  through its registered phone, resolving the same question from either UI.
 
 Product UI, executable/package names and new configuration use **BashKitten**.
 Keep original donor names in licenses, copyright notices and provenance.
@@ -309,7 +328,7 @@ not gain an unrelated host-desktop capture path.
 | --- | --- |
 | Local | Its own on/off toggle and existing local settings/actions; Display only for Local Termux. Off stops Local's owned Agent/Pi/services/display/wake-lock group without stopping containers or disconnecting independent remotes. |
 | Each local container | Its own on/off toggle, Settings and window/Display button. On/Off starts/stops that environment; Settings retains its config/startup/ports/media/sharing and lifecycle/deletion helpers. |
-| Each saved remote | Connection on/off and saved-connection disconnect/delete actions only. No Display endpoint/button or remote settings button. Off disconnects this client's existing tunnel/mappings; it does not stop or power off the remote host. Delete forgets the saved connection through the existing removal flow, not the remote machine or its data. |
+| Each saved remote | Connection on/off and saved-connection disconnect/delete actions, plus **Connect to phone** for the scoped registration in section 13. No Display endpoint/button or remote settings button. Off disconnects this client's existing tunnel/mappings; it does not stop or power off the remote host. Delete forgets the saved connection through the existing removal flow, not the remote machine or its data. |
 
 Use one remote toggle as the normal connect/disconnect action; if Disconnect also
 appears in the existing row actions, it invokes that same operation. Do not add
@@ -324,7 +343,8 @@ metadata may remain visible without implying that its disconnected state is live
 Remote rows do not become host-management surfaces. Preserve the existing
 authorized remote Agent/service transport and its boundaries without adding a
 generic settings entry to those rows. Local/container Share Local remains in
-its owning native settings, as specified below.
+its owning native settings, as specified below. **Connect to phone** is the
+requested calling registration, not a remote management or Display surface.
 
 ### Optional projects and native session identity
 
@@ -347,10 +367,10 @@ directly under Local, a container or a remote without creating/selecting a
 project. Moving a chat into, between or out of projects updates only
 its grouping reference, not its Pi JSONL path, working directory, credentials,
 running process or history. It does not transfer a session to another machine.
-Keep subagent parent/child references and queue/edit ownership intact. Future
+Keep subagent parent/child references and queue/edit ownership intact. The
 calling hooks resolve the same stable environment/chat references; display names
-must never become call-routing keys. Calling, contact, STT/TTS and phone-hook
-implementation remain the separate calling work, not additions to this feature.
+must never become call-routing keys. Section 13 specifies calling, contacts,
+phone-side speech and hooks using these same mappings.
 
 ### Project creation and inherited working directory
 
@@ -1424,6 +1444,8 @@ Use the existing one-product repository and component-build workflow:
 | `agent/src/server/common.mjs`, HTTP/session adapter and RPC worker | Project grouping metadata and existing stock session operations; no custom Pi history writes. |
 | `agent/pi` extension/skills and `agent/packaging/pi-skills.py` | Concise `chats` guide and one deferred read-only list/search/read adapter over the sidecar metadata and native Pi history reader. |
 | Android native Phone module, owned Pi worker launch and Termux CLI/skill packaging | Adapt the pinned MCP donor into a main-APK backend, native feature policy, worker-scoped authorization and clean `phoneuse` CLI. No companion APK or exposed MCP catalog. |
+| Android product-owned telephony library module and existing native/Termux service owners | Import the pinned Phony source/licenses, then reduce it to managed Telecom calls, contact setup, keypad events and the authenticated Pi voice gateway. Same APK and Phone panel, independent of `phoneuse`; no Mozilla core changes. |
+| `agent/pi` extensions, existing RPC worker/status/queue and notification outbox | Narrow ChatGPT usage adapter with terminal/web status; deferred `ask_user` plus concise `ask-user` skill and durable question resolution. Reuse native Pi APIs and existing chat/phone delivery owners. |
 | `agent/src/web/web_ui.html` | Opened-chat view; remove replaced hierarchy/navigation while preserving existing chat/file functions. |
 | Product-owned BashKitten OS source/package | Shared XFCE taskbar, maximized search/pins/app-grid launcher, initially pinned BashKitten OS settings app, layout/scaling and Gnozzard dark/orange styling with persistent wallpaper; Linux guest Thunar application installation/registration adapted from Gnozzard/Buzzard. |
 | Directly merged BashKitten implementation | Needed Buzzard runtime/rootfs/media/lifecycle/sudo functions adapted into their BashKitten owners, with original source pins and notices; no parallel Buzzard app, updater or release chain. |
@@ -1576,7 +1598,9 @@ selection, API-key/account UI or donor client onboarding. Its authenticated
 local transport serves only our Pi CLI and the native Android controls; it is
 not a repackaged MCP endpoint or a connection to an external AI service.
 
-It covers device control, not the separate calling/contact/voice-hook feature.
+This section covers device control. Section 13 adds the calling/contact/voice-hook
+module to the same APK and Phone panel, with its own independent switch and
+authorization. Active-call speech does not become a `phoneuse` capability.
 It does not change the protected Agent boundary, remote authentication, or the
 Tor/Caddy/Authelia/Chisel route. Write only the integration and controls needed
 here; reuse existing native controllers, Termux approval and packaging.
@@ -1587,11 +1611,14 @@ Add a compact **Phone** button to the main native Android top bar beside **+**,
 using the existing icon style. It opens the native Phone settings panel. This
 button does not belong to the XFCE taskbar or the opened-chat web UI.
 
-The panel contains one primary **On/Off** switch, independent feature switches,
-then a divider and Accessibility-dependent switches. Master and new feature
-switches default Off. Switching the master Off retains the user's choices but
-makes every feature inactive. A later On restores only those saved choices whose
-required Android access is currently available; it does not grant permissions.
+The panel starts with section 13's **Telephony On/Off** and calling/contact setup.
+Below a divider, the **Phone controls On/Off** switch owns the independent
+control switches, then another divider and Accessibility-dependent switches.
+Within this section, “master” always means **Phone controls**, not Telephony.
+Both masters and new control switches default Off. Switching Phone controls Off
+retains the user's choices but makes every control feature inactive. A later On
+restores only those saved choices whose required Android access is currently
+available; it does not grant permissions.
 
 Accessibility is optional. Its section stays greyed out until Android access is
 enabled and the service is connected, with a concise explanation and the normal
@@ -1654,7 +1681,7 @@ Remove from the shipped module:
 - All camera/microphone commands, providers, recording/audio options, schemas,
   settings, permission requests and dependencies used only by those features,
   including donor CameraX bindings. Check the merged APK manifest. Browser
-  WebRTC/dictation permissions independently needed elsewhere remain separate
+  WebRTC/dictation and section 13's active-call speech permissions remain separate
   and confer no Phone CLI authority to capture camera or microphone input.
 - Donor app screens/onboarding, global Accessibility startup gate, OAuth/server
   configuration UI, remote icon fetching and its standalone product lifecycle.
@@ -1938,7 +1965,431 @@ support feasibility; they do not verify this rewritten module, production user
 setup, current-target Android 16/17 behavior or physical OEM devices. Keep all
 probes/fixtures outside the product repository and label those limits accurately.
 
-## 13. Pi update and the Durable distinction
+## 13. Native telephony, contacts and call hooks
+
+Requested 11 October, incorporating the earlier 9 October calling research.
+**Status: implementation plan only.** Keep the normal Android call interface:
+call, answer, hang up, keypad, recents and contact callback. Do not create a
+custom dialer or replace the system assistant. The native calling backend is a
+small Android library module **inside the main BashKitten APK**, with setup in
+Phone. This replaces the earlier optional companion APK, separate UID/signature
+pairing and installation flow. Termux remains a separate application/UID.
+
+### Source import and minimal native integration
+
+Start with the unchanged [Phony v2.6 release](https://github.com/DDOneApps/Phony/releases/tag/v2.6)
+at `5c52157dec285c73bc84dd1f388247d3741a127f`, recording the archive checksum,
+full GPLv3 license, original copyrights and matching source. Mark subsequent
+changes and dates; retain Phony's license on its retained source and the existing
+BashKitten license on our code. Import first, then strip/adapt in focused commits.
+Maintain this fork in our tracked sources; no automatic replacement from Phony.
+The research also inspected post-release `e062ad628de6b54163cd1c35d2588fe9f461c602`
+(audio/API-26 fixes). It is not the v2.6 release commit; port only individually
+justified fixes with attribution, rather than silently substituting that tree.
+
+Reuse `TelecomHelper`, `FakeCallConnectionService` and `FakeConnection` for the
+account/connection lifecycle. Add the tested outgoing-call handling and route
+DTMF events to our session menu. Remove the donor's scheduling/alarms, fake-caller
+screens, standalone activity/navigation, update checks, widgets/quick triggers,
+unprotected external-trigger receiver, recording, fake audio and old IVR/audio
+configuration. In particular, digit 1 must not retain Phony's snooze behavior.
+Use our existing LocalAI speech configuration rather than a second voice stack.
+
+Put manifest entries, Telecom callbacks, foreground lifecycle and asynchronous
+setup/control adapters in product-owned Android code. The existing Fenix/native
+Phone settings are the only browser UI integration. No changes to Mozilla/Gecko
+core, dialer source or web-page call control are required by this design. Binder
+callbacks submit bounded background work; network, Termux startup, model work
+and audio processing never block the UI or Telecom callback thread. Retained
+code/dependencies pass the same source/license/telemetry gates as section 12.
+
+### Optional setup in the shared Phone panel
+
+The panel order is **Telephony On/Off**, readiness and minimal **Calling account
+setup**, **Call agent**, **Add Kitten contact** actions; a divider; then section
+12's **Phone controls On/Off** and its feature switches. Both masters default Off
+and retain independent saved choices. Enabling either one grants no authority
+to the other. Phone controls Off must not interrupt a call; Telephony Off must
+not enable or disable Accessibility, notifications or other control features.
+
+Use Android's supported managed
+[ConnectionService](https://developer.android.com/reference/android/telecom/ConnectionService)
+with one stable owned `PhoneAccountHandle`, `CAPABILITY_CALL_PROVIDER` and
+`SCHEME_SIP`. Account setup uses the normal `ACTION_CHANGE_PHONE_ACCOUNTS`
+screen. Check our own account's enabled state through
+[`getRegisteredPhoneAccounts()`](https://developer.android.com/reference/android/telecom/TelecomManager#getRegisteredPhoneAccounts())
+on the Android 16/17 target (API 35+), without enumerating SIM accounts. Explain
+the required user enablement in setup and display actual readiness/error state.
+
+`BIND_TELECOM_CONNECTION_SERVICE` protects the service so Android can bind; it is
+not a runtime permission prompt. Request `CALL_PHONE` when needed for our own
+`placeCall` action. The tested minimal registration/incoming path does not need
+`READ_PHONE_STATE` or `READ_PHONE_NUMBERS`. Do not request contacts/call-log access,
+exact alarms, Accessibility, default-dialer/assistant roles, Termux:API, root,
+ADB or Shizuku for calling. Normal microphone and applicable notification/
+foreground-service requirements belong to active-call speech and its lifecycle.
+
+Do not declare telephony hardware as required. Check the merged manifest for
+permission-implied features and mark them optional where necessary; check
+`FEATURE_TELECOM`, nullable services and API results asynchronously at runtime.
+An unsupported/denied PhoneAccount disables calling with a useful explanation;
+ordinary browser/Pi work continues. A manufacturer that rejects an APK before
+launch because of its declarations cannot be bypassed by these runtime checks.
+The reported Phony OEM launch issue is not proof of a single permission cause.
+Main-APK packaging necessarily includes the service declaration even when Off.
+
+Telephony Off is authoritative in every entrypoint, including a cold Telecom
+bind from Contacts/Recents. Invalidate pending invitations, end owned calls
+cleanly, release audio/foreground resources and unregister the owned account
+as appropriate; retain the stable account identity for deliberate setup later.
+Never rely only on the account's Android enabled flag. Hanging up or switching
+Telephony Off detaches voice without cancelling the underlying Pi work.
+
+### Contact, outgoing call and callback
+
+Use the researched address **`sip:kitten-phone@bashkitten.invalid`** as a local
+Android routing identity, not a public SIP server, cellular number or network
+telephony subscription. **Call agent** uses `TelecomManager.placeCall` with our
+explicit owned account. Incoming agent invitations use `addNewIncomingCall`
+under BashKitten's UID. Validate the owned account, scheme and known address in
+incoming/outgoing callbacks; never route a failed call through a SIM or another
+provider. Return the actual failure when Telecom or the backend rejects it.
+
+**Add Kitten contact** opens the system editor with `ACTION_INSERT`,
+`RawContacts.CONTENT_TYPE`, `Insert.NAME = "Kitten"`, and `Insert.DATA` containing
+a Phone `ContentValues` row:
+
+```text
+MIMETYPE = Phone.CONTENT_ITEM_TYPE
+Phone.NUMBER = kitten-phone@bashkitten.invalid
+Phone.TYPE = Phone.TYPE_CUSTOM
+Phone.LABEL = BashKitten
+```
+
+The Phone row intentionally has **no `sip:` prefix**; Android's tested Contacts
+call action constructs the SIP URI. A dedicated `SipAddress` row did not give a
+usable Call action in the tested Google Contacts versions. Let the user review
+and save through their editor, without `READ_CONTACTS`/`WRITE_CONTACTS`. A cancelled
+or unavailable editor is not a saved-contact success. A contact does not store
+our account handle: test account selection with multiple SIP providers and do
+not promise universal OEM Contacts behavior.
+
+Contacts and Recents reopen the same general agent service, not a permanently
+hardcoded chat. The spoken menu uses the existing project/title/session mapping
+to select a running or saved chat, or explicitly start a new one, on an eligible
+local/registered remote backend. Reattach to existing Pi workers through their
+normal owner; do not duplicate running sessions. A stopped/unavailable backend
+must not be silently replaced by another backend or model. Android maintains
+its ordinary call record; BashKitten does not need to write the call log.
+
+### Direct Termux gateway and service lifetime
+
+Termux cannot own our APK's `ConnectionService` or request incoming calls as our
+PhoneAccount UID. The earlier actual-Termux-UID probe was rejected. Its Pi hooks
+instead call the native module **directly through an authenticated local gateway**:
+
+```text
+owned Pi/session events -> Termux backend voice gateway -> native Telecom module
+native call/keypad/audio events -> Termux gateway -> owning local or remote Pi
+```
+
+There is no Gecko/web-page relay or companion-app hop on each request. Reuse the
+existing approved Termux `RUN_COMMAND` setup to provision the gateway privately.
+Use literal `127.0.0.1`, dynamic endpoint discovery and current-generation mutual
+authentication; loopback alone is not authorization. The earlier abstract Unix
+socket path failed between app UIDs, so do not add it as a fallback. Do not use
+hidden APIs, reflection or `app_process` impersonation. A conflicting listener
+must fail authenticated readiness, not become an assumed valid service.
+
+Bind invitations/events to their backend, session, phone, request ID and expiry,
+with authenticated payloads/results, replay protection and durable deduplication.
+Keep bootstrap/gateway authority private to the existing native/Termux service
+owners. Ordinary Pi workers invoke a narrow hook checked against the chat's saved
+Phone policy; they do not receive unrestricted gateway/admin credentials. This
+durable service authority is distinct from section 12's short-lived `phoneuse`
+worker grants and cannot grant device controls. Never put secrets in contact
+addresses, URLs, the web UI or logs, or export the phone's local gateway secret to
+a remote. The same-Termux-UID trust limitation in section 12 still applies.
+
+Keep enabled callback reception alive using the supported user-enabled Android
+foreground-service lifecycle and notification, with correct call/microphone
+foreground types and background-start rules. The research's temporary
+`specialUse` experiment is evidence about freezing, not a production audio-service
+permission recipe. A cached bare listener was frozen; a socket cannot wake a
+dead or force-stopped app. Contacts/Recents can cause a normal cold Telecom bind,
+but background invitation delivery needs a live authorized service. Show these
+states truthfully; no immortal-service guarantee or hidden restart loop.
+
+Closing a browser activity must not end a live call or callback service merely
+because the UI disappeared. Keep lifecycle ownership in the native module and
+existing background connection owner, without requiring Gecko to render a page.
+Force-stop, denied foreground startup, reboot and unavailable Termux remain
+explicit lifecycle cases. Check invitation expiry immediately before ringing,
+including after suspension; do not ring stale work when a process thaws. Missed
+or declined calls do not create an automatic repeat-call loop. No scheduler UI.
+
+### Phone-side speech, remotes and per-chat hooks
+
+For both local and remote chats, capture/playback belongs to the phone's native
+active-call module, and STT/TTS runs in **that phone's Termux LocalAI services**.
+Use the existing configured speech engines/models. Send text and call/session
+control to remote Pi; do not stream audio to the remote or silently move speech
+to a cloud service. No retained audio or separate transcript store. The normal
+Pi chat receives the recognized text and supplies the response to speak. These
+consented call-audio operations do not expose microphone/camera commands in
+`phoneuse`; the control port continues to omit them.
+
+Add **Connect to phone** to an existing remote connection's actions. When Phone
+setup is ready, explicitly register a stable opaque phone ID, the intended
+remote/backend identity and narrowly scoped callback authority. Reuse the
+phone-initiated **Tor/Chisel/Caddy/Authelia** connection and existing permitted
+agent/service path for text, invitations and control. No public callback port,
+LAN shortcut, alternate authentication or new remote Display path. Keep one
+native background transport/credential-refresh owner; do not create a second
+browser-dependent client or clone credentials into a new voice transport.
+Remote Pi and history remain remote, with no shadow local session.
+
+After **Subagents**, add the requested compact **Phone hook: Off/On** dropdown
+to chats when phone setup is available. Persist the choice and phone association
+in the owning backend's chat metadata, keyed to native session identity. New
+ordinary chats default Off. The user can enable local chats or remote chats
+registered to that phone. Registration alone does not enable all chat hooks;
+offline/unavailable delivery is distinct from the saved choice. Bind to the
+specific backend/session/phone, never whichever chat the UI currently selects.
+
+Work actually started or replied to through a call enables its chat hook before
+dispatch, as one idempotent operation. Merely opening a call, listening to a
+result or connecting a remote does not. An explicit later user Off wins over an
+old transcription retry; typed messages do not reset the preference. This never
+turns global Telephony back On or bypasses missing setup/permissions.
+
+Chat-hook Off or phone/host registration revocation cancels that association's
+unsent or ringing invitations and question-answer mappings created by the hook.
+Check current hook policy and registration generation again immediately before
+delivering a hook notification or accepting its answer, including after
+reconnect/suspension. This does not end an unrelated active call; ordinary
+call/menu controls follow their own current call and backend authorization.
+
+Use the existing notification outbox and settled-turn/native final-entry IDs to
+create one invitation for a final reply. Intermediate tool/model events and
+subagent reports do not independently ring. Extend that **same owner** with the
+question-created event in section 15. If a call is already attached to the chat,
+speak the final/question there rather than ring again. Reconnection, event
+replay and duplicate completion notifications must not create duplicate calls.
+Reuse the outbox's persistence/delivery machinery, not its ordinary notification
+policy: Phone hooks work when general chat notifications are Off or the chat is
+visible. A browser-notification acknowledgement must not consume a phone event.
+Keep channel-specific delivery state and read the full final from its native Pi
+entry reference for TTS; the existing 240-character notification preview is not
+the spoken response. Questions likewise refer to their authoritative record.
+
+### Keypad routing and evidence
+
+Use [`Connection.onPlayDtmfTone(char)`](https://developer.android.com/reference/android/telecom/Connection#onPlayDtmfTone(char))
+and `onStopDtmfTone()`, which deliver the system keypad's digits directly.
+Send authenticated `{callId, menuRevision, sequence, digit}` events. Keep the
+spoken menu's digit-to-backend/session/new-chat mapping stable for that menu;
+list changes must not reinterpret an announced digit. Treat digits as data;
+trigger one action per key-down, none on release, and deduplicate replayed
+call/menu sequence IDs. Separate presses of the same digit are valid. Reject
+input after hangup. No audio DTMF
+decoder or shell-command construction. Question choices additionally bind to
+their question ID/revision; spoken custom replies use the same phone-side STT.
+
+The earlier research is saved in
+`/home/user/Bashkitten-Research/pi-calling-2026-10-09/CALLING_IMPLEMENTATION.txt`
+and its contact, Termux and fork reports. Probes covered managed calls, contact/
+recents callback, process-death startup and keypad `1`, `2`, `*`, `#` on Android
+16/16 QPR2/17 test environments. Google Contacts 4.51.25.737635969 and
+4.74.28.876719826 were exercised. These are **probe results**, not integrated
+BashKitten, voice, physical-OEM or Android Auto acceptance. No new probes were
+run while writing this addition.
+
+Implementation acceptance must cover normal public-API setup on Android 16/17,
+incoming/outgoing/contact/recents calls, running/saved/new chat selection, DTMF,
+hangup without stopping Pi, and the phone-side speech route. Also verify cold
+bind while Off, denied/missing account services, account collisions, UI closure,
+foreground/Doze/process-death cases, replay/expiry/auth failures, remote
+registration/reconnect and the question/final single-delivery rules. Record
+unverified physical OEM/Android Auto behavior explicitly; emulator evidence
+does not establish support on every manufacturer's phone or car interface.
+
+## 14. ChatGPT usage and reset status
+
+Add a narrow Pi extension that shows the selected ChatGPT subscription's actual
+remaining limits in both **Pi's terminal UI and BashKitten's web chat**, using
+the same publication pattern as Pillama. This is account subscription usage,
+separate from the chat's token/cost counters or API-key billing.
+
+Use [llblab/pi-codex-usage v0.13.0](https://github.com/llblab/pi-codex-usage/releases/tag/v0.13.0),
+release commit `02a23c0707ccc4432f320ee14a47183d9bd7f4b1`, as the narrow donor.
+Track the release source/checksum and retain its full MIT license and
+narumiruna/llblab copyrights. Adapt its Pi-authenticated usage request and relevant
+normalization only. Do not import its Codex app-server fallback, Telegram,
+Fast/provider changes, credit redemption or separate polling/storage machinery.
+
+The donor's
+[`lib/query.ts`](https://github.com/llblab/pi-codex-usage/blob/02a23c0707ccc4432f320ee14a47183d9bd7f4b1/lib/query.ts)
+uses `ctx.modelRegistry.getApiKeyAndHeaders(model)` and
+`GET https://chatgpt.com/backend-api/wham/usage`. Pi owns OAuth login, token
+refresh and credential storage. Require the **selected model's subscription
+OAuth mode and proven account/workspace association**: `openai` can also use an
+API key, and `openai-codex` is not the only possible subscription provider.
+Never choose an arbitrary available account or infer identity just from the
+provider name. Use supported Pi auth data; no standalone Pi/Codex credential
+file scraping, second login or private refresh implementation.
+
+This endpoint is observed in source, not a documented stable public subscription
+API. Its compatibility with Pi's current and updated subscription OAuth paths
+must be verified during implementation; no authenticated account probe was
+performed for this plan. If the selected auth path cannot authorize usage for
+the correct account, show unavailable, without changing providers or falling
+back to a Codex process. API-key accounts have no inferred subscription meter.
+
+Preserve the returned window duration, used percentage and reset epoch (the
+source schema uses `limit_window_seconds`, `used_percent`, `reset_at`). The donor
+currently loses duration in its normalized view; correct that in our adaptation.
+[OpenAI's app-server documentation](https://learn.chatgpt.com/docs/app-server)
+also describes actual durations/reset epochs and multiple limit buckets, but
+that is a different interface, not a promise of a public Pi usage API. Do not
+add an app-server dependency to obtain this status.
+
+- Show **remaining** explicitly: `100 - usedPercent`, validated/clamped to the
+  percentage range. Reject malformed data instead of turning it into zero.
+- Show a weekly window only when returned; its reset shows **date and time**.
+  A returned five-hour window shows **5h** and reset **time only**. Label other
+  hourly/short windows using their actual durations; never assume `primary`
+  means five hours or `secondary` means a week.
+- Preserve returned bucket identities/additional limits without inventing model
+  associations. Missing windows mean unavailable/absent, not unlimited or 0%
+  used. Passing a reset timestamp does not prove that an unrefreshed limit reset.
+- Store UTC timestamps; format resets in the viewing client's local timezone,
+  with timezone context available. Account/provider changes and logout clear
+  the previous status and ignore late responses from that identity.
+
+Reuse Pillama's `ctx.ui.setWidget`/`setStatus` and structured RPC `setStatus`
+pattern, with distinct keys such as `chatgpt-usage` for readable text and
+`chatgpt-usage:data` for the normalized snapshot so they cannot overwrite each
+other. The worker already retains replaceable `extensionStatuses` for reconnect.
+Render a compact dedicated status
+line beside the existing status area; do not overwrite Pillama, composer hints
+or the question card, inject status into transcript messages, or patch Pi's
+provider/agent loop. Use one normalized snapshot for terminal and web rendering;
+the browser does not fetch the provider endpoint itself.
+
+Coalesce requests and share a bounded-age read cache per backend/account, so
+multiple chats/subagents do not each poll the same quota. A 60-second cache TTL
+is a reasonable initial refresh bound, not an idle polling interval. Refresh
+asynchronously on relevant active/visible status and turn/account events, with
+bounded timeout, cancellation and failure backoff. No startup-wide account scan
+or hidden perpetual polling. A failed refresh shows unavailable or explicitly
+stale data with observation time; never block sends, tool execution or rendering.
+Keep credentials/account payloads out of web status, logs and native history.
+
+Acceptance: selected subscription account on supported Pi auth paths, API-key
+case, absent/changed windows, weekly/5h timezone formatting, account switch/logout,
+rate-limit/error/timeout and late response, terminal and web reconnect, simultaneous
+chats and coexistence with Pillama/questions. The necessary provider usage GET
+is not permission for telemetry, developer callbacks or new account controls.
+
+## 15. Nonblocking agent questions
+
+Add one stock-deferred **`ask_user`** extension tool and concise normally
+discovered **`ask-user`** skill to BashKitten-owned Pi. It asks a short question,
+optionally offers choices, and always allows a custom text reply. The guide
+teaches asking early, continuing independent work and applying a later answer.
+Keep schemas deferred through Pi's normal `tool_search`; no custom tool loader.
+
+The tool submits to the existing protected worker/backend and, once the pending
+record is accepted, **returns immediately** with `{questionId, status: "pending"}`
+and an instruction to continue independent work. It must not await a UI promise, human reply, ringing
+call or timer. Pi's example `question.ts` and RPC select/input/confirm flows wait
+for an answer; reuse useful presentation ideas only, not their blocking flow.
+There is no new model/provider connection or replacement agent loop.
+
+### Inline question and one resolution owner
+
+Show the question, choice buttons and free-text reply in the owning chat, using
+an inline card rather than a modal. Keep ordinary composer, navigation, other
+chats and agent work usable. Options are suggestions; no preselected option is
+automatically submitted. Reconnect reads authoritative question state and its
+deadline rather than recreating a tool request or restarting a countdown.
+
+Store only the necessary operational record with the owning chat metadata:
+backend/native session/branch identity, question ID, originating tool-call ID,
+text/choices, revision, creation/deadline timestamps and resolution/delivery ID.
+Reuse the existing queue/outbox persistence; no duplicate transcript store or
+background question index. Never bind a reply to the currently selected chat.
+Native session adoption must preserve the owner; a fork/history replay does not
+clone a pending question or replay its invitation into another branch.
+Before delivery, revalidate the native session and the originating branch/tool
+call against current ownership. Hold or cancel stale work; never reopen another
+session automatically to inject its reply. Creation itself is idempotent by
+backend/native-session/tool-call identity, so a retry cannot create another card.
+
+Resolve atomically from `pending` to `answered`, `expired` or `cancelled`.
+The first valid resolution wins; retried submissions return the same result.
+Check the absolute deadline inside that serialized transition even if a suspended
+timer has not fired; an overdue reply cannot win against an elapsed deadline.
+Use a **120-second initial product default** for optional questions, measured by
+an absolute backend deadline, with no extra timeout-settings UI. Expiry delivers
+a clearly attributed backend-generated notice: **“No response; proceed with the
+best long-term solution.”** The tool has already returned, so there is no timeout
+blocking the current agent turn. Timeout does not fabricate a user choice or
+permission approval or inject a privileged system-role message; this mechanism
+is for optional clarification/preferences.
+
+An answer or expiry uses the existing durable worker queue and supported Pi RPC
+`prompt` with `streamingBehavior: "steer"`: delivered at Pi's safe boundary while
+working, or starting the next turn when idle. Pi's supported extension
+`sendUserMessage`/`sendMessage` APIs are also available; keep **one delivery path**
+through the existing owner, not parallel extension and server injections.
+`nextTurn` alone does not resume an idle agent. A running tool is not forcibly
+interrupted. Prefix free text with its question attribution so a leading `/`
+does not become an unintended extension command.
+
+Use stable delivery IDs and the existing `agentDelivery` deduplication/held-draft
+mechanics. Reuse these mechanics without treating a user question as subagent
+family messaging. After a crash, ambiguous submitted prompts remain held for
+normal reconciliation/resume; stock RPC does not guarantee exactly-once delivery
+across a crash. Do not blindly replay, directly write Pi JSONL or promise otherwise.
+Explicit user Stop and backend Off override automatic answer/expiry resumption.
+Persist that stop intent and cancel/hold pending question delivery, with an owner/
+stop-generation check immediately before injection. The current worker abort
+path alone does not establish this durable barrier; extend its existing owner
+state so a timer or answer racing Stop cannot restart the agent.
+Late replies to an expired card can be submitted as a new attributed follow-up;
+they do not rewrite the timeout resolution or replay the original tool call.
+
+### Questions through the same Phone hook
+
+Add a typed `question-created` event to the existing notification outbox, keyed
+by question ID/revision, alongside the final-turn event from section 13. With
+global Telephony On, registered phone and that chat's Phone hook On, ring with
+the pending question or speak it in the already attached call. Keep one invitation
+owner, so the question and final hooks cannot independently double-ring for the
+same pending interaction. Merely asking does not enable a previously Off hook.
+
+Speak question/options, map keypad digits to that immutable question/revision,
+and accept custom spoken answers through the phone's Termux STT. Both phone and
+web submit to the **same resolution owner**. A web answer withdraws a pending
+ring or updates the active call; a phone answer resolves the card. Expiry or
+cancellation invalidates the invitation and keypad mapping; check this again
+immediately before ringing after any suspension/reconnect. A late call answer
+must not become a second resolution. Questions work fully in chat when Phone
+is unavailable or Off; no phone prerequisite or hidden callback retry loop.
+Recheck global Telephony, chat hook, phone registration/generation and question
+state before speaking or accepting keypad/STT answers too. Turning the hook Off
+withdraws the phone invitation/mapping while leaving the web question usable.
+
+Acceptance: busy/idle agent, choices/custom text, no response/expiry, late reply,
+web/phone race, duplicate submissions, UI reconnect, process crash, native
+fork/adoption/branch switch, Stop/Off and held drafts. Verify immediate tool return,
+continued useful work, responsive UI, correct chat routing, one resolved answer
+and no duplicate agent turns/calls. Recheck these extension/RPC contracts against
+the pinned Pi update before implementation; this plan inspected current 1.0.2.
+
+## 16. Pi update and the Durable distinction
 
 Add a focused dependency-update step from current
 `@earendil-works/pi-coding-agent`/`pi-ai` 1.0.2 to the latest verified official
@@ -1958,7 +2409,7 @@ This plan preserves stock sessions; it does not authorize a separate harness or
 history migration. Verify the new release's session restore, effective model and
 reasoning, fork, streaming and subagent communication in the existing integration.
 
-## 14. Ordered implementation and acceptance gates
+## 17. Ordered implementation and acceptance gates
 
 Implement in focused, reviewable commits on main, with relevant checks and pushes.
 Do not dispatch large browser builds before proving the new native boundaries
@@ -1973,7 +2424,9 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Phone module and CLI | Main-APK MCP port, native master/feature policy, optional Accessibility, owned-Pi worker grants, Termux CLI and `phoneuse` skill. | Complete section 12's user-flow and denial checks; no camera/microphone commands, companion APK, exposed MCP catalog or reusable general-shell token. |
-| 8. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling and every bundled component's network/logging audit. | Installed native user flows plus recorded missing hardware coverage; no unexplained telemetry/developer callbacks or release claim based on a dispatched build. |
+| 8. Calling and contacts | Pinned Phony fork as a main-APK native module, independent Telephony setup, managed calls/contact/keypad, Termux gateway, phone-side speech, remote phone registration and per-chat hooks. | Section 13's Android 16/17 flows, cold-bind Off enforcement, foreground/lifetime/auth/expiry checks, exact intended remote route and no duplicate callback; record OEM/Auto gaps. |
+| 9. Usage and questions | Narrow Pi subscription usage/status adapter and deferred nonblocking questions with shared web/phone resolution. | Sections 14–15's selected-account and window formatting checks, immediate tool return, idle/busy/timeout/race/Stop/reconnect cases; no Pi patches or duplicate delivery. |
+| 10. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling and every bundled component's network/logging audit. | Installed native user flows plus recorded missing hardware coverage; no unexplained telemetry/developer callbacks or release claim based on a dispatched build. |
 
 Use ADB/direct Termux for Android setup, installation, permissions and debugging;
 use the desktop BashKitten browser with Cuttlefish's web UI for actual feature

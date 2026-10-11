@@ -32,6 +32,33 @@ no new CUA/MCP server. This is planned work; the installed inventory below is
 unchanged. `termux-display` remains setup/launch guidance, and Android device
 control remains the separately authorized `phoneuse` feature.
 
+Planned additions, 11 October: the main plan's
+[usage section](native-environments-display-plan.md#14-chatgpt-usage-and-reset-status)
+adds a narrow MIT-licensed `pi-codex-usage` adaptation using Pi's selected
+subscription OAuth and existing terminal/RPC status APIs. It shows actual
+weekly/short limits and reset times in Pi and the web UI, independently of
+Pillama's status, without a Codex process, credential scraping or Pi/provider
+patches. Usage status is replaceable metadata, not a transcript message.
+
+The [question section](native-environments-display-plan.md#15-nonblocking-agent-questions)
+adds a deferred `ask_user` tool and concise `ask-user` guide. The tool returns a
+pending ID immediately; choices and custom reply appear inline while Pi keeps
+working. One backend owner resolves answers or the initial 120-second deadline,
+then delivers an attributed answer or no-response instruction through the stock
+Pi queue/RPC path. Silence means proceed with the best long-term solution for
+optional questions, never permission approval. Stop/Off and uncertain crash
+delivery remain authoritative; no waiting UI/tool promise or JSONL edits.
+
+The [calling section](native-environments-display-plan.md#13-native-telephony-contacts-and-call-hooks)
+brings Phony-based telephony into the main APK, with independent setup above the
+Phone controls section. The per-chat Phone hook after Subagents sends final
+turns and questions through one authenticated, deduplicated invitation owner;
+web and spoken/keypad replies resolve the same question. Phone-side Termux
+handles speech even for registered remote chats, preserving the existing
+encrypted remote route. Call-origin work/replies enable the hook. This adds no
+camera/microphone commands or telephony authority to `phoneuse`. These are
+planned capabilities, not changes to the installed inventory below.
+
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's
 `deferred` exposure. Its built-in `tool_search` is activated without replacing
