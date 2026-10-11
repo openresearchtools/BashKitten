@@ -4,12 +4,10 @@
 
 package org.mozilla.fenix.components
 
-import android.app.Application
 import android.content.Context
 import mozilla.components.lib.crash.CrashReporter
 import mozilla.components.support.utils.Browsers
 import mozilla.components.support.utils.RunWhenReadyQueue
-import org.mozilla.fenix.components.metrics.AdjustMetricsService
 import org.mozilla.fenix.components.metrics.DefaultMetricsStorage
 import org.mozilla.fenix.components.metrics.FirstSessionMetricsService
 import org.mozilla.fenix.components.metrics.GleanMetricsService
@@ -59,11 +57,6 @@ class Analytics(
         MetricController.create(
             listOf(
                 GleanMetricsService(context),
-                AdjustMetricsService(
-                    application = context as Application,
-                    storage = metricsStorage,
-                    crashReporter = crashReporter,
-                ),
                 FirstSessionMetricsService(context),
                 InstallReferrerMetricsService(context, settings),
                 GleanUsageReportingMetricsService(gleanProfileIdStore = GleanProfileIdPreferenceStore(context)),

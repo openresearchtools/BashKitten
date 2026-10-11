@@ -15,6 +15,7 @@ import shutil
 from build import checked_archive
 import subprocess
 import tarfile
+import zipfile
 
 AGENT = Path(__file__).resolve().parents[1]
 ROOT = AGENT.parent
@@ -131,7 +132,8 @@ for record in android_records:
     assert re.fullmatch(r'[a-f0-9]{40}', commit)
     key = (repository, commit)
     if key not in android_archives:
-        name = repository.rsplit('/', 1)[-1] + '-' + commit + '.tar.gz'
+        name = record.get('sourceArchive') or repository.rsplit('/', 1)[-1] + '-' + commit + '.tar.gz'
+        assert Path(name).name == name, 'Invalid Android source archive name'
         archive = extra_cache / name
         pin = android_pins[name]
         assert pin['repository'] == repository and pin['commit'] == commit
@@ -139,10 +141,16 @@ for record in android_records:
         assert hashlib.sha256(payload).hexdigest() == pin['sha256']
         archive.write_bytes(payload)
         android_archives[key] = archive
-    with tarfile.open(android_archives[key]) as upstream:
-        matches = [entry for entry in upstream if entry.name.partition('/')[2] == record['licensePath']]
-        assert len(matches) == 1, 'Missing pinned Android license source: ' + record['name']
-        assert hashlib.sha256(upstream.extractfile(matches[0]).read()).hexdigest() == record['sha256'], 'Android license source mismatch: ' + record['name']
+    if android_archives[key].suffix == '.zip':
+        with zipfile.ZipFile(android_archives[key]) as upstream:
+            assert upstream.namelist().count(record['licensePath']) == 1, 'Missing pinned Android license source: ' + record['name']
+            license_bytes = upstream.read(record['licensePath'])
+    else:
+        with tarfile.open(android_archives[key]) as upstream:
+            matches = [entry for entry in upstream if entry.name.partition('/')[2] == record['licensePath']]
+            assert len(matches) == 1, 'Missing pinned Android license source: ' + record['name']
+            license_bytes = upstream.extractfile(matches[0]).read()
+    assert hashlib.sha256(license_bytes).hexdigest() == record['sha256'], 'Android license source mismatch: ' + record['name']
 android_manifest = []
 with tarfile.open(args.output / ('bashkitten-android-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
     for (repository, commit), file in sorted(android_archives.items()):
