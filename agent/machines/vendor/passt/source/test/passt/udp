@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/passt/udp - Check UDP functionality in passt mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+gtools	socat ip jq cmp
+htools	socat jq
+
+set	TEMP __STATEDIR__/test.bin
+
+test	UDP/IPv4: host to guest
+guestb	socat -u UDP4-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/medium.bin UDP4:127.0.0.1:10001,shut-null
+guestw
+guest	cmp /root/medium.bin test.bin
+
+test	UDP/IPv4: guest to host
+hostb	socat -u UDP4-LISTEN:10003,bind=127.0.0.1,null-eof OPEN:__TEMP__,create,trunc
+gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+guest	socat -u OPEN:/root/medium.bin UDP4:__GW__:10003,shut-null
+hostw
+check	cmp __BASEPATH__/medium.bin __TEMP__
+
+test	UDP/IPv6: host to guest
+guestb	socat -u UDP6-LISTEN:10001,null-eof OPEN:test.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/medium.bin UDP6:[::1]:10001,shut-null
+guestw
+guest	cmp /root/medium.bin test.bin
+
+test	UDP/IPv6: guest to host
+hostb	socat -u UDP6-LISTEN:10003,bind=[::1],null-eof OPEN:__TEMP__,create,trunc
+gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+guest	socat -u OPEN:/root/medium.bin UDP6:[__GW6__%__IFNAME__]:10003,shut-null
+hostw
+check	cmp __BASEPATH__/medium.bin __TEMP__

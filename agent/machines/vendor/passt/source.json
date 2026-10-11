@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "passt",
+  "version": "2026_10_02.cba3570",
+  "repository": "https://passt.top/passt",
+  "commit": "cba357068dc586e7540971eb40bb56c5e62c4de1",
+  "sources": [
+    {
+      "path": "source",
+      "repository": "https://passt.top/passt",
+      "commit": "cba357068dc586e7540971eb40bb56c5e62c4de1",
+      "git_archive_sha256": "a1e672f0e83dae43e72266a0427342f78afaef86e1772a76f538ac8f7b208706"
+    }
+  ],
+  "license_paths": [],
+  "modified": false,
+  "source_inventory_sha256": "6d8fe5d79bd1a2a3b425efa4b50be56d9888d86210a8820eba440bfc60e81b0b"
+}

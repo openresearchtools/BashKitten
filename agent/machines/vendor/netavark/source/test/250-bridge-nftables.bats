@@ -1,0 +1,1428 @@
+#!/usr/bin/env bats   -*- bats -*-
+#
+# bridge driver tests with nftables firewall driver
+#
+
+load helpers
+
+fw_driver=nftables
+export NETAVARK_FW=nftables
+
+@test "check nftables driver is in use" {
+    RUST_LOG=netavark=info run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert "${lines[0]}" "==" "[INFO  netavark::firewall] Using nftables firewall driver" "nftables driver is in use"
+}
+
+@test "$fw_driver - internal network" {
+   # Table doesn't exist at this point otherwise
+   run_in_host_netns nft add table inet netavark
+   run_in_host_netns nft list table inet netavark
+   before="$output"
+
+   run_netavark --file ${TESTSDIR}/testfiles/internal.json setup $(get_container_netns_path)
+
+   run_in_host_netns nft list table inet netavark
+   assert "$output" == "$before" "make sure tables have not changed"
+
+   run_in_container_netns ip route show
+   assert "$output" "!~" "default" "No default route for internal networks"
+
+   run_in_container_netns ping -c 1 10.88.0.1
+
+   run_netavark --file ${TESTSDIR}/testfiles/internal.json teardown $(get_container_netns_path)
+}
+
+@test "$fw_driver - simple bridge" {
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    result="$output"
+    assert_json "$result" 'has("podman")' == "true" "object key exists"
+
+    mac=$(jq -r '.podman.interfaces.eth0.mac_address' <<<"$result")
+    # check that interface exists
+    run_in_container_netns ip -j --details link show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].address" == "$mac" "MAC matches container mac"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Container interface is up"
+    assert_json "$link_info" ".[].linkinfo.info_kind" == "veth" "Container interface is a veth device"
+
+    ipaddr="10.88.0.2/16"
+    run_in_container_netns ip addr show eth0
+    assert "$output" =~ "$ipaddr" "IP address matches container address"
+    assert_json "$result" ".podman.interfaces.eth0.subnets[0].ipnet" == "$ipaddr" "Result contains correct IP address"
+
+    run_in_host_netns ip -j --details link show podman0
+    link_info="$output"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Host bridge interface is up"
+    assert_json "$link_info" ".[].linkinfo.info_kind" == "bridge" "The bridge interface is actually a bridge"
+    bridge_mac=$(jq -r '.[].address' <<<"$link_info")
+
+    run_in_host_netns ip -j link show veth0
+    veth_info="$output"
+    assert_json "$veth_info" ".[].address" != "$bridge_mac" "Bridge and Veth must have different mac address"
+
+    ipaddr="10.88.0.1"
+    run_in_host_netns ip addr show podman0
+    assert "$output" =~ "$ipaddr" "IP address matches bridge gateway address"
+    assert_json "$result" ".podman.interfaces.eth0.subnets[0].gateway" == "$ipaddr" "Result contains gateway address"
+
+    # check that the loopback adapter is up
+    run_in_container_netns ip addr show lo
+    assert "$output" =~ "127.0.0.1" "Loopback adapter is up (has address)"
+
+    run_in_host_netns ping -c 1 10.88.0.2
+
+    check_simple_bridge_nftables
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+
+    # now check that nftables rules are gone
+
+    # check FORWARD rules
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${#lines[@]}" = 8 "too many FORWARD rules after teardown"
+
+    # check POSTROUTING rules
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
+    assert "${#lines[@]}" = 6 "too many POSTROUTING rules after teardown"
+
+    # nv_10_88_0_0_nm16 chain should not exists
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_10_88_0_0_nm16
+
+    # bridge should be removed on teardown
+    expected_rc=1 run_in_host_netns ip addr show podman0
+}
+
+@test "$fw_driver - bridge with static routes" {
+    # add second interface and routes through that interface to test proper teardown
+    run_in_container_netns ip link add type dummy
+    run_in_container_netns ip a add 10.91.0.10/24 dev dummy0
+    run_in_container_netns ip link set dummy0 up
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-staticroutes.json setup $(get_container_netns_path)
+
+    # check static routes
+    run_in_container_netns ip r
+    assert "$output" "=~" "10.89.0.0/24 via 10.88.0.2" "static route not set"
+    assert "$output" "=~" "10.90.0.0/24 via 10.88.0.3" "static route not set"
+    assert "$output" "=~" "10.92.0.0/24 via 10.91.0.1" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-staticroutes.json teardown $(get_container_netns_path)
+
+    # check static routes get removed
+    assert "$output" "!~" "10.89.0.0/24 via 10.88.0.2" "static route not set"
+    assert "$output" "!~" "10.90.0.0/24 via 10.88.0.3" "static route not set"
+    assert "$output" "!~" "10.92.0.0/24 via 10.91.0.1" "static route not removed"
+}
+
+@test "$fw_driver - bridge with blackhole routes" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-blackholeroutes.json setup $(get_container_netns_path)
+
+    # check blackhole routes
+    run_in_container_netns ip r
+    assert "$output" "=~" "blackhole 10.89.0.0/24" "blackhole route not set"
+    assert "$output" "=~" "blackhole 10.90.0.0/24" "blackhole route not set"
+    # check regular static route is also set
+    assert "$output" "=~" "10.91.0.0/24 via 10.88.0.3" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-blackholeroutes.json teardown $(get_container_netns_path)
+
+    # check routes get removed
+    run_in_container_netns ip r
+    assert "$output" "!~" "blackhole 10.89.0.0/24" "blackhole route not removed"
+    assert "$output" "!~" "blackhole 10.90.0.0/24" "blackhole route not removed"
+    assert "$output" "!~" "10.91.0.0/24 via 10.88.0.3" "static route not removed"
+}
+
+@test "$fw_driver - bridge with no default route" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-nodefaultroute.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip r
+    assert "$output" "!~" "default" "default route exists"
+
+    run_in_container_netns ip -6 r
+    assert "$output" "!~" "default" "default route exists"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-nodefaultroute.json teardown $(get_container_netns_path)
+    assert "" "no errors"
+}
+
+@test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server with network dns servers and perform update" {
+    # get a random port directly to avoid low ports e.g. 53 would not create nftables rules
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+        setup $(get_container_netns_path)
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1 127.0.0.1,3.3.3.3" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8,1.1.1.1$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+
+    # Use run_helper instead of run_netavark here to check network namespace detection logic.
+    # See https://github.com/containers/netavark/issues/911 for details.
+    NETAVARK_DNS_PORT="$dns_port" run_helper $NETAVARK --config "$NETAVARK_TMPDIR/config" --rootless "$rootless" --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+        update podman1 --network-dns-servers 8.8.8.8
+    assert "$output" = ""
+
+    # after update the pid should never change
+    aardvark_pid2=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$aardvark_pid2" == "$aardvark_pid" "aardvark-dns pid after nv update"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1 8.8.8.8" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8,1.1.1.1$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    # remove network and check running and verify if aardvark config has no nameserver
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+        update podman1 --network-dns-servers ""
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" == "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8,1.1.1.1$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+}
+
+# netavark must do no-op on upates when no aardvark config is there
+@test "run netavark update - no-op" {
+    # get a random port directly to avoid low ports e.g. 53 would not create nftables rules
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+        update podman1 --network-dns-servers 8.8.8.8
+}
+
+@test "$fw_driver - ipv6 bridge" {
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
+    result="$output"
+    assert_json "$result" 'has("podman1")' == "true" "object key exists"
+
+    mac=$(jq -r '.podman1.interfaces.eth0.mac_address' <<<"$result")
+    # check that interface exists
+    run_in_container_netns ip -j --details link show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].address" == "$mac" "MAC matches container mac"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Container interface is up"
+    assert_json "$link_info" ".[].linkinfo.info_kind" == "veth" "Container interface is a veth device"
+
+    ipaddr="fd10:88:a::2/64"
+    run_in_container_netns ip addr show eth0
+    assert "$output" =~ "$ipaddr" "IP address matches container address"
+    assert_json "$result" ".podman1.interfaces.eth0.subnets[0].ipnet" == "$ipaddr" "Result contains correct IP address"
+
+    run_in_host_netns ip -j --details link show podman1
+    link_info="$output"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' == "UP" "Host bridge interface is up"
+    assert_json "$link_info" ".[].linkinfo.info_kind" == "bridge" "The bridge interface is actually a bridge"
+
+    ipaddr="fd10:88:a::1"
+    run_in_host_netns ip addr show podman1
+    assert "$output" =~ "$ipaddr" "IP address matches bridge gateway address"
+    assert_json "$result" ".podman1.interfaces.eth0.subnets[0].gateway" == "$ipaddr" "Result contains gateway address"
+
+    # check that the loopback adapter is up
+    run_in_container_netns ip addr show lo
+    assert "$output" =~ "127.0.0.1" "Loopback adapter is up (has address)"
+
+    run_in_host_netns ping6 -c 1 fd10:88:a::2
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json teardown $(get_container_netns_path)
+}
+
+@test "$fw_driver - ipv6 bridge with static routes" {
+    # add second interface and routes through that interface to test proper teardown
+    run_in_container_netns ip link add type dummy
+    run_in_container_netns ip a add fd10:49:b::2/64 dev dummy0
+    run_in_container_netns ip link set dummy0 up
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-staticroutes.json setup $(get_container_netns_path)
+
+    # check static routes
+    run_in_container_netns ip -6 -br r
+    assert "$output" "=~" "fd10:89:b::/64 via fd10:88:a::ac02" "static route not set"
+    assert "$output" "=~" "fd10:89:c::/64 via fd10:88:a::ac03" "static route not set"
+    assert "$output" "=~" "fd10:51:b::/64 via fd10:49:b::30" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-staticroutes.json teardown $(get_container_netns_path)
+
+    # check static routes get removed
+    run_in_container_netns ip -6 -br r
+    assert "$output" "!~" "fd10:89:b::/64 via fd10:88:a::ac02" "static route not removed"
+    assert "$output" "!~" "fd10:89:c::/64 via fd10:88:a::ac03" "static route not removed"
+    assert "$output" "!~" "fd10:51:b::/64 via fd10:49:b::30" "static route not removed"
+
+    run_in_container_netns ip link delete dummy0
+}
+
+@test "$fw_driver - ipv6 bridge with blackhole routes" {
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-blackholeroutes.json setup $(get_container_netns_path)
+
+    # check blackhole routes
+    run_in_container_netns ip -6 -br r
+    assert "$output" "=~" "blackhole fd10:89:b::/64" "blackhole route not set"
+    assert "$output" "=~" "blackhole fd10:89:c::/64" "blackhole route not set"
+    # check regular static route is also set
+    assert "$output" "=~" "fd10:51:b::/64 via fd10:88:a::ac02" "static route not set"
+
+    run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge-blackholeroutes.json teardown $(get_container_netns_path)
+
+    # check routes get removed
+    run_in_container_netns ip -6 -br r
+    assert "$output" "!~" "blackhole fd10:89:b::/64" "blackhole route not removed"
+    assert "$output" "!~" "blackhole fd10:89:c::/64" "blackhole route not removed"
+    assert "$output" "!~" "fd10:51:b::/64 via fd10:88:a::ac02" "static route not removed"
+}
+
+@test "$fw_driver - bridge driver must generate config for aardvark with custom dns server" {
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
+        setup $(get_container_netns_path)
+
+    # check nftables
+    run_in_host_netns nft list chain inet netavark INPUT
+    assert "${lines[3]}" =~ "ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport 53 accept" "DNS accept rule"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
+}
+
+@test "$fw_driver - aardvark-dns entries after startup failure" {
+    # force failure with invalid aardvark-dns binary
+    expected_rc=1 run_netavark --aardvark-binary ${TESTSDIR} --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json \
+        setup $(get_container_netns_path)
+    assert "$output" =~ "aardvark-dns failed to start: Failed to find executable" "netavark error"
+
+    # check aardvark config must not exists after error
+    run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns"
+    assert "$output" == "" "No aardvark entries"
+}
+
+@test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server" {
+    # get a random port directly to avoid low ports e.g. 53 would not create nftables rules
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-multiple-custom-dns-server.json \
+        setup $(get_container_netns_path)
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8,1.1.1.1$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+}
+
+@test "$fw_driver - bridge driver must generate config for aardvark with multiple custom dns server with network dns servers" {
+    # get a random port directly to avoid low ports e.g. 53 would not create nftables rules
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-network-container-dns-server.json \
+        setup $(get_container_netns_path)
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1 127.0.0.1,3.3.3.3" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename 8.8.8.8,1.1.1.1$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+}
+
+@test "$fw_driver - dual stack dns with alt port" {
+    # get a random port directly to avoid low ports e.g. 53 would not create nftables rules
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        setup $(get_container_netns_path)
+
+    # check nftables
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${lines[2]}" =~ "ip6 daddr fd10:88:a::1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip6 to \[fd10:88:a::1\]:$dns_port" "DNS forward rule ip6"
+    assert "${lines[3]}" =~ "ip daddr 10.89.3.1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS forward rule ip4"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        teardown $(get_container_netns_path)
+
+    # check nftables rules were removed
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 4 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
+}
+
+@test "$fw_driver - dns with default drop policy" {
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        setup $(get_container_netns_path)
+
+    run_in_host_netns nft add chain inet netavark INPUT \{ type filter hook input priority 0 \; policy drop \; \}
+    run_in_host_netns nft add rule inet netavark INPUT ct state related,established accept
+    run_in_host_netns nft add rule inet netavark INPUT meta l4proto ipv6-icmp accept # allow ICMPv6, required for DNS resolution
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        teardown $(get_container_netns_path)
+
+    # check nftables rules were removed
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 4 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
+}
+
+@test "$fw_driver - dns with default drop policy with non-default dns port" {
+    # get a random port
+    dns_port=$((RANDOM+10000))
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        setup $(get_container_netns_path)
+
+    # check that random DNS port was added to nftables rules
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${lines[2]}" =~ "ip6 daddr fd10:88:a::1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip6 to \[fd10:88:a::1\]:$dns_port" "DNS forward rule ip6"
+    assert "${lines[3]}" =~ "ip daddr 10.89.3.1 meta l4proto \{ tcp, udp \} th dport 53 dnat ip to 10.89.3.1:$dns_port" "DNS forward rule ip4"
+
+    run_in_host_netns nft add chain inet netavark INPUT \{ type filter hook input priority 0 \; policy drop \; \}
+    run_in_host_netns nft add rule inet netavark INPUT ip saddr 10.89.3.0/24 meta l4proto \{ tcp, udp \} th dport $dns_port accept
+    run_in_host_netns nft add rule inet netavark INPUT ip6 saddr fd10:88:a::/64 meta l4proto \{ tcp, udp \} th dport $dns_port accept
+    run_in_host_netns nft add rule inet netavark INPUT ct state related,established accept
+    run_in_host_netns nft add rule inet netavark INPUT meta l4proto ipv6-icmp accept # allow ICMPv6, required for DNS resolution
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1,fd10:88:a::1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2 fd10:88:a::2 somename$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p $dns_port run" "aardvark not running or bad options"
+
+    # test redirection actually works
+    run_in_container_netns dig +short "somename.dns.podman" @10.89.3.1 A "somename.dns.podman" @10.89.3.1 AAAA
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv4 dns resolution works 1/2"
+    assert "${lines[1]}" =~ "fd10:88:a::2" "ipv6 dns resolution works 2/2"
+
+    run_in_container_netns dig +short "somename.dns.podman" @fd10:88:a::1
+    assert "${lines[0]}" =~ "10.89.3.2" "ipv6 dns resolution works"
+
+    NETAVARK_DNS_PORT="$dns_port" run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json \
+        teardown $(get_container_netns_path)
+
+    # check nftables rules were removed
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "${#lines[@]}" = 4 "too many v4 NETAVARK_HOSTPORT-DNAT rules after teardown"
+
+    # check aardvark config got cleared, process killed
+    expected_rc=2 run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    expected_rc=1 run_helper ps "$aardvark_pid"
+}
+
+@test "$fw_driver - check error message from netns thread" {
+    # create interface in netns to force error
+    run_in_container_netns ip link add eth0 type dummy
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert_json ".error" "create veth pair: interface eth0 already exists on container namespace: Netlink error: File exists (os error 17)" "interface exists on netns"
+}
+
+@test "$fw_driver - port forwarding ipv4 - tcp" {
+    test_port_fw
+}
+
+@test "$fw_driver - port forwarding ipv6 - tcp" {
+    test_port_fw ip=6
+}
+
+@test "$fw_driver - port forwarding dualstack - tcp" {
+    test_port_fw ip=dual
+}
+
+@test "$fw_driver - port forwarding ipv4 - udp" {
+    test_port_fw proto=udp
+}
+
+@test "$fw_driver - port forwarding ipv6 - udp" {
+    test_port_fw ip=6 proto=udp
+}
+
+@test "$fw_driver - port forwarding dualstack - udp" {
+    test_port_fw ip=dual proto=udp
+}
+
+@test "$fw_driver - port forwarding ipv4 - sctp" {
+    setup_sctp_kernel_module
+    test_port_fw proto=sctp
+}
+
+@test "$fw_driver - port forwarding ipv6 - sctp" {
+    setup_sctp_kernel_module
+    test_port_fw ip=6 proto=sctp
+}
+
+@test "$fw_driver - port forwarding dualstack - sctp" {
+    setup_sctp_kernel_module
+    test_port_fw ip=dual proto=sctp
+}
+
+@test "$fw_driver - port range forwarding ipv4 - tcp" {
+    test_port_fw range=3
+}
+
+@test "$fw_driver - port range forwarding ipv6 - tcp" {
+    test_port_fw ip=6 range=3
+}
+
+@test "$fw_driver - port range forwarding ipv4 - udp" {
+    test_port_fw proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding ipv6 - udp" {
+    test_port_fw ip=6 proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - udp" {
+    test_port_fw ip=dual proto=udp range=3
+}
+
+@test "$fw_driver - port range forwarding dual - tcp" {
+    test_port_fw ip=dual proto=tcp range=3
+}
+
+
+@test "$fw_driver - port forwarding with hostip ipv4 - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with hostip ipv4 dual stack - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw ip=dual hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with hostip ipv6 - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 hostip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with hostip ipv6 dual stack - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=dual hostip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv4 - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw hostip="0.0.0.0" connectip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv4 dual stack - tcp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw ip=dual hostip="0.0.0.0" connectip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv6 - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 hostip="::" connectip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with wildcard hostip ipv6 dual stack - tcp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=dual hostip="::" connectip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with hostip ipv4 - udp" {
+    add_dummy_interface_on_host dummy0 "172.16.0.1/24"
+    test_port_fw proto=udp hostip="172.16.0.1"
+}
+
+@test "$fw_driver - port forwarding with hostip ipv6 - udp" {
+    add_dummy_interface_on_host dummy0 "fd65:8371:648b:0c06::1/64"
+    test_port_fw ip=6 proto=udp hostip="fd65:8371:648b:0c06::1"
+}
+
+@test "$fw_driver - port forwarding with localhost - tcp" {
+    test_port_fw hostip="127.0.0.1"
+}
+
+# Test that port forwarding works with strict Reverse Path Forwarding enabled on the host
+@test "$fw_driver - port forwarding with two networks and RPF - tcp" {
+    # First, enable strict RPF on host/container ns.
+    run_in_host_netns sysctl -w net.ipv4.conf.all.rp_filter=1
+    run_in_host_netns sysctl -w net.ipv4.conf.default.rp_filter=1
+    run_in_container_netns sysctl -w net.ipv4.conf.all.rp_filter=1
+    run_in_container_netns sysctl -w net.ipv4.conf.default.rp_filter=1
+
+    # We need a dummy interface with a host ip,
+    # if we connect directly to the bridge ip it doesn't reproduce.
+    add_dummy_interface_on_host dummy0 "10.0.0.1/24"
+
+    run_netavark --file ${TESTSDIR}/testfiles/two-networks.json setup $(get_container_netns_path)
+    result="$output"
+
+    run_in_host_netns cat /proc/sys/net/ipv4/conf/podman2/rp_filter
+    assert "2" "rp_filter podman2 bridge"
+    run_in_host_netns cat /proc/sys/net/ipv4/conf/podman3/rp_filter
+    assert "2" "rp_filter podman3 bridge"
+
+    run_in_container_netns cat /proc/sys/net/ipv4/conf/eth0/rp_filter
+    assert "2" "rp_filter eth0 interface"
+    run_in_container_netns cat /proc/sys/net/ipv4/conf/eth1/rp_filter
+    assert "2" "rp_filter eth1 interface"
+
+    # Important: Use the "host" ip here and not localhost or bridge ip.
+    run_connection_test "0" "tcp" 8080 "10.0.0.1" 8080
+}
+
+@test "bridge ipam none" {
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "bridge",
+         "network_interface": "dummy0",
+         "subnets": [],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "none"
+         }
+      }
+   }
+}\0
+EOF
+
+    run_netavark setup $(get_container_netns_path) <<<"$config"
+    result="$output"
+
+    mac=$(jq -r '.podman.interfaces.eth0.mac_address' <<< "$result" )
+    # check that interface exists
+    run_in_container_netns ip -j link show eth0
+    link_info="$output"
+    assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
+    assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+
+    run_in_container_netns ip -j --details addr show eth0
+    assert_json "$link_info" ".[].addr_info" "==" "null" "No ip addresses configured"
+
+    # check gateway assignment
+    run_in_container_netns ip r
+    assert "$output" "==" "" "No routes configured"
+}
+
+@test "bridge unknown ipam driver" {
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "bridge",
+         "network_interface": "dummy0",
+         "subnets": [],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "someDriver"
+         }
+      }
+   }
+}\0
+EOF
+
+    expected_rc=1 run_netavark setup $(get_container_netns_path) <<<"$config"
+    assert_json ".error" "unsupported ipam driver someDriver" "Driver is not supported error"
+}
+
+@test "$fw_driver - isolate networks" {
+    # create container/networks with isolation
+
+    # isolate1: 10.89.0.2/24, fd90::2, isolate=true
+    run_netavark --file ${TESTSDIR}/testfiles/isolate1.json setup $(get_container_netns_path)
+
+    # isolate2: 10.89.1.2/24, fd99::2, isolate=true
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/isolate2.json setup $(get_container_netns_path 1)
+
+    # isolate3: 10.89.2.2/24, fd92::2, isolate=strict
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/isolate3.json setup $(get_container_netns_path 2)
+
+    # isolate4: 10.89.3.2/24, fd93::2, isolate=strict
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/isolate4.json setup $(get_container_netns_path 3)
+
+    # check nftables NETAVARK-ISOLATION-1 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${lines[2]}" =~ "iifname \"isolate1\" oifname != \"isolate1\" jump NETAVARK-ISOLATION-2" "isolate1 network ISOLATION1 chain"
+    assert "${lines[3]}" =~ "iifname \"isolate2\" oifname != \"isolate2\" jump NETAVARK-ISOLATION-2" "isolate2 network ISOLATION1 chain"
+    assert "${lines[4]}" =~ "iifname \"isolate3\" oifname != \"isolate3\" jump NETAVARK-ISOLATION-3" "isolate3 network ISOLATION1 chain"
+    assert "${lines[5]}" =~ "iifname \"isolate4\" oifname != \"isolate4\" jump NETAVARK-ISOLATION-3" "isolate4 network ISOLATION1 chain"
+
+    # check nftables FORWARD chain
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1" "forward chain jumps to ISOLATION1"
+
+    # check nftables NETAVARK-ISOLATION-2 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-2
+    assert "${lines[2]}" =~ "oifname \"isolate1\" drop" "isolate1 network ISOLATION2 chain"
+    assert "${lines[3]}" =~ "oifname \"isolate2\" drop" "isolate2 network ISOLATION2 chain"
+    assert "${lines[4]}" =~ "oifname \"isolate3\" drop" "isolate3 network ISOLATION2 chain"
+    assert "${lines[5]}" =~ "oifname \"isolate4\" drop" "isolate4 network ISOLATION2 chain"
+
+    # check nftables NETAVARK-ISOLATION-3 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
+    assert "${lines[2]}" =~ "jump NETAVARK-ISOLATION-2" "ISOLATION3 chain jumpt to ISOLATION2"
+
+    # ping our own ip to make sure the ips work and there is no typo
+    run_in_container_netns ping -w 1 -c 1 10.89.0.2
+    run_in_container_netns 1 ping -w 1 -c 1 10.89.1.2
+    run_in_container_netns 2 ping -w 1 -c 1 10.89.2.2
+    run_in_container_netns 3 ping -w 1 -c 1 10.89.3.2
+
+    # make sure the isolated network cannot reach the other network
+
+    # from network isolate1 to isolate2
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 10.89.1.2
+    # from network isolate1 to isolate3
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 10.89.2.2
+    # from network isolate1 to isolate4
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 10.89.3.2
+
+    # from network isolate2 to isolate1
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.89.0.2
+    # from network isolate2 to isolate3
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.89.2.2
+    # from network isolate2 to isolate4
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 10.89.3.2
+
+    # from network isolate3 to isolate1
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.0.2
+    # from network isolate3 to isolate2
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.1.2
+    # from network isolate3 to isolate4
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 10.89.3.2
+
+    # from network isolate4 to isolate1
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 10.89.0.2
+    # from network isolate4 to isolate2
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 10.89.1.2
+    # from network isolate4 to isolate3
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 10.89.2.2
+
+    # now the same with ipv6
+
+    run_in_container_netns ping -w 1 -c 1 fd90::2
+    run_in_container_netns 1 ping -w 1 -c 1 fd99::2
+    run_in_container_netns 2 ping -w 1 -c 1 fd92::2
+    run_in_container_netns 3 ping -w 1 -c 1 fd93::2
+
+    # from network isolate1 to isolate2
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 fd99::2
+    # from network isolate1 to isolate3
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 fd92::2
+    # from network isolate1 to isolate4
+    expected_rc=1 run_in_container_netns ping -w 1 -c 1 fd93::2
+
+    # from network isolate2 to isolate1
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd90::2
+    # from network isolate2 to isolate3
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd92::2
+    # from network isolate2 to isolate4
+    expected_rc=1 run_in_container_netns 1 ping -w 1 -c 1 fd93::2
+
+    # from network isolate3 to isolate1
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 fd90::2
+    # from network isolate3 to isolate2
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 fd99::2
+    # from network isolate3 to isolate4
+    expected_rc=1 run_in_container_netns 2 ping -w 1 -c 1 fd93::2
+
+    # from network isolate4 to isolate1
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd90::2
+    # from network isolate4 to isolate2
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd99::2
+    # from network isolate4 to isolate3
+    expected_rc=1 run_in_container_netns 3 ping -w 1 -c 1 fd92::2
+
+    # verify we can do port forwarding across isoalted networks
+    for proto in tcp udp sctp; do
+        if [[ "$proto" == "sctp" ]]; then
+            # if sctp is not aviable skip that protocol
+            modprobe sctp || continue
+        fi
+
+        data=$(random_string)
+        run_in_container_netns 1 $NETAVARK_CONNECTION_TESTER --$proto "$(get_container_netns_path 3)" "10.89.0.1:8080" 80 <<<"$data"
+        assert "${lines[1]}" == "Message: $data" "ipv4 ($proto) host port from isolate=true to isloate=strict"
+
+        run_in_container_netns 2 $NETAVARK_CONNECTION_TESTER --$proto "$(get_container_netns_path 3)" "[fd90::1]:8080" 80 <<<"$data"
+        assert "${lines[1]}" == "Message: $data" "ipv6 ($proto) host port from isolate=strict to isloate=strict"
+    done
+
+    # create container/network without isolation
+
+    # podman: 10.88.0.2/16
+    create_container_ns
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge-isolate-false.json setup $(get_container_netns_path 4)
+
+    # check nftables NETAVARK-ISOLATION-3 chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
+    assert "${lines[2]}" =~ "oifname \"podman0\" drop" "non-isolated container ISOLATION3 drop rule"
+    assert "${lines[3]}" =~ "jump NETAVARK-ISOLATION-2" "final rule in ISOLATION3 is jump to ISOLATION2"
+
+    # this should be able to ping non-strict isolated containers
+    # from network podman to isolate1
+    run_in_container_netns 4 ping -w 1 -c 1 10.89.0.2
+    # from network podman to isolate2
+    run_in_container_netns 4 ping -w 1 -c 1 10.89.1.2
+
+    # and should NOT be able to ping strict isolated containers
+    # from network podman to isolate3
+    expected_rc=1 run_in_container_netns 4 ping -w 1 -c 1 10.89.2.2
+    # from network podman to isolate4
+    expected_rc=1 run_in_container_netns 4 ping -w 1 -c 1 10.89.3.2
+
+    # teardown all networks
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge-isolate-false.json teardown $(get_container_netns_path 4)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate4.json teardown $(get_container_netns_path 3)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate3.json teardown $(get_container_netns_path 2)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate2.json teardown $(get_container_netns_path 1)
+    run_netavark --file ${TESTSDIR}/testfiles/isolate1.json teardown $(get_container_netns_path)
+
+    # check that isolation rule is deleted
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${#lines[@]}" = 4 "too many NETAVARK-ISOLATION-1 rules after teardown"
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-2
+    assert "${#lines[@]}" = 4 "too many NETAVARK-ISOLATION-2 rules after teardown"
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-3
+    assert "${#lines[@]}" = 5 "too many NETAVARK-ISOLATION-3 rules after teardown"
+}
+
+@test "$fw_driver - test read only /proc" {
+    if [ -n "$_CONTAINERS_ROOTLESS_UID" ]; then
+        skip "test only supported when run as real root"
+    fi
+
+    # when the sysctl value is already set correctly we should not error
+    run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/ip_forward"
+    run_in_container_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/arp_notify"
+    run_in_host_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
+    run_in_host_netns sh -c "echo 1 > /proc/sys/net/ipv4/conf/default/route_localnet"
+    run_in_container_netns sh -c "echo 2 > /proc/sys/net/ipv4/conf/default/rp_filter"
+    run_in_host_netns mount -t proc -o ro,nosuid,nodev,noexec proc /proc
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+
+    run_in_host_netns mount -t proc -o remount,rw /proc
+    run_in_host_netns sh -c "echo 0 > /proc/sys/net/ipv4/ip_forward"
+    run_in_host_netns mount -t proc -o remount,ro /proc
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert_json ".error" "set sysctl net/ipv4/ip_forward: IO error: Read-only file system (os error 30)" "Sysctl error because fs is read only"
+}
+
+
+@test "$fw_driver - bridge static mac" {
+   mac="aa:bb:cc:dd:ee:ff"
+
+           read -r -d '\0' config <<EOF
+{
+   "container_id": "someID",
+   "container_name": "someName",
+   "networks": {
+      "podman": {
+         "static_ips": [
+            "10.88.0.2"
+         ],
+         "static_mac": "$mac",
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "bridge",
+         "network_interface": "podman1",
+         "subnets": [
+            {
+               "subnet": "10.88.0.0/16",
+               "gateway": "10.88.0.1"
+            }
+         ],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}\0
+EOF
+
+   run_netavark setup $(get_container_netns_path) <<<"$config"
+   result="$output"
+
+
+   assert_json "$result" ".podman.interfaces.eth0.mac_address" == "$mac" "MAC matches input mac"
+   # check that interface exists
+   run_in_container_netns ip -j link show eth0
+   link_info="$output"
+   assert_json "$link_info" ".[].address" "=="  "$mac" "MAC matches container mac"
+   assert_json "$link_info" '.[].flags[] | select(.=="UP")' "=="  "UP" "Container interface is up"
+
+   run_in_host_netns ping -c 1 10.88.0.2
+}
+
+
+@test "$fw_driver - bridge teardown" {
+    create_container_ns
+    configs=()
+    for i in 1 2; do
+        read -r -d '\0' config <<EOF
+{
+   "container_id": "someID$i",
+   "container_name": "someName$i",
+   "networks": {
+      "podman": {
+         "static_ips": [
+            "10.88.0.$i"
+         ],
+         "interface_name": "eth0"
+      }
+   },
+   "network_info": {
+      "podman": {
+         "name": "podman",
+         "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+         "driver": "bridge",
+         "network_interface": "podman1",
+         "subnets": [
+            {
+               "subnet": "10.88.0.0/16",
+               "gateway": "10.88.0.1"
+            }
+         ],
+         "ipv6_enabled": false,
+         "internal": false,
+         "dns_enabled": false,
+         "ipam_options": {
+            "driver": "host-local"
+         }
+      }
+   }
+}\0
+EOF
+
+        configs+=("$config")
+    done
+
+    run_netavark setup $(get_container_netns_path) <<<"${configs[0]}"
+
+    local sysctl_content="# autogenerated by netavark
+net/ipv4/ip_forward = 1
+net/ipv4/conf/podman1/route_localnet = 1
+net/ipv4/conf/podman1/rp_filter = 2"
+    run_in_host_netns cat /run/sysctl.d/10-netavark-podman1.conf
+    assert "$output" == "$sysctl_content" "sysctl.d file content"
+
+    run_netavark setup $(get_container_netns_path 1) <<<"${configs[1]}"
+
+    # content must still be the same after second setup
+    run_in_host_netns cat /run/sysctl.d/10-netavark-podman1.conf
+    assert "$output" == "$sysctl_content" "sysctl.d file content"
+
+    run_netavark teardown $(get_container_netns_path) <<<"${configs[0]}"
+    # bridge should still exist
+    run_in_host_netns ip link show podman1
+
+    # after first teardown file must still exist as bridge is still active
+    run_in_host_netns cat /run/sysctl.d/10-netavark-podman1.conf
+    assert "$output" == "$sysctl_content" "sysctl.d file content"
+
+    # check nftables POSTROUTING chain
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
+    assert "${lines[4]}" =~ "ip saddr 10.88.0.0/16 jump nv_2f259bab_10_88_0_0_nm16" "Jump to network chain rule"
+    assert "${#lines[@]}" = 7 "too many POSTROUTING rules"
+
+    # check nftables nv_53ce4390_10_88_0_0_nm16 chain
+    run_in_host_netns nft list chain inet netavark nv_2f259bab_10_88_0_0_nm16
+    assert "${lines[2]}" =~ "ip daddr 10.88.0.0/16 accept" "Accept subnet daddr rule"
+    assert "${lines[3]}" =~ "ip daddr != 224.0.0.0/4 masquerade" "Masquerade non-multicast daddr rule"
+    assert "${#lines[@]}" = 6 "too many nv_53ce4390_10_88_0_0_nm16 rules"
+
+    # check FORWARD rules
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1"
+    assert "${lines[6]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
+    assert "${lines[7]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
+    assert "${#lines[@]}" = 10 "too many FORWARD rules"
+
+    run_netavark teardown $(get_container_netns_path 1) <<<"${configs[1]}"
+    # bridge should be removed
+    expected_rc=1 run_in_host_netns ip link show podman1
+
+    # after all bridge teardown file must be removed
+    expected_rc=1 run_in_host_netns cat /run/sysctl.d/10-netavark-podman1.conf
+
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[3]}" =~ "ct state invalid drop" "forward rule 1"
+    assert "${#lines[@]}" = 8 "too many NETAVARK_FORWARD rules"
+
+    run_in_host_netns ip -o link
+    assert "${#lines[@]}" == 1 "only loopback adapter"
+}
+
+@test "$fw_driver - two networks" {
+    run_netavark --file ${TESTSDIR}/testfiles/two-networks.json setup $(get_container_netns_path)
+    result="$output"
+    assert_json "$result" 'has("t1")' == "true" "t1 object key exists"
+    assert_json "$result" 'has("t2")' == "true" "t2 object key exists"
+
+    # verify the setup order of the contianer interfaces by checking the interface index
+    run_in_container_netns ip -j addr show eth0
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "2" "eth0 interface must have index 2"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.1.2" "first ip adddress on eth0"
+
+    run_in_container_netns ip -j addr show eth1
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "3" "eth1 interface must have index 3"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.2.2" "first ip adddress on eth1"
+
+    run_in_container_netns ip link del eth0
+    run_in_container_netns ip link del eth1
+
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+
+    # extra check so we can be sure that these rules exists before checking later of they are removed
+    assert "$output" =~ "jump nv_d7322dfb_10_89_2_0_nm24_dnat" "network 1 fw rule exists"
+    assert "$output" =~ "jump nv_fae505bb_10_89_1_0_nm24_dnat" "network 2 fw rule exists"
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/two-networks.json teardown $(get_container_netns_path)
+    # order is not deterministic so we match twice with different eth name
+    assert "$output" =~ 'failed to delete container veth eth0\: Netlink error\: No such device \(os error 19\)' "correct eth0 error message"
+    assert "$output" =~ 'failed to delete container veth eth1\: Netlink error\: No such device \(os error 19\)' "correct eth1 error message"
+
+    # now make sure that it actually removed the nftables rule even with the errors
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "$output" !~ "jump nv_d7322dfb_10_89_2_0_nm24_dnat" "network 1 fw rule should not exist"
+    assert "$output" !~ "jump nv_fae505bb_10_89_1_0_nm24_dnat" "network 2 fw rule should not exist"
+}
+
+@test "$fw_driver - two networks reversed" {
+    # reverse the two networks to ensure the order is indeed depended on the array
+    run_netavark --file <(jq  ".networks |= reverse" ${TESTSDIR}/testfiles/two-networks.json) setup $(get_container_netns_path)
+
+    # verify the setup order of the contianer interfaces by checking the interface index
+    # it should be reversed now compared to the test above
+    run_in_container_netns ip -j addr show eth1
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "2" "eth1 interface must have index 2"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.2.2" "first ip adddress on eth1"
+
+    run_in_container_netns ip -j addr show eth0
+    result="$output"
+    assert_json "$result" '.[0].ifindex' == "3" "eth0 interface must have index 3"
+    assert_json "$result" '.[0].addr_info.[0].local' == "10.89.1.2" "first ip adddress on eth0"
+}
+
+@test "$fw_driver - ipv6 disabled error message" {
+    # disable ipv6 in the netns
+     run_in_host_netns sysctl net.ipv6.conf.all.disable_ipv6=1
+
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/ipv6-bridge.json setup $(get_container_netns_path)
+    assert '{"error":"add ip addr to bridge: failed to add ipv6 address, is ipv6 enabled in the kernel?: Netlink error: Permission denied (os error 13)"}' "error message"
+}
+
+@test "$fw_driver - route metric from config" {
+    run_netavark --file ${TESTSDIR}/testfiles/metric.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "200" "Route metric set from config"
+
+    run_in_container_netns ip -j -6 route list match ::0
+    default_route_v6="$output"
+    assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route_v6" '.[0].metric' == "200" "v6 route metric matches v4"
+}
+
+@test "$fw_driver - default route metric" {
+    run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge.json setup $(get_container_netns_path)
+
+    run_in_container_netns ip -j route list match 0.0.0.0
+    default_route="$output"
+    assert_json "$default_route" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route" '.[0].metric' == "100" "Default metric was chosen"
+
+    run_in_container_netns ip -j -6 route list match ::0
+    default_route_v6="$output"
+    assert_json "$default_route_v6" '.[0].dst' == "default" "Default route was selected"
+    assert_json "$default_route_v6" '.[0].metric' == "100" "v6 route metric matches v4"
+}
+
+@test "netavark error - invalid host_ip in port mappings" {
+    expected_rc=1 run_netavark -f ${TESTSDIR}/testfiles/invalid-port.json setup $(get_container_netns_path)
+    assert_json ".error" "invalid host ip \"abcd\" provided for port 8080" "host ip error"
+}
+
+@test "$fw_driver - test firewalld reload" {
+    setup_firewalld
+
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    check_simple_bridge_nftables
+    assert "$(<$NETAVARK_TMPDIR/config/firewall/firewall-driver)" "==" "nftables" "firewall-driver file content"
+
+    run_in_host_netns firewall-cmd --reload
+
+    # There was a firewalld change in 3.0 that it no longer flushes all rules, howver we can still check if
+    # we are added to trusted.
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "" "no trusted sources"
+
+    # start reload service on start it should restore the rules
+    run_netavark_firewalld_reload
+
+    # this run in the background so give it some time to add the rules
+    sleep 1
+    check_simple_bridge_nftables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after start"
+
+    run_in_host_netns firewall-cmd --reload
+    sleep 1
+    check_simple_bridge_nftables
+    run_in_host_netns firewall-cmd --zone=trusted --list-sources
+    assert "$output" == "10.88.0.0/16" "container subnet is trusted after reload"
+}
+
+@test "$fw_driver - port forwarding ipv4 - tcp with firewalld reload" {
+    test_port_fw firewalld_reload=true
+}
+
+@test "$fw_driver - test firewall-reload" {
+    # setup a simple bridge network
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    # verify the rules are there initially
+    check_simple_bridge_nftables
+
+    # check that the firewall config files exist
+    net_id=$(jq -r '.network_info.podman.id' < "${TESTSDIR}/testfiles/simplebridge.json")
+    config_file="$NETAVARK_TMPDIR/config/firewall/networks/$net_id"
+    run_helper test -f "$config_file"
+    assert "$status" == "0" "network config file $config_file should exist"
+    # flush all nftables rules
+    run_in_host_netns nft flush ruleset
+
+    # verify the netavark table is gone
+    expected_rc=1 run_in_host_netns nft list table inet netavark
+    assert "$output" =~ "Error: No such file or directory" "netavark table should be gone"
+
+    # run firewall-reload to restore the rules
+    RUST_LOG=netavark=debug run_netavark firewall-reload
+    assert "$output" =~ "\[INFO  netavark::commands::firewall_reload\] Successfully reloaded firewall rules" "firewall-reload success message"
+
+    # check that the rules are back
+    check_simple_bridge_nftables
+
+    # teardown the network
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json teardown $(get_container_netns_path)
+}
+
+# Regression test for https://github.com/containers/netavark/issues/1451
+@test "$fw_driver - bridge teardown with missing netns cleans up firewall" {
+    run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+
+    # Verify firewall rules were created
+    check_simple_bridge_nftables
+
+    # Destroy the container netns to simulate the real scenario:
+    # when the netns is gone, the kernel destroys the veth pair, leaving
+    # only host-side state (firewall rules, bridge with no interfaces).
+    kill -9 "${CONTAINER_NS_PIDS[0]}"
+    wait "${CONTAINER_NS_PIDS[0]}" 2>/dev/null || true
+    unset 'CONTAINER_NS_PIDS[0]'
+    sleep 1
+
+    # Kernel destroyed the veth pair when the netns died - bridge has no
+    # connected interfaces now (this is why teardown can't rely on the veth).
+    run_in_host_netns ip link show master podman0
+    assert "${#lines[@]}" = 0 "bridge should have no connected interfaces"
+
+    # Verify firewall rules still exist after netns destruction (they would
+    # leak without this fix)
+    run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${#lines[@]}" = 10 "FORWARD rules should still exist before teardown"
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${#lines[@]}" = 7 "POSTROUTING rules should still exist before teardown"
+    run_in_host_netns ip link show podman0
+
+    # The netns path is now invalid. Teardown still cleans up host-side
+    # rules (missing netns is not an error, the kernel already cleaned up).
+    RUST_LOG=netavark=warn run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json \
+        teardown "/proc/does-not-exist/ns/net"
+    assert "$output" =~ "container netns not found" "missing netns logged as warning"
+
+    # Verify nftables rules are gone
+    # The per-network chain should no longer exist
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+
+    # Bridge should be removed (it was the only container)
+    expected_rc=1 run_in_host_netns ip addr show podman0
+
+    # FORWARD rules should be back to baseline
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${#lines[@]}" = 8 "too many FORWARD rules after teardown with missing netns"
+
+    # POSTROUTING rules should be back to baseline
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${#lines[@]}" = 6 "too many POSTROUTING rules after teardown with missing netns"
+
+    # Isolation chain should no longer reference podman0
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "$output" "!~" "podman0" "isolation chain should not reference podman0"
+}
+
+function check_simple_bridge_nftables() {
+    # check nftables POSTROUTING chain
+    run_in_host_netns nft list chain inet netavark POSTROUTING
+    assert "${lines[3]}" =~ "meta mark & 0x00002000 == 0x00002000 masquerade" "Mark-masquerade rule"
+    assert "${lines[4]}" =~ "ip saddr 10.88.0.0/16 jump nv_53ce4390_10_88_0_0_nm16" "Jump to network chain rule"
+    assert "${#lines[@]}" = 7 "too many POSTROUTING rules"
+
+    # check nftables nv_53ce4390_10_88_0_0_nm16 chain
+    run_in_host_netns nft list chain inet netavark nv_53ce4390_10_88_0_0_nm16
+    assert "${lines[2]}" =~ "ip daddr 10.88.0.0/16 accept" "Accept subnet daddr rule"
+    assert "${lines[3]}" =~ "ip daddr != 224.0.0.0/4 masquerade" "Masquerade non-multicast daddr rule"
+    assert "${#lines[@]}" = 6 "too many nv_53ce4390_10_88_0_0_nm16 rules"
+
+    # check FORWARD rules
+    run_in_host_netns nft list chain inet netavark FORWARD
+    assert "${lines[3]}" =~ "ct state invalid drop" "CT state invalid rule"
+    assert "${lines[4]}" =~ "ct mark & 0x00001000 == 0x00001000 accept" "accept dnat traffic"
+    assert "${lines[5]}" =~ "jump NETAVARK-ISOLATION-1"
+    assert "${lines[6]}" =~ "ip daddr 10.88.0.0/16 ct state established,related accept" "Related,established rule"
+    assert "${lines[7]}" =~ "ip saddr 10.88.0.0/16 accept" "Subnet saddr accept rule"
+    assert "${#lines[@]}" = 10 "too many FORWARD rules"
+
+    run_in_host_netns nft list chain inet netavark NETAVARK-ISOLATION-1
+    assert "${lines[2]}" =~ "iifname \"podman0\" oifname != \"podman0\" jump NETAVARK-ISOLATION-3" "strict isolation as default chain"
+}
+
+# regression test for https://github.com/containers/netavark/issues/1068
+@test "$fw_driver - port firewall rule cleanup port protocol" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json setup $(get_container_netns_path)
+
+    local chain="nv_2f259bab_10_88_0_0_nm16_dnat"
+    run_in_host_netns nft list chain inet netavark $chain
+
+    # extra check so we can be sure that these rules exists before checking later of they are removed
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 udp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 udp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.25 udp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-tcp-udp.json teardown $(get_container_netns_path)
+
+    expected_rc=1 run_in_host_netns nft list chain inet netavark $chain
+}
+
+# regression test for https://github.com/containers/netavark/issues/1129
+@test "$fw_driver - port firewall rule cleanup host ip" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-hostip.json setup $(get_container_netns_path)
+
+    local chain="nv_2f259bab_10_88_0_0_nm16_dnat"
+    run_in_host_netns nft list chain inet netavark $chain
+
+    run_in_host_netns nft list ruleset
+
+    # extra check so we can be sure that these rules exists before checking later of they are removed
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.25 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.25 tcp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
+    assert "$output" =~ "ip saddr 10.88.0.0/16 ip daddr 192.168.188.24 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip saddr 127.0.0.1 ip daddr 192.168.188.24 tcp dport 8080 jump NETAVARK-HOSTPORT-SETMARK"
+    assert "$output" =~ "ip daddr 192.168.188.24 tcp dport 8080 ct mark set meta mark | 0x00001000 dnat ip to 10.88.0.14:8080"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-port-hostip.json teardown $(get_container_netns_path)
+
+    expected_rc=1 run_in_host_netns nft list chain inet netavark $chain
+    run_in_host_netns nft list chain inet netavark NETAVARK-HOSTPORT-DNAT
+    assert "$output" == $'table inet netavark {\n\tchain NETAVARK-HOSTPORT-DNAT {\n\t}\n}' "NETAVARK-HOSTPORT-DNAT chain must be empty"
+}
+
+@test "$fw_driver - bridge with outbound addr4" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr4.json setup $(get_container_netns_path)
+
+    # Check that the nftables rules were created with SNAT
+    run_in_host_netns nft list chain inet netavark nv_2f259bab_10_89_0_0_nm24
+    assert "${lines[3]}" =~ "ip daddr != 224.0.0.0/4 snat ip to 100.1.100.1"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr4.json teardown $(get_container_netns_path)
+
+    # Check that the chain is removed
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_2f259bab_10_89_0_0_nm24
+}
+
+@test "$fw_driver - bridge with outbound addr6" {
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr6.json setup $(get_container_netns_path)
+
+    # Check that the nftables rules were created with SNAT for IPv6
+    run_in_host_netns nft list chain inet netavark nv_2f259bab_fd10-88-a--_nm64
+    assert "${lines[3]}" =~ "ip6 daddr != ff00::/8 snat ip6 to fd20:100:200::1"
+
+    run_netavark --file ${TESTSDIR}/testfiles/bridge-outbound-addr6.json teardown $(get_container_netns_path)
+
+    # Check that the chain is removed
+    expected_rc=1 run_in_host_netns nft list chain inet netavark nv_2f259bab_fd10-88-a--_nm64
+}
+
+@test "$fw_driver - aardvark-dns error cleanup" {
+    expected_rc=1 run_netavark -a /usr/bin/false --file ${TESTSDIR}/testfiles/dualstack-bridge-custom-dns-server.json setup $(get_container_netns_path)
+    assert_json ".error" "error while applying dns entries: aardvark-dns exited unexpectedly without error message" "aardvark-dns error"
+
+    run_in_host_netns nft list table inet netavark
+    assert "$output" !~ "10.89.3.0/24" "leaked network nft rules after setup error"
+    assert "$output" !~ "fd10:88:a::/64" "leaked network nft rules after setup error"
+}
+
+# https://github.com/containers/netavark/issues/1019
+@test "$fw_driver - invalid dns names" {
+    RUST_LOG=netavark=warn run_netavark --file ${TESTSDIR}/testfiles/dns-invalid-names.json \
+        setup $(get_container_netns_path)
+    assert "${#lines[@]}" = 4 "4 output lines, three warnings + result"
+    assert "${lines[0]}" =~ 'invalid network alias "space 1"' "space triggers warning"
+    assert "${lines[1]}" =~ 'invalid network alias "comma,1"' "comma triggers warning"
+    assert "${lines[2]}" =~ 'invalid network alias "newline\\n2"' "newline triggers warning"
+
+    # check aardvark config and running
+    run_helper cat "$NETAVARK_TMPDIR/config/aardvark-dns/podman1"
+    assert "${lines[0]}" =~ "10.89.3.1" "aardvark set to listen to all IPs"
+    assert "${lines[1]}" =~ "^[0-9a-f]{64} 10.89.3.2  somename,valid$" "aardvark config's container"
+    assert "${#lines[@]}" = 2 "too many lines in aardvark config"
+
+    aardvark_pid=$(cat "$NETAVARK_TMPDIR/config/aardvark-dns/aardvark.pid")
+    assert "$ardvark_pid" =~ "[0-9]*" "aardvark pid not found"
+    run_helper ps "$aardvark_pid"
+    assert "${lines[1]}" =~ ".*aardvark-dns --config $NETAVARK_TMPDIR/config/aardvark-dns -p 53 run" "aardvark not running or bad options"
+}
+
+@test "$fw_driver - nft error" {
+    local nft="$NETAVARK_TMPDIR/nft"
+    cat > "$nft" <<EOF
+#!/usr/bin/env bash
+echo 'nft custom error message' 1>&2
+exit 1
+EOF
+
+    chmod +x $nft
+
+    PATH="$NETAVARK_TMPDIR:$PATH" expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/simplebridge.json setup $(get_container_netns_path)
+    assert_json ".error" 'nftables error: "nft" did not return successfully while getting the current ruleset: nft custom error message' "error message from nft is included"
+}
+
+@test "$fw_driver - dns server matching gateway is rejected" {
+    expected_rc=1 run_netavark --file ${TESTSDIR}/testfiles/dualstack-bridge-dns-loop.json \
+        setup $(get_container_netns_path)
+    assert "$output" =~ "would cause aardvark-dns to forward queries to itself" "dns loop rejected"
+
+    # the check runs before any entries are written, so no aardvark config
+    run_helper ls "$NETAVARK_TMPDIR/config/aardvark-dns"
+    assert "$output" == "" "no aardvark entries written on rejection"
+}

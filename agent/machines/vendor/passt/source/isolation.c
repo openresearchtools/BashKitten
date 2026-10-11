@@ -1,0 +1,580 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+/* PASST - Plug A Simple Socket Transport
+ *  for qemu/UNIX domain socket mode
+ *
+ * PASTA - Pack A Subtle Tap Abstraction
+ *  for network namespace/tap device mode
+ *
+ * isolation.c - Self isolation helpers
+ *
+ * Copyright Red Hat
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ * Author: David Gibson <david@gibson.dropbear.id.au>
+ */
+/**
+ * DOC: Theory of Operation
+ *
+ * For security the passt/pasta process performs a number of
+ * self-isolations steps, dropping capabilities, setting namespaces
+ * and otherwise minimising the impact we can have on the system at
+ * large if we were compromised.
+ *
+ * Obviously we can't isolate ourselves from resources before we've
+ * done anything we need to do with those resources, so we have
+ * multiple stages of self-isolation.  In order these are:
+ *
+ * 1a. isolate_initial()
+ * ====================
+ *
+ * Executed immediately after startup, drops capabilities we don't
+ * need at any point during execution (or which we gain back when we
+ * need by joining other namespaces).
+ *
+ * 1b. isolate_fds()
+ * ================
+ *
+ * Executed immediately after isolate_initial().  Closes any leaked
+ * files we might have inherited from the parent process.
+ *
+ * 2. isolate_user()
+ * =================
+ *
+ * Executed once we know what user and user namespace we want to
+ * operate in.  Sets our final UID & GID, and enters the correct user
+ * namespace.
+ *
+ * 3. isolate_prefork()
+ * ====================
+ *
+ * Executed after all setup, but before daemonising (fork()ing into
+ * the background).  Uses mount namespace and pivot_root() to remove
+ * our access to the filesystem.
+ *
+ * 4. isolate_postfork()
+ * =====================
+ *
+ * Executed immediately after daemonizing, but before entering the
+ * actual packet forwarding phase of operation.  Or, if not
+ * daemonizing, immediately after isolate_prefork().  Uses seccomp()
+ * to restrict ourselves to the handful of syscalls we need during
+ * runtime operation.
+ */
+
+#include <errno.h>
+#include <fcntl.h>
+#include <grp.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <pwd.h>
+#include <sched.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/mount.h>
+#include <sys/prctl.h>
+#include <sys/socket.h>
+#include <sys/syscall.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <netinet/if_ether.h>
+
+#include <linux/audit.h>
+#include <linux/capability.h>
+#include <linux/filter.h>
+#include <linux/seccomp.h>
+
+#include "util.h"
+#include "linux_dep.h"
+#include "seccomp.h"
+#include "passt.h"
+#include "log.h"
+#include "isolation.h"
+#include "conf.h"
+
+#define CAP_VERSION	_LINUX_CAPABILITY_VERSION_3
+#define CAP_WORDS	_LINUX_CAPABILITY_U32S_3
+
+/**
+ * drop_caps_ep_except() - Drop capabilities from effective & permitted sets
+ * @keep:	Capabilities to keep
+ */
+static void drop_caps_ep_except(uint64_t keep)
+{
+	struct __user_cap_header_struct hdr = {
+		.version = CAP_VERSION,
+		.pid = 0,
+	};
+	struct __user_cap_data_struct data[CAP_WORDS];
+	int i;
+
+	if (syscall(SYS_capget, &hdr, data))
+		die_perror("Couldn't get current capabilities");
+
+	for (i = 0; i < CAP_WORDS; i++) {
+		uint32_t mask = keep >> (32 * i);
+
+		data[i].effective &= mask;
+		data[i].permitted &= mask;
+	}
+
+	if (syscall(SYS_capset, &hdr, data))
+		die_perror("Couldn't drop capabilities");
+}
+
+/**
+ * clamp_caps() - Prevent any children from gaining caps
+ *
+ * This drops all capabilities from both the inheritable and the
+ * bounding set.  This means that any exec()ed processes can't gain
+ * capabilities, even if they have file capabilities which would grant
+ * them.  We shouldn't ever exec() in any case, but this provides an
+ * additional layer of protection.  Executing this requires
+ * CAP_SETPCAP, which we will have within our userns.
+ *
+ * Note that dropping capabilities from the bounding set limits
+ * exec()ed processes, but does not remove them from the effective or
+ * permitted sets, so it doesn't reduce our own capabilities.
+ */
+static void clamp_caps(void)
+{
+	struct __user_cap_data_struct data[CAP_WORDS];
+	struct __user_cap_header_struct hdr = {
+		.version = CAP_VERSION,
+		.pid = 0,
+	};
+	int i;
+
+	for (i = 0; i < 64; i++) {
+		/* Some errors can be ignored:
+		 * - EINVAL, we'll get this for all values in 0..63
+		 *   that are not actually allocated caps
+		 * - EPERM, we'll get this if we don't have
+		 *   CAP_SETPCAP, which can happen if using
+		 *   --netns-only.  We don't need CAP_SETPCAP for
+		 *   normal operation, so carry on without it.
+		 */
+		if (prctl(PR_CAPBSET_DROP, i, 0, 0, 0) &&
+		    errno != EINVAL && errno != EPERM)
+			die_perror("Couldn't drop cap %i from bounding set", i);
+	}
+
+	if (syscall(SYS_capget, &hdr, data))
+		die_perror("Couldn't get current capabilities");
+
+	for (i = 0; i < CAP_WORDS; i++)
+		data[i].inheritable = 0;
+
+	if (syscall(SYS_capset, &hdr, data))
+		die_perror("Couldn't drop inheritable capabilities");
+}
+
+/**
+ * move_root() - Use chroot() instead of pivot_root() for sandboxing
+ *
+ * Return: negative error code on failure, zero on success
+ */
+static int move_root(void)
+{
+	if (mount(TMPDIR, "/", "", MS_MOVE, "")) {
+		err_perror("Failed to move root into empty tmpfs");
+		return -errno;
+	}
+
+	if (chroot(".")) {
+		err_perror("Failed to chroot() into empty tmpfs");
+		return -errno;
+	}
+
+	if (chdir("/")) {
+		err_perror("Failed to change directory into new root");
+		return -errno;
+	}
+
+	return 0;
+}
+
+/**
+ * isolate_initial() - Early, mostly config independent self isolation
+ *
+ * Should:
+ *  - drop unneeded capabilities
+ * Mustn't:
+ *  - remove filesystem access (we need to access files during setup)
+ */
+void isolate_initial(void)
+{
+	uint64_t keep;
+
+	/* We want to keep CAP_NET_BIND_SERVICE in the initial
+	 * namespace if we have it, so that we can forward low ports
+	 * into the guest/namespace
+	 *
+	 * We have to keep CAP_SETUID and CAP_SETGID at this stage, so
+	 * that we can switch user away from root.
+	 *
+	 * CAP_DAC_OVERRIDE may be required for socket setup when combined
+	 * with --runas.
+	 *
+	 * We have to keep some capabilities for the --netns-only case:
+	 *  - CAP_SYS_ADMIN, so that we can setns() to the netns.
+	 *  - Keep CAP_NET_ADMIN, so that we can configure interfaces
+	 *
+	 * We have to keep CAP_SYS_CHROOT in case of --chroot-fallback option
+	 * being enabled, so we can fall back from pivot_root() to chroot() in
+	 * isolate_prefork().
+	 *
+	 * It's debatable whether it's useful to drop caps when we
+	 * retain SETUID and SYS_ADMIN, but we might as well.  We drop
+	 * further capabilities in isolate_user() and
+	 * isolate_prefork().
+	 */
+	keep = BIT(CAP_NET_BIND_SERVICE) | BIT(CAP_SETUID) | BIT(CAP_SETGID) |
+	       BIT(CAP_SYS_ADMIN) | BIT(CAP_NET_ADMIN) | BIT(CAP_DAC_OVERRIDE) |
+	       BIT(CAP_SYS_CHROOT);
+	/* Since Linux 5.12, if we want to update /proc/self/uid_map to create
+	 * a mapping from UID 0, which only happens with pasta spawning a child
+	 * from a non-init user namespace (pasta can't run as root), we need to
+	 * retain CAP_SETFCAP too.
+	 * We also need to keep CAP_SYS_PTRACE in order to join an existing netns
+	 * path under /proc/$pid/ns/net which was created in the same userns.
+	 */
+	if (!ns_is_init() && !geteuid())
+		keep |= BIT(CAP_SETFCAP) | BIT(CAP_SYS_PTRACE);
+
+	drop_caps_ep_except(keep);
+}
+
+/*
+ * isolate_fds() - Close leaked files, but not --fd, stdin, stdout, stderr
+ * @argc:	Argument count
+ * @argv:	Command line options, as we need to skip any file given via --fd
+ *
+ * Should:
+ *  - close all open files except for standard streams and the one from --fd
+ *  - move the --fd descriptor out of the range 0-2
+ *
+ * Return: new fd number for descriptor from --fd, or -1 if not specified
+ */
+int isolate_fds(int argc, char **argv)
+{
+	int fd, close_from = STDERR_FILENO + 1;
+
+	fd = conf_tap_fd(argc, argv);
+
+	if (fd >= 0) {
+		/* Move the passed fd to a more convenient location */
+		if (fd != close_from			&&
+		    (dup2(fd, close_from) != close_from	||
+		     close(fd)))
+			die_perror("Could not move --fd descriptor");
+		fd = close_from++;
+	}
+
+	if (close_range(close_from, ~0U, CLOSE_RANGE_UNSHARE)) {
+		if (errno == ENOSYS || errno == EINVAL) {
+			/* This probably means close_range() or the
+			 * CLOSE_RANGE_UNSHARE flag is not supported by the
+			 * kernel.  Not much we can do here except carry on and
+			 * hope for the best.
+			 */
+			warn(
+"Can't use close_range() to ensure no files leaked by parent");
+		} else {
+			die_perror("Failed to close files leaked by parent");
+		}
+	}
+
+	return fd;
+}
+
+/**
+ * enter_userns() - Enter a named user namespace
+ * @userns:	userns path to enter
+ */
+static void enter_userns(const char *userns)
+{
+	int ufd;
+
+	ufd = open(userns, O_RDONLY | O_CLOEXEC);
+	if (ufd < 0)
+		die_perror("Couldn't open user namespace %s", userns);
+
+	if (setns(ufd, CLONE_NEWUSER) != 0)
+		die_perror("Couldn't enter user namespace %s", userns);
+
+	close(ufd);
+}
+
+/**
+ * userns_holder() - Hold a clone()ed namespace open until killed
+ * @arg:	Unused
+ *
+ * Return: this function never returns
+ */
+static int userns_holder(void *arg)
+{
+	sigset_t set;
+
+	(void)arg;
+	/* If the parent dies with an error, so should we */
+	if (prctl(PR_SET_PDEATHSIG, SIGKILL))
+		die_perror("Couldn't set PR_SET_PDEATHSIG");
+
+	/* Wait until the parent kills us */
+	sigemptyset(&set);
+	sigwaitinfo(&set, NULL);
+
+	die("userns holder process wasn't killed");
+}
+
+/**
+ * create_userns() - Create a new userns to isolate ourselves
+ * @uid:	Parent UID to map to 0 within the namespace
+ * @gid:	Parent GID to map to 0 within the namespace
+ *
+ * Return: PID of the process holding the new userns
+ *
+ * Several things combine to make this more complicated than you'd expect.
+ * - We want to make the userns before we setuid() to nobody (or the userns
+ *   would be owned by nobody)
+ * - We still want to setuid() _after_ we enter the userns, which means
+ *   (parent-)nobody must be mapped within the userns
+ * - It's only possible to map the current user from within a userns, so we must
+ *   create that mapping from the parent
+ * - Therefore we can't create the userns with unshare(2), but must create it
+ *   by clone(2)ing a temporary holder process.
+ */
+static pid_t create_userns(uid_t uid, gid_t gid)
+{
+	char ns_fn_stack[NS_FN_STACK_SIZE]
+	__attribute__ ((aligned(__alignof__(max_align_t))));
+	pid_t pid;
+
+	pid = do_clone(userns_holder, ns_fn_stack, sizeof(ns_fn_stack),
+		       CLONE_NEWUSER | SIGCHLD, NULL);
+	if (pid < 0)
+		die_perror("Unable to create user namespace");
+
+	make_ugid_map(pid, uid, gid);
+
+	return pid;
+}
+
+/**
+ * isolate_user() - Switch to final UID/GID and move into userns
+ * @c:		Execution context
+ * @uid:	User ID to run as (in original userns)
+ * @gid:	Group ID to run as (in original userns)
+ * @use_userns:	Whether to join or create a userns
+ * @userns:	userns path to enter, may be empty
+ *
+ * Should:
+ *  - set our final UID and GID
+ *  - enter our final user namespace
+ * Mustn't:
+ *  - remove filesystem access (we need that for further setup)
+ */
+void isolate_user(const struct ctx *c, uid_t uid, gid_t gid, bool use_userns,
+		  const char *userns)
+{
+	uint64_t ns_caps = 0;
+
+	/* First set our UID & GID in the original namespace */
+	if (setgroups(0, NULL)) {
+		/* If we don't have CAP_SETGID, this will EPERM */
+		if (errno != EPERM)
+			die_perror("Can't drop supplementary groups");
+	}
+
+	/* If we're going to use a pre-existing userns (either named, or with
+	 * --netns-only the current one), we need to switch to drop root first.
+	 * However, if we're going to create our own userns, we need to delay
+	 * dropping root, because we don't our userns to be owned by nobody.
+	 */
+	if (*userns || !use_userns) {
+		if (setgid(gid) != 0)
+			die_perror("Can't set GID to %u", gid);
+
+		if (setuid(uid) != 0)
+			die_perror("Can't set UID to %u", uid);
+	}
+
+	if (*userns) { /* If given a userns, join it */
+		enter_userns(userns);
+	} else if (use_userns) { /* Otherwise create our own */
+		pid_t holder_pid = create_userns(uid, gid);
+		char new_userns[PATH_MAX];
+
+		if (snprintf_check(new_userns, sizeof(new_userns),
+				   "/proc/%u/ns/user", holder_pid))
+			die_perror("Could not build userns path");
+
+		enter_userns(new_userns);
+
+		/* Now that we occupy the ns, we can kill the temporary holder */
+		if (kill(holder_pid, SIGKILL))
+			die_perror("Could not kill userns temporary holder");
+
+		/* Switch to our final uid/gid, which are mapped to 0 in the userns */
+		if (setgid(0) != 0)
+			die_perror("Can't set GID to 0 in userns");
+
+		if (setuid(0) != 0)
+			die_perror("Can't set UID to 0 in userns");
+	}
+
+	/* Joining a new userns gives us full capabilities; drop the
+	 * ones we don't need.  With --netns-only we haven't changed
+	 * userns but we can drop more capabilities now than at
+	 * isolate_initial()
+	 */
+	/* Keep CAP_SYS_ADMIN, so we can unshare() further in
+	 * isolate_prefork(), pasta also needs it to setns() into the
+	 * netns
+	 */
+	ns_caps |= BIT(CAP_SYS_ADMIN);
+
+	/* Only keep CAP_SYS_CHROOT for the --chroot-fallback case. Otherwise
+	 * it can be dropped
+	 */
+	if (c->chroot_fallback)
+		ns_caps |= BIT(CAP_SYS_CHROOT);
+
+	if (c->mode == MODE_PASTA) {
+		/* Keep CAP_NET_ADMIN, so we can configure the if */
+		ns_caps |= BIT(CAP_NET_ADMIN);
+		/* Keep CAP_NET_BIND_SERVICE, so we can splice
+		 * outbound connections to low port numbers
+		 */
+		ns_caps |= BIT(CAP_NET_BIND_SERVICE);
+		/* Keep CAP_SYS_PTRACE to join the netns of an
+		 * existing process */
+		if (*userns || !use_userns)
+			ns_caps |= BIT(CAP_SYS_PTRACE);
+	}
+
+	drop_caps_ep_except(ns_caps);
+}
+
+/**
+ * isolate_prefork() - Self isolation before daemonizing
+ * @c:		Execution context
+ *
+ * Return: negative error code on failure, zero on success
+ *
+ * Should:
+ *  - Move us to our own IPC and UTS namespaces
+ *  - Move us to a mount namespace with only an empty directory
+ *  - Drop unneeded capabilities (in the new user namespace)
+ * Mustn't:
+ *  - Remove syscalls we need to daemonise
+ */
+int isolate_prefork(const struct ctx *c)
+{
+	int flags = CLONE_NEWIPC | CLONE_NEWNS | CLONE_NEWUTS;
+	uint64_t ns_caps = 0;
+
+	/* If we run in foreground, we have no chance to actually move to a new
+	 * PID namespace. For passt, use CLONE_NEWPID anyway, in case somebody
+	 * ever gets around seccomp profiles -- there's no harm in passing it.
+	 */
+	if (!c->foreground || c->mode != MODE_PASTA)
+		flags |= CLONE_NEWPID;
+
+	if (unshare(flags)) {
+		err_perror("Failed to detach isolating namespaces");
+		return -errno;
+	}
+
+	if (mount("", "/", "", MS_UNBINDABLE | MS_REC, NULL)) {
+		err_perror("Failed to remount /");
+		return -errno;
+	}
+
+	if (mount("", TMPDIR, "tmpfs",
+		  MS_NODEV | MS_NOEXEC | MS_NOSUID | MS_RDONLY,
+		  "nr_inodes=2,nr_blocks=0")) {
+		err_perror("Failed to mount empty tmpfs for sandboxing");
+		return -errno;
+	}
+
+	if (chdir(TMPDIR)) {
+		err_perror("Failed to change directory into empty tmpfs");
+		return -errno;
+	}
+
+	if (syscall(SYS_pivot_root, ".", ".")) {
+		if (c->chroot_fallback) {
+			int rc;
+			info("Failed to pivot_root(), fallback to chroot()...");
+			if ((rc = move_root()))
+				return rc;
+		} else {
+			err_perror("Failed to pivot_root() into empty tmpfs");
+			return -errno;
+		}
+	} else {
+		if (umount2(".", MNT_DETACH | UMOUNT_NOFOLLOW)) {
+			err_perror("Failed to unmount original root filesystem");
+			return -errno;
+		}
+	}
+
+	/* Now that initialization is more-or-less complete, we can
+	 * drop further capabilities
+	 */
+	if (c->mode == MODE_PASTA) {
+		/* Keep CAP_SYS_ADMIN, so we can enter the netns */
+		ns_caps |= BIT(CAP_SYS_ADMIN);
+		/* Keep CAP_NET_BIND_SERVICE, so we can splice
+		 * outbound connections to low port numbers
+		 */
+		ns_caps |= BIT(CAP_NET_BIND_SERVICE);
+	}
+
+	clamp_caps();
+	drop_caps_ep_except(ns_caps);
+
+	return 0;
+}
+
+/**
+ * isolate_postfork() - Self isolation after daemonizing
+ * @c:		Execution context
+ *
+ * Should:
+ *  - disable core dumps
+ *  - limit to a minimal set of syscalls
+ */
+void isolate_postfork(const struct ctx *c)
+{
+	struct sock_fprog prog;
+
+	prctl(PR_SET_DUMPABLE, 0);
+
+	switch (c->mode) {
+	case MODE_PASST:
+		prog.len = (unsigned short)ARRAY_SIZE(filter_passt);
+		prog.filter = filter_passt;
+		break;
+	case MODE_PASTA:
+		prog.len = (unsigned short)ARRAY_SIZE(filter_pasta);
+		prog.filter = filter_pasta;
+		break;
+	case MODE_VU:
+		prog.len = (unsigned short)ARRAY_SIZE(filter_vu);
+		prog.filter = filter_vu;
+		break;
+	default:
+		assert(0);
+	}
+
+	if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) ||
+	    prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog))
+		die_perror("Failed to apply seccomp filter");
+}

@@ -1,0 +1,312 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/layout - tmux pane layouts
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# layout_pasta() - Panes for host, pasta, and separate one for namespace
+layout_pasta() {
+	sleep 1
+
+	tmux kill-pane -a -t 0
+	cmd_write 0 clear
+
+	tmux split-window -v -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+
+	PANE_NS=0
+	PANE_INFO=1
+	PANE_HOST=2
+	PANE_PASST=3
+
+	get_info_cols
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T "test log"
+
+	pane_watch_contexts ${PANE_HOST} host host
+	pane_watch_contexts ${PANE_PASST} pasta passt
+	pane_watch_contexts ${PANE_NS} "namespace" unshare ns
+
+	info_layout "single pasta instance with namespace"
+
+	sleep 1
+}
+
+# layout_passt() - Panes for host, passt, and guest
+layout_passt() {
+	sleep 1
+
+	tmux kill-pane -a -t 0
+	cmd_write 0 clear
+
+	tmux split-window -v -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+
+	PANE_GUEST=0
+	PANE_INFO=1
+	PANE_HOST=2
+	PANE_PASST=3
+
+	get_info_cols
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T "test log"
+
+	pane_watch_contexts ${PANE_HOST} host host
+	pane_watch_contexts ${PANE_PASST} passt passt
+	pane_watch_contexts ${PANE_GUEST} guest qemu guest
+
+	info_layout "single passt instance with guest"
+
+	sleep 1
+}
+
+# layout_passt_in_pasta() - Host, passt within pasta, namespace and guest
+layout_passt_in_pasta() {
+	sleep 1
+
+	tmux kill-pane -a -t 0
+	cmd_write 0 clear
+
+	tmux split-window -v -l '45%' -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+	tmux split-window -v -t passt_test:1.0
+
+	PANE_GUEST=0
+	PANE_NS=1
+	PANE_INFO=2
+	PANE_HOST=3
+	PANE_PASST=4
+
+	get_info_cols
+
+	pane_watch_contexts ${PANE_GUEST} "guest" qemu guest
+	pane_watch_contexts ${PANE_NS} "namespace" ns
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T "test log"
+
+	pane_watch_contexts ${PANE_HOST} host host
+
+	pane_watch_contexts ${PANE_PASST} "passt in pasta (namespace)" pasta passt
+
+	info_layout "passt and guest in namespace, connected by pasta"
+
+	sleep 1
+}
+
+# layout_two_guests() - Two guest panes, two passt panes, plus host and log
+layout_two_guests() {
+	sleep 1
+
+	tmux kill-pane -a -t 0
+	cmd_write 0 clear
+
+	tmux split-window -v -t passt_test
+	tmux split-window -h -l '33%'
+	tmux split-window -h -t passt_test:1.1
+
+	tmux split-window -h -l '35%' -t passt_test:1.0
+	tmux split-window -v -t passt_test:1.0
+
+	PANE_GUEST_1=0
+	PANE_GUEST_2=1
+	PANE_INFO=2
+	PANE_HOST=3
+	PANE_PASST_1=4
+	PANE_PASST_2=5
+
+	get_info_cols
+
+	pane_watch_contexts ${PANE_GUEST_1} "guest #1 in namespace #1" qemu_1 guest_1
+	pane_watch_contexts ${PANE_GUEST_2} "guest #2 in namespace #1" qemu_2 guest_2
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T "test log"
+
+	pane_watch_contexts ${PANE_HOST} host host
+	pane_watch_contexts ${PANE_PASST_1} "passt #1 in namespace #1" pasta_1 passt_1
+	pane_watch_contexts ${PANE_PASST_2} "passt #2 in namespace #1" pasta_1 passt_2
+
+	info_layout "two guests, two passt instances, in namespaces"
+
+	sleep 1
+}
+
+# layout_migrate() - Two guest panes, two passt panes, two passt-repair panes,
+#		     plus host and log
+layout_migrate() {
+	sleep 1
+
+	tmux kill-pane -a -t 0
+	cmd_write 0 clear
+
+	tmux split-window -v -t passt_test
+	tmux split-window -h -l '33%'
+	tmux split-window -h -t passt_test:1.1
+
+	tmux split-window -h -l '35%' -t passt_test:1.0
+	tmux split-window -v -t passt_test:1.0
+
+	tmux split-window -v -t passt_test:1.4
+	tmux split-window -v -t passt_test:1.6
+
+	tmux split-window -v -t passt_test:1.3
+
+	PANE_GUEST_1=0
+	PANE_GUEST_2=1
+	PANE_INFO=2
+	PANE_MON=3
+	PANE_HOST=4
+	PANE_PASST_REPAIR_1=5
+	PANE_PASST_1=6
+	PANE_PASST_REPAIR_2=7
+	PANE_PASST_2=8
+
+	get_info_cols
+
+	pane_watch_contexts ${PANE_GUEST_1} "guest #1 in namespace #1" qemu_1 guest_1
+	pane_watch_contexts ${PANE_GUEST_2} "guest #2 in namespace #2" qemu_2 guest_2
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T "test log"
+
+	pane_watch_contexts ${PANE_MON} "QEMU monitor" mon mon
+
+	pane_watch_contexts ${PANE_HOST} host host
+	pane_watch_contexts ${PANE_PASST_REPAIR_1} "passt-repair #1 in namespace #1" repair_1 passt_repair_1
+	pane_watch_contexts ${PANE_PASST_1} "passt #1 in namespace #1" pasta_1 passt_1
+
+	pane_watch_contexts ${PANE_PASST_REPAIR_2} "passt-repair #2 in namespace #2" repair_2 passt_repair_2
+	pane_watch_contexts ${PANE_PASST_2} "passt #2 in namespace #2" pasta_2 passt_2
+
+	info_layout "two guests, two passt + passt-repair instances, in namespaces"
+
+	sleep 1
+}
+
+# layout_demo_pasta() - Four panes for pasta demo
+layout_demo_pasta() {
+	sleep 1
+
+	cmd_write 0 cd ${BASEPATH}
+	cmd_write 0 clear
+	sleep 1
+	cmd_write 0 clear
+
+	tmux split-window -v -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+
+	PANE_NS=0
+	PANE_INFO=1
+	PANE_HOST=2
+	PANE_PASST=3
+
+	get_info_cols
+
+	tmux pipe-pane -O -t ${PANE_NS} "cat >> ${LOGDIR}/pane_ns.log"
+	tmux select-pane -t ${PANE_NS} -T "namespace"
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T ""
+
+	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
+	tmux select-pane -t ${PANE_HOST} -T "host"
+
+	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
+	tmux select-pane -t ${PANE_PASST} -T "pasta"
+
+	sleep 1
+}
+
+# layout_demo_passt() - Four panes for passt demo
+layout_demo_passt() {
+	sleep 1
+
+	cmd_write 0 cd ${BASEPATH}
+	cmd_write 0 clear
+	sleep 1
+	cmd_write 0 clear
+
+	tmux split-window -v -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+
+	PANE_GUEST=0
+	PANE_INFO=1
+	PANE_HOST=2
+	PANE_PASST=3
+
+	get_info_cols
+
+	tmux pipe-pane -O -t ${PANE_GUEST} "cat >> ${LOGDIR}/pane_guest.log"
+	tmux select-pane -t ${PANE_GUEST} -T "guest"
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T ""
+
+	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
+	tmux select-pane -t ${PANE_HOST} -T "host"
+
+	tmux pipe-pane -O -t ${PANE_PASST} "cat >> ${LOGDIR}/pane_passt.log"
+	tmux select-pane -t ${PANE_PASST} -T "passt in pasta (namespace)"
+
+	sleep 1
+}
+
+# layout_demo_podman() - Four panes for pasta demo with Podman
+layout_demo_podman() {
+	sleep 1
+
+	cmd_write 0 cd ${BASEPATH}
+	cmd_write 0 clear
+	sleep 1
+	cmd_write 0 clear
+
+	tmux split-window -v -l '65%' -t passt_test
+	tmux split-window -h -t passt_test
+	tmux split-window -h -l '42%' -t passt_test:1.0
+
+	PANE_HOST=0
+	PANE_INFO=1
+	PANE_NS1=2
+	PANE_NS2=3
+
+	get_info_cols
+
+	tmux pipe-pane -O -t ${PANE_NS1} "cat >> ${LOGDIR}/pane_ns1.log"
+	tmux select-pane -t ${PANE_NS1} -T "Podman with slirp4netns"
+
+	tmux pipe-pane -O -t ${PANE_NS2} "cat >> ${LOGDIR}/pane_ns2.log"
+	tmux select-pane -t ${PANE_NS2} -T "Podman with pasta"
+
+	tmux send-keys -l -t ${PANE_INFO} 'while cat '"$STATEBASE/log_pipe"'; do :; done'
+	tmux send-keys -t ${PANE_INFO} -N 100 C-m
+	tmux select-pane -t ${PANE_INFO} -T ""
+
+	tmux pipe-pane -O -t ${PANE_HOST} "cat >> ${LOGDIR}/pane_host.log"
+	tmux select-pane -t ${PANE_HOST} -T "host"
+
+	sleep 1
+}

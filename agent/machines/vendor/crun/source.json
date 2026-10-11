@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "name": "crun",
+  "version": "1.30.1",
+  "repository": "https://github.com/containers/crun.git",
+  "commit": "079ff6a7a16d029460af882f9ea44674e6a510b6",
+  "sources": [
+    {
+      "path": "source",
+      "repository": "https://github.com/containers/crun.git",
+      "commit": "079ff6a7a16d029460af882f9ea44674e6a510b6",
+      "git_archive_sha256": "fd9cd97fc8fdd87e8f56848fd9418fc8ba17d22591c164ab797a3563e2d8344a"
+    },
+    {
+      "path": "source/libocispec",
+      "repository": "https://github.com/containers/libocispec.git",
+      "commit": "872b8b0b7ccb1a121601ede0dcac8c6b8a1008a6",
+      "git_archive_sha256": "df976b60063d77086f029192f966634c30b7b99fe82046f210b3f7e15975a6ec"
+    },
+    {
+      "path": "source/libocispec/runtime-spec",
+      "repository": "https://github.com/opencontainers/runtime-spec",
+      "commit": "d64c1d945da7cf6970061c7c9ff4391fafdf2a15",
+      "git_archive_sha256": "8318f4d9069cd2142822a9eecbbe891fc4efaa25ed606b2ef82078b5117c7b6e"
+    },
+    {
+      "path": "source/libocispec/image-spec",
+      "repository": "https://github.com/opencontainers/image-spec",
+      "commit": "26647a49f642c7d22a1cd3aa0a48e4650a542269",
+      "git_archive_sha256": "ad0ea6711bf499872774f29502324c880b59de1c61f737056e4ad29736dbd231"
+    }
+  ],
+  "license_paths": [
+    "source/COPYING",
+    "source/COPYING.libcrun",
+    "source/libocispec/COPYING",
+    "source/src/libcrun/blake3/LICENSE",
+    "source/libocispec/runtime-spec/LICENSE",
+    "source/libocispec/image-spec/LICENSE"
+  ],
+  "modified": false,
+  "source_inventory_sha256": "52bf54bab9f51ae380be6feb1758b0e44714b39eb3810c6ec245c060ef036c9b"
+}

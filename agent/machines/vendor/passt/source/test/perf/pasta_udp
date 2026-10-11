@@ -1,0 +1,245 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/perf/pasta_udp - Check UDP performance in pasta mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+htools	bc head ip sleep iperf3 udp_rr jq sed
+nstools	ip sleep iperf3 udp_rr jq sed
+
+set	MAP_HOST4 192.0.2.1
+set	MAP_HOST6 2001:db8:9a55::1
+
+test	pasta: throughput and latency (local traffic)
+
+hout	FREQ_PROCFS (echo "scale=1"; sed -n 's/cpu MHz.*: \([0-9]*\)\..*$/(\1+10^2\/2)\/10^3/p' /proc/cpuinfo) | bc -l | head -n1
+hout	FREQ_CPUFREQ (echo "scale=1"; printf '( %i + 10^5 / 2 ) / 10^6\n' $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) ) | bc -l
+hout	FREQ [ -n "__FREQ_CPUFREQ__" ] && echo __FREQ_CPUFREQ__ || echo __FREQ_PROCFS__
+
+set	THREADS 1
+set	TIME 1
+set	OPTS -u -P __THREADS__
+
+info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz
+
+report	pasta lo_udp 1 __FREQ__
+
+th	pktlen 1500B 4000B 16384B 65535B
+
+
+tr	UDP throughput over IPv6: ns to host
+iperf3s	host 10003
+# (datagram size) = (packet size) - 48: 40 bytes of IPv6 header, 8 of UDP header
+
+iperf3	BW ns ::1 10003 __TIME__ __OPTS__ -b 5G -l 1452
+bw	__BW__ 0.8 1.2
+iperf3	BW ns ::1 10003 __TIME__ __OPTS__ -b 10G -l 3972
+bw	__BW__ 1.2 1.8
+iperf3	BW ns ::1 10003 __TIME__ __OPTS__ -b 30G -l 16336
+bw	__BW__ 5.0 6.0
+iperf3	BW ns ::1 10003 __TIME__ __OPTS__ -b 40G -l 65487
+bw	__BW__ 7.0 9.0
+
+iperf3k	host
+
+tl	UDP RR latency over IPv6: ns to host
+lat	-
+lat	-
+lat	-
+hostb	udp_rr --nolog -P 10003 -C 10013 -6
+nsout	LAT udp_rr --nolog -P 10003 -C 10013 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 200 150
+
+
+tr	UDP throughput over IPv4: ns to host
+iperf3s	host 10003
+# (datagram size) = (packet size) - 28: 20 bytes of IPv4 header, 8 of UDP header
+
+iperf3	BW ns 127.0.0.1 10003 __TIME__ __OPTS__ -b 5G -l 1372
+bw	__BW__ 0.8 1.2
+iperf3	BW ns 127.0.0.1 10003 __TIME__ __OPTS__ -b 10G -l 3972
+bw	__BW__ 1.2 1.8
+iperf3	BW ns 127.0.0.1 10003 __TIME__ __OPTS__ -b 30G -l 16356
+bw	__BW__ 5.0 6.0
+iperf3	BW ns 127.0.0.1 10003 __TIME__ __OPTS__ -b 40G -l 65507
+bw	__BW__ 7.0 9.0
+
+iperf3k	host
+
+tl	UDP RR latency over IPv4: ns to host
+lat	-
+lat	-
+lat	-
+hostb	udp_rr --nolog -P 10003 -C 10013 -4
+nsout	LAT udp_rr --nolog -P 10003 -C 10013 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 200 150
+
+
+tr	UDP throughput over IPv6: host to ns
+iperf3s	ns 10002
+
+iperf3	BW host ::1 10002 __TIME__ __OPTS__ -b 5G -l 1452
+bw	__BW__ 0.8 1.2
+iperf3	BW host ::1 10002 __TIME__ __OPTS__ -b 10G -l 3972
+bw	__BW__ 1.2 1.8
+iperf3	BW host ::1 10002 __TIME__ __OPTS__ -b 30G -l 16336
+bw	__BW__ 5.0 6.0
+iperf3	BW host ::1 10002 __TIME__ __OPTS__ -b 40G -l 65487
+bw	__BW__ 7.0 9.0
+
+iperf3k	ns
+
+tl	UDP RR latency over IPv6: host to ns
+lat	-
+lat	-
+lat	-
+nsb	udp_rr --nolog -P 10002 -C 10012 -6
+hout	LAT udp_rr --nolog -P 10002 -C 10012 -6 -c -H ::1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 200 150
+
+
+tr	UDP throughput over IPv4: host to ns
+iperf3s	ns 10002
+iperf3	BW host 127.0.0.1 10002 __TIME__ __OPTS__ -b 5G -l 1372
+bw	__BW__ 0.8 1.2
+iperf3	BW host 127.0.0.1 10002 __TIME__ __OPTS__ -b 10G -l 3972
+bw	__BW__ 1.2 1.8
+iperf3	BW host 127.0.0.1 10002 __TIME__ __OPTS__ -b 30G -l 16356
+bw	__BW__ 5.0 6.0
+iperf3	BW host 127.0.0.1 10002 __TIME__ __OPTS__ -b 40G -l 65507
+bw	__BW__ 7.0 9.0
+
+iperf3k	ns
+
+tl	UDP RR latency over IPv4: host to ns
+lat	-
+lat	-
+lat	-
+nsb	udp_rr --nolog -P 10002 -C 10012 -4
+hout	LAT udp_rr --nolog -P 10002 -C 10012 -4 -c -H 127.0.0.1 | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 200 150
+
+te
+
+
+
+test	pasta: throughput and latency (traffic via tap)
+
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+
+info	Throughput in Gbps, latency in µs, one thread at __FREQ__ GHz
+report	pasta tap_udp 1 __FREQ__
+
+th	pktlen 1500B 4000B 16384B 65520B
+
+tr	UDP throughput over IPv6: ns to host
+iperf3s	host 10003
+# (datagram size) = (packet size) - 48: 40 bytes of IPv6 header, 8 of UDP header
+
+iperf3	BW ns __MAP_HOST6__ 10003 __TIME__ __OPTS__ -b 8G -l 1472
+bw	__BW__ 0.3 0.5
+iperf3	BW ns __MAP_HOST6__ 10003 __TIME__ __OPTS__ -b 12G -l 3972
+bw	__BW__ 0.5 0.8
+iperf3	BW ns __MAP_HOST6__ 10003 __TIME__ __OPTS__ -b 20G -l 16356
+bw	__BW__ 3.0 4.0
+iperf3	BW ns __MAP_HOST6__ 10003 __TIME__ __OPTS__ -b 30G -l 65472
+bw	__BW__ 6.0 7.0
+
+iperf3k	host
+
+tl	UDP RR latency over IPv6: ns to host
+lat	-
+lat	-
+lat	-
+hostb	udp_rr --nolog -P 10003 -C 10013 -6
+nsout	LAT udp_rr --nolog -P 10003 -C 10013 -6 -c -H __MAP_HOST6__ | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 200 150
+
+
+tr	UDP throughput over IPv4: ns to host
+iperf3s	host 10003
+# (datagram size) = (packet size) - 28: 20 bytes of IPv4 header, 8 of UDP header
+
+iperf3	BW ns __MAP_HOST4__ 10003 __TIME__ __OPTS__ -b 8G -l 1472
+bw	__BW__ 0.3 0.5
+iperf3	BW ns __MAP_HOST4__ 10003 __TIME__ __OPTS__ -b 12G -l 3972
+bw	__BW__ 0.5 0.8
+iperf3	BW ns __MAP_HOST4__ 10003 __TIME__ __OPTS__ -b 20G -l 16356
+bw	__BW__ 3.0 4.0
+iperf3	BW ns __MAP_HOST4__ 10003 __TIME__ __OPTS__ -b 30G -l 65492
+bw	__BW__ 6.0 7.0
+
+iperf3k	host
+
+tl	UDP RR latency over IPv4: ns to host
+lat	-
+lat	-
+lat	-
+hostb	udp_rr --nolog -P 10003 -C 10013 -4
+nsout	LAT udp_rr --nolog -P 10003 -C 10013 -4 -c -H __MAP_HOST4__ | sed -n 's/^throughput=\(.*\)/\1/p'
+hostw
+lat	__LAT__ 200 150
+
+tr	UDP throughput over IPv6: host to ns
+iperf3s	ns 10002
+
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	ADDR6 ip -j -6 addr show|jq -rM '[.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope != "host" and .scope != "link").local] | .[0]'
+iperf3	BW host __ADDR6__ 10002 __TIME__ __OPTS__ -b 8G -l 1472
+bw	__BW__ 0.3 0.5
+iperf3	BW host __ADDR6__ 10002 __TIME__ __OPTS__ -b 12G -l 3972
+bw	__BW__ 0.5 0.8
+iperf3	BW host __ADDR6__ 10002 __TIME__ __OPTS__ -b 20G -l 16356
+bw	__BW__ 3.0 4.0
+iperf3	BW host __ADDR6__ 10002 __TIME__ __OPTS__ -b 30G -l 65472
+bw	__BW__ 7.0 9.0
+
+iperf3k	ns
+
+tl	UDP RR latency over IPv6: host to ns
+lat	-
+lat	-
+lat	-
+nsb	udp_rr --nolog -P 10002 -C 10012 -6
+hout	LAT udp_rr --nolog -P 10002 -C 10012 -6 -c -H __ADDR6__ | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 200 150
+
+
+tr	UDP throughput over IPv4: host to ns
+iperf3s	ns 10002
+
+nsout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+iperf3	BW host __ADDR__ 10002 __TIME__ __OPTS__ -b 8G -l 1472
+bw	__BW__ 0.3 0.5
+iperf3	BW host __ADDR__ 10002 __TIME__ __OPTS__ -b 12G -l 3972
+bw	__BW__ 0.5 0.8
+iperf3	BW host __ADDR__ 10002 __TIME__ __OPTS__ -b 20G -l 16356
+bw	__BW__ 3.0 4.0
+iperf3	BW host __ADDR__ 10002 __TIME__ __OPTS__ -b 30G -l 65492
+bw	__BW__ 7.0 9.0
+
+iperf3k	ns
+
+tl	UDP RR latency over IPv4: host to ns
+lat	-
+lat	-
+lat	-
+nsb	udp_rr --nolog -P 10002 -C 10012 -4
+hout	LAT udp_rr --nolog -P 10002 -C 10012 -4 -c -H __ADDR__ | sed -n 's/^throughput=\(.*\)/\1/p'
+nsw
+lat	__LAT__ 200 150
+
+te

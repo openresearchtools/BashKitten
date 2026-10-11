@@ -1,0 +1,58 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/setup_ugly - Setup functions using screen-scraping instead of context
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+INITRAMFS_MEM="${BASEPATH}/mbuto.mem.img"
+
+# setup_distro() - Set up pane layout for distro tests
+setup_distro() {
+	layout_host
+}
+
+# setup_pasta_options() - Set up layout and host context without starting pasta
+setup_pasta_options() {
+	context_setup_host host
+
+	layout_pasta_simple
+}
+
+# setup_memory() - Start qemu in guest pane, and passt in passt context
+setup_memory() {
+	layout_memory
+
+	pane_or_context_run guest 'qemu-system-$(uname -m)'		   \
+		' -machine accel=kvm'                                      \
+		' -m '$((${MEM_KIB} / 1024 / 4))' -cpu host -smp '${VCPUS}                    \
+		' -kernel ' "/boot/vmlinuz-$(uname -r)"			   \
+		' -initrd '${INITRAMFS_MEM}' -nographic -serial stdio'	   \
+		' -nodefaults'						   \
+		' -append "console=ttyS0 mitigations=off apparmor=0"'	   \
+		" -pidfile ${STATESETUP}/qemu.pid"
+}
+
+# teardown_distro() - Nothing to do, yet
+teardown_distro() {
+	:
+}
+
+# teardown_pasta_options() - Tear down pasta and host context, no namespace
+teardown_pasta_options() {
+	teardown_context_watch ${PANE_HOST} host
+	teardown_context_watch ${PANE_PASST} passt
+}
+
+# teardown_passt() - Kill qemu with ^C, remove passt PID file
+teardown_memory() {
+	kill $(cat "${STATESETUP}/qemu.pid")
+}

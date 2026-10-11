@@ -1,0 +1,216 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/distro/ubuntu - Ubuntu builds, get packages via passt, test pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+set	PIDFILE __STATEDIR__/passt.pid
+htools	qemu-img virt-edit guestfish cat kill qemu-system-x86_64 qemu-system-ppc64 qemu-system-s390x
+
+# Quick pasta test: send message from init to ns, and from ns to init
+def	distro_quick_pasta_test
+host	(socat -u TCP6-LISTEN:10000 OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
+hostb	./pasta
+sleep	1
+host	PS1='$ '
+host	socat -u TCP6-LISTEN:9999 OPEN:/tmp/ns_msg,create,trunc &
+sleep	2
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
+sleep	2
+host	echo
+sleep	1
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Quick pasta test: netcat-openbsd version for Ubuntu 16.04 ppc64
+def	distro_quick_pasta_test_netcat
+host	(nc -w1 -6 -l -p 10000 > /tmp/init_msg; echo "from_init" | nc -q0 ::1 9999) &
+hostb	./pasta
+sleep	1
+host	PS1='$ '
+host	nc -w1 -6 -l -p 9999 > /tmp/ns_msg &
+sleep	2
+host	echo "from_ns" | nc -q0 ::1 10000
+sleep	2
+host	echo
+sleep	1
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# With systemd-resolved and TCG, DNS might take a while to work
+def	dns_ready_wait
+host	r=10; while [ \${r} -gt 0 ]; do host ubuntu.com && break; sleep 5; r=\$((r - 1)); done
+endef
+
+# Start passt, set common variables
+hostb	./passt -s __STATEDIR__/passt.socket -P __PIDFILE__ &
+sleep	1
+host	echo
+hout	GUEST_FILES ls -1 *.c *.h *.sh passt.1 Makefile README.md | tr '\n' ' '; echo
+
+
+test	Ubuntu 14.04.5 LTS (Trusty Tahr), amd64
+
+set	IMG __STATEDIR__/ubuntu-14.04-amd64.img
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-amd64-disk1.img __IMG__
+host	virt-edit -a __IMG__ /etc/init/ttyS0.conf -e 's/\/getty/\/getty --autologin root/'
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-final.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-container.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-local.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-nonet.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-log-shutdown.conf
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make
+
+# TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
+# with wrapper provided by glibc 2.19, probably wrong argument order.
+
+hint
+sleep	1
+
+# PIDFILE is cleaned up when the next test starts, read it now
+hout	PID cat __PIDFILE__
+
+
+test	Ubuntu 14.04.5 LTS (Trusty Tahr), i386
+
+set	IMG __STATEDIR__/ubuntu-14.04-i386.img
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-i386-disk1.img __IMG__
+host	virt-edit -a __IMG__ /etc/init/ttyS0.conf -e 's/\/getty/\/getty --autologin root/'
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-final.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-container.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-local.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-nonet.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-log-shutdown.conf
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__IMG__,if=virtio -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make
+
+# TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
+# with wrapper provided by glibc 2.19, probably wrong argument order.
+
+hint
+sleep	1
+
+
+test	Ubuntu 14.04.5 LTS (Trusty Tahr), ppc64le
+
+set	IMG __STATEDIR__/ubuntu-14.04-ppc64le.img
+host	qemu-img create -f qcow2 -F qcow2 -b __BASEPATH__/trusty-server-cloudimg-ppc64el-disk1.img __IMG__
+host	virt-edit -a __IMG__ /etc/init/hvc0.conf -e 's/\/getty/\/getty --autologin root/'
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-config.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-final.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-container.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-local.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init-nonet.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-init.conf
+host	guestfish --rw -a __IMG__ -i rm /etc/init/cloud-log-shutdown.conf
+host	guestfish --rw -a __IMG__ -i copy-in __GUEST_FILES__ /root/
+
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __IMG__ -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits -Wno-sign-compare" make
+
+# TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
+# with wrapper provided by glibc 2.19, probably wrong argument order.
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Ubuntu 16.04 LTS (Xenial Xerus), ppc64 (be)
+
+host	qemu-system-ppc64 -m 1024 -M pseries -nographic -nodefaults -serial stdio -no-reboot -nographic -vga none -hda __BASEPATH__/prepared-xenial-server-cloudimg-powerpc-disk1.img -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	PS1='$ '
+host	dhclient -4
+# Skip apt-get update here: some updates to xenial-updates around 2022-01-30
+# broke dependencies for libc6 and gcc-5 -- note that powerpc is not officially
+# supported on this version
+
+# socat not available: install netcat-openbsd and run the test with it
+host	apt-get -y install make gcc netcat-openbsd
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test_netcat
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+test	Ubuntu 22.04 (Jammy Jellyfish), s390x
+
+host	qemu-system-s390x -m 2048 -smp 2 -serial stdio -nodefaults -nographic __BASEPATH__/prepared-jammy-server-cloudimg-s390x.img -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -device virtio-rng-ccw -snapshot
+
+host	export DEBIAN_FRONTEND=noninteractive
+host	service systemd-networkd stop
+host	service systemd-resolved stop
+host	rm /etc/dhcp/dhclient-enter-hooks.d/resolved-enter
+host	dhclient -4
+dns_ready_wait
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+host	export SHELL="/bin/dash"
+host	dash
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+sleep	1
+host	echo
+
+
+host	kill __PID__

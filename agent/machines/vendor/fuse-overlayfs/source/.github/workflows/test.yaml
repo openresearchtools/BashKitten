@@ -1,0 +1,120 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  build_job:
+    runs-on: ubuntu-latest
+    name: Build on ${{ matrix.arch }}
+
+    strategy:
+      matrix:
+        include:
+          - arch: armv7
+            distro: ubuntu_latest
+          - arch: aarch64
+            distro: ubuntu_latest
+          - arch: s390x
+            distro: ubuntu_latest
+          - arch: ppc64le
+            distro: ubuntu_latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: uraimo/run-on-arch-action@v3.0.1
+        name: Build
+        id: build
+        with:
+          arch: ${{ matrix.arch }}
+          distro: ${{ matrix.distro }}
+
+          githubToken: ${{ github.token }}
+
+          setup: |
+            git submodule update --init --recursive
+
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y attr automake autotools-dev git make gcc pkg-config xz-utils python3 g++ python3-setuptools libdevmapper-dev btrfs-progs libbtrfs-dev go-md2man parallel libfuse3-dev bats
+
+          run: |
+            ./autogen.sh
+            LIBS="-ldl" LDFLAGS="-static" ./configure
+            make -j $(nproc)
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: fuse-overlayfs-${{ matrix.arch }}-${{ matrix.distro }}
+          path: |
+            fuse-overlayfs
+
+  Test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test: no-ovl-whiteouts
+          - test: ovl-whiteouts
+    env:
+      GOPATH: /root/go
+      TAGS: exclude_graphdriver_devicemapper exclude_graphdriver_btrfs no_libsubid
+    steps:
+    - name: checkout
+      uses: actions/checkout@v4
+
+    - name: install dependencies
+      run: |
+            sudo apt-get update -q -y
+            sudo apt-get install -q -y attr automake autotools-dev git make gcc pkg-config xz-utils python3 g++ python3-setuptools libdevmapper-dev btrfs-progs libbtrfs-dev go-md2man parallel wget libfuse3-dev bats
+
+            sudo mkdir -p /lower /upper /mnt $GOPATH/src/github.com/containers
+            sudo sh -c "cd $GOPATH/src/github.com/containers; git clone --depth=1 https://github.com/containers/storage"
+            sudo TAGS="$TAGS" GOPATH=$GOPATH sh -c "(cd $GOPATH/src/github.com/containers/storage; sed -i -e 's|^AUTOTAGS.*$|AUTOTAGS := $TAGS|' Makefile; make GO111MODULE=on containers-storage)"
+            sudo sh -c "(cd /; git clone https://github.com/amir73il/unionmount-testsuite.git)"
+
+    - name: run autogen.sh
+      run: |
+        ./autogen.sh
+
+    - name: run configure
+      run: |
+        LIBS="-ldl" LDFLAGS="-static" ./configure
+
+    - name: build and install
+      run: |
+        make -j $(nproc)
+        sudo make -j install
+        sudo cp fuse-overlayfs /sbin
+
+    - name: Archive build artifacts
+      uses: actions/upload-artifact@v4.6.2
+      with:
+        name: fuse-overlayfs-x86_64-ubuntu-latest
+        path: |
+          fuse-overlayfs
+      if: ${{ matrix.test == 'ovl-whiteouts' }}
+
+    - name: run test
+      run: |
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+
+        case "${{ matrix.test }}" in
+            ovl-whiteouts)
+                sudo sh -c "(cd /unionmount-testsuite; unshare -m ./run --ov --fuse=fuse-overlayfs --xdev)"
+                sudo tests/fedora-installs.sh
+                sudo tests/unlink.sh
+                sudo tests/alpine.sh
+                sudo sh -c "(cd /root/go/src/github.com/containers/storage/tests; JOBS=1 STORAGE_OPTION=overlay.mount_program=/sbin/fuse-overlayfs STORAGE_DRIVER=overlay unshare -m ./test_runner.bash)"
+                tests/unpriv.sh
+            ;;
+            no-ovl-whiteouts)
+                sudo sh -c "(cd /unionmount-testsuite; FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1 unshare -m ./run --ov --fuse=fuse-overlayfs --xdev)"
+                sudo FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1 tests/fedora-installs.sh
+                sudo FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1 tests/unlink.sh
+                sudo FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1 tests/alpine.sh
+                sudo sh -c "(cd /root/go/src/github.com/containers/storage/tests; JOBS=1 FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1 STORAGE_OPTION=overlay.mount_program=/sbin/fuse-overlayfs STORAGE_DRIVER=overlay unshare -m ./test_runner.bash)"
+                FUSE_OVERLAYFS_DISABLE_OVL_WHITEOUT=1 tests/unpriv.sh
+            ;;
+        esac

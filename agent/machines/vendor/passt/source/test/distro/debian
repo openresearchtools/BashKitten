@@ -1,0 +1,252 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/distro/debian - Debian builds, get packages via passt, test pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+set	PIDFILE __STATEDIR__/passt.pid
+htools	cat kill qemu-system-x86_64 qemu-system-aarch64 qemu-system-ppc64
+
+# Quick pasta test: send message from init to ns, and from ns to init
+def	distro_quick_pasta_test
+host	export SHELL="/bin/dash"
+host	dash
+host	(socat -u TCP6-LISTEN:10000 OPEN:/tmp/init_msg,create,trunc; echo "from_init" | socat -u STDIN TCP6:[::1]:9999) &
+hostb	./pasta
+sleep	1
+host	socat -u TCP6-LISTEN:9999 OPEN:/tmp/ns_msg,create,trunc &
+sleep	2
+host	echo "from_ns" | socat -u STDIN TCP6:[::1]:10000
+sleep	2
+host	echo
+sleep	1
+hout	NS_MSG cat /tmp/ns_msg
+check	[ __NS_MSG__ = "from_init" ]
+hostb	exit
+host	echo
+hout	INIT_MSG cat /tmp/init_msg
+check	[ __INIT_MSG__ = "from_ns" ]
+endef
+
+# Start passt, set common variables
+hostb	./passt -s __STATEDIR__/passt.socket -P __PIDFILE__ &
+sleep	1
+host	echo
+
+
+test	Debian GNU/Linux 8 (jessie), amd64
+
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none -drive file=__BASEPATH__/prepared-debian-8.11.0-openstack-amd64.qcow2,if=virtio -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Wno-missing-field-initializers -Wno-missing-braces -Wno-type-limits" make
+
+# TODO: pasta test skipped for the moment: clone() as called by NS_CALL hangs
+# with wrapper provided by glibc 2.19, probably wrong argument order.
+
+hint
+sleep	1
+
+# PIDFILE is cleaned up when the next test starts, read it now
+hout	PID cat __PIDFILE__
+
+
+test	Debian GNU/Linux 9 (stretch, oldoldstable), amd64
+
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-9-nocloud-amd64-daily-20200210-166.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+host	sysctl -w kernel.unprivileged_userns_clone=1
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 10 (buster, oldstable), amd64
+
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-nocloud-amd64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+host	sysctl -w kernel.unprivileged_userns_clone=1
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 10 (buster, oldstable), aarch64
+
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-arm64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+host	sysctl -w kernel.unprivileged_userns_clone=1
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 10 (buster, oldstable), ppc64le
+
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-10-generic-ppc64el-20220911-1135.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+host	PS1='$ '
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+host	sysctl -w kernel.unprivileged_userns_clone=1
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+
+
+test	Debian GNU/Linux 11 (bullseye, stable), amd64
+
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-nocloud-amd64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 11 (bullseye, stable), aarch64
+
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-arm64.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux 11 (bullseye, stable), ppc64le
+
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-11-generic-ppc64el.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+sleep	2
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+
+
+# HACK: We need some additional space to install gcc-12 on 'sid' images for
+# amd64 and aarch64, but if we use virt-resize to call resize2fs in the
+# preparation step, partitions will be rearranged and we would also need to
+# adjust boot parameters. Instead, resize the images offline first, and expand
+# partitions and filesystems online, later.
+
+test	Debian GNU/Linux sid (experimental), amd64
+
+host	qemu-img resize __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 4G
+host	qemu-system-x86_64 -M pc,accel=kvm:tcg -m 1024 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-amd64-daily.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+sleep	2
+host	growpart /dev/sda 1
+host	resize2fs -p /dev/sda1
+host	export DEBIAN_FRONTEND=noninteractive
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux sid (experimental), aarch64
+
+host	qemu-img resize __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 4G
+host	qemu-system-aarch64 -m 2048 -cpu cortex-a57 -smp 2 -M virt -bios __BASEPATH__/QEMU_EFI.fd -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-arm64-daily.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+sleep	2
+host	growpart /dev/vda 1
+host	resize2fs -p /dev/vda1
+host	export DEBIAN_FRONTEND=noninteractive
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+
+
+test	Debian GNU/Linux sid (experimental), ppc64le
+
+host	qemu-system-ppc64 -m 2048 -smp 2 -nographic -serial stdio -nodefaults -no-reboot -nographic -vga none __BASEPATH__/prepared-debian-sid-nocloud-ppc64el-daily.qcow2 -device virtio-net-pci,netdev=s0 -netdev stream,id=s0,server=off,addr.type=unix,addr.path=__STATEDIR__/passt.socket -snapshot
+sleep	2
+host	export DEBIAN_FRONTEND=noninteractive
+host	apt-get update
+host	apt-get -y install make gcc socat
+
+host	make clean
+host	CFLAGS="-Werror" make
+
+distro_quick_pasta_test
+
+hint
+sleep	1
+hostb	reset
+
+
+sleep	1
+host	kill __PID__

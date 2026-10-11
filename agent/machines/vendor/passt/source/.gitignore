@@ -1,0 +1,13 @@
+*~
+/passt
+/passt.avx2
+/pasta
+/pasta.avx2
+/passt-repair
+/pesto
+/pasta.1
+/seccomp.h
+/seccomp_pesto.h
+/seccomp_repair.h
+/c*.json
+README.plain.md

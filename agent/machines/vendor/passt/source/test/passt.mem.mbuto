@@ -1,0 +1,39 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# test/passt.mem.mbuto - mbuto (https://mbuto.sh) profile for memory usage tests
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+PROGS="${PROGS:-ash,dash,bash chmod ip mount insmod mkdir ln cat chmod modprobe
+       grep mknod sed chown sleep bc ls ps mount unshare chroot cp kill diff
+       head tail sort tr tee cut nm which switch_root mv rm}"
+
+KMODS="${KMODS:- dummy}"
+
+NODES="${NODES:-console kmsg null ptmx random urandom zero}"
+
+LINKS="${LINKS:-
+	 ash,dash,bash		/init
+	 ash,dash,bash		/bin/sh}"
+
+DIRS="${DIRS} /tmp /sbin /usr/bin"
+
+COPIES="${COPIES} ../passt.avx2,/bin/passt.avx2"
+
+FIXUP="${FIXUP}"'
+mv /bin/* /usr/bin || :
+rm -rf /bin
+ln -s /usr/bin /bin
+chmod 777 /tmp
+sh +m
+'
+
+OUTPUT="KERNEL=__KERNEL__
+INITRD=__INITRD__
+"

@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/passt/tcp - Check TCP functionality in passt mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+gtools	socat ip jq cmp
+htools	socat ip jq
+
+set	TEMP_BIG __STATEDIR__/test_big.bin
+set	TEMP_SMALL __STATEDIR__/test_small.bin
+
+test	TCP/IPv4: host to guest: big transfer
+guestb	socat -u TCP4-LISTEN:10001,reuseaddr OPEN:test_big.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/big.bin TCP4:127.0.0.1:10001
+guestw
+guest	cmp /root/big.bin test_big.bin
+
+test	TCP/IPv4: guest to host: big transfer
+hostb	socat -u TCP4-LISTEN:10003,bind=127.0.0.1,reuseaddr OPEN:__TEMP_BIG__,create,trunc
+gout	GW ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+guest	socat -u OPEN:/root/big.bin TCP4:__GW__:10003
+hostw
+check	cmp __BASEPATH__/big.bin __TEMP_BIG__
+
+test	TCP/IPv4: host to guest: small transfer
+guestb	socat -u TCP4-LISTEN:10001,reuseaddr OPEN:test_small.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/small.bin TCP4:127.0.0.1:10001
+guestw
+guest	cmp /root/small.bin test_small.bin
+
+test	TCP/IPv4: guest to host: small transfer
+hostb	socat -u TCP4-LISTEN:10003,bind=127.0.0.1,reuseaddr OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/small.bin TCP4:__GW__:10003
+hostw
+check	cmp __BASEPATH__/small.bin __TEMP_SMALL__
+
+
+test	TCP/IPv6: host to guest: big transfer
+guestb	socat -u TCP6-LISTEN:10001,reuseaddr OPEN:test_big.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/big.bin TCP6:[::1]:10001
+guestw
+guest	cmp /root/big.bin test_big.bin
+
+test	TCP/IPv6: guest to host: big transfer
+hostb	socat -u TCP6-LISTEN:10003,bind=[::1],reuseaddr OPEN:__TEMP_BIG__,create,trunc
+gout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+gout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+guest	socat -u OPEN:/root/big.bin TCP6:[__GW6__%__IFNAME__]:10003
+hostw
+check	cmp __BASEPATH__/big.bin __TEMP_BIG__
+
+test	TCP/IPv6: host to guest: small transfer
+guestb	socat -u TCP6-LISTEN:10001,reuseaddr OPEN:test_small.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/small.bin TCP6:[::1]:10001
+guestw
+guest	cmp /root/small.bin test_small.bin
+
+test	TCP/IPv6: guest to host: small transfer
+hostb	socat -u TCP6-LISTEN:10003,bind=[::1],reuseaddr OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/small.bin TCP6:[__GW6__%__IFNAME__]:10003
+hostw
+check	cmp __BASEPATH__/small.bin __TEMP_SMALL__

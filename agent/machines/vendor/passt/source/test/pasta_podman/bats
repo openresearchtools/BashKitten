@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/pasta_podman/bats - Build Podman, run pasta system test with bats
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+htools	git make go bats ip jq socat ./test/podman/bin/podman
+
+set	PODMAN test/podman/bin/podman
+hout	WD pwd
+
+test	Podman pasta path
+
+hout	PASTA_BIN CONTAINERS_HELPER_BINARY_DIR="__WD__" __PODMAN__ info --format "{{.Host.Pasta.Executable}}"
+check	[ "__PASTA_BIN__" = "__WD__/pasta" ]
+
+test	Podman system test with bats
+
+host	PODMAN="__PODMAN__" CONTAINERS_HELPER_BINARY_DIR="__WD__" taskset -c 1 bats test/podman/test/system/505-networking-pasta.bats

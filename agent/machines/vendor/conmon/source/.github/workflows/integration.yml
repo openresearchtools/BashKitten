@@ -1,0 +1,59 @@
+name: integration
+on:
+  push:
+    tags:
+      - v*
+    branches:
+      - main
+  pull_request:
+
+jobs:
+
+  conmon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install BATS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+      - run: sudo hack/github-actions-setup
+      - name: Run conmon integration tests
+        run: |
+          sudo mkdir -p /var/run/crio
+          sudo make test-binary
+
+  cri-o:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [stable, oldstable]
+        critest: [0, 1]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: false
+      - name: Install BATS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats
+      - run: sudo hack/github-actions-setup
+      - name: Run CRI-O integration tests (critest=${{ matrix.critest }})
+        run: |
+          CRIO_DIR=$(sudo go env GOPATH)/src/github.com/cri-o/cri-o
+          sudo make -C "$CRIO_DIR" all test-binaries
+          # skip seccomp tests because they have permission denied issues in a container and accept signed image as they don't use conmon
+          sudo rm -f "$CRIO_DIR"/test/seccomp*.bats "$CRIO_DIR"/test/image.bats "$CRIO_DIR"/test/policy.bats
+          sudo sh -c "cd $CRIO_DIR; RUN_CRITEST=${{ matrix.critest }} ./test/test_runner.sh"
+        env:
+          JOBS: '2'
+
+  all-done:
+    needs:
+      - conmon
+      - cri-o
+    runs-on: ubuntu-24.04
+    steps:
+    - run: echo "All jobs completed"

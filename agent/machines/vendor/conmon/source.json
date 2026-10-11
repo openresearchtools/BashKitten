@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "name": "conmon",
+  "version": "v2.2.1",
+  "repository": "https://github.com/containers/conmon.git",
+  "commit": "c8cc2c4db27531bd4e084ce7857f73cd21ee639d",
+  "sources": [
+    {
+      "path": "source",
+      "repository": "https://github.com/containers/conmon.git",
+      "commit": "c8cc2c4db27531bd4e084ce7857f73cd21ee639d",
+      "git_archive_sha256": "d3e602a1ae17dc73d1ee1b099a7510202878344f4546612547a86daee67be079"
+    }
+  ],
+  "license_paths": [
+    "source/LICENSE"
+  ],
+  "modified": false,
+  "source_inventory_sha256": "ab89ebfca4ac4c1b4bf33ad1bd228a016c326ea377b12f343108da101785be51"
+}

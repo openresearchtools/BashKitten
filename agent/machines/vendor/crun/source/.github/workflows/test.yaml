@@ -1,0 +1,162 @@
+name: Test
+
+on: [push, pull_request]
+
+jobs:
+  build_job:
+    runs-on: ubuntu-latest
+    name: Build ${{ matrix.build }} on ${{ matrix.arch }}
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # The static and the shared build are separate jobs: under emulation
+        # each one takes tens of minutes, so running them in parallel roughly
+        # halves the wall clock time.
+        build: [static, shared]
+        arch:
+          - armv7
+#          - aarch64
+#          - s390x
+#          - ppc64le
+          - riscv64
+        distro: [ubuntu_latest]
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+          set-safe-directory: true
+
+      # Running autoreconf natively is much faster than under emulation.
+      # The generated files are architecture independent.
+      - name: Generate the configure script
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y --no-install-recommends autoconf automake libtool pkg-config
+          ./autogen.sh
+
+      - uses: uraimo/run-on-arch-action@v3.2.0
+        name: Build
+        id: build
+        with:
+          arch: ${{ matrix.arch }}
+          distro: ${{ matrix.distro }}
+
+          githubToken: ${{ github.token }}
+
+          install: |
+            apt-get update -y
+            apt-get install -y libseccomp-dev git make libcap-dev cmake pkg-config gcc wget go-md2man libsystemd-dev gperf clang-format libjson-c-dev libprotobuf-c-dev clang mawk
+
+          run: |
+            find $(pwd) -name '.git' -exec bash -c 'git config --global --add safe.directory ${0%/.git}' {} \;
+            ./tests/ci.sh cross-${{ matrix.build }}
+
+  Test:
+    runs-on: ${{ matrix.runner || 'ubuntu-latest' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test: disable-systemd
+          - test: check
+          - test: check-no-openat2
+          - test: check-sanitizers
+          - test: check-systemd
+          - test: enable-shared
+          - test: embedded-blake3
+          - test: system-blake3
+          - test: podman
+          #- test: cri-o
+          - test: containerd
+          - test: oci-validation
+          - test: alpine-build
+          - test: centos9-build
+          - test: centos10-build
+          - test: clang-format
+          - test: clang-check
+          - test: cppcheck
+          - test: bindings
+          - test: checkpoint-restore
+          - test: fuzzing
+          - test: codespell
+          - test: wasmedge-build
+          - test: krun-build
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+
+      - name: install dependencies
+        run: |
+          # If Dockerfile is present in test directory, the test is run
+          # inside container, so these dependencies won't be needed.
+          test -f "tests/${{ matrix.test }}/Dockerfile" && exit 0
+
+          sudo add-apt-repository -y ppa:criu/ppa
+          # add-apt-repository runs apt-get update so we don't have to.
+          sudo apt-get install -q -y criu automake libtool autotools-dev libseccomp-dev git make libcap-dev cmake pkg-config gcc wget libsystemd-dev gperf clang-format libjson-c-dev containerd runc libasan6 libubsan1 libprotobuf-c-dev mawk python3-dev lua5.4 liblua5.4-dev
+          # Fedora (used by maintainers as well as for packaging) has newer
+          # md2man than in Ubuntu, so we have to install it from source.
+          GOBIN=~/.local/bin go install github.com/cpuguy83/go-md2man/v2@latest
+
+      - name: run autogen.sh
+        run: |
+          git clean -fdx .
+          find $(pwd) -name '.git' -exec bash -c 'git config --global --add safe.directory ${0%/.git}' {} \;
+          ./autogen.sh
+
+      - name: run test
+        run: ./tests/ci.sh "${{ matrix.test }}"
+
+  keyring:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: validate crun.keyring
+        run: build-aux/keyring_validate.sh
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: install shfmt
+        env:
+          VERSION: v3.14.0
+          BASEURL: https://github.com/mvdan/sh/releases/download
+          SHA256: fe42021c7272ef2d67ea36cbc3031683c625d0badec733ef3a57b567246a0b66
+        run: |
+          mkdir -p ~/.local/bin
+          curl -sSfL --retry 5 -o ~/.local/bin/shfmt \
+            $BASEURL/$VERSION/shfmt_${VERSION}_linux_amd64
+          sha256sum --strict --check - <<<"$SHA256 *$HOME/.local/bin/shfmt"
+          chmod +x ~/.local/bin/shfmt
+      - name: install shellcheck
+        env:
+          VERSION: v0.11.0
+          BASEURL: https://github.com/koalaman/shellcheck/releases/download
+          SHA256: 4da528ddb3a4d1b7b24a59d4e16eb2f5fd960f4bd9a3708a15baddbdf1d5a55b
+        run: |
+          mkdir -p ~/.local/bin
+          curl -sSfL --retry 5 $BASEURL/$VERSION/shellcheck-$VERSION.linux.x86_64.tar.xz |
+            tar xfJ - -C ~/.local/bin --strip 1 shellcheck-$VERSION/shellcheck
+          sha256sum --strict --check - <<<"$SHA256 *$HOME/.local/bin/shellcheck"
+          # make sure to remove the old version
+          sudo rm -f /usr/bin/shellcheck
+      - name: install dependencies
+        run: |
+          sudo apt-get update -q -y
+          sudo apt-get install -q -y automake libtool autotools-dev libseccomp-dev git make libcap-dev cmake pkg-config gcc wget go-md2man libsystemd-dev gperf clang-format libjson-c-dev libprotobuf-c-dev mawk
+      - uses: lumaxis/shellcheck-problem-matchers@v2
+      - name: shellcheck
+        run: |
+          find $(pwd) -name '.git' -exec bash -c 'git config --global --add safe.directory ${0%/.git}' {} \;
+          ./autogen.sh
+          ./configure --enable-embedded-blake3
+          make shellcheck
+      - name: shfmt
+        run: |
+          make shfmt
+          git diff --ignore-submodules --exit-code

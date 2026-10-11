@@ -1,0 +1,169 @@
+use crate::commands::get_config_dir;
+use crate::dns::aardvark::{Aardvark, AardvarkEntry};
+use crate::error::{NetavarkError, NetavarkErrorList, NetavarkResult};
+use crate::network::constants::DRIVER_BRIDGE;
+use crate::network::core_utils;
+use crate::network::driver::{get_network_driver, DriverInfo};
+
+use crate::{firewall, network};
+use clap::builder::NonEmptyStringValueParser;
+use clap::Parser;
+use log::debug;
+use nix::sys::signal;
+use std::ffi::OsString;
+use std::os::fd::AsFd;
+use std::path::Path;
+
+#[derive(Parser, Debug)]
+pub struct Teardown {
+    /// Network namespace path
+    #[clap(required = true, value_parser = NonEmptyStringValueParser::new())]
+    network_namespace_path: String,
+}
+
+impl Teardown {
+    /// The teardown command is the inverse of the setup command, undoing any configuration applied. Some interfaces may not be deleted (bridge interfaces, for example, will not be removed).
+    pub fn new(network_namespace_path: String) -> Self {
+        Self {
+            network_namespace_path,
+        }
+    }
+
+    pub fn exec(
+        &self,
+        input_file: Option<OsString>,
+        config_dir: Option<OsString>,
+        firewall_driver: Option<String>,
+        aardvark_bin: OsString,
+        plugin_directories: Option<Vec<OsString>>,
+        rootless: bool,
+    ) -> NetavarkResult<()> {
+        debug!("Tearing down..");
+
+        // SAFETY:  signal handlers are considered unsafe due to the care that must
+        //          taken when running code inside the handler function. We however
+        //          only ignore the signal so this is safe without having to worry
+        //          about any code restrictions.
+        // Also we ignore the returned error, this is best effort anyway and can only error when we would pass a invalid signal number.
+        let _ = unsafe { signal::signal(signal::SIGTERM, signal::SigHandler::SigIgn) };
+        let _ = unsafe { signal::signal(signal::SIGINT, signal::SigHandler::SigIgn) };
+
+        let network_options = network::types::NetworkOptions::load(input_file)?;
+
+        let mut error_list = NetavarkErrorList::new();
+
+        let dns_port = core_utils::get_netavark_dns_port()?;
+        let config_dir = get_config_dir(config_dir, "teardown")?;
+
+        let mut aardvark_entries = Vec::new();
+        for (key, network) in &network_options.network_info {
+            if network.dns_enabled && network.driver == DRIVER_BRIDGE {
+                match network_options.container_id.as_str().try_into() {
+                    Ok(id) => {
+                        aardvark_entries.push(AardvarkEntry {
+                            network_name: key,
+                            network_gateways: Vec::new(),
+                            network_dns_servers: &None,
+                            container_id: id,
+                            container_ips_v4: Vec::new(),
+                            container_ips_v6: Vec::new(),
+                            container_names: Vec::new(),
+                            container_dns_servers: &None,
+                            is_internal: network.internal,
+                        });
+                    }
+                    Err(err) => log::warn!(
+                        "invalid container id {}: {err}",
+                        network_options.container_id
+                    ),
+                }
+            }
+        }
+
+        if !aardvark_entries.is_empty() {
+            // stop dns server first before netavark clears the interface
+            let path = Path::new(&config_dir).join("aardvark-dns");
+
+            let aardvark_interface = Aardvark::new(path, rootless, aardvark_bin, dns_port);
+            if let Err(err) = aardvark_interface.delete_from_netavark_entries(&aardvark_entries) {
+                error_list.push(NetavarkError::wrap("remove aardvark entries", err));
+            }
+        }
+
+        let firewall_driver = firewall::get_supported_firewall_driver(firewall_driver)?;
+
+        let mut hostns = core_utils::open_host_netlink_socket()?;
+        let (netns_file, mut netns_netlink) =
+            match core_utils::open_netns_netlink_socket(&self.network_namespace_path, &hostns) {
+                Ok(netns) => (Some(netns.file), Some(netns.netlink)),
+                Err(e) => {
+                    match e.unwrap() {
+                        NetavarkError::Io(io_err)
+                            if io_err.kind() == std::io::ErrorKind::NotFound =>
+                        {
+                            log::warn!("container netns not found: {e}");
+                        }
+                        _ => {
+                            error_list.push(e);
+                        }
+                    }
+                    (None, None)
+                }
+            };
+
+        for named_network_opts in &network_options.networks {
+            let per_network_opts = &named_network_opts.opts;
+            let network = match network_options.network_info.get(&named_network_opts.name) {
+                Some(opts) => opts,
+                None => {
+                    error_list.push(NetavarkError::Message(format!(
+                        "network info for network {} not found",
+                        named_network_opts.name
+                    )));
+                    continue;
+                }
+            };
+
+            let driver = match get_network_driver(
+                DriverInfo {
+                    firewall: firewall_driver.as_ref(),
+                    container_id: &network_options.container_id,
+                    container_name: &network_options.container_name,
+                    container_hostname: &network_options.container_hostname,
+                    container_dns_servers: &network_options.dns_servers,
+                    netns_host: hostns.file.as_fd(),
+                    netns_container: netns_file.as_ref().map(|f| f.as_fd()), // None when no netns
+                    netns_path: &self.network_namespace_path,
+                    network,
+                    per_network_opts,
+                    port_mappings: &network_options.port_mappings,
+                    dns_port,
+                    config_dir: Path::new(&config_dir),
+                    rootless,
+                },
+                &plugin_directories,
+            ) {
+                Ok(driver) => driver,
+                Err(err) => {
+                    error_list.push(err);
+                    continue;
+                }
+            };
+
+            match driver.teardown((&mut hostns.netlink, netns_netlink.as_mut())) {
+                Ok(_) => {}
+                Err(err) => {
+                    error_list.push(err);
+                    continue;
+                }
+            };
+        }
+
+        if !error_list.is_empty() {
+            return Err(NetavarkError::List(error_list));
+        }
+
+        debug!("Teardown complete");
+        Ok(())
+    }
+}

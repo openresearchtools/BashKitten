@@ -1,0 +1,39 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (c) 2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
+#ifndef UDP_H
+#define UDP_H
+
+#include <stdint.h>
+#include <netinet/in.h>
+
+#include "fwd.h"
+
+void udp_listen_sock_handler(const struct ctx *c, union epoll_ref ref,
+			     uint32_t events, const struct timespec *now);
+void udp_sock_handler(const struct ctx *c, union epoll_ref ref,
+		      uint32_t events, const struct timespec *now);
+int udp_tap_handler(const struct ctx *c, uint8_t pif,
+		    sa_family_t af, const void *saddr, const void *daddr,
+		    uint8_t ttl, const struct pool *p, int idx,
+		    const struct timespec *now);
+int udp_init(struct ctx *c);
+void udp_update_l2_buf(const unsigned char *eth_d);
+
+/**
+ * struct udp_ctx - Execution context for UDP
+ * @scan_in:		Port scanning state for inbound packets
+ * @scan_out:		Port scanning state for outbound packets
+ * @timeout:		Timeout for unidirectional flows (in s)
+ * @stream_timeout:	Timeout for stream-like flows (in s)
+ */
+struct udp_ctx {
+	struct fwd_scan scan_in;
+	struct fwd_scan scan_out;
+	int timeout;
+	int stream_timeout;
+};
+
+#endif /* UDP_H */

@@ -1,0 +1,152 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/video - Session recording, JavaScript fragments with links
+#
+# Copyright (c) 2021-2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+VIDEO_START_SECONDS=
+VIDEO_NAME=
+
+VIDEO_LINKS_TEMPLATE="document.write('"'
+	Skip to:
+'
+
+VIDEO_LINKS_TEMPLATE_JS="
+');
+
+var video___VIDEO_NAME__links = [
+"
+
+VIDEO_LINKS_TEMPLATE_POST='];
+
+for (var i = 0; i < video___VIDEO_NAME__links.length; i++) {
+	var obj = document.getElementById(video___VIDEO_NAME__links[i][0]);
+
+	obj.addEventListener("click", function(event) {
+		var __VIDEO_NAME___div = document.getElementById("__VIDEO_NAME__");
+		var top = __VIDEO_NAME___div.offsetTop - 5;
+		var seek;
+
+		for (var i = 0; i < video___VIDEO_NAME__links.length; i++) {
+			if (this.id == video___VIDEO_NAME__links[i][0]) {
+				seek = video___VIDEO_NAME__links[i][1];
+			}
+		}
+
+		event.preventDefault();
+		__VIDEO_NAME___player.dispose();
+		__VIDEO_NAME___player = AsciinemaPlayer.create(
+			"/builds/latest/web/__VIDEO_NAME__.cast",
+			__VIDEO_NAME___div,
+			{ cols: 240, rows: 51, poster: "npt:999:0", startAt: seek, autoplay: true });
+
+		window.scrollTo({ top: top, behavior: "smooth" })
+	}, false);
+}
+'
+
+VIDEO_LINKS_BUF=
+VIDEO_LINKS_COUNT=0
+
+# video_append_links() - Append generic string to JavaScript links file
+video_append_links()
+{
+        __web="${LOGDIR}/web"
+	printf "${@}" >> "${__web}/${VIDEO_NAME}.js"
+}
+
+# video_append_links() - Append generic string to buffer for links
+video_append_links_js()
+{
+	VIDEO_LINKS_BUF="${VIDEO_LINKS_BUF}${@}"
+}
+
+# video_start() - Mark start of a test in capture, record start timestamp
+video_start() {
+	VIDEO_NAME="${1}"
+        __web="${LOGDIR}/web"
+        mkdir -p "${__web}"
+	echo "${VIDEO_LINKS_TEMPLATE}" > "${__web}/${VIDEO_NAME}.js"
+	VIDEO_START_SECONDS=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
+
+	sync
+	[ ${DEMO} -eq 1 ] && tail -1 "${STATEBASE}/demo.uncut" > "${STATEBASE}/${VIDEO_NAME}.start"
+	[ ${CI} -eq 1 ] && tail -1 "${STATEBASE}/ci.uncut" > "${STATEBASE}/${VIDEO_NAME}.start"
+	sync
+
+	tmux refresh-client
+}
+
+# video_stop() - Mark stop of a test in capture, finalise JavaScript fragments
+video_stop() {
+        __web="${LOGDIR}/web"
+	tmux refresh-client
+
+	sync
+	[ ${DEMO} -eq 1 ] && tail -1 "${STATEBASE}/demo.uncut" > "${STATEBASE}/${VIDEO_NAME}.stop"
+	[ ${CI} -eq 1 ] && tail -1 "${STATEBASE}/ci.uncut" > "${STATEBASE}/${VIDEO_NAME}.stop"
+	sync
+
+	sed -i 's/^.*$/&\\/g' "${__web}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_TEMPLATE_JS}" | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${__web}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_BUF}" >> "${__web}/${VIDEO_NAME}.js"
+	echo "${VIDEO_LINKS_TEMPLATE_POST}"  | sed "s/__VIDEO_NAME__/${VIDEO_NAME}/g" >> "${__web}/${VIDEO_NAME}.js"
+}
+
+# video_postprocess() - Cut terminal recordings based on .start and .stop files
+video_postprocess() {
+	IFS='
+'
+        __web="${LOGDIR}/web"
+	__cast_name=
+	for __l in $(cat ${1}); do
+		[ -z "${__header}" ] && __header="${__l}" && continue
+
+		if [ -z "${__cast_name}" ]; then
+		        for __cast_cut in "${STATEBASE}/"*.start; do
+				[ "${__l}" != "$(cat "${__cast_cut}")" ] && continue
+				__cast_name="$(basename "${__cast_cut}")"
+                                __cast_name="${__cast_name%.start}"
+				__cast_offset=
+				__stop_line="$(cat "${STATEBASE}/${__cast_name}.stop")"
+				echo "${__header}" > "${__web}/${__cast_name}.cast"
+				break
+			done
+			continue
+		fi
+
+		[ "${__l}" = "${__stop_line}" ] && __cast_name= && continue
+
+		__l_offset="$(echo ${__l%%.*}|tr -c -d '[:digit:]')"
+		__l_rest="${__l#*.}"
+		[ -z "${__cast_offset}" ] && __cast_offset=${__l_offset}
+		__l_offset=$((__l_offset - __cast_offset))
+		printf '[%s.%s\n' "${__l_offset}" "${__l_rest}" >> "${__web}/${__cast_name}".cast
+	done
+	unset IFS
+}
+
+# video_time_now() - Print current video timestamp, in seconds
+video_time_now() {
+	__now=$(sed -n 's/\([0-9]*\).[0-9]* [0-9]*.[0-9]*/\1/p' /proc/uptime)
+	echo $((__now - VIDEO_START_SECONDS))
+}
+
+# video_link() - Append single link to given video chapter
+video_link() {
+	[ ${VIDEO_LINKS_COUNT} -eq 0 ] && __sep="" || __sep=" |"
+	__id="video_link_${VIDEO_LINKS_COUNT}"
+	video_append_links "${__sep} <a id=\"${__id}\" href=\"${1}\">${1}</a>"
+	video_append_links_js "[ '${__id}', $(($(video_time_now) - 1)) ],"
+
+	VIDEO_LINKS_COUNT=$((VIDEO_LINKS_COUNT + 1))
+}

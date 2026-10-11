@@ -1,0 +1,318 @@
+#!/bin/sh -e
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/run - Entry point to run test cases and demo
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# Start an X terminal and capture a video of the test run (also set for ./ci)
+CI=${CI:-0}
+
+# Start an X terminal and show the demo (also set for ./demo)
+DEMO=${DEMO:-0}
+
+# Base path for output files
+BASEPATH=${BASEPATH:-"$(pwd)"}
+
+# Location of log files for test run
+LOGDIR=${LOGDIR:-"${BASEPATH}/test_logs"}
+LOGFILE=${LOGFILE:-"${LOGDIR}/test.log"}
+
+# If set, skip typing delays while issuing commands in panes
+FAST=${FAST:-1}
+
+# If set, run passt and pasta with debug options
+DEBUG=${DEBUG:-0}
+
+# If set, run passt and pasta with trace options
+TRACE=${TRACE:-0}
+
+# If set, tell passt and pasta to take packet captures
+PCAP=${PCAP:-0}
+
+# Custom kernel to boot guests with, if given
+KERNEL=${KERNEL:-"/boot/vmlinuz-$(uname -r)"}
+
+COMMIT="$(git log --oneline --no-decorate -1)"
+
+# Let exeter tests written in Python find their modules
+export PYTHONPATH=${BASEPATH}/exeter/py3
+
+. lib/util
+. lib/context
+. lib/setup
+. lib/setup_ugly
+. lib/term
+. lib/perf_report
+. lib/layout
+. lib/layout_ugly
+. lib/test
+. lib/video
+. lib/exeter
+
+# cleanup() - Remove temporary files
+cleanup() {
+	[ ${DEBUG} -eq 1 ] || rm -rf "${STATEBASE}"
+}
+
+# run() - Call setup functions, run tests, handle exit from test session
+run() {
+	mkfifo $STATEBASE/log_pipe
+
+	term
+	perf_init
+	[ ${CI} -eq 1 ]   && video_start ci
+
+	exeter smoke/smoke.sh
+	exeter build/build.py
+	exeter build/static_checkers.sh
+
+	setup pasta
+	test pasta/ndp
+	test pasta/dhcp
+	test pasta/tcp
+	test pasta/udp
+	test passt/shutdown
+	teardown pasta
+
+	setup pasta_options
+	test pasta_options/log_to_file
+	test pasta_options/netns_only
+	test pasta_options/no_pidns
+	teardown pasta_options
+
+	setup build
+	test pasta_podman/bats
+	teardown build
+
+	setup memory
+	test memory/passt
+	teardown memory
+
+	VHOST_USER=0
+	setup passt
+	test passt/ndp
+	test passt/dhcp
+	test passt/tcp
+	test passt/udp
+	test passt/shutdown
+	teardown passt
+
+	VALGRIND=1
+	setup passt_in_ns
+	test passt/ndp
+	test passt_in_ns/dhcp
+	test passt_in_ns/icmp
+	test passt_in_ns/tcp
+	test passt_in_ns/udp
+	test passt_in_ns/shutdown
+	teardown passt_in_ns
+
+	setup two_guests
+	test two_guests/basic
+	teardown two_guests
+
+	VHOST_USER=1
+	setup passt_in_ns
+	test passt_vu/ndp
+	test passt_vu_in_ns/dhcp
+	test passt_vu_in_ns/icmp
+	test passt_vu_in_ns/tcp
+	test passt_vu_in_ns/udp
+	test passt_vu_in_ns/shutdown
+	teardown passt_in_ns
+
+	setup two_guests
+	test two_guests_vu/basic
+	teardown two_guests
+
+	setup migrate
+	test migrate/basic
+	teardown migrate
+	setup migrate
+	test migrate/basic_fin
+	teardown migrate
+	setup migrate
+	test migrate/bidirectional
+	teardown migrate
+	setup migrate
+	test migrate/bidirectional_fin
+	teardown migrate
+	setup migrate
+	test migrate/iperf3_out4
+	teardown migrate
+	setup migrate
+	test migrate/iperf3_out6
+	teardown migrate
+	setup migrate
+	test migrate/iperf3_in4
+	teardown migrate
+	setup migrate
+	test migrate/iperf3_in6
+	teardown migrate
+	setup migrate
+	test migrate/iperf3_bidir6
+	teardown migrate
+	setup migrate
+	test migrate/iperf3_many_out6
+	teardown migrate
+	setup migrate
+	test migrate/rampstream_in
+	teardown migrate
+	setup migrate
+	test migrate/rampstream_out
+	teardown migrate
+
+	VALGRIND=0
+	VHOST_USER=0
+	setup passt_in_ns
+	test passt/ndp
+	test passt_in_ns/dhcp
+	test perf/passt_tcp
+	test perf/passt_udp
+	test perf/pasta_tcp
+	test perf/pasta_udp
+	test passt_in_ns/shutdown
+	teardown passt_in_ns
+
+	VHOST_USER=1
+	setup passt_in_ns
+	test passt_vu/ndp
+	test passt_vu_in_ns/dhcp
+	test perf/passt_vu_tcp
+	test perf/passt_vu_udp
+	test passt_vu_in_ns/shutdown
+	teardown passt_in_ns
+
+	# TODO: Make those faster by at least pre-installing gcc and make on
+	# non-x86 images, then re-enable.
+skip_distro() {
+	setup distro
+	test distro/debian
+	test distro/fedora
+	test distro/opensuse
+	test distro/ubuntu
+	teardown distro
+}
+
+	perf_finish
+	[ ${CI} -eq 1 ] && video_stop
+
+	log "PASS: ${STATUS_PASS}, FAIL: ${STATUS_FAIL}, SKIPPED: ${STATUS_SKIPPED}"
+
+	pause_continue \
+		"Press any key to keep test session open"	\
+		"Closing in "					\
+		"Interrupted, press any key to quit"		\
+		9
+
+	return 0
+}
+
+# run_selected() - Run list of tests, with setup/teardown based on test path
+# $@:	List of tests
+run_selected() {
+	mkfifo $STATEBASE/log_pipe
+
+	term
+	VALGRIND=1
+
+	__setup=
+	for __test; do
+		if is_exeter "test/${__test}"; then
+			exeter "${__test}"
+			continue
+		fi
+		# HACK: the migrate tests need the setup repeated for
+		#       each test
+		if [ "${__test%%/*}" != "${__setup}" -o		\
+		     "${__test%%/*}" = "migrate" ]; then
+			[ -n "${__setup}" ] && teardown "${__setup}"
+			__setup="${__test%%/*}"
+			setup "${__setup}"
+		fi
+
+		test "${__test}"
+	done
+	[ -n "${__setup}" ] && teardown "${__setup}"
+
+	log "PASS: ${STATUS_PASS}, FAIL: ${STATUS_FAIL}, SKIPPED: ${STATUS_SKIPPED}"
+
+	pause_continue \
+		"Press any key to keep test session open"	\
+		"Closing in "					\
+		"Interrupted, press any key to quit"		\
+		9
+
+	return 0
+}
+
+# demo() - Simpler path for demo purposes
+demo() {
+	mkfifo $STATEBASE/log_pipe
+
+	FAST=0
+
+	term_demo
+
+	layout_demo_passt
+	video_start demo_passt
+	test demo/passt
+	video_stop
+	teardown demo_passt
+
+	layout_demo_pasta
+	video_start demo_pasta
+	test demo/pasta
+	video_stop
+	teardown demo_pasta
+
+	layout_demo_podman
+	video_start demo_podman
+	test demo/podman
+	video_stop
+	teardown_demo_podman
+
+	return 0
+}
+
+[ "$(basename "${0}")" = "ci" ]       && CI=1
+[ "$(basename "${0}")" = "run_demo" ] && DEMO=1
+
+if [ "${1}" = "from_term" ]; then
+	shift
+
+	exec > ${LOGDIR}/script.log 2>&1
+	[ ${DEBUG} -eq 1 ] && set -x
+	cd ..
+	if [ ${DEMO} -eq 1 ]; then
+		demo
+	elif [ -n "${1}" ]; then
+		run_selected ${*}
+	else
+		run
+	fi
+	tmux kill-session -t passt_test
+	exit
+else
+	rm -rf "${LOGDIR}"
+	mkdir -p "${LOGDIR}"
+	:> "${LOGFILE}"
+	STATEBASE="$(mktemp -d --tmpdir passt-tests-XXXXXX)"
+	trap "cleanup" EXIT
+	run_term ${*}
+fi
+
+[ ${DEMO} -eq 1 ] && exit 0
+
+tail -n1 ${LOGFILE}
+echo "Log at ${LOGFILE}"
+exit $(tail -n1 ${LOGFILE} | sed -n 's/.*FAIL: \(.*\),.*$/\1/p')

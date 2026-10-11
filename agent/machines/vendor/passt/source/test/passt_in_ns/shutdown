@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/passt_in_ns/shutdown - Shut down passt and check exit code (will detect
+#                             valgrind errors amongst others)
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+test	shutdown: exit code
+
+nsout	PASST_PID cat __STATESETUP__/passt.pid
+ns	kill __PASST_PID__
+passtw
