@@ -2,6 +2,25 @@
 
 ## 10–11 October native environments and Display plan
 
+Latest 11 October mobile toolbar/autostart correction: keep the clickable logo
+left and Display, Configuration, native Firefox menu together on the right.
+Display opens the local Termux viewport; Display setup stays in Configuration.
+Add a shared Autostart page and missing startup hooks/controls to individual
+service setup/settings, all editing the same authoritative saved choices.
+Cover Local, individual containers/remotes, Telephone, LocalAI, publishing and
+Display background startup. Allow editable named startup command configurations
+for main desktop Local, Termux and each container, running inside that environment
+under the existing lifetime owner. No duplicate startup stores, public management
+routes, permission bypasses or independent permanent host services. Custom
+commands obey Close versus Quit/crash below. The plan's latest amendment records
+the complete user-authorized addition and its acceptance requirements.
+Selected container chats must also expose that container's own provider logins,
+LocalAI and backend settings through host Configuration over its private Unix
+socket, without opening the guest browser. Keep each Pi profile independent.
+Containers may publish remotes, but remote connections must still use the full
+Tor/Chisel/Caddy/Authelia route and separate identities/authorization; never mix
+that route with local container control or add a transport/authentication fallback.
+
 Latest 11 October desktop lifetime correction: closing a Display tab or browser
 window preserves work (window Close hides to the tray, or minimizes if unavailable).
 Explicit Quit, including tray Quit, force-quit or a browser crash must stop all
