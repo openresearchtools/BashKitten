@@ -71,7 +71,7 @@
       "sourceCommit": "748983f1e4376b17babf23143baebd244e589b52",
       "repository": "https://github.com/termux/termux-packages",
       "lock": "agent/search/runtime-lock.json",
-      "lockSha256": "06059b985afa2975a3eee5133c0f16e21f6c6ca207331e5570658473e7616a24",
+      "lockSha256": "5020ba5fd700fc716fe41027529b71040a96b80812ce731a8619018cb17ecf5b",
       "url": "https://codeload.github.com/termux/termux-packages/tar.gz/748983f1e4376b17babf23143baebd244e589b52",
       "file": "termux-packages-748983f1e4376b17babf23143baebd244e589b52.tar.gz",
       "sha256": "619599927afdb2280fd61c7669f673beaa3f56ad52c40638cd63957e37883711",
