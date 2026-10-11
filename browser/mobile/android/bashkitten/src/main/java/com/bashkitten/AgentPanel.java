@@ -63,8 +63,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> sidecar.toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
+        bar.addView(barIcon("Configuration", R.drawable.ic_agent_gear, openSettingsMenu), new LayoutParams(dp(48), -1));
         bar.addView(new View(activity), new LayoutParams(0, 1, 1));
-        bar.addView(barIcon("BashKitten settings", R.drawable.ic_agent_gear, openSettingsMenu), new LayoutParams(dp(48), -1));
         ImageButton menu = barIcon("Browser menu", R.drawable.ic_agent_browser_menu, openBrowserMenu); bar.addView(menu, new LayoutParams(dp(48), -1));
         FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); chatContent.addView(body, new FrameLayout.LayoutParams(-1, -1));

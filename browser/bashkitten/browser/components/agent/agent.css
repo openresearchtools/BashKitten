@@ -58,11 +58,9 @@
 #bashkitten-native-sidecar summary:hover { background: var(--sidecar-active); }
 #bashkitten-agent-pane[data-connections] #bashkitten-native-workspace { display: none; }
 :root[bashkitten-agent-layout="split"] #bashkitten-native-sidecar { width: 220px; }
-#bashkitten-agent-button { font-weight: 600; min-width: 110px; margin: 4px 2px; padding-inline: 18px; border-radius: 999px; }
-#bashkitten-agent-button[checked] { background: var(--tab-selected-bgcolor, var(--toolbar-bgcolor, Canvas)); box-shadow: 0 1px 4px #0003; }
 #bashkitten-agent-pane-toggle { min-width: 100px; }
-:is(#bashkitten-agent-button, #bashkitten-agent-pane-toggle) > .toolbarbutton-text { display: block !important; }
-:is(#bashkitten-agent-button, #bashkitten-agent-pane-toggle) > .toolbarbutton-icon { display: none !important; }
+#bashkitten-agent-pane-toggle > .toolbarbutton-text { display: block !important; }
+#bashkitten-agent-pane-toggle > .toolbarbutton-icon { display: none !important; }
 :root[bashkitten-agent-layout="full"] .tabbrowser-tab .tab-background { background: transparent !important; box-shadow: none !important; }
 .bashkitten-agent-dialog { width: min(650px, 85vw); max-height: 85vh; overflow: auto; padding: 24px; background: var(--toolbar-bgcolor, Canvas); color: var(--toolbar-color, CanvasText); border: 1px solid var(--border-color, ThreeDShadow); border-radius: 24px; box-shadow: 0 12px 55px #0005; font: menu; }
 .bashkitten-agent-dialog::backdrop { background: #0006; }

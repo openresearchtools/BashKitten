@@ -8,7 +8,9 @@ export class AboutSettings {
       Ci.nsIAboutModule.HIDE_FROM_ABOUTABOUT;
   }
   newChannel(uri, loadInfo) {
-    const source = Services.io.newURI("resource://bashkitten-settings/index.html");
+    // Like about:reader, a non-linkable about content principal loads packaged
+    // ES modules through Gecko's chrome-content path, without network CORS.
+    const source = Services.io.newURI("chrome://bashkitten-settings/content/index.html");
     const channel = Services.io.newChannelFromURIWithLoadInfo(source, loadInfo);
     channel.originalURI = uri;
     channel.owner = Services.scriptSecurityManager.createContentPrincipal(uri, loadInfo.originAttributes);
