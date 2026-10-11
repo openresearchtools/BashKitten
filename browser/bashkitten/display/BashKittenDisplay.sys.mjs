@@ -4,6 +4,21 @@ const URI = "chrome://browser/content/bashkitten/display.xhtml";
 
 /** Native-only adapter: the sidecar supplies a descriptor from its private owner. */
 export const BashKittenDisplay = {
+  tab(window, id) {
+    return [...window.gBrowser.tabs].find(tab => !tab.closing && records.get(tab.linkedBrowser)?.id === id);
+  },
+  selected(window) {
+    const tab = window.gBrowser.selectedTab;
+    return tab && !tab.closing && tab.linkedBrowser.currentURI?.spec === URI
+      ? records.get(tab.linkedBrowser) : null;
+  },
+  close(window, id) {
+    const tab = this.tab(window, id);
+    if (!tab) return false;
+    // Removing a presenter never sends a desktop/container stop command.
+    window.gBrowser.removeTab(tab, { animate: false, closeWindowWithLastTab: false });
+    return true;
+  },
   capabilities() {
     return JSON.parse(Cc["@bashkitten.org/native-display;1"].createInstance(Ci.nsIBashKittenDisplay).capabilities);
   },
@@ -12,12 +27,11 @@ export const BashKittenDisplay = {
         !environment.presenterSocket?.startsWith("/")) {
       throw new Error("Display requires a running local container.");
     }
-    for (const tab of window.gBrowser.tabs) {
-      if (records.get(tab.linkedBrowser)?.id === environment.id) {
-        window.gBrowser.selectedTab = tab;
-        window.BashKittenAgent?.browse();
-        return tab;
-      }
+    const existing = this.tab(window, environment.id);
+    if (existing) {
+      window.gBrowser.selectedTab = existing;
+      window.BashKittenAgent?.browse();
+      return existing;
     }
     const executable = Services.dirsvc.get("GreD", Ci.nsIFile);
     executable.append("runtime"); executable.append("display"); executable.append("bashkitten-display");
@@ -31,12 +45,32 @@ export const BashKittenDisplay = {
     records.set(browser, Object.freeze({ id: environment.id, name: environment.name,
       socket: environment.presenterSocket, executable: executable.path, clipboard: controls.clipboard }));
     tab.label = environment.name;
-    const close = () => { records.delete(browser); browser.contentWindow?.dispatchEvent(new browser.contentWindow.Event("BashKittenDisplayDetach")); };
+    const close = () => {
+      if (!records.delete(browser)) return;
+      window.removeEventListener("unload", close);
+      tab.removeEventListener("TabClose", close);
+      window.gBrowser.removeTabsProgressListener(navigation);
+      browser.removeAttribute("bashkitten-native-display");
+      browser.removeAttribute("bashkitten-protected");
+      if (browser.contentDocument?.documentURI === URI) {
+        browser.contentWindow.dispatchEvent(new browser.contentWindow.Event("BashKittenDisplayDetach"));
+      }
+      window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
+    };
+    const navigation = { onLocationChange(changedBrowser, progress, _request, location) {
+      if (changedBrowser !== browser || !progress.isTopLevel) return;
+      // Home/bookmarks or other native navigation turn this into an ordinary
+      // tab. Retire the presenter, its authority and its toolbar state together.
+      if (location.spec !== URI) close();
+      else window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
+    } };
+    window.gBrowser.addTabsProgressListener(navigation);
     tab.addEventListener("TabClose", close, { once: true });
     window.addEventListener("unload", close, { once: true });
     browser.loadURI(Services.io.newURI(URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
     window.gBrowser.selectedTab = tab;
     window.BashKittenAgent?.browse();
+    window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
     return tab;
   },
   async clipboard(document, request) {

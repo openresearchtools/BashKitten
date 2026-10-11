@@ -35,6 +35,7 @@
 #bashkitten-native-sidecar .native-backend-heading { min-height: 34px; }
 #bashkitten-native-sidecar .native-backend-heading .native-title { font-size: 13px; font-weight: 600; }
 #bashkitten-native-sidecar .native-backend-heading button:not(.native-title) { padding: 0; border-radius: 50%; color: var(--sidecar-muted); }
+#bashkitten-native-sidecar .native-backend-heading button[data-display-id][aria-pressed="true"] { background: var(--sidecar-active); color: var(--sidecar-text); }
 #bashkitten-native-sidecar .native-control-icon { width: 16px; height: 16px; vertical-align: middle; -moz-context-properties: fill; fill: currentColor; }
 #bashkitten-native-sidecar .native-power-track { display: inline-block; position: relative; width: 26px; height: 14px; border-radius: 999px; background: var(--sidecar-line); vertical-align: middle; }
 #bashkitten-native-sidecar .native-power-track::after { content: ""; position: absolute; inset-block-start: 2px; inset-inline-start: 2px; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
@@ -86,3 +87,4 @@
 #browser { position: relative; }
 :root[bashkitten-agent-layout="full"] #bashkitten-agent-pane { position: absolute; inset: 0; z-index: 5; width: 100%; max-width: none; border: 0; }
 :root[bashkitten-agent-layout="full"] :is(#sidebar-container, #sidebar-box, #sidebar-splitter, #sidebar-launcher-splitter, #ai-window-box, #ai-window-splitter, #nav-bar, #PersonalToolbar, #status-bar) { visibility: collapse !important; }
+:root[bashkitten-display-visible] :is(#nav-bar, #PersonalToolbar) { visibility: collapse !important; }

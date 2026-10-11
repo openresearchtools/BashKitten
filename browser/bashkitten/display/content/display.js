@@ -35,8 +35,9 @@ for(const name of ["pointerdown","pointerup"])surface.addEventListener(name,e=>{
 surface.addEventListener("wheel",e=>{e.preventDefault();send({type:"wheel",horizontal:e.deltaX,vertical:e.deltaY,generation});},{passive:false});
 surface.addEventListener("contextmenu",e=>e.preventDefault());
 for(const name of ["keydown","keyup"])surface.addEventListener(name,e=>{const key=keys[e.code];if(key===undefined||e.repeat)return;
-  // Browser navigation shortcuts remain with browser chrome.
-  if(e.ctrlKey&&["KeyL","KeyT","KeyW","Tab"].includes(e.code))return;
+  // Keep tab navigation in browser chrome; Ctrl-L belongs to the focused
+  // guest application because Display has no browser address field.
+  if(e.ctrlKey&&["KeyT","KeyW","Tab"].includes(e.code))return;
   e.preventDefault();e.stopPropagation();send({type:"key",key,pressed:name==="keydown",modifiers:0});});
 surface.addEventListener("focus",()=>send({type:"focus",focused:true}));
 surface.addEventListener("blur",()=>send({type:"focus",focused:false}));

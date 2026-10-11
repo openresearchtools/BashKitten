@@ -18,6 +18,7 @@ const HTML = "http://www.w3.org/1999/xhtml";
 const CONTROLLER = "/usr/bin/bashkittenctl";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  BashKittenDisplay: "resource:///modules/BashKittenDisplay.sys.mjs",
   BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   ContextualIdentityService: "resource://gre/modules/ContextualIdentityService.sys.mjs",
@@ -261,6 +262,12 @@ class AgentView {
     nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.win.openAboutDialog(); });
     appMenu.before(nativeMenu);
     this.installSettingsMenu();
+    this.displayToggle = xul(doc, "toolbarbutton", { id: "bashkitten-display-toggle", image: "chrome://browser/skin/device-desktop.svg", class: "toolbarbutton-1", hidden: "true", checked: "true", "aria-pressed": "true" });
+    this.displayToggle.addEventListener("command", () => {
+      const display = lazy.BashKittenDisplay.selected(this.win);
+      if (display) lazy.BashKittenDisplay.close(this.win, display.id);
+    });
+    doc.getElementById("bashkitten-settings-button").before(this.displayToggle);
     // Move the real Firefox control while its navigation toolbar is collapsed.
     // Keep its original node/listeners/anchor and exact browser-mode placement.
     this.browserMenuControl = doc.getElementById("PanelUI-button");
@@ -275,6 +282,9 @@ class AgentView {
     } };
     Services.obs.addObserver(this.observer, "bashkitten-agent-remote-changed");
     this.win.addEventListener("unload", () => this.destroy(), { once: true });
+    this.displayChanged = () => this.updateDisplayChrome();
+    this.win.gBrowser.tabContainer.addEventListener("TabSelect", this.displayChanged);
+    this.win.addEventListener("BashKittenDisplayChanged", this.displayChanged);
     // Listen to explicit tab choices, not TabSelect: restoration and the
     // replacement tab after closing the last tab must not select away from Agent.
     this.win.gBrowser.tabContainer.addEventListener("click", event => {
@@ -368,7 +378,7 @@ class AgentView {
     this.pane.hidden = false;
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", "true");
     this.doc.documentElement.setAttribute("bashkitten-agent-layout", "full");
-    if (this.browserMenuControl && this.browserMenuHost) this.browserMenuHost.append(this.browserMenuControl);
+    this.updateDisplayChrome();
     this.activeBrowser?.focus();
   }
   browse() {
@@ -378,7 +388,24 @@ class AgentView {
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", split);
     this.doc.documentElement.setAttribute("bashkitten-agent-layout", this.layout);
     this.paneToggle.setAttribute("label", split ? "Hide Agent" : "Show Agent");
-    if (this.browserMenuControl && this.browserMenuHome?.parentNode) this.browserMenuHome.after(this.browserMenuControl);
+    this.updateDisplayChrome();
+  }
+
+  updateDisplayChrome() {
+    const display = this.layout !== "full" && lazy.BashKittenDisplay.selected(this.win);
+    this.doc.documentElement.toggleAttribute("bashkitten-display-visible", Boolean(display));
+    if (this.displayToggle) {
+      this.displayToggle.hidden = !display;
+      const label = display ? `Close ${display.name} Display` : "Display";
+      this.displayToggle.setAttribute("tooltiptext", label);
+      this.displayToggle.setAttribute("aria-label", label);
+    }
+    if (this.layout === "full" || display) {
+      if (this.browserMenuControl && this.browserMenuHost) this.browserMenuHost.append(this.browserMenuControl);
+    } else if (this.browserMenuControl && this.browserMenuHome?.parentNode) {
+      this.browserMenuHome.after(this.browserMenuControl);
+    }
+    this.sidecar.updateDisplays();
   }
 
   saveFileFrom(browser, url, referrerInfo) {
@@ -1137,10 +1164,13 @@ class AgentView {
     catch (error) { this.closeConnections(); throw error; }
   }
 
-  async openMachineDisplay(id) {
+  machineDisplayOpen(id) { return Boolean(lazy.BashKittenDisplay.tab(this.win, id)); }
+
+  async toggleMachineDisplay(id) {
+    if (lazy.BashKittenDisplay.close(this.win, id)) return;
     const endpoint = await control("machines.display", { id });
-    const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
-    return BashKittenDisplay.open(this.win, { kind: "container", id, name: endpoint.name,
+    if (this.win.closed || DesktopLifetime.quitting) return;
+    return lazy.BashKittenDisplay.open(this.win, { kind: "container", id, name: endpoint.name,
       presenterSocket: endpoint.presenterSocket }, { clipboard: payload => control("machines.clipboard", { ...payload, id }) });
   }
 
@@ -1340,6 +1370,8 @@ class AgentView {
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);
+    this.win.gBrowser.tabContainer.removeEventListener("TabSelect", this.displayChanged);
+    this.win.removeEventListener("BashKittenDisplayChanged", this.displayChanged);
     Services.obs.removeObserver(this.observer, "bashkitten-agent-remote-changed");
     // Native window hiding never unloads this view; actual Quit stops ownership.
     for (const browser of this.views.values()) ownedViews.delete(browser);
