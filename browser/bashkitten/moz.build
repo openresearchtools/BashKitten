@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-DIRS += ["browser", "display", "third_party/tor-notices"]
+DIRS += ["browser", "third_party/tor-notices"]
+
+if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+    DIRS += ["display"]
 
 
 FINAL_TARGET_FILES.notices += [
