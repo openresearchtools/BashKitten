@@ -14,11 +14,49 @@ being repaired together for the next candidate. No workstream is fully accepted;
 component compilation and source review do not establish installed acceptance.
 The later Autostart, selected-container configuration and mobile toolbar requests
 are additional mandatory amendments. Their source is integrated in `fb867067e4`;
-the combined `3c35d56d7c` Android/Termux/Linux development packages are now built
+the combined `3c35d56d7c` Android/Termux/Linux development packages were built
 and installed. Whole-feature acceptance remains in progress.
 
-The `3c35d56d7c` desktop package is installed on the Wayland host and real Xorg
-VM, and its matching APK and Termux packages are installed on Android 16/17.
+The next desktop candidate `780540ddf7` is installed on the Wayland host and
+real Xorg VM. Android 16/17 now have the matched `75b5054c31` APK and Termux
+package, including the corrected X11 loader; normal installation sets its
+required `0400` mode and package audits are clean. Both candidate source
+collections passed. Actual native engine/component producers and source-equality
+checks remain recorded separately; these are development packages, not a release
+or whole-feature acceptance claim.
+
+Android 17's installed Phone use page now lists the controls directly with
+rounded switches. Actual taps enable Apps, and master Off retains that selected
+choice while disabling the options. Unavailable Accessibility options remain
+visible and disabled. The page closes to Agent normally. A system-dark change
+exposed a stale theme read from the paused main activity: the page remained light
+despite its own dark configuration. That installed failure remains open pending
+the targeted correction and retest. Desktop Autostart rendered matching rounded
+controls in both light and dark, and the original host appearance was restored.
+The later user correction to separate General/Providers pages and remove the
+legacy web source/license footer is committed in `520600a6a6`, after these
+installed candidates. Existing Firefox notice/source delivery is retained.
+
+Android 16's earlier `3c35d56d7c` actual Pi session successfully discovered
+Phone controls and listed apps. Published llama and Whisper runtimes were
+configured through Local AI, and the CPU model check passed and unloaded.
+Revocation, notification replies, telephony and speech remain unaccepted.
+`1286217ca6` corrects discovery wording to show the actual spaced CLI commands.
+
+The Xorg `780540ddf7` checks include close-to-tray/reopen, custom-command
+startup/removal, renderer-child crash/reopen, browser force-quit with Local On
+and Off, and Unicode/image clipboard transfer through the native controls.
+Observed application workloads stopped on browser death, but a legacy shared
+Podman namespace helper survived. `bb8061b0b9` introduces privately owned
+namespace lifetime; its native helper must be rebuilt and tested. Other actual
+guest blockers are persistent LocalAI startup without a systemd user manager,
+missing Thunar installation actions, panel workarea after resize and interactive
+sudo input corruption. The first two have source fixes `0ce8b11dcb` and
+`a264aff54c`; the latter two are under investigation. Retained guests still use
+their earlier OS package, which is not silently relabelled as the newer package.
+
+The previous `3c35d56d7c` desktop package was installed on the Wayland host and
+real Xorg VM, with matching APK and Termux packages on Android 16/17.
 Normal Termux installation now succeeds and its postinst sets the X11 loader to
 `0400`, without a manual permission repair. The rebuilt APK excludes Adjust and
 its signer library and includes the complete JNA notices; desktop packaging
@@ -46,9 +84,9 @@ an onion-only certificate API was called on loopback. `f93ac418f6` separates tha
 cleanup and adds automatic recovery from an app-managed Local data reset, using
 matching private controller/session identities and a fresh isolated browser
 context. Source review and syntax passed; installed reset/recovery remains open.
-The user's subsequent unified light/dark styling, sidecar corner, redundant
-Display-header removal and Tor tab-icon corrections are being integrated for
-the next combined candidate.
+The user's subsequent styling, sidecar corner, redundant Display-header removal
+and Tor tab-icon corrections are included in `780540ddf7`/`75b5054c31` above;
+the full installed presentation matrix remains open.
 
 Earlier Android 16/17 checks used APK `0753b2edfc`; shared settings cases below also
 cover Android 16 and native Linux `e375826bff` on Wayland and real Xorg.
