@@ -1,0 +1,15 @@
+[Unit]
+Description=BashKitten guest sudo handoff
+
+[Service]
+Type=exec
+ExecStart=/usr/lib/bashkitten/machines/bin/bashkitten-sudo-exec --serve
+User=root
+Group=root
+UMask=0077
+StandardInput=socket
+StandardOutput=socket
+StandardError=null
+KillMode=mixed
+TimeoutStartSec=infinity
+TimeoutStopSec=30s

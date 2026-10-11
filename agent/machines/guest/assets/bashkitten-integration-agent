@@ -1,0 +1,233 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: AGPL-3.0-or-later
+"""Guest endpoints for BashKitten's three private media bridges.
+
+Networking and user port mappings are native Podman configuration. This
+process never receives a host PipeWire socket or a general host RPC endpoint.
+"""
+
+import asyncio
+import ctypes
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+CONTROL = Path("/run/bashkitten-settings/integration.json")
+STATUS = Path("/run/bashkitten-host/integration-status.json")
+MEDIA_PORTS = {
+    "guest_audio_output": 47130,
+    "host_microphone": 47131,
+    "host_camera": 47132,
+}
+PR_SET_PDEATHSIG = 1
+LIBC = ctypes.CDLL(None, use_errno=True)
+
+
+def atomic_json(path: Path, value: dict) -> None:
+    temporary = path.with_name(path.name + f".{os.getpid()}.tmp")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+    os.chmod(temporary, 0o644)
+    os.replace(temporary, path)
+
+
+def start_pipeline(arguments: list[str]) -> subprocess.Popen:
+    parent_pid = os.getpid()
+
+    def bind_lifetime_to_agent() -> None:
+        if LIBC.prctl(PR_SET_PDEATHSIG, int(signal.SIGKILL), 0, 0, 0) != 0:
+            os._exit(127)
+        if os.getppid() != parent_pid:
+            os._exit(127)
+
+    return subprocess.Popen(
+        ["gst-launch-1.0", "-q", *arguments],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        preexec_fn=bind_lifetime_to_agent,
+        close_fds=True,
+    )
+
+
+def stop_pipeline(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+        process.wait(timeout=2)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
+
+
+def listener_exists(port: int) -> bool:
+    encoded = f"{port:04X}"
+    for table in (Path("/proc/net/tcp"), Path("/proc/net/tcp6")):
+        try:
+            lines = table.read_text(encoding="ascii").splitlines()[1:]
+        except (FileNotFoundError, PermissionError):
+            continue
+        for line in lines:
+            fields = line.split()
+            if (
+                len(fields) >= 4
+                and fields[1].rsplit(":", 1)[-1] == encoded
+                and fields[3] == "0A"
+            ):
+                return True
+    return False
+
+
+def pipeline(name: str) -> list[str]:
+    if name == "guest_audio_output":
+        return [
+            "pipewiresrc",
+            "client-name=BashKitten Guest Audio",
+            "do-timestamp=true",
+            "stream-properties=props,stream.capture.sink=true,stream.monitor=true",
+            "!", "audioconvert", "!", "audioresample", "!",
+            "audio/x-raw,format=S16LE,rate=48000,channels=2",
+            "!", "gdppay", "!", "tcpserversink",
+            "host=0.0.0.0", "port=47130", "sync=false",
+        ]
+    if name == "host_microphone":
+        return [
+            "tcpserversrc", "host=0.0.0.0", "port=47131",
+            "!", "gdpdepay", "!", "pipewiresink",
+            "mode=provide", "async=false",
+            "client-name=BashKitten Host Microphone",
+            "stream-properties=props,media.class=Audio/Source,node.name=bashkitten_host_microphone,node.description=Host_Microphone,node.virtual=true",
+        ]
+    return [
+        "tcpserversrc", "host=0.0.0.0", "port=47132",
+        "!", "gdpdepay", "!", "pipewiresink",
+        "mode=provide", "async=false",
+        "client-name=BashKitten Host Camera",
+        "stream-properties=props,media.class=Video/Source,media.role=Camera,node.name=bashkitten_host_camera,node.description=Host_Camera,node.virtual=true",
+    ]
+
+
+async def wait_for_listener(name: str, port: int, process: subprocess.Popen) -> None:
+    deadline = time.monotonic() + 5.0
+    while True:
+        status = process.poll()
+        if status is not None:
+            raise RuntimeError(f"{name} bridge exited before listening (status {status})")
+        if listener_exists(port):
+            return
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"{name} bridge did not open TCP port {port}")
+        await asyncio.sleep(0.025)
+
+
+class MediaEndpoint:
+    def __init__(self, name: str, port: int) -> None:
+        self.name = name
+        self.port = port
+        self.process: subprocess.Popen | None = None
+        self.error: str | None = None
+        self.retry_at = 0.0
+
+    def stop(self) -> None:
+        if self.process is not None:
+            stop_pipeline(self.process)
+            self.process = None
+
+    async def reconcile(self) -> None:
+        if self.process is not None:
+            status = self.process.poll()
+            if status is None:
+                return
+            self.error = f"{self.name} bridge exited (status {status})"
+            self.stop()
+            self.retry_at = time.monotonic() + 1.0
+        if time.monotonic() < self.retry_at:
+            return
+        try:
+            self.process = start_pipeline(pipeline(self.name))
+            await wait_for_listener(self.name, self.port, self.process)
+            self.error = None
+        except asyncio.CancelledError:
+            self.stop()
+            raise
+        except Exception as error:
+            self.stop()
+            self.error = str(error)
+            self.retry_at = time.monotonic() + 1.0
+
+    def status(self) -> dict:
+        return {
+            "pid": self.process.pid if self.process is not None else None,
+            "running": self.process is not None and self.process.poll() is None,
+            "error": self.error,
+        }
+
+
+async def run() -> None:
+    control = json.loads(CONTROL.read_text(encoding="utf-8"))
+    if control.get("schema") != 1:
+        raise RuntimeError("unsupported integration control schema")
+    generation = int(control.get("generation", 0))
+    requested = control.get("media", {})
+    endpoints = {
+        name: MediaEndpoint(name, port)
+        for name, port in MEDIA_PORTS.items()
+        if bool(requested.get(name))
+    }
+    stopped = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for event in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(event, stopped.set)
+    try:
+        previous = None
+        while not stopped.is_set():
+            await asyncio.gather(*(endpoint.reconcile() for endpoint in endpoints.values()))
+            status = {
+                "schema": 1,
+                "generation": generation,
+                "media": {name: endpoint.status() for name, endpoint in endpoints.items()},
+                "error": None,
+            }
+            if status != previous:
+                atomic_json(STATUS, status)
+                previous = status
+            try:
+                await asyncio.wait_for(stopped.wait(), timeout=0.5)
+            except asyncio.TimeoutError:
+                pass
+    finally:
+        for endpoint in endpoints.values():
+            endpoint.stop()
+        atomic_json(
+            STATUS,
+            {"schema": 1, "generation": generation, "media": {}, "error": None},
+        )
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(run())
+    except KeyboardInterrupt:
+        pass
+    except Exception as error:
+        try:
+            atomic_json(
+                STATUS,
+                {"schema": 1, "generation": 0, "media": {}, "error": str(error)},
+            )
+        except Exception:
+            pass
+        print(f"bashkitten-integration-agent: {error}", file=sys.stderr)
+        sys.exit(1)

@@ -1,0 +1,15 @@
+[Unit]
+Description=BashKitten guest sudo handoff socket
+
+[Socket]
+ListenStream=/run/bashkitten/sudo.sock
+SocketUser=user
+SocketGroup=user
+SocketMode=0600
+Accept=yes
+RemoveOnStop=yes
+FlushPending=yes
+MaxConnections=128
+
+[Install]
+WantedBy=sockets.target
