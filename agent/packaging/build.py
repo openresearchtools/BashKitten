@@ -117,8 +117,8 @@ def install_machines(args, app, revision, version):
                 sha(root / 'bin' / name) == metadata['executables'].get(name), 'Missing/mismatched private helper: ' + name)
     require(metadata.get('libraries') and 'libfuse3.so.4' in metadata['libraries'],
             'Private FUSE library is required')
-    for name, digest in metadata['libraries'].items():
-        require(Path(name).name == name and sha(root / 'lib' / name) == digest,
+    for name, library_digest in metadata['libraries'].items():
+        require(Path(name).name == name and sha(root / 'lib' / name) == library_digest,
                 'Missing/mismatched private library: ' + name)
     require((root / 'licenses.json').is_file() and isinstance(metadata.get('depends'), list),
             'Machine runtime requires licenses and external dependency metadata')
