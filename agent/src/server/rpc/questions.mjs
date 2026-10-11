@@ -9,8 +9,8 @@ export async function savedQuestions(id) {
   return (await readJson(path.join(sessionDir(id), 'questions.json'), { records: [] })).records;
 }
 export class QuestionOwner {
-  constructor({ owner, verify, deliver, changed, created, resolved, error }) {
-    Object.assign(this, { owner, verify, deliver, changed, created, resolved, error });
+  constructor({ owner, verify, authorize, deliver, changed, created, resolved, error }) {
+    Object.assign(this, { owner, verify, authorize, deliver, changed, created, resolved, error });
     this.work = Promise.resolve(); this.timer = null; this.epoch = 0;
     this.state = { generation: 0, stopped: false, records: [] };
   }
@@ -31,7 +31,7 @@ export class QuestionOwner {
   heldDeliveries() {
     return this.state.records.flatMap(question => (question.deliveries || []).filter(delivery => delivery.status === 'held' && delivery.text).map(delivery => ({
       questionId: question.questionId, generation: question.generation, sessionId: question.sessionId, nativeSessionId: question.nativeSessionId,
-      text: delivery.text, wire: delivery.text, attachments: [], kind: 'steer', agentDelivery: delivery.id, held: true, recovered: true,
+      text: delivery.text, wire: delivery.text, attachments: [], kind: 'steer', agentDelivery: delivery.id, phoneAuthorization: delivery.phoneAuthorization, held: true, recovered: true,
     })));
   }
   async save() { await writeJson(this.file, this.state); }
@@ -68,10 +68,10 @@ export class QuestionOwner {
       this.state.records.push(question); await this.publish(question, true); return question;
     });
   }
-  async dispatch(question, text, deliveryId, source) {
+  async dispatch(question, text, deliveryId, source, phoneAuthorization) {
     question.deliveries ||= [];
     if (question.deliveries.some(delivery => delivery.id === deliveryId)) return;
-    const delivery = { id: deliveryId, text, source, status: 'submitting' };
+    const delivery = { id: deliveryId, text, source, phoneAuthorization, status: 'submitting' };
     question.deliveries.push(delivery); question.deliveryId = deliveryId; question.deliveryStatus = 'submitting';
     // Resolution and its delivery intent persist together. If a crash lands
     // before queue insertion, reopen exposes this text only as a held draft.
@@ -82,7 +82,7 @@ export class QuestionOwner {
     const epoch = this.epoch;
     void this.deliver({ questionId: question.questionId, generation: question.generation, sessionId: question.sessionId,
       nativeSessionId: question.nativeSessionId, text, wire: text, attachments: [], kind: 'steer',
-      agentDelivery: deliveryId, questionSource: source }).then(result => this.serial(async () => {
+      agentDelivery: deliveryId, questionSource: source, phoneAuthorization }).then(result => this.serial(async () => {
         if (epoch !== this.epoch) return;
         delivery.status = result?.held ? 'held' : 'accepted';
         if (delivery.status === 'accepted') delete delivery.text;
@@ -108,6 +108,7 @@ export class QuestionOwner {
       if (!question || input.revision !== question.revision) throw Error('This question or its revision is no longer available');
       if (!['web', 'call', 'notification', 'voicemail'].includes(input.source)) throw Error('Invalid question reply source');
       if (typeof input.text !== 'string' || !input.text.trim() || typeof input.deliveryId !== 'string' || !input.deliveryId) throw Error('A reply and stable delivery ID are required');
+      if (!await this.authorize(input)) throw Error('This reply source is no longer enabled for this chat');
       if (question.status === 'pending' && question.deadline <= Date.now()) await this.expire();
       if (question.status === 'cancelled' || !this.validDelivery(question)) return { question, status: 'cancelled', deliveryStatus: 'held' };
       const followup = async () => {
@@ -117,7 +118,7 @@ export class QuestionOwner {
         if (!expired && !reviewedChannel) return { question, status: question.status, deliveryStatus: question.deliveryStatus };
         const deliveryId = 'question:' + question.questionId + ':late:' + digest(input.deliveryId);
         if (!(question.deliveries || []).some(delivery => delivery.id === deliveryId)) {
-          await this.dispatch(question, `[User follow-up to ${expired ? 'expired' : 'already answered'} optional question ${question.questionId}: ${question.text}]\n${input.text.trim()}`, deliveryId, input.source);
+          await this.dispatch(question, `[User follow-up to ${expired ? 'expired' : 'already answered'} optional question ${question.questionId}: ${question.text}]\n${input.text.trim()}`, deliveryId, input.source, input.phoneAuthorization);
         }
         return { question, status: question.status, deliveryStatus: question.deliveryStatus, followup: true };
       };
@@ -129,9 +130,11 @@ export class QuestionOwner {
       if (!await this.verify(question) || !this.validDelivery(question)) { question.status = 'cancelled'; question.reason = 'The native chat branch changed'; await this.publish(question); return { question, status: question.status }; }
       // Native branch verification is asynchronous; enforce the absolute
       // deadline again immediately before the in-memory resolution transition.
+      if (!await this.authorize(input)) throw Error('This reply source is no longer enabled for this chat');
+      if (!this.validDelivery(question)) return { question, status: 'cancelled', deliveryStatus: 'held' };
       if (question.deadline <= Date.now()) { await this.expire(); return followup(); }
       question.status = 'answered'; question.answer = input.text.trim(); question.source = input.source; question.resolutionDeliveryId = input.deliveryId; question.resolvedAt = Date.now();
-      await this.dispatch(question, `[User answer to optional question ${question.questionId}: ${question.text}]\n${question.answer}`, 'question:' + question.questionId + ':answer', input.source);
+      await this.dispatch(question, `[User answer to optional question ${question.questionId}: ${question.text}]\n${question.answer}`, 'question:' + question.questionId + ':answer', input.source, input.phoneAuthorization);
       return { question, status: question.status, deliveryStatus: question.deliveryStatus };
     });
   }

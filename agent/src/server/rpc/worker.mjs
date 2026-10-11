@@ -11,6 +11,7 @@ import { notifyTurn, notifyQuestion, resolvedQuestion, notifyAssistantMessage } 
 import { QuestionOwner } from './questions.mjs';
 import { createPhoneWorker } from '../phone/worker.mjs';
 import { inheritChatProject } from '../projects.mjs';
+import { validatePhoneDelivery } from '../phone.mjs';
 import { claimInstance } from '../instance.mjs';
 import { attachmentImages } from '../files/files.mjs';
 import { browserSocketPath } from '../access/browser-channel.mjs';
@@ -44,6 +45,7 @@ const workerKey = randomBytes(32).toString('hex');
 const privateSocket = socketPath(meta.workerOwner + ':extensions');
 const questionOwner = new QuestionOwner({
   owner: () => ({ nativeSessionId: meta.piSessionId }),
+  authorize: input => input.source === 'web' || (input.phoneAuthorization?.source === input.source && validatePhoneDelivery(id, input.phoneAuthorization)),
   verify: async question => {
     if (question.sessionId !== id || question.nativeSessionId !== meta.piSessionId) return false;
     const history = await rpc.command('get_entries');
@@ -67,7 +69,7 @@ const questionOwner = new QuestionOwner({
     return true;
   },
   deliver: item => serial(async () => {
-    if (stopping || item.sessionId !== id || !questionOwner.validDelivery(item)) return { held: true };
+    if (!await canSend(item) || item.sessionId !== id) return { held: true };
     meta.messages ||= [];
     if (queue.some(q => q.agentDelivery === item.agentDelivery) || meta.messages.some(q => q.agentDelivery === item.agentDelivery)) return { held: true };
     item.id = randomUUID(); queue.push(item);
@@ -304,14 +306,21 @@ async function prepareManagedModel(model = meta.model) {
   await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.model });
   await refresh();
 }
+async function canSend(item) {
+  if ((item.phoneDelivery || item.phoneAuthorization) && !await validatePhoneDelivery(id, item.phoneAuthorization)) return false;
+  // Recheck synchronous lifetime invalidation after the asynchronous policy read.
+  return !stopping && (!item.questionId || questionOwner.validDelivery(item)) &&
+    (!item.phoneDelivery || item.stopGeneration === questionOwner.state.generation) &&
+    (item.ownerGeneration === undefined || item.ownerGeneration === questionOwner.state.generation);
+}
 async function send(item) {
   allowRuntimeWork();
   await prepareManagedModel();
-  if (stopping || (item.questionId && !questionOwner.validDelivery(item)) || (item.phoneDelivery && item.stopGeneration !== questionOwner.state.generation) || (item.ownerGeneration !== undefined && item.ownerGeneration !== questionOwner.state.generation)) { item.held = item.recovered = true; await checkpoint(); return; }
+  if (!await canSend(item)) { item.held = item.recovered = true; await checkpoint(); return; }
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
   const images = item.images || await attachmentImages(item.attachments || []);
-  if (stopping || (item.questionId && !questionOwner.validDelivery(item)) || (item.phoneDelivery && item.stopGeneration !== questionOwner.state.generation) || (item.ownerGeneration !== undefined && item.ownerGeneration !== questionOwner.state.generation)) { item.held = item.recovered = true; await checkpoint(); return; }
+  if (!await canSend(item)) { item.held = item.recovered = true; await checkpoint(); return; }
   await rpc.command('prompt', { message: item.wire, images, streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
   // Pi can expand skills/templates or transform input before message_start, so
   // its consumed text need not equal item.wire. After accepted preflight, an
@@ -424,7 +433,8 @@ async function handle(req, res) {
         await applyPending(); return { data: status() };
       }
       if (req.url === '/message') {
-        const stalePhone = requestGeneration !== questionOwner.state.generation || (value.phoneDelivery && value.stopGeneration !== questionOwner.state.generation);
+        const authorizedPhone = !value.phoneDelivery || await validatePhoneDelivery(id, value.phoneAuthorization);
+        const stalePhone = !authorizedPhone || requestGeneration !== questionOwner.state.generation || (value.phoneDelivery && value.stopGeneration !== questionOwner.state.generation);
         if (!stalePhone) { await questionOwner.resume(requestGeneration); await applyPending(); }
         meta.messages ||= [];
         if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { held: Boolean(queue.find(item => item.agentDelivery === value.agentDelivery)?.held), data: status() };
@@ -446,13 +456,13 @@ async function handle(req, res) {
           else {
             if (item.editToken && item.editToken !== value.edit_token) throw Error('Edit is no longer owned by this tab');
             if (value.action === 'remove') items.splice(index, 1);
-            else if (value.action === 'send') { delete item.recovered; delete item.held; delete item.questionId; delete item.phoneDelivery; item.ownerGeneration = requestGeneration; }
-            else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; delete item.questionId; delete item.phoneDelivery; item.ownerGeneration = requestGeneration; }
+            else if (value.action === 'send') { delete item.recovered; delete item.held; delete item.questionId; delete item.phoneDelivery; delete item.phoneAuthorization; item.ownerGeneration = requestGeneration; }
+            else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; delete item.questionId; delete item.phoneDelivery; delete item.phoneAuthorization; item.ownerGeneration = requestGeneration; }
             else if (value.action === 'cancel_edit') delete item.editToken;
             else if (value.action === 'edit') {
               const prefix = item.agentSource ? item.wire.slice(0, item.wire.length - item.text.length) : '';
               const suffix = item.agentSource ? '' : item.wire.slice(item.text.length);
-              item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered; delete item.questionId; delete item.phoneDelivery; item.ownerGeneration = requestGeneration;
+              item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered; delete item.questionId; delete item.phoneDelivery; delete item.phoneAuthorization; item.ownerGeneration = requestGeneration;
               meta.messages.push({ text: item.text, wire: item.wire, attachments: item.attachments, agentSource: item.agentSource, agentDelivery: item.agentDelivery });
             } else throw Error('Unknown queue action');
           }

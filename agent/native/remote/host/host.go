@@ -116,6 +116,7 @@ func Start(c Config) (*Host, error) {
 	}}
 	mux := http.NewServeMux()
 	mux.Handle("/tunnel/", relay)
+	mux.Handle("/services/agent/phone", phoneControl(authorize, control, c.Generation))
 	mux.Handle("/services", serviceControl(authorize, control, c.Generation))
 	mux.Handle("/services/", serviceControl(authorize, control, c.Generation))
 	h := &Host{Tunnel: relay, auth: transport, control: control, done: make(chan error, 1), server: &http.Server{

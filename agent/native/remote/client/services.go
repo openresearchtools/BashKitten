@@ -2,6 +2,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,17 +25,30 @@ func (c *Client) ServiceAction(parent context.Context, id, action string) ([]byt
 }
 
 func (c *Client) serviceRequest(parent context.Context, method, path string) ([]byte, error) {
+	return c.serviceBodyRequest(parent, method, path, nil)
+}
+
+// Phone text/control uses this same authenticated Tor/TLS/OAuth owner.
+func (c *Client) Phone(parent context.Context, body []byte) ([]byte, error) {
+	if !json.Valid(body) {
+		return nil, errors.New("invalid phone request")
+	}
+	return c.serviceBodyRequest(parent, http.MethodPost, "/services/agent/phone", body)
+}
+
+func (c *Client) serviceBodyRequest(parent context.Context, method, path string, body []byte) ([]byte, error) {
 	ctx, cancel := c.operation(parent)
 	defer cancel()
 	token, err := c.accessToken(ctx)
 	if err != nil {
 		return nil, err
 	}
-	r, err := http.NewRequestWithContext(ctx, method, c.config.OnionURL+path, nil)
+	r, err := http.NewRequestWithContext(ctx, method, c.config.OnionURL+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Set("Content-Type", "application/json")
 	response, err := c.http.Do(r)
 	if err != nil {
 		return nil, errors.New("remote service request failed")

@@ -1,5 +1,7 @@
 import fs from 'node:fs/promises';
+import { updateNotification } from './notification-store.mjs';
 import path from 'node:path';
+import { phoneEvent, putPhoneEvent, phoneQuestionResolved, liveAssistantMessage } from '../phone.mjs';
 import { dataDir, digest, readJson, writeJson, createJson, privateDir, sessionDir } from '../common.mjs';
 
 const outbox = path.join(dataDir, 'notifications');
@@ -31,17 +33,19 @@ async function isVisible(id) {
 }
 export async function notifyTurn(meta, entries) {
   const settings = (await readJson(path.join(dataDir, 'settings.json'), {})).notifications;
-  if (!settings?.enabled) return;
   const last = entries.findLast(entry => entry.type === 'message' && entry.message?.role === 'assistant');
   if (!last || ['aborted', 'error', 'toolUse'].includes(last.message.stopReason)) return;
   sessionDir(meta.id);
   const text = typeof last.message.content === 'string' ? last.message.content : (last.message.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   if (!text.trim()) return;
+  const phone = await phoneEvent(meta, last.id, { kind: 'final', entryId: last.id, text });
+  if (!settings?.enabled && !phone) return;
   const file = path.join(outbox, digest(meta.id + ':' + last.id) + '.json');
-  if (!await readJson(file, null)) {
-    const suppressed = settings.onlyWhenHidden !== false && await isVisible(meta.id);
-    await createJson(file, { id: meta.id, turn: last.id, title: meta.title, text: previewText(text), state: suppressed ? 'suppressed' : 'pending' });
-  }
+  await updateNotification(file, async current => {
+    if(current)return null;
+    const suppressed = !settings?.enabled || phone?.route === 'messages' || settings.onlyWhenHidden !== false && await isVisible(meta.id);
+    return { id: meta.id, turn: last.id, title: meta.title, text: previewText(text), state: suppressed ? 'suppressed' : 'pending', ...(phone ? { phone, phoneState: 'pending' } : {}) };
+  });
 }
 // Native browser clients consume this private outbox through authenticated
 // events or the trusted Termux controller. Termux:API is not involved.
@@ -63,12 +67,22 @@ export async function acknowledgeNotifications(keys) {
   if (!Array.isArray(keys) || keys.some(key => !/^[a-f0-9]{64}$/.test(key))) throw Error('Invalid notification IDs');
   let acknowledged = 0;
   for (const key of keys) {
-    const file = path.join(outbox, key + '.json'), value = await readJson(file, null);
-    if (value?.state !== 'pending') continue;
-    await writeJson(file, { ...value, state: 'sent', sentAt: Date.now(), error: undefined });
-    acknowledged++;
+    await updateNotification(path.join(outbox, key + '.json'), value => {
+      if (value?.state !== 'pending') return null;
+      acknowledged++;
+      return { ...value, state: 'sent', sentAt: Date.now(), error: undefined };
+    });
   }
   return { acknowledged };
 }
 // Kept for workers surviving an in-place upgrade. Delivery is browser-owned.
 export const deliverNotifications = pendingNotifications;
+
+// Phone hooks are independent of ordinary notification settings and visibility.
+export async function notifyQuestion(meta, question) {
+  return putPhoneEvent(meta, `question:${question.questionId}:${question.revision}`, { kind: 'question',
+    questionId: question.questionId, revision: question.revision, nativeSessionId: question.nativeSessionId, branchId: question.branchId, text: question.text, options: question.options,
+    expiresAt: question.deadline, createdAt: question.createdAt });
+}
+export const resolvedQuestion = phoneQuestionResolved;
+export const notifyAssistantMessage = liveAssistantMessage;
