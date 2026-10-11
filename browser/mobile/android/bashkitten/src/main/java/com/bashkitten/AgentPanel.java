@@ -91,8 +91,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-localai");
         });
         bar.addView(localAI, new LayoutParams(dp(40), -1));
-        Button phone = barButton("☎", () -> com.bashkitten.telephony.PhonePanel.show(activity, com.bashkitten.phone.PhoneControlsPanel.build(activity)));
-        phone.setContentDescription("Phone"); bar.addView(phone, new LayoutParams(dp(40), -1));
+        bar.addView(barIcon("Phone", R.drawable.ic_agent_phone, () -> com.bashkitten.telephony.PhonePanel.show(
+            activity, com.bashkitten.phone.PhoneControlsPanel.build(activity))), new LayoutParams(dp(40), -1));
         bar.addView(barIcon("Performance", R.drawable.ic_agent_performance, () -> new AgentPerformanceDialog().show(
             ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-performance")), new LayoutParams(dp(40), -1));
         Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
