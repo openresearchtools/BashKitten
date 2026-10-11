@@ -26,6 +26,7 @@ import { syncContext } from '../rpc/context.mjs';
 import { platform } from '../platform/index.mjs';
 import { visibleSession } from '../rpc/notifications.mjs';
 import { claimInstance, processStart, probeBackend } from '../instance.mjs';
+import { updateSettings } from '../settings.mjs';
 import { paths } from '../access/paths.mjs';
 import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeBrowserSocket } from '../access/browser-channel.mjs';
 import { transcribe } from '../localai/dictation.mjs';
@@ -39,8 +40,7 @@ if (!process.env.BASHKITTEN_BACKEND_SOCKET) {
   const port = process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || process.env.PORT;
   if (port) {
     if (!Number.isInteger(Number(port)) || Number(port) < 1024 || Number(port) > 65535) throw Error('Invalid HTTPS port');
-    const file = path.join(dataDir, 'settings.json');
-    await writeJson(file, { ...await readJson(file, {}), web_port: Number(port) });
+    await updateSettings(current => ({ ...current, web_port: Number(port) }));
   }
   await ensureManager();
   const status = await controlRequest('start', {});
@@ -355,7 +355,7 @@ async function handler(req, res) {
     if (route === '/api/control') {
       requireMethod(req, ['GET', 'POST']);
       const value = mutation ? await jsonBody(req) : { command: 'status' };
-      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack', 'notification-settings'].includes(value.command)) throw Error('Unknown control action');
+      if (!['status', 'start', 'stop', 'restart', 'pi-abort', 'pi-stop', 'pi-kill', 'package-job', 'package-cancel', 'package-inventory', 'notifications', 'notifications-ack'].includes(value.command)) throw Error('Unknown control action');
       if (value.command === 'package-job' && (value.kind === 'localai-runtime' || value.retry && (await controlRequest('status')).packages?.job?.kind === 'localai-runtime')) throw Error('Manage LocalAI in the native desktop panel');
       if (value.command === 'package-cancel' && (await controlRequest('status')).packages?.job?.kind === 'localai-runtime') throw Error('Manage LocalAI in the native desktop panel');
       await ensureManager(); return json(res, await controlRequest(value.command, mutation ? value : undefined));
@@ -376,10 +376,12 @@ async function handler(req, res) {
       const next = { web_port: Number(input.web_port), theme: ['system', 'light', 'dark'].includes(input.theme) ? input.theme : 'system',
         default_cwd: (await pickerDirectory(input.default_cwd)).path, default_model: String(input.default_model || ''), default_thinking: String(input.default_thinking || ''),
         default_subagents: subagentSettings(input.default_subagents || config.default_subagents) };
-      if (input.notifications !== undefined) next.notifications = { enabled: Boolean(input.notifications?.enabled), onlyWhenHidden: input.notifications?.onlyWhenHidden !== false, preview: input.notifications?.preview !== false };
       if (!Number.isInteger(next.web_port) || next.web_port < 1024 || next.web_port > 65535) throw Error('Port must be between 1024 and 65535');
       const restartRequired = next.web_port !== config.web_port;
-      config = next; await writeJson(configFile, config);
+      config = await updateSettings(current => {
+        if (current.notifications !== undefined) next.notifications = current.notifications;
+        return next;
+      });
       return json(res, { config, restartRequired });
     }
     if (route === '/api/models') {

@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import { updateNotification } from './notification-store.mjs';
+import { updateSettings } from '../settings.mjs';
 import path from 'node:path';
 import { phoneEvent, putPhoneEvent, phoneQuestionResolved, liveAssistantMessage } from '../phone.mjs';
 import { dataDir, digest, readJson, writeJson, createJson, privateDir, sessionDir } from '../common.mjs';
@@ -7,13 +8,12 @@ import { dataDir, digest, readJson, writeJson, createJson, privateDir, sessionDi
 const outbox = path.join(dataDir, 'notifications');
 export const previewText = text => [...String(text).replace(/\s+/g, ' ').trim()].slice(0, 240).join('');
 export async function notificationSettings(input) {
-  const file = path.join(dataDir, 'settings.json'), settings = await readJson(file, {});
+  let settings;
   if (input !== undefined) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw Error('Invalid notification settings');
     for (const [key, value] of Object.entries(input)) if (!['enabled', 'onlyWhenHidden', 'preview'].includes(key) || typeof value !== 'boolean') throw Error('Invalid notification setting');
-    settings.notifications = { ...settings.notifications, ...input };
-    await writeJson(file, settings);
-  }
+    settings = await updateSettings(current => ({ ...current, notifications: { ...current.notifications, ...input } }));
+  } else settings = await readJson(path.join(dataDir, 'settings.json'), {});
   return { enabled: false, onlyWhenHidden: true, preview: true, ...settings.notifications };
 }
 
