@@ -3270,3 +3270,33 @@ its unused presentation handlers. Android retains **Phone use**, with its
 existing independent master/control switches and optional Accessibility setup.
 This presentation correction changes neither Pi tool discovery nor Android
 permission, grant, revocation and authorization requirements.
+
+### Desktop Close, Quit and crash lifetime — 11 October 2026
+
+The user explicitly clarified the distinction after observing an old container
+service survive package replacement. Closing a Display tab or closing the
+desktop browser window must keep the desktops and work alive. Window Close
+uses the tray; if no tray is available, keep the existing window minimized.
+Neither action is Quit.
+
+Explicit Quit, including Quit from the tray, force-quitting the native browser,
+or a browser crash must stop **all BashKitten-owned local processes**: Pi workers,
+LocalAI, publishing/authentication/Tor, client remote connections and Chisel,
+container desktops and their workloads, display/media helpers, and the container
+service itself. Apply this even when Local is Off. Preserve saved machines,
+rootfs, settings and Pi history; stopping never means deleting them. Remote
+connections disconnect without stopping the separate remote host, and unrelated
+terminal Pi, host processes, build containers and test VMs are outside ownership.
+Android's separately specified Termux background lifetime is unchanged.
+
+Use the existing verified native browser identity and kernel-backed runtime
+guard. Keep cleanup asynchronous with bounded descendant cleanup; an orderly
+JavaScript quit handler alone cannot satisfy forced termination or crash.
+Container controls remain embedded; this adds no separate manager UI. Replace
+an obsolete idle container service directly, preserving busy work, rather than
+requiring desktop sign-out or an operating-system restart. This paragraph
+supersedes earlier text allowing the container service or its desktops to
+survive explicit browser Quit/death, and the optional Close-as-Quit preference.
+Verify window/tab closure and Quit/force-kill/crash separately on both native
+Wayland and Xorg, including Local Off and active containers/remote connections.
+Source changes alone are not lifetime acceptance.

@@ -2,6 +2,19 @@
 
 ## 10–11 October native environments and Display plan
 
+Latest 11 October desktop lifetime correction: closing a Display tab or browser
+window preserves work (window Close hides to the tray, or minimizes if unavailable).
+Explicit Quit, including tray Quit, force-quit or a browser crash must stop all
+BashKitten-owned Pi, LocalAI, publishing/auth/Tor, remote-client/Chisel,
+container workloads, display/media helpers and the container service, including
+when Local is Off. Keep saved rootfs/config/history and unrelated host processes;
+disconnecting a remote never shuts down that remote host. Use the existing native
+browser identity/kernel guard, with bounded nonblocking cleanup. This supersedes
+older statements allowing containers to survive browser Quit/death and the
+Close-as-Quit preference. Android's Termux background lifetime is unchanged.
+No separate container-manager UI is requested. No OS/session restart is needed
+for an outdated app-owned service. See the latest amendment in the plan.
+
 The requested next architecture is recorded in
 [docs/native-environments-display-plan.md](docs/native-environments-display-plan.md).
 Its **User presentation amendment — 11 October 2026**, including the later
