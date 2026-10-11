@@ -121,6 +121,8 @@ export async function liveAssistantMessage(meta, message) {
   const live = await readJson(path.join(sessionDir(meta.id), 'phone-live.json'), null);
   if (!live || live.expiresAt < Date.now()) return;
   const policy = await authorizedPolicy(meta); if (!policy || policy.phoneId !== live.phoneId) return;
+  const registration = await phoneRegistration(live.phoneId);
+  if (!registration?.enabled?.telephony || registration.generation !== live.generation) return;
   // References only; playback reads native Pi history. No duplicate transcript store.
   await createJson(path.join(root,'live',digest(`${meta.id}:${message.timestamp}:${digest(text)}`)+'.json'),
     { phoneId: live.phoneId, backendId: policy.backendId, generation: policy.generation, sessionId: meta.id,
@@ -166,15 +168,22 @@ export class PhoneBackend {
       return { stopGeneration: state.stopGeneration ?? state.generation ?? 0, nativeSessionId: meta.piSessionId || null };
     }
     if(action==='phone.last'){
-      const history=await savedSession(meta);const entries=history?.getEntries()||[];
+      const history=await savedSession(meta);const entries=history?.getBranch()||[];
       const entry=entries.findLast(e=>e.type==='message'&&e.message?.role==='assistant'&&!['toolUse','aborted','error'].includes(e.message.stopReason));
       return {text:entry?textOf(entry.message):'',entryId:entry?.id};
     }
-    if(action==='phone.live'){
+    if(action==='phone.live')return this.serial(async()=>{
       const file=path.join(sessionDir(sessionId),'phone-live.json');
-      if(value.enabled)await writeJson(file,{phoneId:registration.phoneId,callId:value.callId,expiresAt:Date.now()+60000});else await fs.rm(file,{force:true});
+      if(value.enabled){
+        const current=await requirePhoneIdentity(identity),policy=await authorizedPolicy(meta);
+        if(!current.enabled?.telephony||!policy||policy.phoneId!==current.phoneId||policy.generation!==current.generation)throw Error('Live listening is no longer authorized');
+        await writeJson(file,{phoneId:current.phoneId,generation:current.generation,callId:value.callId,menuRevision:value.menuRevision,expiresAt:Date.now()+60000});
+      }else {
+        const current=await readJson(file,null);
+        if(current?.phoneId===registration.phoneId&&current.callId===value.callId&&current.menuRevision===value.menuRevision)await fs.rm(file,{force:true});
+      }
       return {enabled:Boolean(value.enabled)};
-    }
+    });
     if(action==='phone.reply')return this.serial(async()=>{
       const text=String(value.text||'').trim(),delivery=String(value.deliveryId||'');if(!text||!delivery)throw Error('Missing reply text or submission identity');
       const current=await phonePolicy(sessionId);if(current.mode==='off'||current.generation!==registration.generation)throw Error('Phone access changed before Send');
@@ -200,9 +209,12 @@ export async function pendingPhoneLive(phoneId) {
   const directory=path.join(root,'live');const result=[];
   for(const name of await eventFiles(directory)){if(!/^[a-f0-9]{64}\.json$/.test(name))continue;const file=path.join(directory,name),value=await readJson(file,null);if(!value||value.phoneId!==phoneId)continue;if(value.expiresAt<Date.now()){await fs.rm(file,{force:true});continue;}
     const meta=await readMeta(value.sessionId),policy=await authorizedPolicy(meta);if(!policy||policy.generation!==value.generation){await fs.rm(file,{force:true});continue;}
-    const history=await savedSession(meta),entry=history?.getEntries().find(e=>e.type==='message'&&e.message?.role==='assistant'&&e.message.timestamp===value.timestamp&&digest(textOf(e.message))===value.textDigest);if(!entry)continue;
-    result.push({...value,key:name.slice(0,-5),entryId:entry.id,text:textOf(entry.message),title:meta.title});
-  }return result;
+    const history=await savedSession(meta),entries=history?.getEntries()||[],entryOrder=entries.findIndex(e=>e.type==='message'&&e.message?.role==='assistant'&&e.message.timestamp===value.timestamp&&digest(textOf(e.message))===value.textDigest);if(entryOrder<0)continue;
+    const entry=entries[entryOrder];result.push({...value,key:name.slice(0,-5),entryId:entry.id,text:textOf(entry.message),title:meta.title,entryOrder});
+  }
+  // Hash-named outbox files do not carry playback order. Equal timestamps use
+  // the native append-only history position, without creating another cursor.
+  return result.sort((a,b)=>a.timestamp-b.timestamp||a.sessionId.localeCompare(b.sessionId)||a.entryOrder-b.entryOrder).map(({entryOrder,...value})=>value);
 }
 export async function acknowledgePhoneLive(phoneId,key){if(!/^[a-f0-9]{64}$/.test(key))throw Error('Invalid live event');const file=path.join(root,'live',key+'.json'),value=await readJson(file,null);if(value?.phoneId===phoneId)await fs.rm(file,{force:true});}
 
