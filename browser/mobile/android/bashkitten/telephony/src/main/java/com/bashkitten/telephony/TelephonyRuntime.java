@@ -42,11 +42,14 @@ public final class TelephonyRuntime {
     private final AtomicFile file;
     private final TelecomHelper telecom;
     private final Map<String, KittenConnection> calls = new HashMap<>();
+    private final Map<String, Long> callErrorRevisions = new HashMap<>();
     private final Set<Consumer<JSONObject>> observers = new HashSet<>();
     private JSONObject state;
     volatile Backend gateway;
     private boolean serviceReady;
     private String error = "";
+    private String errorCallId;
+    private long errorRevision;
     private Runnable openLocalAI;
     private Consumer<Boolean> enabledListener;
     public void setEnabledListener(Consumer<Boolean> listener) { execute(() -> enabledListener = listener); }
@@ -84,7 +87,10 @@ public final class TelephonyRuntime {
     boolean enabled(String key) { return settings().optBoolean(key); }
     JSONObject backend(String id) { return state.optJSONObject("backends").optJSONObject(id); }
     String label(String id) { JSONObject value = backend(id); return value == null ? "Unavailable backend" : value.optString("name", "BashKitten"); }
-    void failed(Throwable failure) { error = failure.getMessage() == null ? "Phone operation failed" : failure.getMessage(); changed(); }
+    void failed(Throwable failure) { recordFailure(null, failure); }
+    void callFailed(String callId, Throwable failure) { recordFailure(callId, failure); }
+    private void recordFailure(String callId, Throwable failure) { errorCallId = callId; errorRevision++; error = failure.getMessage() == null ? "Phone operation failed" : failure.getMessage(); changed(); }
+    private void clearError() { error = ""; errorCallId = null; errorRevision++; }
     private void changed() { JSONObject snapshot = snapshot(); for (Consumer<JSONObject> observer : new ArrayList<>(observers)) main.post(() -> observer.accept(snapshot)); }
     private JSONObject snapshot() {
         if (state == null) return json("error", error);
@@ -95,7 +101,7 @@ public final class TelephonyRuntime {
     public void observe(Consumer<JSONObject> listener) { execute(() -> { observers.add(listener); changed(); }); }
     public void unobserve(Consumer<JSONObject> listener) { execute(() -> observers.remove(listener)); }
     public void install(Backend backend, Runnable openLocalAI) {
-        execute(() -> { this.gateway = backend; this.openLocalAI = openLocalAI; error = ""; changed(); });
+        execute(() -> { this.gateway = backend; this.openLocalAI = openLocalAI; clearError(); changed(); });
     }
     public void openLocalAI() { if (openLocalAI != null) main.post(openLocalAI); }
     public CompletableFuture<JSONObject> configure(JSONObject patch) {
@@ -126,7 +132,7 @@ public final class TelephonyRuntime {
                     telecom.unregister(); invalidateRoute("calls");
                 }
                 if (!enabled("messages")) { invalidateRoute("messages"); PhoneNotifications.clear(context); }
-                error = ""; changed();
+                clearError(); changed();
                 // Failure to synchronize is visible; saved choices never silently revert.
                 if (gateway != null && gateway.connected()) gateway.request("phone.settings", json("settings", next)).whenComplete((v,e) -> { if (e != null) execute(() -> failed(e)); });
                 done.complete(snapshot());
@@ -235,40 +241,47 @@ public final class TelephonyRuntime {
                 if (incoming) {
                     call.setRinging(); serial.schedule(() -> { if (!call.answered && !call.ended) end(call, DisconnectCause.MISSED); }, 45, TimeUnit.SECONDS);
                 } else { call.setDialing(); answer(call); }
-            } catch (Exception failure) { call.ended = true; call.disconnect(DisconnectCause.ERROR, failure.getMessage()); failed(failure); }
+            } catch (Exception failure) { call.ended = true; callErrorRevisions.remove(call.id); call.disconnect(DisconnectCause.ERROR, failure.getMessage()); callFailed(call.id, failure); }
         });
         return call;
     }
     void answer(KittenConnection call) {
         if (call.ended || call.answered || call.preparing) return;
-        if (!enabled("telephony") || gateway == null) { end(call, DisconnectCause.ERROR); failed(new IllegalStateException("Phone's Termux gateway is unavailable")); return; }
-        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { end(call, DisconnectCause.ERROR); failed(new IllegalStateException("Allow the microphone in Phone settings before calling")); return; }
+        callErrorRevisions.put(call.id, errorRevision);
+        if (!enabled("telephony") || gateway == null) { end(call, DisconnectCause.ERROR); callFailed(call.id, new IllegalStateException("Phone's Termux gateway is unavailable")); return; }
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { end(call, DisconnectCause.ERROR); callFailed(call.id, new IllegalStateException("Allow the microphone in Phone settings before calling")); return; }
         call.preparing = true;
         gateway.prepare().whenComplete((ready,error) -> execute(() -> {
             call.preparing = false;
             if (call.ended) return;
-            if(error != null || !enabled("telephony")) { if(error != null)failed(error); end(call,DisconnectCause.ERROR); return; }
-            if(call.incoming) { try { requireEvent(event(call.eventId),"calls"); } catch(Exception expired) { JSONObject original=event(call.eventId);if(original!=null&&!original.optString("kind").equals("question")&&enabled("telephony")){mailbox(call.eventId);call.eventId=null;}failed(expired); end(call,DisconnectCause.CANCELED); return; } }
+            if(error != null || !enabled("telephony")) { if(error != null)callFailed(call.id,error); end(call,DisconnectCause.ERROR); return; }
+            if(call.incoming) { try { requireEvent(event(call.eventId),"calls"); } catch(Exception expired) { JSONObject original=event(call.eventId);if(original!=null&&!original.optString("kind").equals("question")&&enabled("telephony")){mailbox(call.eventId);call.eventId=null;}callFailed(call.id,expired); end(call,DisconnectCause.CANCELED); return; } }
             call.answered = true; call.setActive();
             try { context.startForegroundService(new Intent(context, PhoneCallService.class)); }
-            catch (RuntimeException denied) { failed(denied); end(call, DisconnectCause.ERROR); return; }
+            catch (RuntimeException denied) { callFailed(call.id,denied); end(call, DisconnectCause.ERROR); return; }
             if (serviceReady) startFlow(call);
         }));
     }
     void voiceServiceReady(boolean ready, String reason) {
         serviceReady = ready;
         for (KittenConnection call : new ArrayList<>(calls.values())) if (call.answered && !call.ended) {
-            if (ready) startFlow(call); else { failed(new IllegalStateException(reason)); end(call, DisconnectCause.ERROR); }
+            if (ready) startFlow(call); else { callFailed(call.id,new IllegalStateException(reason)); end(call, DisconnectCause.ERROR); }
         }
     }
     private void startFlow(KittenConnection call) {
         if (call.flow != null) return;
+        Long previousErrorRevision = callErrorRevisions.remove(call.id);
+        KittenConnection failedCall = calls.get(errorCallId);
+        // Only retire an ended call's old failure. A newer failure during
+        // preparation, another active call or a non-call operation stays visible.
+        if (errorCallId != null && (failedCall == null || failedCall.ended) && Objects.equals(previousErrorRevision, errorRevision)) { clearError(); changed(); }
         call.flow = new CallFlow(this, call); if (call.audioState != null) call.flow.audioRoute(call.audioState); call.flow.start(); for(JSONObject event : call.waitingEvents)call.flow.enqueue(event); call.waitingEvents.clear();
     }
     void voiceServiceStopped() { serviceReady = false; for (KittenConnection call : new ArrayList<>(calls.values())) if (call.answered) end(call, DisconnectCause.ERROR); }
     public void hangup() { execute(() -> { for (KittenConnection call : new ArrayList<>(calls.values())) end(call, DisconnectCause.LOCAL); }); }
     void end(KittenConnection call, int cause) {
         if (call.ended) return; call.ended = true;
+        callErrorRevisions.remove(call.id);
         if (call.flow != null) call.flow.close();
         if (call.incoming && !call.answered && (cause == DisconnectCause.REJECTED || cause == DisconnectCause.MISSED)) mailbox(call.eventId);
         else if (call.eventId != null) finishEvent(call.eventId, "call-ended");
