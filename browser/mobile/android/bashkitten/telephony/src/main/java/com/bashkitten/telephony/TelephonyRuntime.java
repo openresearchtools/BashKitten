@@ -19,6 +19,10 @@ import java.util.function.*;
 
 /** Single native owner. Gateway installation is private application wiring, never a web/Intent API. */
 public final class TelephonyRuntime {
+    private static final String CALL_DOMAIN = "bashkitten.local";
+    private static final String GENERAL_ALIAS = "kitten-phone@" + CALL_DOMAIN;
+    private static final java.util.regex.Pattern BACKEND_ALIAS = java.util.regex.Pattern.compile(
+        "kitten-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}@bashkitten\\.local");
     public interface Backend {
         CompletableFuture<JSONObject> request(String action, JSONObject payload);
         CompletableFuture<byte[]> audio(String action, byte[] bytes, JSONObject metadata);
@@ -164,7 +168,8 @@ public final class TelephonyRuntime {
             if (id == null || id.isBlank() || generation == null || generation.isBlank()) throw new IllegalArgumentException("Missing backend identity");
             JSONObject old = backend(id);
             if (old != null && old.optBoolean("revoked")) throw new IllegalArgumentException("Revoked backend identity cannot be reused");
-            JSONObject value = old == null ? json("alias", "kitten-" + UUID.randomUUID() + "@bashkitten.invalid", "divert", false) : old;
+            if (old != null) requireBackendAlias(old.optString("alias"));
+            JSONObject value = old == null ? json("alias", "kitten-" + UUID.randomUUID() + "@" + CALL_DOMAIN, "divert", false) : old;
             put(value, "name", name); put(value, "generation", generation); put(state.optJSONObject("backends"), id, value); save(); changed(); return value;
         });
     }
@@ -176,15 +181,20 @@ public final class TelephonyRuntime {
             withdraw(id, null); changed();
         });
     }
+    private static String requireBackendAlias(String alias) {
+        if (!BACKEND_ALIAS.matcher(alias).matches()) throw new IllegalArgumentException("Unsupported backend calling address");
+        return alias;
+    }
     Uri address(String id) {
-        if (id == null) return Uri.parse("sip:kitten-phone@bashkitten.invalid");
+        if (id == null) return Uri.parse("sip:" + GENERAL_ALIAS);
         JSONObject value = backend(id); if (value == null || value.optBoolean("revoked")) throw new IllegalArgumentException("Backend is no longer registered");
-        return Uri.parse("sip:" + value.optString("alias"));
+        return Uri.parse("sip:" + requireBackendAlias(value.optString("alias")));
     }
     String route(Uri address) {
-        if (address == null || !"sip".equals(address.getScheme()) || address.getFragment() != null) throw new IllegalArgumentException("Unknown calling address");
+        if (address == null || !"sip".equals(address.getScheme()) || !address.isOpaque() || address.getFragment() != null) throw new IllegalArgumentException("Unknown calling address");
         String alias = address.getSchemeSpecificPart();
-        if (alias.equals("kitten-phone@bashkitten.invalid")) return null;
+        if (GENERAL_ALIAS.equals(alias)) return null;
+        requireBackendAlias(alias);
         JSONObject backends = state.optJSONObject("backends");
         for (String id : keys(backends)) if (alias.equals(backends.optJSONObject(id).optString("alias")) && !backends.optJSONObject(id).optBoolean("revoked")) return id;
         throw new IllegalArgumentException("This calling contact was removed or revoked");

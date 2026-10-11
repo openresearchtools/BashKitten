@@ -56,6 +56,22 @@ physical OEM restrictions, traffic/content-log audit and Cuttlefish acceptance
 remain part of the combined installed-candidate tests. These checks do not mark
 plan section 12 complete.
 
+## Calling addresses
+
+The 11 October address change uses only `sip:kitten-phone@bashkitten.local`
+for the general line and `sip:kitten-<UUID>@bashkitten.local` for registered
+backends. These are local Android Telecom identities; the native owner does
+not resolve the domain or connect to a SIP server. Calls still require the
+exact BashKitten PhoneAccount, and backend calls require an exact, non-revoked
+registry alias. Contact creation still uses the normal Android editor without
+contacts or call-log access.
+
+Earlier development `.invalid` addresses are unsupported. There is no alias
+migration, compatibility route or contact rewrite. Installed-candidate acceptance
+must create the current contact through the ordinary setup flow and verify both
+outgoing calls and matching incoming callbacks; source checks alone do not
+establish that acceptance.
+
 ## Container ordinary browser
 
 The guest uses the existing BashKitten browser binary and existing browser
