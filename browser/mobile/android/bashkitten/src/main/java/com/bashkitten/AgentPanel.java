@@ -79,7 +79,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             if (!checked || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn();
             updatePower();
         });
-        Button chats = barButton("☷", () -> sidecar.show(bar)); chats.setContentDescription("Environments, projects and chats"); bar.addView(chats, new LayoutParams(dp(40), -1));
+        bar.addView(barIcon("Environments, projects and chats", R.drawable.ic_agent_sidebar, sidecar::toggle), new LayoutParams(dp(40), -1));
         location = barButton("+", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class).putExtra("connectOnly", true))); location.setContentDescription("Connect to remote"); bar.addView(location, new LayoutParams(dp(40), -1));
         display = barIcon("Display", R.drawable.ic_agent_display, () -> {
             if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
@@ -98,7 +98,8 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
-        body = new LinearLayout(activity); body.setOrientation(VERTICAL); agent.addView(body, new LayoutParams(-1, 0, 1));
+        FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));
+        body = new LinearLayout(activity); body.setOrientation(VERTICAL); chatContent.addView(body, new FrameLayout.LayoutParams(-1, -1));
         connectionStatus = text();
         connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
         connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
@@ -115,6 +116,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         logScroll = new ScrollView(activity); logScroll.setNestedScrollingEnabled(true); logScroll.addView(log); logScroll.setVisibility(GONE);
         setupBody.addView(logScroll, new LayoutParams(-1, dp(240)));
         body.addView(setup, new LayoutParams(-1, 0, 1));
+        sidecar.attach(chatContent);
         addView(agent); addView(browser);
         runtime.attach(engine, this);
         setOnApplyWindowInsetsListener((v, insets) -> {
@@ -154,11 +156,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try { b.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
         return button(b, label, action);
     }
-    private ImageButton barIcon(String label, int icon, Runnable action) {
+    private ImageButton barIcon(String label, int icon, Runnable action) { return iconButton(activity, label, icon, action); }
+    static ImageButton iconButton(Activity activity, String label, int icon, Runnable action) {
         androidx.appcompat.widget.AppCompatImageButton button = new androidx.appcompat.widget.AppCompatImageButton(activity);
         button.setImageResource(icon); button.setContentDescription(label); button.setTooltipText(label);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        button.setPadding(dp(8), dp(8), dp(8), dp(8));
+        int padding = Math.round(8 * activity.getResources().getDisplayMetrics().density);
+        button.setPadding(padding, padding, padding, padding);
         TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary, android.R.attr.selectableItemBackgroundBorderless});
         try { button.setImageTintList(theme.getColorStateList(0)); button.setBackground(theme.getDrawable(1)); } finally { theme.recycle(); }
         button.setOnClickListener(ignored -> action.run()); return button;
@@ -186,6 +190,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         boolean sideBySide = !browserUi && split && !shown && getResources().getConfiguration().screenWidthDp >= 600;
         boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
+        if (!agentVisible) sidecar.close();
         hideAgent.setVisibility(sideBySide ? VISIBLE : GONE);
         agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);

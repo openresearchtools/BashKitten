@@ -37,4 +37,18 @@
     <style name="BashKittenDialogButton" parent="Widget.AppCompat.Button.ButtonBar.AlertDialog">
         <item name="android:textColor">@color/bashkitten_text</item>
     </style>
+    <!-- Scoped to native chat navigation; do not inherit Fenix's pink primary. -->
+    <style name="BashKittenSidecarDialogTheme" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
+        <item name="colorPrimary">?attr/colorOnSurface</item>
+        <item name="colorAccent">?attr/colorOnSurface</item>
+        <item name="android:colorAccent">?attr/colorOnSurface</item>
+        <item name="colorControlActivated">?attr/colorOnSurface</item>
+        <item name="buttonBarPositiveButtonStyle">@style/BashKittenSidecarDialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/BashKittenSidecarDialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/BashKittenSidecarDialogButton</item>
+    </style>
+    <style name="BashKittenSidecarDialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">?attr/colorOnSurface</item>
+        <item name="backgroundTint">@android:color/transparent</item>
+    </style>
 </resources>
