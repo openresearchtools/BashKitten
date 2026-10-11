@@ -26,10 +26,10 @@ export async function run(file, args, { env = process.env, cwd, input, output, s
   if (!allowFailure && result.code !== 0) throw Error(`${file.split('/').at(-1)} exited ${result.signal || result.code}: ${result.stderr.trim()}`);
   return result;
 }
-export const podman = (args, options = {}) => run(helper('podman'), args, { ...options, env: { ...podmanEnvironment(), ...options.env } });
+export const podman = (args, options = {}) => run(helper('podman'), args, { ...options, env: podmanEnvironment(options.env) });
 export async function installed() {
   if (process.getuid?.() === 0) throw Error('Run BashKitten machines as your desktop user, not host root');
-  for (const name of ['podman','crun','conmon','pasta','netavark','aardvark-dns','fuse-overlayfs']) {
+  for (const name of ['podman','crun','conmon','pasta','netavark','aardvark-dns','fuse-overlayfs','fusermount3','catatonit']) {
     try { await fs.access(helper(name), fs.constants.X_OK); }
     catch { throw Error(`The private ${name} runtime is missing; reinstall the BashKitten machine package`); }
   }

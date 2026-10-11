@@ -1,0 +1,25 @@
+From: BashKitten contributors
+Subject: [PATCH] mount: require the configured private fusermount helper
+
+BashKitten owns its container helpers. If the configured packaged helper cannot
+start, return that failure instead of searching for a host installation in PATH.
+This modification retains the LGPLv2 terms of lib/mount.c.
+
+--- a/lib/mount.c
++++ b/lib/mount.c
+@@ -135,14 +135,9 @@
+ 
+ 	/* See man 7 environ for the global environ pointer */
+ 
+-	/* first try the install path */
++	/* BashKitten requires the configured private install path. */
+ 	int status = posix_spawn(&pid, full_path,  action, NULL,
+ 				 (char * const *) argv, environ);
+-	if (status != 0) {
+-		/* if that fails, try a system install */
+-		status = posix_spawnp(&pid, FUSERMOUNT_PROG, action, NULL,
+-				      (char * const *) argv, environ);
+-	}
+ 
+ 	if (status != 0) {
+ 		fuse_log(FUSE_LOG_ERR, "Failed to call '%s': %s\n",

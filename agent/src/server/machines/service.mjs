@@ -237,7 +237,7 @@ async function start(config, job) {
     await writeJson(path.join(p.settings,'display.json'),{machineId:id,mode:gateway.mode,software:gateway.mode==='software',width:1280,height:720});
     await writeJson(path.join(p.settings,'integration.json'),{schema:1,media:Object.fromEntries(Object.entries(config.integrations.media).map(([k,v])=>[k,v.enabled]))});
     if (!info) {
-      await run(config.launch.executable,config.launch.arguments,{cwd:config.launch.cwd,env:{...podmanEnvironment(),...config.launch.environment},output:job.output,signal:job.signal});
+      await run(config.launch.executable,config.launch.arguments,{cwd:config.launch.cwd,env:podmanEnvironment(config.launch.environment),output:job.output,signal:job.signal});
       info=await inspect(id); if (!info) throw Error('Podman did not create the machine');
       await saveState(id,{definition:definition(config)});
     }

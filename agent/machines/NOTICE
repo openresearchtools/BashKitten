@@ -17,3 +17,9 @@ separate product/updater or host-privilege command path is retained.
 
 Original BashKitten modules are AGPL-3.0-only where so marked. Component license
 texts and original copyright notices remain applicable; do not relabel donors.
+
+Private libfuse 3.18.3 modification, 11 October 2026: require the configured
+packaged fusermount3 path and report its spawn error without trying a host
+installation. The named patch is retained under patches/libfuse; lib/mount.c
+and this adaptation retain that file's GNU LGPLv2 terms. Original libfuse source
+and full license texts remain in vendor/libfuse.
