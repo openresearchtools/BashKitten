@@ -3169,3 +3169,35 @@ The unproven engineering points are the Linux native frame receiver/gateway
 adaptation, Android host-interface extraction, paired-window layout and the
 complete private Podman/helper packaging. They are concrete implementation work,
 not functionality claimed by this research plan.
+
+## User presentation amendment — 11 October 2026
+
+This records the user's corrections after inspecting the installed candidate.
+It supersedes the earlier top-bar placement instructions for the listed
+controls, without removing their functions or changing their authorization,
+backend ownership, nonblocking behavior or acceptance requirements.
+
+- Preserve the original chat/sidebar appearance. Add the requested backend
+  sections and dividers without replacing it with pink buttons or a different
+  navigation design. Android's expandable sidebar belongs inside the Agent
+  content area below its toolbar, respecting rotation, keyboard and window
+  bounds; it is not a floating full-screen popup.
+- Use distinct, consistent native icons for Chats, Files and the browser menu.
+  New chat uses a compose icon, including within projects; it does not reuse
+  the connection-add plus. Keep the browser's three-line menu at the far right.
+- Move Local AI, Notifications, Phone/Computer Use, Remote Connections,
+  Telephone and Performance into the actual native Firefox menu on mobile
+  and desktop, with an icon and these titles under a **BashKitten controls**
+  divider. On mobile put this section above Settings in the existing menu
+  containing History and Bookmarks. Remove their extra top-bar shortcuts;
+  do not introduce a second replacement menu. Use each existing feature's
+  correct platform/backend scope and report unavailable capabilities honestly.
+- Use plain user-facing language and the existing Firefox settings style.
+  Keep call, message and device-control settings in their relevant destinations
+  instead of exposing implementation labels or a flat list of unrelated buttons.
+  Speech setup belongs in LocalAI; Android Auto should open its own normal
+  entry point where available. Preserve all planned settings and independent
+  master switches, with advanced setup in appropriately grouped detail views.
+
+The original protected baseline remains unchanged. These are implementation
+requirements from the user, not a claim that the revised installed UI passes.
