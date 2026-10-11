@@ -726,8 +726,27 @@ class AgentView {
     this.message("Agent off", "Your browser remains open. Turn on to reconnect to your saved chats.");
   }
 
+  retireLocalIdentity(previous) {
+    this.drafts.delete(`local:${previous.identity}`);
+    const browser = this.views.get("local");
+    if (browser && ownedViews.get(browser)?.connection.userContextId === previous.userContextId) {
+      ownedViews.delete(browser);
+      browser.stop(); browser.remove(); this.views.delete("local");
+      if (this.activeBrowser === browser) this.activeBrowser = null;
+    }
+    this.localConnection = null;
+    this.localGeneration = null;
+    this.currentIdentity = null;
+    this.currentInstanceId = null;
+    if (!this.selection) this.closeConnections();
+  }
+
   async update(status, { reload = false } = {}) {
     if (this.off || this.selection) return;
+    const epoch = this.selectionEpoch;
+    const revision = this.localUpdate = (this.localUpdate || 0) + 1;
+    const current = () => !this.off && !this.selection && !this.win.closed && !DesktopLifetime.quitting &&
+      this.selectionEpoch === epoch && this.localUpdate === revision;
     const web = status.web || {};
     this.localOn = !["failed", "stopped", "off"].includes(web.status);
     this.sidecar?.render();
@@ -742,44 +761,62 @@ class AgentView {
       return;
     }
     const url = new URL(web.url);
-    if (url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password) throw new Error("The local controller supplied an invalid HTTPS address.");
-    if (this.currentIdentity && this.currentIdentity !== web.identity.caSha256) {
-      throw Object.assign(new Error("The local Agent certificate identity changed. Check the service before trusting its replacement."), { code: "local_identity_changed" });
+    if (url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password ||
+        url.pathname !== "/" || url.search || url.hash) throw new Error("The local controller supplied an invalid HTTPS address.");
+    if (web.auth?.mode !== "native-local") throw new Error("Update the local BashKitten package to use native Local authentication.");
+    if (!web.auth.generation) throw new Error("The local Agent session is unavailable.");
+    const enroll = !this.localConnection || this.localConnection.url !== url.href ||
+      this.currentIdentity !== web.identity.caSha256 || this.currentInstanceId !== web.identity.instanceId;
+    let local;
+    if (enroll || this.localGeneration !== web.auth.generation) {
+      try { local = await control("local-session"); }
+      catch (error) { if (!current()) return; throw error; }
+      if (!current()) return;
+      if (typeof web.identity.instanceId !== "string") throw new Error("Missing local server identity.");
+      const cookieName = "__Host-bashkitten_local_" + web.identity.instanceId.replaceAll("-", "");
+      if (local.url !== web.url || local.generation !== web.auth.generation ||
+          local.identity?.caSha256 !== web.identity.caSha256 || local.identity?.instanceId !== web.identity.instanceId ||
+          local.cookie?.name !== cookieName || !/^[a-f0-9]{64}$/.test(local.cookie?.value || "")) {
+        throw new Error("The local Agent changed while connecting. Turn on to retry.");
+      }
     }
-    if (!this.localConnection || this.localConnection.url !== new URL(web.url).href || this.currentIdentity !== web.identity.caSha256) {
+    if (enroll) {
       const selection = AgentRemotes.selection;
-      await AgentRemotes.trustLocal({ url: web.url, ...web.identity });
-      if (this.off || this.selection || AgentRemotes.selection !== selection) return;
+      try {
+        await AgentRemotes.trustLocal({ url: web.url, ...web.identity }, {
+          current: () => current() && AgentRemotes.selection === selection,
+          replace: previous => {
+            contexts.delete(previous.userContextId);
+            Services.ppmm.sharedData.set("BashKittenAgentContexts", [...contexts]);
+            Services.ppmm.sharedData.flush();
+            for (const win of Services.wm.getEnumerator("navigator:browser")) win.BashKittenAgent?.retireLocalIdentity(previous);
+          },
+        });
+      } catch (error) {
+        if (!current() || AgentRemotes.selection !== selection) return;
+        throw error;
+      }
+      if (!current() || AgentRemotes.selection !== selection) return;
       const activating = AgentRemotes.activate("local"), activation = AgentRemotes.selection;
       let connection;
       try { connection = await activating; }
       catch (error) {
-        if (this.off || this.selection || AgentRemotes.selection !== activation) return;
+        if (!current() || AgentRemotes.selection !== activation) return;
         throw error;
       }
-      if (this.off || this.selection || AgentRemotes.selection !== activation) return;
+      if (!current() || AgentRemotes.selection !== activation) return;
       this.localConnection = connection;
     }
     const connection = this.localConnection;
     this.currentIdentity = web.identity.caSha256;
-    if (web.auth?.mode === "native-local") {
-      if (!web.auth.generation) throw new Error("The local Agent session is unavailable.");
-      if (this.localGeneration !== web.auth.generation) {
-        const local = await control("local-session");
-        if (this.off || this.selection) return;
-        const cookieName = "__Host-bashkitten_local_" + web.identity.instanceId.replaceAll("-", "");
-        if (local.url !== web.url || local.generation !== web.auth.generation ||
-            local.identity?.caSha256 !== web.identity.caSha256 || local.identity?.instanceId !== web.identity.instanceId ||
-            local.cookie?.name !== cookieName || !/^[a-f0-9]{64}$/.test(local.cookie?.value || "")) {
-          throw new Error("The local Agent changed while connecting. Turn on to retry.");
-        }
-        Services.cookies.add("127.0.0.1", "/", cookieName, local.cookie.value, true, true, true,
-          Date.now() + 400 * 86400000, { userContextId: connection.userContextId },
-          Ci.nsICookie.SAMESITE_STRICT, Ci.nsICookie.SCHEME_HTTPS);
-        this.localGeneration = local.generation;
-        reload = true;
-      }
-    } else throw new Error("Update the local BashKitten package to use native Local authentication.");
+    this.currentInstanceId = web.identity.instanceId;
+    if (local) {
+      Services.cookies.add("127.0.0.1", "/", local.cookie.name, local.cookie.value, true, true, true,
+        Date.now() + 400 * 86400000, { userContextId: connection.userContextId },
+        Ci.nsICookie.SAMESITE_STRICT, Ci.nsICookie.SCHEME_HTTPS);
+      this.localGeneration = local.generation;
+      reload = true;
+    }
     await this.connect(connection, true, { reload });
   }
 
@@ -847,7 +884,8 @@ class AgentView {
       if (browser.hasAttribute("data-agent-url") && previousEntry?.draftKey === draftKey) {
         try {
           const draft = await browser.browsingContext.currentWindowGlobal.getActor("BashKittenAgent").sendQuery("CaptureDraft");
-          if (draft) this.drafts.set(draftKey, draft);
+          if (draft && epoch === this.selectionEpoch && !this.off && this.activeBrowser === browser &&
+              browser.isConnected && ownedViews.get(browser) === previousEntry) this.drafts.set(draftKey, draft);
         } catch (error) { console.warn("Could not retain Agent draft after a content crash", error); }
       }
       if (epoch !== this.selectionEpoch || this.off || this.activeBrowser !== browser) return;
@@ -900,11 +938,6 @@ class AgentView {
     this.off = !stopping;
     if (this.power) this.power.textContent = stopping ? "Retry Turn off" : "Turn on";
     if (this.state) this.message(stopping ? "Shutdown not confirmed" : "Agent unavailable", error.message || String(error));
-    if (!this.remote && error.code === "local_identity_changed") {
-      const review = html(this.doc, "button", { type: "button" }, "Review changed connection identity");
-      review.addEventListener("click", () => this.localIdentity());
-      this.state.append(review);
-    }
     console.error("BashKitten Agent operation failed", error);
   }
 
@@ -922,37 +955,6 @@ class AgentView {
     this.doc.documentElement.append(dialog);
     dialog.showModal();
     return { dialog, content, actions };
-  }
-
-  async localIdentity() {
-    const { dialog, content } = this.dialog("Local connection identity");
-    const message = html(this.doc, "p", {}, "Checking the private local controller…");
-    content.append(message);
-    try {
-      const status = await control("status");
-      const identity = status.web?.identity;
-      if (!identity?.caSha256 || !identity?.instanceId) throw new Error("Start the local Agent service to read its identity.");
-      let saved;
-      try { saved = await AgentRemotes.connection("local"); } catch {}
-      message.textContent = "The saved identity protects your login when the local HTTPS port changes.";
-      content.append(html(this.doc, "p", {}, `Current local certificate: ${identity.caSha256}`));
-      if (saved) content.append(html(this.doc, "p", {}, `Saved certificate: ${saved.identity}`));
-      if (saved?.identity === identity.caSha256) return;
-      const trust = html(this.doc, "button", { type: "button" }, "Trust this local installation");
-      trust.addEventListener("click", async () => {
-        trust.disabled = true;
-        try {
-          await lazy.BrowserControlChannel.close("local identity replaced");
-          await AgentRemotes.remove("local");
-          this.drafts.delete(`local:${saved?.identity}`);
-          const browser = this.views.get("local");
-          if (browser) { ownedViews.delete(browser); browser.remove(); this.views.delete("local"); }
-          this.currentIdentity = null; this.localConnection = null;
-          dialog.close(); await this.local();
-        } catch (error) { message.textContent = error.message; trust.disabled = false; }
-      });
-      content.append(trust);
-    } catch (error) { message.textContent = error.message; }
   }
 
   async microphonePermission(browser, actor, request) {
@@ -1257,6 +1259,7 @@ class AgentView {
           const draft = await actor.sendQuery("CaptureDraft");
           if (!draft) return;
           await BashKittenDrafts.save(() => this.draftEnrollment(entry, actor), draft);
+          await this.draftEnrollment(entry, actor);
           this.drafts.set(entry.draftKey, draft);
         } while (actor.draftDirty);
       } finally { actor.saving = null; }
