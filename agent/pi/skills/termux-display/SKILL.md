@@ -10,7 +10,8 @@ the desktop inside BashKitten’s native Display tab. Remote browser access does
 give a remote Pi control of this phone's display. For explicitly headless work,
 use your own Xvfb session instead, with `-nolisten tcp` and owned cleanup.
 
-The native **Local → Display** panel, user and Pi share one launcher and script.
+**Configuration → Display**, the user and Pi share one launcher and script.
+The Display button opens the desktop; Configuration opens its launch settings.
 Do not create another startup service, edit this skill, or put competing commands
 in `.bashrc`. BashKitten's packages supply XFCE, Mesa and the paired `bashkitten-x11` loader.
 The native engine is included in BashKitten; no separate X11 app is needed.
@@ -61,7 +62,7 @@ Background any required GPU helper **inside this script**, so the existing
 process guard owns it too. Do not remove X sockets/locks or kill other displays.
 Closing the Display tab does not stop the server; use launcher Stop.
 Local Agent Off stops the owned display. Switching the chat to Remote does
-not stop it; its Display button remains under Local.
+not stop it; the phone's local Display remains available.
 
 After Start, read `environment.DISPLAY` from status and use that actual value
 for GUI applications, for example `DISPLAY=:2 mousepad` **only if status reports

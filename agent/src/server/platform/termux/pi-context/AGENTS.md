@@ -14,7 +14,7 @@
   task applies, then any needed references; do not preload every skill body.
 - Package help: https://wiki.termux.com/wiki/Package_Management
   Available package recipes: https://github.com/termux/termux-packages
-- For a visible desktop, read `termux-display`. The native Display panel and
+- For a visible desktop, read `termux-display`. Configuration → Display and
   `{{PREFIX}}/bin/bashkitten-display` share `{{DISPLAY_COMMAND}}`. Read the
   launcher's status for the actual DISPLAY before opening GUI applications.
   Save command changes through the launcher; do not edit the installed skill.

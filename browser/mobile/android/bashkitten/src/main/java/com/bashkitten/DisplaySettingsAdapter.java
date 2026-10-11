@@ -39,7 +39,9 @@ public final class DisplaySettingsAdapter {
             try {
                 if (method.equals("display-setup")) {
                     if (runtime.selected.equals("local")) runtime.turnOn(); else runtime.select("local");
-                    result.complete(new JSONObject()); activity.finish(); return;
+                    BrowserApp app = BrowserApp.get(activity);
+                    activity.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true));
+                    result.complete(new JSONObject()); app.main.post(activity::finish); return;
                 }
                 if (method.equals("display-status") && runtime.shareNeedsSetup()) {
                     result.complete(new JSONObject().put("needsSetup", true)); return;
