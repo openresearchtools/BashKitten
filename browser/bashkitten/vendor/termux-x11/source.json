@@ -107,5 +107,12 @@
       "gitArchiveSha256": "a720711f84adceed2729cd23142537613fac924bf70ca58ef8bd7d28df6b7079"
     }
   ],
-  "modifications": []
+  "modifications": [],
+  "excludedFiles": [
+    {
+      "path": "lorie-app/testkey_untrusted.jks",
+      "sha256": "a2ba19f2417de94dd3bdfb6ceece070cdc5f9b492af09cd5900058e860b18c7d",
+      "reason": "Public upstream dummy debug-signing fixture deliberately excluded from the retained tree and shipped artifacts. BashKitten does not build the donor lorie-app or shell-loader application; its embedded module uses BashKitten signing identity. No donor signing key is required or used."
+    }
+  ]
 }
