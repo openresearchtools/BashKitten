@@ -30,6 +30,8 @@ jobs:
           sparse-checkout: |
             agent/search
             agent/packaging/termux/search
+            auth/build
+            auth/dependencies/termux
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -82,11 +84,10 @@ jobs:
           sparse-checkout: |
             agent/search
             agent/packaging/termux/search
-      - uses: actions/checkout@v4
-        with:
-          repository: termux/termux-packages
-          ref: 748983f1e4376b17babf23143baebd244e589b52
-          path: termux-packages
+            auth/build
+            auth/dependencies/termux
+      - name: Extract retained Termux framework
+        run: python3 auth/build/retained-sources.py termux --commit 748983f1e4376b17babf23143baebd244e589b52 --output termux-packages
       - run: sudo apt-get update && sudo apt-get install -y zstd
       - name: Identify native compiler inputs
         id: primp-inputs
@@ -118,6 +119,8 @@ jobs:
           TERMUX_BUILDER_IMAGE_NAME: ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6
         run: |
           cp -a agent/packaging/termux/search/python-primp termux-packages/packages/
+          export TERMUX_DOCKER_RUN_EXTRA_ARGS="--volume $PWD:/bashkitten:ro"
+          export TERMUX_DOCKER_EXEC_EXTRA_ARGS="--env BASHKITTEN_SOURCE_ROOT=/bashkitten"
           cd termux-packages
           scripts/run-docker.sh ./build-package.sh -I -a "$TERMUX_ARCH" python-primp
       - name: Stage and check native ELF alignment

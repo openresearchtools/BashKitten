@@ -19,6 +19,9 @@ async function texts(folder) {
 export async function bundledLicenses(root = appRoot) {
   const pkg = JSON.parse(await fs.readFile(path.join(root, 'package.json')));
   const lock = JSON.parse(await fs.readFile(path.join(root, 'package-lock.json')));
+  const piPin = await fs.readFile(path.join(root, 'PI_UPSTREAM.md'), 'utf8');
+  const piVersion = piPin.match(/Release: `v([^`]+)`/)?.[1];
+  const piCommit = piPin.match(/Commit: `([a-f0-9]{40})`/)?.[1];
   let version;
   try { version = JSON.parse(await fs.readFile(path.join(root, 'build-platform.json'))).version; }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -61,7 +64,11 @@ export async function bundledLicenses(root = appRoot) {
         'proxy-agent-negotiate': 'proxy-agent-negotiate' })[value.name];
     if (supplement) notices.push(...await texts(path.join(root, 'licenses/upstream', supplement)));
     if (!notices.length) throw Error('Missing license text: ' + key);
-    records.push({ name: value.name, version: value.version, license: value.license || item.license,
+    const pinnedPi = ['@earendil-works/chord', '@earendil-works/pi-ai', '@earendil-works/pi-agent-core',
+      '@earendil-works/pi-codemode', '@earendil-works/pi-coding-agent', '@earendil-works/pi-mcp',
+      '@earendil-works/pi-telemetry', '@earendil-works/pi-tui'].includes(value.name)
+      && value.version === piVersion && piCommit;
+    records.push({ name: value.name, version: value.version, license: value.license || item.license || (pinnedPi ? 'MIT' : undefined),
       source: typeof value.repository === 'string' ? value.repository : value.repository?.url,
       text: [...new Set(notices)].join('\n\n') });
   }

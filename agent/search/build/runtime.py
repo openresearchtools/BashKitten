@@ -28,6 +28,27 @@ def digest(path: Path) -> str:
 
 def fetch(record: dict, cache: Path) -> Path:
     path = cache / record["filename"]
+    inventory = ROOT / 'vendor/sources/sources.json'
+    if inventory.exists():
+        retained = json.loads(inventory.read_text())
+        if digest(LOCK) != retained['lockSha256']:
+            raise RuntimeError('Retained search sources do not match runtime lock')
+        sources = {item['filename']: item for item in retained['components']}
+        pin = sources.get(record['filename'])
+        if pin:
+            source = inventory.parent / pin['file']
+            if pin['sha256'] != record['sha256'] or digest(source) != record['sha256']:
+                raise RuntimeError('Retained search source mismatch: ' + record['filename'])
+            shutil.copy2(source, path)
+            return path
+    else:
+        # Published matching source bundles retain the same original archives.
+        source = ROOT / 'archives' / record['filename']
+        if source.is_file() and digest(source) == record['sha256']:
+            shutil.copy2(source, path)
+            return path
+    if not record['filename'].endswith('.whl'):
+        raise RuntimeError('Missing retained search source: ' + record['filename'])
     if path.exists() and digest(path) == record["sha256"]:
         return path
     partial = path.with_suffix(path.suffix + ".part")

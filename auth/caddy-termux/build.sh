@@ -8,6 +8,7 @@ TERMUX_PKG_DEPENDS='ca-certificates'
 
 termux_step_make() {
   termux_setup_golang
+  source "$BASHKITTEN_SOURCE_ROOT/auth/build/go-env.sh"
   case "$TERMUX_ARCH" in
     aarch64) export GOARCH=arm64 ;;
     x86_64) export GOARCH=amd64 ;;

@@ -34,21 +34,21 @@ records = {}
 for location, value in lock['packages'].items():
     if not location or value.get('dev') or not value.get('resolved'): continue
     url = value['resolved']
-    # SheetJS CE publishes current open-source releases on its own official CDN;
-    # the npm registry copy is obsolete. Keep this exception exact and verify
-    # the lockfile integrity and package identity below, as for every npm source.
-    assert url.startswith('https://registry.npmjs.org/') or (
-        url == 'https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz'
-        and location == 'node_modules/xlsx' and value['version'] == '0.20.3')
+    assert url.startswith('https://registry.npmjs.org/') or url == 'file:vendor/sheetjs/xlsx-0.20.3.tgz'
     records.setdefault(url, {**value, 'name': value.get('name') or location.rsplit('node_modules/', 1)[-1]})
 
+npm_sources = {item['url']: item for item in json.loads(tracked('agent/vendor/npm/sources.json'))['components']}
 def collect(item):
     url, value = item
     file = cache / (hashlib.sha256(url.encode()).hexdigest()[:20] + '.tgz')
-    if not file.exists():
-        temporary = file.with_suffix('.part')
-        subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '3', '--max-time', '300', '--proto', '=https', '--proto-redir', '=https', url, '-o', str(temporary)], check=True)
-        temporary.replace(file)
+    if url.startswith('file:'):
+        payload = tracked('agent/' + url[5:])
+    else:
+        source = npm_sources[url]
+        assert source['integrity'] == value['integrity']
+        payload = tracked('agent/vendor/npm/' + source['file'])
+        assert hashlib.sha256(payload).hexdigest() == source['sha256']
+    file.write_bytes(payload)
     algorithm, encoded = value['integrity'].split()[0].split('-', 1)
     assert algorithm in ('sha512', 'sha256', 'sha1')
     with file.open('rb') as stream: actual = hashlib.file_digest(stream, algorithm).digest()
@@ -66,11 +66,43 @@ def collect(item):
 with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool: components = list(pool.map(collect, records.items()))
 pi_commit = re.search(rb'Commit: `([a-f0-9]{40})`', tracked('agent/PI_UPSTREAM.md'))[1].decode()
 pi_source = cache / ('pi-' + pi_commit + '.tar.gz')
-if not pi_source.exists():
-    subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '3', '--proto', '=https', '--proto-redir', '=https', 'https://codeload.github.com/earendil-works/pi/tar.gz/' + pi_commit, '-o', str(pi_source)], check=True)
+pi_record = json.loads(tracked('agent/vendor/pi/source.json'))
+assert pi_record['commit'] == pi_commit
+pi_payload = tracked('agent/vendor/pi/' + pi_record['file'])
+assert hashlib.sha256(pi_payload).hexdigest() == pi_record['sha256']
+pi_source.write_bytes(pi_payload)
 with pi_source.open('rb') as stream: pi_sha = hashlib.file_digest(stream, 'sha256').hexdigest()
 manifest = {'sourceCommit': revision, 'pi': {'commit': pi_commit, 'file': pi_source.name, 'sha256': pi_sha}, 'components': components}
 manifest_path = args.output / 'components.json'; manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+# These retained inputs are included by git archive. Verify the exact committed
+# revision before producing a release source bundle; a checkout cache is not
+# authority for either dependency identity or lock freshness.
+def check_file(base, record):
+    relative = Path(record['file'])
+    assert not relative.is_absolute() and '..' not in relative.parts
+    assert hashlib.sha256(tracked(base + '/' + str(relative))).hexdigest() == record['sha256'], 'Retained source mismatch: ' + str(relative)
+
+go_base = 'auth/dependencies/go'
+go = json.loads(tracked(go_base + '/sources.json'))
+for name, digest in go['locks'].items():
+    assert hashlib.sha256(tracked(name)).hexdigest() == digest, 'Stale Go source lock: ' + name
+for module in go['modules']:
+    for record in module['files'].values(): check_file(go_base, record)
+for record in go['moduleMetadata']: check_file(go_base, record)
+for base, lock_file in [('auth/dependencies/frontend', 'auth/authelia/web/pnpm-lock.yaml'),
+                        ('agent/search/vendor/sources', 'agent/search/runtime-lock.json')]:
+    inventory = json.loads(tracked(base + '/sources.json'))
+    assert hashlib.sha256(tracked(lock_file)).hexdigest() == inventory['lockSha256'], 'Stale source lock: ' + lock_file
+    for record in inventory['components']:
+        check_file(base, record)
+        for notice in record.get('licenseFiles', []): check_file(base, notice)
+base = 'auth/dependencies/termux'
+for record in json.loads(tracked(base + '/sources.json'))['components']:
+    assert hashlib.sha256(tracked(record['lock'])).hexdigest() == record['lockSha256']
+    check_file(base, record)
+base = 'auth/dependencies/go-toolchain'
+check_file(base, json.loads(tracked(base + '/sources.json')))
+
 source = args.output / ('bashkitten-source-' + revision[:12] + '.tar.gz')
 subprocess.run(['git', 'archive', '--format=tar.gz', '--prefix=bashkitten/', '-o', str(source.resolve()), revision], cwd=ROOT, check=True)
 with tarfile.open(args.output / ('bashkitten-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
@@ -84,14 +116,14 @@ with tarfile.open(args.output / ('bashkitten-native-dependency-source-' + revisi
     for value in json.loads(tracked('agent/licenses/source-archives.json')):
         file = extra_cache / value['file']
         file.parent.mkdir(parents=True, exist_ok=True)
-        if not file.exists():
-            subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '3', '--proto', '=https', '--proto-redir', '=https', value['url'], '-o', str(file)], check=True)
+        file.write_bytes(tracked('agent/vendor/native/' + value['file']))
         with file.open('rb') as stream: actual = hashlib.file_digest(stream, 'sha256').hexdigest()
         assert actual == value['sha256'], 'Native source checksum mismatch: ' + value['file']
         archive.add(file, arcname='native-dependencies/' + value['file'])
 # Android's Tor/JNI and retained assets use pinned source outside Gecko itself.
 android_records = json.loads(tracked('browser/bashkitten/android/notices/sources.json'))
 android_archives = {}
+android_pins = {item['file']: item for item in json.loads(tracked('agent/vendor/native/android-sources.json'))}
 for record in android_records:
     repository = record['repository']
     commit = record['commit']
@@ -101,9 +133,11 @@ for record in android_records:
     if key not in android_archives:
         name = repository.rsplit('/', 1)[-1] + '-' + commit + '.tar.gz'
         archive = extra_cache / name
-        if not archive.exists():
-            url = 'https://codeload.github.com/' + repository.removeprefix('https://github.com/') + '/tar.gz/' + commit
-            subprocess.run(['curl', '--fail', '--silent', '--show-error', '--location', '--retry', '3', '--proto', '=https', '--proto-redir', '=https', url, '-o', str(archive)], check=True)
+        pin = android_pins[name]
+        assert pin['repository'] == repository and pin['commit'] == commit
+        payload = tracked('agent/vendor/native/' + name)
+        assert hashlib.sha256(payload).hexdigest() == pin['sha256']
+        archive.write_bytes(payload)
         android_archives[key] = archive
     with tarfile.open(android_archives[key]) as upstream:
         matches = [entry for entry in upstream if entry.name.partition('/')[2] == record['licensePath']]
