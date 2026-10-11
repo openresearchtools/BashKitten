@@ -14,6 +14,7 @@ import org.json.JSONObject;
 /** PCM stays in transient memory. LocalAI and VAD work off the audio/UI callback. */
 final class CallAudio implements AutoCloseable {
     private final TelephonyRuntime owner;
+    private final String callId;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final ExecutorService vadWork = Executors.newSingleThreadExecutor();
     private final ExecutorService routes = Executors.newSingleThreadExecutor();
@@ -23,8 +24,9 @@ final class CallAudio implements AutoCloseable {
     private volatile boolean muted, finish;
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile String requestId;
+    private volatile String cancelledRequestId;
     private volatile int generation;
-    CallAudio(TelephonyRuntime owner) { this.owner = owner; audio = owner.context.getSystemService(AudioManager.class); }
+    CallAudio(TelephonyRuntime owner,String callId) { this.owner = owner; this.callId = callId; audio = owner.context.getSystemService(AudioManager.class); }
     void route(CallAudioState state) {
         muted = state.isMuted();
         routes.execute(() -> {
@@ -40,7 +42,7 @@ final class CallAudio implements AutoCloseable {
     }
     synchronized void cancel() {
         generation++; finish = true;
-        if (requestId != null && owner.gateway != null) owner.gateway.cancel(requestId);
+        if (requestId != null) { cancelledRequestId = requestId; if(owner.gateway != null)owner.gateway.cancel(requestId); }
         AudioRecord input = recorder; if (input != null) try { input.stop(); } catch (RuntimeException ignored) { }
         AudioTrack output = player; if (output != null) try { output.pause(); output.flush(); } catch (RuntimeException ignored) { }
     }
@@ -49,7 +51,7 @@ final class CallAudio implements AutoCloseable {
     boolean current(int ticket) { return !closed.get() && generation == ticket; }
     void speak(String text, Runnable done, Consumer<Throwable> failure) {
         int ticket = ticket(); String id = UUID.randomUUID().toString(); requestId = id;
-        owner.gateway.audio("phone.speech.synthesize",new byte[0],TelephonyRuntime.json("text",text,"requestId",id)).whenComplete((wav,error) -> {
+        owner.gateway.audio("phone.speech.synthesize",new byte[0],TelephonyRuntime.json("text",text,"requestId",id,"callId",callId,"cancelledRequestId",cancelledRequestId)).whenComplete((wav,error) -> {
             if (error != null) { if(current(ticket)) owner.execute(() -> failure.accept(error)); return; }
             if(!current(ticket)){Arrays.fill(wav,(byte)0);return;}
             io.execute(() -> {

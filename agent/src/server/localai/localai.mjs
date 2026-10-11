@@ -393,7 +393,8 @@ export class LocalAI {
     if (await fs.stat(output).catch(error => { if (error.code !== 'ENOENT') throw error; return null; })) throw Error('The output file already exists; choose a new WAV filename');
     const temporary = path.join(path.dirname(output), '.bashkitten-tts-' + randomUUID() + '.wav');
     const executable = path.join(path.dirname(runtime.binary), 'llama-tts'); await fs.access(executable, fs.constants.X_OK);
-    const argv = [executable, '-m', config.model, '-mm', config.projector, '-p', text, '--tts-speaker-file', config.voice, '--output', temporary,
+    // TTS maps omitted/negative -n to 512 frames; let its EOS finish the export.
+    const argv = [executable, '-m', config.model, '-mm', config.projector, '-p', text, '-n', '2147483647', '--tts-speaker-file', config.voice, '--output', temporary,
       '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
       ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
       ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])];

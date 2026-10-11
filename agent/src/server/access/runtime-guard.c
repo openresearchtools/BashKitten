@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <poll.h>
 #include <signal.h>
@@ -121,6 +122,64 @@ static void child_setup(pid_t expected_parent, int death_signal) {
     if (sigprocmask(SIG_SETMASK, &empty, NULL) != 0) _exit(125);
 }
 
+/* Node's captured stdio is a socketpair, which fopen(/proc/self/fd/N) cannot
+ * reopen. The released TTS CLI writes its already-complete WAV sequentially.
+ * Give it a real anonymous output pipe on fd 3, separate from diagnostic stdout,
+ * and relay only that pipe to the caller. The enclosing guard still owns every
+ * descendant; parent-death signals also cancel this bridge and its engine. */
+static int pipe_output(char **command) {
+    pid_t parent = getppid();
+    child_setup(parent, SIGKILL);
+    int descriptors[2];
+    if (pipe2(descriptors, O_CLOEXEC) != 0) {
+        perror("runtime-guard: output pipe");
+        return 125;
+    }
+    pid_t owner = getpid(), child = fork();
+    if (child < 0) {
+        close(descriptors[0]); close(descriptors[1]);
+        perror("runtime-guard: fork output producer");
+        return 125;
+    }
+    if (!child) {
+        child_setup(owner, SIGKILL);
+        close(descriptors[0]);
+        if (dup2(descriptors[1], 3) < 0 || fcntl(3, F_SETFD, 0) != 0) _exit(125);
+        if (descriptors[1] != 3) close(descriptors[1]);
+        int discard = open("/dev/null", O_WRONLY | O_CLOEXEC);
+        if (discard < 0 || dup2(discard, STDOUT_FILENO) < 0) _exit(125);
+        if (discard != STDOUT_FILENO) close(discard);
+        execvp(command[0], command);
+        perror("runtime-guard: exec output producer");
+        _exit(127);
+    }
+    close(descriptors[1]);
+    unsigned char buffer[65536];
+    bool failed = false;
+    for (;;) {
+        ssize_t count = read(descriptors[0], buffer, sizeof(buffer));
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) { failed = count < 0; break; }
+        for (ssize_t offset = 0; offset < count;) {
+            ssize_t written = write(STDOUT_FILENO, buffer + offset, (size_t)(count - offset));
+            if (written < 0 && errno == EINTR) continue;
+            if (written <= 0) { failed = true; break; }
+            offset += written;
+        }
+        volatile unsigned char *wipe = buffer;
+        for (size_t i = 0; i < sizeof(buffer); ++i) wipe[i] = 0;
+        if (failed) break;
+    }
+    close(descriptors[0]);
+    if (failed) kill(child, SIGKILL); // Unreaped child identity cannot be reused.
+    int status;
+    pid_t waited;
+    do { waited = waitpid(child, &status, 0); } while (waited < 0 && errno == EINTR);
+    if (failed || waited != child) return 125;
+    return WIFEXITED(status) ? WEXITSTATUS(status) :
+        WIFSIGNALED(status) ? 128 + WTERMSIG(status) : 125;
+}
+
 /* The desktop controller adopts its browser's lifetime without a lease or a
  * heartbeat. A pidfd cannot silently become a different process after PID reuse.
  * This helper remains a child of the existing controller/subreaper; it never
@@ -202,6 +261,8 @@ static bool release_wake_lock(void) {
 int main(int argc, char **argv) {
     const struct rlimit no_core = {0, 0};
     if (setrlimit(RLIMIT_CORE, &no_core) != 0) { perror("runtime-guard: disable core dumps"); return 125; }
+    if (argc >= 3 && strcmp(argv[1], "pipe-output") == 0)
+        return pipe_output(&argv[2]);
     if (argc == 4 && strcmp(argv[1], "wait-owner") == 0)
         return wait_owner(argv[2], argv[3]);
     if (argc < 4 || strcmp(argv[argc - 1], "serve") != 0) {
