@@ -12,13 +12,17 @@ export async function renderSection({ root: parent, call: control, info, signal 
   const doc = parent.ownerDocument;
   const node = (tag, text = '') => { const result = doc.createElementNS(HTML, tag); result.textContent = text; return result; };
   const message = node('p'), body = node('div'); message.setAttribute('role', 'status'); parent.append(message, body);
-  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus, routerPresetNode;
-  const engineStatus = {};
+  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus, routerPresetNode, feedbackJob;
+  const engineStatus = {}, runtimeViews = {};
+  const jobMessage = job => job ? [({ complete: 'Complete', failed: 'Failed', interrupted: 'Interrupted', cancelled: 'Cancelled' })[job.status] || job.phase,
+    job.progress?.downloaded ? `${(job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', job.error].filter(Boolean).join(' · ') : '';
+  const followJob = job => { feedbackJob = job?.id; message.textContent = jobMessage(job); };
   const active = () => !signal.aborted && parent.isConnected && isLocal();
   const call = async (name, args) => { if (!active()) throw Error('Select Local to use LocalAI'); return control(name, args); };
   const run = async (action, feedback = message) => {
     if (busy || !active()) return;
     busy = true; feedback.textContent = '';
+    if (feedback === message) feedbackJob = null;
     const disabled = [...parent.querySelectorAll('button')].map(button => [button, button.disabled]);
     for (const [button] of disabled) button.disabled = true;
     try { await action(); } catch (error) { if (active()) feedback.textContent = error.message; }
@@ -132,15 +136,50 @@ export async function renderSection({ root: parent, call: control, info, signal 
         : engine === 'llama' ? [['auto', 'Automatic'], ['cuda', 'CUDA + CPU'], ['vulkan', 'Vulkan + CPU']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], savedBackend);
       if (engine === 'llama') section.append(node('p', 'Choose CPU or a GPU for each model below. Launcher environment applies to all router models.'));
       const version = node('p'); version.setAttribute('role', 'status'); section.append(version);
+      let runtime = current.runtime, checked, checkError = '', checkSerial = 0, runtimeSerial = 0;
+      const showVersion = () => {
+        if (checkError) version.textContent = checkError;
+        else if (checked?.custom) version.textContent = 'Custom binary — managed updates disabled';
+        else if (checked) {
+          const updateAvailable = runtime?.release !== checked.release || runtime?.backend !== checked.packageBackend;
+          version.textContent = `${checked.version} · ${checked.backend} · ${updateAvailable ? 'Update available' : 'Up to date'}`;
+        } else version.textContent = runtime ? [runtime.version, runtime.backend, 'Installed'].filter(Boolean).join(' · ') : '';
+      };
+      const checkRuntime = async () => {
+        const request = ++checkSerial, atRuntime = runtimeSerial;
+        try {
+          const result = await call('localai-check', { engine });
+          if (!active() || !version.isConnected || request !== checkSerial) return;
+          checked = atRuntime !== runtimeSerial && runtime && (runtime.release !== result.release || runtime.backend !== result.packageBackend) ? null : result;
+          checkError = ''; showVersion();
+        } catch (error) {
+          if (active() && version.isConnected && request === checkSerial) { checkError = error.message; showVersion(); }
+        }
+      };
       section.append(button('Check now', async () => {
         if (mode.value !== config.mode || backend.value !== savedBackend) throw Error('Save the runtime choice first');
-        const result = await call('localai-check', { engine });
-        version.textContent = result.custom ? 'Custom binary — managed updates disabled' : `${result.version} · ${result.backend} · ${result.updateAvailable ? 'Update available' : 'Up to date'}`;
+        await checkRuntime();
       }), button('Download / update runtime', async () => {
         if (mode.value !== config.mode || backend.value !== savedBackend) throw Error('Save the runtime choice first');
-        const result = await call('localai-install', { engine }); message.textContent = result.phase;
+        const result = await call('localai-install', { engine }); if (active()) followJob(result);
       }));
-      if (current.runtime?.root) for (const [label, record] of [['Licenses', 'license'], ['Source record', 'source']]) section.append(button(label, () => openRecord(engine, record)));
+      const records = node('div'); section.append(records);
+      for (const [label, record] of [['Licenses', 'license'], ['Source record', 'source']]) records.append(button(label, () => openRecord(engine, record)));
+      runtimeViews[engine] = next => {
+        if (!version.isConnected) return;
+        if (runtime?.release !== next?.release || runtime?.backend !== next?.backend) {
+          runtimeSerial++; checkError = '';
+          // A newer release may have appeared since the last catalogue check.
+          // Show the actual installed version rather than a stale update claim.
+          if (next && checked && (next.release !== checked.release || next.backend !== checked.packageBackend)) checked = null;
+        }
+        runtime = next;
+        if (mode.value === 'managed') binary.value = runtime?.binary || '';
+        records.hidden = !runtime?.root;
+        showVersion();
+      };
+      records.hidden = !runtime?.root;
+      showVersion();
       const launcher = node('details'); launcher.append(node('summary', 'Launcher and environment')); section.append(launcher);
       launcher.append(node('p', 'The default launcher supplies the executable, port and saved configuration. Override these settings only when needed.'));
       const port = field(launcher, 'Port — 0 chooses an available port', config.port); port.type = 'number'; port.min = '0'; port.max = '65535';
@@ -186,14 +225,14 @@ export async function renderSection({ root: parent, call: control, info, signal 
       };
       updateSpeechControls();
       body.append(section);
-      if (config.mode === 'managed') void call('localai-check', { engine }).then(result => { if (active() && version.isConnected) version.textContent = `${result.version} · ${result.backend} · ${result.updateAvailable ? 'Update available' : 'Up to date'}`; }).catch(error => { if (version.isConnected) version.textContent = error.message; });
+      if (config.mode === 'managed') void checkRuntime();
     }
     drawTTS();
     const models = node('details'); models.className = 'connection-card'; models.append(node('summary', 'Models'));
     const modelBody = node('div'); models.append(modelBody); body.append(models);
     models.ontoggle = () => { if (models.open && !modelBody.hasChildNodes()) void run(() => drawModels(modelBody)); };
-    const progress = node('p', state.job ? [state.job.phase, state.job.error].filter(Boolean).join(' · ') : ''); progressNode = progress; body.append(progress);
-    body.append(button('Refresh status', async () => draw(await call('localai-status'))), button('Cancel LocalAI operation', async () => { const value = await call('localai-cancel'); progress.textContent = value?.phase || ''; }));
+    const progress = node('p', jobMessage(state.job)); progressNode = progress; body.append(progress);
+    body.append(button('Refresh status', async () => draw(await call('localai-status'))), button('Cancel LocalAI operation', async () => { const value = await call('localai-cancel'); if (active()) { followJob(value); progress.textContent = jobMessage(value); } }));
     const output = node('details'); output.append(node('summary', 'LocalAI operation output')); const text = node('pre', state.job?.log || ''); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
   };
   const drawTTS = () => {
@@ -438,15 +477,20 @@ export async function renderSection({ root: parent, call: control, info, signal 
     try {
       if (!busy) {
         const latest = await call('localai-status');
-        if (!active() || doc.hidden) return;
+        if (!active() || doc.hidden || busy) return;
         if (latest.needsSetup) return;
         if (!state) { draw(latest); return; }
         for (const engine of ['llama', 'whisper']) {
           const current = latest[engine];
           if (engineStatus[engine]?.isConnected) engineStatus[engine].textContent = [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, engine === 'llama' ? current.runtime?.backend && current.runtime.backend + ' runtime (per-model device)' : current.runtime?.selectedBackend].filter(Boolean).join(' · ');
+          runtimeViews[engine]?.(current.runtime);
         }
         if (importNode?.isConnected) importNode.textContent = ['Pi import: ' + latest.import.state, latest.import.provider, latest.import.endpoint, latest.import.error].filter(Boolean).join(' · ');
-        if (progressNode?.isConnected) progressNode.textContent = latest.job ? [latest.job.phase, latest.job.progress?.downloaded ? `${(latest.job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', latest.job.error].filter(Boolean).join(' · ') : '';
+        if (progressNode?.isConnected) progressNode.textContent = jobMessage(latest.job);
+        if (feedbackJob && latest.job?.id === feedbackJob) {
+          message.textContent = jobMessage(latest.job);
+          if (['complete', 'failed', 'interrupted', 'cancelled'].includes(latest.job.status)) feedbackJob = null;
+        }
         if (outputNode?.isConnected) outputNode.textContent = latest.job?.log || '';
         if (synthesisStatus?.isConnected) synthesisStatus.textContent = [latest.tts?.synthesis?.state, latest.tts?.synthesis?.output, latest.tts?.synthesis?.error].filter(Boolean).join(' · ');
         await refreshVisibleModels?.();
