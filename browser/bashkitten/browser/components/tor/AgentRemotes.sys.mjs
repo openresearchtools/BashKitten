@@ -205,17 +205,40 @@ class AgentRemoteStore {
     }));
   }
 
-  trustLocal({ url, caPem, caSha256, instanceId }) {
+  // Only the native private-controller handoff calls this. Local installation
+  // resets are authoritative here; remote enrollment never uses this path.
+  trustLocal({ url, caPem, caSha256, instanceId }, { current, replace }) {
     return this.serialized(async () => {
       await this.load(); url = validateURL(url, true);
-      if (typeof instanceId !== "string" || !instanceId) throw new Error("Missing local server identity.");
-      const { identity } = certificate(caPem, caSha256), previous = this.entries.get("local");
-      if (previous && (previous.instanceId !== instanceId || previous.caSha256 !== identity)) {
-        throw Object.assign(new Error("The local server identity changed. Check the service before trusting its replacement."), { code: "local_identity_changed" });
+      const check = () => { if (!current()) throw new Error("The local Agent selection changed."); };
+      check();
+      if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(instanceId) ||
+          !/^[a-f0-9]{64}$/.test(caSha256)) throw new Error("Missing local server identity.");
+      const { cert, identity } = certificate(caPem, caSha256), previous = this.entries.get("local");
+      // Mirror setAgentCA's existing native validation before retiring trust.
+      if (!(cert.certType & Ci.nsIX509Cert.CA_CERT) || cert.getRawDER().length > 65536) {
+        throw new Error("The local controller did not supply a valid CA certificate.");
       }
+      const replacing = previous && (previous.instanceId !== instanceId || previous.caSha256 !== identity);
+      if (replacing) {
+        this.contexts.set(previous.userContextId, null);
+        if (this.activeId === "local") this.activeId = null;
+        Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", "local");
+        replace(this.info(previous));
+        this.trust.clearAgentCA(new URL(previous.url).hostname, { userContextId: previous.userContextId });
+        await new Promise((resolve, reject) => Services.clearData.deleteDataFromOriginAttributesPattern(
+          { userContextId: previous.userContextId },
+          { onDataDeleted: failed => failed ? reject(new Error("Could not clear the previous local connection data.")) : resolve() }
+        ));
+        check();
+      }
+      // Keep the old entry occupied until this synchronous allocation/replace.
+      // Remote enrollment has its own queue and may allocate during clearData.
+      const userContextId = !previous || replacing ? this.allocateContext() : previous.userContextId;
       const entry = { id: "local", kind: "agent", name: "Local", url, caPem, caSha256: identity, instanceId,
-        userContextId: previous?.userContextId ?? this.allocateContext() };
-      this.entries.set("local", entry); await this.save(); await this.prepare(entry); return this.info(entry);
+        userContextId };
+      this.entries.set("local", entry); await this.save(); check();
+      await this.prepare(entry); check(); return this.info(entry);
     }, true);
   }
 
@@ -537,6 +560,9 @@ class AgentRemoteStore {
     callback?.(null, this.info(entry));
   }
   block(entry) {
+    // Local and machine connections never own onion mTLS credentials or Tor
+    // routes. The native client-certificate API intentionally rejects loopback.
+    if (nativeEntry(entry)) return;
     for (const choice of Object.values(entry.mappings || {})) TorRouting.setServiceRoute(choice.context, null);
     TorRouting.setAgentTunnel(entry.userContextId, null);
     this.trust.clearAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId });
