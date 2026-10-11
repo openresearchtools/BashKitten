@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { createWriteStream, watch } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
+import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { privateDir, readJson, writeJson, json, jsonBody, socketRequest } from '../common.mjs';
@@ -155,6 +156,39 @@ async function checkRuntimeIdentity(id, info) {
   for (const [source,target] of [[p.rootfs,'/'],[p.exchange,'/run/bashkitten-host'],[p.settings,'/run/bashkitten-settings'],[p.guestDisplay,'/run/bashkitten-display']]) {
     if (mounts.filter(item => item.Destination === target).length !== 1 || !mounts.some(item => item.Source === source && item.Destination === target)) throw Error('Podman changed the owned endpoint/rootfs mounts; stopped before launch');
   }
+}
+async function clearStoppedBrowserSocket(files, signal) {
+  const directory = path.join(files.exchange, 'agent');
+  const socketPath = path.join(directory, 'guest-browser.sock');
+  const stat = async file => fs.lstat(file).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  const parent = await stat(directory);
+  if (!parent) return;
+  if (!parent.isDirectory() || parent.uid !== process.getuid() || parent.mode & 0o077) throw Error('Guest browser control directory is not private and owned');
+  const original = await stat(socketPath);
+  if (!original) return;
+  if (!original.isSocket() || original.uid !== process.getuid()) throw Error('Guest browser control path is not an owned socket');
+  // The serialized machine operation has verified its guest is stopped. Still
+  // refuse a live listener, including one outside that guest, instead of taking
+  // over its endpoint. A refused connection alone establishes a stale socket.
+  const probe = AbortSignal.any([signal, AbortSignal.timeout(2000)]);
+  await new Promise((resolve, reject) => {
+    const client = net.createConnection({ path: socketPath, signal: probe });
+    client.once('connect', () => { client.destroy(); reject(Error('Guest browser control is still listening; its socket was left unchanged')); });
+    client.once('error', error => {
+      client.destroy();
+      if (['ECONNREFUSED', 'ENOENT'].includes(error.code)) resolve();
+      else reject(Error('Could not verify the stale guest browser socket; it was left unchanged', { cause: error }));
+    });
+  });
+  signal.throwIfAborted();
+  const currentParent = await stat(directory), current = await stat(socketPath);
+  if (!current) return;
+  if (!currentParent || currentParent.dev !== parent.dev || currentParent.ino !== parent.ino ||
+      currentParent.uid !== process.getuid() || currentParent.mode & 0o077 || !currentParent.isDirectory() ||
+      current.dev !== original.dev || current.ino !== original.ino || !current.isSocket() || current.uid !== process.getuid()) {
+    throw Error('Guest browser control path changed during startup; it was left unchanged');
+  }
+  await fs.unlink(socketPath);
 }
 async function operation(id) {
   const p = locations(id);
@@ -318,7 +352,10 @@ async function start(config, job) {
       info=await inspect(id); if (!info) throw Error('Podman did not create the machine');
       await saveState(id,{definition:definition(config)});
     }
+    info = await inspect(id, { signal: job.signal });
+    if (!info || info.State?.Running !== false) throw Error('The guest is not stopped; its browser socket was left unchanged');
     await checkRuntimeIdentity(id,info);
+    await clearStoppedBrowserSocket(p, job.signal);
     await fs.rm(path.join(p.exchange,'agent/guest-browser-status.json'),{force:true});
     await fs.rm(path.join(p.exchange,'integration-status.json'),{force:true});
     job.check();
