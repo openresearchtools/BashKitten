@@ -1,0 +1,19 @@
+[Icon Theme]
+Name=Gnozzard Graphite Orange
+Comment=Native Adwaita folders recoloured with the Gnozzard orange palette
+Inherits=Adwaita,hicolor
+Directories=scalable/places,scalable/mimetypes
+
+[scalable/places]
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable
+Context=Places
+
+[scalable/mimetypes]
+Size=64
+MinSize=8
+MaxSize=512
+Type=Scalable
+Context=MimeTypes

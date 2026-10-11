@@ -1,0 +1,17 @@
+[org.gnome.shell]
+enabled-extensions=['gnozzard@openresearchtools', 'ding@rastersoft.com', 'ubuntu-appindicators@ubuntu.com']
+disabled-extensions=['ubuntu-dock@ubuntu.com']
+
+[org.gnome.mutter]
+dynamic-workspaces=false
+
+[org.gnome.desktop.wm.preferences]
+num-workspaces=1
+
+# Supply the initial background without overwriting the user's wallpaper.
+[org.gnome.desktop.background]
+picture-uri=''
+picture-uri-dark=''
+color-shading-type='solid'
+primary-color='#202225'
+secondary-color='#202225'

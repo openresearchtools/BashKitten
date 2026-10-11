@@ -1,0 +1,52 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Minimal Polkit-launched APT bridge for a user-selected local .deb."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import stat
+import subprocess
+import sys
+
+
+def fail(message: str) -> None:
+    print(f"gnozzard-deb-installer: {message}", file=sys.stderr)
+    raise SystemExit(2)
+
+
+if len(sys.argv) != 2:
+    fail("exactly one package path is required")
+
+caller = os.environ.get("PKEXEC_UID", "")
+if not caller.isdecimal():
+    fail("this helper must be started through pkexec")
+
+path = Path(os.path.normpath(sys.argv[1]))
+if not path.is_absolute() or path.suffix.lower() != ".deb":
+    fail("package path must be an absolute .deb path")
+
+try:
+    info = path.lstat()
+except OSError as error:
+    fail(f"cannot inspect package: {error}")
+if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+    fail("package must be a regular file, not a link")
+if info.st_uid != int(caller) or info.st_size == 0:
+    fail("package must be a non-empty file owned by the requesting user")
+
+validated = subprocess.run(
+    ["/usr/bin/dpkg-deb", "--field", str(path), "Package"],
+    check=False,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+    timeout=10,
+)
+if validated.returncode != 0:
+    fail("file is not a valid Debian binary package")
+
+os.execv(
+    "/usr/bin/apt-get",
+    ["apt-get", "install", "-y", "--", str(path)],
+)

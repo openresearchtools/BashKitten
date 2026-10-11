@@ -1,0 +1,209 @@
+#panel.gnozzard-top-panel {
+  background-color: #282828;
+  font-weight: normal;
+}
+
+#panel.gnozzard-top-panel .panel-button {
+  font-weight: normal;
+}
+
+.gnozzard-panel {
+  spacing: 0;
+  padding: 0;
+  border: none;
+  font-weight: normal;
+}
+
+.gnozzard-applications-button,
+.gnozzard-task-page-button,
+.gnozzard-task-button,
+.gnozzard-show-desktop {
+  background-color: #282828;
+  border-radius: 0;
+  padding: 0 10px;
+  min-height: 38px;
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+}
+
+.gnozzard-applications-button:hover,
+.gnozzard-task-page-button:hover,
+.gnozzard-task-page-button:focus,
+.gnozzard-task-button:hover,
+.gnozzard-task-button:focus,
+.gnozzard-show-desktop:hover {
+  background-color: #3f3f3f;
+}
+
+.gnozzard-task-page-button {
+  padding: 0;
+  font-weight: bold;
+  text-align: center;
+}
+
+.gnozzard-task-button:active,
+.gnozzard-task-button.focused {
+  background-color: #282828;
+  color: white;
+  box-shadow: inset 0 -3px #ff7139;
+}
+
+.gnozzard-task-content,
+.gnozzard-app-row-content {
+  spacing: 7px;
+}
+
+.gnozzard-task-label {
+  color: #ffffff;
+}
+
+.gnozzard-show-desktop {
+  min-width: 11px;
+  padding: 0 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
+  border-right: 0;
+}
+
+.gnozzard-app-menu {
+  background-color: #222222;
+  border: none;
+  border-radius: 12px 12px 0 0;
+  color: white;
+  padding: 10px;
+  spacing: 8px;
+}
+
+.popup-menu.gnozzard-applications-popup {
+  margin: 0;
+  -arrow-rise: 0;
+  -boxpointer-gap: 0;
+}
+
+.gnozzard-applications-popup .popup-menu-content {
+  background-color: transparent;
+  border: none;
+  border-radius: 12px 12px 0 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.gnozzard-applications-below .gnozzard-app-menu,
+.gnozzard-applications-below .popup-menu-content {
+  border-radius: 0 0 12px 12px;
+}
+
+.gnozzard-app-search {
+  margin: 0;
+}
+
+.gnozzard-menu-bottom-bar {
+  spacing: 6px;
+  margin-top: 4px;
+}
+
+.gnozzard-settings-button {
+  transition-duration: 150ms;
+  background-color: transparent;
+  border: 3px solid transparent;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 100px transparent;
+}
+
+.gnozzard-settings-button:hover,
+.gnozzard-settings-button:focus {
+  box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.17);
+}
+
+.gnozzard-settings-button:active {
+  box-shadow: inset 0 0 0 100px rgba(255, 255, 255, 0.28);
+}
+
+.gnozzard-app-list {
+  spacing: 1px;
+}
+
+.gnozzard-app-row {
+  border-radius: 8px;
+  padding: 7px 8px;
+  color: white;
+  text-align: left;
+}
+
+.gnozzard-app-row:hover {
+  background-color: #3f3f3f;
+}
+
+.gnozzard-app-row:focus {
+  background-color: #ff7139;
+  color: #181818;
+}
+
+.gnozzard-pinned-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+  padding-top: 7px;
+  spacing: 2px;
+}
+
+.gnozzard-pinned-title {
+  color: #c8c8c8;
+  font-size: 0.85em;
+  padding: 0 5px 3px 5px;
+}
+
+.gnozzard-workspaces-button {
+  padding: 0;
+}
+
+.gnozzard-workspaces-content {
+  spacing: 0;
+}
+
+.gnozzard-workspace-button,
+.gnozzard-workspace-add-button {
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  color: white;
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.gnozzard-workspace-entry-content {
+  min-height: 32px;
+}
+
+.gnozzard-workspace-indicator {
+  background-color: #ff7139;
+  height: 3px;
+}
+
+.gnozzard-workspace-add-button {
+  font-weight: bold;
+  min-width: 30px;
+  padding: 0 8px;
+}
+
+.gnozzard-resources-button {
+  padding: 0 8px;
+}
+
+.gnozzard-resources-activation {
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.gnozzard-destructive-text {
+  color: #ff5f57;
+}
+/* Only shared gaps receive input, never window content. */
+.gnozzard-tile-divider { background-color: transparent; }
+.gnozzard-tile-divider:hover { background-color: rgba(233, 84, 32, 0.7); }
+.gnozzard-tile-preview { background-color: rgba(233, 84, 32, 0.18); border: 2px solid #e95420; }
+.gnozzard-tile-preview:invalid { background-color: rgba(192, 28, 40, 0.18); border-color: #c01c28; }
+.gnozzard-tile-preview-label { background-color: #282828; color: white; border-radius: 6px; padding: 8px; font-size: 10pt; }
