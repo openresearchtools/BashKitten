@@ -18,6 +18,9 @@ const script = fileURLToPath(import.meta.url), exec = promisify(execFile);
 const idPattern = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const localAI = id => ['localai-llama', 'localai-whisper'].includes(id);
 const unit = id => `bashkitten-service-${id}.scope`;
+// Managed guests have their own session supervisor, not a systemd user manager.
+// Capture the controller's execution role before applying a command environment.
+const useUserScope = platform === 'linux' && process.env.BASHKITTEN_EXECUTION_ROLE !== 'container';
 const text = value => typeof value === 'string' && !value.includes('\0');
 
 function target(value) {
@@ -171,7 +174,7 @@ export class HostedServices {
     // The guard still owns the scope's descendants, including if systemd or
     // the controller dies. A scope preserves that parent/child ownership.
     let failure;
-    if (platform === 'linux') await exec('systemctl', ['--user', 'stop', unit(id)], { timeout: 15000 }).catch(error => { failure = error; });
+    if (useUserScope) await exec('systemctl', ['--user', 'stop', unit(id)], { timeout: 15000 }).catch(error => { failure = error; });
     owner.child?.kill('SIGTERM');
     let timer;
     try {
@@ -202,9 +205,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     process.on('SIGTERM', () => process.exit(0)); process.on('SIGINT', () => process.exit(0));
     const args = entry.command.argv;
     const env = localAI(id) ? engineEnvironment(entry.command.env) : { ...process.env, ...entry.command.env };
-    // Scope units retain the existing guard's ancestry; detached user services
-    // would otherwise survive a killed controller. Never expand arguments.
-    const child = platform === 'linux'
+    // Both host scopes and direct guest/Termux commands stay below the guard;
+    // detached user services would survive a killed controller. Never expand arguments.
+    const child = useUserScope
       ? spawn('systemd-run', ['--user', '--scope', '--quiet', '--collect', '--no-ask-password', '--expand-environment=no', '--unit=' + unit(id),
         '--description=BashKitten ' + entry.name, '--', ...args], { cwd: entry.command.cwd, env, stdio: 'inherit' })
       : spawn(args[0], args.slice(1), { cwd: entry.command.cwd, env, stdio: 'inherit' });
