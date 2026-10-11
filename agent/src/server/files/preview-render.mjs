@@ -162,7 +162,9 @@ function sheetCell(cell) {
 export async function renderPreview({ kind, name, text = '', workbook }, outputPath) {
   if (!['text', 'markdown', 'sheet'].includes(kind)) throw new Error('Unsupported HTML preview kind');
   const nonce = randomBytes(24).toString('base64');
-  const policy = `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'self' about:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
+  // Gecko checks an iframe's <a download> against frame-src before handling
+  // the attachment. Permit its own Blob; the sandbox keeps an opaque origin.
+  const policy = `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src data: blob:; frame-src 'self' about: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
   const output = await fs.open(outputPath, 'wx', 0o600);
   // Writes are awaited, including each workbook page, so output backpressure
   // cannot accumulate the entire standalone document in the worker's memory.
