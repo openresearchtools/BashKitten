@@ -1,0 +1,753 @@
+#
+# Copyright (C) 2020 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+"""APIs for build configurations."""
+
+from pathlib import Path
+from typing import Dict, List, Optional
+import functools
+import json
+
+from llvm_android import (hosts, paths, toolchains, win_sdk)
+
+class Config:
+    """Base configuration."""
+
+    name: str
+    target_os: hosts.Host
+    target_arch: hosts.Arch = hosts.Arch.X86_64
+    sysroot: Optional[Path] = None
+
+    """Additional config data that a builder can specify."""
+    extra_config = None
+
+    @property
+    def llvm_triple(self) -> str:
+        raise NotImplementedError()
+
+    def get_c_compiler(self, toolchain: toolchains.Toolchain) -> Path:
+        """Returns path to c compiler."""
+        return toolchain.cc
+
+    def get_cxx_compiler(self, toolchain: toolchains.Toolchain) -> Path:
+        """Returns path to c++ compiler."""
+        return toolchain.cxx
+
+    def get_linker(self, _toolchain: toolchains.Toolchain) -> Optional[Path]:
+        """Returns the path to linker."""
+        return None
+
+    @property
+    def cflags(self) -> List[str]:
+        """Returns a list of flags for c compiler."""
+        return []
+
+    @property
+    def cxxflags(self) -> List[str]:
+        """Returns a list of flags used for cxx compiler."""
+        return self.cflags
+
+    @property
+    def ldflags(self) -> List[str]:
+        """Returns a list of flags for static linker."""
+        return []
+
+    @property
+    def env(self) -> Dict[str, str]:
+        return {}
+
+    def __str__(self) -> str:
+        return self.target_os.name
+
+    @property
+    def output_suffix(self) -> str:
+        """The suffix of output directory name."""
+        return f'-{self.target_os.value}'
+
+    @property
+    def cmake_defines(self) -> Dict[str, str]:
+        """Additional defines for cmake."""
+        return dict()
+
+
+class _BaseConfig(Config):  # pylint: disable=abstract-method
+    """Base configuration."""
+
+    use_lld: bool = True
+    target_os: hosts.Host
+    # Assume most configs are cross compiling
+    is_cross_compiling: bool = True
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags: List[str] = [f'-ffile-prefix-map={paths.ANDROID_DIR}/=']
+        cflags.extend(f'-B{d}' for d in self.bin_dirs)
+        return cflags
+
+    @property
+    def ldflags(self) -> List[str]:
+        ldflags: List[str] = []
+        for lib_dir in self.lib_dirs:
+            ldflags.append(f'-B{lib_dir}')
+            ldflags.append(f'-L{lib_dir}')
+        if self.use_lld:
+            ldflags.append('-fuse-ld=lld')
+        return ldflags
+
+    @property
+    def bin_dirs(self) -> List[Path]:
+        """Paths to binaries used in cflags."""
+        return []
+
+    @property
+    def lib_dirs(self) -> List[Path]:
+        """Paths to libraries used in ldflags."""
+        return []
+
+    def get_linker(self, toolchain: toolchains.Toolchain) -> Optional[Path]:
+        if self.use_lld:
+            return toolchain.lld
+        return None
+
+
+class BaremetalConfig(_BaseConfig):
+    """Configuration for baremetal targets."""
+
+    target_os: hosts.Host = hosts.Host.Baremetal
+
+    @property
+    def cmake_defines(self) -> Dict[str, str]:
+        defines = super().cmake_defines
+        defines['COMPILER_RT_BAREMETAL_BUILD'] = 'ON'
+        return defines
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append(f'--target={self.llvm_triple}')
+        return cflags
+
+    @property
+    def output_suffix(self) -> str:
+        """The suffix of output directory name."""
+        return f'-{self.target_arch.value}-baremetal'
+
+
+class BaremetalAArch64Config(BaremetalConfig):
+    """Configuration for baremetal targets."""
+
+    target_arch: hosts.Arch = hosts.Arch.AARCH64
+
+    @property
+    def llvm_triple(self) -> str:
+        return 'aarch64-elf'
+
+
+class BaremetalArmMultilibConfig(BaremetalConfig):
+    """Configuration for baremetal ARM multilib targets."""
+
+    target_arch: hosts.Arch = hosts.Arch.ARM
+
+    @property
+    def multilib_name(self) -> str:
+        """The name of the multilib variant."""
+        raise NotImplementedError()
+
+    @property
+    def output_suffix(self) -> str:
+        """The suffix of output directory name."""
+        return f'-{self.multilib_name}-baremetal'
+
+
+class BaremetalArmv6MConfig(BaremetalArmMultilibConfig):
+    """Configuration for baremetal Armv6-M target."""
+
+    @property
+    def llvm_triple(self) -> str:
+        return 'armv6m-none-eabi'
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append('-march=armv6-m')
+        cflags.append('-mfloat-abi=soft')
+        return cflags
+
+    @property
+    def multilib_name(self) -> str:
+        return 'armv6-m'
+
+
+class BaremetalArmv8MBaseConfig(BaremetalArmMultilibConfig):
+    """Configuration for baremetal Armv8-M baseline target."""
+
+    @property
+    def llvm_triple(self) -> str:
+        return 'armv8m.base-none-eabi'
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append('-march=armv8-m.base')
+        cflags.append('-mfloat-abi=soft')
+        return cflags
+
+    @property
+    def multilib_name(self) -> str:
+        return 'armv8-m.base'
+
+
+class BaremetalArmv81MMainConfig(BaremetalArmMultilibConfig):
+    """Configuration for baremetal Armv8.1-M mainline target."""
+
+    def __init__(self, fpu: hosts.Armv81MMainFpu):
+        self.fpu = fpu
+
+    @property
+    def llvm_triple(self) -> str:
+        if self.fpu == hosts.Armv81MMainFpu.NONE:
+            return 'armv8.1m.main-none-eabi'
+        else:
+            return 'armv8.1m.main-none-eabihf'
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append('-march=armv8.1-m.main')
+        cflags.append(f'-mfpu={self.fpu.llvm_fpu}')
+        cflags.append(f'-mfloat-abi={self.fpu.llvm_float_abi}')
+        return cflags
+
+    @property
+    def multilib_name(self) -> str:
+        return f'armv8.1-m.main+{self.fpu.value}'
+
+
+class DarwinConfig(_BaseConfig):
+    """Configuration for Darwin targets."""
+
+    target_os: hosts.Host = hosts.Host.Darwin
+    use_lld: bool = False
+    is_cross_compiling: bool = False
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        # Fails if an API used is newer than what specified in -mmacos-version-min.
+        cflags.append('-Werror=unguarded-availability')
+        return cflags
+
+    @property
+    def llvm_triple(self) -> str:
+        # x86_64-apple-darwin is another choice
+        return 'arm64-apple-darwin'
+
+class _GccConfig(_BaseConfig):  # pylint: disable=abstract-method
+    """Base config to use gcc libs."""
+
+    gcc_root: Path
+    gcc_triple: str
+    gcc_ver: str
+
+    def __init__(self, is_32_bit: bool = False):
+        self.is_32_bit = is_32_bit
+
+    @property
+    def bin_dirs(self) -> List[Path]:
+        return [self.gcc_root / self.gcc_triple / 'bin']
+
+    @property
+    def gcc_lib_dir(self) -> Path:
+        gcc_lib_dir = self.gcc_root / 'lib' / 'gcc' / self.gcc_triple / self.gcc_ver
+        if self.is_32_bit:
+            gcc_lib_dir = gcc_lib_dir / '32'
+        return gcc_lib_dir
+
+    @property
+    def gcc_builtin_dir(self)-> Path:
+        base = self.gcc_root / self.gcc_triple
+        if self.is_32_bit:
+            return base / 'lib32'
+        else:
+            return base / 'lib64'
+
+    @property
+    def lib_dirs(self) -> List[Path]:
+        return [self.gcc_lib_dir, self.gcc_builtin_dir]
+
+
+class LinuxConfig(_GccConfig):
+    """Configuration for Linux targets."""
+
+    target_os: hosts.Host = hosts.Host.Linux
+    sysroot: Optional[Path] = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8' / 'sysroot'
+    gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-linux-glibc2.17-4.8'
+    gcc_triple: str = 'x86_64-linux'
+    gcc_ver: str = '4.8.3'
+    is_cross_compiling: bool = False
+    is_musl: bool = False
+
+    @property
+    def llvm_triple(self) -> str:
+        return 'i386-unknown-linux-gnu' if self.is_32_bit else 'x86_64-unknown-linux-gnu'
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        if self.is_32_bit and not self.is_musl:
+            cflags.append('-march=i686')
+        return cflags
+
+
+    @property
+    def ldflags(self) -> List[str]:
+        return super().ldflags + [
+            '-Wl,--hash-style=both',
+        ]
+
+
+class LinuxMuslConfig(LinuxConfig):
+    """Config for Musl sysroot bootstrapping"""
+    target_os: hosts.Host = hosts.Host.Linux
+    target_arch: hosts.Arch
+    is_cross_compiling: bool
+    is_musl: bool = True
+
+    def __init__(self, arch: hosts.Arch = hosts.Arch.X86_64, is_cross_compiling: bool = True):
+        self.triple = arch.llvm_arch + '-unknown-linux-musl'
+        if arch is hosts.Arch.ARM:
+            self.triple += 'eabihf'
+        self.target_arch = arch
+        self.is_cross_compiling = is_cross_compiling
+
+    @property
+    def is_32_bit(self):
+        return self.target_arch in [hosts.Arch.ARM, hosts.Arch.I386]
+
+    @property
+    def llvm_triple(self) -> str:
+        return self.triple
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags + [
+                f'--target={self.llvm_triple}',
+                # TODO: Try removing -D_LIBCPP_HAS_MUSL_LIBC now that the
+                # LIBCXX_HAS_MUSL_LIBC CMake var is set. We may have to wait
+                # until the bootstrap compiler's c++/v1/__config_site header is
+                # new enough to define _LIBCPP_HAS_MUSL_LIBC to 1.
+                '-D_LIBCPP_HAS_MUSL_LIBC',
+                '-D_LARGEFILE64_SOURCE=1',
+                # gcc does this automatically and glibc includes it in features.h
+                # Neither clang nor musl include it, so add it here.  Otherwise
+                # libedit fails with error: wchar_t must store ISO 10646 characters
+                '-include stdc-predef.h',
+        ]
+        if self.target_arch is hosts.Arch.ARM:
+            cflags.append('-march=armv7-a')
+
+        return cflags
+
+    @property
+    def cxxflags(self) -> List[str]:
+        cxxflags = super().cxxflags + [
+            # -stdlib=libc++ prevents the "Check for working CXX compiler"
+            # step from failing when it can't find libstdc++.
+            # -Wno-unused-command-line-argument is necessary for commands that
+            # use -Werror -nostdinc++.
+            '-stdlib=libc++',
+            '-Wno-unused-command-line-argument',
+        ]
+
+        return cxxflags
+
+    @property
+    def ldflags(self) -> List[str]:
+        return super().ldflags + [
+            '-rtlib=compiler-rt',
+            '-Wl,-z,stack-size=2097152',
+        ]
+
+    @property
+    def sysroot(self) -> Path:
+        return paths.BUILD_TOOLS_DIR / 'sysroots' / self.triple
+
+    @property
+    def output_suffix(self) -> str:
+        """The suffix of output directory name."""
+        return f'-{self.llvm_triple}'
+
+    @property
+    def lib_dirs(self) -> List[Path]:
+        """Override gcc libdirs."""
+        return []
+
+    @property
+    def bin_dirs(self) -> List[Path]:
+        """Override gcc bindirs."""
+        return []
+
+    @property
+    def cmake_defines(self) -> Dict[str, str]:
+        defines = super().cmake_defines
+        defines['LIBCXX_USE_COMPILER_RT'] = 'TRUE'
+        defines['LIBCXX_HAS_MUSL_LIBC'] = 'TRUE'
+        defines['LIBCXXABI_USE_COMPILER_RT'] = 'TRUE'
+        defines['LIBUNWIND_USE_COMPILER_RT'] = 'TRUE'
+        # clang generates call to builtin functions when building
+        # compiler-rt for musl.  Allow use of the builtins library.
+        defines['COMPILER_RT_USE_BUILTINS_LIBRARY'] = 'TRUE'
+
+        # The musl sysroots contain empty libdl.a, libpthread.a and librt.a to
+        # satisfy the parts of the LLVM build that hardcode -lpthread, etc.,
+        # but that causes LLVM to mis-detect them as libpthread.so, etc.
+        # Hardcoded them as disabled to prevent references from .deplibs
+        # sections.
+        defines['LIBCXX_HAS_RT_LIB'] = 'FALSE'
+        defines['LIBCXX_HAS_PTHREAD_LIB'] = 'FALSE'
+        defines['LIBCXXABI_HAS_PTHREAD_LIB'] = 'FALSE'
+        defines['LIBUNWIND_HAS_DL_LIB'] = 'FALSE'
+        defines['LIBUNWIND_HAS_PTHREAD_LIB'] = 'FALSE'
+
+        defines['LLVM_DEFAULT_TARGET_TRIPLE'] = self.llvm_triple
+
+        return defines
+
+
+class LinuxMuslHostConfig(LinuxMuslConfig):
+    """Config for Musl as the host"""
+    def __init__(self, arch: hosts.Arch = hosts.Arch.X86_64):
+        super().__init__(arch=arch, is_cross_compiling=False)
+
+    @property
+    def env(self) -> Dict[str, str]:
+        env = super().env
+        env['LD_LIBRARY_PATH'] = str(self.sysroot / 'lib')
+        return env
+
+
+# TODO: We should kill off 32-bit Windows support, but we still need it because
+# we have a single 32-bit DLL for USB stuff for adb.exe/fastboot.exe.
+class MinGWConfig(_GccConfig):
+    """Configuration for MinGW targets."""
+
+    target_os: hosts.Host = hosts.Host.Windows
+    gcc_root: Path = paths.GCC_ROOT / 'host' / 'x86_64-w64-mingw32-4.8'
+    gcc_triple: str = 'x86_64-w64-mingw32'
+    gcc_ver: str = '4.8.3'
+
+    @property
+    def target_arch(self) -> hosts.Arch:
+        return hosts.Arch.I386 if self.is_32_bit else hosts.Arch.X86_64
+
+    @property
+    def llvm_triple(self) -> str:
+        return 'i686-pc-windows-gnu' if self.is_32_bit else 'x86_64-pc-windows-gnu'
+
+    @property
+    def sysroot(self) -> Optional[Path]:
+        return paths.SYSROOTS / ('i686-w64-mingw32' if self.is_32_bit else 'x86_64-w64-mingw32')
+
+    @property
+    def output_suffix(self) -> str:
+        return '-windows32' if self.is_32_bit else '-windows'
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append(f'--target={self.llvm_triple}')
+        cflags.append('-D_LARGEFILE_SOURCE')
+        cflags.append('-D_FILE_OFFSET_BITS=64')
+        cflags.append('-D_WIN32_WINNT=0x0600')
+        cflags.append('-DWINVER=0x0600')
+        cflags.append('-D__MSVCRT_VERSION__=0x1400')
+        if self.target_arch == hosts.Arch.I386:
+            cflags.append('-fsjlj-exceptions')
+        return cflags
+
+    @property
+    def ldflags(self) -> List[str]:
+        ldflags = super().ldflags
+        if not self.is_32_bit:
+            ldflags.append('-Wl,--dynamicbase')
+            ldflags.append('-Wl,--nxcompat')
+            ldflags.append('-Wl,--high-entropy-va')
+            ldflags.append('-Wl,--Xlink=-Brepro')
+        return ldflags
+
+    @property
+    def lib_dirs(self) -> List[Path]:
+        # No need for explicit lib_dirs.  We copy them into the sysroot.
+        return []
+
+
+class MSVCConfig(Config):
+    """Configuration for MSVC toolchain."""
+    target_os: hosts.Host = hosts.Host.Windows
+    is_cross_compiling: bool = True
+
+    # We still use lld but don't want -fuse-ld=lld in linker flags.
+    use_lld: bool = False
+
+    def get_c_compiler(self, toolchain: toolchains.Toolchain) -> Path:
+        return toolchain.cl
+
+    def get_cxx_compiler(self, toolchain: toolchains.Toolchain) -> Path:
+        return toolchain.cl
+
+    def get_linker(self, toolchain: toolchains.Toolchain) -> Optional[Path]:
+        return toolchain.lld_link
+
+    @functools.cached_property
+    def _read_env_setting(self) -> Dict[str, str]:
+        sdk_path = win_sdk.get_path()
+        assert sdk_path is not None
+        base_path = sdk_path / 'bin'
+        with (base_path / 'SetEnv.x64.json').open('r') as env_file:
+            env_setting = json.load(env_file)
+        return {key: ';'.join(str(base_path.joinpath(*v)) for v in value)
+                for key, value in env_setting['env'].items()}
+
+    @property
+    def llvm_triple(self) -> str:
+        return 'x86_64-pc-windows-msvc',
+
+    @property
+    def cflags(self) -> List[str]:
+        return super().cflags + [
+            '-w',
+            '-fuse-ld=lld',
+            f'--target={self.llvm_triple}',
+            '-fms-compatibility-version=19.10',
+            '-D_HAS_EXCEPTIONS=1',
+            '-D_CRT_STDIO_ISO_WIDE_SPECIFIERS'
+        ]
+
+    @property
+    def ldflags(self) -> List[str]:
+        return super().ldflags + [
+            '/MANIFEST:NO',
+            '/dynamicbase',
+            '/nxcompat',
+            '/highentropyva',
+            '/Brepro',
+        ]
+
+    @property
+    def env(self) -> Dict[str, str]:
+        return self._read_env_setting
+
+    @property
+    def cmake_defines(self) -> Dict[str, str]:
+        defines = super().cmake_defines
+        defines['CMAKE_POLICY_DEFAULT_CMP0091'] = 'NEW'
+        defines['CMAKE_MSVC_RUNTIME_LIBRARY'] = 'MultiThreaded'
+        return defines
+
+
+class AndroidConfig(_BaseConfig):
+    """Config for Android targets."""
+
+    target_os: hosts.Host = hosts.Host.Android
+
+    target_arch: hosts.Arch
+
+    static: bool = False
+    platform: bool = False
+    override_api_level: Optional[int] = None
+
+    @property
+    def base_llvm_triple(self) -> str:
+        """Get base LLVM triple (without API level)."""
+        if self.target_arch == hosts.Arch.ARM:
+            # AndroidARMConfig specifies a "-march=armv7-a" cflag, but including
+            # armv7a in the triple is necessary to build libc++ tests correctly,
+            # which do not allow adding arbitrary cflags.
+            return 'armv7a-linux-androideabi'
+        else:
+            return f'{self.target_arch.llvm_arch}-linux-android'
+
+    @property
+    def llvm_triple(self) -> str:
+        """Get LLVM triple (with API level)."""
+        return f'{self.base_llvm_triple}{self.api_level}'
+
+    @property
+    def ndk_arch(self) -> str:
+        """Converts to ndk arch."""
+        return {
+            hosts.Arch.ARM: 'arm',
+            hosts.Arch.AARCH64: 'arm64',
+            hosts.Arch.I386: 'x86',
+            hosts.Arch.RISCV64: 'riscv64',
+            hosts.Arch.X86_64: 'x86_64',
+        }[self.target_arch]
+
+    @property
+    def ndk_sysroot_triple(self) -> str:
+        """Triple used to identify NDK sysroot."""
+        if self.target_arch == hosts.Arch.ARM:
+            return 'arm-linux-androideabi'
+        return self.base_llvm_triple
+
+    @property
+    def sysroot(self) -> Path:  # type: ignore
+        """Returns sysroot path."""
+        platform_or_ndk = 'platform' if self.platform else 'ndk'
+        return paths.SYSROOTS / platform_or_ndk / self.ndk_arch
+
+    @property
+    def ldflags(self) -> List[str]:
+        ldflags = super().ldflags
+        ldflags.append('-rtlib=compiler-rt')
+        ldflags.append('-Wl,-z,defs')
+        ldflags.append('-Wl,--gc-sections')
+        ldflags.append('-Wl,--build-id=sha1')
+        ldflags.append('-pie')
+        if self.static:
+            ldflags.append('-static')
+        if (self.target_arch == hosts.Arch.X86_64 or
+                self.target_arch == hosts.Arch.AARCH64):
+            ldflags.append('-Wl,-z,max-page-size=16384')
+            ldflags.append('-Wl,-z,common-page-size=16384')
+        return ldflags
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append(f'--target={self.llvm_triple}')
+
+        cflags.append('-ffunction-sections')
+        cflags.append('-fdata-sections')
+        if (self.target_arch == hosts.Arch.X86_64 or
+                self.target_arch == hosts.Arch.AARCH64):
+            cflags.append('-D__BIONIC_NO_PAGE_SIZE_MACRO')
+        return cflags
+
+    @property
+    def api_level(self) -> int:
+        if self.override_api_level:
+            return self.override_api_level
+        if self.target_arch == hosts.Arch.RISCV64:
+            return 35
+        if self.static or self.platform:
+            # Set API level for platform to to 30 since these runtimes can be
+            # used for apexes targeting that API level.
+            return 30
+        return 21
+
+    def __str__(self) -> str:
+        return (f'{self.target_os.name}-{self.target_arch.name} ' +
+                f'(platform={self.platform} static={self.static} {self.extra_config})')
+
+    @property
+    def output_suffix(self) -> str:
+        suffix = f'-{self.target_arch.value}'
+        if not self.platform:
+            suffix += '-ndk-cxx'
+        return suffix
+
+
+class AndroidARMConfig(AndroidConfig):
+    """Configs for android arm targets."""
+    target_arch: hosts.Arch = hosts.Arch.ARM
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append('-march=armv7-a')
+        return cflags
+
+
+class AndroidAArch64Config(AndroidConfig):
+    """Configs for android arm64 targets."""
+    target_arch: hosts.Arch = hosts.Arch.AARCH64
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append('-mbranch-protection=standard')
+        return cflags
+
+
+class AndroidRiscv64Config(AndroidConfig):
+    """Configs for android riscv64 targets."""
+    target_arch: hosts.Arch = hosts.Arch.RISCV64
+
+
+class AndroidX64Config(AndroidConfig):
+    """Configs for android x86_64 targets."""
+    target_arch: hosts.Arch = hosts.Arch.X86_64
+
+
+class AndroidI386Config(AndroidConfig):
+    """Configs for android x86 targets."""
+    target_arch: hosts.Arch = hosts.Arch.I386
+
+    @property
+    def cflags(self) -> List[str]:
+        cflags = super().cflags
+        cflags.append('-m32')
+        return cflags
+
+
+def host_config(musl: bool=False) -> Config:
+    """Returns the Config matching the current machine."""
+    return {
+        hosts.Host.Linux: LinuxMuslHostConfig if musl else LinuxConfig,
+        hosts.Host.Darwin: DarwinConfig,
+        hosts.Host.Windows: MinGWConfig
+    }[hosts.build_host()]()
+
+def host_32bit_config(musl: bool=False) -> Config:
+    if hosts.build_host().is_darwin:
+        raise RuntimeError("host_32bit config only needed for Windows or Linux")
+    if musl:
+        return LinuxMuslHostConfig(hosts.Arch.I386)
+    if hosts.build_host().is_windows:
+        return MinGWConfig(is_32_bit=True)
+    else:
+        return LinuxConfig(is_32_bit=True)
+
+
+def android_configs(platform: bool=True,
+                    static: bool=False,
+                    extra_config=None) -> List[Config]:
+    """Returns a list of configs for android builds."""
+    configs = [
+        AndroidARMConfig(),
+        AndroidAArch64Config(),
+        AndroidI386Config(),
+        AndroidX64Config(),
+        AndroidRiscv64Config(),
+    ]
+    for config in configs:
+        config.static = static
+        config.platform = platform
+        config.extra_config = extra_config
+    # List is not covariant. Explicit convert is required to make it List[Config].
+    return list(configs)
+
+
+def android_ndk_tsan_configs() -> List[Config]:
+    """Returns a list of configs for android builds."""
+    configs = [
+        AndroidAArch64Config(),
+        AndroidX64Config(),
+    ]
+    for config in configs:
+        config.override_api_level = 24
+    # List is not covariant. Explicit convert is required to make it List[Config].
+    return list(configs)

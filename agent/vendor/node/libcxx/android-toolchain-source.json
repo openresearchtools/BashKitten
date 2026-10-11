@@ -1,0 +1,6 @@
+{
+  "repository": "https://android.googlesource.com/toolchain/llvm_android",
+  "commit": "9e20ac0b949feedcfe3da791189310f6ebcbc7a8",
+  "archiveSha256": "47918fcf9ede6b8243bee0ed9709de06531249a52df93c313ef73bddd16295d4",
+  "modified": false
+}
