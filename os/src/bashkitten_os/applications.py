@@ -863,7 +863,13 @@ def command_install_deb(arguments: argparse.Namespace) -> None:
         return
     # The real guest terminal owns its PTY and displays APT's output/prompts.
     # Installation is explicit; never silently retry a raw AppImage or host APT.
-    terminal_command = shlex.join(["sudo", "-n", "apt-get", "install", "-y", "--", str(path)])
+    # Fresh container images omit APT lists. Refresh signed indexes before
+    # resolving dependencies, and keep the selected path out of shell source.
+    terminal_command = shlex.join([
+        "sudo", "-n", "sh", "-c",
+        'apt-get update --error-on=any && exec apt-get install -y -- "$1"',
+        "bashkitten-install-deb", str(path),
+    ])
     subprocess.run(["xfce4-terminal", "--disable-server", "--hold", "--title=Install Debian Package",
                     "--command=" + terminal_command], check=True)
 
