@@ -6,10 +6,46 @@ This record tracks implementation and evidence; it does not reduce its scope.
 
 ## Current checkpoint — 11 October 2026
 
-Feature implementations are integrated across the nine workstreams. Final package
-consumer checks and the shared source commit are being completed before the first
-full Android/Linux candidate builds. Component compilation and source review do
-not establish installed feature acceptance.
+Feature implementations are integrated across the nine workstreams. The first
+whole-scope Android/Linux candidates have been built and installed; actual app
+acceptance is in progress. Startup, provisioning and presentation failures are
+being repaired together for the next candidate. No workstream is fully accepted;
+component compilation and source review do not establish installed acceptance.
+
+Installed revisions at this checkpoint are Android APK `6dee6b16f9`, Termux
+backend `a9dc65607a`, Termux OS `4c1f2bb98e`, and native Linux `7ecea9955c`.
+External artifact receipts retain full commits, checksums, source-equivalence
+records and matching notices; these are development candidates, not a release.
+
+Actual installed observations:
+
+- Fresh Android setup now reaches the chat UI with an owned empty Pi profile;
+  model and reasoning correctly show **Not set**. A too-long Phone Unix socket
+  path blocked Termux startup and was repaired in `a9dc65607a`.
+- Enabling Messages requested notification permission without enabling Calls or
+  requesting call/microphone permissions. Message delivery and call flows remain
+  unverified.
+- The real Debian 13 Xorg VM runs the Linux candidate with X11 and software
+  WebRender/llvmpipe. Its Local chat starts, offline Podman notices open, and
+  project creation selects the correct folder and records its new-chat mapping.
+  A real send without credentials reports the missing API key and retains the
+  draft; this is not an inference or native-history acceptance pass.
+- Container creation displays real preparation output while other UI remains
+  usable. The explicit stock-panel conflict and missing schema compiler are fixed
+  by `c64c0ccff0`; subsequent rootfs materialization still needs repair and retest.
+- The Android sidebar's floating popup, pink buttons and ambiguous icons failed
+  the user's design review. `acfa9df6ba` restores the flat sidebar and embeds it
+  below the toolbar; further toolbar and Phone settings corrections are in the
+  same upcoming Android batch. Installed visual/rotation/keyboard checks remain
+  required; the currently installed APK still has the rejected presentation.
+- Desktop startup/resource failures were repaired in `ba248b7d1b` and
+  `7ecea9955c`. Local asset-only repackaging with a reused development profile
+  requires clearing Gecko's startup cache. Native Wayland acceptance remains
+  pending, separately from the real Xorg result.
+
+The full plan's feature, failure, lifecycle and platform matrix remains required.
+Android 16, physical-device/OEM/Android Auto coverage and the complete artifact/
+traffic audit are not established by the checks above.
 
 | Area | Source integration | Installed acceptance |
 | --- | --- | --- |
@@ -17,7 +53,7 @@ not establish installed feature acceptance.
 | Linux Display / persistent gateway | Native module committed; Rust/C++ component compilation and software/Intel/NVIDIA frame, resize and reattachment checks pass | Pending Wayland and real Xorg |
 | Container lifecycle / private Podman | Persistent machine owner, isolated engine configuration, guest lifecycle/sudo and desktop context implemented | Pending |
 | Native sidecar / projects / chats | Android hierarchy committed; desktop hierarchy, project folder ownership and private container connection integrated | Pending Android/Linux |
-| BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux component builds pass; native Termux compilation in progress | Pending Termux/Linux |
+| BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Pending desktop feature flows on Termux/Linux |
 | Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; integrated Java compilation passes | Pending |
 | Telephony / contacts / messages / voicemail | Native library, private gateway, confirmed call speech, encrypted remote hooks and shared question delivery committed; integrated Java compilation passes | Pending |
 | Pi release / usage / ask_user | Pi 1.1.0, selected-account usage and deferred questions integrated using stock APIs | Pending |
@@ -41,8 +77,8 @@ microphone acceptance.
 Daughter Actions run 38148970357 published Whisper r2 for the required target
 matrix, including the pinned Silero VAD helper/model. The downloaded Android
 x86_64 helper passed framing, speech/silence probability and clean shutdown
-checks under the actual Termux UID. The installed old LocalAI still uses r1;
-selecting r2 and configuring phone STT/TTS through the new candidate remain
+checks under the actual Termux UID. The fresh acceptance profile has no selected
+runtime; selecting r2 and configuring phone STT/TTS through the new candidate remain
 mandatory. No AI engine was built on this workstation.
 
 Detailed component records are retained outside the repository under
