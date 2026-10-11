@@ -198,12 +198,9 @@ class AgentView {
     workspace.append(this.sidecar.root, chat); this.pane.append(workspace);
     const tabbox = doc.getElementById("tabbrowser-tabbox");
     tabbox.before(this.pane);
-    this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "BashKitten", class: "toolbarbutton-1", role: "tab", removable: "false", skipintoolbarset: "true", tooltiptext: "BashKitten" });
-    this.button.addEventListener("command", () => this.show());
-    doc.getElementById("tabbrowser-tabs").before(this.button);
     this.chatsToggle = xul(doc, "toolbarbutton", { id: "bashkitten-chats-toggle", image: "chrome://branding/content/icon32.png", class: "toolbarbutton-1", tooltiptext: "Chats", "aria-label": "Chats", "aria-controls": "bashkitten-native-sidecar", "aria-expanded": String(this.sidecar.isOpen()) });
-    this.chatsToggle.addEventListener("command", () => { if (this.pane.hidden || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
-    this.button.before(this.chatsToggle);
+    this.chatsToggle.addEventListener("command", () => { if (this.layout !== "full" || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
+    doc.getElementById("tabbrowser-tabs").before(this.chatsToggle);
     this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", overflows: "false", tooltiptext: "Show or hide the Agent pane" });
     this.paneToggle.addEventListener("command", () => {
       this.browseWithAgent = !this.browseWithAgent;
@@ -263,9 +260,9 @@ class AgentView {
   installSettingsMenu() {
     const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "menu" });
     const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
-    const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "BashKitten settings", "aria-label": "BashKitten settings", "aria-haspopup": "menu" });
+    const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "Configuration", "aria-label": "Configuration", "aria-haspopup": "menu" });
     gear.addEventListener("command", event => popup.openPopup(gear, "after_end", 0, 0, false, false, event));
-    this.button.after(gear);
+    this.chatsToggle.after(gear);
     for (const [section, title, image] of [
       ["localai", "Local AI", "chrome://global/skin/icons/lightbulb.svg"],
       ["notifications", "Notifications", "chrome://browser/skin/notification-fill-12.svg"],
@@ -305,8 +302,6 @@ class AgentView {
     this.pane.hidden = false;
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", "true");
     this.doc.documentElement.setAttribute("bashkitten-agent-layout", "full");
-    this.button.setAttribute("checked", "true");
-    this.button.setAttribute("aria-selected", "true");
     if (this.browserMenuControl && this.browserMenuHost) this.browserMenuHost.append(this.browserMenuControl);
     this.activeBrowser?.focus();
   }
@@ -317,8 +312,6 @@ class AgentView {
     this.doc.documentElement.setAttribute("bashkitten-agent-visible", split);
     this.doc.documentElement.setAttribute("bashkitten-agent-layout", this.layout);
     this.paneToggle.setAttribute("label", split ? "Hide Agent" : "Show Agent");
-    this.button.removeAttribute("checked");
-    this.button.setAttribute("aria-selected", "false");
     if (this.browserMenuControl && this.browserMenuHome?.parentNode) this.browserMenuHome.after(this.browserMenuControl);
   }
 

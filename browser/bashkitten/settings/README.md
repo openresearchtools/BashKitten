@@ -6,11 +6,12 @@ General continue to use their existing protected Agent document and its selected
 backend; they do not receive additional device authority.
 
 `about:bashkitten-settings` is an unprivileged content document in a Gecko child.
-The common About module and a narrowly content-accessible
-`resource://bashkitten-settings/` alias maps only to its own content directory
-inside the packaged Gecko archive. JarMaker places the manifest and all shared
-assets together, so the mapping also resolves in installed desktop and Android
-packages. Its CSP forbids
+The common About module loads the narrowly content-accessible
+`chrome://bashkitten-settings/content/` package inside the Gecko archive.
+JarMaker places the manifest and all shared assets together. The document keeps
+its non-linkable `about:` content principal and uses Gecko's existing support for
+loading local chrome modules from such pages; it gains no system principal or
+native settings authority. Its CSP forbids
 network connections, forms, embedded objects and remote scripts. Loading a copy
 in an ordinary tab supplies no settings authority.
 

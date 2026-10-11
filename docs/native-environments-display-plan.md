@@ -3238,3 +3238,13 @@ These later placement and hierarchy decisions supersede their conflicting
 earlier presentation instructions, including the temporary rule reserving every
 plus icon for connections. The underlying feature scope, protected baseline and
 whole-plan acceptance requirements remain unchanged.
+
+### Final 11 October toolbar correction: logo only
+
+The user explicitly removed the written-out BashKitten title/button after
+inspecting the desktop toolbar. Use the logo as the sidebar/chat entry, followed
+by the separate configuration gear, with the original Firefox three-line menu
+at the far right. Label the gear **Configuration** for its tooltip and accessible
+name. Do not retain a second BashKitten text pill or Agent entry beside the logo.
+This supersedes the preceding desktop title/tab wording only; the gear's
+destinations, flat repeated sidebar and native browser menu remain as specified.
