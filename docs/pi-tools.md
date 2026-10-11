@@ -50,14 +50,21 @@ optional questions, never permission approval. Stop/Off and uncertain crash
 delivery remain authoritative; no waiting UI/tool promise or JSONL edits.
 
 The [calling section](native-environments-display-plan.md#13-native-telephony-contacts-and-call-hooks)
-brings Phony-based telephony into the main APK, with independent setup above the
-Phone controls section. The per-chat Phone hook after Subagents sends final
-turns and questions through one authenticated, deduplicated invitation owner;
-web and spoken/keypad replies resolve the same question. Phone-side Termux
-handles speech even for registered remote chats, preserving the existing
-encrypted remote route. Call-origin work/replies enable the hook. This adds no
-camera/microphone commands or telephony authority to `phoneuse`. These are
-planned capabilities, not changes to the installed inventory below.
+brings Phony-based telephony and replyable notifications into the main APK, with
+independent setup above Phone controls. The compact per-chat Phone selector after
+Subagents offers Off, Call-in only, Messages or Calls: a user may call a chat while
+receiving its updates only as notifications. Finals/questions share an authenticated,
+deduplicated outbox and one web/call/notification/mailbox question-resolution owner.
+Calls use backend contacts, recent-chat menus, immediate keypad and phone-side
+LocalAI speech, with VAD/# completion and mandatory read-back plus Send/Change/Add
+more before submission. Call-created chats enable participation; replies retain
+their saved delivery method. Diverted/unanswered calls become per-backend voicemail.
+Android Auto owns its notification voice review; ordinary RemoteInput replies
+need no second confirmation. Late question replies are attributed follow-ups,
+not reopened questions. Preserve native Pi history/queues and the existing
+encrypted remote route. This adds no camera/microphone commands or telephony
+authority to `phoneuse`. These are planned capabilities, not changes to the
+installed inventory below.
 
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's

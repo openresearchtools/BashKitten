@@ -19,8 +19,9 @@ provider connections, API-key/account/model setup or client onboarding. Existing
 Pi owns all model/provider connections; Phone controls expose our authenticated CLI
 path to the retained Android controls.
 Bundle its backend module into the main APK; no companion APK. Add Phone beside
-the native top-bar +. Its panel starts with Telephony On/Off and calling/contact
-setup, then a divider and Phone controls On/Off, independent control switches, then
+the native top-bar +. Its panel starts with independent Telephony and Replyable
+messages On/Off, calling/contact setup and delivery/speech defaults, then the
+divider and Phone controls On/Off, independent control switches, then
 optional Accessibility-dependent switches greyed out when unavailable. Off must
 remove handlers/discovery and stop collection, with native checks on every path
 regardless of wider APK grants. Remove all `phoneuse` camera/microphone control and
@@ -42,8 +43,10 @@ and other unused code in focused commits. Keep a small native telephony library
 module in the main APK, using supported Android 16/17 managed Telecom, contact/
 recents callback and keypad APIs; no Mozilla core changes, separate APK, required
 telephony hardware, root/ADB/Shizuku or default-assistant role for users. All setup,
-call, transport and speech work is nonblocking. Telephony and Phone controls have
-independent master switches; cold Contacts/Recents binds must honor Telephony Off.
+call, transport and speech work is nonblocking. Telephony, Replyable messages and
+Phone controls have independent master switches; cold Contacts/Recents binds must
+honor Telephony Off. Posting/replying to our messages does not require the
+phoneuse notification-listener grant, a PhoneAccount or microphone permission.
 Use the tested SIP-shaped Kitten contact and normal contact editor, without
 contacts/call-log access. Also offer optional contacts for the user's selected
 phone-connected containers/remotes: one stable opaque alias per backend under
@@ -54,9 +57,28 @@ earlier general-contact probe. Termux hooks reach the native module through the
 authenticated private gateway; no per-call Gecko relay or broad worker token.
 Call speech runs on the phone through its Termux LocalAI, including remote chats;
 remote text/control stays on the existing Tor/Chisel/Caddy/Authelia route. Add the
-requested Connect to phone registration and per-chat Phone hook after Subagents.
-Call-origin work/replies enable the hook; ordinary chats default Off. Finals and
-questions share one deduplicated invitation owner; hangup does not stop Pi work.
+requested Connect to phone registration and compact per-chat Phone selector after
+Subagents: Off, Call-in only, Messages or Calls. Messages allows user-initiated
+calls but never agent-initiated ringing. Main settings choose new ordinary/call
+chat defaults; initially ordinary Off and call-created Calls. Call replies retain
+the saved mode, including Messages. Finals/questions use one deduplicated outbox
+owner across notifications, calls and per-backend voicemail; no transport fallback.
+Use native MessagingStyle/RemoteInput for direct replies and Android Auto's own
+voice review where supported; do not promise custom car confirmation controls or
+LocalAI speech inside Auto. No unsolicited message TTS or SMS/carrier integration.
+Call menus announce 0 for new, then a configurable 1–9 recent enabled chats
+(initial count 5); stable project/title mappings, immediate keypad, spoken input
+only after menu/beep. Selected chat actions: send, read last final, stream live
+completed assistant text, excluding reasoning/tools. Reuse phone LocalAI and
+package the missing Silero VAD helper/model through daughter CI. End dictation
+by #, silence or either (default either, 4 seconds after speech). Always read
+dictated text back and require Send/Change/Add more before dispatch; browser
+auto-send never bypasses this. Preserve/append drafts and cancel stale audio work.
+Star opens each backend's voicemail menu with diversion/listen/reply; unanswered
+or diverted calls save once without repeated rings. Per-backend clear does not
+delete Pi history. Store only voicemail delivery text/references for later
+playback, not audio or a shadow chat history; replies still need their original
+authorized backend. Off/revocation is not diversion. Hangup leaves Pi running.
 Foreground/lifetime readiness and unsupported ROMs must be reported honestly;
 the earlier probes are not integrated BashKitten/OEM/Android Auto acceptance.
 Section 14 plans one narrow Pi ChatGPT usage extension based on pinned MIT
@@ -73,8 +95,9 @@ Use one backend resolution owner, a 120-second optional-question deadline and
 attributed answer/expiry delivery through the existing queue and stock Pi RPC.
 No reply means proceed with the best long-term solution, never permission approval.
 Honor Stop/Off, session/fork identity, durable deduplication and held ambiguous
-crash deliveries. Phone and chat resolve the same question; an enabled Phone
-hook delivers questions as well as finals, without duplicate turns or rings.
+crash deliveries. Web, call, notification and voicemail share question resolution;
+recording/read-back never extends the deadline. Late confirmed replies become
+attributed follow-ups, not second answers; no duplicate turns or rings.
 Machine rootfs/configuration and durable runtime storage belong under the existing
 `$BASHKITTEN_DATA_DIR`, with user-chosen names mapped to stable machine directories.
 Retain lifecycle/deletion helpers. Implementation acceptance must include an

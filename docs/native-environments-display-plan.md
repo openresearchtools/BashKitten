@@ -17,8 +17,9 @@ The Android Phone module and MCP-to-CLI port are part of this same plan in
 [section 12](#12-android-phone-control-and-the-mcp-port), including optional
 Accessibility, enforceable feature switches and owned-Pi session authorization.
 The 11 October additions bring the earlier calling/contact research into
-[section 13](#13-native-telephony-contacts-and-call-hooks), with telephony in
-the main APK, followed by [ChatGPT usage status](#14-chatgpt-usage-and-reset-status)
+[section 13](#13-native-telephony-contacts-and-call-hooks), with telephony,
+replyable message notifications and per-backend voicemail in the main APK,
+followed by [ChatGPT usage status](#14-chatgpt-usage-and-reset-status)
 and [nonblocking questions](#15-nonblocking-agent-questions). These supersede
 the earlier calling plan's companion-APK design; no separate calling plan needs
 to be implemented alongside this one.
@@ -96,16 +97,20 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   passwordless guest sudo, and adding applications/launchers to the Start menu.
   Explicit user-created desktop shortcuts remain available; none are preseeded.
 - Android's native top bar also has **Phone** beside **+**. Its settings show
-  **Telephony On/Off** and calling/contact setup first, then a divider and
+  independent **Telephony On/Off** and **Replyable messages On/Off**, calling/
+  contact setup and delivery/speech defaults first, then a divider and
   **Phone controls On/Off**, independent control switches and the optional
   Accessibility-dependent section. Both backend modules are in the main APK.
   Local BashKitten-owned Pi sessions use the `phoneuse` CLI/skill for enabled
   controls; that CLI has no camera/microphone commands. Telephony uses the
   normal Android call screen, contacts, recents and keypad, with phone-side
-  speech processing and an optional per-chat Phone hook for finals/questions.
+  speech processing and a compact per-chat delivery selector for finals/questions.
   Users can save contacts for the particular container environments and remotes
   they want to call directly; callbacks use the same backend-specific identity.
-  Neither feature enables the other; no companion APK is needed.
+  Users can call an agent while receiving its updates only through replyable
+  notifications. Calls offer new/recent chats, send/read-last/live-listening
+  actions, confirmed dictation and a backend mailbox for diverted/unanswered
+  callbacks. Each feature keeps its own switch; no companion APK is needed.
 - Pi's terminal and the web chat show a compact ChatGPT subscription-usage line
   alongside the existing Pillama status: actual weekly/short windows where
   available, clearly labelled remaining percentage and reset time. Weekly
@@ -113,8 +118,9 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
 - Pi can ask an optional question with choices and a custom reply in the chat
   while continuing its work. Answers arrive as ordinary attributed follow-ups;
   unanswered questions expire with an explicit instruction to proceed with the
-  best long-term solution. A chat's enabled Phone hook also delivers questions
-  through its registered phone, resolving the same question from either UI.
+  best long-term solution. The chat's chosen call/message route also delivers
+  questions through its registered phone, resolving the same question from web,
+  call or notification. Listening and replying later do not extend its deadline.
 
 Product UI, executable/package names and new configuration use **BashKitten**.
 Keep original donor names in licenses, copyright notices and provenance.
@@ -1613,12 +1619,15 @@ Add a compact **Phone** button to the main native Android top bar beside **+**,
 using the existing icon style. It opens the native Phone settings panel. This
 button does not belong to the XFCE taskbar or the opened-chat web UI.
 
-The panel starts with section 13's **Telephony On/Off** and calling/contact setup.
+The panel starts with section 13's independent **Telephony On/Off** and
+**Replyable messages On/Off**, calling/contact setup and delivery/speech settings.
 Below a divider, the **Phone controls On/Off** switch owns the independent
 control switches, then another divider and Accessibility-dependent switches.
-Within this section, “master” always means **Phone controls**, not Telephony.
-Both masters and new control switches default Off. Switching Phone controls Off
-retains the user's choices but makes every control feature inactive. A later On
+Within this section, “master” always means **Phone controls**. Its Notifications
+switch controls access to other apps' notifications, not posting/replying to our
+own agent messages. All masters and new control switches default Off. Switching
+Phone controls Off retains the user's choices but makes every control feature
+inactive. A later On
 restores only those saved choices whose required Android access is currently
 available; it does not grant permissions.
 
@@ -1993,8 +2002,8 @@ Reuse `TelecomHelper`, `FakeCallConnectionService` and `FakeConnection` for the
 account/connection lifecycle. Add the tested outgoing-call handling and route
 DTMF events to our session menu. Remove the donor's scheduling/alarms, fake-caller
 screens, standalone activity/navigation, update checks, widgets/quick triggers,
-unprotected external-trigger receiver, recording, fake audio and old IVR/audio
-configuration. In particular, digit 1 must not retain Phony's snooze behavior.
+unprotected external-trigger receiver, donor call recording, fake audio and old
+IVR/audio configuration. In particular, digit 1 must not retain Phony's snooze behavior.
 Use our existing LocalAI speech configuration rather than a second voice stack.
 
 Put manifest entries, Telecom callbacks, foreground lifecycle and asynchronous
@@ -2007,12 +2016,16 @@ code/dependencies pass the same source/license/telemetry gates as section 12.
 
 ### Optional setup in the shared Phone panel
 
-The panel order is **Telephony On/Off**, readiness and minimal **Calling account
-setup**, **Call agent**, **Add Kitten contact** actions; a divider; then section
-12's **Phone controls On/Off** and its feature switches. Both masters default Off
-and retain independent saved choices. Enabling either one grants no authority
-to the other. Phone controls Off must not interrupt a call; Telephony Off must
-not enable or disable Accessibility, notifications or other control features.
+The panel starts with independent **Telephony On/Off** and **Replyable messages
+On/Off**, actual readiness, and minimal **Calling account setup**, **Call agent**,
+**Add Kitten contact** actions. Keep delivery defaults, recent-chat count, speech
+completion settings and per-backend voicemail controls in this same section.
+Then a divider separates section 12's **Phone controls On/Off** and its feature
+switches. All three masters default Off and retain independent saved choices.
+Enabling one grants no authority to the others. Replyable messages need normal
+notification permission, not a PhoneAccount, microphone, Accessibility or the
+Phone controls notification-listener grant. Phone controls Off must not interrupt
+a call; Telephony Off leaves explicitly enabled message delivery available.
 
 Use Android's supported managed
 [ConnectionService](https://developer.android.com/reference/android/telecom/ConnectionService)
@@ -2041,7 +2054,7 @@ The reported Phony OEM launch issue is not proof of a single permission cause.
 Main-APK packaging necessarily includes the service declaration even when Off.
 
 Telephony Off is authoritative in every entrypoint, including a cold Telecom
-bind from Contacts/Recents. Invalidate pending invitations, end owned calls
+bind from Contacts/Recents. Invalidate pending call invitations, end owned calls
 cleanly, release audio/foreground resources and unregister the owned account
 as appropriate; retain the stable account identity for deliberate setup later.
 Never rely only on the account's Android enabled flag. Hanging up or switching
@@ -2195,13 +2208,17 @@ explicit lifecycle cases. Check invitation expiry immediately before ringing,
 including after suspension; do not ring stale work when a process thaws. Missed
 or declined calls do not create an automatic repeat-call loop. No scheduler UI.
 
-### Phone-side speech, remotes and per-chat hooks
+### Phone-side speech and remote registration
 
 For both local and remote chats, capture/playback belongs to the phone's native
 active-call module, and STT/TTS runs in **that phone's Termux LocalAI services**.
-Use the existing configured speech engines/models. Send text and call/session
+Use the existing configured LocalAI STT and TTS engines/models. If either is
+missing, show the missing setup with one **Open LocalAI** action; do not duplicate
+model selection in Phone. Calling readiness requires usable speech services;
+message notifications remain independently usable. Send text and call/session
 control to remote Pi; do not stream audio to the remote or silently move speech
-to a cloud service. No retained audio or separate transcript store. The normal
+to a cloud service. No retained caller audio or shadow chat transcript; the
+requested voicemail keeps only its delivered message items below. The normal
 Pi chat receives the recognized text and supplies the response to speak. These
 consented call-audio operations do not expose microphone/camera commands in
 `phoneuse`; the control port continues to omit them.
@@ -2216,39 +2233,303 @@ native background transport/credential-refresh owner; do not create a second
 browser-dependent client or clone credentials into a new voice transport.
 Remote Pi and history remain remote, with no shadow local session.
 
-After **Subagents**, add the requested compact **Phone hook: Off/On** dropdown
-to chats when phone setup is available. Persist the choice and phone association
-in the owning backend's chat metadata, keyed to native session identity. New
-ordinary chats default Off. The user can enable local chats or remote chats
-registered to that phone. Registration alone does not enable all chat hooks;
-offline/unavailable delivery is distinct from the saved choice. Bind to the
-specific backend/session/phone, never whichever chat the UI currently selects.
+### Per-chat delivery and one event owner
 
-Work actually started or replied to through a call enables its chat hook before
-dispatch, as one idempotent operation. Merely opening a call, listening to a
-result or connecting a remote does not. An explicit later user Off wins over an
-old transcription retry; typed messages do not reset the preference. This never
-turns global Telephony back On or bypasses missing setup/permissions.
+Replace the earlier **Phone hook: Off/On** proposal with one compact **Phone**
+selector after **Subagents**. Keep call-in participation distinct from whether
+the agent may call the user. These choices cover the requested combinations:
 
-Chat-hook Off or phone/host registration revocation cancels that association's
-unsent or ringing invitations and question-answer mappings created by the hook.
-Check current hook policy and registration generation again immediately before
-delivering a hook notification or accepting its answer, including after
-reconnect/suspension. This does not end an unrelated active call; ordinary
-call/menu controls follow their own current call and backend authorization.
+| Choice | User can select this chat when calling its backend | Agent final/question delivery |
+| --- | --- | --- |
+| Off | No | None through this feature. |
+| Call-in only | Yes | No unsolicited call/message; the user calls when wanted. |
+| Messages | Yes | Replyable notification; the agent never starts a call. |
+| Calls | Yes | Call from that backend's identity, or its voicemail when diverted/unanswered. |
 
-Use the existing notification outbox and settled-turn/native final-entry IDs to
-create one invitation for a final reply. Intermediate tool/model events and
-subagent reports do not independently ring. Extend that **same owner** with the
-question-created event in section 15. If a call is already attached to the chat,
-speak the final/question there rather than ring again. Reconnection, event
-replay and duplicate completion notifications must not create duplicate calls.
-Reuse the outbox's persistence/delivery machinery, not its ordinary notification
-policy: Phone hooks work when general chat notifications are Off or the chat is
-visible. A browser-notification acknowledgement must not consume a phone event.
-Keep channel-specific delivery state and read the full final from its native Pi
-entry reference for TTS; the existing 240-character notification preview is not
-the spoken response. Questions likewise refer to their authoritative record.
+Actual calls/messages additionally require their respective global switch and
+current readiness. A Messages chat remains useful with Telephony Off. A denied
+permission or failed route retains the saved choice and reports its actual
+state; never substitute another delivery method. Ordinary chat notifications
+keep their existing setting; merge a coinciding final event into the requested
+replyable notification rather than posting duplicate alerts.
+
+Main Phone settings choose defaults for new ordinary chats and work started by
+call. Initial defaults are **Off** for ordinary chats and **Calls** for new
+call-origin work; the latter can instead be **Messages** or **Call-in only**.
+Apply defaults once, not retrospectively to existing chats. Persist the choice
+and phone association in owning-backend chat metadata keyed to native session
+identity. Registration alone never enables every chat. Merely calling/listening
+does not change a chat's policy. Call-origin creation enables participation
+before its first confirmed submission, as one idempotent operation. Replies by
+call retain the chat's enabled choice, including Messages; they must not silently
+turn on agent-initiated ringing. Explicit later Off wins over stale capture or
+retry, and typed messages do not reset the saved preference.
+
+Use the existing notification outbox with settled-turn/native final-entry IDs
+and section 15's question ID/revision. Intermediate model/tool events and
+subagent reports do not independently create notifications, rings or voicemail.
+One owner chooses the saved route and tracks notification/call/mailbox delivery;
+reconnect, replay and duplicate completion cannot create another invitation.
+In an already attached call, present the relevant final/question there instead
+of ringing again. Messages mode still posts its chosen notification; reading
+that event aloud in the call must not resolve its question or double-submit a
+reply. Live listening below is an explicit in-call subscription, separate from
+the completion/question hook.
+
+Serialize call presentation with the current interaction: queue arriving
+finals/questions while capturing, transcribing, reviewing or using another menu.
+Never replace a draft, prompt or active keypad vocabulary mid-interaction. Check
+the original question deadline when it reaches the front; waiting for speech
+does not extend it. Hook playback and live listening share event deduplication.
+
+Reuse persistence, not the existing general-notification eligibility rules:
+these explicit hooks also work when general notifications are Off or the chat
+is visible. A general notification acknowledgement cannot consume a call event.
+Read the full final from its native Pi entry for TTS; the current 240-character
+preview is not the spoken answer. Questions refer to their authoritative record.
+
+Chat Off, relevant master Off, or phone/backend revocation withdraws its pending
+delivery/actions and invalidates the associated reply authority. Recheck policy,
+registration generation, backend/session and event at notification action,
+ringing, mailbox access and final submission, including after suspension. Do
+not fall back to the foreground chat or another backend. Turning one chat Off
+does not end an unrelated active call; cancel that chat's queued playback/draft
+dispatch. Stop/fork/adoption and held ambiguous submissions use section 15's
+existing queue ownership rules. Turning a delivery route Off is not deletion
+of native Pi history or previously stored mailbox records.
+
+### Replyable notifications and Android Auto
+
+Use native Android **MessagingStyle** notifications, labelled with backend,
+project when present, and chat title. Keep stable conversation identity from the
+backend/session IDs; equal or renamed titles must never retarget a reply. Final
+messages and questions use the same event owner and existing background gateway
+as calls. Remote replies remain text over the existing encrypted connection.
+This is BashKitten notification messaging, not insertion into the SMS database
+or a new carrier/RCS provider.
+
+Follow Android's [notification messaging integration](https://developer.android.com/training/cars/communication/notification-messaging):
+declare the automotive notification capability, use `MessagingStyle`/`Person`,
+a reply action with `SEMANTIC_ACTION_REPLY`, one `RemoteInput` and
+`setShowsUserInterface(false)`, plus the matching mark-as-read action. Use an
+explicit app-owned PendingIntent receiver/service: the reply PendingIntent must
+be mutable for RemoteInput, while its target and conversation/event identity
+remain fixed and validated by our native owner. Give actions distinct stable
+identities; updating a notification must not reinterpret an outstanding reply
+as an answer to a newer question. A receiver queues authenticated work off the
+UI thread without opening Gecko. The normal session owner reuses/adopts its
+worker, or starts its sole worker when needed and allowed; it never duplicates
+a running session or bypasses Stop. Mark-read is
+not an answer. Use MessagingStyle, not deprecated `UnreadConversation`.
+
+Users may listen/reply later through Android Auto's message notification/tiles
+and notification centre. BashKitten does not start TTS just because a message
+arrived. Google's [documented reply flow](https://support.google.com/androidauto/answer/6348317?hl=en-gb)
+reads the dictated message back and offers send, cancel or editing. Use that
+host-owned flow where available. The app receives the final submitted text;
+the API does not expose its intermediate speech, review state or a custom
+**Send / Change / Add more** menu. Do not claim we can inject that menu or force
+Auto to use our LocalAI voice/models. On phone surfaces without voice review,
+ordinary direct reply is sufficient, as requested. Treat the delivered reply
+as the user's submission; no second confirmation requiring opening the app.
+Our full mandatory LocalAI confirmation flow below applies to our own calls.
+
+For sideloaded releases, document Android Auto's **Allow unknown sources**
+developer option: Google's [testing guidance](https://developer.android.com/training/cars/testing#unknown-sources)
+explicitly includes messaging notifications. This is a user setup step without
+root/ADB, not proof every car accepts the APK automatically. No custom templated
+car UI or replacement assistant is planned. Verify listen-later, native review
+and reply on a real Auto setup; current Telecom probes do not establish this.
+
+### Backend and chat call menus
+
+Calling a backend contact goes directly to its backend. The general contact
+first selects among its authorized backends. Freeze each announced mapping with
+a menu revision; renames, new activity or deletion must not shift numbered
+choices during that menu. Reject a removed choice instead of reassigning it.
+
+The backend greeting announces **“Press or say 0 to start a new chat”** first,
+then **1–9** eligible active/recently finished chats in newest-activity order.
+Speak project/title, or just title for ungrouped chats, and whether it is working
+or finished. Include only enabled chats associated with this phone/backend.
+Phone settings expose **Recent chats to announce**, initially **5**, selectable
+from 1 to 9. Nine is the single-digit menu capacity, not a limit on stored chats
+or machines. Do not invent paging/search menus; the app retains full history.
+Announce unread voicemail and **“Press star for voicemail”** when applicable;
+star also works with an empty mailbox to reach its diversion control.
+
+Keypad choices are active from the start and immediately stop pending menu
+playback. Spoken selection starts **only after the entire announced menu** and
+a short, gentle beep; do not interpret the menu's own speech as user input.
+The same prompt-then-beep rule applies to every speech-input state. Silence or
+unrecognized speech is not a selection. Normal Android call hangup remains
+available throughout, including while LocalAI is loading or transcribing.
+
+Selecting a chat offers **1 Send a message**, **2 Read last final message**,
+**3 Stream live**, using keypad or the corresponding spoken choice. Read-last
+uses the last actual assistant final entry and reports when none exists; it
+does not ask Pi to regenerate it. Selecting 0 prepares a new chat through normal
+session creation on that backend and enters dictation; dispatch only after
+confirmation. Use the existing standalone cwd behavior, or inherited project
+cwd when a project is actually selected; do not guess a project from a title.
+Contacts select backends, never whichever chat happens to be open on screen.
+
+After confirmation, a busy chat receives normal Pi steering at its safe boundary;
+an idle/finished chat receives a new turn. Reuse supported RPC and the existing
+durable prompt owner, including stable submission IDs and Stop checks. A call
+does not force-interrupt tools. Read-last, live listening and mailbox playback
+are read operations and must never start a model turn as a side effect.
+
+### Dictation, end-of-speech and mandatory review
+
+Implement one asynchronous call flow: **menu → capture → transcription →
+read-back/review → dispatch**. Native Android captures/plays audio; the phone's
+Termux LocalAI performs speech processing. Reuse configured Whisper/Parakeet
+and TTS services, with their existing shared busy/cancellation ownership.
+No live transcription is required: local VAD may delimit a recording and then
+the selected engine transcribes it as a complete utterance.
+
+Phone settings choose **Finish dictation: # / Silence / Either** and the silence
+duration. Default **Either**, **4 seconds without detected speech after speech
+has begun**. The VAD timer resets when speech resumes; initial silence, muted
+input and empty/no-speech transcription never submit anything. `#` ends capture
+immediately only when its selected completion mode permits it. End-of-capture
+means transcribe and review, never Send. Digits inside dictation are message
+content, not menu commands; other keypad digits do not prematurely finish it.
+Exclude our beep/playback/key tones from STT; verify route changes and echo on
+actual handset/headset/car audio rather than assuming microphone routing.
+
+After **every dictated message**, read its transcript back using configured
+LocalAI TTS, then announce **1 Send, 2 Change, 3 Add more**, followed by the beep
+for a spoken choice. Keypad actions are available immediately during read-back
+and the menu; the user may deliberately interrupt it. Silence never sends.
+Keep the draft outside Pi until an explicit Send:
+
+| Action | Draft behavior |
+| --- | --- |
+| 1 / Send | Submit this reviewed draft once through its original backend/session owner. |
+| 2 / Change | Beep and capture replacement; retain the old draft until replacement transcription succeeds, then read/review the new draft. |
+| 3 / Add more | Beep and capture another segment; append it to the existing draft without rewriting earlier words, then read/review the complete combined text. |
+
+The browser dictation **Automatically send voice messages** setting must not
+bypass call review. Hangup discards an unsubmitted call draft and transient
+audio; never send because playback ended or a call dropped. Failed transcription
+preserves an existing draft for Change/Add more rather than submitting a partial
+result. A failure after dispatch uses the normal held/ambiguous-delivery path,
+not blind replay.
+
+In **menu/review command states only**, normalize case/punctuation and inspect
+the first up to ten recognized words for digits, number words and short commands
+such as send, change/edit, add more/append. Apply the current menu's vocabulary,
+not a general LLM intent router. Prefer exact phrases and recognized aliases;
+permit low-tolerance near matches only for one unambiguous positive command,
+with especially strict matching for **Send**. Reject negation, quoted commands
+and conflicting choices; clarify rather than guessing. Do not scan dictated
+message bodies for command words. Voice/keypad
+answers to agent questions additionally retain question ID/revision and pass
+through the same transcript/selected-answer read-back and review before Send.
+
+Each state transition invalidates older capture/STT/TTS results. A keypad action
+stops current and queued playback immediately; cancel work asynchronously and
+ignore late completions using the call/menu/state generation. Keep buttons,
+hangup and browser UI responsive during model startup, inference or stalled IPC.
+
+Implementation gap: current `agent/src/server/localai/dictation.mjs` receives a
+whole WAV before transcription; it is not a continuous VAD/capture service.
+Current `localai.mjs` TTS synthesizes to an output WAV file, so reuse its engine
+configuration and ownership but add a cancellable memory/pipe/FD playback path
+for calls. Do not claim the existing export path supplies streaming/no-retained
+audio. The inspected daughter pin, **whisper.cpp v1.9.5** at
+`d1be6fde11ac6e0407606b4e42fe72d34add8037`, provides the
+[public Silero VAD API](https://github.com/ggml-org/whisper.cpp/blob/d1be6fde11ac6e0407606b4e42fe72d34add8037/include/whisper.h#L701).
+Add a small helper using `whisper_vad_detect_speech_no_reset` and the probability
+accessors, retaining state through an utterance and resetting on cancellation
+or a new capture. The Boolean return reports detection success, not whether
+speech exists. Feed normalized 16 kHz mono audio in complete 512-sample windows,
+with speech preroll and inference off audio/UI callbacks. Use its probabilities
+for the selected silence interval, independently of Whisper or Parakeet STT.
+
+Build/package this missing helper in the existing **daughter GitHub Actions**
+runtime workflow, not on the workstation. The candidate converted model is
+`ggml-silero-v6.2.0.bin` from [pinned model revision
+`9ffd54a1e1ee413ddf265af9913beaf518d1639b`](https://huggingface.co/ggml-org/whisper-vad/tree/9ffd54a1e1ee413ddf265af9913beaf518d1639b),
+published SHA-256 `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987`.
+Verify downloaded bytes and record its precise conversion/source dependencies
+before release; a model-card name alone is insufficient provenance. Retain full
+Whisper/ggml and [Silero MIT notices](https://github.com/snakers4/silero-vad/blob/be95df9152c0d7618fa1edfeb296fc3dae32376f/LICENSE).
+Deliver it through managed LocalAI setup without a separate ONNX/PyTorch runtime
+or speech-provider configuration. Missing VAD is part of calling readiness;
+this helper/model is not currently packaged. Verify endpointing with both STT
+families. Call audio remains transient, with no new recording archive.
+
+### Live listening
+
+Chat action **3** subscribes to that native Pi session's user-visible assistant
+text. Speak completed assistant text messages between tool calls and the final
+message once; never speak private thinking, tool arguments/results or subagent
+events. Use Pi's supported completion events, not an arbitrary token timer or
+partial-token TTS. Track native message/entry identity and the playback cursor
+so streaming completion and settled-final delivery cannot read the same text
+twice. This is not a request for extra model commentary or a separate transcript.
+
+Keep reading asynchronously while Pi works. The selected-chat keypad actions
+remain available: 1 pauses playback for a message, 2 reads last final, 3 resumes
+live listening; star opens voicemail. Prompt/beep capture prevents TTS feeding
+back into STT. Hangup unsubscribes and cancels audio, leaving Pi work untouched.
+If playback cannot keep up, retain text references in order with flow control;
+do not buffer unbounded synthesized audio or stall the agent/UI. Report an
+unavailable source/backend instead of speaking another chat.
+
+### Per-backend voicemail and call diversion
+
+Provide a private **voicemail mailbox per registered backend** in Phone, with
+**Divert calls to voicemail** and the requested view/clear controls. This is
+application delivery state, not carrier voicemail or recording the user's call.
+When a Calls chat produces a final/question while diversion is On, save the
+event in that backend's mailbox without ringing. Also save unanswered/declined
+agent calls there, once. Do not ring repeatedly. Messages and Call-in only keep
+their chosen behavior; diversion does not turn those into callback hooks.
+Explicit Off/revocation cancels delivery instead of creating new voicemail.
+
+Within a backend/chat menu, **star opens voicemail**; it does not simultaneously
+toggle diversion. A minimal contextual menu offers **1 Listen**, **2 turn call
+diversion on/off** with its current state spoken, and **# Return**. During
+playback, **1 Reply**, **2 Next**, **# Return** apply; announce Reply only when
+the source can accept it. These are immediate keypad actions, with equivalent
+spoken commands after each prompt/beep. Do not interpret star as a send or
+termination inside message dictation; # retains the configured capture rule.
+
+On calling that backend, announce its unread mailbox count and star access.
+Playback identifies chat/project and whether the item is a final or question,
+then speaks its text. Reply enters the same capture/read-back/Send-Change-Add
+flow for that item's exact chat, with current authorization and Stop checks.
+An answered/expired question cannot be answered again: explain its state, and
+an explicitly confirmed reply may instead be an attributed new follow-up as
+in section 15. Revalidate at Send; if its status changed during capture/review,
+explain the changed meaning and require a fresh Send for that follow-up.
+Listening/transcribing/review never extends the 120-second
+question deadline. No ringing of expired questions after reconnect.
+
+Persist mailbox delivery items under BashKitten's existing private data root:
+backend/session, final-entry or question ID/revision, creation/delivery identity
+and played/replied/cleared state, plus the delivered message/question text needed
+to listen later. Store only those voicemail items, not full chat history or
+caller transcripts; keep native Pi history authoritative and synthesize speech
+on playback instead of retaining audio. This narrow message snapshot implements
+the requested mailbox, not a shadow local Pi session. Store it on the phone,
+grouped by backend, so an already saved message remains playable when its remote
+disconnects. Reply and live question status still require the original authorized
+backend; report unavailable status and retain the user's draft through the
+existing held-delivery mechanism, without silently starting work elsewhere.
+
+Playing or marking read does not submit a reply. Mark replied only after durable
+submission acceptance; keep failed/ambiguous submissions available or held.
+Explicit per-item/per-backend Clear removes mailbox records only, not Pi
+history or the question's resolution. Preserve deduplication in the event owner
+so cleared messages are not recreated by replay. Turning diversion back Off
+affects new deliveries; it does not ring the saved backlog. Backend names and
+contacts resolve stable IDs, keeping separate mailboxes for identically named
+containers/remotes.
 
 ### Keypad routing and evidence
 
@@ -2272,14 +2553,24 @@ recents callback, process-death startup and keypad `1`, `2`, `*`, `#` on Android
 BashKitten, voice, physical-OEM or Android Auto acceptance. No new probes were
 run while writing this addition.
 
-Implementation acceptance must cover normal public-API setup on Android 16/17,
-incoming/outgoing/contact/recents calls, running/saved/new chat selection, DTMF,
-hangup without stopping Pi, and the phone-side speech route. Also verify cold
-bind while Off, denied/missing account services, account collisions, UI closure,
-foreground/Doze/process-death cases, replay/expiry/auth failures, remote
-registration/reconnect and the question/final single-delivery rules. Record
-unverified physical OEM/Android Auto behavior explicitly; emulator evidence
-does not establish support on every manufacturer's phone or car interface.
+Implementation acceptance uses normal public-API setup on Android 16/17 and
+the actual app/Contacts/dialer/notification surfaces. No new product tests or
+acceptance claims are created by this documentation change.
+
+| Case | Required evidence |
+| --- | --- |
+| Setup/lifetime | Incoming/outgoing/contact/Recents calls, cold bind while Off, denied/missing services, multiple calling accounts, UI closure, foreground/Doze/process death, muted/changed audio routes and hangup leaving Pi running. |
+| Independent routes | Messages with Telephony Off and no microphone/PhoneAccount; Call-in only never rings; Messages allows user calls without enabling agent calls; Calls obeys diversion; all masters and phoneuse notification access stay independent. Saved defaults apply only to new chats; explicit Off wins over old capture/retries. |
+| Correct menu/backend | Two contacts and duplicate/renamed backend/project/chat names; 0 starts the correct backend's normal new chat, 1–9 freeze eligible recency mapping; configured count, no eligible chats, vanished session and backend revocation. Keypad interrupts the first prompt; spoken selection starts only after it finishes. |
+| Capture/review | Both Whisper and Parakeet, actual pinned VAD, speech pauses around four seconds, all #/silence modes, no-speech/mute, digits/words, ambiguity/negation and beep/echo isolation. Send/Change/Add more retains/replaces/appends correctly; no automatic send from silence, browser auto-send setting or hangup. |
+| Responsiveness/races | Keypad during read-back/model loading, repeated digits, cancelled STT/TTS finishing late, busy shared speech service, stalled IPC and hangup before/after Send. Navigation remains responsive; queued audio stops, uncertain submissions stay held and Stop is not undone. |
+| Live/read-last | Busy/idle/finished chats; native completed assistant text between tools, exclusion of reasoning/tools, full final once, slow TTS and action interruption; no model turn caused by listening. |
+| Voicemail | Divert without ringing, no answer/decline saved once under correct backend, star menus, unread/played/replied states, reply/clear, restart/replay, diversion Off without backlog ringing, saved-message playback while remote is unavailable and no unauthorized reply; already answered/expired questions. No audio archive or duplicate Pi history. |
+| Notifications/Auto | Correct backend/session/question reply from phone direct reply and a real Android Auto installation; delayed listen, host read-back/edit/send, mark-read without answer, renamed chat and newer question without retargeting an old action. Verify sideload setup, denied notification permission and no unsolicited TTS. |
+| Shared question owner | Call/web/notification/mailbox races, 120-second expiry during recording/review, late confirmed follow-up, fork/adoption/Stop/Off and stale/replayed events. One answer or expiry, no double prompt/ring, unchanged encrypted remote route. |
+
+Record unverified physical OEM/Android Auto/audio behavior explicitly; emulator
+keypad evidence does not establish voice support on every phone or car.
 
 ## 14. ChatGPT usage and reset status
 
@@ -2428,30 +2719,50 @@ state so a timer or answer racing Stop cannot restart the agent.
 Late replies to an expired card can be submitted as a new attributed follow-up;
 they do not rewrite the timeout resolution or replay the original tool call.
 
-### Questions through the same Phone hook
+### Questions through calls, messages and voicemail
 
 Add a typed `question-created` event to the existing notification outbox, keyed
-by question ID/revision, alongside the final-turn event from section 13. With
-global Telephony On, registered phone and that chat's Phone hook On, ring with
-the pending question or speak it in the already attached call. Keep one invitation
-owner, so the question and final hooks cannot independently double-ring for the
-same pending interaction. Merely asking does not enable a previously Off hook.
+by question ID/revision, alongside the final-turn event from section 13. Its
+per-chat route chooses a replyable message, call (or diverted/unanswered
+voicemail), or no unsolicited delivery. The respective master, phone
+association and live policy must permit it. Present the question in an attached
+call without a new ring. Keep one event owner so question/final hooks cannot
+independently double-ring for the same pending interaction. Asking a question
+never enables a previously Off hook or changes Messages to Calls.
 
-Speak question/options, map keypad digits to that immutable question/revision,
-and accept custom spoken answers through the phone's Termux STT. Both phone and
-web submit to the **same resolution owner**. A web answer withdraws a pending
-ring or updates the active call; a phone answer resolves the card. Expiry or
-cancellation invalidates the invitation and keypad mapping; check this again
-immediately before ringing after any suspension/reconnect. A late call answer
-must not become a second resolution. Questions work fully in chat when Phone
-is unavailable or Off; no phone prerequisite or hidden callback retry loop.
-Recheck global Telephony, chat hook, phone registration/generation and question
-state before speaking or accepting keypad/STT answers too. Turning the hook Off
-withdraws the phone invitation/mapping while leaving the web question usable.
+Speak question/options, bind keypad choices to that immutable question/revision,
+and accept custom spoken answers through phone-side Termux STT. Before submitting
+either a dictated answer or keypad-selected choice, use section 13's read-back
+and Send/Change/Add more review; numbers in that review have the review meanings,
+not the previous question's choices. Notification replies use the host's normal
+RemoteInput submission without a second call-style confirmation. Web, call,
+notification and voicemail replies submit to the **same resolution owner**.
+Keep outstanding notification actions bound to the displayed question/revision,
+not whichever question later becomes newest in that chat.
+
+A resolved web/phone/message answer withdraws pending ringing, invalidates the
+other answer actions and updates the card/active call/mailbox status. Expiry or
+cancellation invalidates pending-answer mappings; recheck immediately before
+ringing or final Send, including after suspension. Reading/recording/reviewing
+an answer does not extend the absolute **120-second** deadline. Stop/Off still
+wins. Keep an expired question readable in voicemail/history, but label it
+expired; a deliberate later reply follows the existing attributed follow-up
+path and cannot become another resolution or restart the old tool call.
+If it expires or is answered elsewhere during call review, explain this and
+require a fresh Send for the new follow-up. A direct notification reply submitted after expiry is already an
+explicit user submission and can use that attributed follow-up path, with its
+result reported to the notification/card. Never reinterpret a stale numbered
+reply using another question's options.
+
+Questions remain fully usable in chat when Phone is unavailable or Off. Recheck
+route, relevant master, registration/generation and question/session/branch state
+before each action and dispatch. Off removes that channel's authority without
+resolving the web card or purging existing history/mailbox records. Expiry never
+rings again on reconnect. There is no phone prerequisite or hidden retry loop.
 
 Acceptance: busy/idle agent, choices/custom text, no response/expiry, late reply,
-web/phone race, duplicate submissions, UI reconnect, process crash, native
-fork/adoption/branch switch, Stop/Off and held drafts. Verify immediate tool return,
+web/call/notification/mailbox race, duplicate submissions, UI reconnect, process
+crash, native fork/adoption/branch switch, Stop/Off and held drafts. Verify immediate tool return,
 continued useful work, responsive UI, correct chat routing, one resolved answer
 and no duplicate agent turns/calls. Recheck these extension/RPC contracts against
 the pinned Pi update before implementation; this plan inspected current 1.0.2.
@@ -2491,8 +2802,8 @@ and compiling the changed components. A passing build is not feature acceptance.
 | 5. Native hierarchy | Listed backends, one + entry, per-backend toggles and container Settings/Display, optional projects with folder-picker creation and new-chat cwd inheritance, standalone chats, rename/move, selected-chat web view. | New project chats use their project's directory; standalone behavior and existing histories/cwd remain unchanged; independent controls, no remote Display/settings, no large backend dropdown, no container-count cap or duplicate sidebar; subagent/draft/session ownership retained. |
 | 6. Integration boundaries | Guest local socket, existing media/ports/settings, unchanged remote publishing and CUA scope. | Local/remote credentials remain separated; allowed remote flow and denied management paths; Agent excluded from desktop automation. |
 | 7. Phone module and CLI | Main-APK MCP port, native master/feature policy, optional Accessibility, owned-Pi worker grants, Termux CLI and `phoneuse` skill. | Complete section 12's user-flow and denial checks; no camera/microphone commands, companion APK, exposed MCP catalog or reusable general-shell token. |
-| 8. Calling and contacts | Pinned Phony fork as a main-APK native module, independent Telephony setup, managed calls/contact/keypad, Termux gateway, phone-side speech, remote phone registration and per-chat hooks. | Section 13's Android 16/17 flows, cold-bind Off enforcement, foreground/lifetime/auth/expiry checks, exact intended remote route and no duplicate callback; record OEM/Auto gaps. |
-| 9. Usage and questions | Narrow Pi subscription usage/status adapter and deferred nonblocking questions with shared web/phone resolution. | Sections 14–15's selected-account and window formatting checks, immediate tool return, idle/busy/timeout/race/Stop/reconnect cases; no Pi patches or duplicate delivery. |
+| 8. Calls, messages and contacts | Pinned Phony native module, independent Telephony/message setup, per-backend contacts/mailbox, recent-chat/keypad menus, Termux gateway and LocalAI VAD/capture/review/live speech, remote registration and per-chat routing. | Section 13's Android 16/17 flows and complete acceptance table: native notification/Auto reply, mandatory call review, voicemail, cold-bind Off, foreground/audio/lifetime/auth/expiry checks, intended remote route and no duplicate delivery; record OEM/Auto gaps. |
+| 9. Usage and questions | Narrow Pi subscription usage/status adapter and deferred nonblocking questions with one web/call/notification/mailbox resolution owner. | Sections 14–15's selected-account/window checks, immediate tool return, idle/busy/deadline-during-review/late-reply/race/Stop/reconnect cases; no Pi patches or duplicate delivery. |
 | 10. Package/release readiness | All actual architecture artifacts, matching APK/loader, caches, complete offline source/notices, upgrade handling and every bundled component's network/logging audit. | Installed native user flows plus recorded missing hardware coverage; no unexplained telemetry/developer callbacks or release claim based on a dispatched build. |
 
 Use ADB/direct Termux for Android setup, installation, permissions and debugging;
