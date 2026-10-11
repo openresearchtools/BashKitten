@@ -6,16 +6,28 @@ import xml.etree.ElementTree as ET
 from .common import PREFIX,SHARE,linux_guest
 
 
-def atomic(path,text,replace=True):
+def atomic(path,text):
     path.parent.mkdir(parents=True,exist_ok=True)
     descriptor,name=tempfile.mkstemp(prefix='.'+path.name,dir=path.parent)
     try:
         with os.fdopen(descriptor,'w') as stream:stream.write(text)
-        if replace:os.replace(name,path)
-        else:
-            try:os.link(name,path)
-            except FileExistsError:pass
+        os.replace(name,path)
     finally:Path(name).unlink(missing_ok=True)
+
+def new_default(path,text):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    try:stream=path.open('x',encoding='utf-8')
+    except FileExistsError:return
+    created=os.fstat(stream.fileno())
+    try:
+        with stream:stream.write(text)
+    except BaseException:
+        # Remove only our incomplete creation, not a user replacement.
+        try:
+            current=path.lstat()
+            if (current.st_dev,current.st_ino)==(created.st_dev,created.st_ino):path.unlink()
+        except FileNotFoundError:pass
+        raise
 
 def initialize():
     config=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))
@@ -23,7 +35,7 @@ def initialize():
     # User portal choices take precedence; this is a provisioning default, not
     # a package-owned replacement for xfce4-session's system configuration.
     if not any(os.path.lexists(portals/name) for name in ('portals.conf','xfce-portals.conf')):
-        atomic(portals/'xfce-portals.conf',(SHARE/'xfce-portals.conf').read_text(),replace=False)
+        new_default(portals/'xfce-portals.conf',(SHARE/'xfce-portals.conf').read_text())
     channel_dir=config/'xfce4/xfconf/xfce-perchannel-xml'
     for source in (SHARE/'defaults').glob('*.xml'):
         target=channel_dir/source.name
