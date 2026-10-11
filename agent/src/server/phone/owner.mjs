@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { dataDir, privateDir, json, jsonBody } from '../common.mjs';
+import { socketPath, privateDir, json, jsonBody } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { processStart } from '../instance.mjs';
 import { endpoint, phoneRequest, privateRequest } from './transport.mjs';
@@ -18,8 +18,10 @@ export async function initializePhoneOwner() {
   if (platform !== 'termux') return {};
   if (server) return phoneOwnerEnvironment();
   registrar = token();
-  const directory = path.join(dataDir, 'run'); await privateDir(directory);
-  socket = path.join(directory, `phone-owner-${randomUUID()}.sock`);
+  // Use the same compact private pathname as the other local worker sockets.
+  // A descriptive prefix plus UUID exceeds sun_path in Termux's home directory.
+  socket = socketPath(`phone-owner:${randomUUID()}`);
+  await privateDir(path.dirname(socket));
   server = http.createServer(async (req, res) => {
     try {
       if (req.method !== 'POST' || req.url !== '/phone' || req.headers.origin || req.headers['content-type'] !== 'application/json') throw Error('Phone authority denied');
