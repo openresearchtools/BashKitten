@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def fingerprint(target):
     paths = ['browser', 'agent/packaging/browser-component.py']
     if target.startswith('android'):
-        paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote',
+        paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
                   'agent/packaging/release_version.py',
                   'agent/packaging/licenses.mjs', 'agent/packaging/node', 'agent/packaging/termux/search',
