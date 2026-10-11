@@ -1,8 +1,9 @@
 # Native environments implementation and acceptance
 
 Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
-`bashkitten/plan/native-environments-2026-10-11`. The agreed plan remains unchanged.
-This record tracks implementation and evidence; it does not reduce its scope.
+`bashkitten/plan/native-environments-2026-10-11`. The original remains unchanged;
+the current plan also records the user's explicit 11 October presentation
+amendments. This record tracks evidence and does not reduce that combined scope.
 
 ## Current checkpoint — 11 October 2026
 
@@ -26,18 +27,42 @@ Actual installed observations:
   requesting call/microphone permissions. Message delivery and call flows remain
   unverified.
 - The real Debian 13 Xorg VM runs the Linux candidate with X11 and software
-  WebRender/llvmpipe. Its Local chat starts, offline Podman notices open, and
-  project creation selects the correct folder and records its new-chat mapping.
-  A real send without credentials reports the missing API key and retains the
-  draft; this is not an inference or native-history acceptance pass.
+  WebRender/llvmpipe. Local chat and offline Podman notices work. Actual project
+  creation, renaming, moving chats between projects and back to standalone, and
+  cancellation passed. Successful Pi turns verify that new project chats inherit
+  their directory and moving an existing chat preserves its original directory.
+- The Xorg candidate downloaded the managed llama v0.6.0-r1 Vulkan runtime and
+  Qwen3.5-2B Q4_0 through LocalAI, configured CPU router execution, passed the
+  optional load check with confirmed unload, and imported the model into owned
+  Pi. The first send without credentials retained its draft; that work completed
+  after configuring the local model. These results cover the previous LocalAI
+  presentation; the shared Gecko replacement still needs installed verification.
+- Deferred chat discovery/list/read returned the correct project, renamed chat,
+  original directory and native entry references without modifying its history.
+  Unnecessary system bootstrap text was exposed by read; `8bfc038b2c` removes it
+  from lookup results and awaits installed retest. Subagent discovery/list worked;
+  the small model omitted a required spawn argument, so child communication and
+  final delivery remain unverified.
+- A real optional question returned pending in 11 ms while Pi continued, survived
+  chat switching and delivered one attributed answer to its original session.
+  The next question produced exactly one expiry notice, but its visible card was
+  not verified at the absolute chat bottom. `d928978af1` repairs source-level
+  bottom-follow, idle state refresh and pending-question event lifetime; installed
+  expiry/card, Stop and race coverage remains pending.
 - Container creation displays real preparation output while other UI remains
   usable. The explicit stock-panel conflict and missing schema compiler are fixed
-  by `c64c0ccff0`; subsequent rootfs materialization still needs repair and retest.
+  by `c64c0ccff0`; `bed281f5a5` repairs materialization from a stopped container
+  export. The repaired installed creation/Display path still needs retesting.
 - The Android sidebar's floating popup, pink buttons and ambiguous icons failed
   the user's design review. `acfa9df6ba` restores the flat sidebar and embeds it
-  below the toolbar; further toolbar and Phone settings corrections are in the
-  same upcoming Android batch. Installed visual/rotation/keyboard checks remain
-  required; the currently installed APK still has the rejected presentation.
+  below the toolbar. The user's final direction is a BashKitten logo/sidebar,
+  separate settings gear, unchanged Firefox menu and repeated flat Local,
+  Containers and Remotes sections. Shared protected Gecko settings and native
+  adapters are being integrated in the same batch, including removal of the
+  superseded forms. Installed visual/rotation/keyboard checks remain required;
+  the currently installed APK still has the rejected presentation. The cached
+  intermediate `d3919f88c9` build was not installed because it predates that final
+  placement decision.
 - Desktop startup/resource failures were repaired in `ba248b7d1b` and
   `7ecea9955c`. Local asset-only repackaging with a reused development profile
   requires clearing Gecko's startup cache. Native Wayland acceptance remains
