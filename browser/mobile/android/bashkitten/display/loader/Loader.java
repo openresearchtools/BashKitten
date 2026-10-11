@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Adapted from Termux:X11 fa3a8b430e28 shell-loader. Marked changes:
-// exact paired module ABI, SHA-256 signer pin, current Android user, no overrides.
+// exact paired module ABI, SHA-256 signer pin, current Android user, and the
+// verified package's extracted native-library directory, with no overrides.
 package com.bashkitten.display.loader;
 
 import android.content.pm.PackageInfo;
@@ -28,7 +29,8 @@ public final class Loader {
             StringBuilder hex = new StringBuilder();
             for (byte value : digest) hex.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
             if (!Pair.SIGNER.equals(hex.toString())) throw new SecurityException("BashKitten and its Termux Display package have different signing identities");
-            ClassLoader loader = new PathClassLoader(info.applicationInfo.sourceDir, ClassLoader.getSystemClassLoader());
+            ClassLoader loader = new PathClassLoader(info.applicationInfo.sourceDir,
+                info.applicationInfo.nativeLibraryDir, ClassLoader.getSystemClassLoader());
             String version = (String) loader.loadClass("com.bashkitten.display.DisplayProtocol").getField("VERSION").get(null);
             if (!Pair.VERSION.equals(version)) throw new IllegalStateException("Update BashKitten and its Termux packages together: Display versions differ");
             loader.loadClass("com.termux.x11.CmdEntryPoint").getMethod("main", String[].class).invoke(null, (Object) args);
