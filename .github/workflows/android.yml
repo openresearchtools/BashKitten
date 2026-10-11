@@ -14,6 +14,10 @@ name: Android browser candidate
         description: Successful Node runtime run containing both Termux architectures
         required: true
         type: string
+      environments_run:
+        description: Successful native-environments run containing the Display loader and both Termux OS architectures
+        required: true
+        type: string
   workflow_call:
     inputs:
       auth_run:
@@ -23,6 +27,9 @@ name: Android browser candidate
         default: ''
         type: string
       node_run:
+        default: ''
+        type: string
+      environments_run:
         default: ''
         type: string
     secrets:
@@ -43,5 +50,6 @@ jobs:
       auth_run: ${{ inputs.auth_run }}
       search_run: ${{ inputs.search_run }}
       node_run: ${{ inputs.node_run }}
+      environments_run: ${{ inputs.environments_run }}
     secrets:
       BUILD_REPOS_TOKEN: ${{ secrets.BUILD_REPOS_TOKEN }}
