@@ -204,9 +204,9 @@ def install_termux_display(args, app, revision, bin_dir):
     display = app / 'display'; display.mkdir(exist_ok=True)
     loader = display / 'bashkitten-x11-loader.jar'
     shutil.copy2(source / 'bashkitten-x11-loader.jar', loader)
-    # Preserve the donor's read-only loader requirement in the installed payload,
-    # independently of intermediate artifact-copy permissions. Termux dpkg keeps it.
-    loader.chmod(0o400)
+    # Non-root dpkg reopens .dpkg-new for writeback after applying archive modes.
+    # Like the donor package, make the installed loader read-only in postinst.
+    loader.chmod(0o600)
     shutil.copytree(source / 'licenses', display / 'licenses')
     shutil.copy2(source / 'manifest.json', display / 'manifest.json')
     bin_dir.mkdir(parents=True, exist_ok=True)
@@ -509,10 +509,11 @@ def assemble(args):
         control = stage / 'DEBIAN'
         control.mkdir()
         managed = json.dumps({'owner': 'bashkitten', 'version': pi_version, 'lockSha256': lock_hash})
+        display_postinst = f"chmod 400 '{installed_app}/display/bashkitten-x11-loader.jar'\n" if termux else ''
         executable(control / 'postinst', f'''#!{shell}
 set -e
 umask 022
-runtime='{runtime}'
+{display_postinst}runtime='{runtime}'
 if [ ! -f "$runtime/ready" ]; then
   mkdir -p "$runtime"
   cp -a '{installed_app}/node_modules' "$runtime/"
