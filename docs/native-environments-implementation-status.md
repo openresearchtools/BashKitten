@@ -17,7 +17,52 @@ are additional mandatory amendments. Their source is integrated in `fb867067e4`;
 the combined `3c35d56d7c` Android/Termux/Linux development packages were built
 and installed. Whole-feature acceptance remains in progress.
 
-The current combined development candidate is
+The current development candidate is
+`005d3e5b2d45dcb899f57d40b22e92f9b7cc6a93`. Its Linux package is fully built,
+source-verified and installed on the native Wayland host and real Xorg VM.
+The matched Android APK and Termux package are now installed on Android 16/17
+with BashKitten OS `0f16d716aa`. Installed APK hashes, backend revision, OS producer
+stamp and standard file manifests match; package verification is clean and normal
+postinst sets the paired loader to `0400` with the correct owner. Both Android
+apps were left stopped after installation; their new UI acceptance is pending.
+Installation receipts are `verification/android16-005d/installation.json` and
+`verification/android17-005d/installation.json` in the Build repository. This candidate uses
+the BashKitten OS package from `0f16d716aa`, private engine from `136d077c9f`
+and the freshly built guest package from `47620b1f83`. The native Gecko producer
+remains `609e82c200`, with exact input-equality and separate assembly receipts;
+the Android loader producer remains `780540ddf7`. The Linux and Android guard
+producers remain `9ffeedb41d` and `bb8061b0b9`, respectively.
+
+The `005d3e5b2d` package/source checksums and full corresponding-source collector
+passed. Independent inspection found 2,046 nonempty Linux offline notice records,
+including all 619 private-machine notices and the corrected full Plotters texts.
+It also found one package metadata defect: the recorded machine-archive checksum
+was overwritten by a library checksum. Input-archive and executable/library
+validation passed; runtime bytes are unaffected. `300e12d6bd` fixes that field
+for the next package. The immutable `005d3e5b2d` package retains this documented
+provenance limitation and is not a release-readiness claim.
+
+Initial installed `005d3e5b2d` Xorg checks pass the Callback label and selected
+Local page. Fresh machine creation succeeds, but its settings can race the older
+catalogue response; reopening after refresh works. `bdb08fdb58` repairs that race
+for the next candidate. The new machine is still preparing. A retained guest's
+`Browser exited 0` was traced during a normal Start to automatic Firefox
+Troubleshoot Mode after repeated crash tests, followed by a duplicate profile
+attempt; its managed-launch repair is pending. Neither startup is accepted yet.
+Raw code Download now reaches
+the normal Save File dialog, with actual saved-content verification still pending.
+These observations are recorded in
+`acceptance/xorg-vm-control/candidate-005d-ui.json` in the Build repository.
+The Wayland host also passes the visible Callback check, recorded in
+`verification/desktop-005d/installation.json`; this is not a calling-flow pass.
+The following committed source changes are
+also outside the installed `005d3e5b2d` candidate: `f4ac3e519e` matches question
+cards to chat styling; `a794347f3b` keeps the selected chat subscribed to turns
+started through an external entry point; `79b55863d8` clears a prior call's error
+when a new call begins; and `300e12d6bd` corrects package provenance above. Their
+source checks do not establish installed results.
+
+The previous combined development candidate was
 `0cf34b8857d8d6faef040ca1135038bded74618c`, installed on the native Wayland
 host, real Xorg VM and Android 16/17. Both Android installations have its matched
 Termux backend and the separately installed BashKitten OS component from
@@ -42,12 +87,14 @@ the feature controls. Unavailable Accessibility options remain disabled, and
 closing the page returns to Agent. These presentation/settings checks do not
 establish the full tool authorization or revocation matrix.
 
-The next integrated source batch adds Display-only compact toolbars and viewport
+The `005d3e5b2d` batch includes Display-only compact toolbars and viewport
 toggles, Android Updates with exact APK/Termux package pairing, and `.local`
-calling identifiers without development-address compatibility. Completed questions
-now belong beside their originating native tool call, with the existing native
-answer shown once; unanswered questions can be dismissed without stopping Pi.
-These changes have source/compilation evidence, not installed acceptance yet.
+calling identifiers without development-address compatibility. The visible
+calling destination is now **Callback**, separate from Phone use. Completed
+questions are placed beside their originating native tool call, with the existing
+native answer shown once; unanswered questions can be dismissed without stopping
+Pi. These changes have source/build evidence; their complete installed acceptance
+is still pending.
 The public APT feed does not yet contain this development candidate's matching
 packages, so a successful public-feed update cannot be claimed from local assembly.
 
@@ -60,11 +107,22 @@ model subsequently made distinct new question calls, rather than the application
 replaying a delivery. Stop cancelled those new questions and prevented a late
 reply from resuming Pi. Direct calling, a contact created through the normal editor
 and Recents callback connected through the managed PhoneAccount. Hangup left Pi
-running. Those calls used the earlier development address; the new `.local`
-identity, actual call audio/review, full cross-channel races and OEM/Auto behavior
-remain separate gates. An actual diverted final reached the native voicemail
+running. A later, properly timed public-audio fixture on a second `0cf34b8857`
+call ended recording on silence, progressed through the TTS review stage and
+accepted explicit keypad **1** to Send. The original native Pi session contains
+one resulting user message and one assistant final. Acoustic read-back was not
+independently heard, so this is not full speech-review acceptance. The selected
+idle chat did not display that externally started turn after its queue cleared;
+`a794347f3b` addresses that subscription gap in source. Evidence is in the Build
+repository's `verification/android16-0cf3/manual-progress.json`,
+`call-retry-audio-metadata.json` and `call-native-history-read.json`; the stale
+chat screenshots do not prove a displayed completed turn.
+
+Those calls used the earlier development address; the new `.local` identity,
+complete audio/review flow, cross-channel races and OEM/Auto behavior remain
+separate gates. An actual diverted final reached the native voicemail
 store, but the open mailbox view remained stale; `47620b1f83` repairs that display
-refresh, pending installation. Earlier
+refresh and is included in the installed `005d3e5b2d` packages, pending UI retest. Earlier
 Android 16 observations retain their original revisions rather than becoming
 automatic retests of this candidate.
 
@@ -77,7 +135,7 @@ discoverable app commands after Apps was switched Off, and actual attempted
 telephony and speech remain unaccepted.
 `1286217ca6` corrects discovery wording to show the actual spaced CLI commands.
 
-The current Xorg `0cf34b8857` candidate separately opens General and Providers,
+The earlier Xorg `0cf34b8857` candidate separately opens General and Providers,
 keeps the settings view free of the composer/footer, and remains usable during
 fresh container preparation. A General setting persisted through Done/reopen and
 was restored after the check. The fresh `Xorg0cf3` machine completes creation in
