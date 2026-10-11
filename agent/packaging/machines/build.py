@@ -39,8 +39,14 @@ def require(condition, message):
 
 
 def run(command, cwd=None, env=None, log=None):
-    subprocess.run([str(x) for x in command], cwd=cwd, env=env, check=True,
-                   stdout=log, stderr=subprocess.STDOUT if log else None)
+    try:
+        subprocess.run([str(x) for x in command], cwd=cwd, env=env, check=True,
+                       stdout=log, stderr=subprocess.STDOUT if log else None)
+    except subprocess.CalledProcessError:
+        if log:
+            log.flush()
+            print(Path(log.name).read_text(errors='replace')[-8000:], flush=True)
+        raise
 
 
 def output(command, cwd=None):
