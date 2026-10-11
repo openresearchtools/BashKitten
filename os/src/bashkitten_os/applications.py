@@ -508,6 +508,15 @@ def locate_desktop_file(desktop_id: str) -> Path:
     raise UserInputError(f"application entry not found: {desktop_id}")
 
 
+def run_appimage(path: Path, command: list[str], environment: dict[str, str]) -> None:
+    # This standalone helper stays off the desktop UI thread. Keep the child's
+    # process group and standard streams, but retain an owner to report failure.
+    result = subprocess.run(command, env=environment, check=False)
+    if result.returncode:
+        reason = f"signal {-result.returncode}" if result.returncode < 0 else f"exit status {result.returncode}"
+        raise UserInputError(f"{path.name} ended with {reason}.")
+
+
 def command_launch(arguments: argparse.Namespace) -> None:
     path = validate_appimage(arguments.path)
     authorize(path)
@@ -518,7 +527,7 @@ def command_launch(arguments: argparse.Namespace) -> None:
     os.chdir(path.parent)
     environment = os.environ.copy()
     environment.setdefault("ELECTRON_OZONE_PLATFORM_HINT", "x11")
-    os.execve(path, [str(path), *arguments.targets], environment)
+    run_appimage(path, [str(path), *arguments.targets], environment)
 
 
 def persistent_extract_directory(path: Path) -> Path:
@@ -621,7 +630,7 @@ def exec_extracted_appimage(path: Path, directory: Path, apprun: Path, arguments
             launch_arguments.append("--no-sandbox")
         else:
             launch_arguments.insert(position, "--no-sandbox")
-    os.execve(apprun, [str(apprun), *launch_arguments, *arguments], environment)
+    run_appimage(path, [str(apprun), *launch_arguments, *arguments], environment)
 
 
 def ensure_persistent_extraction(path: Path) -> tuple[Path, Path]:
