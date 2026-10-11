@@ -8,7 +8,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
+import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
 import { launchInference } from './launch.mjs';
 import { parseRouterINI, updateRouterModel, isolatedPreset, routerModelId, browseBackend, verifyTestConfiguration } from './router-models.mjs';
@@ -111,6 +111,18 @@ export class LocalAI {
     await writeJson(configFile, config);
   }
   async config() { requireLocalRuntime(); return readConfiguration(); }
+  async record({ engine, record }) {
+    requireLocalRuntime();
+    const name = record === 'license' ? 'LICENSES.txt' : record === 'source' ? 'SOURCE.json' : null;
+    if (!name) throw Error('Choose runtime licenses or its source record');
+    const runtime = await runtimeInfo(engine);
+    if (!runtime?.root) throw Error('Download this runtime first');
+    const directory = await fs.realpath(runtimeDirectory), root = await fs.realpath(runtime.root);
+    if (!root.startsWith(directory + path.sep)) throw Error('Runtime record is outside the installed runtime directory');
+    const filename = await fs.realpath(path.join(root, name));
+    if (filename !== path.join(root, name) || !(await fs.stat(filename)).isFile()) throw Error('Runtime record is not a regular installed file');
+    return { name, content: await fs.readFile(filename, 'utf8'), mimeType: record === 'source' ? 'application/json' : 'text/plain' };
+  }
   async status() {
     const config = await this.config(), host = await this.services.status();
     const engines = {};

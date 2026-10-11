@@ -315,6 +315,7 @@ async function serve() {
     }
     if (command.startsWith('localai-')) {
       if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: ['localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
+      if (command === 'localai-record') return localAI.record(value);
       if (command === 'localai-browse') return localAI.browse(value);
       if (command === 'localai-router-models') return localAI.routerModels(value);
       if (command === 'localai-router-model-save') return localAI.saveRouterModel(value);
