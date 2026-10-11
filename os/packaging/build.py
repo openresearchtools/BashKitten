@@ -230,6 +230,8 @@ def main():
     if not termux:
         write(base/'share/applications/org.bashkitten.AppImage.desktop','[Desktop Entry]\nType=Application\nName=BashKitten AppImage\nNoDisplay=true\nExec=bashkitten-app launch %f\nMimeType=application/vnd.appimage;application/x-iso9660-appimage;\nIcon=application-x-executable\n')
     dependencies=(['python','pygobject','gtk3','libwnck','xfconf','xfwm4','xfce4-session','xfdesktop','thunar','xfce4-terminal','xdotool','scrot','at-spi2-core','xorg-xrandr','xorg-xrdb','xorg-xprop','xdg-desktop-portal','libdisplay-info','libxfce4ui','libxfce4util','garcon','exo'] if termux else ['python3','python3-gi','gir1.2-gtk-3.0','gir1.2-wnck-3.0','gir1.2-atspi-2.0','libgtk-3-0t64','libwnck-3-0','libxfconf-0-3','xfconf','xfwm4','xfce4-session','xfdesktop4','thunar','xfce4-terminal','xdotool','scrot','at-spi2-core','x11-xserver-utils','x11-utils','xdg-desktop-portal','xdg-desktop-portal-gtk','libdbusmenu-gtk3-4','libxfce4ui-2-0','libxfce4util7','libgarcon-1-0','libgarcon-gtk3-1-0','libexo-2-0','zenity','squashfs-tools','desktop-file-utils','xdg-utils','libfuse2t64','sudo'])
+    # The inherited icon themes do not require the SVG loader used by our icons.
+    dependencies.append('librsvg' if termux else 'librsvg2-common')
     if not termux:
         # Required by postinst even when the guest installs without Recommends.
         dependencies += ['libglib2.0-bin'] + linux_shlibs(stage,args.build_dir)
