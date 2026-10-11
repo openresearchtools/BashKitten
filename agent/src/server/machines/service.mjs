@@ -12,6 +12,7 @@ import { defaults, validate, prepareRuntime, prepareStorage, machineRoot, packag
   load, containerName, machineLabel, definition, helper, userNamespace, mount, podmanEnvironment } from './config.mjs';
 import { podman, installed, run } from './process.mjs';
 import { startMedia, stopMedia, mediaDevices, mediaStatus, integrationArguments } from './media.mjs';
+import { duringUpdate, mutations, runtimeVersion, updateMessage, updateError } from './update.mjs';
 
 process.umask(0o077);
 await privateDir(machineRoot);
@@ -21,6 +22,8 @@ if (!owner) process.exit(0);
 await fs.rm(daemonSocket, { force: true });
 await prepareStorage();
 const active = new Map();
+const runtime = await runtimeVersion(true), started = await processStart(process.pid);
+let updatePending = false, retiring = false, retirementStarted = false, mutationRequests = 0, upgradeCheck;
 const activationWatchers = new Map(), activationWaiters = new Set();
 function watchActivation(id) {
   if (activationWatchers.has(id)) return;
@@ -68,10 +71,10 @@ async function saveState(id, fields) {
   await writeJson(file, state);
   return state;
 }
-async function inspect(id) {
-  const result = await podman(['container', 'inspect', containerName(id)], { allowFailure: true });
+async function inspect(id, { signal } = {}) {
+  const result = await podman(['container', 'inspect', containerName(id)], { allowFailure: true, signal });
   if (result.code) {
-    const exists = await podman(['container', 'exists', containerName(id)], { allowFailure: true });
+    const exists = await podman(['container', 'exists', containerName(id)], { allowFailure: true, signal });
     if (exists.code === 1) return null;
     throw Error(result.stderr.trim() || 'Could not inspect machine');
   }
@@ -370,7 +373,42 @@ async function edit(value) {
   });
 }
 async function action(name,value={},requestSignal) {
-  if(name==='status') return {schema:1,pid:process.pid};
+  if(name==='status') return {schema:2,pid:process.pid,started,runtime,updatePending};
+  if(name==='upgrade') {
+    if(value.pid!==process.pid || value.started!==started) throw Error('The container service changed while preparing its update');
+    updatePending = true;
+    if (upgradeCheck) return upgradeCheck;
+    upgradeCheck = (async () => {
+      if (retiring) return {restarting:true};
+      if (active.size || mutationRequests) return {restarting:false};
+      // Fence even Stop during the asynchronous idle check. Calls already
+      // accepted are counted above, including work queued on the catalogue.
+      retiring = true;
+      const signal = AbortSignal.any([AbortSignal.timeout(10000), ...(requestSignal ? [requestSignal] : [])]);
+      let idle = false;
+      try {
+        for (const r of await records()) {
+          signal.throwIfAborted();
+          // Only these read-only queries are cancelled on timeout/disconnect;
+          // the guest and accepted lifecycle operations are never signalled.
+          const info = await inspect(r.config.id, { signal });
+          const gateway = await readJson(path.join(r.files.runtime,'gateway.json'),null);
+          if (info?.State?.Running || info?.State?.Paused ||
+              gateway && await processStart(gateway.pid) === gateway.started ||
+              mediaStatus(r.config.id).some(channel => channel.running)) return {restarting:false};
+        }
+        signal.throwIfAborted();
+        idle = true;
+        return {restarting:true};
+      } catch (error) {
+        // An engine/metadata error must not take away read, Stop or Cancel.
+        // It prevents replacement until the old owner can prove it is idle.
+        return {restarting:false,error:'Could not confirm that the container service is idle: ' + error.message};
+      } finally { if (!idle) retiring = false; }
+    })();
+    try { return await upgradeCheck; } finally { upgradeCheck = null; }
+  }
+  if (updatePending && (!duringUpdate.has(name) || retiring && mutations.has(name))) throw updateError(updateMessage);
   if(name==='list') {
     const list=await records();
     // Read each real container state asynchronously. An unavailable engine remains visible.
@@ -387,7 +425,7 @@ async function action(name,value={},requestSignal) {
       if(pending?.id === value.ack.id) await saveState(value.ack.machineId,{activation:pending.id});
     }
     let activations = await pendingActivations();
-    if (!activations.length && value.wait) {
+    if (!activations.length && value.wait && !retiring) {
       await new Promise(resolve => { const finish=()=>{clearTimeout(timer);activationWaiters.delete(finish);resolve();}; const timer=setTimeout(finish,20000);activationWaiters.add(finish); });
       activations=await pendingActivations();
     }
@@ -509,8 +547,28 @@ for(const r of await records()) {
 const server=http.createServer(async(req,res)=>{
   const request=new AbortController();
   res.once('close',()=>{if(!res.writableEnded)request.abort();});
-  try {if(req.url==='/status')return json(res,await action('status'));if(req.method!=='POST')throw Error('Use POST for native machine actions');const result=await action(req.url.slice(1),await jsonBody(req),request.signal);if(!res.destroyed)json(res,result);}
+  const name=req.url.slice(1), mutation=mutations.has(name);
+  if(mutation)mutationRequests++;
+  try {
+    if(req.url==='/status')return json(res,await action('status'));
+    if(req.method!=='POST')throw Error('Use POST for native machine actions');
+    const result=await action(name,await jsonBody(req),request.signal);
+    if(name==='upgrade' && result.restarting) {
+      // Idle, with new lifecycle work fenced. Flush this reply before closing
+      // the listener and releasing the systemd owner. Closing a browser never
+      // enters this path and no running guest or operation is cancelled here.
+      const retire=()=>{
+        if(retirementStarted)return;
+        retirementStarted=true;
+        for(const wake of activationWaiters)wake();
+        server.close(()=>{owner.close();process.exit(0);});
+      };
+      if(res.destroyed)retire();else {res.once('finish',retire);res.once('close',retire);}
+    }
+    if(!res.destroyed)json(res,result);
+  }
   catch(error){if(!res.destroyed)json(res,{error:error.message,code:error.code},400);}
+  finally {if(mutation)mutationRequests--;}
 });
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(daemonSocket,resolve);});
 await fs.chmod(daemonSocket,0o600);
