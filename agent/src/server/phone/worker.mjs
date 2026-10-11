@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { dataDir, privateDir, json } from '../common.mjs';
+import { socketPath, privateDir, json } from '../common.mjs';
 import { privateRequest } from './transport.mjs';
 
 /** Each Pi incarnation gets its own socket/key. Native session adoption rotates
@@ -12,8 +12,8 @@ export async function createPhoneWorker({ sessionId }) {
   const ownerSocket = process.env.BASHKITTEN_PHONE_OWNER_SOCKET, ownerKey = process.env.BASHKITTEN_PHONE_OWNER_WORKER_KEY;
   if (!ownerSocket || !ownerKey) return { environment: {}, adopt: async () => {}, close: async () => {} };
   const key = randomBytes(32).toString('base64url');
-  const directory = path.join(dataDir, 'run'); await privateDir(directory);
-  const socket = path.join(directory, `phone-pi-${randomUUID()}.sock`);
+  const socket = socketPath(`phone-pi:${randomUUID()}`);
+  await privateDir(path.dirname(socket));
   let active = true, transition = Promise.resolve(), generation = 0;
   const server = http.createServer(async (req, res) => {
     try {
