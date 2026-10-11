@@ -190,6 +190,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     return cert;
   }
   configureAgent(params) {
+    if (this.destroyed) throw new Error("Agent view closed");
     this.cancelLoginResponse();
     const endpoint = this.agentEndpoint(params.url);
     const identity = params.identity;
@@ -207,7 +208,11 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
     if (localSession) {
       const expectedName = "__Host-bashkitten_local_" + String(identity.instanceId).replaceAll("-", "");
-      if (this.context !== contextPrefix("bashkitten-agent-ui-local") || onion ||
+      const expectedContext = "bashkitten-agent-ui-local-" + identity.caSha256 + "-" + identity.instanceId;
+      // Native retains the legacy jar only when its saved identity is unchanged.
+      const localContext = this.context === contextPrefix(expectedContext) || this.context === contextPrefix("bashkitten-agent-ui-local");
+      if (!localContext || onion ||
+          !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(identity.instanceId || "") ||
           localSession.url !== endpoint.origin || localSession.identity?.instanceId !== identity.instanceId ||
           localSession.identity?.caSha256 !== identity.caSha256 ||
           localSession.cookie?.name !== expectedName || !/^[a-f0-9]{64}$/.test(localSession.cookie?.value || "")) {

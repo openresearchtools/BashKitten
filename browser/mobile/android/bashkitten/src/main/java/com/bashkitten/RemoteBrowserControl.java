@@ -32,7 +32,7 @@ final class RemoteBrowserControl {
             URI endpoint = URI.create(address);
             if (!"https".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost()) ||
                     endpoint.getUserInfo() != null || selected == null || !selected.isOpen() ||
-                    !"bashkitten-agent-ui-local".equals(selected.getSettings().getContextId()) ||
+                    !app.agent.isLocalSession(selected) ||
                     !app.agent.selected.equals("local") || app.agent.session != selected || !app.agent.isOnRequested()) return;
             String serverOrigin = new URI(endpoint.getScheme(), null, endpoint.getHost(), endpoint.getPort(), null, null, null).toString();
             if (active && session == selected && serverOrigin.equals(origin)) {
@@ -243,7 +243,7 @@ final class RemoteBrowserControl {
         if (version != generation || !active) return;
         GeckoSession previous = session;
         String previousOrigin = origin;
-        boolean local = "bashkitten-agent-ui-local".equals(previous.getSettings().getContextId());
+        boolean local = app.agent.isLocalSession(previous);
         disconnect();
         if (local) { reconnectLocal(previous, previousOrigin); return; }
         app.message((message == null ? "Agent connection closed" : message) + ". Browser control is off; allow it again to reconnect.");
