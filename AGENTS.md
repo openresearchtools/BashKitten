@@ -4,7 +4,21 @@
 
 The requested next architecture is recorded in
 [docs/native-environments-display-plan.md](docs/native-environments-display-plan.md).
-Read it before implementing that work. It is a researched plan, not an
+The agreed original is permanently pinned at commit
+`f71686dcb76402ec43bac3e6a7db8979ef0fb119`, tagged
+`bashkitten/plan/native-environments-2026-10-11`. Read the
+[original plan at that exact commit](https://github.com/openresearchtools/BashKitten/blob/f71686dcb76402ec43bac3e6a7db8979ef0fb119/docs/native-environments-display-plan.md)
+as well as the current plan before implementation and after compaction; pass
+this baseline to delegated agents. Section "Agreed original baseline" gives
+the local read command. Never amend/rewrite away the baseline, move/delete its
+tag or weaken its GitHub protection. Keep progress, failures and completion
+evidence in separate status records; do not rewrite requirements to fit what
+was implemented. Later user-authorized changes belong in new commits with
+explicit dated amendments explaining what changed and why. Preserve the
+original intentions and compare final acceptance against them plus those
+authorized amendments; an agent's plan rewrite is not authorization to cut scope.
+Ordinary implementation fixes and evidence updates remain permitted; this
+preserves requirements, not a frozen implementation. It is a researched plan, not an
 implementation or acceptance claim. It specifies embedded Termux:X11 without a
 separate X11 APK, Linux Podman/crun environments, a native environment/project/chat
 sidecar, shared XFCE customization and the requested CPU display fallback.

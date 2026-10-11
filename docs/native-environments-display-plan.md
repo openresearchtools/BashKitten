@@ -5,6 +5,32 @@ No application code, package, installed runtime or working user flow is delivere
 by this document. Research used BashKitten `a39f8b1d1ab8ab0ee202a5bb174f905578e83333`
 and the pinned sources below; integration and acceptance remain future work.
 
+## Agreed original baseline
+
+The user-agreed starting plan is frozen at commit
+[`f71686dcb76402ec43bac3e6a7db8979ef0fb119`](https://github.com/openresearchtools/BashKitten/blob/f71686dcb76402ec43bac3e6a7db8979ef0fb119/docs/native-environments-display-plan.md),
+with permanent tag `bashkitten/plan/native-environments-2026-10-11`.
+Read that original alongside the current plan before implementation and after
+compaction, and include its identity in subagent handoffs. The commit SHA is the
+authoritative reference even if a working copy of this document changes:
+
+```sh
+git show f71686dcb76402ec43bac3e6a7db8979ef0fb119:docs/native-environments-display-plan.md
+```
+
+Do not amend or rewrite away that baseline, move/delete its tag, or weaken the
+GitHub rule protecting the tag from updates and deletion. Keep progress, blockers
+and acceptance evidence in separate status records. Never revise requirements
+to make an incomplete implementation appear complete. Later changes explicitly
+authorized by the user must be recorded in new commits as dated amendments,
+identifying the changed requirement and the user's decision while retaining
+the original baseline. Final acceptance compares the implementation with the
+original intentions plus those authorized amendments, not merely an agent's
+latest rewritten plan. This marker adds preservation rules; it does not change
+the agreed feature scope or prevent ordinary implementation fixes and evidence
+updates. Explicit later user decisions take precedence where they amend a
+requirement, without erasing the original record.
+
 **Implementation mandate:** every feature in this plan is equally required.
 Implement and integrate the complete scope before the first full BashKitten
 main-app candidate builds, then test all features, fix blockers across the
