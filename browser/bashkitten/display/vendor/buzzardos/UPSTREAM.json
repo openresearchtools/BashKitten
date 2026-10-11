@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/openresearchtools/BuzzardOS",
+  "commit": "6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0",
+  "license": "AGPL-3.0-or-later",
+  "selection": "Private guest display protocol, frame/keyboard/synchronization code and original build metadata. Unmodified source subset; excluded GTK frontend is not built.",
+  "files": {
+    "LICENSE": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef",
+    "NOTICE": "acc47753006301ccb9aa3fea680a0b535c1ccc769a6485bd4b3453a48eac33d3",
+    "THIRD_PARTY_NOTICES.md": "6ddfd31aa075519532890efeb38cc23078ce77fbad8f004404f5ce36c5c118cc",
+    "host/Cargo.toml": "78ae65ce7896094f84b273973a475fdd7d78cf3a7e91cba0ab809a8b4fbbd252",
+    "host/Cargo.lock": "0fb59cc46f546eae0fd561245f601369432357ed17debe52c095357e64ac9d76",
+    "host/crates/buzzardos-display/Cargo.toml": "cbd10281bf8e8f32b81a6d291f34a1c2ed73f610e77fd6522d4ea7495277b6d9",
+    "host/crates/buzzardos-display/src/guest_display.rs": "015ec3568bc7b2211d3855864293fd5fa78a18b0c0fe8579313dc728f2f085bb",
+    "host/crates/buzzardos-display/src/gateway.rs": "fbb672aa4f283e64f6285a9931747349632884c9cb1a69ee05cfdebcf7289a88",
+    "host/crates/buzzardos-display/src/keyboard.rs": "4c780981c0f13e7cfa3147254ecacec32b823616c6e269e4bf56e4d7bf796250",
+    "host/crates/buzzardos-display/src/drm_syncobj.rs": "df27967490916a18cabe82c25b5a28f2c15a1d09d1dc0a93944d2937058baa2a"
+  }
+}
