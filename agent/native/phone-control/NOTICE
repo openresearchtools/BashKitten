@@ -1,0 +1,11 @@
+BashKitten Phone controls is a maintained fork/adaptation of Android Remote
+Control MCP v1.12.0, commit 3777403d148283c5a18a3e8122ff819da4eed808.
+Original copyright 2026–2027 Daniele Salvatore Albano; MIT (LICENSE.md).
+The complete pristine donor is preserved by BashKitten commit 653010bc9d.
+The original donor implementation was stripped after that pristine import.
+The source locations below identify the operations ported to the native module.
+The adapted com.bashkitten.phone Java module records MIT-derived platform
+operations and BashKitten's AGPL-3.0-only policy/transport integration per file.
+Removed: MCP, providers/onboarding, camera/audio, tunnels, events, update checks,
+OAuth, remote icon loading, donor UI/lifecycle, logging and native payloads.
+There is no automatic donor updater. Existing Pi remains the only agent/provider.
