@@ -633,5 +633,15 @@
     "file": "proxy-agent-negotiate-b7e5f7ccce1a3ac5b339cc4c587974e8989cbc16.tar.gz",
     "url": "https://codeload.github.com/TooTallNate/proxy-agents/tar.gz/b7e5f7ccce1a3ac5b339cc4c587974e8989cbc16",
     "sha256": "d6a4204d6b590a823c739869ed390d53cbd4e0a49a2968b1f66a51461acf9f75"
+  },
+  {
+    "name": "Android Remote Control MCP",
+    "version": "v1.12.0",
+    "repository": "https://github.com/danielealbano/android-remote-control-mcp",
+    "commit": "3777403d148283c5a18a3e8122ff819da4eed808",
+    "file": "android-remote-control-mcp-3777403d148283c5a18a3e8122ff819da4eed808.tar.gz",
+    "url": "https://codeload.github.com/danielealbano/android-remote-control-mcp/tar.gz/3777403d148283c5a18a3e8122ff819da4eed808",
+    "sha256": "95b04ce23acb14bc4f8aa381564d09ad28375877cf2cb56bfe896305e23be946",
+    "license": "MIT"
   }
 ]
