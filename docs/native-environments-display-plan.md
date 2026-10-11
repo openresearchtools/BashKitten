@@ -3383,3 +3383,24 @@ Account for those browser controls when sizing the display; closing or switching
 the tab detaches only its renderer and leaves its desktop/backend running.
 Verify these actions on the installed Android and desktop candidates, including
 with the keyboard open and while the display is busy or stalled.
+
+### Local recovery and consistent appearance — 11 October 2026
+
+The user clarified that Local setup must not require managing a data directory
+or approving certificates. Normal upgrades preserve the existing Local identity
+and data. If the app-managed data directory is deliberately removed, initialize
+a fresh Local backend through the authenticated private native controller/Termux
+bridge and retire only the old Local browser context. Match the live identity
+and local-session response before enrolling its replacement; an arbitrary
+loopback server is not an authority. Never apply remote onion client-certificate
+cleanup to Local or container contexts. Saved remote enrollment, authentication
+and the Tor/Chisel/Caddy/Authelia route remain separate and unchanged. A deleted
+data directory does not imply recovery of its deleted settings or sessions.
+
+Configuration pages and all setup dialogs must match the existing sidebar,
+chat and Firefox interface in both light and dark mode: the same theme,
+typography, colors, spacing and rounded controls, without separate accent
+palettes. Restore the sidecar's top-left rounding below the tab/title bar while
+keeping its integrated layout. This concerns the BashKitten browser interface;
+the explicitly requested BashKitten OS desktop palette remains as specified
+above. Verify the installed surfaces in both themes, including mobile sizing.
