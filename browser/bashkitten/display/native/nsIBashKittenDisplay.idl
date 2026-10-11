@@ -1,0 +1,14 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+#include "nsISupports.idl"
+webidl Element;
+interface nsIObserver;
+/** Parent-only native viewport. Never exposed to Agent or ordinary content. */
+[scriptable, uuid(b7f58a16-c8c5-42a9-8103-1461c2c76eaa)]
+interface nsIBashKittenDisplay : nsISupports {
+  void attach(in Element surface, in AUTF8String presenterSocket,
+              in AUTF8String rendererExecutable, in nsIObserver observer);
+  /** Typed, validated input/viewport packets; no commands, paths or descriptors. */
+  void input(in AUTF8String message);
+  readonly attribute AUTF8String capabilities;
+  void close();
+};

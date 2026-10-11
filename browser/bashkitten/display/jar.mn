@@ -1,0 +1,4 @@
+browser.jar:
+    content/browser/bashkitten/display.xhtml (content/display.xhtml)
+    content/browser/bashkitten/display.js (content/display.js)
+    content/browser/bashkitten/display.css (content/display.css)
