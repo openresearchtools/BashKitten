@@ -91,6 +91,12 @@ async def run():
             await asyncio.sleep(.05)
         else:
             raise RuntimeError('Guest Xwayland did not become ready')
+        # dbus-run-session started before the owned X11 context existed. Publish
+        # only this guest's display/session values for portal/toolkit activation.
+        activation = ['DISPLAY','XAUTHORITY','XDG_CURRENT_DESKTOP','XDG_SESSION_TYPE',
+                      'BASHKITTEN_EXECUTION_ROLE','BASHKITTEN_MACHINE_ID','BASHKITTEN_DATA_DIR',
+                      'BASHKITTEN_DESKTOP_CONTEXT','BASHKITTEN_GUEST_STATUS_FILE']
+        await command('/usr/bin/dbus-update-activation-environment',*activation,env=env)
         for binary in ['/usr/bin/pipewire','/usr/bin/pipewire-pulse','/usr/bin/wireplumber']:
             await launch(binary)
         integration=json.loads(Path('/run/bashkitten-settings/integration.json').read_text())
