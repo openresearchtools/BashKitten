@@ -1,0 +1,89 @@
+From: BashKitten
+Subject: Keep the Applications label beside its proportionally sized product icon
+
+Only the owned BashKitten Applications launcher adds an image in labelled mode.
+Other launchers and user show-label choices retain their existing behavior.
+
+--- a/plugins/launcher/launcher.c
++++ b/plugins/launcher/launcher.c
+@@ -214,6 +214,8 @@
+   GtkWidget *button;
+   GtkWidget *arrow;
+   GtkWidget *child;
++  GtkWidget *label_box;
++  GtkWidget *label_image;
+   GtkWidget *menu;
+   GtkWidget *action_menu;
+ 
+@@ -360,6 +362,8 @@
+   plugin->action_menu = NULL;
+   plugin->items = NULL;
+   plugin->child = NULL;
++  plugin->label_box = NULL;
++  plugin->label_image = NULL;
+   plugin->surface = NULL;
+   plugin->icon_name = NULL;
+   plugin->menu_timeout_id = 0;
+@@ -869,14 +873,27 @@
+ 
+       /* destroy the old child */
+       if (plugin->child != NULL)
+-        gtk_widget_destroy (plugin->child);
+-
+-      /* create child */
++        gtk_widget_destroy (gtk_bin_get_child (GTK_BIN (plugin->button)));
++      plugin->label_box = NULL;
++      plugin->label_image = NULL;
++
++      /* Preserve labelled launchers; only BashKitten Applications adds its icon. */
+       if (G_UNLIKELY (plugin->show_label))
+-        plugin->child = gtk_label_new (NULL);
++        {
++          plugin->label_box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
++          plugin->label_image = gtk_image_new ();
++          gtk_widget_set_no_show_all (plugin->label_image, TRUE);
++          plugin->child = gtk_label_new (NULL);
++          gtk_box_pack_start (GTK_BOX (plugin->label_box), plugin->label_image, FALSE, FALSE, 0);
++          gtk_box_pack_start (GTK_BOX (plugin->label_box), plugin->child, FALSE, FALSE, 0);
++          gtk_container_add (GTK_CONTAINER (plugin->button), plugin->label_box);
++          gtk_widget_show (plugin->label_box);
++        }
+       else
+-        plugin->child = gtk_image_new ();
+-      gtk_container_add (GTK_CONTAINER (plugin->button), plugin->child);
++        {
++          plugin->child = gtk_image_new ();
++          gtk_container_add (GTK_CONTAINER (plugin->button), plugin->child);
++        }
+       gtk_widget_show (plugin->child);
+ 
+       /* update size */
+@@ -1309,7 +1326,12 @@
+ 
+   /* set the panel plugin size */
+   if (plugin->show_label)
+-    gtk_widget_set_size_request (GTK_WIDGET (panel_plugin), -1, -1);
++    {
++      gtk_widget_set_size_request (GTK_WIDGET (panel_plugin), -1, -1);
++      if (plugin->label_image != NULL)
++        gtk_image_set_pixel_size (GTK_IMAGE (plugin->label_image),
++                                 xfce_panel_plugin_get_icon_size (panel_plugin));
++    }
+   else
+     {
+       gint icon_size;
+@@ -1820,6 +1842,14 @@
+                            (mode == XFCE_PANEL_PLUGIN_MODE_VERTICAL) ? 270 : 0);
+       gtk_label_set_text (GTK_LABEL (plugin->child),
+                           item != NULL ? garcon_menu_item_get_name (item) : _("No items"));
++      gtk_orientable_set_orientation (GTK_ORIENTABLE (plugin->label_box),
++                                      mode == XFCE_PANEL_PLUGIN_MODE_VERTICAL
++                                        ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
++      gtk_image_set_from_icon_name (GTK_IMAGE (plugin->label_image), "bashkitten-os", GTK_ICON_SIZE_BUTTON);
++      gtk_image_set_pixel_size (GTK_IMAGE (plugin->label_image), icon_size);
++      gtk_widget_set_visible (plugin->label_image,
++                              item != NULL && g_strcmp0 (garcon_menu_item_get_command (item),
++                                                        "bashkitten-os launcher") == 0);
+     }
+   else if (G_LIKELY (item != NULL))
+     {
