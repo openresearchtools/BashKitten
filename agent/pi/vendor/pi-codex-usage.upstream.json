@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/llblab/pi-codex-usage",
+  "release": "v0.13.0",
+  "commit": "02a23c0707ccc4432f320ee14a47183d9bd7f4b1",
+  "archive": "https://api.github.com/repos/llblab/pi-codex-usage/tarball/02a23c0707ccc4432f320ee14a47183d9bd7f4b1",
+  "sha256": "7481640e41d2a7f6253b76ceecc288d8c9f79257d79ddf331ec2abe70d228b14",
+  "license": "MIT",
+  "pristine": true
+}
