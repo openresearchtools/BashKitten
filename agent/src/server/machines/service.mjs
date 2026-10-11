@@ -361,7 +361,7 @@ async function edit(value) {
     return {machine:brief(await load(value.id)),config};
   });
 }
-async function action(name,value={}) {
+async function action(name,value={},requestSignal) {
   if(name==='status') return {schema:1,pid:process.pid};
   if(name==='list') {
     const list=await records();
@@ -433,10 +433,20 @@ async function action(name,value={}) {
   }
   if(name==='clipboard') {
     const info=await inspect(value.id);if(!info?.State?.Running)throw Error('Start this machine before using its clipboard');
-    const type=value.type || 'text/plain';
+    let type=value.type || 'text/plain';
     if(!['read','write'].includes(value.action)||!['text/plain','image/png'].includes(type))throw Error('Clipboard supports text/plain and image/png read/write');
+    const signal=AbortSignal.any([AbortSignal.timeout(18000),...(requestSignal?[requestSignal]:[])]);
+    const args=['exec',...(value.action==='write'?['--interactive']:[]),'--user','1000:1000','--env','DISPLAY=:0','--env','XAUTHORITY=/run/user/1000/bashkitten-Xauthority',info.Id,'/usr/bin/timeout','--kill-after=2','15','/usr/bin/xclip','-selection','clipboard'];
+    let target=type==='image/png'?'image/png':'UTF8_STRING';
+    if(value.action==='read'&&!value.type) {
+      const available=(await podman([...args,'-out','-target','TARGETS'],{binary:true,signal})).stdout.toString('utf8').split(/\r?\n/);
+      if(available.includes('image/png')) {type='image/png';target='image/png';}
+      else if(available.includes('UTF8_STRING')) target='UTF8_STRING';
+      else if(available.includes('text/plain;charset=utf-8')) target='text/plain;charset=utf-8';
+      else if(available.includes('text/plain')) target='text/plain';
+      else throw Error('The desktop clipboard does not contain supported text or PNG content');
+    }
     let input;
-    const clipboardLimit=16*1024*1024;
     if(value.action==='write') {
       if(type==='text/plain') {if(typeof value.text!=='string')throw Error('Expected clipboard text');input=value.text;}
       else {
@@ -444,14 +454,17 @@ async function action(name,value={}) {
         input=Buffer.from(value.dataBase64,'base64');
         if(!input.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))throw Error('Clipboard image is not PNG');
       }
-      if(Buffer.byteLength(input)>clipboardLimit)throw Error('Clipboard data exceeds the supported 16 MiB');
     }
-    const args=['exec',...(value.action==='write'?['--interactive']:[]),'--user','1000:1000','--env','DISPLAY=:0','--env','XAUTHORITY=/run/user/1000/bashkitten-Xauthority',containerName(value.id),'/usr/bin/timeout','--kill-after=2','15','/usr/bin/xclip','-selection','clipboard',value.action==='write'?'-in':'-out','-target',type==='image/png'?'image/png':'UTF8_STRING'];
-    const result=await podman(args,{input,binary:type==='image/png',maxOutputBytes:clipboardLimit,signal:AbortSignal.timeout(18000)});
-    return value.action==='write'?{ok:true}:type==='image/png'?{type,dataBase64:result.stdout.toString('base64')}:{type,text:result.stdout};
+    const result=await podman([...args,value.action==='write'?'-in':'-out','-target',target],{input,binary:true,signal});
+    if(value.action==='write')return {ok:true};
+    if(type==='image/png') {
+      if(!result.stdout.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))throw Error('Clipboard image is not PNG');
+      return {type,dataBase64:result.stdout.toString('base64')};
+    }
+    return {type,text:new TextDecoder('utf-8',{fatal:true}).decode(result.stdout)};
   }
   if(name==='guest-control') {
-    if(typeof value.command!=='string'||!['share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-files','service-status','service-save','service-remove','service-action','local-session','status','start','stop'].includes(value.command))throw Error('Unsupported guest settings operation');
+    if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-files','service-status','service-save','service-remove','service-action','local-session','status','start','stop'].includes(value.command))throw Error('Unsupported guest settings operation');
     return guestCall(value.id,value.command,value.value||{});
   }
   if(name==='start')return catalogue(async()=>{const cfg=await saveCapabilities(value);return begin(value.id,'start',job=>start(cfg,job));});
@@ -486,8 +499,10 @@ for(const r of await records()) {
   }
 }
 const server=http.createServer(async(req,res)=>{
-  try {if(req.url==='/status')return json(res,await action('status'));if(req.method!=='POST')throw Error('Use POST for native machine actions');json(res,await action(req.url.slice(1),await jsonBody(req)));}
-  catch(error){json(res,{error:error.message,code:error.code},400);}
+  const request=new AbortController();
+  res.once('close',()=>{if(!res.writableEnded)request.abort();});
+  try {if(req.url==='/status')return json(res,await action('status'));if(req.method!=='POST')throw Error('Use POST for native machine actions');const result=await action(req.url.slice(1),await jsonBody(req),request.signal);if(!res.destroyed)json(res,result);}
+  catch(error){if(!res.destroyed)json(res,{error:error.message,code:error.code},400);}
 });
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(daemonSocket,resolve);});
 await fs.chmod(daemonSocket,0o600);

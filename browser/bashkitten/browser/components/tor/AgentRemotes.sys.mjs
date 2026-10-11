@@ -9,6 +9,7 @@ const CONTEXT_MIN = 0xB4500000;
 const CONTEXT_MAX = 0xB450FFFF;
 const FILE = PathUtils.join(PathUtils.profileDir, "bashkitten-remotes.json");
 const TOPIC = "bashkitten-agent-remote-changed";
+const nativeEntry = entry => entry.id === "local" || entry.kind === "machine";
 
 function validateURL(value, local = false) {
   const url = new URL(value);
@@ -121,7 +122,7 @@ class AgentRemoteStore {
     for (const entry of entries) {
       if (!Number.isInteger(entry.userContextId) || entry.userContextId < CONTEXT_MIN ||
           entry.userContextId > CONTEXT_MAX || ids.has(entry.userContextId)) throw new Error("Invalid isolated remote context.");
-      entry.url = validateURL(entry.url, entry.id === "local");
+      entry.url = validateURL(entry.url, nativeEntry(entry));
       certificate(entry.caPem, entry.caSha256); ids.add(entry.userContextId);
       if (entry.mappings !== undefined && (!entry.mappings || typeof entry.mappings !== "object" || Array.isArray(entry.mappings))) {
         throw new Error("Invalid saved service mappings.");
@@ -167,13 +168,22 @@ class AgentRemoteStore {
     return { id: entry.id, name: entry.name, kind: "agent", url: entry.url,
       userContextId: entry.userContextId, identity: entry.caSha256,
       active: entry.id === this.activeId, state: owner?.state || "disconnected",
-      error: owner?.error || owner?.servicesError || "", migrationRequired: entry.id !== "local" && !entry.bundle };
+      error: owner?.error || owner?.servicesError || "", migrationRequired: !nativeEntry(entry) && !entry.bundle };
   }
-  async list() { return [...(await this.load()).values()].filter(entry => !["local", "local-hosting"].includes(entry.id)).map(entry => this.info(entry)); }
+  async list() { return [...(await this.load()).values()].filter(entry => !nativeEntry(entry) && entry.id !== "local-hosting").map(entry => this.info(entry)); }
   async connection(id) {
     const entry = (await this.load()).get(id);
     if (!entry) throw new Error("The connection no longer exists.");
     return this.info(entry);
+  }
+  rename(id, name) {
+    return this.serialized(async () => {
+      const entry = (await this.load()).get(id);
+      if (!entry || id === "local") throw new Error("Choose a saved remote.");
+      name = String(name || "").trim();
+      if (!name || /[\x00-\x1f]/.test(name)) throw new Error("Choose a remote name.");
+      entry.name = name; await this.save(); this.notify(); return this.info(entry);
+    });
   }
 
   trustLocal({ url, caPem, caSha256, instanceId }) {
@@ -187,6 +197,24 @@ class AgentRemoteStore {
       const entry = { id: "local", kind: "agent", name: "Local", url, caPem, caSha256: identity, instanceId,
         userContextId: previous?.userContextId ?? this.allocateContext() };
       this.entries.set("local", entry); await this.save(); await this.prepare(entry); return this.info(entry);
+    }, true);
+  }
+
+  isMachineContext(userContextId) {
+    return Boolean(this.entries && [...this.entries.values()].some(entry => entry.kind === "machine" && entry.userContextId === userContextId));
+  }
+
+  trustMachine(id, name, { url, caPem, caSha256, instanceId }) {
+    return this.serialized(async () => {
+      if (!/^machine:[a-f0-9-]{36}$/.test(id)) throw new Error("Invalid machine identity.");
+      await this.load(); url = validateURL(url, true);
+      const { identity } = certificate(caPem, caSha256), previous = this.entries.get(id);
+      if (!instanceId || previous && (previous.instanceId !== instanceId || previous.caSha256 !== identity)) {
+        throw new Error("The container Agent identity changed. Review this machine before replacing its trust.");
+      }
+      const entry = { id, kind: "machine", name, url, caPem, caSha256: identity, instanceId,
+        userContextId: previous?.userContextId ?? this.allocateContext() };
+      this.entries.set(id, entry); await this.save(); await this.prepare(entry); return this.info(entry);
     }, true);
   }
 
@@ -215,7 +243,7 @@ class AgentRemoteStore {
   async prepare(entry) {
     const { cert } = certificate(entry.caPem, entry.caSha256), host = new URL(entry.url).hostname;
     this.contexts.set(entry.userContextId, entry.url);
-    if (entry.id !== "local" && !this.clients.has(entry.id)) await TorRouting.registerAgentContext(entry.userContextId, host, entry.clientAuthorization);
+    if (!nativeEntry(entry) && !this.clients.has(entry.id)) await TorRouting.registerAgentContext(entry.userContextId, host, entry.clientAuthorization);
     this.trust.setAgentCA(host, { userContextId: entry.userContextId }, cert);
   }
 
@@ -223,12 +251,12 @@ class AgentRemoteStore {
     const selection = ++this.selection;
     const entry = (await this.load()).get(id);
     if (!entry) throw new Error("Select an Agent server.");
-    if (id !== "local" && !entry.bundle) throw new Error("Import a new encrypted Connection QR from this host's Share Local setup.");
+    if (!nativeEntry(entry) && !entry.bundle) throw new Error("Import a new encrypted Connection QR from this host's Share Local setup.");
     if (selection !== this.selection) throw new Error("The Agent selection changed.");
     this.activeId = id;
-    await this.serialized(() => this.prepare(entry), id === "local");
+    await this.serialized(() => this.prepare(entry), nativeEntry(entry));
     if (selection !== this.selection) {
-      if (id !== "local" && this.entries.get(id) === entry && !this.clients.has(id)) this.block(entry);
+      if (!nativeEntry(entry) && this.entries.get(id) === entry && !this.clients.has(id)) this.block(entry);
       throw new Error("The Agent selection changed.");
     }
     this.notify(); return this.info(entry);

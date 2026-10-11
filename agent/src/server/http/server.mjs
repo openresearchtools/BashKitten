@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { PhoneBackend, phoneStatus, requirePhoneIdentity, phonePolicy, savePhonePolicy, phoneRegistration, registerPhone, pendingPhoneEvents, acknowledgePhoneEvent, revokePhone, selectedPhone, initializePhonePolicy, pendingPhoneLive, acknowledgePhoneLive, disablePhone, pendingPhoneUpdates, acknowledgePhoneUpdate } from '../phone.mjs';
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import { openSync, closeSync } from 'node:fs';
@@ -6,6 +7,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { createPhoneWorkerSlot, withoutPhoneIssuers } from '../phone/owner.mjs';
+import { handleGuestBrowser } from '../access/guest-browser.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
@@ -28,6 +31,7 @@ import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeB
 import { transcribe } from '../localai/dictation.mjs';
 import { subagentSettings, readSubagentSettings, saveSubagentSettings } from '../rpc/subagents.mjs';
 import { SubagentChats } from '../rpc/subagent-chats.mjs';
+import { projects, createProject, renameProject, removeProject, moveChat, forgetChat, projectDirectory } from '../projects.mjs';
 
 process.umask(0o077);
 await privateDir(dataDir); await privateDir(sessionsDir); await privateDir(path.join(dataDir, 'run'));
@@ -54,12 +58,16 @@ if (!ownership) {
 }
 const instanceToken = process.env.BASHKITTEN_INSTANCE_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(instanceToken || '')) throw Error('Private controller token required');
+const phoneOwnerToken = process.env.BASHKITTEN_PHONE_OWNER_HTTP_TOKEN;
+delete process.env.BASHKITTEN_PHONE_OWNER_HTTP_TOKEN;
+if (!/^[a-f0-9]{64}$/.test(phoneOwnerToken || '')) throw Error('Private Phone controller token required');
 const started = await processStart(process.pid);
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
 const scheme = 'https';
 const services = new Services(), starts = new Map();
 const subagents = new SubagentChats({ createSession, ensureWorker, running });
+const phoneBackend = new PhoneBackend({ listSessions: sessionList, createSession, ensureWorker, running });
 const configFile = path.join(dataDir, 'settings.json');
 let config = await readJson(configFile, { web_port: 3939, theme: 'system', default_cwd: os.homedir(), default_model: '', default_thinking: '' });
 const portOverride = process.argv.find(arg => arg.startsWith('--port='))?.slice(7) || process.env.PORT;
@@ -91,8 +99,15 @@ async function startWorker(id, explicit) {
       await closeBrowserSocket(id, { keepBinding: true });
       const browserOwner = randomUUID(), browserSocket = await ensureBrowserSocket(browserOwner, id);
       const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
-      const child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...process.env, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
-      closeSync(log); child.unref();
+      const phoneSlot = await createPhoneWorkerSlot(id);
+      const workerEnvironment = withoutPhoneIssuers(process.env); delete workerEnvironment.BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN;
+      let child;
+      try {
+        child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...workerEnvironment, ...phoneSlot.environment, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
+        await phoneSlot.attach(child);
+      } catch (error) { await phoneSlot.close(); child?.kill(); throw error; }
+      finally { closeSync(log); }
+      child.unref();
       let failure; child.on('error', error => { failure = error; });
       child.once('exit', (code, signal) => { if (code !== 0) failure = Error(`BashKitten's Pi runtime could not start (${signal || code}). Check this chat's worker.log.`); });
       for (let attempt = 0; attempt < 160; attempt++) { if (failure) throw failure; if (await running(id)) return; await pause(100); }
@@ -107,7 +122,7 @@ async function savedView(meta) {
   if (native && native.getCwd() !== meta.cwd) { meta.cwd = native.getCwd(); await writeMeta(meta); }
   const entries = native?.getBranch() || [];
   const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
-  return { cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
+  return { questions: (await readJson(path.join(sessionDir(meta.id), 'questions.json'), { records: [] })).records, cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
     entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e), events: [],
     steeringMessages: drafts.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(queueItem) };
 }
@@ -142,13 +157,14 @@ async function discoverSessions() {
 }
 async function sessionList() {
   await discoverSessions();
+  const catalogue = await projects();
   return Promise.all((await allMeta()).map(async meta => {
     const state = await running(meta.id);
-    return { id: meta.id, title: meta.title, cwd: meta.cwd, model: meta.model, thinking: meta.thinking, modified: meta.modified, current_segment: 1, running: Boolean(state?.data.busy), subagentParent: meta.subagentParent, subagents: await readSubagentSettings(meta.id) };
+    return { id: meta.id, title: meta.title, cwd: meta.cwd, projectId: catalogue.chats[meta.id] || null, model: meta.model, thinking: meta.thinking, modified: meta.modified, current_segment: 1, running: Boolean(state?.data.busy), subagentParent: meta.subagentParent, phone: await phonePolicy(meta.id), subagents: await readSubagentSettings(meta.id) };
   })).then(items => items.sort((a, b) => b.modified - a.modified));
 }
 async function createSession(value, ownership = {}) {
-  const cwd = (await pickerDirectory(value.cwd || config.default_cwd)).path;
+  const cwd = value.projectId ? await projectDirectory(value.projectId) : (await pickerDirectory(value.cwd || config.default_cwd)).path;
   const id = randomUUID(), dir = sessionDir(id); await privateDir(dir);
   const title = String(value.title || value.prompt || 'New chat').trim().replace(/\s+/g, ' ').slice(0, 100) || 'Image session';
   const meta = { id, cwd, title, model: value.model || config.default_model, thinking: value.thinking || config.default_thinking,
@@ -156,6 +172,8 @@ async function createSession(value, ownership = {}) {
   const settings = typeof value.subagents === 'string' ? JSON.parse(value.subagents) : value.subagents;
   await saveSubagentSettings(id, subagentSettings({ ...config.default_subagents, ...settings }));
   await writeMeta(meta);
+  await initializePhonePolicy(meta.id);
+  if (value.projectId) await moveChat(meta.id, value.projectId);
   return meta;
 }
 async function deleteSession(id) {
@@ -169,6 +187,7 @@ async function deleteSession(id) {
   await fs.rmdir(sessionDir(id)).catch(() => {});
   await fs.rm(socketPath(id), { force: true }); await fs.rm(socketPath(id) + '.lock', { force: true });
   await closeBrowserSocket(id);
+  await forgetChat(id);
 }
 function requireMethod(req, allowed) { if (!allowed.includes(req.method)) throw Object.assign(Error('Method not allowed'), { status: 405 }); }
 const logo = await fs.readFile(path.join(here, '../../web/logo.png'));
@@ -258,6 +277,7 @@ async function handler(req, res) {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('X-Frame-Options', 'DENY');
+    if (await handleGuestBrowser(req, res, route, handleBrowserChannel)) return;
     if (route === '/api/instance') {
       if (req.method !== 'GET' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
       return json(res, { pid: process.pid, instance: instanceToken });
@@ -268,6 +288,20 @@ async function handler(req, res) {
       if (typeof block !== 'boolean') throw Error('Choose file-manager policy transition');
       await refreshManagerPolicy(async () => { await Promise.all([revokeRemoteFileJobs(), revokeRemotePreviews()]); }, block);
       return json(res, { ok: true });
+    }
+    if (route === '/api/instance/phone') {
+      if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + phoneOwnerToken) throw Object.assign(Error('Invalid Phone controller token'), { status: 403 });
+      const { action, value = {}, identity } = await jsonBody(req);
+      if (action === 'phone.status') return json(res, await phoneStatus());
+      if (action === 'phone.register') return json(res, await registerPhone(value));
+      await requirePhoneIdentity(identity);
+      if (action === 'phone.disable') { await disablePhone(identity.phoneId); return json(res, { ok: true }); }
+      if (action === 'phone.revoke') { await revokePhone(identity.phoneId); return json(res, { ok: true }); }
+      if (action === 'phone.pending') return json(res, { events: await pendingPhoneEvents(identity.phoneId), live: await pendingPhoneLive(identity.phoneId), updates: await pendingPhoneUpdates(identity.phoneId) });
+      if (action === 'phone.update-ack') { await acknowledgePhoneUpdate(identity.phoneId, value.eventId); return json(res, { ok: true }); }
+      if (action === 'phone.live-ack') { await acknowledgePhoneLive(identity.phoneId, value.key); return json(res, { ok: true }); }
+      if (action === 'phone.ack') { await acknowledgePhoneEvent(identity.phoneId, value.eventId, value.state); return json(res, { ok: true }); }
+      return json(res, await phoneBackend.command(action, value, identity));
     }
     if (route === '/api/instance/subagents') {
       if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + instanceToken) throw Object.assign(Error('Invalid instance token'), { status: 403 });
@@ -334,6 +368,7 @@ async function handler(req, res) {
       res.setHeader('Cache-Control', 'no-store');
       return json(res, await transcribe(req, res, cancel => auth.watch(record, cancel)));
     }
+    if (route === '/api/phone/status') { requireMethod(req,['GET']); return json(res,await phoneStatus()); }
     if (route === '/api/settings') {
       requireMethod(req, ['GET', 'POST']);
       if (!mutation) return json(res, { config, locations: await folderLocations(), platform });
@@ -386,7 +421,11 @@ async function handler(req, res) {
       requireMethod(req, ['GET', 'POST']);
       if (mutation) {
         const form = await formBody(req);
-        try { const meta = await createSession(Object.fromEntries(form)); await ensureWorker(meta.id); return json(res, { id: meta.id }); }
+        try {
+          const input = Object.fromEntries(form);
+          const create = async () => { const meta = await createSession(input); await ensureWorker(meta.id); return json(res, { id: meta.id }); };
+          return input.projectId ? await runManagerRequest(req, res, record, create) : await create();
+        }
         finally { await form.cleanup(); }
       }
       const sessions = await sessionList(), offset = Math.max(0, Number(url.searchParams.get('offset')) || 0), limit = Math.min(100, Number(url.searchParams.get('limit')) || 100);
@@ -396,7 +435,21 @@ async function handler(req, res) {
         const parent = byId.get(session.subagentParent);
         if (parent && !included.has(parent.id)) { included.add(parent.id); page.push(parent); }
       }
-      return json(res, { sessions: page, nextOffset: offset + limit < sessions.length ? offset + limit : null });
+      return json(res, { sessions: page, projects: (await projects()).projects, nextOffset: offset + limit < sessions.length ? offset + limit : null });
+    }
+    if (route === '/api/projects') {
+      requireMethod(req, ['GET', 'POST']);
+      if (!mutation) return json(res, { projects: (await projects()).projects });
+      const input = await jsonBody(req);
+      return await runManagerRequest(req, res, record, async () => json(res, { project: await createProject(input) }));
+    }
+    const projectMatch = route.match(/^\/api\/projects\/([a-f0-9-]{36})$/);
+    if (projectMatch) {
+      requireMethod(req, ['PATCH', 'DELETE']);
+      const input = await jsonBody(req);
+      if (req.method === 'PATCH') return json(res, { project: await renameProject(projectMatch[1], input.name) });
+      if (input.confirm !== true) throw Error('Confirm removing the project grouping; its chats are kept');
+      return json(res, await removeProject(projectMatch[1]));
     }
     if (route === '/api/projects/delete' || route === '/api/sessions/project' || route === '/api/session-groups') {
       requireMethod(req, ['GET', 'POST', 'DELETE']);
@@ -410,6 +463,24 @@ async function handler(req, res) {
     const match = route.match(/^\/api\/sessions\/([a-f0-9-]{36})(?:\/(.*))?$/);
     if (!match) throw Object.assign(Error('Not found'), { status: 404 });
     const [, id, action = ''] = match; let meta = await readMeta(id);
+    if (action === 'project') {
+      requireMethod(req, ['POST']);
+      return json(res, await moveChat(id, (await jsonBody(req)).projectId));
+    }
+    if (action === 'questions' || action === 'questions/answer') {
+      requireMethod(req, action === 'questions' ? ['GET'] : ['POST']);
+      if (!await running(id)) {
+        if (action !== 'questions') throw Error('This chat is stopped. Resume it explicitly before sending a reply.');
+        const { savedQuestions } = await import('../rpc/questions.mjs');
+        return json(res, { questions: await savedQuestions(id) });
+      }
+      return json(res, await workerRequest(id, '/' + action, action === 'questions' ? undefined : { ...await jsonBody(req), source: 'web' }));
+    }
+    if (action === 'phone') {
+      requireMethod(req, ['GET', 'POST']);
+      if (mutation) { const input = await jsonBody(req); const previous = await phonePolicy(id); const registration = input.phoneId || previous.phoneId ? await phoneRegistration(input.phoneId || previous.phoneId) : await selectedPhone(); return json(res, { phone: await savePhonePolicy(id, input, registration) }); }
+      return json(res, { phone: await phonePolicy(id) });
+    }
     if (action === 'subagents') {
       requireMethod(req, ['GET', 'POST']);
       if (mutation) {
