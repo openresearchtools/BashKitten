@@ -59,6 +59,9 @@ export async function readNativeChat(pi, meta, { signal, leafId } = {}) {
 }
 const summary = meta => ({ id: meta.id, title: meta.title, projectId: meta.projectId,
   projectName: meta.projectName, cwd: meta.cwd, modified: meta.modified, subagentParent: meta.subagentParent });
+// Pi records runtime instructions/tool schemas in system entries. They are not
+// the saved conversation and must not inflate a lookup into another prompt dump.
+const conversationEntry = entry => entry.type !== 'message' || entry.message?.role !== 'system';
 const page = (items, offset, limit) => ({ items: items.slice(offset, offset + limit), nextOffset: offset + limit < items.length ? offset + limit : null });
 export async function lookupChats(pi, root, value = {}, signal) {
   const action = value.action || 'list', offset = Number(value.offset || 0), limit = Number(value.limit || 50);
@@ -69,7 +72,7 @@ export async function lookupChats(pi, root, value = {}, signal) {
     if (!meta) throw Error('Chat is unavailable on this backend');
     const history = await readNativeChat(pi, meta, { signal, leafId: value.leafId });
     return { chat: summary(meta), cwd: history.cwd, branches: history.branches, leafId: history.leafId,
-      ...page(history.entries, offset, limit) };
+      ...page(history.entries.filter(conversationEntry), offset, limit) };
   }
   const query = String(value.query || '').toLocaleLowerCase();
   const scoped = catalogue.sessions.filter(meta => !value.projectId || meta.projectId === value.projectId);
@@ -79,7 +82,7 @@ export async function lookupChats(pi, root, value = {}, signal) {
   for (const meta of scoped) {
     signal?.throwIfAborted();
     for (const entry of (await readNativeChat(pi, meta, { signal })).entries) {
-      if (entry.type !== 'message') continue;
+      if (entry.type !== 'message' || !conversationEntry(entry)) continue;
       const content = entry.message.content;
       const text = typeof content === 'string' ? content : (content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
       const index = text.toLocaleLowerCase().indexOf(query);
