@@ -50,6 +50,14 @@ export class NativeSidecar {
   close() { this.setOpen(false); }
   toggle() { this.setOpen(!this.isOpen()); }
   chatSelected() { if (this.narrow) this.close(); }
+  updateDisplays(buttons = this.root.querySelectorAll("[data-display-id]")) {
+    for (const button of buttons) {
+      const open = this.host.machineDisplayOpen(button.dataset.displayId);
+      const label = `${open ? "Close" : "Open"} ${button.dataset.displayName} Display`;
+      button.setAttribute("aria-pressed", String(open));
+      button.setAttribute("aria-label", label); button.title = label;
+    }
+  }
   async navigation(action, value = {}) {
     const browser = this.host.activeBrowser, global = browser?.browsingContext.currentWindowGlobal;
     if (this.host.off || !global) throw new Error("Connect to this backend first.");
@@ -140,7 +148,12 @@ export class NativeSidecar {
       power.disabled = ["preparing", "starting", "stopping", "deleting"].includes(backend.state);
       power.setAttribute("role", "switch"); power.setAttribute("aria-checked", String(Boolean(on))); heading.append(power);
       if (backend.kind === "machine") heading.append(this.iconButton("chrome://global/skin/icons/settings.svg", `${backend.name} settings`, () => this.machineSettings(backend.id)));
-      if (backend.kind === "machine") heading.append(this.iconButton("chrome://browser/skin/device-desktop.svg", `Open ${backend.name} Display`, () => this.host.openMachineDisplay(backend.id)));
+      if (backend.kind === "machine") {
+        const display = this.iconButton("chrome://browser/skin/device-desktop.svg", `Open ${backend.name} Display`, () => this.host.toggleMachineDisplay(backend.id));
+        display.dataset.displayId = backend.id; display.dataset.displayName = backend.name;
+        this.updateDisplays([display]);
+        heading.append(display);
+      }
       if (backend.kind === "remote") heading.append(this.button("⋯", `${backend.name} actions`, () => this.remoteActions(backend)));
       section.append(heading);
       if (backend.kind !== "local") section.append(this.node("small", { class: "native-backend-state", role: "status" }, backend.state || "Disconnected"));

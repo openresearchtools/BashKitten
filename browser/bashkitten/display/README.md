@@ -15,6 +15,16 @@ chrome viewport checks its exact document, system principal and current browser
 ownership on every native attachment/clipboard call. The existing protected-tab
 marker excludes the viewport from browser-use automation.
 
+The 11 October address-less Display presentation uses the existing Agent chrome
+adapter and Firefox `TabSelect`/top-level location hooks. Only an enrolled,
+selected `display.xhtml` hides the address row; the tab strip, logo,
+Configuration and the real Firefox menu remain available. The active monitor
+controls remove only the presenter tab. Navigating that tab elsewhere retires
+its native record and protected marker and restores ordinary browser chrome.
+Focused guest applications receive Ctrl-L; Ctrl-T, Ctrl-W and Ctrl-Tab remain
+browser tab shortcuts. These product hooks do not modify the pristine Buzzard
+donor or the container/gateway lifetime owner.
+
 The small Gecko adapter is the XPCOM component in `native/`, its module/jar
 registration and the product `moz.build` entry. Its native `VideoFrameContainer`
 feeds Gecko's existing asynchronous ImageContainer/compositor. The HTML video
