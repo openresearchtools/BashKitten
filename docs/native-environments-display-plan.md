@@ -3416,3 +3416,11 @@ page, with matching rounded toggles and no additional “Allowed actions” step
 Turning the master off leaves its saved options visible but disabled. Keep
 Accessibility-dependent options visible and disabled while access is unavailable;
 presentation does not change the native per-feature authorization checks.
+
+The user's next correction separates General settings and Providers into their
+own Configuration destinations. Each opens only its relevant existing controls;
+remove the legacy App/Providers subtab strip. Remove the standalone web UI's
+Source code/license footer and duplicate About links now that Firefox's settings
+and About own their presentation. Preserve the complete notices, corresponding
+source delivery and existing browser entry points; this removes duplicate UI,
+not licensing obligations or provider functions.
