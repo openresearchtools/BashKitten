@@ -111,7 +111,7 @@ public final class AutostartSettingsAdapter implements AutoCloseable {
                     supported ? "Reconnect through this saved connection. Sign-in may still be required." : "Import a new encrypted connection QR first."));
             }
             JSONObject p = phone.join();
-            entries.put(entry("telephone", "Telephone", "Phone", p.has("unavailable") ? null : p.optBoolean("enabled"), p.optBoolean("available"), p.optString("unavailable", p.optString("detail"))));
+            entries.put(entry("telephone", "Callback", "Phone", p.has("unavailable") ? null : p.optBoolean("enabled"), p.optBoolean("available"), p.optString("unavailable", p.optString("detail"))));
             JSONObject custom = commands.join(), failures = custom.optJSONObject("startupErrors");
             if (failures == null) failures = new JSONObject();
             JSONObject d = display.join();

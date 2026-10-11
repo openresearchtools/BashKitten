@@ -343,7 +343,7 @@ class AgentView {
       ["localai", "Local AI", "chrome://global/skin/icons/lightbulb.svg"],
       ["notifications", "Notifications", "chrome://browser/skin/notification-fill-12.svg"],
       ["remotes", "Remote Connections", "chrome://global/skin/icons/link.svg"],
-      ["telephone", "Telephone", "chrome://browser/skin/device-phone.svg"],
+      ["telephone", "Callback", "chrome://browser/skin/device-phone.svg"],
       ["performance", "Performance", "chrome://global/skin/icons/performance.svg"],
       ["autostart", "Autostart", "chrome://global/skin/icons/settings.svg"],
       ["providers", "Providers", "chrome://browser/skin/login.svg"],
@@ -1013,7 +1013,7 @@ class AgentView {
   }
 
   async localAI() { return this.openSettings("localai"); }
-  async connectToPhone(id, title = "Telephone") { return this.openSettings(title === "Notifications" ? "notifications" : "telephone", { backendId: id }); }
+  async connectToPhone(id, title = "Callback") { return this.openSettings(title === "Notifications" ? "notifications" : "telephone", { backendId: id }); }
   async shareMachine(id) { return this.openSettings("share-local", { backendId: id }); }
 
   async phoneStatus(backend) {

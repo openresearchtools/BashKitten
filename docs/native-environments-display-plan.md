@@ -3502,3 +3502,12 @@ or rewriting the delivered expiry. Keep the settled record with its original
 question. Repeated clicks and races with answers, expiry, Stop or backend Off
 must not duplicate delivery or revive a stopped chat; verify the originating
 native session/branch before resolving the request.
+
+### Callback label — 11 October 2026
+
+Rename the user-facing **Telephone** destination to **Callback** so its
+purpose is clear. Use that label in Android and Linux Configuration, the shared
+settings title, Autostart and guidance linking to those settings. **Phone use**
+remains the separate device-control feature. This is a presentation change only:
+keep the existing `telephone`/`telephony` routes, service identities, saved
+settings and calling behavior, without a migration.
