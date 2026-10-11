@@ -213,7 +213,9 @@ class Layout:
     def make_divider(self):
         view=Gtk.Window(type=Gtk.WindowType.TOPLEVEL);self.divider=view
         view.set_decorated(False);view.set_skip_taskbar_hint(True);view.set_skip_pager_hint(True)
-        view.set_type_hint(Gdk.WindowTypeHint.UTILITY);view.set_accept_focus(False);view.set_keep_above(True)
+        # The reserved gap keeps this visible in the normal window layer. An
+        # always-above hint would put the divider over Xfwm's transient dialogs.
+        view.set_type_hint(Gdk.WindowTypeHint.UTILITY);view.set_accept_focus(False)
         view.get_style_context().add_class('bashkitten-divider');style(view)
         view.add_events(Gdk.EventMask.BUTTON_PRESS_MASK|Gdk.EventMask.BUTTON_RELEASE_MASK|Gdk.EventMask.POINTER_MOTION_MASK)
         def press(_,event):

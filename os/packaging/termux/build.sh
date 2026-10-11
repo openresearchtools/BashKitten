@@ -11,7 +11,7 @@ TERMUX_PKG_REVISION=1
 TERMUX_PKG_SKIP_SRC_EXTRACT=true
 TERMUX_PKG_NO_REPLACE_GUESS_SCRIPTS=true
 TERMUX_PKG_AUTO_UPDATE=false
-TERMUX_PKG_DEPENDS="python, pygobject, gtk3, libwnck, xfconf, xfwm4, xfce4-session, xfdesktop, thunar, xfce4-terminal, xdotool, scrot, at-spi2-core, xorg-xrandr, xorg-xrdb, xorg-xprop, xdg-desktop-portal, libdisplay-info, libxfce4ui, libxfce4util, garcon, exo, desktop-file-utils"
+TERMUX_PKG_DEPENDS="python, pygobject, gtk3, librsvg, libwnck, xfconf, xfwm4, xfce4-session, xfdesktop, thunar, xfce4-terminal, xdotool, scrot, at-spi2-core, xorg-xrandr, xorg-xrdb, xorg-xprop, xdg-desktop-portal, libdisplay-info, libxfce4ui, libxfce4util, garcon, exo, desktop-file-utils"
 TERMUX_PKG_BUILD_DEPENDS="xfce4-dev-tools"
 TERMUX_PKG_PROVIDES="xfce4-panel (= 4.20.8)"
 TERMUX_PKG_CONFLICTS="xfce4-panel"
