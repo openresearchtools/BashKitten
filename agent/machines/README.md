@@ -6,6 +6,16 @@ private Podman and the persistent guest display/media/backend lifetime. It is no
 under Local's runtime guard. Missing rootless-user/systemd prerequisites are
 reported; no system-Podman or alternate-runtime fallback is used.
 
+The service reports the package revision and the Node executable it loaded.
+After an update, its owner refuses new provisioning/start/configuration work,
+while reads, Stop and Cancel remain available. It retires only when accepted
+operations, running containers and their display/media processes have finished;
+the next native request starts the installed version. A native ownership lock
+serializes replacement across browser/controller processes. Browser Quit never
+stops this persistent owner. Older services without this drain protocol require
+a desktop sign-out or computer restart, which is reported explicitly; a client
+does not kill a legacy owner from a potentially stale idle snapshot.
+
 Each named machine has a stable UUID directory below `$BASHKITTEN_DATA_DIR/machines`.
 `launch.json` is the canonical editable executable/argv/environment/cwd definition;
 `Containerfile` is its saved installation recipe. Runtime status and credentials
