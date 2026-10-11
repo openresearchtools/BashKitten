@@ -355,7 +355,7 @@ private fun TabPageBannerTabs(
         contentDescription = "Tor tabs: $torTabCount",
         onClick = { onTabPageIndicatorClicked(Page.TorTabs) },
     ) {
-        Text("Tor", style = FirefoxTheme.typography.body2)
+        Icon(painterResource(R.drawable.ic_bashkitten_tor), null)
     }
 
 
