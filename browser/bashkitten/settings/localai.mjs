@@ -16,6 +16,10 @@ export async function renderSection({ root: parent, call: control, info, signal 
   const engineStatus = {}, runtimeViews = {};
   const jobMessage = job => job ? [({ complete: 'Complete', failed: 'Failed', interrupted: 'Interrupted', cancelled: 'Cancelled' })[job.status] || job.phase,
     job.progress?.downloaded ? `${(job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', job.error].filter(Boolean).join(' · ') : '';
+  const operationOutput = value => [value.job?.log, ...[['llama', 'llama.cpp'], ['whisper', 'Whisper']].map(([engine, label]) => {
+    const service = value[engine]?.service;
+    return service?.output ? `${label} · ${service.state}\n${service.output}` : '';
+  })].filter(Boolean).join('\n\n');
   const followJob = job => { feedbackJob = job?.id; message.textContent = jobMessage(job); };
   const active = () => !signal.aborted && parent.isConnected && isLocal();
   const call = async (name, args) => { if (!active()) throw Error('This environment’s LocalAI settings are no longer open.'); return control(name, args); };
@@ -238,7 +242,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
     models.ontoggle = () => { if (models.open && !modelBody.hasChildNodes()) void run(() => drawModels(modelBody)); };
     const progress = node('p', jobMessage(state.job)); progressNode = progress; body.append(progress);
     body.append(button('Refresh status', async () => draw(await call('localai-status'))), button('Cancel LocalAI operation', async () => { const value = await call('localai-cancel'); if (active()) { followJob(value); progress.textContent = jobMessage(value); } }));
-    const output = node('details'); output.append(node('summary', 'LocalAI operation output')); const text = node('pre', state.job?.log || ''); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
+    const output = node('details'); output.append(node('summary', 'LocalAI operation output')); const text = node('pre', operationOutput(state)); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
   };
   const drawTTS = () => {
     if (!state.tts) return;
@@ -497,7 +501,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
           message.textContent = jobMessage(latest.job);
           if (['complete', 'failed', 'interrupted', 'cancelled'].includes(latest.job.status)) feedbackJob = null;
         }
-        if (outputNode?.isConnected) outputNode.textContent = latest.job?.log || '';
+        if (outputNode?.isConnected) outputNode.textContent = operationOutput(latest);
         if (synthesisStatus?.isConnected) synthesisStatus.textContent = [latest.tts?.synthesis?.state, latest.tts?.synthesis?.output, latest.tts?.synthesis?.error].filter(Boolean).join(' · ');
         await refreshVisibleModels?.();
       }
