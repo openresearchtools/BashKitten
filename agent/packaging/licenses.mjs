@@ -35,6 +35,15 @@ async function arrayInventory(file, component) {
   if (!Array.isArray(records) || !records.length) throw Error('Missing bundled license inventory: ' + file);
   return records.map(value => record(value, component));
 }
+async function displayInventory(root) {
+  const inventory = await json(path.join(root, 'licenses.json'));
+  if (inventory.schema !== 1 || !Array.isArray(inventory.components) || !inventory.components.length) throw Error('Invalid Display license inventory');
+  return Promise.all(inventory.components.map(async ({ texts, ...component }) => {
+    if (!Array.isArray(texts) || !texts.length) throw Error('Missing Display license text: ' + component.name);
+    const text = (await Promise.all(texts.map(file => relativeText(root, file)))).join('\n\n');
+    return record({ ...component, text }, 'Display');
+  }));
+}
 function compatible(values, target) { return !values || (!values.includes('!' + target) && (values.every(value => value.startsWith('!')) || values.includes(target))); }
 async function npmInventory(root, target, architecture) {
   const lock = await json(path.join(root, 'package-lock.json'));
@@ -153,7 +162,7 @@ export async function collectLicenses(root, { target, version, browser, 'backend
     if (!backendOnly) {
       records.push(...await arrayInventory(path.join(root, 'machines/licenses.json'), 'Private container runtime'));
       records.push(...await arrayInventory(path.join(root, 'machines/guest-licenses.json'), 'Container desktop'));
-      records.push(...await arrayInventory(path.join(root, 'display/licenses.json'), 'Display'));
+      records.push(...await displayInventory(path.join(root, 'display')));
     }
   } else {
     if (browser) throw Error('The Termux package does not bundle the Android browser');
