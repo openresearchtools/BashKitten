@@ -8,6 +8,7 @@ const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
   BashKittenAgent: "resource:///modules/BashKittenAgent.sys.mjs",
+  BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
   ExperimentAPI: "resource://nimbus/ExperimentAPI.sys.mjs",
   PrivateTab: "resource:///modules/PrivateTab.sys.mjs",
   StatusBar: "resource:///modules/StatusBar.sys.mjs",
@@ -97,7 +98,11 @@ export const BashKittenGlue = {
   observe(subject, topic) {
     switch (topic) {
       case "browser-delayed-startup-finished":
-        lazy.BashKittenAgent.onWindowOpened(subject);
+        if (lazy.BrowserControlChannel.guestRequested) {
+          void lazy.BrowserControlChannel.startGuest();
+        } else {
+          lazy.BashKittenAgent.onWindowOpened(subject);
+        }
         lazy.PrivateTab.onWindowOpened(subject);
         lazy.TorRouting.onWindowOpened(subject);
         lazy.StatusBar.onWindowOpened(subject);
