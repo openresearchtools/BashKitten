@@ -121,7 +121,7 @@ def build(args):
             'Use the native Linux runner for the selected architecture')
     binaries = BINARIES + (('passt.avx2', 'pasta.avx2') if architecture == 'amd64' else ())
     for tool in ('go', 'cargo', 'rustc', 'make', 'cc', 'pkg-config', 'autoreconf',
-                 'dpkg-shlibdeps', 'dpkg-buildflags', 'readelf', 'tar', 'gzip', 'meson', 'ninja'):
+                 'dpkg-shlibdeps', 'dpkg-buildflags', 'readelf', 'tar', 'gzip', 'meson', 'ninja', 'patch'):
         require(shutil.which(tool), 'Missing build dependency: ' + tool)
     work = args.work.resolve(); destination = args.output.resolve()
     require(not work.is_relative_to(ROOT) and not destination.is_relative_to(ROOT),
@@ -131,7 +131,10 @@ def build(args):
     toolchain = {name: output([name, '--version']).splitlines()[0] for name in ('cc', 'cargo', 'rustc')}
     toolchain['go'] = output(['go', 'version'])
     require(re.search(r'go1\.(2[6-9]|[3-9]\d)\.', toolchain['go']), 'Podman requires Go >=1.26')
-    key = hashlib.sha256(json.dumps({'sources': records, 'toolchain': toolchain,
+    patch_root = ROOT / 'agent/machines/patches'
+    patches = {str(path.relative_to(patch_root)): sha(path)
+               for path in sorted(patch_root.glob('*/*.patch'))}
+    key = hashlib.sha256(json.dumps({'sources': records, 'toolchain': toolchain, 'patches': patches,
         'architecture': architecture, 'licenseSupplements': sha(ROOT / 'agent/machines/license-supplements/sources.json'), 'recipe': sha(Path(__file__))}, sort_keys=True).encode()).hexdigest()
     cache = work / key; cache.mkdir(exist_ok=True)
     runtime = cache / 'machines'; (runtime / 'bin').mkdir(parents=True, exist_ok=True)
@@ -149,6 +152,12 @@ def build(args):
         source = cache / name
         if not source.exists():
             shutil.copytree(VENDOR / name / 'source', source, symlinks=True)
+            try:
+                for patch in sorted((patch_root / name).glob('*.patch')):
+                    run(['patch', '--batch', '--forward', '-p1', '-i', patch], source)
+            except Exception:
+                shutil.rmtree(source)
+                raise
         vendor = None
         if 'vendor' in record:
             archive = VENDOR / name / record['vendor']['file']
@@ -236,13 +245,18 @@ def build(args):
                               '-e' + str(runtime / 'lib/libfuse3.so.4')], dependency_work)
     depends = [item for item in dependency_text.removeprefix('shlibs:Depends=').split(', ')
                if item != 'bashkitten-private-fuse'] + ['uidmap', 'iptables', 'systemd', 'dbus-user-session', 'pipewire-bin', 'gstreamer1.0-tools', 'gstreamer1.0-pipewire', 'gstreamer1.0-pulseaudio', 'gstreamer1.0-plugins-base', 'gstreamer1.0-plugins-good', 'gstreamer1.0-plugins-bad']
+    licenses.append({'name': 'BashKitten machine runtime adaptation notices',
+                     'license': 'See individual component licenses',
+                     'text': (ROOT / 'agent/machines/NOTICE').read_text()})
     (runtime / 'licenses.json').write_text(json.dumps(licenses, indent=2) + '\n')
     provenance = runtime / 'sources'; provenance.mkdir(exist_ok=True)
     for name in COMPONENTS:
         shutil.copy2(VENDOR / name / 'source.json', provenance / (name + '.json'))
+    shutil.copytree(patch_root, provenance / 'patches', dirs_exist_ok=True)
+    shutil.copy2(ROOT / 'agent/machines/NOTICE', provenance / 'BASHKITTEN-NOTICE')
     manifest = {'schema': 1, 'platform': 'linux', 'architecture': architecture,
                 'buildKey': key, 'sourceCommit': output(['git', 'rev-parse', 'HEAD'], ROOT),
-                'toolchain': toolchain, 'components': list(records.values()), 'depends': depends,
+                'toolchain': toolchain, 'components': list(records.values()), 'patches': patches, 'depends': depends,
                 'executables': {b: sha(runtime / 'bin' / b) for b in binaries},
                 'libraries': {p.name: sha(p) for p in sorted((runtime / 'lib').iterdir())},
                 'recipeSha256': sha(Path(__file__)), 'sourceDateEpoch': int(epoch)}

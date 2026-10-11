@@ -56,7 +56,8 @@ export async function prepareStorage() {
   try { await fs.writeFile(path.join(config,'auth.json'),'{}\n',{flag:'wx',mode:0o600}); }
   catch(error) { if(error.code!=='EEXIST')throw error; }
 }
-export const podmanEnvironment = () => ({ ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$)/.test(key))),
+export const podmanEnvironment = (overrides = {}) => ({ ...Object.fromEntries(Object.entries({...process.env,...overrides}).filter(([key]) => !/^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$)/.test(key))),
+  PATH: [path.join(packageRoot,'bin'),overrides.PATH ?? process.env.PATH].filter(Boolean).join(path.delimiter),
   CONTAINERS_CONF: path.join(storageRoot, 'config/containers.conf'),
   CONTAINERS_STORAGE_CONF: path.join(storageRoot, 'config/storage.conf'),
   CONTAINERS_REGISTRIES_CONF: path.join(storageRoot, 'config/registries.conf'),
