@@ -125,6 +125,7 @@ import mozilla.components.ui.icons.R as iconsR
  * @param extensionsMenuItemDescription The label of extensions menu item description.
  * @param moreSettingsSubmenu The content of more menu item.
  * @param extensionSubmenu The content of extensions menu item to avoid configuration during animation.
+ * @param bashKittenControls Browser-owned BashKitten controls placed above Settings.
  */
 @Suppress("LongParameterList", "LongMethod", "CyclomaticComplexMethod", "CognitiveComplexMethod")
 @Composable
@@ -181,6 +182,7 @@ fun MainMenu(
     extensionsMenuItemDescription: String?,
     moreSettingsSubmenu: @Composable () -> Unit,
     extensionSubmenu: @Composable () -> Unit,
+    bashKittenControls: @Composable () -> Unit = {},
 ) {
     MenuFrame(
         contentModifier = Modifier
@@ -285,6 +287,8 @@ fun MainMenu(
             onDownloadsMenuClick = onDownloadsMenuClick,
             onPasswordsMenuClick = onPasswordsMenuClick,
         )
+
+        bashKittenControls()
 
         MenuGroup {
             // Mozilla accounts and Sync are not product features in BashKitten.

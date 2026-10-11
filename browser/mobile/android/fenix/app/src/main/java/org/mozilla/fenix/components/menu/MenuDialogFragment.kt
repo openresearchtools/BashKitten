@@ -700,6 +700,17 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                     onSettingsButtonClick = {
                                         store.dispatch(MenuAction.Navigate.Settings)
                                     },
+                                    bashKittenControls = {
+                                        org.mozilla.fenix.bashkitten.BashKittenMenu { control ->
+                                            val host = requireActivity()
+                                            dismiss()
+                                            host.window.decorView.post {
+                                                if (!host.isFinishing && !host.isDestroyed) {
+                                                    com.bashkitten.AgentControls.open(host, control)
+                                                }
+                                            }
+                                        }
+                                    },
                                     onWallpaperButtonClick = {
                                         store.dispatch(MenuAction.Navigate.Wallpaper)
                                     },
