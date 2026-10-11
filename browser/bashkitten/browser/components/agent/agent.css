@@ -3,8 +3,9 @@
 :root[bashkitten-agent-layout="split"] #bashkitten-agent-pane { width: 42vw; max-width: 70vw; border-inline-end: 1px solid var(--chrome-content-separator-color); }
 #bashkitten-agent-pane button, #bashkitten-agent-pane select, .bashkitten-agent-dialog button, .bashkitten-agent-dialog input, .bashkitten-agent-dialog select { font: menu; color: inherit; background: var(--button-background-color, ButtonFace); border: 1px solid var(--border-color, ThreeDShadow); border-radius: 999px; padding: 6px 12px; }
 #bashkitten-agent-pane button { cursor: pointer; }
-#bashkitten-chats-toggle .toolbarbutton-icon { width: 28px; height: 28px; object-fit: contain; }
-#bashkitten-settings-button .toolbarbutton-icon { width: 16px; height: 16px; }
+/* Firefox sizes this padded border box, not just the image inside it. */
+#bashkitten-chats-toggle { --toolbarbutton-padding-inner: max(0px, calc((var(--tab-min-height) - 28px) / 2)); }
+#bashkitten-chats-toggle .toolbarbutton-icon { width: max(28px, var(--tab-min-height)); height: max(28px, var(--tab-min-height)); object-fit: contain; }
 #bashkitten-settings-menu { min-width: 250px; }
 #bashkitten-browser-menu-host:empty { display: none; }
 #bashkitten-agent-power { white-space: nowrap; }

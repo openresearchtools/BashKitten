@@ -7,7 +7,10 @@ backend; they do not receive additional device authority.
 
 `about:bashkitten-settings` is an unprivileged content document in a Gecko child.
 The common About module and a narrowly content-accessible
-`resource://bashkitten-settings/` alias package its static assets. Its CSP forbids
+`resource://bashkitten-settings/` alias maps only to its own content directory
+inside the packaged Gecko archive. JarMaker places the manifest and all shared
+assets together, so the mapping also resolves in installed desktop and Android
+packages. Its CSP forbids
 network connections, forms, embedded objects and remote scripts. Loading a copy
 in an ordinary tab supplies no settings authority.
 

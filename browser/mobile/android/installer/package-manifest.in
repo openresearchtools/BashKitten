@@ -104,7 +104,6 @@
 
 ; Modules
 @BINPATH@/modules/*
-@BINPATH@/bashkitten-settings/*
 @BINPATH@/moz-src/*
 @BINPATH@/actors/*
 

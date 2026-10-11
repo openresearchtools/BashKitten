@@ -1,19 +1,4 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 EXTRA_JS_MODULES += ["AboutSettings.sys.mjs"]
 XPCOM_MANIFESTS += ["components.conf"]
-FINAL_TARGET_FILES["bashkitten-settings"] += [
-    "device-controls.mjs",
-    "display-settings.mjs",
-    "index.html",
-    "localai.mjs",
-    "machine.mjs",
-    "main.mjs",
-    "performance.mjs",
-    "phone.mjs",
-    "remotes.mjs",
-    "settings.css",
-    "share-local.mjs",
-    "ui.mjs",
-]
-
 JAR_MANIFESTS += ["jar.mn"]

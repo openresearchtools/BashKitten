@@ -223,7 +223,6 @@
 ; Modules
 @RESPATH@/browser/modules/*
 @RESPATH@/modules/*
-@RESPATH@/bashkitten-settings/*
 @RESPATH@/moz-src/*
 @RESPATH@/browser/actors/*
 @RESPATH@/actors/*
