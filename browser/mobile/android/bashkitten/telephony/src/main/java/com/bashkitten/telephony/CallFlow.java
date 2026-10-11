@@ -4,6 +4,8 @@ package com.bashkitten.telephony;
 import android.telecom.CallAudioState;
 import org.json.*;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
 import java.util.function.Consumer;
 
 /** One cancellable state machine per call. Menus snapshot stable IDs, never mutable titles. */
@@ -23,8 +25,11 @@ final class CallFlow implements AutoCloseable {
     private JSONArray mailbox=new JSONArray();
     private int mailboxIndex;
     private boolean listening,lateConfirmed,hasStopGeneration;
+    private JSONObject liveSubscription;
+    private ScheduledFuture<?> liveRenewal;
+    private CompletableFuture<JSONObject> liveRequests=CompletableFuture.completedFuture(null);
     CallFlow(TelephonyRuntime owner,KittenConnection call){this.owner=owner;this.call=call;audio=new CallAudio(owner,call.id);}
-    private void transition(String state){generation++;audio.cancel();this.state=state;}
+    private void transition(String state){stopLive();generation++;audio.cancel();this.state=state;}
     private JSONObject request(Object...pairs){JSONObject value=TelephonyRuntime.json("callId",call.id,"menuRevision",generation,"backendId",call.backend,"sessionId",sessionId,"nativeSessionId",nativeSessionId);JSONObject extra=TelephonyRuntime.json(pairs);for(String key:TelephonyRuntime.keys(extra))TelephonyRuntime.put(value,key,extra.opt(key));return value;}
     private void ask(String action,JSONObject payload,Consumer<JSONObject> done){int token=generation;owner.gateway.request(action,payload).whenComplete((value,error)->owner.execute(()->{if(call.ended||token!=generation)return;if(error!=null)failure(error);else done.accept(value);}));}
     private void speak(String text,Runnable done){int token=generation;audio.speak(text,()->{if(token==generation&&!call.ended)done.run();},error->{if(token==generation&&!call.ended)failure(error);});}
@@ -34,7 +39,7 @@ final class CallFlow implements AutoCloseable {
     private void backendMenu(){backendDigits="";transition("backends");ask("phone.backends",request(),value->{choices.clear();JSONArray list=value.optJSONArray("backends");StringBuilder text=new StringBuilder("Choose a backend. ");if(list!=null)for(int i=0;i<list.length();i++){JSONObject backend=list.optJSONObject(i);if(backend==null)continue;String digit=String.valueOf(i+1);choices.put(digit,backend);text.append("Say ").append(digit).append(" for ").append(backend.optString("name")).append(". ");}if(choices.isEmpty())text.append("No backends are connected to this phone.");else if(choices.size()>9)text.insert(0,"Enter the backend number followed by hash, or say its number after the beep. ");prompt(text.toString());});}
     private void chatMenu(){transition("chats");targetEvent=null;sessionId="";draft="";hasStopGeneration=false;lateConfirmed=false;listening=false;ask("phone.chats",request("recent",owner.settings().optInt("recent",5)),value->{choices.clear();StringBuilder text=new StringBuilder("Press or say 0 to start a new chat. ");JSONArray list=value.optJSONArray("chats");if(list!=null)for(int i=0;i<list.length();i++){JSONObject chat=list.optJSONObject(i);if(chat==null)continue;String key=String.valueOf(i+1);choices.put(key,chat);text.append("Press or say ").append(key).append(" for ").append(title(chat)).append(chat.optBoolean("running")?", working. ":", finished. ");}long unread=0;JSONArray items=owner.mailboxItems(call.backend);for(int i=0;i<items.length();i++)if(!items.optJSONObject(i).optBoolean("played"))unread++;if(unread>0)text.append("You have ").append(unread).append(" unread voicemail messages. ");text.append("Press star for voicemail.");prompt(text.toString());});}
     private static String title(JSONObject value){String project=value.optString("projectTitle");return (project.isBlank()?"":project+", ")+value.optString("title","Chat");}
-    private void chatActions(){if(!pending.isEmpty()){JSONObject event=pending.poll();if(!event.optString("kind").equals("question")||event.optLong("expiresAt",Long.MAX_VALUE)>=System.currentTimeMillis()){eventPrompt(event);return;}}transition("actions");prompt("Press or say 1 to send a message, 2 to read the last final message, or 3 to stream live. Press star for voicemail.");}
+    private void chatActions(){while(!pending.isEmpty()){JSONObject event=pending.poll();if(spoken.contains(event.optString("entryId",event.optString("eventId"))))continue;if(event.optString("kind").equals("question")&&event.optLong("expiresAt",Long.MAX_VALUE)<System.currentTimeMillis())continue;eventPrompt(event);return;}transition("actions");prompt("Press or say 1 to send a message, 2 to read the last final message, or 3 to stream live. Press star for voicemail.");}
     private void newChat(){hasStopGeneration=false;draft="";transition("new");String creationId=UUID.randomUUID().toString();ask("phone.new",request("mode",owner.settings().optString("callDefault","calls"),"creationId",creationId),value->{sessionId=value.optString("sessionId");if(sessionId.isBlank()){failure(new IllegalStateException("Backend did not create a chat"));return;}capture("replace");});}
     private void capture(String mode){if(hasStopGeneration){captureReady(mode);return;}transition("preparing-capture");ask("phone.begin",request(),result->{stopGeneration=result.optLong("stopGeneration");hasStopGeneration=true;nativeSessionId=result.isNull("nativeSessionId")?"":result.optString("nativeSessionId","");captureReady(mode);});}
     private void captureReady(String mode){transition("dictating");captureMode=mode;int token=generation;audio.capture(owner.settings(),text->{if(token!=generation)return;draft=mode.equals("append")&&!draft.isBlank()?draft+"\n"+text:text;submissionId=UUID.randomUUID().toString();review();},error->{if(token!=generation)return;owner.failed(error);if(!draft.isBlank())review();else chatActions();});}
@@ -46,8 +51,20 @@ final class CallFlow implements AutoCloseable {
             draft="";lateConfirmed=false;hasStopGeneration=false;if(targetEvent!=null){owner.finishEvent(targetEvent.optString("eventId"),"replied");owner.replied(targetEvent.optString("eventId"));}targetEvent=null;transition("actions");speak(result.optString("deliveryStatus").equals("submitting")?"Answer recorded. Delivery is pending.":"Message sent.",this::chatActions);
         });}
     private void readLast(){transition("reading");ask("phone.last",request(),result->{String text=result.optString("text");speak(text.isBlank()?"This chat has no final message yet.":text,this::chatActions);});}
-    private void stream(){transition("live");listening=true;renewLive();ask("phone.live",request("enabled",true),value->speak("Live listening is on. Press 1 to send a message, 2 for the last final message, or star for voicemail.",this::drain));}
-    private void renewLive(){ if(!listening||call.ended)return;owner.serial.schedule(()->{if(listening&&!call.ended){owner.gateway.request("phone.live",request("enabled",true));renewLive();}},20,java.util.concurrent.TimeUnit.SECONDS); }
+    private CompletableFuture<JSONObject> liveRequest(JSONObject subscription,boolean enabled){
+        JSONObject payload=TelephonyRuntime.json();for(String key:TelephonyRuntime.keys(subscription))TelephonyRuntime.put(payload,key,subscription.opt(key));TelephonyRuntime.put(payload,"enabled",enabled);
+        // Preserve enable/disable order even when the transport completes asynchronously.
+        liveRequests=liveRequests.handle((value,error)->null).thenCompose(ignored->owner.gateway.request("phone.live",payload));return liveRequests;
+    }
+    private void stream(){transition("live");listening=true;JSONObject subscription=request();liveSubscription=subscription;int token=generation;liveRequest(subscription,true).whenComplete((value,error)->owner.execute(()->{if(call.ended||token!=generation||liveSubscription!=subscription)return;if(error!=null){failure(error);return;}renewLive(subscription,token);speak("Live listening is on. Press 1 to send a message, 2 for the last final message, or star for voicemail.",this::drain);}));}
+    private void renewLive(JSONObject subscription,int token){
+        if(!listening||call.ended||generation!=token||liveSubscription!=subscription)return;
+        liveRenewal=owner.serial.schedule(()->{liveRenewal=null;if(!listening||call.ended||generation!=token||liveSubscription!=subscription)return;liveRequest(subscription,true).whenComplete((value,error)->owner.execute(()->{if(call.ended||generation!=token||liveSubscription!=subscription)return;if(error!=null)failure(error);else renewLive(subscription,token);}));},20,java.util.concurrent.TimeUnit.SECONDS);
+    }
+    private void stopLive(){
+        listening=false;if(liveRenewal!=null){liveRenewal.cancel(false);liveRenewal=null;}JSONObject subscription=liveSubscription;liveSubscription=null;
+        if(subscription!=null&&owner.gateway!=null)liveRequest(subscription,false).whenComplete((value,error)->{if(error!=null)owner.execute(()->owner.failed(error));});
+    }
     void live(JSONObject event){if(!listening||!Objects.equals(call.backend,event.optString("backendId"))||!sessionId.equals(event.optString("sessionId")))return;enqueue(event);}
     void enqueue(JSONObject event){if(spoken.contains(event.optString("entryId",event.optString("eventId"))))return;pending.add(event);if(state.equals("live"))drain();}
     private void drain(){if(!state.equals("live")||pending.isEmpty())return;JSONObject event=pending.poll();String id=event.optString("entryId",event.optString("eventId"));if(spoken.contains(id)){drain();return;}if(event.optString("kind").equals("question")&&event.optLong("expiresAt",Long.MAX_VALUE)<System.currentTimeMillis()){drain();return;}if(event.optString("kind").equals("question")){eventPrompt(event);return;}spoken.add(id);state="live-speaking";speak(event.optString("text"),()->{state="live";drain();});}
@@ -87,5 +104,5 @@ final class CallFlow implements AutoCloseable {
         if(state.equals("question")){transition("event");prompt("That question is "+status+". Press 1 to send a new follow-up, 2 for the last final message, or 3 to stream live.");}
     }
     void audioRoute(CallAudioState state){audio.route(state);}
-    @Override public void close(){transition("closed");audio.close();draft="";for(JSONObject event:pending)if(event.optString("route").equals("calls"))owner.mailbox(event.optString("eventId"));pending.clear();if(owner.gateway!=null&&listening)owner.gateway.request("phone.live",request("enabled",false));}
+    @Override public void close(){transition("closed");audio.close();draft="";for(JSONObject event:pending)if(event.optString("route").equals("calls"))owner.mailbox(event.optString("eventId"));pending.clear();}
 }
