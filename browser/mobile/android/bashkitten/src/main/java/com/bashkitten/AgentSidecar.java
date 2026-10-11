@@ -191,10 +191,6 @@ public final class AgentSidecar {
     private void render() {
         final int y = scroll.getScrollY(); body.removeAllViews();
         notice.setVisibility(notice.getText().length() == 0 ? View.GONE : View.VISIBLE); body.addView(notice);
-        Button display = button("Display", () -> { close(); com.bashkitten.display.DisplayTabs.open(activity, "local"); });
-        android.graphics.drawable.Drawable screen = activity.getDrawable(R.drawable.ic_agent_display).mutate(); screen.setTint(muted); screen.setBounds(0, 0, dp(18), dp(18));
-        display.setCompoundDrawablesRelative(screen, null, null, null); display.setCompoundDrawablePadding(dp(10)); body.addView(display);
-        divider();
         backend("local", "Local", false);
         divider();
         section("Remotes", "Connect to remote", () -> AgentSettingsActivity.open(activity, "remotes"));

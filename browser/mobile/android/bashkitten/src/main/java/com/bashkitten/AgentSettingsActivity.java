@@ -8,7 +8,7 @@ import android.content.ClipboardManager;
 import android.content.res.TypedArray;
 import android.os.Bundle;
 import android.view.View;
-import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
@@ -61,11 +61,15 @@ public final class AgentSettingsActivity extends ProductActivity {
         if (!SECTIONS.contains(section)) { finish(); return; }
         app = BrowserApp.get(this);
         view = new GeckoView(this);
-        ViewCompat.setOnApplyWindowInsetsListener(view, (target, insets) -> {
+        // GeckoView's touch origin and its SurfaceView must stay identical.
+        // Inset the container, not GeckoView's internal rendering surface.
+        FrameLayout content = new FrameLayout(this);
+        content.addView(view, new FrameLayout.LayoutParams(-1, -1));
+        ViewCompat.setOnApplyWindowInsetsListener(content, (target, insets) -> {
             androidx.core.graphics.Insets area = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.ime());
             target.setPadding(area.left, area.top, area.right, area.bottom); return insets;
         });
-        setContentView(view); ViewCompat.requestApplyInsets(view);
+        setContentView(content); ViewCompat.requestApplyInsets(content);
         session = new GeckoSession(new GeckoSessionSettings.Builder().contextId("bashkitten-settings-" + UUID.randomUUID()).usePrivateMode(true).build());
         session.setNavigationDelegate(new GeckoSession.NavigationDelegate() {
             @Override public GeckoResult<AllowOrDeny> onLoadRequest(GeckoSession source, LoadRequest request) {
