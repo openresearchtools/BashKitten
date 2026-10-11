@@ -3404,3 +3404,15 @@ palettes. Restore the sidecar's top-left rounding below the tab/title bar while
 keeping its integrated layout. This concerns the BashKitten browser interface;
 the explicitly requested BashKitten OS desktop palette remains as specified
 above. Verify the installed surfaces in both themes, including mobile sizing.
+
+An open Display tab uses only the normal browser toolbar: remove the redundant
+second “Display · Local” title/settings bar and give that space to its viewport.
+Display setup stays in Configuration. In Android's tab switcher, replace the Tor
+text tab with a matching monochrome onion icon, retaining its accessible name
+and the existing Tor-tab behavior.
+
+Phone use shows all control options directly in its existing scrollable settings
+page, with matching rounded toggles and no additional “Allowed actions” step.
+Turning the master off leaves its saved options visible but disabled. Keep
+Accessibility-dependent options visible and disabled while access is unavailable;
+presentation does not change the native per-feature authorization checks.

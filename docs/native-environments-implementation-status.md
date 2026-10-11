@@ -14,16 +14,51 @@ being repaired together for the next candidate. No workstream is fully accepted;
 component compilation and source review do not establish installed acceptance.
 The later Autostart, selected-container configuration and mobile toolbar requests
 are additional mandatory amendments. Their source is integrated in `fb867067e4`;
-the combined Android/Termux/Linux build and installed acceptance remain pending.
+the combined `3c35d56d7c` Android/Termux/Linux development packages are now built
+and installed. Whole-feature acceptance remains in progress.
 
-Android 16/17 now have APK `0753b2edfc`; earlier shared settings cases below also
+The `3c35d56d7c` desktop package is installed on the Wayland host and real Xorg
+VM, and its matching APK and Termux packages are installed on Android 16/17.
+Normal Termux installation now succeeds and its postinst sets the X11 loader to
+`0400`, without a manual permission repair. The rebuilt APK excludes Adjust and
+its signer library and includes the complete JNA notices; desktop packaging
+includes the refreshed full Plotters grants. The source-only checksum repair
+`cde3fb7177` also passed the full corresponding-source collector with nine
+archives. These package/source results do not establish complete traffic,
+architecture or installed-feature acceptance.
+
+Actual Xorg `3c35d56d7c` fresh-container preparation now reaches a running XFCE
+desktop in the native Display tab. Pointer input opens Applications, keyboard
+search launches Terminal, and ordinary typed commands execute. The guest display
+resizes from 1270×618 to 728×618; closing and reopening the viewport retains that
+same Terminal. Broader OS, lifecycle, acceleration and Wayland-container checks
+remain open. Android 17's Display opens with ordinary browser navigation; its
+tab switcher and tab close return to Agent. Desktop attachment still fails because
+the loader tries to load the compressed X11 library directly from the APK;
+the corrected loader and actual rendered frames remain pending.
+
+The host's first `3c35d56d7c` restart omitted the acceptance data-directory
+setting and selected an older default backend. The retained browser correctly
+reported that different identity; restoring the intended launch directory loaded
+Local without replacing trust. This was a test-launch error, not upgrade-driven
+certificate regeneration. Source review also found a real Local cleanup defect:
+an onion-only certificate API was called on loopback. `f93ac418f6` separates that
+cleanup and adds automatic recovery from an app-managed Local data reset, using
+matching private controller/session identities and a fresh isolated browser
+context. Source review and syntax passed; installed reset/recovery remains open.
+The user's subsequent unified light/dark styling, sidecar corner, redundant
+Display-header removal and Tor tab-icon corrections are being integrated for
+the next combined candidate.
+
+Earlier Android 16/17 checks used APK `0753b2edfc`; shared settings cases below also
 cover Android 16 and native Linux `e375826bff` on Wayland and real Xorg.
-Both Android backends remain `a807ba48ed`, with OS source
-`609e82c200`. Desktop `0753b2edfc` is now installed on the Wayland host and Xorg
+At that checkpoint both Android backends used `a807ba48ed`, with OS source
+`609e82c200`, and desktop `0753b2edfc` was installed on the Wayland host and Xorg
 VM. Its corrected Configuration menus were observed on Wayland and Android 17.
 Fresh Xorg guest preparation progressed past the unsupported launcher arguments
 but exposed profile-validation, desktop bus environment and stale display-socket
-failures; their repairs await the next installed candidate. External receipts retain full commits,
+failures; the fresh `3c35d56d7c` guest result above supersedes those blockers.
+External receipts retain full commits,
 checksums, distinct native producers and assembly revisions, source-equivalence
 records and matching notices. These are development candidates.
 
