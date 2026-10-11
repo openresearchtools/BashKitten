@@ -3424,3 +3424,21 @@ Source code/license footer and duplicate About links now that Firefox's settings
 and About own their presentation. Preserve the complete notices, corresponding
 source delivery and existing browser entry points; this removes duplicate UI,
 not licensing obligations or provider functions.
+
+### Display-only toolbar and viewport toggle — 11 October 2026
+
+The user removed the address bar from local container and Termux Display tabs.
+Keep the BashKitten logo, a matching Display icon, Configuration and the native
+Firefox menu, together with ordinary tab switching and closing. Do not add a
+second Display toolbar or hide navigation needed to reach chats or other tabs.
+Ordinary browser tabs retain their address bar and normal browser controls.
+
+Show the Display control as active while its corresponding viewport is open.
+Clicking it again closes that viewport only, leaving its Termux/container desktop,
+Pi sessions and background services running. Container heading controls target
+their own viewport; keep their state synchronized with ordinary tab closure.
+Opening it again uses the same existing desktop and renderer lifecycle. Display
+setup and background autostart remain independent Configuration settings, and
+the desktop Quit/crash ownership rules are unchanged. Verify both platforms,
+including switching between Display and ordinary tabs, narrow layouts, keyboard
+insets, re-opening the preserved desktop and unrelated containers remaining open.
