@@ -37,11 +37,13 @@ repositories {
     maven { url 'https://raw.githubusercontent.com/guardianproject/gpmaven/master' }
 }
 
+def remoteClientAar = file("${System.getenv('BASHKITTEN_REMOTE_CLIENT_DIR')}/bashkitten-remote.aar")
+
 dependencies {
     api project(':bashkitten-sdk')
-    implementation project(':bashkitten-display')
+    api project(':bashkitten-display')
     implementation project(':bashkitten-telephony')
-    implementation files("${System.getenv('BASHKITTEN_REMOTE_CLIENT_DIR')}/bashkitten-remote.aar")
+    implementation files(remoteClientAar)
     implementation project(':geckoview')
     implementation project(':components:support-utils')
     implementation libs.androidx.appcompat
@@ -55,8 +57,7 @@ dependencies {
 
 tasks.register('checkRemoteClient') {
     doLast {
-        def directory = System.getenv('BASHKITTEN_REMOTE_CLIENT_DIR')
-        if (!directory || !file("$directory/bashkitten-remote.aar").isFile()) {
+        if (!remoteClientAar.isFile()) {
             throw new GradleException('Build the native remote client with auth/build/remote-android.sh first')
         }
     }
