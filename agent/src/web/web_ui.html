@@ -247,6 +247,7 @@
     .message-content { min-width: 0; max-width: 100%; font-size: 15px; line-height: 1.62; overflow-wrap: anywhere; }
     .message.user .message-content { max-width: 82%; padding: 9px 13px; border-radius: var(--radius-card); background: var(--surface-2); font-size: 14px; }
     .message.assistant .message-content { width: 100%; }
+    .message.agent .message-content { width: 100%; padding-left: 10px; border-left: 2px solid var(--line); }
     .message.error .message-content { padding-left: 10px; border-left: 2px solid var(--danger); color: var(--danger); }
     .markdown p { margin: 0 0 8px; }
     .markdown p:last-child { margin-bottom: 0; }
@@ -280,6 +281,7 @@
     .sent-file-download { margin-left: auto; color: var(--muted); font-size: 14px; }
     .message-actions { position: absolute; bottom: -21px; display: flex; gap: 2px; opacity: .42; transition: opacity .12s; }
     .message.assistant .message-actions { left: 0; }
+    .message.agent .message-actions { left: 0; }
     .message.user .message-actions { right: 0; }
     .message:hover .message-actions, .message:focus-within .message-actions { opacity: 1; }
     .message-actions button { height: 20px; padding: 0 7px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--muted); font-size: 10px; }
@@ -347,6 +349,7 @@
     .activity.error .tool-state { color: var(--danger); }
     .tool-body { margin: 1px 20px 7px 0; overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-control); background: var(--activity); }
     .tool-body pre { max-height: 330px; margin: 0; padding: 10px 12px; border: 0; border-radius: inherit; background: transparent; }
+    .tool-message, .agent-delivery { padding: 10px 12px; }
     .thought summary { color: var(--muted); font-style: normal; }
     .thought .tool-body { margin-left: 25px; }
 
@@ -1313,9 +1316,29 @@
       return holder;
     }
 
+    function agentTitle(id, recorded = '') {
+      return sessionCache.find(session => session.id === id)?.title ||
+        (current?.id === id ? current.title : '') || recorded || (id ? `Agent ${id.slice(0, 8)}` : 'Agent');
+    }
+
+    function agentSourceLink(id, label) {
+      const link = document.createElement(id ? 'button' : 'span');
+      link.className = 'agent-source'; link.textContent = label;
+      if (id) {
+        link.type = 'button'; link.title = `Open chat · ${id}`;
+        link.onclick = () => openSessionById(id).catch(error => { $('#composerHint').textContent = error.message; });
+      }
+      return link;
+    }
+
     function toolPresentation(block) {
       const value = block.arguments || {};
       const path = value.path || '.';
+      if (block.name === 'agents') {
+        const action = { spawn: 'Start subagent', send: 'Send message', follow_up: 'Send follow-up', stop: 'Stop subagent', list: 'List agents' }[value.action] || 'Agents';
+        const target = value.id || value.name ? agentTitle(value.id, value.name) : '';
+        return { action, focus: target ? `${agentTitle(current?.id, current?.title)} → ${target}` : '' };
+      }
       const presentations = {
         bash: ['Ran', value.command || 'shell command'],
         read: ['Read', `${path}${value.offset ? ` from line ${value.offset}` : ''}`],
@@ -1336,17 +1359,40 @@
 
     function renderToolSource(details, block) {
       details.querySelector('.tool-arguments')?.remove();
-      if (block.name !== 'write' || typeof block.arguments?.content !== 'string') return;
+      details.agentCall = block.name === 'agents' ? block : null;
+      const agentMessage = block.name === 'agents' && typeof block.arguments?.message === 'string';
+      if (!agentMessage && (block.name !== 'write' || typeof block.arguments?.content !== 'string')) return;
       let source = details.querySelector('.tool-source');
       if (!source) {
-        source = document.createElement('pre');
-        source.className = 'tool-source';
-        source.setAttribute('aria-label', 'Written content');
+        source = document.createElement(agentMessage ? 'div' : 'pre');
+        source.className = agentMessage ? 'tool-source tool-message markdown' : 'tool-source';
+        source.setAttribute('aria-label', agentMessage ? 'Message to agent' : 'Written content');
         source.tabIndex = 0;
         details.querySelector('.tool-body').prepend(source);
       }
       // Use the recorded call, not the current file, when replaying history.
-      source.textContent = block.arguments.content;
+      if (agentMessage) source.innerHTML = markdown(block.arguments.message);
+      else source.textContent = block.arguments.content;
+    }
+
+    function renderAgentResult(details, message) {
+      if (message.toolName !== 'agents' || message.isError || !message.details) return false;
+      const result = message.details, body = details.querySelector('.tool-body');
+      const delivery = document.createElement('div'); delivery.className = 'agent-delivery';
+      if (Array.isArray(result.agents)) {
+        for (const agent of result.agents) delivery.append(agentSourceLink(agent.id,
+          `${agentTitle(agent.id, agent.name)} · ${agent.state || 'Status unavailable'}`));
+        if (!result.agents.length) delivery.textContent = 'No other agents.';
+      } else if (result.id) {
+        const args = details.agentCall?.arguments || {};
+        const target = agentTitle(result.id, result.name || args.name);
+        details.querySelector('.tool-focus').textContent = `${agentTitle(current?.id, current?.title)} → ${target}`;
+        const status = result.delivery === 'held' ? 'Held — chat is stopped' : result.delivery === 'accepted' ? 'Message sent' : result.state === 'stopped' ? 'Chat stopped' : 'Agent updated';
+        delivery.append(agentSourceLink(result.id, `${status} · ${target}`));
+        if (result.message) delivery.append(document.createTextNode(result.message));
+        if (result.delivery === 'held') details.querySelector('.tool-state').textContent = 'Held';
+      } else return false;
+      body.append(delivery); return true;
     }
 
     function renderToolCall(block, body) {
@@ -1402,6 +1448,7 @@
       const toolBody = details.querySelector('.tool-body');
       const source = toolBody.querySelector('.tool-source');
       [...toolBody.children].forEach(node => { if (node !== source) node.remove(); });
+      if (renderAgentResult(details, message)) return;
       const imageBlocks = (Array.isArray(message.content) ? message.content : []).filter(block => block.type === 'image');
       const outputText = textBlocks(message.content);
       if ((!source || message.isError) && (outputText || !imageBlocks.length)) {
@@ -1582,16 +1629,16 @@
       if (message.role === 'toolResult') return renderToolResult(message);
       if (message.role === 'user') {
         beginRenderedTurn(message.timestamp);
-        const body = messageRow('user');
+        const fromAgent = message.agentSource && message.agentSource.kind !== 'phone';
+        const body = messageRow(fromAgent ? 'agent' : 'user');
         if (message.agentSource?.kind === 'phone') {
           const attribution = document.createElement('span'); attribution.className = 'agent-source';
           attribution.textContent = { notification: 'Notification reply', call: 'Phone call', voicemail: 'Voicemail reply' }[message.agentSource.source];
           body.append(attribution);
         } else if (message.agentSource) {
-          const attribution = document.createElement('button'); attribution.type = 'button'; attribution.className = 'agent-source';
-          attribution.textContent = (message.agentSource.report ? 'Completed turn · ' : 'Agent · ') + message.agentSource.name;
-          attribution.onclick = () => openSessionById(message.agentSource.id).catch(error => { $('#composerHint').textContent = error.message; });
-          body.append(attribution);
+          const sender = message.agentSource;
+          const kind = sender.report ? 'Subagent result' : 'Agent message';
+          body.append(agentSourceLink(sender.id, `${kind} · ${agentTitle(sender.id, sender.name)} → ${agentTitle(current?.id, current?.title)}`));
         }
         const hasStoredAttachments = renderStoredAttachments(message.content, body);
         if (!hasStoredAttachments) renderImages(message.content, body, 'Attached image');
@@ -1687,7 +1734,7 @@
         liveToolCalls.set(event.index, call);
         details.open = true;
         details.querySelector('.tool-state').textContent = 'Preparing';
-        if (call.text && event.type !== 'tool_call_end') {
+        if (call.text && call.name !== 'agents' && event.type !== 'tool_call_end') {
           const argumentsView = document.createElement('pre');
           argumentsView.className = 'tool-arguments';
           argumentsView.textContent = call.text;
