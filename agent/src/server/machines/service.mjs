@@ -472,7 +472,7 @@ async function action(name,value={},requestSignal) {
     return {type,text:new TextDecoder('utf-8',{fatal:true}).decode(result.stdout)};
   }
   if(name==='guest-control') {
-    if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-files','service-status','service-save','service-remove','service-action','local-session','status','start','stop'].includes(value.command))throw Error('Unsupported guest settings operation');
+    if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-files','localai-share','service-status','service-save','service-remove','service-action','local-session','status','start','stop'].includes(value.command))throw Error('Unsupported guest settings operation');
     return guestCall(value.id,value.command,value.value||{});
   }
   if(name==='start')return catalogue(async()=>{const cfg=await saveCapabilities(value);return begin(value.id,'start',job=>start(cfg,job));});

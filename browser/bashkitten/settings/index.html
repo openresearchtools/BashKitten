@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src resource://bashkitten-settings/; style-src resource://bashkitten-settings/ 'unsafe-inline'; img-src resource://bashkitten-settings/ data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>BashKitten settings</title>
+  <link rel="stylesheet" href="resource://bashkitten-settings/settings.css">
+  <script type="module" src="resource://bashkitten-settings/main.mjs"></script>
+</head>
+<body>
+  <main>
+    <header class="page-heading">
+      <div><h1 id="title">BashKitten settings</h1><p id="backend"></p></div>
+      <button id="close" type="button" aria-label="Close settings" title="Close settings" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </header>
+    <p id="page-status" role="status">Opening settings…</p>
+    <section id="content" aria-labelledby="title"></section>
+  </main>
+</body>
+</html>

@@ -1,29 +1,63 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package com.bashkitten.phone;
 
-import android.app.*;
-import android.content.*;
+import android.app.Activity;
+import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.widget.*;
 import org.json.*;
 import java.util.UUID;
+import java.util.concurrent.*;
 
-/** User-selected SAF roots and independent per-location read/write/delete policy. */
+/** Owns only Android's folder picker. Folder policy is edited in the protected settings page. */
 public final class PhoneFilesActivity extends Activity {
-    private PhonePolicy policy;
-    @Override public void onCreate(Bundle state){super.onCreate(state);policy=PhoneControlsRuntime.get(this).policy;render();}
-    private void render(){LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);ScrollView scroll=new ScrollView(this);scroll.addView(layout);setContentView(scroll);
-        Button add=new Button(this);add.setText("Add folder");add.setOnClickListener(v->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION|Intent.FLAG_GRANT_PREFIX_URI_PERMISSION),1));layout.addView(add);
-        JSONArray items=new PhoneFiles(this,policy).locations();for(int i=0;i<items.length();i++)try{JSONObject item=items.getJSONObject(i);TextView name=new TextView(this);name.setText(item.optString("name","Folder"));layout.addView(name);
-            for(String field:new String[]{"read","write","delete"}){Switch toggle=new Switch(this);toggle.setText(field);toggle.setChecked(item.optBoolean(field));toggle.setOnCheckedChangeListener((v,on)->{try{item.put(field,on);save(items);}catch(Exception ignored){}});layout.addView(toggle);}
-            Button remove=new Button(this);remove.setText("Remove access");remove.setOnClickListener(v->{JSONArray next=new JSONArray();for(int n=0;n<items.length();n++)if(items.optJSONObject(n)!=item)next.put(items.optJSONObject(n));try{getContentResolver().releasePersistableUriPermission(Uri.parse(item.optString("uri")),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(SecurityException ignored){}save(next);render();});layout.addView(remove);
-        }catch(Exception ignored){}
+    private static final ConcurrentHashMap<String, CompletableFuture<JSONObject>> requests = new ConcurrentHashMap<>();
+    private String requestId;
+    private CompletableFuture<JSONObject> result;
+    private boolean saving;
+    static CompletableFuture<JSONObject> pick(Activity activity) {
+        String id = UUID.randomUUID().toString(); CompletableFuture<JSONObject> result = new CompletableFuture<>(); requests.put(id, result);
+        result.whenComplete((value, error) -> requests.remove(id, result));
+        activity.runOnUiThread(() -> {
+            try {
+                if (result.isDone() || activity.isFinishing() || activity.isDestroyed()) throw new IllegalStateException("Settings closed.");
+                activity.startActivity(new Intent(activity, PhoneFilesActivity.class).putExtra("request", id));
+            } catch (Exception error) { result.completeExceptionally(error); }
+        }); return result;
     }
-    private void save(JSONArray items){policy.preferences.edit().putString("locations",items.toString()).apply();policy.changed();}
-    @Override public void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request!=1||result!=RESULT_OK||data==null||data.getData()==null)return;
-        try{Uri uri=data.getData();int flags=data.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);getContentResolver().takePersistableUriPermission(uri,flags);
-            JSONArray items=new PhoneFiles(this,policy).locations();items.put(new JSONObject().put("id",UUID.randomUUID()).put("uri",uri).put("name",uri.getLastPathSegment()).put("read",true).put("write",false).put("delete",false));save(items);render();
-        }catch(Exception e){new AlertDialog.Builder(this).setMessage("Android did not grant this folder").setPositiveButton("OK",null).show();}
+    @Override public void onCreate(Bundle state) {
+        super.onCreate(state); requestId = getIntent().getStringExtra("request"); result = requestId == null ? null : requests.get(requestId);
+        if (result == null || result.isDone()) { finish(); return; }
+        result.whenComplete((value, error) -> runOnUiThread(() -> { if (!isFinishing()) finish(); }));
+        if (state == null) try {
+            startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION | Intent.FLAG_GRANT_PREFIX_URI_PERMISSION), 1);
+        } catch (Exception error) { result.completeExceptionally(error); }
+    }
+    @Override public void onActivityResult(int request, int status, Intent data) {
+        super.onActivityResult(request, status, data);
+        if (request != 1 || result == null || result.isDone()) return;
+        if (status != RESULT_OK || data == null || data.getData() == null) { result.complete(new JSONObject()); return; }
+        Uri uri = data.getData(); int flags = data.getFlags() & (Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        saving = true;
+        CompletableFuture.runAsync(() -> {
+            try {
+                if (result.isDone()) return;
+                PhonePolicy policy = PhoneControlsRuntime.get(this).policy;
+                synchronized (policy) {
+                    if (result.isDone()) return;
+                    getContentResolver().takePersistableUriPermission(uri, flags);
+                    JSONArray items = new PhoneFiles(this, policy).locations();
+                    boolean exists = false;
+                    for (int i = 0; i < items.length(); i++) if (uri.toString().equals(items.getJSONObject(i).optString("uri"))) { exists = true; break; }
+                    if (!exists) items.put(new JSONObject().put("id", UUID.randomUUID()).put("uri", uri).put("name", uri.getLastPathSegment()).put("read", true).put("write", false).put("delete", false));
+                    policy.preferences.edit().putString("locations", items.toString()).apply(); policy.changed();
+                }
+                result.complete(new JSONObject().put("added", true));
+            } catch (Exception error) { result.completeExceptionally(new IllegalStateException("Android did not grant this folder.", error)); }
+        });
+    }
+    @Override public void onDestroy() {
+        if (!isChangingConfigurations() && !saving && result != null && !result.isDone()) result.completeExceptionally(new IllegalStateException("Folder picker closed."));
+        super.onDestroy();
     }
 }
