@@ -12,6 +12,7 @@
 #include <string.h>
 #include <sys/prctl.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -248,6 +249,70 @@ static int wait_owner(const char *pid_text, const char *started_text, bool stop_
     return result > 0 && (owner.revents & POLLIN) ? 0 : 125;
 }
 
+/* A rootless pause helper deliberately leaves Podman's cgroup, but remains an
+ * orphaned child of our subreaper. This is not a general signal-by-PID command:
+ * require that exact ancestry, private engine environment and executable, then
+ * use a pidfd so an exited/reused PID can never select a different process. */
+static int stop_podman_pause(const char *pid_text, const char *started_text,
+                             const char *runtime, const char *executable) {
+    child_setup(getppid(), SIGKILL);
+    char *end;
+    long number = strtol(pid_text, &end, 10);
+    if (*end || number <= 1 || number > INT_MAX) return 64;
+    pid_t pid = (pid_t)number;
+    unsigned long long started = strtoull(started_text, &end, 10);
+    if (*end || !started || runtime[0] != '/' || executable[0] != '/') return 64;
+    const char *guard_text = getenv("BASHKITTEN_GUARD_PID");
+    const char *data = getenv("BASHKITTEN_DATA_DIR");
+    if (!guard_text || !data || data[0] != '/') return 125;
+    long guard = strtol(guard_text, &end, 10);
+    if (*end || guard <= 1 || guard > INT_MAX) return 125;
+    struct identity parent, before, after;
+    if (!identify(getppid(), &parent) || parent.parent != guard ||
+        !identify(pid, &before) || before.parent != guard || before.started != started) return 125;
+    int descriptor = (int)syscall(SYS_pidfd_open, pid, 0);
+    if (descriptor < 0) return errno == ESRCH ? 0 : 125;
+    char proc[64], actual[PATH_MAX + 1], storage[PATH_MAX];
+    struct stat status;
+    snprintf(proc, sizeof(proc), "/proc/%ld", (long)pid);
+    bool valid = stat(proc, &status) == 0 && status.st_uid == getuid();
+    snprintf(proc, sizeof(proc), "/proc/%ld/exe", (long)pid);
+    ssize_t length = readlink(proc, actual, PATH_MAX);
+    if (length >= 0) {
+        actual[length] = '\0';
+        size_t size = strlen(actual);
+        if (size >= 10 && strcmp(actual + size - 10, " (deleted)") == 0) actual[size - 10] = '\0';
+    }
+    valid = valid && length > 0 && strcmp(actual, executable) == 0;
+    int size = snprintf(storage, sizeof(storage), "%s/podman/config/storage.conf", data);
+    valid = valid && size > 0 && size < (int)sizeof(storage);
+    snprintf(proc, sizeof(proc), "/proc/%ld/environ", (long)pid);
+    FILE *environment = valid ? fopen(proc, "r") : NULL;
+    unsigned found = 0;
+    if (environment) {
+        char *entry = NULL; size_t capacity = 0;
+        while (getdelim(&entry, &capacity, '\0', environment) > 0) {
+            if (strcmp(entry, "_PODMAN_PAUSE=1") == 0) found |= 1;
+            if (strncmp(entry, "XDG_RUNTIME_DIR=", sizeof("XDG_RUNTIME_DIR=") - 1) == 0 && strcmp(entry + sizeof("XDG_RUNTIME_DIR=") - 1, runtime) == 0) found |= 2;
+            if (strncmp(entry, "BASHKITTEN_DATA_DIR=", sizeof("BASHKITTEN_DATA_DIR=") - 1) == 0 && strcmp(entry + sizeof("BASHKITTEN_DATA_DIR=") - 1, data) == 0) found |= 4;
+            if (strncmp(entry, "CONTAINERS_STORAGE_CONF=", sizeof("CONTAINERS_STORAGE_CONF=") - 1) == 0 && strcmp(entry + sizeof("CONTAINERS_STORAGE_CONF=") - 1, storage) == 0) found |= 8;
+            if (strncmp(entry, "BASHKITTEN_GUARD_PID=", sizeof("BASHKITTEN_GUARD_PID=") - 1) == 0 && strcmp(entry + sizeof("BASHKITTEN_GUARD_PID=") - 1, guard_text) == 0) found |= 16;
+        }
+        free(entry); fclose(environment);
+    }
+    valid = valid && found == 31 && identify(pid, &after) &&
+        after.started == started && after.parent == guard;
+    if (!valid) { close(descriptor); return 125; }
+    if (syscall(SYS_pidfd_send_signal, descriptor, SIGKILL, NULL, 0) != 0 && errno != ESRCH) {
+        close(descriptor); return 125;
+    }
+    struct pollfd stopped = {.fd = descriptor, .events = POLLIN};
+    int result;
+    do { result = poll(&stopped, 1, 2000); } while (result < 0 && errno == EINTR);
+    close(descriptor);
+    return result > 0 && (stopped.revents & POLLIN) ? 0 : 125;
+}
+
 static bool release_wake_lock(void) {
     if (!wake_owned) return true;
     pid_t owner = getpid(), child = fork();
@@ -292,6 +357,8 @@ int main(int argc, char **argv) {
         return pipe_output(&argv[2]);
     if ((argc == 4 || (argc == 5 && strcmp(argv[4], "guard-stop") == 0)) && strcmp(argv[1], "wait-owner") == 0)
         return wait_owner(argv[2], argv[3], argc == 5);
+    if (argc == 6 && strcmp(argv[1], "stop-podman-pause") == 0)
+        return stop_podman_pause(argv[2], argv[3], argv[4], argv[5]);
     if (argc < 4 || strcmp(argv[argc - 1], "serve") != 0) {
         fprintf(stderr, "Usage: runtime-guard <node> <control.mjs> serve\n");
         return 64;
