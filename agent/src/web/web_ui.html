@@ -1485,13 +1485,20 @@
       line.title = `Observed ${new Date(snapshot.observedAt).toLocaleString()} · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
     }
     const questionDrafts = new Map(), questionSubmissions = new Map();
+    let questionState = [], questionRenderKey = '', questionVersion = 0;
+    const hasPendingQuestion = () => questionState.some(question => question.status === 'pending');
     function renderQuestions(questions = []) {
       const root = $('#questionCards'); if (!root) return;
+      questionVersion++;
+      questionState = questions.filter(question => question.sessionId === current?.id);
+      const key = JSON.stringify([current?.id, questionState]);
+      if (key === questionRenderKey) return;
+      questionRenderKey = key;
+      const chat = $('#chat'), follow = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 100;
       const focused = document.activeElement?.closest('[data-question]')?.dataset.question;
       const selection = focused ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
       root.replaceChildren();
-      for (const question of questions) {
-        if (question.sessionId !== current?.id) continue;
+      for (const question of questionState) {
         const card = document.createElement('section'); card.className = 'question-card'; card.dataset.question = question.questionId;
         const title = document.createElement('strong'); title.textContent = question.text;
         const state = document.createElement('div'); state.className = 'meta';
@@ -1689,12 +1696,14 @@
         setRunButton(false);
         $('#composerHint').textContent = editingQueueId ? 'Editing queued message · Esc to cancel' : '';
         loadSessions().catch(() => {});
-        const settledView = sessionView;
+        const settledView = sessionView, settledSource = source;
         setTimeout(async () => {
           if (sessionView !== settledView) return;
           await refreshQueue().catch(() => {});
           if (sessionView !== settledView) return;
-          if (!queueState.busy && !queuedItems().length) {
+          // Optional questions keep changing after Pi's final turn. Keep their
+          // existing event stream until resolution instead of freezing the card.
+          if (source === settledSource && !queueState.busy && !queuedItems().length && !hasPendingQuestion()) {
             source?.close();
             source = null;
           }
@@ -1704,6 +1713,7 @@
       } else if (event.type === 'goal') {
         renderGoal(event.data);
       } else if (event.type === 'queue_state') {
+        if (Array.isArray(event.data?.questions)) renderQuestions(event.data.questions);
         renderQueueState(event.data);
       } else if (event.type === 'models_changed') {
         applyModelSelection(event);
@@ -2038,9 +2048,12 @@
 
     async function refreshQueue() {
       if (!current) return renderQueueState();
-      const view = sessionView;
+      const view = sessionView, questionsAtRequest = questionVersion;
       const value = await api(`/api/sessions/${current.id}/status`);
       if (view !== sessionView) return;
+      // Reconcile the authoritative owner state after an idle/disconnected
+      // stream, without overwriting a newer event received during this request.
+      if (questionsAtRequest === questionVersion && Array.isArray(value.data?.questions)) renderQuestions(value.data.questions);
       renderQueueState(value.data);
       updateInstanceControl(value.data?.stopped);
       renderGoal(value.data?.goal);
@@ -2450,7 +2463,7 @@
             consume(value);
           } catch {}
         };
-        stream.onerror=()=>{if(sessionView===view&&subscribed)refreshQueue().then(()=>{if(!queueState.busy){stream.close();if(source===stream)source=null;}}).catch(()=>{});};
+        stream.onerror=()=>{if(sessionView===view&&subscribed)refreshQueue().then(()=>{if(sessionView===view&&source===stream&&!queueState.busy&&!hasPendingQuestion()){stream.close();source=null;}}).catch(()=>{});};
         stream.addEventListener('offline', () => {
           clearTimeout(timeout);
           stream.close();
