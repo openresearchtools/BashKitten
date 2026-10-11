@@ -42,10 +42,29 @@ the feature controls. Unavailable Accessibility options remain disabled, and
 closing the page returns to Agent. These presentation/settings checks do not
 establish the full tool authorization or revocation matrix.
 
+The next integrated source batch adds Display-only compact toolbars and viewport
+toggles, Android Updates with exact APK/Termux package pairing, and `.local`
+calling identifiers without development-address compatibility. Completed questions
+now belong beside their originating native tool call, with the existing native
+answer shown once; unanswered questions can be dismissed without stopping Pi.
+These changes have source/compilation evidence, not installed acceptance yet.
+The public APT feed does not yet contain this development candidate's matching
+packages, so a successful public-feed update cannot be claimed from local assembly.
+
 Android 16's matched update was verified before handoff. Actual `0cf34b8857`
-checks now show the truthful enabled-but-not-started Messages guidance and the
-correct **Notification reply** label on its saved RemoteInput turn. The gateway
-was then started through its normal switch for continued acceptance. Earlier
+checks show the truthful enabled-but-not-started Messages guidance and the
+correct **Notification reply** label on its saved RemoteInput turn. A notification
+answer reached its original Pi chat once. One optional question expired at its
+120-second deadline and produced one attributed timeout entry; the small local
+model subsequently made distinct new question calls, rather than the application
+replaying a delivery. Stop cancelled those new questions and prevented a late
+reply from resuming Pi. Direct calling, a contact created through the normal editor
+and Recents callback connected through the managed PhoneAccount. Hangup left Pi
+running. Those calls used the earlier development address; the new `.local`
+identity, actual call audio/review, full cross-channel races and OEM/Auto behavior
+remain separate gates. An actual diverted final reached the native voicemail
+store, but the open mailbox view remained stale; `47620b1f83` repairs that display
+refresh, pending installation. Earlier
 Android 16 observations retain their original revisions rather than becoming
 automatic retests of this candidate.
 
@@ -67,12 +86,26 @@ noninteractive sudo, interactive Terminal input and redirected-I/O checks.
 Closing the browser window during preparation leaves materialization running;
 tray activation restores the same browser and the guest reaches running.
 Ctrl-Z during `sudo -n cat` displays `^Z` without returning an ordinary shell
-prompt. That observed job-control failure is with the OS owner; `fg` and the rest
-of the PTY/signal/resize matrix remain unaccepted. A retained older
-`3c35d56d7c` guest still fails browser/backend readiness after startup and remains
-under diagnosis; its rootfs/package was not silently replaced. That retained-guest
-failure does not invalidate the separate
-fresh-machine result or establish an upgrade pass.
+prompt. The source repair keeps the broker and foreground child in one PTY
+session; installed `fg` and signal handling remain unaccepted. Both the fresh and
+retained older guest then failed normal restart because their stopped browser's
+socket remained. The source repair verifies ownership, stopped container identity
+and socket liveness before retiring that stale socket. Neither rootfs was replaced
+and no manual socket deletion was used to claim a pass. Thunar installation also
+exposed missing APT lists, missing descriptor access for direct AppImages and
+unwritable implicit profile parents; those repairs await a new installed guest.
+
+Further actual Xorg `0cf34b8857` checks verified custom Autostart arguments,
+directory and environment; disabling automatic start kept the current process,
+and Remove stopped it. Window Close preserved the browser and work, while explicit
+tray Quit stopped current owned services. Killing only the main browser during
+guest startup and during active Pi inference stopped the observed workers,
+inference, guest/auth/display processes and current owners. The separate legacy
+Podman namespace helper still exists and is not covered by that cleanup claim.
+The sidebar remained responsive at narrow width during inference. Width/height
+and height-only Display resizing kept the terminal above the bottom panel.
+Raw preview Download exposed a Blob CSP failure; `e455149bae` is the source fix,
+with actual download rechecking still required.
 
 Earlier Xorg `780540ddf7` checks include close-to-tray/reopen, custom-command
 startup/removal, renderer-child crash/reopen, browser force-quit with Local On
