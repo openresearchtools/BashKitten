@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -188,9 +189,13 @@ def build(args):
                            f'-X go.podman.io/podman/v6/libpod/config._installPrefix={PREFIX} '
                            f'-X go.podman.io/common/pkg/config.additionalHelperBinariesDir={PREFIX}/bin')
                 tags = 'apparmor seccomp systemd containers_image_openpgp exclude_graphdriver_btrfs grpcnotrace'
+                # The pinned C pause implementation does not consume the Go or
+                # Makefile install prefix. Its named patch requires this path.
+                podman_env = {**env, 'CGO_CFLAGS': env.get('CGO_CFLAGS', '-O2 -g') + ' ' +
+                              shlex.quote('-DBASHKITTEN_CATATONIT=' + json.dumps(PREFIX + '/bin/catatonit'))}
                 for binary in ('podman', 'rootlessport'):
-                    command(['go', 'build', '-p', jobs, '-ldflags', ldflags, '-tags', tags,
-                             '-o', runtime / 'bin' / binary, './cmd/' + binary])
+                    run(['go', 'build', '-p', jobs, '-ldflags', ldflags, '-tags', tags,
+                         '-o', runtime / 'bin' / binary, './cmd/' + binary], source, podman_env, log)
                 configs = runtime / 'config'; configs.mkdir(exist_ok=True)
                 shutil.copy2(source / 'vendor/go.podman.io/common/pkg/seccomp/seccomp.json', configs / 'seccomp.json')
             elif name == 'crun':
