@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 toolkit.jar:
 % content bashkitten-settings %content/bashkitten-settings/ contentaccessible=yes
+  content/bashkitten-settings/autostart.mjs (autostart.mjs)
   content/bashkitten-settings/device-controls.mjs (device-controls.mjs)
   content/bashkitten-settings/display-settings.mjs (display-settings.mjs)
   content/bashkitten-settings/index.html (index.html)

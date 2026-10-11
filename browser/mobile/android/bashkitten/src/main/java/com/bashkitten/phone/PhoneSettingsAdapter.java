@@ -127,7 +127,7 @@ public final class PhoneSettingsAdapter implements AutoCloseable {
     }
     private CompletableFuture<JSONObject> configure(String target, JSONObject args) throws JSONException {
         keys(args, "patch"); JSONObject patch = args.getJSONObject("patch");
-        if (target.equals("telephone")) keys(patch, "telephony", "ordinaryDefault", "callDefault", "recent", "finish", "silenceSeconds");
+        if (target.equals("telephone")) keys(patch, "telephony", "startup", "ordinaryDefault", "callDefault", "recent", "finish", "silenceSeconds");
         else keys(patch, "messages", "ordinaryDefault");
         CompletableFuture<JSONObject> ready = CompletableFuture.completedFuture(requested());
         if (patch.optBoolean("telephony")) ready = permission(Manifest.permission.RECORD_AUDIO, 7328);
@@ -190,7 +190,7 @@ public final class PhoneSettingsAdapter implements AutoCloseable {
     }
     private JSONObject phoneSnapshot(String target, JSONObject value) {
         JSONObject saved = value.optJSONObject("settings"), filtered = new JSONObject();
-        List<String> allowed = target.equals("telephone") ? List.of("telephony", "ordinaryDefault", "callDefault", "recent", "finish", "silenceSeconds") : List.of("messages", "ordinaryDefault");
+        List<String> allowed = target.equals("telephone") ? List.of("telephony", "startup", "ordinaryDefault", "callDefault", "recent", "finish", "silenceSeconds") : List.of("messages", "ordinaryDefault");
         if (saved != null) for (String key : allowed) if (saved.has(key)) put(filtered, key, saved.opt(key));
         JSONObject result = TelephonyRuntime.json("settings", filtered, "connected", value.optBoolean("connected"), "error", value.optString("error"),
             "microphone", activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED,

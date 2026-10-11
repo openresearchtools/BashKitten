@@ -5,7 +5,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { dataDir, privateDir, writePrivate, digest, body } from '../../common.mjs';
+import { dataDir, privateDir, writePrivate, readJson, writeJson, digest, body } from '../../common.mjs';
 import { platform } from '../index.mjs';
 import { binary } from '../../access/paths.mjs';
 
@@ -14,6 +14,7 @@ const directory = path.join(dataDir, 'display');
 export const displayCommand = path.join(directory, 'launch.sh');
 const runningCommand = path.join(directory, 'running.sh');
 const previousCommand = path.join(directory, 'last-working.sh');
+const configFile = path.join(directory, 'config.json');
 // Node is private to BashKitten; shell/X11 paths belong to the Termux prefix.
 const prefix = process.env.PREFIX || '/data/data/com.termux/files/usr';
 const shell = () => path.join(prefix, 'bin/sh');
@@ -68,6 +69,12 @@ export class TermuxDisplay {
   activeCommand = '';
   environment = {};
 
+  async startup() {
+    if ((await readJson(configFile, {})).startup !== true) return;
+    try { await this.start(); }
+    catch (error) { this.state = 'failed'; this.error = error.message; }
+  }
+
   async status() {
     if (this.state === 'running' && !await desktopReady(this.environment)) {
       await this.stop();
@@ -77,7 +84,7 @@ export class TermuxDisplay {
     const sockets = await fs.readdir(path.join(temporary, '.X11-unix')).catch(error => {
       if (error.code === 'ENOENT') return []; throw error;
     });
-    return { state: this.state, error: this.error, output: this.output,
+    return { state: this.state, error: this.error, output: this.output, startup: (await readJson(configFile, {})).startup === true,
       command: text, revision: digest(text), commandPath: displayCommand,
       launcherNote: /(?:^|[\s/])termux-x11(?:\s|$)/m.test(text) && !text.includes('bashkitten-x11')
         ? 'This saved command uses independent Termux:X11. Change its server launcher to bashkitten-x11 to show it in Display; your other settings are preserved.' : '',
@@ -88,6 +95,12 @@ export class TermuxDisplay {
   }
 
   async save(value) {
+    if (Object.hasOwn(value, 'startup')) {
+      if (Object.keys(value).length !== 1 || typeof value.startup !== 'boolean') throw Error('Choose whether Display starts automatically');
+      await privateDir(directory);
+      await writeJson(configFile, { ...await readJson(configFile, {}), startup: value.startup });
+      return this.status();
+    }
     const before = await command();
     if (value.revision !== digest(before)) throw Error('The launch command changed. Reopen it before saving.');
     const text = value.reset === true ? defaultCommand : value.command;

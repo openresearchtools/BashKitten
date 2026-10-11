@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { BrowserControlChannel } from "resource:///modules/BrowserControlChannel.sys.mjs";
-const remoteInfo = ({ id, name, url, state, error, migrationRequired }) => ({ id, name, url, state, error, migrationRequired });
+import { localAutostart, setLocalAutostart } from "resource:///modules/DesktopAutostart.sys.mjs";
+const remoteInfo = ({ id, name, url, state, error, migrationRequired, autostart }) => ({ id, name, url, state, error, migrationRequired, autostart });
 function servicesInfo(result) {
   return { services: result.services.map(({ id, name, kind, state, reachable, error, actions, choice = {}, mapping, url, importState }) => ({
     id, name, kind, state, reachable, error, actions, url, importState,
@@ -11,16 +12,18 @@ function servicesInfo(result) {
 }
 
 /** Only display metadata leaves the private connection owner. */
-export async function remoteSettingsCall(host, name, value, current, advanceEpoch) {
+export async function remoteSettingsCall(host, name, value, current, advanceEpoch, backend) {
   const check = () => { if (!current()) throw new Error("The Remote Connections view is closed."); };
   check();
-  if (name === "remotes.list") return { selected: host.selection || "local", localLabel: "Local", remotes: (await AgentRemotes.list()).map(remoteInfo), capabilities: { scan: true, browserControl: true } };
+  if (name === "remotes.list") return { selected: host.selection || "local", localLabel: "Local", localAutostart: localAutostart(), shareLabel: backend.kind === "machine" ? `Share ${backend.name}` : "Share Local", remotes: (await AgentRemotes.list()).map(remoteInfo), capabilities: { scan: true, browserControl: true } };
+  if (name === "remotes.local-autostart") return setLocalAutostart(value.enabled);
   if (name === "remotes.enroll") return host.enrollRemote(value.method, current);
-  if (name === "remotes.share-local") { host.win.setTimeout(() => { if (current()) host.shareLocal().catch(console.error); }, 0); return { ok: true }; }
+  if (name === "remotes.share-local") { host.win.setTimeout(() => { if (current()) host.openSettings("share-local", { backendId: backend.kind === "machine" ? backend.id : "local" }).catch(console.error); }, 0); return { ok: true }; }
   if (name === "remotes.connect" && value.id === "local") { host.win.setTimeout(() => { if (current()) host.choose("").catch(console.error); }, 0); return { ok: true }; }
   const record = (await AgentRemotes.list()).find(item => item.id === value.id);
   check();
   if (!record) throw new Error("Choose an existing saved remote.");
+  if (name === "remotes.autostart") return remoteInfo(await AgentRemotes.setAutostart(record.id, value.enabled));
   if (name === "remotes.connect") { host.win.setTimeout(() => { if (current()) host.choose(record.id).catch(console.error); }, 0); return { ok: true }; }
   if (name === "remotes.rename") return remoteInfo(await AgentRemotes.rename(record.id, value.name));
   if (name === "remotes.disconnect") {

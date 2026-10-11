@@ -28,7 +28,7 @@ public final class DisplaySettingsAdapter {
     }
     private void authorize() {
         if (closed || activity.isDestroyed()) throw new IllegalStateException("Display settings closed");
-        if (!installation.equals(runtime.termux.installationId()) || runtime.shareNeedsSetup())
+        if (!installation.equals(runtime.termux.installationId()) || !runtime.localSetupReady())
             throw new SecurityException("Complete Local setup before changing Display settings.");
     }
     public CompletableFuture<JSONObject> dispatch(String method, JSONObject args) {
@@ -43,7 +43,8 @@ public final class DisplaySettingsAdapter {
                     activity.startActivity(app.host.launchIntent().putExtra("bashkitten.openAgent", true));
                     result.complete(new JSONObject()); app.main.post(activity::finish); return;
                 }
-                if (method.equals("display-status") && runtime.shareNeedsSetup()) {
+                if (method.equals("display-status") &&
+                    (!installation.equals(runtime.termux.installationId()) || !runtime.localSetupReady())) {
                     result.complete(new JSONObject().put("needsSetup", true)); return;
                 }
                 authorize();
@@ -59,10 +60,16 @@ public final class DisplaySettingsAdapter {
                     result.complete(new JSONObject()); return;
                 }
                 if (!COMMANDS.contains(method)) throw new SecurityException("Unsupported Display operation");
-                JSONObject input = method.equals("display-save")
-                    ? new JSONObject().put("revision", args.getString("revision")).put("command", args.getString("command")).put("reset", args.optBoolean("reset"))
-                    : new JSONObject();
+                JSONObject input = new JSONObject();
+                if (method.equals("display-save")) {
+                    if (args.has("startup")) {
+                        if (args.length() != 1 || !(args.get("startup") instanceof Boolean)) throw new IllegalArgumentException("Choose whether Display starts automatically.");
+                        input.put("startup", args.getBoolean("startup"));
+                    } else input.put("revision", args.getString("revision")).put("command", args.getString("command")).put("reset", args.optBoolean("reset"));
+                }
+                if (method.equals("display-start")) BrowserApp.get(activity).display.prepareStart();
                 runtime.command(method, input, value -> {
+                    if (method.equals("display-stop")) BrowserApp.get(activity).display.revoke();
                     try { authorize(); last = value; result.complete(value); }
                     catch (Exception error) { result.completeExceptionally(error); }
                 }, error -> result.completeExceptionally(new IllegalStateException(error)));

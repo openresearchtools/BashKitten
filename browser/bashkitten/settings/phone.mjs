@@ -59,6 +59,9 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
         .finally(() => { if (enabled.isConnected) enabled.disabled = calling && !state.supported && !enabled.checked; });
     };
     if (calling) {
+      const startup = check(root, 'Start with BashKitten', !!state.settings?.startup);
+      startup.onchange = () => run(async () => { await call('configure', { patch: { startup: startup.checked } }); await refresh(); });
+      message('Reconnects enabled Calls and Messages when BashKitten opens.');
       if (!state.supported) message("Calls aren't supported on this device.");
       button(root, 'Call setup', setup).disabled = !state.supported;
       button(root, 'Call settings', () => settings(true));

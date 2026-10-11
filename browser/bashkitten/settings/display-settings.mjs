@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-import { node, field, button, runStatus } from './ui.mjs';
+import { node, field, check, button, runStatus } from './ui.mjs';
 
 export const DISPLAY_PROMPT = 'Use the termux-display skill to set up XFCE for this device and save a working launch command, using supported GPU acceleration if available.';
 
@@ -16,6 +16,8 @@ export async function renderSection({ root, call, signal }) {
     value = result; body.replaceChildren();
     if (value.needsSetup) { action(body, 'Set up Local', () => call('display-setup')); return; }
     const status = node(body, 'p', `Display · ${value.state || 'unavailable'}`); status.setAttribute('role', 'status'); body.append(status);
+    const startup = check(body, 'Start with BashKitten', !!value.startup);
+    startup.onchange = () => run(async () => draw(await call('display-save', { startup: startup.checked })));
     for (const text of [value.launcherNote, value.error]) if (text) body.append(node(body, 'p', text));
     body.append(node(body, 'pre', value.command || ''));
     action(body, 'Copy', () => call('display-copy', { kind: 'command' }));

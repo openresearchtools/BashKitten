@@ -5,6 +5,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { piAgentDir } from '../node-runtime.mjs';
+import { declaredCallback, enrollCallback, callbackRegistration, acceptCallback, forwardCallback, finishCallback } from './provider-login.mjs';
 
 const providerRevisionFile = path.join(dataDir, 'provider-revision.json');
 export const providerRevision = () => readJson(providerRevisionFile, null);
@@ -75,7 +76,29 @@ export class Services {
   state() {
     if (!this.attempt) return null;
     const { id, provider, status, events, prompt, error } = this.attempt;
-    return { id, provider, status, events, prompt, error };
+    return { id, provider, status: this.attempt.callbackFailure ? 'failed' : status,
+      events: events.map(event => event.type === 'auth_url' ? { ...event, nativeCallback: Boolean(declaredCallback(event)) } : event),
+      prompt, error: this.attempt.callbackFailure || error };
+  }
+  nativeLogin(action, value) {
+    const attempt = this.attempt;
+    if (!attempt || attempt.id !== value.attemptId) throw Error('This provider login is no longer active');
+    if (action === 'describe') {
+      if (attempt.status !== 'pending' || attempt.controller.signal.aborted || attempt.callbackForwarding) throw Error('Provider login is not awaiting a callback');
+      return enrollCallback(attempt, value.url);
+    }
+    const registration = callbackRegistration(attempt, value);
+    if (action === 'status') return { attemptId: attempt.id, status: this.state().status, error: this.state().error };
+    if (action === 'cancel') { finishCallback(attempt); if (attempt.status === 'pending') attempt.controller.abort(); return { ok: true }; }
+    if (action !== 'callback' || attempt.status !== 'pending' || attempt.controller.signal.aborted) throw Error('Provider login is not awaiting a callback');
+    const received = acceptCallback(registration, value.url);
+    attempt.callbackForwarding = forwardCallback(registration, received, attempt.controller.signal).catch(() => {
+      if (!attempt.controller.signal.aborted && attempt.status !== 'complete') {
+        attempt.callbackFailure = 'Pi could not accept this browser callback. Start a new login to retry.';
+        attempt.controller.abort();
+      }
+    });
+    return { ok: true, status: 'pending' };
   }
   async start(provider, type) {
     allowRuntimeWork();
@@ -111,7 +134,7 @@ export class Services {
       attempt.status = attempt.controller.signal.aborted ? 'cancelled' : 'failed';
       // Do not expose provider response bodies, which may contain credentials.
       attempt.error = attempt.status === 'failed' ? 'Pi could not complete login. Check the selected method and try again.' : undefined;
-    }).finally(async () => { attempt.prompt = null; attempt.answer = null; await fs.rm(lease, { force: true }); });
+    }).finally(async () => { finishCallback(attempt); attempt.prompt = null; attempt.answer = null; await fs.rm(lease, { force: true }); });
     return this.state();
   }
   answer(id, promptId, input) {

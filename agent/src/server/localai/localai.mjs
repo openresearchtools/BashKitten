@@ -20,10 +20,10 @@ const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
 const defaultContextSize = 32768;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: platform === 'termux' ? 'cpu' : 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
-  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket' } : { model: '', modelKind: 'whisper', keepRunning: false, autoSend: true }) });
+  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket' } : { model: '', modelKind: 'whisper', startup: false, keepRunning: false, autoSend: true }) });
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
 // Pi import and voice-message sending do not change the inference command.
-const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined });
+const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined });
 // A GPU archive also contains its CPU backend. Moving to a different GPU
 // archive requires an explicit download, but saving that choice must work first.
 const supportsManagedChoice = (runtime, config) => Boolean(runtime?.binary &&
@@ -35,6 +35,7 @@ async function readConfiguration() {
     if (saved.version !== 1) throw Error('Unsupported LocalAI configuration');
     if (saved.whisper.autoSend === undefined) saved.whisper.autoSend = true;
     if (saved.whisper.modelKind === undefined) saved.whisper.modelKind = 'whisper';
+    if (saved.whisper.startup === undefined) saved.whisper.startup = false;
     saved.tts ||= defaults('tts');
     return saved;
   }
@@ -65,7 +66,7 @@ function configuration(engine, value) {
     if (result.argv.length || Object.keys(result.env).length) throw Error('TTS uses the verified llama-tts command');
   } else {
     if (!['whisper', 'parakeet'].includes(result.modelKind)) throw Error('Choose Whisper or Parakeet');
-    if (typeof result.keepRunning !== 'boolean' || typeof result.autoSend !== 'boolean' || !cleanText(result.model) || result.model && !path.isAbsolute(result.model)) throw Error('Choose a whisper.cpp model and valid voice-message options');
+    if (typeof result.startup !== 'boolean' || typeof result.keepRunning !== 'boolean' || typeof result.autoSend !== 'boolean' || !cleanText(result.model) || result.model && !path.isAbsolute(result.model)) throw Error('Choose a whisper.cpp model and valid voice-message options');
     if (result.mode !== 'managed') throw Error('Whisper uses the verified managed runtime');
     if (Object.keys(result.env).length) throw Error('Whisper does not accept environment overrides that can retain audio');
   }
@@ -129,9 +130,10 @@ export class LocalAI {
     for (const engine of Object.keys(ids)) {
       const runtime = await runtimeInfo(engine), service = host.services.find(item => item.id === ids[engine]);
       engines[engine] = { config: config[engine], runtime: describeRuntime(runtime), service, url: service ? 'http://' + service.target.address : null,
+        startupCapability: { available: engine !== 'whisper' || config.whisper.modelKind !== 'parakeet', detail: engine === 'whisper' && config.whisper.modelKind === 'parakeet' ? 'Parakeet starts for each transcription; this runtime has no persistent server.' : '' },
         savedForNextStart: Boolean(this.services.running.get(ids[engine])?.child && !sameRuntimeConfig(this.runningConfig.get(engine), config[engine])), error: this.errors.get(engine) || '' };
     }
-    return { ...engines, tts: { config: config.tts, runtime: describeRuntime(await runtimeInfo('llama')), synthesis: this.synthesisState || { state: 'idle' } }, platform, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
+    return { ...engines, tts: { config: config.tts, runtime: describeRuntime(await runtimeInfo('llama')), synthesis: this.synthesisState || { state: 'idle' }, startupCapability: { available: false, detail: 'Text to speech starts for each request; this runtime has no persistent server.' } }, platform, revision: digest(JSON.stringify(config)), import: this.importState, speechBusy: Boolean(this.speech) };
   }
   async save(value) { return this.exclusive(() => this.saveConfiguration(value)); }
   async saveConfiguration({ engine, config: input, revision }) {
@@ -216,7 +218,7 @@ export class LocalAI {
     const command = await this.command(engine, config, port);
     await this.services.save({ internal: true, revision: status.revision, service: { id: ids[engine], name: engine === 'llama' ? 'llama.cpp' : 'Whisper',
       target: { network: 'tcp', address: '127.0.0.1:' + port }, scheme: 'http', openPath: '/', kind: engine === 'llama' ? 'llama' : 'web',
-      enabled: engine === 'llama' && Boolean(existing?.enabled), startup: engine === 'llama' && config.startup, command } });
+      enabled: engine === 'llama' && Boolean(existing?.enabled), startup: config.startup, command } });
   }
   async action(engine, action) { return this.exclusive(() => this.performAction(engine, action)); }
   async performAction(engine, action) {
@@ -454,9 +456,10 @@ export class LocalAI {
   async startup() {
     this.stopping = false;
     const config = await this.config();
-    if (!config.llama.startup) return;
-    try { await this.action('llama', 'start'); this.errors.delete('llama'); }
-    catch (error) { this.errors.set('llama', error.message); }
+    for (const engine of Object.keys(ids)) if (config[engine].startup) {
+      try { await this.action(engine, 'start'); this.errors.delete(engine); }
+      catch (error) { this.errors.set(engine, error.message); }
+    }
   }
 
   async speechCapability() {

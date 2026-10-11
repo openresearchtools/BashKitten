@@ -115,12 +115,18 @@ public final class TermuxConnection {
             return;
         }
         JSONObject args = request.optJSONObject("args");
-        String input = (args == null ? new JSONObject() : args).toString();
+        String input;
+        try {
+            // A native settings read must not resurrect a saved Local web owner.
+            // The controller consumes this only when it starts; explicit Start
+            // remains the existing action, and live owners are never reset.
+            input = (args == null ? new JSONObject() : new JSONObject(args.toString())).put("initialWeb", false).toString();
+        } catch (org.json.JSONException error) { fail.accept("Invalid service command arguments."); return; }
         // Secrets remain on stdin: no password, factor or connection key enters argv or logs.
         String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
                 + "exec '" + PREFIX + "/bin/bashkittenctl' \"$1\" --stdin; else "
                 + "printf '{\"error\":\"BashKitten packages are not installed yet.\"}' >&2; exit 1; fi";
-        long timeout = command.equals("start") || command.equals("restart") || command.startsWith("share-") ? 180000 : command.equals("status") ? 120000 : 60000;
+        long timeout = command.equals("start") || command.equals("restart") || command.equals("autostart-startup") || command.startsWith("share-") ? 180000 : command.equals("status") ? 120000 : 60000;
         execute(script, new String[] { command }, input, timeout, done, fail);
     }
 

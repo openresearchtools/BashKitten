@@ -99,6 +99,7 @@ class AgentRemoteStore {
   writes = Promise.resolve();
   contexts = new Map();
   clients = new Map();
+  starting = new Map();
   importToPi = null;
 
   get crypto() { return Cc["@mozilla.org/login-manager/crypto/SDR;1"].getService(Ci.nsILoginManagerCrypto); }
@@ -124,6 +125,7 @@ class AgentRemoteStore {
           entry.userContextId > CONTEXT_MAX || ids.has(entry.userContextId)) throw new Error("Invalid isolated remote context.");
       entry.url = validateURL(entry.url, nativeEntry(entry));
       certificate(entry.caPem, entry.caSha256); ids.add(entry.userContextId);
+      if (entry.autostart !== undefined && typeof entry.autostart !== "boolean") throw new Error("Invalid remote startup choice.");
       if (entry.mappings !== undefined && (!entry.mappings || typeof entry.mappings !== "object" || Array.isArray(entry.mappings))) {
         throw new Error("Invalid saved service mappings.");
       }
@@ -167,7 +169,7 @@ class AgentRemoteStore {
     const owner = this.clients.get(entry.id);
     return { id: entry.id, name: entry.name, kind: "agent", url: entry.url,
       userContextId: entry.userContextId, identity: entry.caSha256,
-      active: entry.id === this.activeId, state: owner?.state || "disconnected",
+      active: entry.id === this.activeId, autostart: entry.autostart === true, state: owner?.state || "disconnected",
       error: owner?.error || owner?.servicesError || "", migrationRequired: !nativeEntry(entry) && !entry.bundle };
   }
   async list() { return [...(await this.load()).values()].filter(entry => !nativeEntry(entry) && entry.id !== "local-hosting").map(entry => this.info(entry)); }
@@ -184,6 +186,23 @@ class AgentRemoteStore {
       if (!name || /[\x00-\x1f]/.test(name)) throw new Error("Choose a remote name.");
       entry.name = name; await this.save(); this.notify(); return this.info(entry);
     });
+  }
+
+  setAutostart(id, enabled) {
+    return this.serialized(async () => {
+      const entry = (await this.load()).get(id);
+      if (!entry || nativeEntry(entry) || id === "local-hosting" || typeof enabled !== "boolean") throw new Error("Choose a saved remote and its startup setting.");
+      entry.autostart = enabled; await this.save(); this.notify(); return this.info(entry);
+    });
+  }
+
+  async startup(current) {
+    const entries = await this.list();
+    return Promise.allSettled(entries.filter(entry => entry.autostart).map(entry => {
+      if (!current()) return Promise.resolve();
+      const task = this.connect(entry.id, false, current).finally(() => this.starting.delete(entry.id));
+      this.starting.set(entry.id, task); return task;
+    }));
   }
 
   trustLocal({ url, caPem, caSha256, instanceId }) {
@@ -234,7 +253,8 @@ class AgentRemoteStore {
         const entry = { id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1), kind: "agent",
           name: bundle.name, url, bundle, caPem: browser.identity.caPem, caSha256: identity, instanceId: bundle.id,
           clientAuthorization: onionPrivateKey(bundle.tor_private),
-          userContextId: previous?.userContextId ?? this.allocateContext(), mappings: previous?.mappings || {}, token: previous?.token || null };
+          userContextId: previous?.userContextId ?? this.allocateContext(), mappings: previous?.mappings || {}, token: previous?.token || null,
+          autostart: previous?.autostart === true };
         this.entries.set(entry.id, entry); await this.save(); this.notify(); return this.info(entry);
       } finally { password = ""; await helper.close(); }
     });
@@ -263,7 +283,7 @@ class AgentRemoteStore {
   }
 
   current(entry, owner) {
-    if (this.entries.get(entry.id) !== entry || this.clients.get(entry.id) !== owner || owner.abort.signal.aborted) {
+    if (this.entries.get(entry.id) !== entry || this.clients.get(entry.id) !== owner || owner.abort.signal.aborted || owner.allowed && !owner.allowed()) {
       throw new Error("Remote connection closed.");
     }
   }
@@ -282,14 +302,15 @@ class AgentRemoteStore {
     }
   }
 
-  async connect(id, forceLogin = false) {
+  async connect(id, forceLogin = false, background = null) {
+    if (!background && this.starting.has(id)) await this.starting.get(id).catch(() => {});
     const entry = (await this.load()).get(id);
-    if (!entry?.bundle || this.activeId !== id) throw new Error("Select an enrolled remote Agent.");
+    if (!entry?.bundle || (background ? !entry.autostart || !background() : this.activeId !== id)) throw new Error("Select an enrolled remote Agent.");
     let owner = this.clients.get(id);
     if (owner?.state === "ready" && !forceLogin) return { connection: this.info(entry) };
     if (owner) await this.disconnect(id);
-    if (this.activeId !== id) throw new Error("The Agent selection changed.");
-    owner = { state: "connecting", error: "", helper: null, callback: null, abort: new AbortController() };
+    if (background ? !background() : this.activeId !== id) throw new Error("The Agent selection changed.");
+    owner = { state: "connecting", error: "", helper: null, callback: null, abort: new AbortController(), allowed: background };
     this.clients.set(id, owner);
     try {
       await this.serialized(async () => {
@@ -317,6 +338,10 @@ class AgentRemoteStore {
         socksAddress: `127.0.0.1:${await TorRouting.ensureProxy()}` });
       this.current(entry, owner);
       if (!forceLogin && await helper.call("authorize")) { await this.ready(entry, owner); return { connection: this.info(entry) }; }
+      if (background) {
+        owner.state = "login"; owner.error = "Sign in to reconnect."; this.notify();
+        return { connection: this.info(entry), loginRequired: true };
+      }
       const loginURL = await helper.call("begin-login");
       this.current(entry, owner);
       owner.state = "login"; this.notify(); return { connection: this.info(entry), loginURL };
@@ -530,7 +555,7 @@ class AgentRemoteStore {
     ++this.selection;
     const previous = this.activeId; this.activeId = null;
     if (previous) Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", previous);
-    await Promise.all([...this.clients].filter(([, owner]) => closeClients || owner.state !== "ready")
+    await Promise.all([...this.clients].filter(([, owner]) => closeClients || owner.state !== "ready" && !owner.allowed)
       .map(([id]) => this.disconnect(id)));
     this.notify();
   }

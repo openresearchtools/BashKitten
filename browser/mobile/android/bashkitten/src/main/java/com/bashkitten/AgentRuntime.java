@@ -14,6 +14,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
+import java.util.function.BooleanSupplier;
 import org.json.*;
 import org.mozilla.geckoview.*;
 import com.bashkitten.phone.PhoneControlsRuntime;
@@ -54,6 +55,12 @@ public final class AgentRuntime {
     private JSONObject localSession;
     private boolean localSessionPending;
     private boolean reloadOnConnect;
+    private final Set<String> startupRemotes = new HashSet<>();
+    private final Set<String> suppressedStartupRemotes = new HashSet<>();
+    private final Map<String, String> startupErrors = new HashMap<>();
+    private final Map<String, String> remoteLoginAddresses = new HashMap<>();
+    private int backgroundOperation;
+    private boolean backgroundStartupPending;
 
     AgentRuntime(BrowserApp app) {
         this.app = app; termux = new TermuxConnection(app); identities = new SecretStore(app, "agent-identities");
@@ -76,7 +83,7 @@ public final class AgentRuntime {
     }
     public void attach(GeckoRuntime engine, Listener listener) {
         this.engine = engine; listeners.add(listener);
-        if (!launched) { launched = true; turnOn(); }
+        if (!launched) { launched = true; startConfigured(); }
         else listener.changed();
     }
     public void observe(Listener listener) { listeners.add(listener); }
@@ -98,6 +105,127 @@ public final class AgentRuntime {
     }
     public boolean isOnRequested() { return desired; }
     public boolean localIsOnRequested() { return localControlRequested; }
+    public boolean localAutostart() { return app.policies.getBoolean("agent.autostart.local", true); }
+    public void setLocalAutostart(boolean enabled) {
+        app.policies.edit().putBoolean("agent.autostart.local", enabled).apply(); changed();
+    }
+    public void setRemoteAutostart(String id, boolean enabled, Runnable done, Consumer<String> failure) {
+        if (!enabled) { startupRemotes.remove(id); suppressedStartupRemotes.add(id); }
+        stored(() -> {
+            JSONObject saved = remoteStore.read(), record = saved.getJSONObject(id);
+            if (id.equals("local") || record.optInt("version") != 2 || !record.optString("kind").equals("agent")) throw new IllegalArgumentException("Choose a saved remote connection");
+            record.put("autostart", enabled); remoteStore.write(saved); return true;
+        }, ignored -> { changed(); done.run(); }, failure);
+    }
+    String startupError(String id) { return startupErrors.getOrDefault(id, ""); }
+    boolean localSetupReady() {
+        return termuxSetupAttempted && termux.permissionGranted() && !termux.installationId().isEmpty()
+            && termux.installationId().equals(app.policies.getString("agent.termuxInstallation", ""));
+    }
+    private void startupFailed(String id, String message) { startupErrors.put(id, message == null ? "Startup failed" : message); changed(); }
+    private void startConfigured() {
+        // A foreground browser launch restores saved choices, never grants setup
+        // permissions or changes the selected chat to start another backend.
+        if (localAutostart()) {
+            if (selected.equals("local")) turnOn();
+            else if (localSetupReady()) startBackgroundLocal();
+            else startupFailed("local", "Complete Local setup before starting it automatically.");
+        } else changed();
+        if (localSetupReady()) startBackgroundServices();
+        phoneVoice.restoreStartup().whenComplete((ignored, error) -> app.main.post(() -> {
+            if (error != null) startupFailed("telephone", error.getMessage());
+        }));
+        remotes(saved -> {
+            for (Iterator<String> keys = saved.keys(); keys.hasNext();) {
+                String id = keys.next(); JSONObject record = saved.optJSONObject(id);
+                if (record == null || !record.optBoolean("autostart") || suppressedStartupRemotes.contains(id) || removingRemotes.contains(id)) continue;
+                if (selected.equals(id)) { turnOn(); continue; }
+                if (!batteryExempt(app.getPackageName())) { startupFailed("remote:" + id, "Allow BashKitten background access before connecting automatically."); continue; }
+                RemoteAgentConnection previous = remoteConnections.get(id);
+                if (previous != null && !previous.isClosed()) continue;
+                startupRemotes.add(id);
+                startRemote(id, record, previous, () -> startupRemotes.contains(id) && !removingRemotes.contains(id),
+                    message -> { startupRemotes.remove(id); startupFailed("remote:" + id, message); });
+            }
+        }, message -> startupFailed("remotes", message));
+    }
+    private void startBackgroundLocal() {
+        if (!batteryExempt(app.getPackageName()) || !batteryExempt(TermuxConnection.PACKAGE)) {
+            startupFailed("local", "Allow BashKitten and Termux background access before starting Local automatically."); return;
+        }
+        final int generation = backgroundOperation;
+        try {
+            app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
+            recordLocalControl(true);
+            command("start", new JSONObject(), value -> {
+                if (generation != backgroundOperation || !localSetupReady()) return;
+                connectPhoneControls(); phoneVoice.ready(); startupErrors.remove("local"); changed();
+            }, message -> { if (generation == backgroundOperation) startupFailed("local", message); });
+        } catch (Exception error) { startupFailed("local", error.getMessage()); }
+    }
+    private void startBackgroundServices() {
+        if (!batteryExempt(app.getPackageName()) || !batteryExempt(TermuxConnection.PACKAGE)) {
+            startupFailed("local-services", "Allow BashKitten and Termux background access before starting services automatically."); return;
+        }
+        final int generation = backgroundOperation;
+        final String installation = termux.installationId();
+        BooleanSupplier current = () -> generation == backgroundOperation && localSetupReady() && installation.equals(termux.installationId());
+        // Read the real Display choice before arming its private Binder source.
+        // Local can remain Off; this never creates a Termux permission grant.
+        Consumer<JSONObject> launch = display -> {
+            if (!current.getAsBoolean()) return;
+            try {
+                if (display.optBoolean("startup")) {
+                    try { app.display.prepareStart(); }
+                    catch (Exception error) { startupFailed("display", error.getMessage()); }
+                }
+                backgroundStartupPending = true;
+                app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
+                command("autostart-startup", new JSONObject(), value -> {
+                    backgroundStartupPending = false;
+                    if (current.getAsBoolean()) {
+                        JSONObject failures = value.optJSONObject("startupErrors");
+                        startupErrors.remove("local-services");
+                        ArrayList<String> errors = new ArrayList<>();
+                        if (failures != null) for (Iterator<String> keys = failures.keys(); keys.hasNext();) {
+                            String key = keys.next(); String message = failures.optString(key);
+                            if (!message.isEmpty()) errors.add(key + ": " + message);
+                        }
+                        if (!value.isNull("error") && !value.optString("error").isEmpty()) errors.add(value.optString("error"));
+                        JSONArray commands = value.optJSONArray("status");
+                        if (commands != null) for (int i = 0; i < commands.length(); i++) {
+                            JSONObject command = commands.optJSONObject(i);
+                            if (command != null && !command.optString("error").isEmpty()) errors.add(command.optString("id") + ": " + command.optString("error"));
+                        }
+                        if (!errors.isEmpty()) {
+                            String summary = String.join(" · ", errors);
+                            startupFailed("local-services", summary); app.message("Startup: " + summary);
+                        }
+                        changed();
+                    }
+                    releaseWake();
+                }, message -> {
+                    backgroundStartupPending = false;
+                    if (current.getAsBoolean()) startupFailed("local-services", message);
+                    releaseWake();
+                });
+            } catch (Exception error) {
+                backgroundStartupPending = false; startupFailed("local-services", error.getMessage()); releaseWake();
+            }
+        };
+        command("display-status", new JSONObject(), launch, message -> {
+            if (!current.getAsBoolean()) return;
+            startupFailed("display", message); launch.accept(new JSONObject());
+        });
+    }
+    /** Binder lifetime, not the saved Display startup preference, owns this lock. */
+    void displayConnectionChanged() {
+        if (app.display.hasSource()) {
+            try { app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON)); }
+            catch (Exception error) { startupFailed("display", error.getMessage()); }
+        } else releaseWake();
+        changed();
+    }
     /** Native hierarchy only: execute in the current enrolled protected document. */
     public void navigation(String action, JSONObject value, Consumer<JSONObject> done, Consumer<String> failure) {
         final GeckoSession target = session; final String backend = selected;
@@ -123,7 +251,7 @@ public final class AgentRuntime {
             termuxSetupAttempted = true;
             app.policies.edit().putBoolean("agent.termuxSetupAttempted", true).apply();
         }
-        if (!busy && (!desired || state.equals("setup"))) turnOn();
+        if (intent.getBooleanExtra(TermuxConnection.SETUP_COMPLETE, false) && !busy && (!desired || state.equals("setup"))) turnOn();
     }
     public void turnOn() {
         if (busy || removingRemotes.contains(selected)) return;
@@ -256,6 +384,7 @@ public final class AgentRuntime {
     }
     public void turnOff() {
         if (!selected.equals("local")) { disconnectRemote(selected); return; }
+        backgroundOperation++;
         PhoneControlsRuntime.get(app).disconnectOwner();
         if (state.equals("stopping")) return;
         boolean termuxInstalled = termux.installed();
@@ -298,7 +427,7 @@ public final class AgentRuntime {
         busy = false; state = "off"; error = ""; releaseWake(); changed();
     }
     private void releaseWake() {
-        if (localControlRequested || remoteConnections.values().stream().anyMatch(connection -> !connection.isClosed())) return;
+        if (localControlRequested || backgroundStartupPending || app.display != null && app.display.hasSource() || remoteConnections.values().stream().anyMatch(connection -> !connection.isClosed())) return;
         app.startService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_OFF));
     }
     public void setBackendOn(String id, boolean on, Consumer<String> failure) {
@@ -307,6 +436,7 @@ public final class AgentRuntime {
         if (selected.equals("local")) { turnOff(); return; }
         // Stop only Termux's owned group while leaving the selected remote and
         // independent mappings alive. No selection changes to accomplish power.
+        backgroundOperation++;
         stopBackgroundLocal(failure);
     }
     private void stopBackgroundLocal(Consumer<String> failure) {
@@ -572,6 +702,7 @@ public final class AgentRuntime {
             JSONObject record = new JSONObject().put("version", 2).put("kind", "agent")
                 .put("name", bundle.getString("name")).put("bundle", bundle);
             if (old != null && old.has("mappings")) record.put("mappings", old.getJSONObject("mappings"));
+            record.put("autostart", old != null && old.optBoolean("autostart"));
             saved.put(id, record); remoteStore.write(saved);
             return true;
         }, ignored -> {
@@ -592,6 +723,8 @@ public final class AgentRuntime {
         return connection != null && connection.ready && !connection.isClosed();
     }
     public void disconnectRemote(String id) {
+        suppressedStartupRemotes.add(id);
+        startupRemotes.remove(id); remoteLoginAddresses.remove(id);
         RemoteAgentConnection connection = remoteConnections.get(id);
         app.closeServiceRoutes(id); serviceSnapshots.remove(id);
         if (connection != null) connection.close();
@@ -716,6 +849,7 @@ public final class AgentRuntime {
     public void removeRemote(String id, Runnable done, Consumer<String> failure) throws Exception {
         if (id.equals("local")) throw new IllegalArgumentException("Local Agent cannot be removed.");
         if (!removingRemotes.add(id)) throw new IllegalStateException("This connection is being removed.");
+        suppressedStartupRemotes.add(id); startupRemotes.remove(id); remoteLoginAddresses.remove(id);
         Consumer<String> failed = message -> { removingRemotes.remove(id); failure.accept(message); };
         remotes(saved -> {
             RemoteAgentConnection connection = remoteConnections.get(id);
@@ -769,12 +903,15 @@ public final class AgentRuntime {
     private void remoteFailed(RemoteAgentConnection connection, String message) {
         if (remoteConnections.get(connection.host) != connection) return;
         app.closeServiceRoutes(connection.host); serviceSnapshots.remove(connection.host); connection.close();
-        if (!selected.equals(connection.host)) return;
+        startupErrors.put("remote:" + connection.host, message); startupRemotes.remove(connection.host); remoteLoginAddresses.remove(connection.host);
+        if (!selected.equals(connection.host)) { releaseWake(); changed(); return; }
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         setup("remote", message);
     }
     private void remoteReady(RemoteAgentConnection connection) {
+        if (remoteConnections.get(connection.host) != connection || connection.isClosed()) return;
+        startupRemotes.remove(connection.host); startupErrors.remove("remote:" + connection.host); remoteLoginAddresses.remove(connection.host); changed();
         remoteServices(connection.host, ignored -> {}, message -> app.message("Services: " + message));
         if (!selectedRemote(connection)) return;
         try {
@@ -787,6 +924,8 @@ public final class AgentRuntime {
         } catch (Exception error) { remoteFailed(connection, "Could not configure the enrolled Agent tunnel."); }
     }
     private void remoteLogin(RemoteAgentConnection connection, String address) {
+        if (remoteConnections.get(connection.host) != connection || connection.isClosed()) return;
+        startupRemotes.remove(connection.host); remoteLoginAddresses.put(connection.host, address); changed();
         if (!selectedRemote(connection)) return;
         try {
             configure(connection.identity.getString("url"), connection.identity.getJSONObject("identity"),
@@ -827,38 +966,46 @@ public final class AgentRuntime {
         final int generation = ++operation;
         RemoteAgentConnection active = remoteConnections.get(selected);
         if (active != null && active.ready && !active.isClosed()) { remoteReady(active); return; }
+        if (active != null && active.awaitingCallback && !active.isClosed() && remoteLoginAddresses.containsKey(selected)) { remoteLogin(active, remoteLoginAddresses.get(selected)); return; }
+        startupRemotes.remove(selected);
         if (active != null) { app.closeServiceRoutes(selected); serviceSnapshots.remove(selected); active.close(); }
         remotes(saved -> {
             if (generation != operation || !desired) return;
             try {
                 JSONObject record = saved.getJSONObject(selected);
-                if (record.optInt("version") != 2 || !record.optString("kind").equals("agent")) {
-                    setup("remote", "This saved connection needs a new encrypted QR from the host’s Share Local page."); return;
-                }
-                JSONObject bundle = record.getJSONObject("bundle");
-                String host = bundle.getString("onion");
-                if (!selected.equals(host)) throw new SecurityException("Remote identity does not match its saved connection.");
-                app.tor.authorizeTemporarily(new OnionKey(host, bundle.getString("tor_private")), (port, cleanup) -> {
-                    if (generation != operation || !desired) { cleanup.run(); return; }
-                    TorGateway.AgentRoute route = null;
-                    try {
-                        String socket = app.tor.socksPath();
-                        route = app.tor.agentRoute(host);
-                        RemoteAgentConnection connection = new RemoteAgentConnection(app.main, bundle, port, route, cleanup,
-                            new RemoteAgentConnection.Listener() {
-                                @Override public void login(RemoteAgentConnection value, String address) { remoteLogin(value, address); }
-                                @Override public void ready(RemoteAgentConnection value) { remoteReady(value); }
-                                @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
-                            }, active);
-                        remoteConnections.put(host, connection);
-                        connection.start(app, bundle, socket);
-                    } catch (Exception error) {
-                        if (route != null) route.revoke(); cleanup.run();
-                        setup("remote", "Could not start the native remote connection.");
-                    }
-                }, message -> { if (generation == operation) { setup("remote", message); } });
+                startRemote(selected, record, active, () -> generation == operation && desired,
+                    message -> { if (generation == operation) setup("remote", message); });
             } catch (Exception error) { setup("remote", "Could not open the saved connection: " + error.getMessage()); }
         }, message -> { if (generation == operation && desired) setup("remote", message); });
+    }
+    private void startRemote(String host, JSONObject record, RemoteAgentConnection previous, BooleanSupplier current, Consumer<String> failure) {
+        try {
+            if (record.optInt("version") != 2 || !record.optString("kind").equals("agent")) throw new IllegalStateException("This saved connection needs a new encrypted QR from the host’s Share Local page.");
+            JSONObject bundle = record.getJSONObject("bundle");
+            if (!host.equals(bundle.getString("onion"))) throw new SecurityException("Remote identity does not match its saved connection.");
+            app.tor.authorizeTemporarily(new OnionKey(host, bundle.getString("tor_private")), (port, cleanup) -> {
+                if (!current.getAsBoolean()) { cleanup.run(); return; }
+                TorGateway.AgentRoute route = null;
+                RemoteAgentConnection created = null;
+                try {
+                    String socket = app.tor.socksPath(); route = app.tor.agentRoute(host);
+                    RemoteAgentConnection connection = new RemoteAgentConnection(app.main, bundle, port, route, cleanup,
+                        new RemoteAgentConnection.Listener() {
+                            @Override public void login(RemoteAgentConnection value, String address) { remoteLogin(value, address); }
+                            @Override public void ready(RemoteAgentConnection value) { remoteReady(value); }
+                            @Override public void failed(RemoteAgentConnection value, String message) { remoteFailed(value, message); }
+                        }, previous);
+                    remoteConnections.put(host, connection);
+                    created = connection;
+                    app.startForegroundService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_ON));
+                    connection.start(app, bundle, socket); changed();
+                } catch (Exception error) {
+                    if (created != null) created.close();
+                    else { if (route != null) route.revoke(); cleanup.run(); }
+                    releaseWake(); failure.accept("Could not start the native remote connection: " + error.getMessage());
+                }
+            }, message -> { if (current.getAsBoolean()) failure.accept(message); });
+        } catch (Exception error) { failure.accept(error.getMessage()); }
     }
     private void poll() {
         if (polling) return; polling = true;

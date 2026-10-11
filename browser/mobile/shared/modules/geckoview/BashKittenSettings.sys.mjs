@@ -6,6 +6,7 @@ const prefix = "gvctx" + Array.from(new TextEncoder().encode("bashkitten-setting
 export const SETTINGS_URI = "about:bashkitten-settings";
 const names = value => new Set(value.split(" "));
 const sections = {
+  autostart: names("autostart.get autostart.set autostart.commands.save"),
   localai: names("localai-setup localai-status localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action clipboard-copy localai-open-record"),
   notifications: names("turn-notification-settings snapshot configure notification-permission android-auto android-auto-settings"),
   telephone: names("snapshot configure setup-account readiness call contact divert clear-voicemail microphone-permission open-voice-settings"),
@@ -13,7 +14,7 @@ const sections = {
   remotes: names("remotes.list remotes.connect remotes.disconnect remotes.remove remotes.rename remotes.enroll remotes.services remotes.save-mapping remotes.service-key remotes.service-action remotes.open-service remotes.copy-service remotes.share-local"),
   performance: names("performance-sample performance-close"),
   display: names("display-status display-start display-stop display-save display-open display-copy display-setup"),
-  "share-local": names("share-status share-setup share-reissue share-confirm share-cancel share-publish share-files service-status service-save service-remove service-action localai-share share-save-qr share-open-authenticator share-open-localai share-local-setup"),
+  "share-local": names("share-status share-setup share-reissue share-confirm share-cancel share-publish share-startup share-files service-status service-save service-remove service-action localai-share share-save-qr share-open-authenticator share-open-localai share-local-setup"),
 };
 
 export const BashKittenSettings = {

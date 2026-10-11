@@ -36,8 +36,14 @@ export async function renderSection({ root, call, info, signal }) {
       if (state.migrationRequired) body.append(node(body, 'p', 'Replace the previous remote identity to use encrypted connections. Old connection exports will stop working.'));
       action(body, state.migrationRequired ? 'Reissue identity' : 'Turn on', () => account(Boolean(state.migrationRequired))); return;
     }
-    body.append(node(body, 'p', state.error ? 'Publishing failed' : state.enabled ? state.running ? 'Publishing is on' : 'Publishing resumes when Local is turned on' : 'Publishing is off'));
+    body.append(node(body, 'p', state.error ? 'Publishing failed' : state.enabled ? state.running ? 'Publishing is on' : 'Publishing is stopped' : 'Publishing is off'));
     action(body, state.enabled ? 'Turn off' : 'Turn on', async () => draw(await call('share-publish', { enabled: !state.enabled })));
+    if (state.enabled && !state.running) action(body, 'Start publishing', async () => draw(await call('share-publish', { enabled: true })));
+    const startup = check(body, 'Start publishing automatically', state.startup === true);
+    startup.onchange = () => {
+      const enabled = startup.checked; startup.checked = state.startup === true;
+      void run(async () => draw(await call('share-startup', { enabled })));
+    };
     const files = check(body, 'Allow remote file manager', Boolean(state.allowFileManager));
     files.onchange = () => { const allowed = files.checked; files.checked = Boolean(state.allowFileManager); void run(async () => draw(await call('share-files', { allowed }))); };
     body.append(node(body, 'p', state.address || ''), node(body, 'p', 'Connection QR — encrypted with your account password.'));
@@ -98,7 +104,7 @@ export async function renderSection({ root, call, info, signal }) {
     const share = check(body, 'Share llama.cpp', Boolean(llama?.enabled));
     share.onchange = () => { const enabled = share.checked; share.checked = Boolean(llama?.enabled); void run(async () => { await call('localai-share', { enabled }); await loadServices(); }); };
     body.append(node(body, 'p', 'Configure the local router, models and runtime in LocalAI.'));
-    if (info.local && info.backendKind !== 'machine') action(body, 'Open LocalAI', () => call('share-open-localai'));
+    if (info.local || info.backendKind === 'machine') action(body, 'Open LocalAI', () => call('share-open-localai'));
     for (const service of value.services || []) {
       const card = node(body, 'section'); card.className = 'connection-card'; body.append(card);
       card.append(node(card, 'h2', service.name), node(card, 'p', `${service.state} · ${service.reachable ? 'Target reachable' : 'Target unavailable'}`));

@@ -2,11 +2,13 @@
 
 import { BashKittenDrafts } from "resource:///modules/BashKittenDrafts.sys.mjs";
 import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
+import { autostartController, localAutostart } from "resource:///modules/DesktopAutostart.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { BashKittenSettings, SETTINGS_URI } from "resource:///modules/BashKittenSettings.sys.mjs";
 import { LinuxPerformanceMonitor } from "resource:///modules/Performance.sys.mjs";
 import { remoteSettingsCall } from "resource:///modules/RemoteSettings.sys.mjs";
+import { openProviderLogin } from "resource:///modules/ProviderLogin.sys.mjs";
 import { NativeSidecar } from "resource:///modules/NativeSidecar.sys.mjs";
 import { connectMachine, disconnectMachine } from "resource:///modules/ContainerConnection.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
@@ -137,8 +139,8 @@ function control(command, data = {}) {
   return localControl(command, data);
 }
 async function localControl(command, data = {}, timeoutMs) {
-  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown"];
-  if (![...machineCommands, "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-record", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
+  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown", "machines.autostart-status", "machines.autostart-save"];
+  if (![...machineCommands, "autostart-status", "autostart-save", "autostart-startup", "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-record", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   // Native requests can start owners without turning Local on (for example,
@@ -214,6 +216,7 @@ class AgentView {
     this.doc = win.document;
     this.views = new Map();
     this.documentTransfers = new Set();
+    this.providerLogins = new Set();
     this.drafts = new Map();
     this.off = false;
     this.busy = false;
@@ -290,6 +293,14 @@ class AgentView {
     DesktopLifetime.attach(this, shutdown);
     this.show();
     await this.refreshRemotes();
+    void control("autostart-startup").then(result => {
+      const errors = Object.entries(result.startupErrors || {}).map(([name, message]) => `${name}: ${message}`);
+      if (result.error) errors.push(result.error);
+      for (const item of result.status || []) if (item.error) errors.push(item.error);
+      if (errors.length && !this.win.closed) this.sidecar.notice.textContent = `Service startup: ${errors.join("; ")}`;
+    }).catch(error => { this.sidecar.notice.textContent = `Service startup: ${error.message}`; });
+    void AgentRemotes.startup(() => !this.win.closed && !DesktopLifetime.quitting && !closingLocal)
+      .catch(error => { this.sidecar.notice.textContent = `Connection startup: ${error.message}`; });
     void (async () => {
       const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
       await control("machines.startup", { displayCapabilities: BashKittenDisplay.capabilities() });
@@ -297,8 +308,18 @@ class AgentView {
     })().catch(error => { this.sidecar.notice.textContent = `Container startup: ${error.message}`; });
     void this.watchMachineActivations();
     const selected = Services.prefs.getStringPref("bashkitten.agent.selectedRemote", "");
-    await this.run(() => selected && this.sidecar.backends.some(backend => backend.id === selected)
-      ? this.choose(selected) : this.start());
+    await this.run(async () => {
+      let status;
+      if (localAutostart()) {
+        try { status = await control("start"); this.localOn = true; }
+        catch (error) { this.sidecar.notice.textContent = `Local startup: ${error.message}`; }
+      }
+      if (DesktopLifetime.quitting || this.win.closed) return;
+      const previous = this.sidecar.backends.find(backend => backend.id === selected);
+      if (previous?.autostart && (previous.kind === "remote" || previous.state === "running")) return this.choose(selected);
+      if (status) { this.off = false; await this.update(status); this.schedule(); }
+      else { this.off = true; this.localOn = false; this.stopped(); await this.sidecar.render(); }
+    });
     DesktopLifetime.started();
   }
 
@@ -314,6 +335,7 @@ class AgentView {
       ["remotes", "Remote Connections", "chrome://global/skin/icons/link.svg"],
       ["telephone", "Telephone", "chrome://browser/skin/device-phone.svg"],
       ["performance", "Performance", "chrome://global/skin/icons/performance.svg"],
+      ["autostart", "Autostart", "chrome://global/skin/icons/settings.svg"],
       ["providers", "Providers", "chrome://browser/skin/login.svg"],
       ["general", "General settings", "chrome://global/skin/icons/settings.svg"],
     ]) {
@@ -401,6 +423,17 @@ class AgentView {
 
   cancelDocumentTransfers() {
     return Promise.allSettled([...this.documentTransfers].map(transfer => transfer.cancel()));
+  }
+
+  cancelProviderLogins() { for (const owner of [...this.providerLogins]) owner.cancel(); }
+
+  openProviderLogin(actor, entry, value) {
+    if (typeof value?.attemptId !== "string" || typeof value?.url !== "string") throw new Error("Invalid provider login.");
+    const connection = entry.connection, epoch = this.selectionEpoch;
+    const current = () => protectedAgentView(actor) === entry && actor.manager === actor.browsingContext.currentWindowGlobal &&
+      entry.connection === connection && this.selection === connection.machineId && this.selectionEpoch === epoch &&
+      !this.win.closed && !DesktopLifetime.quitting;
+    return openProviderLogin({ host: this, current, request: (name, args) => this.machineLocalControl(connection.machineId, name, args), attemptId: value.attemptId, url: value.url });
   }
 
   async viewFile(browser, value) {
@@ -502,6 +535,7 @@ class AgentView {
     await this.saveCurrentDraft();
     if (epoch !== this.selectionEpoch || this.win.closed) return;
     this.cancelDocumentTransfers();
+    this.cancelProviderLogins();
     this.closeConnections();
     this.selection = id;
     clearTimeout(this.timer);
@@ -639,6 +673,7 @@ class AgentView {
     this.selectionEpoch = (this.selectionEpoch || 0) + 1;
     this.off = true;
     this.cancelDocumentTransfers();
+    this.cancelProviderLogins();
     lazy.BrowserControlChannel.close("Selected backend disconnected");
     if (this.activeBrowser) this.activeBrowser.hidden = true;
     this.message("Backend disconnected", "Reconnect from its heading. Its saved chats remain available.");
@@ -652,6 +687,7 @@ class AgentView {
     clearTimeout(this.timer);
     if (selectedLocal && epoch === this.selectionEpoch) {
       this.cancelDocumentTransfers();
+      this.cancelProviderLogins();
       this.closeConnections();
       this.off = true;
       await lazy.BrowserControlChannel.close("Local Agent turned off");
@@ -753,7 +789,7 @@ class AgentView {
     const origin = new URL(connection.url).origin;
     // Container filesystem operations belong to its backend picker/downloads;
     // native-local login does not grant access to host filesystem UI.
-    contexts.set(connection.userContextId, { origin, local: local && !connection.machineId });
+    contexts.set(connection.userContextId, { origin, local: local && !connection.machineId, providerLogin: Boolean(local && connection.machineId) });
     Services.ppmm.sharedData.set("BashKittenAgentContexts", [...contexts]);
     Services.ppmm.sharedData.flush();
     const key = connection.id || connection.identity?.instanceId || `local:${connection.userContextId}`;
@@ -968,8 +1004,9 @@ class AgentView {
     }
     const backend = this.sidecar.backends?.find(item => item.id === (options.backendId || this.selection || "local"));
     if (!backend) throw new Error("This backend is no longer available.");
-    if (section === "localai" && backend.kind !== "local") throw new Error("Select Local to open Local AI on this computer.");
+    if (section === "localai" && !["local", "machine"].includes(backend.kind)) throw new Error("Local AI is configured on its owning device.");
     if (section === "share-local" && backend.kind === "remote") throw new Error("Sharing is configured on the owning device.");
+    if (section === "performance" && backend.kind === "remote") throw new Error("Performance is available for Local and owned containers.");
     if (section === "machine" && backend.kind !== "machine") throw new Error("Choose a managed container.");
     let epoch = this.selectionEpoch;
     const panel = xul(this.doc, "vbox", { id: "bashkitten-settings-view", flex: "1" });
@@ -980,11 +1017,12 @@ class AgentView {
     let closed = false;
     const current = () => !closed && this.connectionsPanel === panel && this.selectionEpoch === epoch && !DesktopLifetime.quitting;
     const request = (name, value = {}) => backend.kind === "machine" ? this.machineLocalControl(backend.id, name, value) : control(name, value);
+    const startupCall = autostartController({ control, request, backend, current });
     const tests = new Set(), setups = new Map(), monitor = new LinuxPerformanceMonitor();
     let performanceSession = null, performanceTask = null;
     const pause = () => {
       monitor.reset();
-      if (performanceSession) { const session = performanceSession; performanceSession = null; void control("performance-close", { session }).catch(() => {}); }
+      if (performanceSession) { const session = performanceSession; performanceSession = null; void request("performance-close", { session }).catch(() => {}); }
     };
     const theme = () => this.win.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     const themeObserver = new this.win.MutationObserver(() => BashKittenSettings.notify(browser, "theme", { theme: theme() }));
@@ -994,12 +1032,13 @@ class AgentView {
     themeMedia.addEventListener("change", themeChanged);
     const cleanup = () => {
       if (closed) return; closed = true; pause(); themeObserver.disconnect(); themeMedia.removeEventListener("change", themeChanged);
-      for (const owner of tests) void control("localai-router-model-test-cancel", { owner }).catch(console.error);
+      for (const owner of tests) void request("localai-router-model-test-cancel", { owner }).catch(console.error);
       for (const setupId of setups.keys()) void request("share-cancel", { setupId }).catch(console.error);
       tests.clear(); setups.clear();
     };
     const call = async (name, value) => {
       if (!current() || closed) throw new Error("The settings owner changed.");
+      if (name.startsWith("autostart.")) return startupCall(name, value);
       if (name.startsWith("machines.")) {
         if (backend.kind !== "machine" || value.id !== undefined && value.id !== backend.id) throw new Error("This operation belongs to another container.");
         if (["machines.connect-phone", "machines.share-local"].includes(name)) {
@@ -1025,26 +1064,26 @@ class AgentView {
         this.win.setTimeout(() => { if (current()) this.openSettings("share-local", { backendId: backend.id }).catch(console.error); }, 0);
         return { ok: true };
       }
-      if (name.startsWith("remotes.")) return remoteSettingsCall(this, name, value, current, () => { epoch = this.selectionEpoch; });
+      if (name.startsWith("remotes.")) return remoteSettingsCall(this, name, value, current, () => { epoch = this.selectionEpoch; }, backend);
       if (name === "clipboard-copy") {
         if (typeof value.text !== "string") throw new Error("Expected text to copy.");
         Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value.text); return { ok: true };
       }
-      if (name === "localai-open-record") return control("localai-record", value);
+      if (name === "localai-open-record") return request("localai-record", value);
       if (name === "performance-close") { pause(); return { ok: true }; }
       if (name === "performance-sample") {
         if (this.pane.hidden || this.doc.hidden || !this.doc.hasFocus() || this.win.windowState === this.win.STATE_MINIMIZED) { pause(); throw new Error("Performance sampling is paused while the view is hidden."); }
         if (performanceTask) return performanceTask;
         const session = performanceSession ||= Services.uuid.generateUUID().toString().slice(1, -1);
-        performanceTask = Promise.all([monitor.sample(), control("performance-sample", { session }).catch(error => ({ cpuPercent: null, reason: error.message }))]).then(([system, workload]) => ({ ...system, workload })).finally(() => {
+        performanceTask = Promise.all([backend.kind === "local" ? monitor.sample() : Promise.resolve({}), request("performance-sample", { session }).catch(error => ({ cpuPercent: null, reason: error.message }))]).then(([system, workload]) => ({ ...system, workload })).finally(() => {
           performanceTask = null;
-          if (performanceSession !== session) void control("performance-close", { session }).catch(() => {});
+          if (performanceSession !== session) void request("performance-close", { session }).catch(() => {});
         });
         return performanceTask;
       }
       if (name === "share-open-localai") {
-        if (backend.kind !== "local") throw new Error("Open Local AI on the owning device.");
-        this.win.setTimeout(() => { if (current()) this.localAI().catch(console.error); }, 0); return { ok: true };
+        if (!["local", "machine"].includes(backend.kind)) throw new Error("Open Local AI on the owning device.");
+        this.win.setTimeout(() => { if (current()) this.openSettings("localai", { backendId: backend.id }).catch(console.error); }, 0); return { ok: true };
       }
       if (name === "share-save-qr") {
         const state = await request("share-status");
@@ -1070,8 +1109,8 @@ class AgentView {
         const status = await request("start"); if (!current()) throw new Error("The settings owner changed.");
         if (backend.kind === "local" && !this.selection && !this.remote) { this.off = false; await this.update(status); this.schedule(); }
       }
-      const result = await (section === "share-local" ? request(name, value) : control(name, value));
-      if (name === "localai-router-model-test" && (!current() || closed)) await control("localai-router-model-test-cancel", { owner: value.owner });
+      const result = await request(name, value);
+      if (name === "localai-router-model-test" && (!current() || closed)) await request("localai-router-model-test-cancel", { owner: value.owner });
       if (["share-setup", "share-reissue"].includes(name) && result.setupId) {
         if (!current() || closed) await request("share-cancel", { setupId: result.setupId });
         else setups.set(result.setupId, result.otpauthUrl);
@@ -1080,7 +1119,7 @@ class AgentView {
       return result;
     };
     const revoke = BashKittenSettings.enroll(browser, {
-      info: { platform: "linux", section, backendName: section === "performance" ? "This Linux device" : backend.name, local: backend.kind === "local", backendKind: backend.kind, machineId: backend.kind === "machine" ? backend.id : null, operation: Boolean(options.operation), theme: theme(), connectOnly: Boolean(options.connectOnly) },
+      info: { platform: "linux", section, backendName: section === "performance" && backend.kind === "local" ? "This Linux device" : backend.name, local: backend.kind === "local", backendKind: backend.kind, machineId: backend.kind === "machine" ? backend.id : null, operation: Boolean(options.operation), theme: theme(), connectOnly: Boolean(options.connectOnly) },
       current, call, cleanup, pause, close: () => this.closeConnections(),
     });
     panel.addEventListener("close", () => { revoke(); if (this.settingsBrowser === browser) this.settingsBrowser = null; }, { once: true });
@@ -1286,6 +1325,7 @@ class AgentView {
   destroy() {
     this.selectionEpoch = (this.selectionEpoch || 0) + 1;
     this.closeConnections();
+    this.cancelProviderLogins();
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("browser closed");
     this.win.removeEventListener("keydown", this.tabKey, true);

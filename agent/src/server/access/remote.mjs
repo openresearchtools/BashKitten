@@ -11,16 +11,22 @@ const torRoot = path.join(remoteDir, 'tor');
 const onion = /^[a-z2-7]{56}\.onion$/;
 
 export class RemoteAccess {
-  constructor({ schedule }) { this.schedule = schedule; this.stack = null; this.operations = Promise.resolve(); this.pending = null; this.error = ''; }
+  constructor({ schedule }) { this.schedule = schedule; this.stack = null; this.operations = Promise.resolve(); this.pending = null; this.error = ''; this.publicationRequested = null; }
   transaction(fn) { const work = this.operations.then(fn); this.operations = work.catch(() => {}); return work; }
   async state() {
     const state = await readJson(paths.share, null);
-    if (!state) return { version: 2, phase: 'new', enabled: false, allowFileManager: false };
-    if (state.version !== 2 || !['replacing', 'setup', 'ready'].includes(state.phase) || typeof state.enabled !== 'boolean' || typeof state.allowFileManager !== 'boolean' ||
+    if (!state) return { version: 2, phase: 'new', enabled: false, startup: false, allowFileManager: false };
+    if (state.version !== 2 || !['replacing', 'setup', 'ready'].includes(state.phase) || typeof state.enabled !== 'boolean' || typeof state.allowFileManager !== 'boolean' || (state.startup !== undefined && typeof state.startup !== 'boolean') ||
         (state.phase !== 'replacing' && (!/^[a-f0-9]{48}$/.test(state.id || '') || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(state.owner || ''))) ||
         (state.phase === 'ready' && (!onion.test(state.onion || '') || !/^[a-f0-9]{64}$/.test(state.caSha256 || ''))) ||
         (state.enabled && state.phase !== 'ready')) throw Error('Invalid Share Local state; remote access stays closed');
-    return state;
+    return { ...state, startup: state.startup ?? state.enabled };
+  }
+  shouldPublish(state) {
+    // Snapshot launch policy once. Saving a future startup choice must not
+    // turn a currently enabled encrypted route on or off.
+    this.publicationRequested ??= state.startup;
+    return state.enabled && this.publicationRequested;
   }
   async identity() {
     const state = await this.state();
@@ -39,7 +45,7 @@ export class RemoteAccess {
   async prepare(stack) {
     this.stack = stack;
     const state = await this.state();
-    if (!state.enabled) return [];
+    if (!this.shouldPublish(state)) return [];
     await this.identity();
     if (!(await accountStatus()).initialized || await this.hostname() !== state.onion) throw Error('Remote account setup is incomplete or its onion identity changed');
     for (const file of [paths.users, paths.database, paths.remoteCertificate, paths.connectionQr,
@@ -62,7 +68,7 @@ export class RemoteAccess {
     return file;
   }
   async publish() {
-    if (!(await this.state()).enabled) return;
+    if (!this.shouldPublish(await this.state())) return;
     await this.stack.launch('tor', binary('tor'), ['-f', await this.torConfig(true)], process.env);
   }
   async authentication() {
@@ -72,7 +78,7 @@ export class RemoteAccess {
     return { jwks: [{ key: keys.oidc_key, algorithm: 'RS256', use: 'sig' }], clients: [registration] };
   }
   async startTunnel() {
-    if (!(await this.state()).enabled) return;
+    if (!this.shouldPublish(await this.state())) return;
     if (this.stack.tunnelStarted) return;
     const keys = await this.identity(), host = await this.hostname();
     const result = await this.stack.tunnel.call('start', { socket: paths.tunnel, auth_socket: paths.auth, control_socket: paths.control, generation: keys.id, onion: host, key: keys.host_key });
@@ -91,6 +97,8 @@ export class RemoteAccess {
       if (!this.stack?.ready || this.stack.stopping) throw Error('Turn on Local before Share Local setup');
       validateAccountCredentials(value, { create: true });
       if (typeof value.allowFileManager !== 'boolean') throw Error('Choose whether to allow the remote file manager');
+      const previous = await this.state();
+      const startup = previous.phase === 'ready' ? previous.startup : undefined;
       if (!reissue) {
         const state = await this.state();
         const legacy = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
@@ -99,7 +107,8 @@ export class RemoteAccess {
       // Drain writes before committing the new policy. Admission stays blocked
       // until the durable state is saved, including if a save fails.
       await this.stack.refreshFileManager(true);
-      await writeJson(paths.share, { version: 2, phase: 'replacing', enabled: false, allowFileManager: false });
+      this.publicationRequested = false;
+      await writeJson(paths.share, { version: 2, phase: 'replacing', enabled: false, startup, allowFileManager: false });
       await this.stack.refreshFileManager();
       this.stack.reconfiguring = true; this.stack.ready = false;
       this.cancelPending();
@@ -122,7 +131,7 @@ export class RemoteAccess {
         const keys = await this.stack.tunnel.call('enrollment-keys');
         await writeJson(paths.remoteKeys, keys);
         await writePrivate(paths.remoteCertificate, keys.certificate);
-        await writeJson(paths.share, { version: 2, id: keys.id, phase: 'setup', enabled: false, allowFileManager: value.allowFileManager, owner: value.username });
+        await writeJson(paths.share, { version: 2, id: keys.id, phase: 'setup', enabled: false, startup, allowFileManager: value.allowFileManager, owner: value.username });
         await this.stack.launch('tor', binary('tor'), ['-f', await this.torConfig(false)], process.env);
         await this.stack.waitUntil(() => this.hostname(), 'Tor identity');
         await this.stack.stopNamed('tor');
@@ -168,7 +177,9 @@ export class RemoteAccess {
         delete keys.tor_private; delete keys.private_key;
         await writeJson(paths.remoteKeys, keys);
         const caSha256 = new X509Certificate(bundle.root_ca).fingerprint256.replaceAll(':', '').toLowerCase();
-        await writeJson(paths.share, { ...state, phase: 'ready', enabled: true, onion: bundle.onion, caSha256 });
+        const saved = await readJson(paths.share);
+        await writeJson(paths.share, { ...state, phase: 'ready', enabled: true, startup: saved.startup ?? true, onion: bundle.onion, caSha256 });
+        this.publicationRequested = true;
         this.cancelPending();
         await this.stack.reconfigureRemote();
         return this.status();
@@ -197,11 +208,23 @@ export class RemoteAccess {
       const state = await this.state();
       if (state.phase !== 'ready') throw Error('Complete Share Local account and authenticator setup first');
       if (enabled && (!this.stack.ready || this.stack.stopping)) throw Error('Turn on Local before publishing');
-      if (state.enabled === enabled) return this.status();
+      if (state.enabled === enabled && this.publicationRequested === enabled) return this.status();
+      this.publicationRequested = enabled;
       await this.stack.refreshFileManager(true);
       await writeJson(paths.share, { ...state, enabled });
       await this.stack.refreshFileManager();
       if (this.stack.ready) await this.stack.reconfigureRemote();
+      return this.status();
+    });
+  }
+  async setStartup(enabled) {
+    return this.transaction(async () => {
+      if (typeof enabled !== 'boolean') throw Error('Choose whether publishing starts automatically');
+      const state = await this.state();
+      if (state.phase !== 'ready') throw Error('Complete Share Local setup before choosing automatic publishing');
+      // Establish this runtime's old policy before changing only the next one.
+      this.shouldPublish(state);
+      await writeJson(paths.share, { ...state, startup: enabled });
       return this.status();
     });
   }
@@ -222,7 +245,7 @@ export class RemoteAccess {
       const state = await this.state();
       const migrationRequired = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
       const running = Boolean(state.enabled && this.stack?.ready && this.stack.tunnelStarted && this.stack.children.some(child => child.name === 'tor' && child.exit === undefined));
-      return { phase: state.phase, enabled: state.enabled, running, allowFileManager: state.allowFileManager, migrationRequired, error: this.error,
+      return { phase: state.phase, enabled: state.enabled, startup: state.startup, running, allowFileManager: state.allowFileManager, migrationRequired, error: this.error,
         address: state.phase === 'ready' ? 'https://' + await this.hostname() : null,
         qrDataUrl: state.phase === 'ready' ? 'data:image/png;base64,' + (await fs.readFile(paths.connectionQr)).toString('base64') : null };
     } catch (error) {
@@ -235,7 +258,7 @@ export class RemoteAccess {
         } catch (failure) { this.stack.fatal?.(failure); throw failure; }
         finally { this.stack.reconfiguring = false; }
       }
-      return { phase: 'error', enabled: false, running: false, allowFileManager: false, reissueRequired: true, error: error.message };
+      return { phase: 'error', enabled: false, startup: false, running: false, allowFileManager: false, reissueRequired: true, error: error.message };
     }
   }
 }

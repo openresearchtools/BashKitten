@@ -12,7 +12,8 @@ public final class DisplayBroker {
     private final BrowserApp app;
     private final ExecutorService work = Executors.newSingleThreadExecutor();
     private final java.util.List<Pending> waiting = new java.util.ArrayList<>();
-    private IDisplaySource source;
+    private volatile IDisplaySource source;
+    private volatile String requestedInstallation = "";
     private IBinder.DeathRecipient death;
     private int owner = -1;
     private long generation;
@@ -22,11 +23,19 @@ public final class DisplayBroker {
         Pending(Consumer<ParcelFileDescriptor> ready, Consumer<String> fail) { this.ready = ready; this.fail = fail; }
     }
     DisplayBroker(BrowserApp app) { this.app = app; }
+    /** Native Start/startup intent, separate from whether Local Pi is enabled. */
+    public void prepareStart() {
+        if (!app.agent.localSetupReady()) throw new IllegalStateException("Complete Local setup before starting Display.");
+        requestedInstallation = app.agent.termux.installationId();
+    }
+    public boolean hasSource() { return source != null; }
     private void require(int uid) throws Exception {
         app.grants.require(uid);
         int installed = app.getPackageManager().getApplicationInfo(TermuxConnection.PACKAGE, 0).uid;
         if (uid != installed) throw new SecurityException("Display source must belong to the approved Termux installation");
-        if (!app.agent.localIsOnRequested()) throw new SecurityException("Local Agent is Off");
+        if (!app.agent.localIsOnRequested() && (requestedInstallation.isEmpty()
+                || !requestedInstallation.equals(app.agent.termux.installationId())))
+            throw new SecurityException("Start Display from BashKitten first.");
     }
     void register(int uid, String version, IDisplaySource value) throws Exception {
         require(uid);
@@ -37,6 +46,7 @@ public final class DisplayBroker {
                 require(uid); clearSource(); source = value; owner = uid; long id = ++generation;
                 death = () -> work.execute(() -> { if (id == generation) clearSource(); });
                 value.asBinder().linkToDeath(death, 0);
+                app.main.post(app.agent::displayConnectionChanged);
                 for (Pending pending : new java.util.ArrayList<>(waiting)) connect(pending);
                 waiting.clear();
             } catch (Exception error) {
@@ -85,6 +95,7 @@ public final class DisplayBroker {
         });
     }
     public void revoke() {
+        requestedInstallation = "";
         app.main.post(() -> app.host.closeDisplay());
         work.execute(() -> {
             IDisplaySource previous = source;
@@ -96,8 +107,10 @@ public final class DisplayBroker {
     }
     private void failWaiting(String error) { for (Pending pending : waiting) failed(pending, error); waiting.clear(); }
     private void clearSource() {
+        boolean connected = source != null;
         if (source != null && death != null) source.asBinder().unlinkToDeath(death, 0);
         source = null; death = null; owner = -1; generation++;
+        if (connected) app.main.post(app.agent::displayConnectionChanged);
     }
     private static void close(ParcelFileDescriptor fd) { if (fd != null) try { fd.close(); } catch (java.io.IOException ignored) {} }
 }

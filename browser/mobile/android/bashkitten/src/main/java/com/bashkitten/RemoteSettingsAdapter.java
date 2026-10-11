@@ -67,12 +67,17 @@ public final class RemoteSettingsAdapter implements AutoCloseable {
                             JSONObject record = saved.getJSONObject(key);
                             String state = app.agent.remoteConnected(key) ? "ready" : app.agent.selected.equals(key) && app.agent.isOnRequested() ? app.agent.state : "disconnected";
                             records.put(new JSONObject().put("id", key).put("name", record.optString("name", key)).put("state", state)
-                                .put("error", app.agent.selected.equals(key) ? app.agent.error : "").put("migrationRequired", record.optInt("version") != 2));
+                                .put("error", app.agent.selected.equals(key) ? app.agent.error : app.agent.startupError("remote:" + key))
+                                .put("autostart", record.optBoolean("autostart")).put("migrationRequired", record.optInt("version") != 2));
                         }
                         done(result, new JSONObject().put("remotes", records).put("selected", app.agent.selected).put("localLabel", "This device · Termux")
+                            .put("localAutostart", app.agent.localAutostart())
                             .put("capabilities", new JSONObject().put("scan", true).put("browserControl", false)));
                     } catch (Exception error) { failure.accept(error.getMessage()); }
                 }, failure); return;
+            case "remotes.local-autostart":
+                if (args.length() != 1 || !(args.get("enabled") instanceof Boolean)) throw new IllegalArgumentException("Choose whether Local starts automatically");
+                app.agent.setLocalAutostart(args.getBoolean("enabled")); done(result, object("ok", true)); return;
             case "remotes.enroll":
                 if (enrollment != null) throw new IllegalStateException("Connection import is already open");
                 String methodName = args.getString("method");
@@ -97,6 +102,9 @@ public final class RemoteSettingsAdapter implements AutoCloseable {
                 JSONObject record = saved.getJSONObject(id);
                 String serviceId = args.optString("serviceId");
                 switch (method) {
+                    case "remotes.autostart":
+                        if (args.length() != 2 || !(args.get("enabled") instanceof Boolean)) throw new IllegalArgumentException("Choose whether this remote connects automatically");
+                        app.agent.setRemoteAutostart(id, args.getBoolean("enabled"), () -> done(result, object("ok", true)), failure); return;
                     case "remotes.connect": app.agent.select(id); openAgent(); done(result, object("ok", true)); return;
                     case "remotes.disconnect": app.agent.disconnectRemote(id); done(result, object("ok", true)); return;
                     case "remotes.remove": app.agent.removeRemote(id, () -> done(result, object("ok", true)), failure); return;
