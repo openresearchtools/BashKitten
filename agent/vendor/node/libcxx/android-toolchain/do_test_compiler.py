@@ -1,0 +1,483 @@
+#!/usr/bin/env python3
+#
+# Copyright (C) 2017 The Android Open Source Project
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# pylint: disable=not-callable
+
+import argparse
+import logging
+import multiprocessing
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+from typing import Dict, List, Optional, Set
+
+import context  # pylint: disable=unused-import
+from llvm_android import hosts, paths, utils, version
+
+
+class ProfileHandler(object):
+
+    def getProfileFileEnvVars(self):
+        return []
+
+    def mergeProfiles(self):
+        return
+
+
+class PgoProfileHandler(ProfileHandler):
+
+    def __init__(self):
+        self.profiles_dir = paths.OUT_DIR / 'clang-profiles'
+        self.profiles_format = os.path.join(self.profiles_dir, '%4m.profraw')
+
+    def getProfileFileEnvVars(self):
+        return [('LLVM_PROFILE_FILE', self.profiles_format)]
+
+    def mergeProfiles(self):
+        stage1_install = paths.OUT_DIR / 'stage1-install'
+        profdata_tool = stage1_install / 'bin' / 'llvm-profdata'
+
+        profdata_dir = paths.OUT_DIR
+        profdata_filename = paths.pgo_profdata_filename()
+        utils.check_call([
+            str(profdata_tool), 'merge', '-o',
+            str(profdata_dir / profdata_filename),
+            str(self.profiles_dir)
+        ])
+
+        dist_dir = Path(os.environ.get('DIST_DIR', paths.OUT_DIR))
+        utils.create_tarball(profdata_dir, [profdata_filename],
+                             dist_dir / paths.pgo_profdata_tarname())
+
+
+class BoltProfileHandler(ProfileHandler):
+
+    def __init__(self):
+        self.profiles_dir = paths.OUT_DIR / 'bolt-profiles'
+
+    def mergeProfiles(self):
+        stage2_install = paths.OUT_DIR / 'stage2-install'
+        merge_fdata_tool = stage2_install / 'bin' / 'merge-fdata'
+
+        bolt_collection_path = paths.OUT_DIR / 'bolt_collection'
+        clang_fdata_filename = 'clang.fdata'
+        clang_fdata_path = bolt_collection_path / clang_fdata_filename
+        utils.check_call([
+            merge_fdata_tool, '-o', str(clang_fdata_path), str(bolt_collection_path / 'clang')
+        ])
+
+        dist_dir = Path(os.environ.get('DIST_DIR', paths.OUT_DIR))
+        utils.create_tarball(bolt_collection_path, [clang_fdata_filename],
+                             dist_dir / paths.bolt_fdata_tarname())
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('android_path', help='Android source directory.')
+
+    clang_group = parser.add_mutually_exclusive_group()
+    clang_group.add_argument(
+        '--clang-path',
+        nargs='?',
+        help='Directory with a previously built Clang toolchain.')
+    clang_group.add_argument(
+        '--clang-package-path',
+        nargs='?',
+        help='Directory of a pre-packaged (.tar.xz) Clang toolchain. '
+        'Toolchain extracted from the package will be used.')
+    clang_group.add_argument(
+        '--clang-bootstrap-path',
+        nargs='?',
+        help='Directory of a pre-packaged (.tar.xz) bootstrap (stage-1) Clang. '
+        'Clang extracted from the package will be used for building a full toolchain.')
+    clang_group.add_argument(
+        '--clang-kokoro-build-id',
+        nargs='?',
+        help='Kokoro TOT Clang build ID'
+        'Clang pulled from that build will be used.')
+
+    parser.add_argument(
+        '-k',
+        '--keep-going',
+        action='store_true',
+        default=False,
+        help='Keep going when some targets cannot be built.')
+    parser.add_argument(
+        '-j',
+        action='store',
+        dest='jobs',
+        type=int,
+        default=multiprocessing.cpu_count(),
+        help='Number of executed jobs.')
+    parser.add_argument(
+        '--build-only',
+        action='store_true',
+        default=False,
+        help='Build default targets only.')
+    parser.add_argument(
+        '--no-mlgo',
+        action='store_true',
+        default=False,
+        help='Build without mlgo.')
+    parser.add_argument(
+        '--skip-tests',
+        action='store_true',
+        default=False,
+        help='Build with --skip-tests option.')
+    parser.add_argument(
+        '--flashall-path',
+        nargs='?',
+        help='Use internal '
+        'flashall tool if the path is set.')
+    parser.add_argument(
+        '-t',
+        '--target',
+        nargs='?',
+        help='Build for specified '
+        'target. This will work only when --build-only is '
+        'enabled.')
+    parser.add_argument(
+        '--module',
+        action='append',
+        help='Build the specified modules, default is dist.')
+    parser.add_argument(
+        '--with-tidy',
+        action='store_true',
+        default=False,
+        help='Enable clang tidy for Android build.')
+    clean_built_target_group = parser.add_mutually_exclusive_group()
+    clean_built_target_group.add_argument(
+        '--clean-built-target',
+        action='store_true',
+        default=True,
+        help='Clean output for each target that is built.')
+    clean_built_target_group.add_argument(
+        '--no-clean-built-target',
+        action='store_false',
+        dest='clean_built_target',
+        help='Do not remove target output.')
+
+    profile_generate_group = parser.add_mutually_exclusive_group()
+    profile_generate_group.add_argument(
+        '--generate-clang-profile',
+        action='store_true',
+        default=False,
+        dest='profile',
+        help='Build instrumented compiler and gather profiles')
+    profile_generate_group.add_argument(
+        '--generate-bolt-profile',
+        action='store_true',
+        default=False,
+        dest='bolt',
+        help='Build BOLT instrumented compiler and gather profiles')
+
+    args = parser.parse_args()
+    if args.build_only and not args.target:
+        parser.error('Build target is not specified in build only mode.')
+
+    return args
+
+
+def copy_clang(android_base: Path, clang_path: Path) -> None:
+    android_clang_path = (android_base / 'prebuilts' / 'clang' / 'host' /
+                          hosts.build_host().os_tag / 'clang-dev')
+    if android_clang_path.is_symlink() or android_clang_path.is_file():
+        android_clang_path.unlink()
+    elif android_clang_path.is_dir():
+        shutil.rmtree(android_clang_path)
+    # TODO(b/260809113): We can use symlink when this bug is fixed.
+    shutil.copytree(clang_path, android_clang_path, symlinks=True)
+
+
+def get_connected_device_list() -> List[List[str]]:
+    try:
+        # Get current connected device list.
+        out = utils.check_output(['adb', 'devices', '-l'])
+        devices = [x.split() for x in out.strip().split('\n')[1:]]
+        return devices
+    except subprocess.CalledProcessError:
+        # If adb is not working properly. Return empty list.
+        return []
+
+
+def rm_current_product_out():
+    if 'ANDROID_PRODUCT_OUT' in os.environ:
+        product_out = Path(os.environ['ANDROID_PRODUCT_OUT'])
+        if product_out.is_dir():
+            shutil.rmtree(product_out)
+
+
+def extract_clang_version(clang_install: Path) -> version.Version:
+    version_file = (Path(clang_install) / 'include' / 'clang' / 'Basic' /
+                    'Version.inc')
+    return version.Version(version_file)
+
+
+def build_target(android_base: Path, clang_version: version.Version,
+                 target: str, modules: List[str],
+                 max_jobs: int, with_tidy: bool, no_mlgo: bool,
+                 profiler: Optional[ProfileHandler]=None) -> None:
+    jobs = '-j{}'.format(max(1, min(max_jobs, multiprocessing.cpu_count())))
+    try:
+        env_out = utils.check_output(
+            [
+                'bash', '-c', '. ./build/envsetup.sh;'
+                'lunch ' + target + ' >/dev/null && env'
+            ],
+            cwd=android_base
+        )
+    except subprocess.CalledProcessError:
+        raise RuntimeError('Failed to lunch ' + target)
+
+    env: Dict[str, str] = {}
+    for line in env_out.splitlines():
+        if not line:
+            continue
+        (key, _, value) = line.partition('=')
+        value = value.strip()
+        env[key] = value
+
+    # Set ALLOW_NINJA_ENV so that soong propagates environment variables to
+    # Ninja.  We use it for disabling warnings in the compiler wrapper and for
+    # setting path to write PGO profiles.
+    env['ALLOW_NINJA_ENV'] = 'true'
+
+    env['LLVM_PREBUILTS_VERSION'] = 'clang-dev'
+    env['LLVM_RELEASE_VERSION'] = clang_version.major_version()
+    env['LLVM_NEXT'] = 'true'
+
+    # FIXME: Temporarily turn off MLGO since the new model requires an
+    # additional flag.
+    env['THINLTO_USE_MLGO'] = 'false'
+
+    if no_mlgo:
+        env['THINLTO_USE_MLGO'] = 'false'
+
+    if with_tidy:
+        env['WITH_TIDY'] = '1'
+
+    if profiler is not None:
+        # lld calls _Exit as a speedup, which prevents it from writing the PGO
+        # profiles.
+        env['LLD_IN_TEST'] = '1'
+        # Build only a subset of targets and collect profiles
+        env['CLANG_ANALYZER_CHECKS'] = '1'
+        modules = ['libart', 'libc', 'adb-tidy']
+
+        # Set the environment variable specifying where the profile file gets
+        # written.
+        for key, val in profiler.getProfileFileEnvVars():
+            env[key] = val
+
+    modulesList = ' '.join(modules)
+    print('Start building target %s and modules %s.' % (target, modulesList))
+    try:
+        utils.check_call(
+            ['/bin/bash', '-c', 'build/soong/soong_ui.bash --make-mode ' + jobs + \
+             ' -k100 ' + modulesList],
+            cwd=android_base,
+            env=env
+        )
+    except subprocess.CalledProcessError:
+        errors = parse_error_log()
+        print("===== Error Summary =====")
+        print("".join(errors))
+        raise Exception('Build failed with errors.')
+
+
+def test_device(android_base: Path, clang_version: version.Version, device: List[str],
+                modules: List[str], max_jobs: int, clean_output: str, flashall_path: Optional[Path],
+                with_tidy: bool, no_mlgo: bool) -> bool:
+    [label, target] = device[-1].split(':')
+    # If current device is not connected correctly we will just skip it.
+    if label != 'device':
+        print('Device %s is not connecting correctly.' % device[0])
+        return True
+    else:
+        target = 'aosp_' + target + '-eng'
+    try:
+        build_target(android_base, clang_version, target, modules, max_jobs,
+                     with_tidy, no_mlgo)
+        if flashall_path is None:
+            bin_path = (android_base / 'out' / 'host' /
+                        hosts.build_host().os_tag / 'bin')
+            utils.check_call(
+                ['./adb', '-s', device[0], 'reboot', 'bootloader'],
+                cwd=bin_path)
+            utils.check_call(
+                ['./fastboot', '-s', device[0], 'flashall'], cwd=bin_path)
+        else:
+            os.environ['ANDROID_SERIAL'] = device[0]
+            utils.check_call(['./flashall'], cwd=flashall_path)
+        result = True
+    except subprocess.CalledProcessError:
+        print('Flashing/testing android for target %s failed!' % target)
+        result = False
+    if clean_output:
+        rm_current_product_out()
+    return result
+
+
+def extract_packaged_clang(package_path: Path) -> Path:
+    # Find package to extract
+    tarballs: List[Path] = sorted(package_path.rglob('*-linux-*.tar.xz'))
+    if len(tarballs) != 1:
+        raise RuntimeError(
+            f'No clang packages (.tar.xz) found in {package_path}')
+
+    tarball = tarballs[0]
+
+    # Extract package to $OUT_DIR/extracted
+    extract_dir = paths.OUT_DIR / 'extracted'
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    utils.extract_tarball(extract_dir, tarball)
+
+    # Find and return a singleton subdir
+    extracted: List[Path] = list(extract_dir.iterdir())
+    if len(extracted) != 1:
+        raise RuntimeError(
+            f'Expected one file from package.  Found: {extracted}')
+
+    clang_path = extracted[0]
+    if not clang_path.is_dir():
+        raise RuntimeError(f'Extracted path is not a dir: {clang_path}')
+
+    return clang_path
+
+
+def fetch_kokoro_prebuilt(build_id: str) -> Path:
+    # Extract package to $OUT_DIR/extracted
+    extract_dir = paths.OUT_DIR / 'extracted'
+    if extract_dir.exists():
+        shutil.rmtree(extract_dir)
+    extract_dir.mkdir(parents=True, exist_ok=True)
+
+    utils.check_call([
+        paths.SCRIPTS_DIR / "fetch_kokoro_prebuilts.py", "--build_id", build_id,
+        extract_dir
+    ])
+
+    return extract_dir / f'clang-{build_id}'
+
+
+def is_clang_built_with_mlgo(clang_dir: Path):
+    clang = clang_dir / 'bin' / 'clang'
+    output = utils.check_output([str(clang), '--version'])
+    return '+mlgo' in output
+
+
+def main():
+    logging.basicConfig(level=logging.DEBUG)
+
+    args = parse_args()
+    modules = ['dist']
+    if args.module:
+        modules = args.module
+    if args.clang_path is not None:
+        clang_path = Path(args.clang_path)
+    elif args.clang_package_path is not None:
+        clang_path = extract_packaged_clang(Path(args.clang_package_path))
+    elif args.clang_kokoro_build_id is not None:
+        clang_path = fetch_kokoro_prebuilt(args.clang_kokoro_build_id)
+    else:
+        cmd = [paths.SCRIPTS_DIR / 'build.py', '--no-build=windows,lldb']
+        if not args.no_mlgo:
+            cmd.append('--mlgo')
+        if args.clang_bootstrap_path:
+            cmd.append(f'--bootstrap-use={args.clang_bootstrap_path}')
+        if args.profile:
+            cmd.append('--build-instrumented')
+            cmd.append('--skip-tests')
+        elif args.bolt:
+            cmd.append('--pgo')
+            cmd.append('--lto')
+            cmd.append('--bolt-instrument')
+            cmd.append('--no-strip')
+            cmd.append('--skip-tests')
+        elif args.skip_tests:
+            cmd.append('--skip-tests')
+        utils.check_call(cmd)
+        clang_path = paths.get_package_install_path(hosts.build_host(), 'clang-dev')
+    clang_version = extract_clang_version(clang_path)
+    copy_clang(Path(args.android_path), clang_path)
+
+    no_mlgo = not is_clang_built_with_mlgo(clang_path)
+
+    if args.build_only:
+        if args.profile:
+            profiler = PgoProfileHandler()
+        elif args.bolt:
+            profiler = BoltProfileHandler()
+        else:
+            profiler = None
+
+        build_target(Path(args.android_path), clang_version, args.target,
+                     modules, args.jobs, args.with_tidy, no_mlgo, profiler)
+
+        if profiler is not None:
+            profiler.mergeProfiles()
+
+    else:
+        devices = get_connected_device_list()
+        if len(devices) == 0:
+            print("You don't have any devices connected.")
+        for device in devices:
+            result = test_device(Path(args.android_path), clang_version, device,
+                                 modules, args.jobs, args.clean_built_target,
+                                 Path(args.flashall_path) if args.flashall_path else None,
+                                 args.with_tidy, no_mlgo)
+            if not result and not args.keep_going:
+                break
+
+
+def parse_error_log() -> Set[str]:
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    try:
+        with open(paths.OUT_DIR / 'error.log', 'r') as f:
+            errors = set()
+            in_failure_context = False
+            lines = f.readlines()
+            if len(lines) == 0:
+                return {'Empty error.log file'}
+            for line in lines:
+                if 'FAILED:' in line:
+                    if in_failure_context:
+                        errors.add('Unknown error, check full logs for failure')
+                    else:
+                        in_failure_context = True
+                # Catches either Clang or LLD errors.
+                # Clang format: FILE_NAME:LOC: error: ERR_MSG
+                # LLD format:   ld.lld: error: ERR_MSG
+                if ': error:' in line:
+                    # Only report the first error for each failed command.
+                    if not in_failure_context:
+                        continue
+                    # Strip ANSI color code
+                    line = ansi_escape.sub('', line)
+                    errors.add(line)
+                    in_failure_context = False
+            return errors
+    except:
+        return set()
+
+
+if __name__ == '__main__':
+    main()
