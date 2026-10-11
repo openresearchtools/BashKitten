@@ -153,16 +153,24 @@ async function prepareImage(config, job) {
   job.check();
   await job.phase('Materializing the persistent rootfs with native UID mapping');
   await privateDir(p.rootfs);
-  // Run tar in the selected native user namespace, preserving numeric IDs, ACLs
-  // and xattrs. The source root's /run includes our destination: exclude it.
-  const copy = 'set -euo pipefail; chown 0:0 /run/bashkitten-materialize; chmod 0755 /run/bashkitten-materialize; tar --numeric-owner --xattrs --xattrs-include="*" --acls --one-file-system --exclude="./dev/*" --exclude="./proc/*" --exclude="./run/*" --exclude="./sys/*" --exclude="./tmp/*" -cpf - -C / . | tar --numeric-owner --xattrs --xattrs-include="*" --acls -xpf - -C /run/bashkitten-materialize';
-  const materializer = containerName(config.id) + '-materialize';
+  // Export a never-started image container, as in the donor. Archiving a running
+  // helper's / would include live proc/sys mountpoint metadata and OCI injections.
+  // Extract in the machine's namespace so numeric guest IDs map natively.
+  const copy = 'set -e; chown 0:0 /run/bashkitten-materialize; chmod 0755 /run/bashkitten-materialize; exec tar --numeric-owner --xattrs --xattrs-include="*" --acls -xpf - -C /run/bashkitten-materialize';
+  const materializer = containerName(config.id) + '-materialize', source = containerName(config.id) + '-source';
+  const archive = path.join(p.directory, 'materialize.tar');
+  let input;
   try {
-    await podman(['run','--rm','--name',materializer,'--label',`${machineLabel}=${config.id}`,userNamespace,'--user=0','--network=none','--log-driver=none', '--entrypoint=/bin/bash',
-      '--mount',mount(p.rootfs,'/run/bashkitten-materialize'),image,'-c',copy], { output: job.output, signal: job.signal });
+    await podman(['create','--name',source,'--label',`${machineLabel}=${config.id}`,'--network=none','--log-driver=none','--entrypoint=/usr/bin/true',image], { output: job.output, signal: job.signal });
+    await podman(['export','--output',archive,source], { output: job.output, signal: job.signal });
+    input = await fs.open(archive, 'r');
+    await podman(['run','--rm','--interactive','--name',materializer,'--label',`${machineLabel}=${config.id}`,userNamespace,'--user=0','--network=none','--no-hosts','--read-only','--log-driver=none', '--entrypoint=/bin/bash',
+      '--mount',mount(p.rootfs,'/run/bashkitten-materialize'),image,'-c',copy], { input: input.fd, output: job.output, signal: job.signal });
   } finally {
+    await input?.close();
     // Cancelling the CLI alone need not terminate its attached container.
-    await podman(['rm','--force','--ignore',materializer],{output:job.output});
+    try { await podman(['rm','--force','--ignore',materializer,source],{output:job.output}); }
+    finally { await fs.rm(archive, { force: true }); }
   }
   await saveState(config.id, { provisioned: true, packageRevision: manifest.revision, state: 'stopped', lastError: null });
 }
