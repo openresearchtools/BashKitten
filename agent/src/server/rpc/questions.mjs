@@ -106,9 +106,19 @@ export class QuestionOwner {
     return this.serial(async () => {
       const question = this.state.records.find(q => q.questionId === input.questionId);
       if (!question || input.revision !== question.revision) throw Error('This question or its revision is no longer available');
+      const epoch = this.epoch, generation = this.state.generation;
       if (input.source !== 'web' || !await this.authorize(input)) throw Error('This question cannot be dismissed from this source');
       const result = () => ({ question, status: question.status, deliveryStatus: question.deliveryStatus });
       if (question.dismissed || !['pending', 'expired'].includes(question.status)) return result();
+      if (question.status === 'expired') {
+        // This only hides a settled control. An earlier Stop must not require
+        // resuming work, but an owner change during validation still rejects it.
+        const ownsQuestion = () => !this.closed && this.epoch === epoch && this.state.generation === generation &&
+          question.sessionId === this.id && question.nativeSessionId === this.owner().nativeSessionId;
+        if (!ownsQuestion() || !await this.verify(question) || !ownsQuestion()) throw Error('The originating question is no longer on this active chat branch');
+        question.dismissed = true; question.dismissedAt = Date.now();
+        await this.publish(question); return result();
+      }
       if (!this.validDelivery(question)) throw Error('This chat is stopped or no longer owns the question');
       if (!await this.verify(question) || !this.validDelivery(question)) throw Error('The originating question is no longer on this active chat branch');
       // The absolute deadline still wins if branch verification crossed it.
