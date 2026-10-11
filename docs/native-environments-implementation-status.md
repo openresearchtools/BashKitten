@@ -13,39 +13,69 @@ acceptance is in progress. Startup, provisioning and presentation failures are
 being repaired together for the next candidate. No workstream is fully accepted;
 component compilation and source review do not establish installed acceptance.
 
-Installed revisions at this checkpoint are Android 16/17 APK `fb1111c5d5` and
-native Linux `fb1111c5d5` on Wayland and Xorg. Android 16 has the `609e82c200`
-Termux backend/OS; Android 17 still has backend `a9dc65607a` and OS `4c1f2bb98e`
-while its upgrade is prepared. External receipts retain full commits, checksums,
-source-equivalence records and matching notices. These are development candidates.
+Installation records cover Android 16/17 APK `e375826bff`; the actual shared
+settings cases below cover Android 16 and native Linux `e375826bff` on Wayland
+and real Xorg. Both Android backends were upgraded to `a807ba48ed`, with OS source
+`609e82c200`. Desktop `0753b2edfc` is now installed on the Wayland host and Xorg
+VM. Its corrected Configuration menu was observed on Wayland; fresh guest
+preparation is running on Xorg, with acceptance still pending. External receipts retain full commits,
+checksums, distinct native producers and assembly revisions, source-equivalence
+records and matching notices. These are development candidates.
 
 The shared settings/sidebar implementation in `609e82c200` received actual
 cached native builds on both targets: desktop 8m37s and Android 9m47s. Installed
-checks then found incorrect static-asset placement. `fb1111c5d5` corrected the
-archive placement and icon sizing, with verified unchanged native producers.
-The installed page then exposed a second failure: module loading from its
-resource URL was rejected by Gecko's CORS checks. `e375826bff` uses Gecko's
-existing non-linkable about-page chrome module path, retaining the unprivileged
-content principal, scoped CSP and native authorization. This batch also removes
-the written BashKitten toolbar pill, labels the gear Configuration, and deletes
-two unused native LocalAI forms. Packaging is running; installed settings
-acceptance remains blocked until this candidate is tested.
+checks found incorrect static-asset placement, then a module CORS failure after
+`fb1111c5d5` corrected the archive placement and icon sizing. `e375826bff` uses
+Gecko's existing non-linkable about-page chrome module path, retaining the
+unprivileged content principal, scoped CSP and native authorization. Actual
+shared Local AI settings now load on the Wayland host and Xorg VM; Android 16
+also renders the Phone controls page and its optional Accessibility guidance.
+This verifies those entry/rendering paths, not all controls or authorization
+cases. The logo-only toolbar and Configuration gear are visible; the written
+BashKitten pill is removed.
+
+`0753b2edfc` applies the latest user correction: desktop Configuration has no
+Computer use/Termux use settings; the execution-role Pi skills/tools remain.
+Phone use configuration is Android-only. Display setup remains in Configuration,
+separate from the existing Display action that opens the desktop. The installed
+Wayland `0753b2edfc` Configuration menu shows Local AI, Notifications, Remote
+Connections, Telephone, Performance, Providers and General settings, without a
+Phone/Computer Use entry. This is a menu check, not a retest of every destination;
+the latest Android presentation still requires installed verification.
 
 Installed Xorg checks passed the flat hierarchy, corrected icons, wide/narrow
 sidebar behavior, draft preservation and Providers/General navigation. A real
 question card remained visible after the final reply and delivered one answer
-to its original chat. Other question cases remain pending. Container creation
-still used a legacy daemon surviving the package upgrade; its tar failure does
-not establish a failure of the newly installed export code. `84af6f3685` adds
-revision detection and safe idle replacement, retaining running guests and
-read/Stop/Cancel paths. Legacy services explicitly require a session/OS restart.
-The update behavior and fresh container retry still need installed verification.
+to its original chat; other question cases remain pending. The installed
+`e375826bff` candidate correctly refused creation through a legacy machine
+daemon, showing the session/OS-restart requirement added by `84af6f3685`.
+After a normal VM reboot, actual UI Retry completed the Debian/XFCE image build,
+rootfs export and materialization, then visibly failed at guest browser startup.
+`c4aab21296` removes unsupported guest `--no-remote`/`--profile` arguments.
+The `0753b2edfc` DEB contains the actually rebuilt `739e9944a7` guest package,
+verified against its launcher source and nested package hash; this package
+integrity result does not establish successful guest startup or Display.
+Active-guest update/drain behavior also remains unverified.
 
 Android 16 is a separate official API 36 KVM guest with fresh Termux and no
-copied Pi profile. Setup-only package prerequisites were repaired with a normal
-full upgrade; its installed feature flows remain pending. Android 17's old
-controller did not answer a stop request during upgrade preparation; diagnosis
-is ongoing. No completion or stability claim follows from these package checks.
+copied Pi profile. Normal setup now completes and the empty chat reports Model
+and Reasoning **Not set**, Agents Off and Phone Off. Android 17's old controller
+was diagnosed with an outbox watcher feedback loop: read scans changed directory
+attributes and scheduled more scans. `a807ba48ed` removes those read-side
+mutations, filters file events and coalesces scans. After installing the fix,
+the actual Android 17 Local Off/On flow terminated the old controller/HTTP group
+and reached ready with a new group. Installed file hashes match `a807ba48ed`.
+The new controller and HTTP processes then remained sleeping near 98/97 MiB,
+with five/three CPU ticks and slightly lower RSS across a 32.47-second diagnostic
+window. This supports repair of the observed immediate busy loop; it is not an
+endurance/no-leak proof or acceptance of phone delivery and wider lifecycle cases.
+
+A fresh Android 17 Display attempt reached the native viewport but failed to
+attach: Android rejected the packaged loader JAR as writable before its Java
+entry point. The browser returned to chat normally. `da996b644e` restores the
+donor's read-only loader mode in both generation and Termux package assembly,
+with atomic generator output. Normal package upgrade and Display retesting
+remain required; no APK/native rebuild or platform policy override is needed.
 
 Actual installed observations:
 
@@ -64,14 +94,20 @@ Actual installed observations:
   Qwen3.5-2B Q4_0 through LocalAI, configured CPU router execution, passed the
   optional load check with confirmed unload, and imported the model into owned
   Pi. The first send without credentials retained its draft; that work completed
-  after configuring the local model. These results cover the previous LocalAI
-  presentation; the shared Gecko replacement still needs installed verification.
+  after configuring the local model. With the shared Gecko replacement at
+  `e375826bff`, actual Xorg UI then downloaded Qwen3.5-4B Q4_K_M, added/edited its
+  router entry with CPU execution and context 16384, passed Check model load,
+  confirmed unload, and exposed the imported model in Pi's picker. This covers
+  that CPU flow, not the complete GPU/runtime/model matrix.
 - Deferred chat discovery/list/read returned the correct project, renamed chat,
   original directory and native entry references without modifying its history.
   Unnecessary system bootstrap text was exposed by read; `8bfc038b2c` removes it
-  from lookup results and awaits installed retest. Subagent discovery/list worked;
-  the small model omitted a required spawn argument, so child communication and
-  final delivery remain unverified.
+  from lookup results and awaits installed retest. On `e375826bff`, a real 4B
+  model turn with Agents On spawned Directory check under ProjectTwo. The child
+  ran `pwd` in the inherited project directory, and exactly one attributed
+  completion reached the original parent through the normal queue. The child
+  source link returned to that parent. Peer messages, follow-ups, Stop, crash,
+  fork and race cases remain separate unverified gates.
 - A real optional question returned pending in 11 ms while Pi continued, survived
   chat switching and delivered one attributed answer to its original session.
   The next question produced exactly one expiry notice, but its visible card was
@@ -81,36 +117,59 @@ Actual installed observations:
 - Container creation displays real preparation output while other UI remains
   usable. The explicit stock-panel conflict and missing schema compiler are fixed
   by `c64c0ccff0`; `bed281f5a5` repairs materialization from a stopped container
-  export. The repaired installed creation/Display path still needs retesting.
+  export. Installed retry now reaches materialization after the required restart,
+  but guest startup and the complete Display/OS path remain blocked pending the
+  corrected guest package's fresh installed run.
 - The Android sidebar's floating popup, pink buttons and ambiguous icons failed
   the user's design review. `acfa9df6ba` restores the flat sidebar and embeds it
   below the toolbar. The user's final direction is a BashKitten logo/sidebar,
   separate settings gear, unchanged Firefox menu and repeated flat Local,
   Containers and Remotes sections. Shared protected Gecko settings and native
-  adapters are integrated in the frozen batch, including removal of the
-  superseded forms. Notification preferences retain their existing private
-  controller and serialized settings-file updates. Installed visual/rotation/
-  keyboard checks remain required;
-  the currently installed APK still has the rejected presentation. The cached
-  intermediate `d3919f88c9` build was not installed because it predates that final
+  adapters are integrated, including removal of the superseded forms. The
+  installed `e375826bff` toolbar/shared settings now render; `0753b2edfc` carries
+  the later Android-only Phone use correction. Notification preferences retain
+  their existing private controller and serialized settings-file updates.
+  Complete visual/rotation/keyboard checks remain required. The cached
+  intermediate `d3919f88c9` build was not installed because it predates the final
   placement decision.
 - Desktop startup/resource failures were repaired in `ba248b7d1b` and
   `7ecea9955c`. Local asset-only repackaging with a reused development profile
-  requires clearing Gecko's startup cache. Native Wayland acceptance remains
-  pending, separately from the real Xorg result.
+  requires clearing Gecko's startup cache. Wayland shared-settings entry/rendering
+  is now observed, but its full Display/lifecycle acceptance remains pending,
+  separately from the real Xorg results.
+- Actual Xorg Files > View on `e375826bff` opens Markdown in an ordinary preview
+  tab with rendered heading/table and a working Raw toggle. DOCX converts on the
+  backend and opens in Gecko's native PDF viewer while Agent activity/navigation
+  continues. CSV renders a scrolling grid and Download saves the expected file
+  through the native dialog. These are specific document flows; large-file,
+  cancellation, remote authorization and the complete supported-format matrix
+  remain unverified.
 
 The full plan's feature, failure, lifecycle and platform matrix remains required.
-Android 16, physical-device/OEM/Android Auto coverage and the complete artifact/
-traffic audit are not established by the checks above.
+Android 16's remaining feature flows, physical-device/OEM/Android Auto coverage
+and the complete artifact/traffic audit are not established by the checks above.
+
+Checkpoint receipts are under `/run/media/user/Data/BashkittenBuild/`:
+
+| Record | Confirmed scope |
+| --- | --- |
+| `acceptance/xorg-vm-control/candidate-e375-ui.json` | Actual settings, safe legacy-update refusal/reboot retry, CPU LocalAI load/unload, subagent parent/child/cwd delivery, Markdown/Raw, DOCX/PDF and CSV preview/download cases; explicit partial/pending limits. |
+| `acceptance/shared-settings-e375/host-localai.png` | Actual Wayland shared Local AI page rendering. |
+| `acceptance/shared-settings-0753/host-install.json` and `host-configuration-menu.json` | Exact Wayland installed package and corrected native Configuration menu; underlying chat selector options in the raw accessibility array are not menu entries. |
+| `verification/android16-e375/installation.json` | Matched APK/backend installation, normal setup and actual empty-chat/Phone controls rendering; remaining cases listed. |
+| `verification/phone-watch-feedback/diagnosis.json` and `verification/termux-package-a807.json` | Watcher cause, focused source repair and exact installed-package input hashes; not phone functionality acceptance. |
+| `verification/phone-watch-feedback/android17-a807/summary.json` and `idle-samples.json`, plus `acceptance/shared-settings-e375/android17-restart.png` | Actual Android 17 Local Off/On, old-group exit/new ready state, matched installed watcher source and short idle diagnostic; no endurance or Phone-flow acceptance. Earlier install/idle records alone were passive diagnostics. |
+| `verification/guest-launch-component-739e.json` and `verification/guest-desktop-package-0753.json` | Rebuilt guest launcher/source equality and actual nested guest in the latest desktop DEB; fresh guest flow pending. |
+| `verification/shared-settings-desktop-package-0753.json` and `verification/settings-phone-use-only-20261011/source-check.json` | Actual packaged settings source and focused Android-only Phone use removal review; not installed acceptance. |
 
 | Area | Source integration | Installed acceptance |
 | --- | --- | --- |
 | Android Display / paired Termux loader | Separate renderer and approved UID/FD bridge committed; both native ABIs, AIDL, main Java and narrow Fenix Kotlin integration compile | Pending |
 | Linux Display / persistent gateway | Native module committed; Rust/C++ component compilation and software/Intel/NVIDIA frame, resize and reattachment checks pass | Pending Wayland and real Xorg |
-| Container lifecycle / private Podman | Persistent machine owner, isolated engine configuration, guest lifecycle/sudo and desktop context implemented | Pending |
-| Native sidecar / projects / chats | Android hierarchy committed; desktop hierarchy, project folder ownership and private container connection integrated | Pending Android/Linux |
+| Container lifecycle / private Podman | Persistent machine owner, isolated engine configuration, guest lifecycle/sudo and desktop context implemented | Partial Xorg: legacy-update refusal/reboot retry/materialization observed; corrected guest startup and full lifecycle pending |
+| Native sidecar / projects / chats | Android hierarchy committed; desktop hierarchy, project folder ownership and private container connection integrated | Partial Xorg project/cwd/move/draft and one subagent completion path; Android/full matrix pending |
 | BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Pending desktop feature flows on Termux/Linux |
-| Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; integrated Java compilation passes | Pending |
+| Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; Android-only configuration | Android 16 settings rendering observed; feature commands/authorization/revocation pending |
 | Telephony / contacts / messages / voicemail | Native library, private gateway, confirmed call speech, encrypted remote hooks and shared question delivery committed; integrated Java compilation passes | Pending |
 | Pi release / usage / ask_user | Pi 1.1.0, selected-account usage and deferred questions integrated using stock APIs | Pending |
 | Sources / licensing / telemetry / packages | Exact source imports retained; offline auth/search consumers, matching package inputs and transitive notice collection being checked | Pending full artifact/traffic verification |
@@ -152,8 +211,9 @@ auth/search manifests. These source checks do not execute or accept product flow
 
 ## Complete feature and acceptance register
 
-Every row below is pending integrated installed verification. Keep the exact
-candidate revisions, platforms, observations and blockers with each case.
+Every row below still has incomplete integrated installed verification; partial
+passes in the checkpoint do not close an entire row. Keep the exact candidate
+revisions, platforms, observations and blockers with each case.
 The first table covers feature integration; the second records the expanded
 acceptance matrix. Physical GPU/OEM/Android Auto coverage cannot be inferred
 from Cuttlefish. Additional detailed cases remain mandatory in the frozen plan.
