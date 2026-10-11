@@ -3260,3 +3260,13 @@ start. Embedding Termux:X11 does not remove this setup or create a second comman
 store. The user further clarified that this entry opens setup, while the
 existing Display button still opens the desktop itself. It configures local
 Termux only and adds no remote Display path.
+
+### Phone use is the only device-tools configuration entry — 11 October 2026
+
+The user removed Computer Use and Termux Use from the user-facing configuration
+UI. They remain Pi tools/skills, available only in their already specified
+execution environments. Remove the desktop Phone/Computer Use menu entry and
+its unused presentation handlers. Android retains **Phone use**, with its
+existing independent master/control switches and optional Accessibility setup.
+This presentation correction changes neither Pi tool discovery nor Android
+permission, grant, revocation and authorization requirements.

@@ -3,7 +3,7 @@ const sections = Object.freeze({
   localai: { title: 'Local AI', module: './localai.mjs' },
   notifications: { title: 'Notifications', module: './phone.mjs' },
   telephone: { title: 'Telephone', module: './phone.mjs' },
-  'phone-use': { title: 'Phone/Computer Use', module: './device-controls.mjs' },
+  'phone-use': { title: 'Phone use', module: './device-controls.mjs', platform: 'android' },
   remotes: { title: 'Remote Connections', module: './remotes.mjs' },
   performance: { title: 'Performance', module: './performance.mjs' },
   display: { title: 'Display', module: './display-settings.mjs' },
@@ -19,7 +19,7 @@ async function start() {
   started = true;
   try {
     const info = bridge.info, section = sections[info?.section];
-    if (!section || typeof bridge.call !== 'function') throw Error('This settings view is unavailable.');
+    if (!section || section.platform && section.platform !== info.platform || typeof bridge.call !== 'function') throw Error('This settings view is unavailable.');
     const theme = value => {
       const choice = typeof value === 'string' ? value : value?.theme;
       if (['light', 'dark'].includes(choice)) document.documentElement.dataset.theme = choice;
