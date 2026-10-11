@@ -30,8 +30,9 @@ rounded switches. Actual taps enable Apps, and master Off retains that selected
 choice while disabling the options. Unavailable Accessibility options remain
 visible and disabled. The page closes to Agent normally. A system-dark change
 exposed a stale theme read from the paused main activity: the page remained light
-despite its own dark configuration. That installed failure remains open pending
-the targeted correction and retest. Desktop Autostart rendered matching rounded
+despite its own dark configuration. `9ffeedb41d` corrects the activity/theme source;
+Java/Kotlin compilation and independent review passed, with installed retest still
+pending. Desktop Autostart rendered matching rounded
 controls in both light and dark, and the original host appearance was restored.
 The later user correction to separate General/Providers pages and remove the
 legacy web source/license footer is committed in `520600a6a6`, after these
@@ -40,7 +41,10 @@ installed candidates. Existing Firefox notice/source delivery is retained.
 Android 16's earlier `3c35d56d7c` actual Pi session successfully discovered
 Phone controls and listed apps. Published llama and Whisper runtimes were
 configured through Local AI, and the CPU model check passed and unloaded.
-Revocation, notification replies, telephony and speech remain unaccepted.
+On the matched `75b5054c31` installation, the same live Pi session observed no
+discoverable app commands after Apps was switched Off, and actual attempted
+`phoneuse apps list` calls were denied. Master revocation, notification replies,
+telephony and speech remain unaccepted.
 `1286217ca6` corrects discovery wording to show the actual spaced CLI commands.
 
 The Xorg `780540ddf7` checks include close-to-tray/reopen, custom-command
@@ -52,8 +56,13 @@ namespace lifetime; its native helper must be rebuilt and tested. Other actual
 guest blockers are persistent LocalAI startup without a systemd user manager,
 missing Thunar installation actions, panel workarea after resize and interactive
 sudo input corruption. The first two have source fixes `0ce8b11dcb` and
-`a264aff54c`; the latter two are under investigation. Retained guests still use
+`a264aff54c`; `f650600966` repairs panel reservation ordering and `19e9e2702d`
+repairs identification of the real controlling terminal. Independent source
+reviews and actual component compilation passed; installed retests remain open.
+Retained guests still use
 their earlier OS package, which is not silently relabelled as the newer package.
+That retained guest additionally passed actual launcher search/scroll/pin/unpin,
+Manage window size Off/On, preserved Two app mode choice, and scaling changes.
 
 The previous `3c35d56d7c` desktop package was installed on the Wayland host and
 real Xorg VM, with matching APK and Termux packages on Android 16/17.
@@ -71,9 +80,12 @@ search launches Terminal, and ordinary typed commands execute. The guest display
 resizes from 1270×618 to 728×618; closing and reopening the viewport retains that
 same Terminal. Broader OS, lifecycle, acceleration and Wayland-container checks
 remain open. Android 17's Display opens with ordinary browser navigation; its
-tab switcher and tab close return to Agent. Desktop attachment still fails because
-the loader tries to load the compressed X11 library directly from the APK;
-the corrected loader and actual rendered frames remain pending.
+tab switcher and tab close return to Agent. The newer paired `75b5054c31`
+Android 17 installation now renders the XFCE desktop in the viewport, without
+the redundant Display header. Its ordinary tab tray, accessible Tor icon and tab
+close return to Agent. A first taskbar tap did not visibly respond;
+pointer/keyboard, resize and broader Display acceptance remain open rather than
+being inferred from the first rendered frame.
 
 The host's first `3c35d56d7c` restart omitted the acceptance data-directory
 setting and selected an older default backend. The retained browser correctly
