@@ -1,0 +1,12 @@
+{
+  "name": "Phony",
+  "url": "https://github.com/DDOneApps/Phony",
+  "version": "v2.6",
+  "commit": "5c52157dec285c73bc84dd1f388247d3741a127f",
+  "source": "source",
+  "archiveFormat": "git archive --format=tar 5c52157dec285c73bc84dd1f388247d3741a127f",
+  "archiveSha256": "bb080e75a269107e9f58f18d397a084c219861b1e4ad83683f5c52b557b18836",
+  "license": "source/LICENSE",
+  "imported": "2026-10-11",
+  "notes": "Pristine release source, without upstream Git ancestry. This is source provenance, not a bundled Phony APK. Product adaptations follow in separate commits."
+}

@@ -1,0 +1,188 @@
+# Phony
+
+<div align="center">
+
+<img src="https://github.com/user-attachments/assets/c36243df-659f-4ac5-8c63-a1344e8b876a" width=20% title="logo" />
+
+<p>
+
+[![GitHub stars](https://img.shields.io/github/stars/DDOneApps/Phony?style=for-the-badge)](https://github.com/DDOneApps/Phony/stargazers) [![GitHub forks](https://img.shields.io/github/forks/DDOneApps/Phony?style=for-the-badge)](https://github.com/DDOneApps/Phony/network) [![GitHub issues](https://img.shields.io/github/issues/DDOneApps/Phony?style=for-the-badge)](https://github.com/DDOneApps/Phony/issues)
+[![Downloads](https://img.shields.io/github/downloads/DDOneApps/Phony/total?color=green&style=for-the-badge)](https://github.com/DDOneApps/Phony/releases/latest) 
+[![Crowdin](https://img.shields.io/badge/dynamic/json?color=red&label=translation&query=$.message&style=for-the-badge&url=https://raw.githubusercontent.com/DDOneApps/Phony/main/badge.json&logo=crowdin)](https://crowdin.com/project/phony)
+
+[![GitHub license](https://img.shields.io/badge/license-GPL%20v3-red?style=for-the-badge)](LICENSE)
+</p>
+
+**Phony (formerly FakeCall) is an open-source Android application to simulate incoming calls, featuring a modern Material 3 UI with dynamic Monet support.**
+
+
+</div>
+
+## Overview
+Ever wanted to get [that Feature of old Samsung phones](https://www.youtube.com/watch?v=OKV3Eei5JNE) to simulate an incoming call with audio on the originial phone app?
+Introducing Phony. Unlike other apps that merely mock a UI, this app integrates directly with the Android Telecom Framework to provide an indistinguishable calling experience. It has many features to make the call as real as possible.
+
+<p align=center>
+
+## Features
+
+</p>
+
+-  **Original Dialer:** Phony uses your real Phone app to simulate the incoming Call by creating [a Phone Account in android's TelecomManager](https://developer.android.com/reference/android/telecom/TelecomManager)
+-  **Customizable:** The app lets you customize the name of the fake phone account in the settings to match your real service provider.
+-  **Schedule:** Set exact Timers for when the call should come in
+-  **Audio Support:** You can upload audio files that play when the call is answered
+-  **Call History:** Simulated calls are being shown in call history
+-  **IVR Mode:** assign audio files to keys and make sub-menus
+-  **Recording:** record microphone audio of a simulated call
+-  **Automation API:** trigger calls from Tasker, MacroDroid, or ADB via a broadcast intent
+-  **Accessibility Shortcut:** schedule a fake call from the system accessibility button using saved defaults
+-  **Quick Trigger Presets:** save up to 5 presets and expose them as launcher app actions + Quick Settings tiles
+
+## Automation API
+
+Phony exposes a broadcast receiver for automation apps.
+
+**Action**
+
+`com.upnp.fakeCall.TRIGGER`
+
+**Extras**
+
+- `caller_name` (`String`, optional)
+- `caller_number` (`String`, optional)
+- `delay` (`Int`, optional, seconds)
+
+If one or more extras are omitted, Phony falls back to the saved **Automation & Quick Trigger Defaults** from Settings.
+
+**ADB example (recommended, package-targeted, no `-n` needed)**
+
+```bash
+adb shell am broadcast -a com.upnp.fakeCall.TRIGGER -p com.upnp.fakeCall --es caller_name "Boss" --es caller_number "+49123456789" --ei delay 30
+```
+
+**Windows `cmd.exe` (single line)**
+
+```cmd
+adb shell am broadcast -a com.upnp.fakeCall.TRIGGER -p com.upnp.fakeCall --es caller_name "Boss" --es caller_number "+49123456789" --ei delay 30
+```
+
+**Explicit component fallback**
+
+```bash
+adb shell am broadcast -n com.upnp.fakeCall/.ExternalTriggerReceiver -a com.upnp.fakeCall.TRIGGER --es caller_name "Boss" --es caller_number "+49123456789" --ei delay 30
+```
+
+For Tasker, MacroDroid, etc. set:
+- Action: `com.upnp.fakeCall.TRIGGER`
+- Package: `com.upnp.fakeCall`
+
+## Accessibility Quick Trigger
+
+Enable the `Phony` accessibility service and assign it to the system accessibility button or shortcut. When invoked, it schedules a fake call using the saved quick-trigger defaults from Settings and shows a short confirmation toast.
+
+You can configure these defaults inside:
+
+`Settings -> Automation & Quick Trigger Defaults`
+
+You can also save up to five quick trigger presets from the same section:
+
+- presets appear as launcher app actions (long-press the app icon)
+- presets are available as Quick Settings tiles (`Phony Preset 1` ... `Phony Preset 5`)
+
+## Screenshots
+
+![Screenshot 1](https://github.com/DDOneApps/Phony/blob/main/metadata/en-US/images/phoneScreenshots/1.png)
+_Main screen_
+
+![Screenshot 3](https://github.com/DDOneApps/Phony/blob/main/metadata/en-US/images/phoneScreenshots/3.png)
+_settings screen_
+
+![Screenshot 4](https://github.com/DDOneApps/Phony/blob/main/metadata/en-US/images/phoneScreenshots/2.png)
+_Incoming call (example)_
+
+## Tech Stack
+
+**Mobile Development:**
+
+[![Kotlin](https://img.shields.io/badge/Kotlin-0095D5?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+
+[![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/)
+
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-4285F4?style=for-the-badge&logo=jetpack%20compose&logoColor=white)](https://developer.android.com/jetpack/compose)
+
+**Build System:**
+
+[![Gradle](https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white)](https://gradle.org/)
+
+**UI/UX:**
+
+[![Material 3](https://img.shields.io/badge/Material%203-0057B7?style=for-the-badge&logo=materialdesign&logoColor=white)](https://m3.material.io/)
+
+[![Dynamic Color](https://img.shields.io/badge/Monet-8BC34A?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com/design/color/dynamic-color)
+
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=DDOneApps%2FPhony&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=DDOneApps/Phony&type=date&theme=dark&legend=top-left&sealed_token=94RDa-jVjWC7k4fnw3wGcsA_OLrM7ysC39rUlACOBSv2YGxFEmZ2W9hCARovw72YNpf674AQYZVtkO9gFQHPjLRaf0Hgqnu4FKbXnsr-J8hkblFjmm9bLA" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=DDOneApps/Phony&type=date&legend=top-left&sealed_token=94RDa-jVjWC7k4fnw3wGcsA_OLrM7ysC39rUlACOBSv2YGxFEmZ2W9hCARovw72YNpf674AQYZVtkO9gFQHPjLRaf0Hgqnu4FKbXnsr-J8hkblFjmm9bLA" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=DDOneApps/Phony&type=date&legend=top-left&sealed_token=94RDa-jVjWC7k4fnw3wGcsA_OLrM7ysC39rUlACOBSv2YGxFEmZ2W9hCARovw72YNpf674AQYZVtkO9gFQHPjLRaf0Hgqnu4FKbXnsr-J8hkblFjmm9bLA" />
+ </picture>
+</a>
+##  Project Structure
+
+```
+Phony/
+├── .github/          # GitHub related files (e.g., issue templates, workflows) - TODO: If applicable
+├── .idea/            # IntelliJ/Android Studio project configuration files
+├── app/              # Main Android application module
+│   ├── build.gradle.kts # Module-level Gradle build script (Kotlin DSL)
+│   ├── src/          # Source code and resources
+│   │   ├── main/     # Main source set (Kotlin code, resources, manifest)
+│   │   └── androidTest/ # Android UI test source set
+│   └── ...           # Other module files
+├── build.gradle.kts  # Top-level Gradle build script (Kotlin DSL)
+├── gradle/           # Gradle wrapper files
+├── gradlew           # Gradle wrapper script (for Unix/macOS)
+├── gradlew.bat       # Gradle wrapper script (for Windows)
+├── gradle.properties # Global Gradle properties
+├── settings.gradle.kts # Gradle settings file (defines project modules)
+├── .gitignore        # Specifies intentionally untracked files to ignore
+└── README.md         # This README file
+```
+
+## Contributing
+
+We welcome contributions to Phony!
+
+If you want to help translating, do it [Here](https://crowdin.com/project/phony/invite?h=ad1b7ff358ecf52e9f823b4f7f691f1d2725120) via crowdin
+## License
+
+This Project is licenced under GNU General Public License.
+Read it [Here](https://raw.githubusercontent.com/DDOneApps/Phony/refs/heads/main/LICENSE)
+
+## Acknowledgments
+
+-   AI for helping me with my poor kotlin knowledge.
+-   [NLL Apps](https://github.com/NLLAPPS) for telling me how this project could be implemented. ([Reddit](https://www.reddit.com/r/fossdroid/comments/1rj26ty/foss_alternative_to_fake_call_app_using_real/))
+
+## Support
+
+-   If you encounter any bugs or have feature requests, please open an issue on [GitHub Issues](https://github.com/DDOneApps/Phony/issues).
+
+---
+
+
+**☕️ If you want to support me, you can do it via monero:**
+`42eQ1sZtR1USUcGRwc4hiTLNvL7q8U9XSCVVtuhRFKKREpevd4F1X3aN8X4UzkqNTy3n4BsfUooLvj1ydjpem5Ee9SRA2dZ`
+![9a569a26-b6f7-4425-84b6-0584a914ae54](https://github.com/user-attachments/assets/10f6a5b6-bf4c-43c1-8929-21e7cc3951e2)
+
+
+**⭐ Star this repo if you find it helpful!**
+
+Made with ❤️(and AI 🤖)
+
+
+
