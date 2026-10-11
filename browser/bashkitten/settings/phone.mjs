@@ -43,6 +43,14 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
     return runStatus(root, signal);
   }
   function message(value) { if (value) root.append(node(root, 'p', value)); }
+  function connectionHint(value = state) {
+    const name = calling ? 'Calls' : 'Messages';
+    if (value.connectionState === 'connecting') return 'Connecting to your chats…';
+    const local = value.localOnRequested === false ? 'Turn on Local to connect your chats. ' : '';
+    if (value.connectionState === 'not-started')
+      return `${local}${name} are enabled but haven't started. Turn ${name} off and on to start them.`;
+    return local || `${name} aren't connected. Turn ${name} off and on to retry.`;
+  }
   function overview() {
     const run = screen('main'), key = calling ? 'telephony' : 'messages';
     if (!calling) {
@@ -71,7 +79,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
       button(root, 'Message settings', () => settings(false));
       if (!state.notifications) button(root, 'Allow notifications', () => run(() => call('notification-permission')));
     }
-    if (state.settings?.[key] && !state.connected) message('Turn on Local to connect your chats.');
+    if (state.settings?.[key] && !state.connected) message(connectionHint());
   }
   function turnSettings() {
     const run = screen('turn-settings', 'Turn notifications'), saved = state.turnNotifications || {};
@@ -96,7 +104,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
       if (value.reason) missing.push(value.reason);
       else if (!value.accountEnabled) missing.push('Enable BashKitten in calling account settings.');
       if (!value.microphone) missing.push('Allow microphone access to speak during calls.');
-      if (!value.gateway) missing.push('Turn on Local to connect your chats.');
+      if (state.settings?.telephony && !value.gateway) missing.push(connectionHint(value));
       status.textContent = missing.length ? missing.join('\n') : 'Calling is set up. Speech models are checked when you call.';
     };
     button(root, 'Set up calling account', () => run(() => call('setup-account'))).disabled = !state.settings?.telephony;

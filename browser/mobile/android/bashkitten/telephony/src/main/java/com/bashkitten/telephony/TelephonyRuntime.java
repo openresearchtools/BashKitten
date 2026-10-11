@@ -24,6 +24,7 @@ public final class TelephonyRuntime {
         CompletableFuture<byte[]> audio(String action, byte[] bytes, JSONObject metadata);
         void cancel(String requestId);
         boolean connected();
+        String connectionState();
         CompletableFuture<Void> prepare();
     }
     private static TelephonyRuntime instance;
@@ -46,6 +47,8 @@ public final class TelephonyRuntime {
     private Consumer<Boolean> enabledListener;
     public void setEnabledListener(Consumer<Boolean> listener) { execute(() -> enabledListener = listener); }
     public void transportError(String error) { execute(() -> failed(new IllegalStateException(error))); }
+    public void connectionChanged() { execute(this::changed); }
+    public String connectionState() { Backend current = gateway; return current == null ? "not-started" : current.connectionState(); }
     public CompletableFuture<JSONObject> settingsSnapshot() { return job(() -> new JSONObject(settings().toString())); }
     public CompletableFuture<JSONObject> startupSnapshot() { return job(() -> json("enabled", settings().optBoolean("startup"), "available", true,
         "detail", enabled("telephony") || enabled("messages") ? "Restores enabled calling and message connections when BashKitten opens. Local must be available." : "Turn on Calls or Messages in Telephone settings to use this option.")); }
