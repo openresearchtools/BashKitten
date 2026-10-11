@@ -1,0 +1,973 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Adapted from Gnozzard 59ca6d56: XFCE/native-prefix, architecture validation,
+no size quotas, guest sudo/PTY. Original GPL-3.0-or-later license retained."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import stat
+import struct
+import subprocess
+import sys
+import tempfile
+import platform
+import signal
+
+
+APPIMAGE_MAGIC = (b"AI\x01", b"AI\x02")
+DESKTOP_ID_RE = re.compile(r"^[A-Za-z0-9_.+-]+\.desktop$")
+HELPER = str(Path(__file__).resolve().parents[3] / "bin/bashkitten-app")
+
+
+class UserInputError(RuntimeError):
+    pass
+
+
+def data_home() -> Path:
+    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local/share"))
+
+
+def desktop_directory() -> Path:
+    try:
+        result = subprocess.run(
+            ["xdg-user-dir", "DESKTOP"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+        if result:
+            return Path(result)
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+    return Path.home() / "Desktop"
+
+
+def validate_appimage(argument: str) -> Path:
+    path = Path(argument).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path = Path(os.path.normpath(path))
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise UserInputError(f"cannot inspect {path}: {error}") from error
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise UserInputError("AppImage must be a regular file, not a link")
+    if info.st_uid != os.getuid():
+        raise UserInputError("AppImage must be owned by the current user")
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(20)
+    except OSError as error:
+        raise UserInputError(f"cannot read {path}: {error}") from error
+    if len(header) != 20 or header[:4] != b"\x7fELF" or header[8:11] not in APPIMAGE_MAGIC:
+        raise UserInputError("file does not have a valid AppImage ELF/type header")
+    expected = {"x86_64": 62, "aarch64": 183}.get(platform.machine())
+    endian = "<" if header[5] == 1 else ">"
+    if expected is None or header[4] != 2 or struct.unpack_from(endian + "H", header, 18)[0] != expected:
+        raise UserInputError("AppImage architecture does not match this environment")
+    return path
+
+
+def validate_desktop_file(argument: str) -> tuple[Path, str]:
+    path = Path(argument).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path = Path(os.path.normpath(path))
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise UserInputError(f"cannot inspect {path}: {error}") from error
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise UserInputError("desktop launcher must be a regular file, not a link")
+    if info.st_uid != os.getuid():
+        raise UserInputError("desktop launcher must be owned by the current user")
+    if path.suffix.lower() != ".desktop" or info.st_size <= 0:
+        raise UserInputError("desktop launcher must be a non-empty .desktop file ")
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise UserInputError(f"cannot read desktop launcher: {error}") from error
+    if not re.search(r"(?m)^\[Desktop Entry\]\s*$", content):
+        raise UserInputError("file has no [Desktop Entry] group")
+    if not re.search(r"(?m)^Type=Application\s*$", content):
+        raise UserInputError("only application desktop launchers are supported")
+    if desktop_field(content, "Exec") is None and desktop_field(
+        content, "DBusActivatable"
+    ) != "true":
+        raise UserInputError("desktop launcher has neither Exec nor D-Bus activation")
+    return path, content
+
+
+def validate_debian_package(argument: str) -> tuple[Path, str, str]:
+    path = Path(argument).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path = Path(os.path.normpath(path))
+    try:
+        info = path.lstat()
+    except OSError as error:
+        raise UserInputError(f"cannot inspect {path}: {error}") from error
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise UserInputError("Debian package must be a regular file, not a link")
+    if info.st_uid != os.getuid():
+        raise UserInputError("Debian package must be owned by the current user")
+    if path.suffix.lower() != ".deb" or info.st_size == 0:
+        raise UserInputError("selected file is not a non-empty .deb package")
+    try:
+        result = subprocess.run(
+            ["dpkg-deb", "--field", str(path), "Package", "Version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError) as error:
+        raise UserInputError(f"cannot inspect Debian package: {error}") from error
+    fields = dict(
+        line.split(":", 1) for line in result.stdout.splitlines() if ":" in line
+    )
+    package = fields.get("Package", "").strip()
+    version = fields.get("Version", "").strip()
+    if result.returncode != 0 or not re.fullmatch(r"[a-z0-9][a-z0-9+.-]+", package):
+        raise UserInputError("file is not a valid Debian binary package")
+    return path, package, version
+
+
+def authorize(path: Path) -> None:
+    current = path.stat().st_mode
+    path.chmod(current | stat.S_IXUSR)
+
+
+def desktop_exec_quote(value: str) -> str:
+    if any(ord(character) < 32 for character in value):
+        raise UserInputError("desktop launch paths cannot contain control characters")
+    # Desktop Entry Exec uses percent field codes even inside quotes.
+    escaped = value.replace("%", "%%")
+    for character in ("\\", '"', "`", "$"):
+        escaped = escaped.replace(character, f"\\{character}")
+    return f'"{escaped}"'
+
+
+def display_name(path: Path) -> str:
+    name = path.name
+    for suffix in (".AppImage", ".appimage"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    name = re.sub(r"[\r\n\t]+", " ", name).strip()
+    return name or "AppImage"
+
+
+def atomic_write(path: Path, content: str, mode: int = 0o644) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def squashfs_offset(path: Path) -> int | None:
+    """Locate and validate a type-2 AppImage SquashFS superblock."""
+    size = path.stat().st_size
+    with path.open("rb") as handle:
+        offset = 0
+        carry = b""
+        while True:
+            block = handle.read(8 * 1024 * 1024)
+            if not block:
+                return None
+            data = carry + block
+            search_from = 0
+            while True:
+                position = data.find(b"hsqs", search_from)
+                if position < 0:
+                    break
+                candidate = offset - len(carry) + position
+                resume = handle.tell()
+                handle.seek(candidate)
+                superblock = handle.read(96)
+                handle.seek(resume)
+                if len(superblock) == 96:
+                    block_size = struct.unpack_from("<I", superblock, 12)[0]
+                    major, minor = struct.unpack_from("<HH", superblock, 28)
+                    bytes_used = struct.unpack_from("<Q", superblock, 40)[0]
+                    if (
+                        4096 <= block_size <= 1024 * 1024
+                        and block_size & (block_size - 1) == 0
+                        and major == 4
+                        and minor == 0
+                        and 96 <= bytes_used <= size - candidate
+                    ):
+                        return candidate
+                search_from = position + 1
+            carry = data[-95:]
+            offset += len(block)
+
+
+def extract_appimage_icon(path: Path, icon_stem: str) -> Path | None:
+    """Extract .DirIcon from SquashFS without executing the AppImage runtime."""
+    offset = squashfs_offset(path)
+    if offset is None:
+        return None
+    icon_dir = data_home() / "icons" / "bashkitten-app-appimages"
+    icon_dir.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{icon_stem}.", dir=icon_dir)
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        with temporary.open("wb") as output:
+            result = subprocess.run(
+                ["unsquashfs", "-o", str(offset), "-cat", str(path), ".DirIcon"],
+                check=False,
+                stdout=output,
+                stderr=subprocess.DEVNULL,
+            )
+        if result.returncode != 0 or temporary.stat().st_size <= 0:
+            return None
+        with temporary.open("rb") as stream:
+            header = stream.read(4096)
+        stripped = header.lstrip()
+        if header.startswith(b"\x89PNG\r\n\x1a\n"):
+            extension = ".png"
+        elif stripped.startswith(b"<svg") or (
+            stripped.startswith(b"<?xml") and b"<svg" in stripped
+        ):
+            extension = ".svg"
+        elif b"/* XPM */" in header[:128]:
+            extension = ".xpm"
+        else:
+            return None
+        destination = icon_dir / f"{icon_stem}{extension}"
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, destination)
+        for old_icon in icon_dir.glob(f"{icon_stem}.*"):
+            if old_icon != destination and old_icon.is_file() and not old_icon.is_symlink():
+                old_icon.unlink()
+        return destination
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return None
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def appimage_desktop_path(path: Path) -> Path:
+    identity = hashlib.sha256(os.fsencode(path)).hexdigest()[:20]
+    return data_home() / "applications" / f"bashkitten-app-appimage-{identity}.desktop"
+
+
+def update_desktop_database(directory: Path) -> None:
+    try:
+        subprocess.run(
+            ["update-desktop-database", str(directory)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+
+def managed_appimage_entry(desktop_id: str) -> tuple[Path, str]:
+    if not DESKTOP_ID_RE.fullmatch(desktop_id) or not desktop_id.startswith("bashkitten-app-appimage-"):
+        raise UserInputError("not a BashKitten-managed AppImage entry")
+    entry = data_home() / "applications" / desktop_id
+    try:
+        info = entry.lstat()
+    except OSError as error:
+        raise UserInputError(f"cannot inspect application entry: {error}") from error
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+        raise UserInputError("application entry is not a user-owned regular file")
+    content = entry.read_text(encoding="utf-8")
+    if "\nX-BashKitten-Managed=true\n" not in f"\n{content}":
+        raise UserInputError("application entry is not managed by BashKitten")
+    return entry, content
+
+
+def managed_desktop_entry(desktop_id: str) -> tuple[Path, str]:
+    if not DESKTOP_ID_RE.fullmatch(desktop_id) or not desktop_id.startswith("bashkitten-app-launcher-"):
+        raise UserInputError("not a BashKitten-managed desktop launcher")
+    entry = data_home() / "applications" / desktop_id
+    try:
+        info = entry.lstat()
+    except OSError as error:
+        raise UserInputError(f"cannot inspect application entry: {error}") from error
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+        raise UserInputError("application entry is not a user-owned regular file")
+    content = entry.read_text(encoding="utf-8")
+    if (
+        "\nX-BashKitten-Managed=true\n" not in f"\n{content}"
+        or desktop_field(content, "X-BashKitten-Desktop-Source") is None
+    ):
+        raise UserInputError("application entry is not a managed desktop launcher")
+    return entry, content
+
+
+def register_appimage(path: Path) -> Path:
+    authorize(path)
+    desktop_file = appimage_desktop_path(path)
+    launcher_name = display_name(path)
+    if desktop_file.is_file() and not desktop_file.is_symlink():
+        previous = desktop_file.read_text(encoding="utf-8")
+        if "\nX-BashKitten-Managed=true\n" in f"\n{previous}":
+            match = re.search(r"(?m)^Name=(.+)$", previous)
+            if match:
+                launcher_name = match.group(1)
+    icon = extract_appimage_icon(path, desktop_file.stem)
+    icon_value = str(icon) if icon is not None else "application-x-executable"
+    entry = "\n".join(
+        (
+            "[Desktop Entry]",
+            "Type=Application",
+            f"Name={launcher_name}",
+            f"Comment=AppImage at {path}",
+            f"Exec={desktop_exec_quote(HELPER)} launch {desktop_exec_quote(str(path))}",
+            f"Icon={icon_value}",
+            "Terminal=false",
+            "Categories=Utility;",
+            "StartupNotify=true",
+            "X-BashKitten-Managed=true",
+            f"X-AppImage-Path={path}",
+            "",
+        )
+    )
+    atomic_write(desktop_file, entry)
+    update_desktop_database(desktop_file.parent)
+    return desktop_file
+
+
+def desktop_field(content: str, key: str) -> str | None:
+    match = re.search(rf"(?m)^{re.escape(key)}=(.*)$", content)
+    return match.group(1) if match else None
+
+
+def desktop_launcher_path(path: Path) -> Path:
+    identity = hashlib.sha256(os.fsencode(path)).hexdigest()[:20]
+    return data_home() / "applications" / f"bashkitten-app-launcher-{identity}.desktop"
+
+
+def _replace_desktop_field(content: str, key: str, value: str) -> str:
+    header = re.search(r"(?m)^\[Desktop Entry\]\s*$", content)
+    if header is None:
+        raise UserInputError("file has no [Desktop Entry] group")
+    next_header = re.search(r"(?m)^\[", content[header.end() :])
+    group_end = (
+        header.end() + next_header.start()
+        if next_header is not None
+        else len(content)
+    )
+    group = content[header.end() : group_end]
+    updated, count = re.subn(
+        rf"(?m)^{re.escape(key)}=.*$",
+        lambda _match: f"{key}={value}",
+        group,
+        count=1,
+    )
+    if count:
+        return f"{content[:header.end()]}{updated}{content[group_end:]}"
+    separator = "" if group.endswith("\n") else "\n"
+    updated = f"{group}{separator}{key}={value}\n"
+    return f"{content[:header.end()]}{updated}{content[group_end:]}"
+
+
+def _localize_desktop_icon(path: Path, content: str) -> str:
+    icon_value = desktop_field(content, "Icon")
+    if icon_value and not Path(icon_value).is_absolute():
+        relative_icon = Path(icon_value)
+        if relative_icon.suffix.lower() in {".svg", ".png", ".xpm", ".ico"}:
+            candidates = [path.parent / relative_icon]
+        else:
+            candidates = list(
+                path.parent / f"{icon_value}{extension}"
+                for extension in (".svg", ".png", ".xpm", ".ico")
+            )
+        for sibling_icon in candidates:
+            if sibling_icon.is_file() and not sibling_icon.is_symlink():
+                content = _replace_desktop_field(
+                    content, "Icon", str(sibling_icon.resolve())
+                )
+                break
+    return content
+
+
+def prepared_desktop_content(path: Path, content: str) -> str:
+    prepared = _localize_desktop_icon(path, content)
+    prepared = _replace_desktop_field(
+        prepared,
+        "Exec",
+        f"{desktop_exec_quote(HELPER)} desktop-launch {desktop_exec_quote(str(path))} %U",
+    )
+    prepared = _replace_desktop_field(prepared, "TryExec", HELPER)
+    prepared = _replace_desktop_field(prepared, "DBusActivatable", "false")
+    prepared = _replace_desktop_field(prepared, "X-BashKitten-Managed", "true")
+    return _replace_desktop_field(prepared, "X-BashKitten-Desktop-Source", str(path))
+
+
+def register_desktop_file(path: Path, content: str) -> Path:
+    destination = desktop_launcher_path(path)
+    atomic_write(destination, prepared_desktop_content(path, content), mode=0o755)
+    update_desktop_database(destination.parent)
+    return destination
+
+
+def matching_managed_desktop_copy(content: str, directory: Path) -> Path | None:
+    source_marker = desktop_field(content, "X-AppImage-Path")
+    source_key = "X-AppImage-Path"
+    if not source_marker:
+        source_marker = desktop_field(content, "X-BashKitten-Desktop-Source")
+        source_key = "X-BashKitten-Desktop-Source"
+    if not source_marker or not directory.is_dir():
+        return None
+    for candidate in directory.glob("*.desktop"):
+        try:
+            info = candidate.lstat()
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+                continue
+            existing = candidate.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if (
+            "\nX-BashKitten-Managed=true\n" in f"\n{existing}"
+            and desktop_field(existing, source_key) == source_marker
+        ):
+            return candidate
+    return None
+
+
+def mark_desktop_trusted(destination: Path) -> None:
+    try:
+        subprocess.run(
+            ["gio", "set", "-t", "string", str(destination), "metadata::trusted", "true"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+
+def trusted_desktop_copy(source: Path, preferred_name: str) -> Path:
+    destination_dir = desktop_directory()
+    destination_dir.mkdir(parents=True, exist_ok=True)
+    source_content = source.read_text(encoding="utf-8")
+    managed_destination = matching_managed_desktop_copy(source_content, destination_dir)
+    safe_name = re.sub(r"[^A-Za-z0-9._ +()-]", "_", preferred_name).strip(" .")
+    if not safe_name:
+        safe_name = "Application"
+    destination = managed_destination or destination_dir / f"{safe_name}.desktop"
+    if managed_destination is None:
+        counter = 2
+        while destination.exists():
+            if destination.read_bytes() == source.read_bytes():
+                break
+            destination = destination_dir / f"{safe_name} ({counter}).desktop"
+            counter += 1
+    temporary = destination.with_name(f".{destination.name}.tmp-{os.getpid()}")
+    try:
+        shutil.copyfile(source, temporary)
+        temporary.chmod(0o755)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    mark_desktop_trusted(destination)
+    return destination
+
+
+def locate_desktop_file(desktop_id: str) -> Path:
+    if not DESKTOP_ID_RE.fullmatch(desktop_id):
+        raise UserInputError("invalid desktop application ID")
+    directories = [data_home()]
+    directories.extend(
+        Path(item)
+        for item in os.environ.get("XDG_DATA_DIRS", "/usr/local/share:/usr/share").split(":")
+        if item
+    )
+    for directory in directories:
+        candidate = directory / "applications" / desktop_id
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate
+    raise UserInputError(f"application entry not found: {desktop_id}")
+
+
+def command_launch(arguments: argparse.Namespace) -> None:
+    path = validate_appimage(arguments.path)
+    authorize(path)
+    directory = persistent_extract_directory(path)
+    if directory.exists() or directory.is_symlink():
+        exec_extracted_appimage(path, directory, extracted_apprun(directory), arguments.targets)
+        return
+    os.chdir(path.parent)
+    environment = os.environ.copy()
+    environment.setdefault("ELECTRON_OZONE_PLATFORM_HINT", "x11")
+    os.execve(path, [str(path), *arguments.targets], environment)
+
+
+def persistent_extract_directory(path: Path) -> Path:
+    return path.with_name(f"{path.name}.extracted")
+
+
+def extracted_apprun(directory: Path) -> Path:
+    try:
+        directory_info = directory.lstat()
+    except OSError as error:
+        raise UserInputError(f"cannot inspect extracted AppImage directory: {error}") from error
+    if stat.S_ISLNK(directory_info.st_mode) or not stat.S_ISDIR(directory_info.st_mode):
+        raise UserInputError("persistent extraction path is not a real directory")
+    if directory_info.st_uid != os.getuid():
+        raise UserInputError("persistent extraction directory is not owned by the current user")
+    apprun = directory / "AppRun"
+    try:
+        resolved = apprun.resolve(strict=True)
+        resolved.relative_to(directory.resolve(strict=True))
+        target_info = resolved.stat()
+    except (OSError, ValueError) as error:
+        raise UserInputError("extracted AppRun is missing or points outside its directory") from error
+    if not stat.S_ISREG(target_info.st_mode) or target_info.st_uid != os.getuid():
+        raise UserInputError("extracted AppRun target is not a user-owned regular file")
+    resolved.chmod(target_info.st_mode | stat.S_IXUSR)
+    return apprun
+
+
+def extracted_desktop_arguments(directory: Path) -> list[str]:
+    """Return literal launch arguments declared by the AppImage desktop entry."""
+    try:
+        desktop_files = sorted(directory.glob("*.desktop"))
+    except OSError:
+        return []
+    for desktop_file in desktop_files:
+        try:
+            info = desktop_file.lstat()
+            if (
+                stat.S_ISLNK(info.st_mode)
+                or not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.getuid()
+                or info.st_size <= 0
+            ):
+                continue
+            content = desktop_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            continue
+        exec_value = desktop_field(content, "Exec")
+        if not exec_value:
+            continue
+        try:
+            tokens = shlex.split(exec_value, posix=True)
+        except ValueError:
+            continue
+        if not tokens:
+            continue
+        fixed_arguments = []
+        for token in tokens[1:]:
+            without_literal_percent = token.replace("%%", "")
+            if re.search(r"%[A-Za-z]", without_literal_percent):
+                continue
+            fixed_arguments.append(token.replace("%%", "%"))
+        return fixed_arguments
+    return []
+
+
+def no_sandbox_marker(directory: Path) -> Path:
+    return directory / ".no-sandbox"
+
+
+def has_no_sandbox_approval(directory: Path) -> bool:
+    try:
+        info = no_sandbox_marker(directory).lstat()
+    except OSError:
+        return False
+    return (
+        stat.S_ISREG(info.st_mode)
+        and not stat.S_ISLNK(info.st_mode)
+        and info.st_uid == os.getuid()
+        and stat.S_IMODE(info.st_mode) == 0o600
+        and info.st_size == 0
+    )
+
+
+def exec_extracted_appimage(path: Path, directory: Path, apprun: Path, arguments=()) -> None:
+    os.chdir(directory)
+    environment = os.environ.copy()
+    environment.setdefault("ELECTRON_OZONE_PLATFORM_HINT", "x11")
+    environment["APPIMAGE"] = str(path)
+    environment["APPDIR"] = str(directory)
+    environment["OWD"] = str(path.parent)
+    desktop_arguments = extracted_desktop_arguments(directory)
+    launch_arguments = [
+        argument for argument in desktop_arguments if argument != "--no-sandbox"
+    ]
+    if has_no_sandbox_approval(directory):
+        try:
+            position = desktop_arguments.index("--no-sandbox")
+        except ValueError:
+            launch_arguments.append("--no-sandbox")
+        else:
+            launch_arguments.insert(position, "--no-sandbox")
+    os.execve(apprun, [str(apprun), *launch_arguments, *arguments], environment)
+
+
+def ensure_persistent_extraction(path: Path) -> tuple[Path, Path]:
+    destination = persistent_extract_directory(path)
+    if destination.exists() or destination.is_symlink():
+        return destination, extracted_apprun(destination)
+    offset = squashfs_offset(path)
+    if offset is None:
+        raise UserInputError("cannot locate the AppImage SquashFS filesystem")
+    temporary = Path(tempfile.mkdtemp(prefix=f".{path.name}.extracting-", dir=path.parent))
+    try:
+        run_extraction(
+            [
+                "unsquashfs",
+                "-processors",
+                str(min(8, os.cpu_count() or 1)),
+                "-o",
+                str(offset),
+                "-d",
+                str(temporary),
+                str(path),
+            ],
+        )
+        apprun = extracted_apprun(temporary)
+        try:
+            os.replace(temporary, destination)
+        except FileExistsError:
+            return destination, extracted_apprun(destination)
+        return destination, destination / apprun.relative_to(temporary)
+    except (FileNotFoundError, subprocess.SubprocessError) as error:
+        raise UserInputError(f"cannot extract AppImage: {error}") from error
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary, ignore_errors=True)
+
+
+def run_extraction(command: list[str]) -> None:
+    """Separate helper owns an interruptible native progress dialog and child."""
+    child = progress = None
+    def cancelled(*_):
+        raise UserInputError("AppImage extraction cancelled")
+    previous = {sig: signal.signal(sig, cancelled) for sig in (signal.SIGTERM, signal.SIGINT)}
+    try:
+        with tempfile.TemporaryFile(mode="w+") as errors:
+            child = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=errors, start_new_session=True)
+            progress = subprocess.Popen(["zenity", "--progress", "--pulsate", "--auto-close",
+                                         "--title=BashKitten Applications", "--text=Extracting AppImage…"],
+                                        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True)
+            while child.poll() is None:
+                if progress.poll() is not None:cancelled()
+                try:child.wait(timeout=.1)
+                except subprocess.TimeoutExpired:pass
+            if child.returncode:
+                errors.seek(0)
+                raise UserInputError("AppImage extraction failed: " + errors.read().strip())
+            if progress.poll() is None:
+                progress.communicate("100\n", timeout=5)
+    finally:
+        for sig, handler in previous.items():signal.signal(sig,handler)
+        if child and child.poll() is None:
+            os.killpg(child.pid,signal.SIGTERM)
+            try:child.wait(timeout=2)
+            except subprocess.TimeoutExpired:os.killpg(child.pid,signal.SIGKILL);child.wait()
+        if progress and progress.poll() is None:
+            progress.terminate()
+            try:progress.wait(timeout=2)
+            except subprocess.TimeoutExpired:progress.kill();progress.wait()
+
+
+def extract_and_run(path: Path, request_no_sandbox: bool = False) -> None:
+    directory, apprun = ensure_persistent_extraction(path)
+    if request_no_sandbox and not has_no_sandbox_approval(directory):
+        atomic_write(no_sandbox_marker(directory), "", mode=0o600)
+    exec_extracted_appimage(path, directory, apprun)
+
+
+def command_extract_and_run(arguments: argparse.Namespace) -> None:
+    path = validate_appimage(arguments.path)
+    authorize(path)
+    extract_and_run(path)
+
+
+def command_extract_and_run_no_sandbox(arguments: argparse.Namespace) -> None:
+    path = validate_appimage(arguments.path)
+    authorize(path)
+    extract_and_run(path, request_no_sandbox=True)
+
+
+def launch_desktop_file(path: Path, targets: list[str]) -> None:
+    """Launch from the source file so desktop field codes retain its location."""
+    try:
+        import gi
+
+        gi.require_version("Gio", "2.0")
+        from gi.repository import Gio
+
+        try:
+            gi.require_version("GioUnix", "2.0")
+            from gi.repository import GioUnix
+
+            desktop_app_info = GioUnix.DesktopAppInfo
+        except (ImportError, ValueError):
+            desktop_app_info = Gio.DesktopAppInfo
+    except (AttributeError, ImportError, ValueError) as error:
+        raise UserInputError(f"desktop launcher support is unavailable: {error}") from error
+
+    try:
+        application = desktop_app_info.new_from_filename(str(path))
+        if application is None:
+            raise UserInputError("desktop launcher could not be loaded")
+        files = [Gio.File.new_for_commandline_arg(target) for target in targets]
+        if not application.launch(files, None):
+            raise UserInputError("desktop launcher did not start successfully")
+    except UserInputError:
+        raise
+    except Exception as error:
+        raise UserInputError(f"cannot launch desktop file: {error}") from error
+
+
+def command_desktop_launch(arguments: argparse.Namespace) -> None:
+    path, _content = validate_desktop_file(arguments.path)
+    launch_desktop_file(path, arguments.targets)
+
+
+def command_desktop_register(arguments: argparse.Namespace) -> None:
+    path, content = validate_desktop_file(arguments.path)
+    entry = register_desktop_file(path, content)
+    if arguments.desktop:
+        name = desktop_field(content, "Name") or path.stem
+        print(trusted_desktop_copy(entry, name))
+    else:
+        print(entry)
+
+
+def command_authorize(arguments: argparse.Namespace) -> None:
+    path = validate_appimage(arguments.path)
+    authorize(path)
+    print(path)
+
+
+def command_register(arguments: argparse.Namespace) -> None:
+    path = validate_appimage(arguments.path)
+    entry = register_appimage(path)
+    if arguments.desktop:
+        shortcut = trusted_desktop_copy(entry, display_name(path))
+        print(shortcut)
+    else:
+        print(entry)
+
+
+def command_app_to_desktop(arguments: argparse.Namespace) -> None:
+    source = locate_desktop_file(arguments.desktop_id)
+    name = arguments.desktop_id.removesuffix(".desktop").split(".")[-1]
+    print(trusted_desktop_copy(source, name))
+
+
+def command_remove_appimage(arguments: argparse.Namespace) -> None:
+    entry, content = managed_appimage_entry(arguments.desktop_id)
+    icon_match = re.search(r"(?m)^Icon=(.+)$", content)
+    if icon_match:
+        icon = Path(icon_match.group(1))
+        expected_dir = data_home() / "icons" / "bashkitten-app-appimages"
+        if icon.parent == expected_dir and icon.name.startswith(entry.stem) and icon.is_file():
+            icon.unlink()
+    entry.unlink()
+    update_desktop_database(entry.parent)
+    print(entry)
+
+
+def command_remove_desktop(arguments: argparse.Namespace) -> None:
+    entry, _content = managed_desktop_entry(arguments.desktop_id)
+    entry.unlink()
+    update_desktop_database(entry.parent)
+    print(entry)
+
+
+def command_rename_appimage(arguments: argparse.Namespace) -> None:
+    entry, content = managed_appimage_entry(arguments.desktop_id)
+    rename_managed_entry(entry, content, arguments.name)
+
+
+def rename_managed_entry(entry: Path, content: str, requested_name: str) -> None:
+    name = requested_name.strip()
+    if not name or len(name) > 120 or any(ord(character) < 32 for character in name):
+        raise UserInputError("name must contain 1 to 120 printable characters")
+    escaped_name = name.replace("\\", "\\\\")
+    updated, count = re.subn(
+        r"(?m)^Name=.*$",
+        lambda _match: f"Name={escaped_name}",
+        content,
+        count=1,
+    )
+    if count != 1:
+        raise UserInputError("application entry has no Name field")
+    desktop_copy = matching_managed_desktop_copy(content, desktop_directory())
+    atomic_write(entry, updated)
+    if desktop_copy is not None:
+        atomic_write(desktop_copy, updated, mode=0o755)
+        mark_desktop_trusted(desktop_copy)
+    update_desktop_database(entry.parent)
+    print(entry)
+
+
+def command_rename_desktop(arguments: argparse.Namespace) -> None:
+    entry, content = managed_desktop_entry(arguments.desktop_id)
+    rename_managed_entry(entry, content, arguments.name)
+
+
+def _show_dialog(kind: str, title: str, text: str) -> None:
+    try:
+        subprocess.run(
+            ["zenity", f"--{kind}", f"--title={title}", f"--text={text}"],
+            check=False,
+            timeout=300,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        pass
+
+
+def command_install_deb(arguments: argparse.Namespace) -> None:
+    path, package, version = validate_debian_package(arguments.path)
+    version_text = f" {version}" if version else ""
+    try:
+        confirmed = subprocess.run(
+            [
+                "zenity",
+                "--question",
+                "--title=Install Debian Package",
+                f"--text=Install {package}{version_text}?\n\nDependencies will be resolved with APT.",
+                "--ok-label=Install",
+                "--cancel-label=Cancel",
+            ],
+            check=False,
+            timeout=300,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError) as error:
+        raise UserInputError(f"cannot open package confirmation: {error}") from error
+    if confirmed.returncode != 0:
+        return
+    # The real guest terminal owns its PTY and displays APT's output/prompts.
+    # Installation is explicit; never silently retry a raw AppImage or host APT.
+    terminal_command = shlex.join(["sudo", "-n", "apt-get", "install", "-y", "--", str(path)])
+    subprocess.run(["xfce4-terminal", "--disable-server", "--hold", "--title=Install Debian Package",
+                    "--command=" + terminal_command], check=True)
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(prog="bashkitten-app")
+    subparsers = result.add_subparsers(dest="command", required=True)
+
+    launch = subparsers.add_parser("launch", help="validate and launch an AppImage")
+    launch.add_argument("path")
+    launch.add_argument("targets", nargs="*")
+    launch.set_defaults(function=command_launch)
+
+    extract_run = subparsers.add_parser(
+        "extract-and-run", help="persistently extract and run an AppImage"
+    )
+    extract_run.add_argument("path")
+    extract_run.set_defaults(function=command_extract_and_run)
+
+    extract_run_no_sandbox = subparsers.add_parser(
+        "extract-and-run-no-sandbox",
+        help="persistently extract and run an AppImage without its sandbox",
+    )
+    extract_run_no_sandbox.add_argument("path")
+    extract_run_no_sandbox.set_defaults(function=command_extract_and_run_no_sandbox)
+
+    authorize_parser = subparsers.add_parser("authorize", help="make a valid AppImage executable")
+    authorize_parser.add_argument("path")
+    authorize_parser.set_defaults(function=command_authorize)
+
+    register = subparsers.add_parser("register", help="add an AppImage to Applications")
+    register.add_argument("path")
+    register.add_argument("--desktop", action="store_true", help="also create a desktop shortcut")
+    register.set_defaults(function=command_register)
+
+    desktop_launch = subparsers.add_parser(
+        "desktop-launch", help="validate and run a local desktop launcher"
+    )
+    desktop_launch.add_argument("path")
+    desktop_launch.add_argument("targets", nargs="*")
+    desktop_launch.set_defaults(function=command_desktop_launch)
+
+    desktop_register = subparsers.add_parser(
+        "desktop-register", help="add a local desktop launcher to Applications"
+    )
+    desktop_register.add_argument("path")
+    desktop_register.add_argument(
+        "--desktop", action="store_true", help="also create a trusted desktop shortcut"
+    )
+    desktop_register.set_defaults(function=command_desktop_register)
+
+    install_deb = subparsers.add_parser(
+        "install-deb", help="confirm and install a local Debian package using APT"
+    )
+    install_deb.add_argument("path")
+    install_deb.set_defaults(function=command_install_deb)
+
+    shortcut = subparsers.add_parser("app-to-desktop", help="copy an installed app to the desktop")
+    shortcut.add_argument("desktop_id")
+    shortcut.set_defaults(function=command_app_to_desktop)
+
+    remove = subparsers.add_parser(
+        "remove-appimage", help="remove a BashKitten-managed AppImage from Applications"
+    )
+    remove.add_argument("desktop_id")
+    remove.set_defaults(function=command_remove_appimage)
+
+    remove_desktop = subparsers.add_parser(
+        "remove-desktop", help="remove a BashKitten-managed desktop launcher from Applications"
+    )
+    remove_desktop.add_argument("desktop_id")
+    remove_desktop.set_defaults(function=command_remove_desktop)
+
+    rename = subparsers.add_parser(
+        "rename-appimage", help="change the visible name of a BashKitten-managed AppImage"
+    )
+    rename.add_argument("desktop_id")
+    rename.add_argument("name")
+    rename.set_defaults(function=command_rename_appimage)
+
+    rename_desktop = subparsers.add_parser(
+        "rename-desktop", help="change the visible name of a managed desktop launcher"
+    )
+    rename_desktop.add_argument("desktop_id")
+    rename_desktop.add_argument("name")
+    rename_desktop.set_defaults(function=command_rename_desktop)
+
+    return result
+
+
+def main() -> int:
+    try:
+        arguments = parser().parse_args()
+        arguments.function(arguments)
+        return 0
+    except UserInputError as error:
+        _show_dialog("error", "BashKitten Applications", str(error))
+        print(f"bashkitten-app: {error}", file=sys.stderr)
+        return 2
+    except OSError as error:
+        _show_dialog("error", "BashKitten Applications", str(error))
+        print(f"bashkitten-app: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

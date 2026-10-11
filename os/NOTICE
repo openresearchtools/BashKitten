@@ -1,0 +1,44 @@
+BashKitten OS — desktop customization within BashKitten.
+New BashKitten code: AGPL-3.0-only. See licenses/AGPL-3.0.txt.
+
+Retained and adapted source:
+- Gnozzard, https://github.com/openresearchtools/gnozzard,
+  59ca6d56ef147dea820381036838e76645074d0e: applications/installer/launcher
+  behavior and dark/orange styling, GPL-3.0-or-later. Changes: native GTK/XFCE
+  integration, backend-local naming, explicit X11 session, architecture validation,
+  no arbitrary file quotas, private guest sudo/PTY instead of Polkit.
+- Gnozzard orange folder artwork derives from GNOME Adwaita, LGPL-3.0-only.
+  SVG attribution and upstream THIRD_PARTY.md are retained. Palette unchanged.
+- PeGPU v0.1.106, aae5382fae02eaeb97ceeb7fcaa531f88009b081: scaling profiles,
+  normalization, changed-value writes and transaction functions, MIT. Changes:
+  shared settings, dynamic panel discovery, no process scraping or WM restart.
+- BuzzardOS podman, 6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0:
+  Thunar custom-action identities/merge behavior, AGPL-3.0-or-later.
+- XFCE panel 4.20.8, 56211a5feb13158447c930c8de2b713a9256c1be:
+  GPL-2.0-or-later, libxfce4panel LGPL-2.1-or-later. Only the per-window
+  Two app mode action is patched; stock tasklist and systray implementations remain.
+- Xfwm4 4.20.0, 7cadce33226be955fa2677b97a1969701d246b80:
+  default decoration theme, GPL-2.0-or-later. Recolored to Gnozzard palette.
+- BashKitten kitten-with-glasses logo, AGPL-3.0-only; original retained in
+  browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png.
+
+Full pristine source, exact selected-file hashes and upstream paths are in
+os/upstream/sources.json and os/upstream/. All modifications are in os/src,
+os/data and os/patches; upstream snapshots remain unchanged. Matching source
+is included in the repository source archive delivered beside release binaries.
+Normal GTK, X11, XFCE, GLib, Python, AT-SPI and GIO dependencies remain native
+OS packages; their own package/source metadata and copyright files remain installed.
+No telemetry, external log collector, update checker or developer callback is
+added. Source review/build checks are not a claim of completed traffic acceptance.
+
+Termux tray menu dependency: libdbusmenu 16.04.0 official Launchpad release,
+source SHA256 b9cc4a2acd74509435892823607d966d424bd9ad5d0b00938f27240a1bfa878a,
+LGPL-2.1-or-later / LGPL-3.0-or-later component notices retained. GTK3 build is
+private to BashKitten OS; Termux's GLib-only package is not substituted for it.
+The named configure patch defines its Valgrind conditional when donor tests are
+disabled; no donor tests or introspection/dumper tools enter the runtime package.
+
+Private libxfce4windowing 4.20.7, e288652b65a103c64161307281116b838c5df643,
+LGPL-2.1-or-later, from https://gitlab.xfce.org/xfce/libxfce4windowing.
+Built for X11 only as the dependency required by panel 4.20.8; full source and
+license texts retained. No separate Wayland/Sway desktop is included.

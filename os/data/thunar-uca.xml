@@ -1,0 +1,92 @@
+<actions>
+  <action>
+    <icon>media-playback-start</icon>
+    <name>Run AppImage</name>
+    <unique-id>bashkitten-appimage-run-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app launch %f</command>
+    <description>Run this AppImage using the validated BashKitten launcher</description>
+    <range>1-1</range>
+    <patterns>*.AppImage;*.appimage</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>package-x-generic</icon>
+    <name>Extract and Run AppImage (Persistent)</name>
+    <unique-id>bashkitten-appimage-extract-run-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app extract-and-run %f</command>
+    <description>Persistently extract beside this AppImage and run it</description>
+    <range>1-1</range>
+    <patterns>*.AppImage;*.appimage</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>dialog-warning</icon>
+    <name>Extract and Run --no-sandbox</name>
+    <unique-id>bashkitten-appimage-extract-run-no-sandbox-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app extract-and-run-no-sandbox %f</command>
+    <description>Persistently extract and remember the --no-sandbox launch option</description>
+    <range>1-1</range>
+    <patterns>*.AppImage;*.appimage</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>application-x-executable</icon>
+    <name>Add AppImage to Applications</name>
+    <unique-id>bashkitten-appimage-add-applications-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app register %f</command>
+    <description>Register this AppImage in the Applications menu</description>
+    <range>1-1</range>
+    <patterns>*.AppImage;*.appimage</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>user-desktop</icon>
+    <name>Add AppImage to Desktop</name>
+    <unique-id>bashkitten-appimage-add-desktop-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app register --desktop %f</command>
+    <description>Create a desktop shortcut linked to this AppImage</description>
+    <range>1-1</range>
+    <patterns>*.AppImage;*.appimage</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>application-x-executable</icon>
+    <name>Run Desktop Launcher</name>
+    <unique-id>bashkitten-desktop-run-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app desktop-launch %f</command>
+    <description>Run Desktop Launcher</description>
+    <range>1-1</range>
+    <patterns>*.desktop</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>application-x-executable</icon>
+    <name>Add Launcher to Applications</name>
+    <unique-id>bashkitten-desktop-apps-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app desktop-register %f</command>
+    <description>Add Launcher to Applications</description>
+    <range>1-1</range>
+    <patterns>*.desktop</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>application-x-executable</icon>
+    <name>Add Launcher to Desktop</name>
+    <unique-id>bashkitten-desktop-desktop-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app desktop-register --desktop %f</command>
+    <description>Add Launcher to Desktop</description>
+    <range>1-1</range>
+    <patterns>*.desktop</patterns>
+    <other-files />
+  </action>
+  <action>
+    <icon>application-x-executable</icon>
+    <name>Install Debian Package…</name>
+    <unique-id>bashkitten-deb-install-v1</unique-id>
+    <command>@PREFIX@/bin/bashkitten-app install-deb %f</command>
+    <description>Install Debian Package…</description>
+    <range>1-1</range>
+    <patterns>*.deb</patterns>
+    <other-files />
+  </action>
+</actions>

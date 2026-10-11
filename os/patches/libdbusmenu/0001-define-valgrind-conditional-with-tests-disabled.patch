@@ -1,0 +1,23 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -120,8 +120,8 @@
+                                   [have_tests=yes]
+ )
+ PKG_CHECK_MODULES(DBUSMENUTESTSVALGRIND, valgrind, have_valgrind=yes, have_valgrind=no)
++])
+ AM_CONDITIONAL([HAVE_VALGRIND], [test "x$have_valgrind" = "xyes"])
+-])
+ 
+ AC_SUBST(DBUSMENUTESTS_CFLAGS)
+ AC_SUBST(DBUSMENUTESTS_LIBS)
+--- a/configure
++++ b/configure
+@@ -14628,6 +14628,8 @@
+ fi
+ 
+ 
++HAVE_VALGRIND_TRUE='#'
++HAVE_VALGRIND_FALSE=
+ if test "x$enable_tests" != "xno"; then :
+ 
+ 

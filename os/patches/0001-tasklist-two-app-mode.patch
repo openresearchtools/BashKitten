@@ -1,0 +1,87 @@
+--- a/plugins/tasklist/tasklist-widget.c
++++ b/plugins/tasklist/tasklist-widget.c
+@@ -3276,6 +3276,66 @@
+ 
+ 
+ 
++/* BashKitten OS: only the requested per-window Two app mode action.
++ * The desktop owner validates current eligibility and uses its existing layout.
++ * Added by BashKitten, 2026-10-11; upstream GPL-2.0-or-later retained. */
++static void
++bashkitten_two_app_activate (GtkMenuItem *item, gpointer unused)
++{
++  gchar **argv = g_object_get_data (G_OBJECT (item), "bashkitten-split-argv");
++  GError *error = NULL;
++  if (!g_spawn_async (NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error))
++    {
++      g_warning ("Cannot request Two app mode: %s", error->message);
++      g_error_free (error);
++    }
++}
++
++static void
++bashkitten_two_app_update (GSettings *settings, gchar *key, GtkWidget *item)
++{
++  gtk_widget_set_sensitive (item,
++    GPOINTER_TO_INT (g_object_get_data (G_OBJECT (item), "bashkitten-pair-valid"))
++    && g_settings_get_boolean (settings, "manage-window-size")
++    && g_settings_get_boolean (settings, "two-app-mode"));
++}
++
++static GtkWidget *
++bashkitten_window_action_menu (XfceTasklistChild *child)
++{
++  GtkWidget *menu = xfw_window_action_menu_new (child->window);
++#ifdef ENABLE_X11
++  if (xfw_windowing_get () == XFW_WINDOWING_X11)
++    {
++      GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
++      GSettingsSchema *schema = source ? g_settings_schema_source_lookup (source, "org.bashkitten.OS", TRUE) : NULL;
++      if (schema != NULL)
++        {
++          GSettings *settings = g_settings_new_full (schema, NULL, NULL);
++          XfwWindow *active = xfw_screen_get_active_window (child->tasklist->screen);
++          GtkWidget *item = gtk_menu_item_new_with_label (_("Two app mode"));
++          gboolean valid = active != NULL && active != child->window;
++          gchar **argv = g_new0 (gchar *, 5);
++          argv[0] = g_strdup ("bashkitten-os");
++          argv[1] = g_strdup ("split");
++          argv[2] = g_strdup_printf ("%lu", active ? xfw_window_x11_get_xid (active) : 0);
++          argv[3] = g_strdup_printf ("%lu", xfw_window_x11_get_xid (child->window));
++          g_object_set_data_full (G_OBJECT (item), "bashkitten-split-argv", argv, (GDestroyNotify) g_strfreev);
++          g_object_set_data (G_OBJECT (item), "bashkitten-pair-valid", GINT_TO_POINTER (valid));
++          g_object_set_data_full (G_OBJECT (item), "bashkitten-settings", settings, g_object_unref);
++          g_signal_connect_object (settings, "changed", G_CALLBACK (bashkitten_two_app_update), item, 0);
++          bashkitten_two_app_update (settings, NULL, item);
++          g_signal_connect (item, "activate", G_CALLBACK (bashkitten_two_app_activate), NULL);
++          gtk_menu_shell_append (GTK_MENU_SHELL (menu), item);
++          gtk_widget_show (item);
++          g_settings_schema_unref (schema);
++        }
++    }
++#endif
++  return menu;
++}
++
++
+ static gboolean
+ xfce_tasklist_button_button_press_event (GtkWidget *button,
+                                          GdkEventButton *event,
+@@ -3304,7 +3364,7 @@
+ 
+   if (event->button == 3)
+     {
+-      menu = xfw_window_action_menu_new (child->window);
++      menu = bashkitten_window_action_menu (child);
+       xfce_tasklist_button_add_launch_new_instance_item (child, menu, FALSE);
+       g_signal_connect (G_OBJECT (menu), "deactivate",
+                         G_CALLBACK (xfce_tasklist_button_menu_destroy), child);
+@@ -3972,7 +4032,7 @@
+ 
+           if (action_menu_entries)
+             gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi),
+-                                       xfw_window_action_menu_new (child->window));
++                                       bashkitten_window_action_menu (child));
+ 
+           if (li->next == NULL)
+             xfce_tasklist_button_add_launch_new_instance_item (child, menu, TRUE);
