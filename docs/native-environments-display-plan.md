@@ -103,6 +103,8 @@ Tor/Chisel/Caddy/Authelia implementation without changing its intended route.
   controls; that CLI has no camera/microphone commands. Telephony uses the
   normal Android call screen, contacts, recents and keypad, with phone-side
   speech processing and an optional per-chat Phone hook for finals/questions.
+  Users can save contacts for the particular container environments and remotes
+  they want to call directly; callbacks use the same backend-specific identity.
   Neither feature enables the other; no companion APK is needed.
 - Pi's terminal and the web chat show a compact ChatGPT subscription-usage line
   alongside the existing Pillama status: actual weekly/short windows where
@@ -2047,11 +2049,11 @@ Telephony Off detaches voice without cancelling the underlying Pi work.
 
 ### Contact, outgoing call and callback
 
-Use the researched address **`sip:kitten-phone@bashkitten.invalid`** as a local
+Use the researched general address **`sip:kitten-phone@bashkitten.invalid`** as a local
 Android routing identity, not a public SIP server, cellular number or network
 telephony subscription. **Call agent** uses `TelecomManager.placeCall` with our
 explicit owned account. Incoming agent invitations use `addNewIncomingCall`
-under BashKitten's UID. Validate the owned account, scheme and known address in
+under BashKitten's UID. Validate the owned account, scheme and registered address in
 incoming/outgoing callbacks; never route a failed call through a SIM or another
 provider. Return the actual failure when Telecom or the backend rejects it.
 
@@ -2074,13 +2076,78 @@ or unavailable editor is not a saved-contact success. A contact does not store
 our account handle: test account selection with multiple SIP providers and do
 not promise universal OEM Contacts behavior.
 
-Contacts and Recents reopen the same general agent service, not a permanently
-hardcoded chat. The spoken menu uses the existing project/title/session mapping
-to select a running or saved chat, or explicitly start a new one, on an eligible
+The general Kitten contact reopens the service's backend menu; the optional
+backend-specific contacts below go straight to their selected environment.
+Neither permanently hardcodes a chat. The spoken menu uses the existing
+project/title/session mapping to select a running or saved chat, or explicitly
+start a new one, on an eligible
 local/registered remote backend. Reattach to existing Pi workers through their
 normal owner; do not duplicate running sessions. A stopped/unavailable backend
 must not be silently replaced by another backend or model. Android maintains
 its ordinary call record; BashKitten does not need to write the call log.
+
+### Optional contacts for selected containers and remotes
+
+Extend **Add Kitten contact** with a choice of the general service or a specific
+phone-connected container environment/saved remote. Create contacts only for
+the backends the user chooses, through the same normal phone contact editor.
+Suggest a readable name such as **Kitten · Research VM** or **Kitten · Laptop**;
+the user can edit it. A container must have an authorized connection and phone
+registration of its own backend identity; a contact creates no remote access,
+new transport or permission to administer its host. Phone-side setup can select
+these registered environments without adding another settings screen per one.
+Saving a contact does not start the environment or enable every chat's Phone hook.
+
+Give each selected backend a stable opaque local call alias, for example
+`sip:kitten-<opaque-id>@bashkitten.invalid`, mapped in the phone registration
+metadata to its existing environment/remote identity. Store the address without
+`sip:` in the contact's Phone row, as above. Keep **one** BashKitten PhoneAccount;
+do not create an account or provider per contact. The alias is a routing key,
+not a credential, hostname, user-chosen display name or embedded session token.
+Renaming the container/remote preserves its alias. Deleting/revoking it invalidates
+the route; never reuse an old alias for a different machine or silently route a
+stale contact to General/Local. A recreated same-name machine is a new identity.
+
+For actual saved-contact lookup, test inserting **both** that clickable Phone
+row and a `SipAddress.CONTENT_ITEM_TYPE` row with `SipAddress.SIP_ADDRESS` set
+to the same address without `sip:`, in the same `Insert.DATA` list. AOSP's
+[`buildSipContactQuery`](https://android.googlesource.com/platform/packages/providers/ContactsProvider/+/3788ede92ad2ab5f69d7d5da740c1e449980949c/src/com/android/providers/contacts/ContactsDatabaseHelper.java#4762)
+matches SIP MIME rows; the tested Phone row alone does not prove incoming
+matching. This dual-row approach is source-supported but untested here. SIP
+contact fields are deprecated from API 35 and an editor can discard them, so
+verify what the normal editor saves and what the target dialer resolves. Keep
+the Phone row for the tested outgoing call action; do not replace it with the
+SIP-only field that lacked that action in the earlier probe.
+
+Calling that contact, or its Recents entry, selects the mapped backend directly
+and offers its running/saved chats or a new chat, without the general backend
+selection step. A callback from any of that backend's opted-in chats/questions
+uses the same alias as the incoming connection address, so it can match the
+saved contact and its call history. Supply the canonical SIP URI in
+[`TelecomManager.EXTRA_INCOMING_CALL_ADDRESS`](https://android.googlesource.com/platform/frameworks/base/+/94b4c163b7dfe5ce3607f7bb8456f9573f7de57d/telecomm/framework/java/android/telecom/TelecomManager.java#2450)
+in `addNewIncomingCall`'s extras, and use that same validated URI on the
+Connection. Derive this address from the authenticated
+event's backend association; a remote cannot supply another backend's caller
+identity. Preserve the separate exact session/question reference inside the
+invitation, rather than encoding it into the contact number.
+
+Set the per-call address and current readable backend name using Android's
+[`Connection.setAddress`](https://developer.android.com/reference/android/telecom/Connection#setAddress(android.net.Uri,%20int))
+and [`setCallerDisplayName`](https://developer.android.com/reference/android/telecom/Connection#setCallerDisplayName(java.lang.String,%20int))
+with allowed presentation. Contact resolution and which name takes precedence
+belong to the system dialer; retain the user's contact name and do not add
+contacts read/write permission merely to synchronize it after a backend rename.
+The prior probe displayed its supplied caller label, so it does not establish
+saved-contact name/photo matching; test that separately from readable labels.
+The caller identity explains which environment needs attention, not its private
+task transcript. The existing general Kitten contact remains available.
+
+This per-backend alias/contact matching is new planned behavior, not part of
+the earlier single-address probe claim. Verify two independently named backends:
+contact-to-correct-backend calls, incoming contact-name matching, missed-call/
+Recents callback routing, duplicate backend names, rename/restart, unavailable
+backend and deleted/revoked aliases. Test Android 16/17 dialers and record OEM
+contact-matching limitations without changing the intended routing.
 
 ### Direct Termux gateway and service lifetime
 

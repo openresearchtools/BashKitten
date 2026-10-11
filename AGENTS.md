@@ -45,7 +45,12 @@ telephony hardware, root/ADB/Shizuku or default-assistant role for users. All se
 call, transport and speech work is nonblocking. Telephony and Phone controls have
 independent master switches; cold Contacts/Recents binds must honor Telephony Off.
 Use the tested SIP-shaped Kitten contact and normal contact editor, without
-contacts/call-log access. Termux hooks reach the native module through the
+contacts/call-log access. Also offer optional contacts for the user's selected
+phone-connected containers/remotes: one stable opaque alias per backend under
+the same PhoneAccount, direct backend selection and matching callback identity.
+Names can change without retargeting contacts; deleted/revoked aliases never
+route to another backend. Verify incoming contact matching separately from the
+earlier general-contact probe. Termux hooks reach the native module through the
 authenticated private gateway; no per-call Gecko relay or broad worker token.
 Call speech runs on the phone through its Termux LocalAI, including remote chats;
 remote text/control stays on the existing Tor/Chisel/Caddy/Authelia route. Add the
