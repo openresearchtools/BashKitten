@@ -40,7 +40,7 @@ export class Jobs {
       await this.handlers[this.job.kind](this, this.job.input);
       this.job.status = 'complete'; this.job.phase = 'Complete'; this.job.finishedAt = Date.now();
     } catch (error) { this.job.status = error.code === 'CANCELLED' ? 'cancelled' : 'failed'; this.job.error = error.message; this.job.finishedAt = Date.now(); }
-    finally { await this.save(); this.busy = false; }
+    finally { try { await this.save(); } finally { this.busy = false; } }
   }
   checkCancellation() { if (this.job.cancelRequested) throw Object.assign(Error('Cancelled after the current package step finished safely.'), { code: 'CANCELLED' }); }
   async cancel() {

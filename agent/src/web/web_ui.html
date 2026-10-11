@@ -644,16 +644,6 @@
             <label>Subagent model<select id="defaultAgentsModel"></select></label>
             <label>Subagent thinking<select id="defaultAgentsThinking"></select></label>
           </div>
-          <div class="settings-section" id="packageUpdates">
-            <h3>Packages</h3>
-            <p id="packageSummary" class="meta"></p>
-            <div class="subscription-actions"><button type="button" data-package-job="check-packages">Check updates</button><button type="button" data-package-job="update-pi">Update Pi</button><button type="button" data-package-job="rollback-pi" id="rollbackPi">Roll back Pi</button></div>
-            <div class="subscription-actions hidden" id="termuxPackageActions"><button type="button" data-package-job="update-packages">Update packages</button><button type="button" data-package-job="refresh-lists">Refresh lists</button><button type="button" data-package-job="recover-packages">Repair interrupted update</button></div>
-            <p id="packagePhase" role="status" class="meta"></p><button type="button" id="retryPackageJob" class="hidden">Retry</button><button type="button" id="cancelPackageJob" class="hidden">Cancel</button>
-            <progress id="packageProgress" class="hidden" max="100" style="width:100%" aria-label="Package operation progress"></progress><p id="packageActivity" class="meta"></p>
-            <details><summary>Package output</summary><pre id="packageOutput" style="max-height:16rem;overflow:auto;white-space:pre-wrap"></pre></details>
-            <details id="installedPackages"><summary>Installed packages</summary><p id="packageInventoryStatus" class="meta"></p><div id="packageInventory" style="max-height:20rem;overflow:auto"></div></details>
-          </div>
           <details class="settings-section"><summary>Pi processes</summary><p class="meta">Stopping Pi keeps its saved sessions and project files.</p><div id="piProcesses"></div></details>
           </section>
           <section id="settingsServices" class="settings-panel hidden" aria-labelledby="settingsHeading">
@@ -1865,7 +1855,6 @@
       const value = await api('/api/settings');
       config = value.config;
       serverPlatform = value.platform;
-      $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
       await refreshDictation();
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
@@ -1877,60 +1866,15 @@
     }
 
 
-    let packagePollBusy = false;
-    async function refreshPackages() {
-      if (packagePollBusy || activeSettingsSection !== 'app' || $('#settingsView').classList.contains('hidden')) return;
-      packagePollBusy = true;
-      try {
-        const status = await api('/api/control'), packages = status.packages;
-        const pi = packages.sources.pi, apt = packages.sources.apt, npm = packages.sources.npm, job = packages.job;
-        $('#packageSummary').textContent = ['Pi ' + packages.runtime.version, packages.search ? 'Packaged DDGS ' + packages.search.ddgs : 'Search runtime not installed', pi?.error ? 'Pi: ' + pi.error : pi ? 'Latest Pi ' + pi.latest + (pi.reason ? ' · ' + pi.reason : '') : 'Updates have not been checked', apt?.error ? 'APT: ' + apt.error : apt ? apt.available + ' APT updates' : '', npm?.error ? 'npm: ' + npm.error : npm ? npm.available + ' npm updates' : ''].filter(Boolean).join(' · ');
-        renderPiProcesses(status.sessions || []);
-        const active = job && ['running', 'waiting'].includes(job.status);
-        document.querySelectorAll('[data-package-job]').forEach(button => { button.disabled = Boolean(active); });
-        $('#rollbackPi').classList.toggle('hidden', !packages.runtime.previous);
-        $('#packagePhase').textContent = job ? job.phase + ' · ' + job.status + (job.error ? ' · ' + job.error : '') : '';
-        $('#packageProgress').classList.toggle('hidden', !active);
-        if (active && job.progress) $('#packageProgress').value = job.progress.percent;
-        else $('#packageProgress').removeAttribute('value');
-        $('#packageActivity').textContent = active && job.progress ? job.progress.message + ' · ' + Math.round(job.progress.percent) + '%' : '';
-        const output = $('#packageOutput'), follow = output.scrollHeight - output.scrollTop - output.clientHeight < 40;
-        output.textContent = job?.log || '';
-        if (follow) output.scrollTop = output.scrollHeight;
-        $('#cancelPackageJob').classList.toggle('hidden', !active); $('#cancelPackageJob').disabled = Boolean(job?.cancelRequested);
-        $('#cancelPackageJob').textContent = job?.cancelRequested ? 'Finishing current package step…' : 'Cancel';
-        $('#retryPackageJob').classList.toggle('hidden', !job || !['failed','interrupted','cancelled'].includes(job.status));
-      } catch (error) { $('#packagePhase').textContent = error.message; }
-      finally { packagePollBusy = false; }
+    let processPollBusy = false;
+    async function refreshPiProcesses() {
+      if (processPollBusy || document.hidden || activeSettingsSection !== 'app' || $('#settingsView').classList.contains('hidden')) return;
+      processPollBusy = true;
+      try { const status = await api('/api/control'); renderPiProcesses(status.sessions || []); }
+      catch (error) { $('#settingsNotice').textContent = error.message; }
+      finally { processPollBusy = false; }
     }
-    async function packageJob(kind, retry = false) {
-      try { await api('/api/control', {method:'POST',body:JSON.stringify({command:'package-job',kind,retry})}); await refreshPackages(); }
-      catch (error) { $('#packagePhase').textContent = error.message; }
-    }
-    let inventoryBusy = false;
-    $('#installedPackages').ontoggle = async () => {
-      if (!$('#installedPackages').open || inventoryBusy) return;
-      inventoryBusy = true;
-      $('#packageInventoryStatus').textContent = 'Reading installed packages…';
-      try {
-        const value = await api('/api/control', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({command:'package-inventory'})});
-        const root = $('#packageInventory'); root.replaceChildren();
-        const groups = [['Pi', [{name:'Pi coding agent',version:value.pi}]], ['APT', value.apt], ['npm',value.npm], ['Search',value.search?.packages]];
-        for (const [label, entries] of groups) {
-          if (!entries?.length) continue;
-          const heading = document.createElement('h4'); heading.textContent = label; root.append(heading);
-          for (const item of entries) {
-            const row = document.createElement('div'); row.className = 'meta'; row.textContent = `${item.name} · ${item.version}`; root.append(row);
-          }
-        }
-        $('#packageInventoryStatus').textContent = value.npmError || 'Search and browser skills update with the BashKitten package.';
-      } catch (error) { $('#packageInventoryStatus').textContent = error.message; }
-      finally { inventoryBusy = false; }
-    };
-    document.querySelectorAll('[data-package-job]').forEach(button => { button.onclick = () => packageJob(button.dataset.packageJob); });
-    $('#retryPackageJob').onclick = () => packageJob(null, true);
-    $('#cancelPackageJob').onclick = async () => { try { await api('/api/control', {method:'POST', body:JSON.stringify({command:'package-cancel'})}); await refreshPackages(); } catch (error) { $('#packagePhase').textContent = error.message; } };
-    setInterval(refreshPackages, 3000);
+    setInterval(refreshPiProcesses, 3000);
 
     async function control(command, value = {}) {
       return api('/api/control', {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...value,command})});
@@ -1950,7 +1894,7 @@
           const button = document.createElement('button'); button.type = 'button'; button.textContent = text;
           button.onclick = async () => {
             button.disabled = true;
-            try { await control(command,{id:session.id}); await refreshPackages(); if (current?.id === session.id) await openSession(current,true); }
+            try { await control(command,{id:session.id}); await refreshPiProcesses(); if (current?.id === session.id) await openSession(current,true); }
             catch (error) { $('#settingsNotice').textContent = error.message; }
             finally { button.disabled = false; }
           };
@@ -2409,7 +2353,7 @@
       $('#settingsSaveRow').classList.toggle('hidden', section !== 'app');
       $('#settingsNotice').textContent = '';
       if (section === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
-      else refreshPackages();
+      else refreshPiProcesses();
       $('#title').textContent = heading;
       $('#title').classList.remove('hidden');
       $('#folderBtn').classList.add('hidden');

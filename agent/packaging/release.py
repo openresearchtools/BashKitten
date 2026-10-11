@@ -13,9 +13,79 @@ import re
 import shutil
 import subprocess
 import tarfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
+TERMUX_UPDATE_ASSET = 'assets/termux-update.json'
+TERMUX_BOOTSTRAP_ASSET = 'assets/updates-bootstrap.mjs'
+
+
+def validate_termux_update(value, version=None, abi=None):
+    """Validate immutable APK expectations, without inventing package provenance."""
+    if not isinstance(value, dict) or value.get('schema') != 1:
+        raise ValueError('Missing Android companion update manifest')
+    architecture = value.get('architecture')
+    expected_abi = {'aarch64': 'arm64-v8a', 'x86_64': 'x86_64'}.get(architecture)
+    if not expected_abi or value.get('apkAbi') != expected_abi or (abi and abi != expected_abi):
+        raise ValueError('Android companion update architecture mismatch')
+    product_version = value.get('productVersion', '')
+    if (not isinstance(product_version, str) or not re.fullmatch(r'\d+\.\d+(?:\.\d+)?', product_version)
+            or (version and product_version != version)):
+        raise ValueError('Android companion update version mismatch')
+    revision = value.get('sourceCommit', '')
+    if not isinstance(revision, str) or not re.fullmatch('[0-9a-f]{40}', revision):
+        raise ValueError('Android companion update source revision is missing')
+    bootstrap = value.get('bootstrapSha256')
+    if not isinstance(bootstrap, str) or not re.fullmatch('[0-9a-f]{64}', bootstrap):
+        raise ValueError('Android companion update bootstrap checksum is missing')
+    packages = value.get('packages')
+    if not isinstance(packages, list) or len(packages) != 2:
+        raise ValueError('Android companion update must name both owned packages')
+    names = set()
+    for item in packages:
+        if not isinstance(item, dict):
+            raise ValueError('Invalid Android companion package expectation')
+        name = item.get('name')
+        expected_version = {'bashkitten': product_version, 'bashkitten-os': product_version + '-1'}.get(name)
+        if not expected_version or name in names or item.get('version') != expected_version or item.get('architecture') != architecture:
+            raise ValueError('Android companion package identity/version mismatch')
+        names.add(name)
+        source = item.get('sourceCommit', '')
+        if not isinstance(source, str) or not re.fullmatch('[0-9a-f]{40}', source):
+            raise ValueError('Android companion package source revision is missing')
+        if name == 'bashkitten' and source != revision:
+            raise ValueError('Android companion backend source revision mismatch')
+        digest = item.get('sha256')
+        if (name == 'bashkitten-os' or digest is not None) and (not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest)):
+            raise ValueError('Android companion package checksum is missing or invalid')
+        if name == 'bashkitten-os' and (not isinstance(item.get('installedManifestSha256'), str)
+                or not re.fullmatch('[0-9a-f]{64}', item['installedManifestSha256'])):
+            raise ValueError('Android companion installed OS manifest checksum is missing')
+    return value
+
+
+def termux_os_identity(file):
+    """Read producer identity and installed-file manifest from the actual .deb."""
+    members = {}
+    for mode, name in [('--fsys-tarfile', 'data/data/com.termux/files/usr/share/bashkitten-os/build.json'),
+                       ('--ctrl-tarfile', 'md5sums')]:
+        with subprocess.Popen(['dpkg-deb', mode, str(file)], stdout=subprocess.PIPE) as process:
+            with tarfile.open(fileobj=process.stdout, mode='r|') as archive:
+                for item in archive:
+                    if item.name.removeprefix('./') == name and item.isfile():
+                        if name in members:
+                            raise ValueError('Duplicate Termux OS identity file')
+                        members[name] = archive.extractfile(item).read()
+            if process.wait() != 0 or name not in members or not members[name]:
+                raise ValueError('Termux OS package is missing its producer stamp or installed-file manifest')
+    stamp = json.loads(members['data/data/com.termux/files/usr/share/bashkitten-os/build.json'])
+    if (stamp.get('schemaVersion') != 1 or stamp.get('target') != 'termux'
+            or stamp.get('architecture') not in ('aarch64', 'x86_64')
+            or not re.fullmatch('[0-9a-f]{40}', stamp.get('sourceCommit', ''))
+            or not isinstance(stamp.get('version'), str) or not stamp['version']):
+        raise ValueError('Termux OS package has invalid producer identity')
+    return {**stamp, 'installedManifestSha256': hashlib.sha256(members['md5sums']).hexdigest()}
 
 
 def sha(file):
@@ -83,7 +153,7 @@ def main():
     signers = sorted(sdk.glob('build-tools/*/apksigner'))
     if not signers:
         raise ValueError('Android apksigner is required to verify the final APKs')
-    apps, abis = [], set()
+    apps, abis, pairings = [], set(), []
     for apk in apks:
         manifest = json.loads((apk.parent / 'build-manifest.json').read_text())
         abi = manifest.get('architecture')
@@ -102,6 +172,15 @@ def main():
             raise ValueError('APK must be the signed BashKitten product')
         if manifest.get('apks', {}).get(apk.name) != sha(apk):
             raise ValueError('APK hash mismatch')
+        with zipfile.ZipFile(apk) as archive:
+            if any(archive.namelist().count(name) != 1 for name in (TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET)):
+                raise ValueError('APK must contain one immutable companion update manifest and bootstrap')
+            pairing = validate_termux_update(json.loads(archive.read(TERMUX_UPDATE_ASSET)), version, abi)
+            if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
+                raise ValueError('APK companion update bootstrap checksum mismatch')
+        if pairing['sourceCommit'] != manifest['source']:
+            raise ValueError('APK companion update manifest has a different producing source')
+        pairings.append(pairing)
         signature = subprocess.check_output([str(signers[-1]), 'verify', '--print-certs', str(apk)], text=True)
         if 'certificate SHA-256 digest: ' + CERT not in signature:
             raise ValueError('APK did not use the existing Droid signing certificate')
@@ -113,6 +192,7 @@ def main():
         apps.append(app)
     packages = []
     auxiliary = []
+    os_identities = {}
     auxiliary_keys = set()
     architectures = set()
     for file in sorted(args.candidates.rglob('*.deb')):
@@ -126,6 +206,11 @@ def main():
             expected = version + '-1' if architecture in {'aarch64', 'x86_64'} else version
             if fields['Version'] != expected:
                 raise ValueError('Auxiliary package version mismatch: ' + file.name)
+            if name == 'bashkitten-os' and architecture in {'aarch64', 'x86_64'}:
+                identity = termux_os_identity(file)
+                if identity['architecture'] != architecture or identity['version'] != fields['Version']:
+                    raise ValueError('Termux OS installed identity differs from its package')
+                os_identities[architecture] = identity
             metadata = json.loads(Path(str(file) + '.json').read_text())
             if metadata.get('sourceCommit', metadata.get('revision')) != revision:
                 raise ValueError('Auxiliary source revision mismatch: ' + file.name)
@@ -161,6 +246,23 @@ def main():
     required_auxiliary = {('bashkitten-os', arch) for arch in architectures} | {('bashkitten-machines-guest', arch) for arch in ['amd64', 'arm64']}
     if auxiliary_keys != required_auxiliary:
         raise ValueError('All architecture-matched desktop customization and guest packages are required')
+    for pairing in pairings:
+        for expected in pairing['packages']:
+            matches = [item for item in packages + auxiliary if item['Package'] == expected['name']
+                       and item['Architecture'] == expected['architecture']]
+            if len(matches) != 1:
+                raise ValueError('APK companion package is absent from this release')
+            actual = matches[0]
+            source = actual['build'].get('sourceCommit', actual['build'].get('revision'))
+            identity = os_identities.get(expected['architecture']) if expected['name'] == 'bashkitten-os' else None
+            if identity:
+                source = identity['sourceCommit']
+            if (actual['Version'] != expected['version'] or source != expected['sourceCommit']
+                    or ('sha256' in expected and actual['sha256'] != expected['sha256'])
+                    or (identity and identity['installedManifestSha256'] != expected['installedManifestSha256'])):
+                raise ValueError('APK companion pairing differs from the published package: '
+                                 + expected['name'] + '/' + expected['architecture']
+                                 + '; reassemble APK resources from the matching inputs')
     sources = []
     for file in sorted(args.candidates.rglob('*')):
         if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip|jar)$', file.name):

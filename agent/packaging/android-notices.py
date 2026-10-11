@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate companion-server notices from the actual Termux release payloads."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -8,6 +9,7 @@ import subprocess
 import tempfile
 
 from build import checked_archive, extract, install_node, install_termux_display, collect_termux_os
+from release import validate_termux_update, termux_os_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -42,7 +44,10 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
     install_node(args.node_archive, stage, 'termux', args.architecture)
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     install_termux_display(args, stage, revision, stage / 'bin')
-    collect_termux_os(args.os_package, stage, revision, args.architecture, version)
+    os_metadata = collect_termux_os(args.os_package, stage, revision, args.architecture, version)
+    os_identity = termux_os_identity(args.os_package)
+    if os_identity['architecture'] != args.architecture or os_identity['version'] != os_metadata['version']:
+        raise ValueError('Termux OS installed identity differs from its package')
     extract(args.auth_archive, stage / 'auth')
     extract(args.search_archive, stage)
     if json.loads((stage / 'auth/share/metadata/runtime.json').read_text())['target'] != target:
@@ -52,3 +57,19 @@ with tempfile.TemporaryDirectory(prefix='bashkitten-apk-notices-') as temporary:
     subprocess.run(['node', str(ROOT / 'packaging/licenses.mjs'), str(stage), '--target', 'termux', '--version', version], check=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(stage / 'licenses.json', args.output)
+    # The backend is assembled later from this exact recipe revision. The OS
+    # package is already an input, so retain its actual checksum and provenance.
+    pairing = validate_termux_update({
+        'schema': 1, 'productVersion': version, 'sourceCommit': revision,
+        'bootstrapSha256': hashlib.sha256((ROOT / 'src/server/platform/termux/updates-bootstrap.mjs').read_bytes()).hexdigest(),
+        'architecture': args.architecture,
+        'apkAbi': 'x86_64' if args.architecture == 'x86_64' else 'arm64-v8a',
+        'packages': [
+            {'name': 'bashkitten', 'version': version, 'architecture': args.architecture,
+             'sourceCommit': revision},
+            {'name': 'bashkitten-os', 'version': os_metadata['version'], 'architecture': os_metadata['architecture'],
+             'sourceCommit': os_identity['sourceCommit'], 'sha256': os_metadata['sha256'],
+             'installedManifestSha256': os_identity['installedManifestSha256']},
+        ],
+    })
+    (args.output.parent / 'termux-update.json').write_text(json.dumps(pairing, indent=2) + '\n')

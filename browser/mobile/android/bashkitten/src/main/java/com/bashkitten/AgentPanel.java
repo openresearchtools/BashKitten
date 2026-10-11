@@ -522,82 +522,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         } else app.remoteControl.authorize(activity, runtime.session, runtime.url, "Remote Agent");
     }
     public void notifications() { AgentSettingsActivity.open(activity, "notifications"); }
-    public void checkBrowserUpdate() {
-        app.message("Checking for a BashKitten update…");
-        new Thread(() -> {
-            try {
-                String abi = TermuxConnection.downloadAbi(), download = null, available = null;
-                long newest = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0).getLongVersionCode();
-                // The published APK's versionCode decides upgrades across stable
-                // and nightly; tag dates and prerelease suffixes do not order APKs.
-                for (int page = 1; ; page++) {
-                    JSONArray releases = new JSONArray(releaseMetadata("https://api.github.com/repos/openresearchtools/bashkitten/releases?per_page=100&page=" + page));
-                    for (int i = 0; i < releases.length(); i++) {
-                        JSONObject release = releases.getJSONObject(i);
-                        if (release.optBoolean("draft")) continue;
-                        JSONArray assets = release.getJSONArray("assets");
-                        Map<String, String> downloads = new HashMap<>();
-                        for (int j = 0; j < assets.length(); j++) {
-                            JSONObject asset = assets.getJSONObject(j);
-                            downloads.put(asset.getString("name"), asset.getString("browser_download_url"));
-                        }
-                        String manifestUrl = downloads.get("release.json");
-                        if (manifestUrl == null) continue;
-                        JSONArray apps = new JSONObject(releaseMetadata(manifestUrl)).getJSONArray("apps");
-                        for (int j = 0; j < apps.length(); j++) {
-                            JSONObject candidate = apps.getJSONObject(j);
-                            if (!candidate.getString("packageId").equals(activity.getPackageName()) || !candidate.getString("abi").equals(abi)) continue;
-                            long code = candidate.getLong("versionCode");
-                            if (code <= newest) continue;
-                            String name = candidate.getString("asset"), link = downloads.get(name);
-                            if (link == null || !name.endsWith(".apk")) throw new IOException("Release " + release.getString("tag_name") + " is missing its " + abi + " APK.");
-                            newest = code; download = link; available = release.getString("tag_name");
-                        }
-                    }
-                    if (releases.length() < 100) break;
-                }
-                if (download == null) { app.main.post(() -> app.message("BashKitten is up to date.")); return; }
-                String link = download, version = available;
-                app.main.post(() -> new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("BashKitten " + version).setMessage("A browser update is available. Testing release only; not ready for production.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
-            } catch (Exception error) { app.main.post(() -> app.message("The update check failed: " + error.getMessage())); }
-        }, "bashkitten-update").start();
-    }
+    public void checkBrowserUpdate() { AgentSettingsActivity.open(activity, "updates"); }
     private static String releaseMetadata(String url) throws IOException {
         java.net.HttpURLConnection connection = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
         connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
         connection.setRequestProperty("Accept", "application/vnd.github+json");
         try (InputStream input = connection.getInputStream()) { return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8); }
         finally { connection.disconnect(); }
-    }
-    public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
-    private void packageCommand(String command, TextView output) {
-        try {
-            if (command.equals("status")) { runtime.command("package-inventory", new JSONObject(), value -> output.setText(inventoryText(value)), output::setText); return; }
-            runtime.command("package-job", new JSONObject().put("kind", command), value -> showPackageJob(value, output), output::setText);
-        } catch (JSONException ignored) {}
-    }
-    private String inventoryText(JSONObject inventory) {
-        StringBuilder text = new StringBuilder("Installed packages\n\n");
-        for (String source : new String[]{"apt", "npm"}) {
-            text.append(source.equals("apt") ? "Termux / APT\n" : "\nnpm\n");
-            JSONArray items = inventory.optJSONArray(source);
-            if (items != null) for (int i=0; i<items.length(); i++) {
-                JSONObject item = items.optJSONObject(i);
-                if (item != null) text.append(item.optString("name")).append("  ").append(item.optString("version")).append('\n');
-            }
-        }
-        text.append("\nPi  ").append(inventory.optString("pi"));
-        JSONObject search = inventory.optJSONObject("search");
-        if (search != null) text.append("\nDDGS  ").append(search.optString("version", search.optString("ddgs", "Packaged")));
-        if (inventory.has("npmError")) text.append("\n\n").append(inventory.optString("npmError"));
-        return text.toString();
-    }
-    private void showPackageJob(JSONObject value, TextView output) {
-        JSONObject packages = value.optJSONObject("packages");
-        JSONObject job = packages == null ? null : packages.optJSONObject("job");
-        if (job == null) { output.setText("No package operation is running."); return; }
-        output.setText(job.optString("phase") + "\n" + job.optString("log") + (job.has("error") ? "\n" + job.optString("error") : ""));
-        if (job.optString("status").equals("running")) app.main.postDelayed(() -> runtime.command("status", new JSONObject(), next -> showPackageJob(next, output), output::setText), 1500);
     }
     private void error(String text){message.setText(text);Toast.makeText(activity,text,Toast.LENGTH_LONG).show();}
     private void download(WebResponse response){

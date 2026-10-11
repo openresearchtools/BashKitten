@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Assemble Android's offline About from this build's resolved license payloads."""
 import argparse
+import hashlib
 import json
 import importlib.util
 import os
 import re
 from pathlib import Path
+import shutil
 import subprocess
 
 p = argparse.ArgumentParser()
@@ -16,6 +18,18 @@ p.add_argument('--version', required=True)
 a = p.parse_args()
 root = Path(__file__).resolve().parents[4]
 companion = Path(os.environ['BASHKITTEN_COMPANION_LICENSES'])
+pairing_path = companion.parent / 'termux-update.json'
+release_spec = importlib.util.spec_from_file_location('bashkitten_release', root / 'agent/packaging/release.py')
+release = importlib.util.module_from_spec(release_spec)
+release_spec.loader.exec_module(release)
+pairing = release.validate_termux_update(json.loads(pairing_path.read_text()), a.version,
+                                        os.environ.get('BASHKITTEN_ANDROID_ABI', 'arm64-v8a'))
+revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+if pairing['sourceCommit'] != revision:
+    raise SystemExit('Companion update expectations do not belong to this APK source')
+bootstrap = (root / 'agent/src/server/platform/termux/updates-bootstrap.mjs').read_bytes()
+if hashlib.sha256(bootstrap).hexdigest() != pairing['bootstrapSha256']:
+    raise SystemExit('Companion update bootstrap differs from the recorded APK input')
 records = json.loads(companion.read_text())
 if not isinstance(records, list) or not records:
     raise SystemExit('The companion package license inventory is empty')
@@ -105,6 +119,8 @@ for archive in archives:
 else:
     raise SystemExit('The built Gecko component license inventory is missing')
 a.output.mkdir(parents=True, exist_ok=True)
+shutil.copy2(pairing_path, a.output / 'termux-update.json')
+(a.output / 'updates-bootstrap.mjs').write_bytes(bootstrap)
 licenses = a.output / 'licenses.json'
 licenses.write_text(json.dumps(records, ensure_ascii=False))
 subprocess.run(['python3', str(root / 'agent/packaging/about.py'), 'android', str(licenses), str(a.output / 'about.html'), '--version', a.version], check=True)

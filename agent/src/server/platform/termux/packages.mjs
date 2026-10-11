@@ -1,10 +1,8 @@
 import { npmCommand, npmArgs } from '../../node-runtime.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { sourceResult, checkPi, installPi, atIdle } from '../../updates/runtime.mjs';
-import { checkNpm, updateNpm } from '../../updates/npm.mjs';
 import { selectedRuntime } from '../../rpc/runtime.mjs';
-import { ensureIntegration, integrationStatus, searchRuntime } from '../../rpc/integration.mjs';
+import { integrationStatus, searchRuntime } from '../../rpc/integration.mjs';
 import { platform } from '../index.mjs';
 
 const exec = promisify(execFile);
@@ -19,6 +17,7 @@ export async function packageState(names) {
 }
 // Explicit local inventory: no registry or repository requests.
 export async function packageInventory() {
+  requireTermux();
   const { stdout } = await exec('dpkg-query', ['-W', '-f=${binary:Package}\t${Version}\t${db:Status-Status}\n'], { timeout: 15000, maxBuffer: Infinity });
   const apt = stdout.trim().split('\n').map(line => line.split('\t')).filter(([, , state]) => state === 'installed').map(([name, version]) => ({ name, version }));
   let npm = [], npmError;
@@ -31,44 +30,4 @@ export async function packageInventory() {
     npmError = value.error?.summary;
   } catch (error) { npmError = error.message; }
   return { apt, npm, npmError, pi: selectedRuntime().version, search: await searchRuntime(), browser: await integrationStatus() };
-}
-export async function refreshApt(job) {
-  return sourceResult('apt', async () => {
-    await job.phase('Refreshing APT repositories'); await apt(job, ['update']);
-    const output = await apt(job, ['-s', 'upgrade']);
-    const packages = [...output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)].map(([, name, current, latest]) => ({ name, current: current || 'Not installed', latest }));
-    return { available: packages.length, packages, summary: output.slice(-16000) };
-  });
-}
-export async function checkPackages(job) {
-  const results = [];
-  if (platform === 'termux') results.push(await refreshApt(job));
-  await job.phase('Checking installed npm packages'); results.push(await checkNpm());
-  await job.phase('Checking Pi on npm'); results.push(await checkPi());
-  const errors = results.filter(result => result.error);
-  if (errors.length) throw Error(errors.map(result => result.error).join('; '));
-}
-export async function updatePackages(job) {
-  requireTermux();
-  await job.step('refresh-apt', 'Refreshing APT repositories', async () => {
-    const result = await refreshApt(job); if (result.error) throw Error(result.error);
-  });
-  await job.step('apt-upgrade', 'Updating Termux packages', () => atIdle(job, async () => {
-    const simulation = await apt(job, ['-s', 'full-upgrade']);
-    if (/^Remv (bashkitten|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(simulation)) throw Error('APT would remove a required BashKitten package; inspect the transaction before proceeding');
-    await apt(job, ['--download-only', '-y', 'full-upgrade']);
-    await apt(job, ['-y', 'full-upgrade']);
-  }));
-  const errors = [];
-  for (const operation of [updateNpm, installPi, ensureIntegration]) { try { await operation(job); } catch (error) { if (error.code === 'CANCELLED') throw error; errors.push(error.message); } }
-  if (errors.length) throw Error('APT completed. npm: ' + errors.join('; '));
-  await refreshApt(job);
-}
-export async function recoverPackages(job) {
-  requireTermux();
-  await atIdle(job, async () => {
-    await job.phase('Completing interrupted package configuration');
-    await job.exec('dpkg', ['--force-confdef', '--force-confold', '--configure', '-a'], { env: environment });
-    await apt(job, ['-f', 'install', '-y']);
-  });
 }
