@@ -217,9 +217,12 @@ def main():
     # xfce4-session owns the public XFCE portal default on both target systems.
     # Provision this private template into an unset owned profile instead.
     write(share/'xfce-portals.conf',(ROOT/'data/xfce-portals.conf').read_text().replace('default=gtk\n','') if termux else (ROOT/'data/xfce-portals.conf').read_text())
-    icon=base/'share/icons/hicolor/256x256/apps/bashkitten-os.png';icon.parent.mkdir(parents=True,exist_ok=True)
-    # Existing source logo, no workstation-only dependency or enlarged tiny icon.
-    shutil.copy(share/'logo.png',icon)
+    # Install correctly sized existing branding assets. The original wallpaper
+    # logo is 1254px; labelling it as 256px makes GTK launcher tooltips oversized.
+    for size in (48,64,128,256):
+        icon=base/f'share/icons/hicolor/{size}x{size}/apps/bashkitten-os.png'
+        icon.parent.mkdir(parents=True,exist_ok=True)
+        shutil.copy(REPO/f'browser/bashkitten/browser/branding/default{size}.png',icon)
     shutil.copytree(ROOT/'upstream/gnozzard/data/icons/Gnozzard',base/'share/icons/BashKitten')
     index=base/'share/icons/BashKitten/index.theme';index.write_text(index.read_text().replace('Gnozzard','BashKitten'))
     theme(stage,prefix)
