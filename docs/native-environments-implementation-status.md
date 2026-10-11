@@ -18,6 +18,16 @@ backend `a9dc65607a`, Termux OS `4c1f2bb98e`, and native Linux `7ecea9955c`.
 External artifact receipts retain full commits, checksums, source-equivalence
 records and matching notices; these are development candidates, not a release.
 
+The next shared settings/sidebar batch is frozen at
+`609e82c2001f6aa18c745cf5dc252cc5038e128e`, committed and pushed. It replaces
+the separate native forms with protected Gecko settings views, keeps the
+separate settings gear and original Firefox menu, and repeats the flat
+Projects/Chats layout for Local, containers and remotes. The new common About
+registration requires real cached native browser builds on both targets;
+configuration passed and those builds are running. Java/Kotlin/resource,
+JavaScript/import/asset and private-dispatch source checks passed. No installed
+visual or feature acceptance is claimed for this revision yet.
+
 Actual installed observations:
 
 - Fresh Android setup now reaches the chat UI with an owned empty Pi profile;
@@ -58,8 +68,10 @@ Actual installed observations:
   below the toolbar. The user's final direction is a BashKitten logo/sidebar,
   separate settings gear, unchanged Firefox menu and repeated flat Local,
   Containers and Remotes sections. Shared protected Gecko settings and native
-  adapters are being integrated in the same batch, including removal of the
-  superseded forms. Installed visual/rotation/keyboard checks remain required;
+  adapters are integrated in the frozen batch, including removal of the
+  superseded forms. Notification preferences retain their existing private
+  controller and serialized settings-file updates. Installed visual/rotation/
+  keyboard checks remain required;
   the currently installed APK still has the rejected presentation. The cached
   intermediate `d3919f88c9` build was not installed because it predates that final
   placement decision.
