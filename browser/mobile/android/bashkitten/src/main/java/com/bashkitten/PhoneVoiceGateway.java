@@ -47,7 +47,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     });}
     void ready(){if(desired&&requested){port=0;start();}}
     synchronized void start(){
-        if(!desired||starting||port!=0)return;starting=true;final long token=++epoch;
+        if(!desired||starting||port!=0)return;starting=true;final long token=++epoch;phone.connectionChanged();
         if(remotePoll==null)remotePoll=delivery.scheduleWithFixedDelay(this::pollRemotes,2,2,TimeUnit.SECONDS);
         io.execute(()->{
             try{
@@ -113,6 +113,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
         delivery.schedule(()->awaitReady(ready,deadline),100,TimeUnit.MILLISECONDS);
     }
     @Override public boolean connected(){return desired&&port>0&&key!=null;}
+    @Override public String connectionState(){return connected()?"connected":starting?"connecting":requested?"disconnected":"not-started";}
     @Override public CompletableFuture<JSONObject> request(String action,JSONObject value){
         final long token=epoch;if(!connected())return CompletableFuture.failedFuture(new IOException("Phone gateway is disconnected"));
         if(action.equals("phone.backends"))return phone.registeredBackends();
@@ -158,5 +159,5 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     private static String mac(byte[] key,JSONObject value)throws Exception{Mac hmac=Mac.getInstance("HmacSHA256");hmac.init(new SecretKeySpec(key,"HmacSHA256"));return hex(hmac.doFinal((value.getString("id")+"\n"+value.getString("nonce")+"\n"+value.getLong("time")+"\n"+value.getString("payload")).getBytes(StandardCharsets.UTF_8)));}
     private static byte[] proof(byte[] key)throws Exception{Mac hmac=Mac.getInstance("HmacSHA256");hmac.init(new SecretKeySpec(key,"HmacSHA256"));return hmac.doFinal("bashkitten-phone-frame-v1".getBytes(StandardCharsets.US_ASCII));}
     private static String hex(byte[] bytes){StringBuilder text=new StringBuilder();for(byte b:bytes)text.append(String.format(Locale.ROOT,"%02x",b&255));return text.toString();}
-    @Override public synchronized void close(){if(remotePoll!=null){remotePoll.cancel(false);remotePoll=null;}if(server==null&&key==null&&port==0&&!starting)return;epoch++;for(Socket socket:accepted)try{socket.close();}catch(IOException ignored){}accepted.clear();for(Map.Entry<String,JSONObject> remote:remotes.entrySet())app.main.post(()->agent.phoneRemoteRequest(remote.getKey(),"phone.disable",new JSONObject(),remote.getValue(),ignored->{},ignored->{}));port=0;starting=false;for(Socket socket:active.values())try{socket.close();}catch(IOException ignored){}active.clear();if(server!=null)try{server.close();}catch(IOException ignored){}server=null;byte[] old=key;key=null;if(old!=null)Arrays.fill(old,(byte)0);seen.clear();app.main.post(()->agent.command("phone-gateway-disconnect",new JSONObject(),ignored->{},ignored->{}));}
+    @Override public synchronized void close(){if(remotePoll!=null){remotePoll.cancel(false);remotePoll=null;}if(server==null&&key==null&&port==0&&!starting)return;epoch++;for(Socket socket:accepted)try{socket.close();}catch(IOException ignored){}accepted.clear();for(Map.Entry<String,JSONObject> remote:remotes.entrySet())app.main.post(()->agent.phoneRemoteRequest(remote.getKey(),"phone.disable",new JSONObject(),remote.getValue(),ignored->{},ignored->{}));port=0;starting=false;for(Socket socket:active.values())try{socket.close();}catch(IOException ignored){}active.clear();if(server!=null)try{server.close();}catch(IOException ignored){}server=null;byte[] old=key;key=null;if(old!=null)Arrays.fill(old,(byte)0);seen.clear();phone.connectionChanged();app.main.post(()->agent.command("phone-gateway-disconnect",new JSONObject(),ignored->{},ignored->{}));}
 }

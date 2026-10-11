@@ -96,7 +96,7 @@ public final class PhoneSettingsAdapter implements AutoCloseable {
                     return uiResult(() -> BrowserApp.get(activity).agent.notificationSettings(activity, args));
                 case "setup-account":
                     keys(args); return phone.setupAccount().thenCompose(value -> ui(() -> activity.startActivity(new Intent(TelecomManager.ACTION_CHANGE_PHONE_ACCOUNTS))));
-                case "readiness": keys(args); return phone.readiness();
+                case "readiness": keys(args); return phone.readiness().thenApply(this::connectionSnapshot);
                 case "call":
                     keys(args, "backendId"); String callBackend = optionalId(args, "backendId");
                     return ui(() -> {
@@ -203,6 +203,11 @@ public final class PhoneSettingsAdapter implements AutoCloseable {
             put(result, "supported", Build.VERSION.SDK_INT >= 35 && activity.getSystemService(TelecomManager.class) != null && activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELECOM));
             put(result, "backends", value.optJSONObject("backends")); put(result, "mailbox", value.optJSONObject("mailbox"));
         }
+        return connectionSnapshot(result);
+    }
+    private JSONObject connectionSnapshot(JSONObject result) {
+        put(result, "connectionState", phone.connectionState());
+        put(result, "localOnRequested", BrowserApp.get(activity).agent.localIsOnRequested());
         return result;
     }
     private JSONObject controlsSnapshot() throws JSONException {
