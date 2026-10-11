@@ -37,7 +37,7 @@ public final class AgentRuntime {
     public JSONObject status = new JSONObject();
     private boolean launched, desired, busy, polling, termuxSetupAttempted;
     private volatile boolean localControlRequested;
-    private int operation;
+    private volatile int operation;
     public boolean visible;
     public String setupStep = "";
     public boolean permissionPromptPending;
@@ -53,7 +53,12 @@ public final class AgentRuntime {
     private final Set<String> removingRemotes = new HashSet<>();
     private final Map<String, JSONObject> serviceSnapshots = new HashMap<>();
     private JSONObject localSession;
-    private boolean localSessionPending;
+    private String localSessionContext;
+    private volatile Object localSessionRequest;
+    private JSONObject localSessionProof;
+    private int localSessionOperation;
+    private static final String LOCAL_CONTEXT = "bashkitten-agent-ui-local";
+    private static final String UUID_PATTERN = "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}";
     private boolean reloadOnConnect;
     private final Set<String> startupRemotes = new HashSet<>();
     private final Set<String> suppressedStartupRemotes = new HashSet<>();
@@ -333,16 +338,13 @@ public final class AgentRuntime {
         PhoneControlsRuntime.get(app).disconnectOwner();
         final int generation = operation;
         stored(() -> {
-            JSONObject remembered = identities.read(); remembered.remove("local"); identities.write(remembered);
+            JSONObject remembered = identities.read(); remembered.remove("local"); remembered.remove("localContext"); identities.write(remembered);
             return true;
         }, ignored -> {
             if (generation != operation) return;
             app.remoteControl.disconnect();
-            GeckoSession local = sessions.remove("local");
-            if (session == local) { session = null; url = ""; }
-            if (local != null && local.isOpen()) { local.stop(); local.close(); }
-            localSession = null; localSessionPending = false; status = new JSONObject();
-            if (engine != null) engine.getStorageController().clearDataForSessionContext("bashkitten-agent-ui-local");
+            retireLocalContext(null);
+            localSession = null; localSessionContext = null; localSessionRequest = null; status = new JSONObject();
             done.run();
         }, message -> { if (generation == operation) fail("Could not reset the previous local connection: " + message); });
     }
@@ -490,11 +492,11 @@ public final class AgentRuntime {
         command("start", new JSONObject(), result -> {
             if (generation != operation || !desired) { failure.accept("Agent changed while starting Share Local. Retry from its current state."); return; }
             try {
-                JSONObject web = result.getJSONObject("web");
-                if (!web.getJSONObject("auth").optString("mode").equals("native-local"))
-                    throw new IllegalStateException("Update BashKitten packages in Termux to use account-free Local and Share Local.");
-                stored(() -> { rememberIdentity("local", web.getJSONObject("identity")); return true; }, ignored -> {
-                    if (generation != operation || !desired) { failure.accept("Agent changed while starting Share Local."); return; }
+                final String installation = termux.installationId();
+                // Starting the private host does not enroll a browser certificate.
+                // Only the matching Local session handshake below can do that.
+                stored(() -> { verifyLocalStatus(result.getJSONObject("web")); return true; }, ignored -> {
+                    if (generation != operation || !desired || !localSetupReady() || !installation.equals(termux.installationId())) { failure.accept("Agent changed while starting Share Local."); return; }
                     if (selected.equals("local")) { acceptStatus(result); poll(); }
                     done.run();
                 }, failure);
@@ -503,18 +505,75 @@ public final class AgentRuntime {
     }
     private void acceptStatus(JSONObject value) {
         final int generation = operation;
+        final String installation = termux.installationId();
         stored(() -> {
-            JSONObject web = value.getJSONObject("web");
-            URI endpoint = URI.create(web.getString("url"));
-            if (!"https".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost())
-                    || endpoint.getPort() < 1 || endpoint.getUserInfo() != null)
-                throw new SecurityException("Invalid local HTTPS endpoint.");
-            rememberIdentity("local", web.getJSONObject("identity")); return true;
+            verifyLocalStatus(value.getJSONObject("web")); return true;
         }, ignored -> {
-            if (generation == operation && desired && selected.equals("local")) acceptVerifiedStatus(value);
-        }, message -> { if (generation == operation && desired && selected.equals("local")) fail(message); });
+            if (currentLocal(generation, installation)) acceptVerifiedStatus(value, installation);
+        }, message -> { if (currentLocal(generation, installation)) fail(message); });
     }
-    private void acceptVerifiedStatus(JSONObject value) {
+    private boolean currentLocal(int generation, String installation) {
+        return generation == operation && desired && selected.equals("local") && localSetupReady()
+            && installation.equals(termux.installationId());
+    }
+    private static void verifyLocalStatus(JSONObject web) throws Exception {
+        URI endpoint = URI.create(web.getString("url"));
+        if (!"https".equals(endpoint.getScheme()) || !"127.0.0.1".equals(endpoint.getHost())
+                || endpoint.getPort() < 1 || endpoint.getPort() > 65535
+                || !endpoint.toString().equals("https://127.0.0.1:" + endpoint.getPort()))
+            throw new SecurityException("Invalid local HTTPS endpoint.");
+        JSONObject identity = web.getJSONObject("identity"), auth = web.getJSONObject("auth");
+        if (!auth.optString("mode").equals("native-local") || !auth.optString("generation").matches(UUID_PATTERN)
+                || !identity.optString("instanceId").matches(UUID_PATTERN) || !identity.optString("caSha256").matches("[a-f0-9]{64}"))
+            throw new SecurityException("Invalid native local Agent identity.");
+        verifyLocalCertificate(identity);
+    }
+    private static void verifyLocalCertificate(JSONObject identity) throws Exception {
+        String pem = identity.getString("caPem");
+        // Match Gecko's existing PEM/DER transport bounds before retiring any
+        // trusted context, and require a single actual X509 CA, not just a hash.
+        if (pem.length() > 32768 || !pem.matches("(?s)\\s*-----BEGIN CERTIFICATE-----[A-Za-z0-9+/=\\s]+-----END CERTIFICATE-----\\s*"))
+            throw new SecurityException("Invalid local Agent CA certificate.");
+        byte[] der = java.util.Base64.getMimeDecoder().decode(pem.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", ""));
+        java.security.cert.X509Certificate certificate = (java.security.cert.X509Certificate) java.security.cert.CertificateFactory.getInstance("X.509")
+            .generateCertificate(new java.io.ByteArrayInputStream(der));
+        if (der.length > 65536 || !Arrays.equals(der, certificate.getEncoded()) || certificate.getBasicConstraints() < 0)
+            throw new SecurityException("Invalid local Agent CA certificate.");
+        verifiedCertificateHash(identity);
+    }
+    private static boolean sameLocalSession(JSONObject value, String endpoint, JSONObject identity, String generation) {
+        JSONObject actual = value == null ? null : value.optJSONObject("identity");
+        return actual != null && endpoint.equals(value.optString("url")) && generation.equals(value.optString("generation"))
+            && identity.optString("caSha256").equals(actual.optString("caSha256"))
+            && identity.optString("instanceId").equals(actual.optString("instanceId"));
+    }
+    private static String localContext(JSONObject identity) throws JSONException {
+        return LOCAL_CONTEXT + "-" + identity.getString("caSha256") + "-" + identity.getString("instanceId");
+    }
+    boolean isLocalSession(GeckoSession target) {
+        return target != null && target == sessions.get("local") && localSession != null && localSessionContext != null
+            && localSessionContext.equals(target.getSettings().getContextId());
+    }
+    /** A recreated private Local backend gets a new cookie/draft jar, never a remote enrollment reset. */
+    private void retireLocalContext(String replacement) {
+        GeckoSession local = sessions.get("local");
+        String previous = local == null ? app.policies.getString("agent.localContext", LOCAL_CONTEXT) : local.getSettings().getContextId();
+        if (!Objects.equals(previous, replacement)) {
+            if (local != null && session == local) app.remoteControl.disconnect();
+            sessions.remove("local");
+            if (session == local) { session = null; url = ""; }
+            if (local != null) {
+                BashKittenController.setHostDelegate(local, null);
+                if (local.isOpen()) { local.stop(); local.close(); }
+            }
+            if (engine != null && (LOCAL_CONTEXT.equals(previous) || previous != null
+                    && previous.matches(LOCAL_CONTEXT + "-[a-f0-9]{64}-" + UUID_PATTERN)))
+                engine.getStorageController().clearDataForSessionContext(previous);
+        }
+        if (replacement == null) app.policies.edit().remove("agent.localContext").apply();
+        else app.policies.edit().putString("agent.localContext", replacement).apply();
+    }
+    private void acceptVerifiedStatus(JSONObject value, String installation) {
         try {
             status = value;
             JSONObject web = value.getJSONObject("web");
@@ -523,33 +582,57 @@ public final class AgentRuntime {
             JSONObject auth = web.optJSONObject("auth");
             if (auth != null && auth.optString("mode").equals("native-local")) {
                 String sessionGeneration = auth.getString("generation");
-                if (localSession == null || !localSession.optString("generation").equals(sessionGeneration)) {
-                    if (localSessionPending) return;
-                    localSessionPending = true;
+                if (!sameLocalSession(localSession, endpoint, identity, sessionGeneration)) {
+                    if (localSessionRequest != null && localSessionOperation == operation
+                            && sameLocalSession(localSessionProof, endpoint, identity, sessionGeneration)) return;
+                    final Object request = new Object(); localSessionRequest = request; localSessionOperation = operation;
+                    localSessionProof = new JSONObject().put("url", endpoint).put("identity", identity).put("generation", sessionGeneration);
                     final int requestedOperation = operation;
                     command("local-session", new JSONObject(), result -> {
-                        localSessionPending = false;
-                        if (requestedOperation != operation || !desired || !selected.equals("local")) return;
+                        if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) return;
                         try {
-                            JSONObject actualIdentity = result.getJSONObject("identity");
                             JSONObject cookie = result.getJSONObject("cookie");
                             String expectedName = "__Host-bashkitten_local_" + identity.getString("instanceId").replace("-", "");
-                            if (!result.getString("url").equals(endpoint) || !result.getString("generation").equals(sessionGeneration)
-                                || !actualIdentity.getString("caSha256").equals(identity.getString("caSha256"))
-                                || !actualIdentity.getString("instanceId").equals(identity.getString("instanceId"))
+                            if (!sameLocalSession(result, endpoint, identity, sessionGeneration)
                                 || !cookie.getString("name").equals(expectedName) || !cookie.getString("value").matches("[a-f0-9]{64}")) {
                                 throw new SecurityException("The local Agent changed while connecting. Turn on to retry.");
                             }
-                            localSession = result;
-                            reloadOnConnect = true;
-                            acceptStatus(value);
-                        } catch (Exception failure) { fail("Could not verify the local Agent session. Turn on to retry."); }
+                            stored(() -> {
+                                // This reply came through the permission-checked native Termux
+                                // bridge and matches the live status, not a loopback HTTP page.
+                                verifyLocalCertificate(result.getJSONObject("identity"));
+                                JSONObject original = identities.read(), remembered = new JSONObject(original.toString()), previous = remembered.optJSONObject("local");
+                                boolean unchanged = previous != null && previous.optString("caSha256").equals(identity.optString("caSha256"))
+                                    && previous.optString("instanceId").equals(identity.optString("instanceId"));
+                                // Preserve the old jar/draft on an ordinary APK upgrade.
+                                // Only a changed/new identity moves into a fresh context.
+                                String context = unchanged && LOCAL_CONTEXT.equals(remembered.optString("localContext", LOCAL_CONTEXT)) ? LOCAL_CONTEXT : localContext(identity);
+                                remembered.put("local", identity).put("localContext", context);
+                                if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) throw new java.util.concurrent.CancellationException();
+                                identities.write(remembered);
+                                if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) {
+                                    // Storage is serialized; revoke a write that raced Off,
+                                    // a different status proof or a Termux reinstall.
+                                    identities.write(original); throw new java.util.concurrent.CancellationException();
+                                }
+                                return context;
+                            }, context -> {
+                                if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) return;
+                                localSessionRequest = null; retireLocalContext(context);
+                                localSession = result; localSessionContext = context; reloadOnConnect = true;
+                                acceptVerifiedStatus(value, installation);
+                            }, message -> {
+                                if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) return;
+                                localSessionRequest = null; fail(message);
+                            });
+                        } catch (Exception failure) { localSessionRequest = null; fail("Could not verify the local Agent session. Turn on to retry."); }
                     }, message -> {
-                        localSessionPending = false;
-                        if (requestedOperation == operation && desired) fail(message);
+                        if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) return;
+                        localSessionRequest = null; fail(message);
                     });
                     return;
                 }
+                localSessionRequest = null;
                 state = "on";
             } else {
                 localSession = null;
@@ -559,13 +642,17 @@ public final class AgentRuntime {
             busy = false; changed();
         } catch (Exception exception) { fail(exception.getMessage() == null ? "The service identity could not be verified." : exception.getMessage()); }
     }
-    private void rememberIdentity(String name, JSONObject identity) throws Exception {
+    private static String verifiedCertificateHash(JSONObject identity) throws Exception {
         String pem = identity.getString("caPem");
         byte[] der = java.util.Base64.getMimeDecoder().decode(pem.replace("-----BEGIN CERTIFICATE-----", "").replace("-----END CERTIFICATE-----", ""));
         StringBuilder hex = new StringBuilder();
         for (byte b : MessageDigest.getInstance("SHA-256").digest(der)) hex.append(String.format(Locale.ROOT, "%02x", b & 255));
         String hash = hex.toString();
         if (!hash.equalsIgnoreCase(identity.getString("caSha256").replace(":", ""))) throw new SecurityException("The service certificate identity is invalid.");
+        return hash;
+    }
+    private void rememberIdentity(String name, JSONObject identity) throws Exception {
+        String hash = verifiedCertificateHash(identity);
         JSONObject stored = identities.read();
         JSONObject previous = stored.optJSONObject(name);
         if (previous != null && !hash.equalsIgnoreCase(previous.optString("caSha256").replace(":", ""))) throw new SecurityException("The saved Agent certificate changed. The connection was blocked.");
@@ -580,7 +667,7 @@ public final class AgentRuntime {
         String sessionKey = selected;
         GeckoSession next = sessions.get(sessionKey);
         if (next == null) {
-            next = new GeckoSession(new GeckoSessionSettings.Builder().contextId("bashkitten-agent-ui-" + sessionKey).build());
+            next = new GeckoSession(new GeckoSessionSettings.Builder().contextId(sessionKey.equals("local") ? localSessionContext : "bashkitten-agent-ui-" + sessionKey).build());
             sessions.put(sessionKey, next); next.open(engine);
         }
         session = next;
@@ -601,30 +688,33 @@ public final class AgentRuntime {
         final String previousUrl = url;
         boolean needsLoad = reloadOnConnect || !endpoint.equals(url) || !state.equals("on") || !target.isOpen();
         String request = new JSONObject().put("method", "agent.configure").put("params", params).toString();
-        Runnable connect = () -> BashKittenController.request(target, request).accept(result -> {
-            try {
-                if (generation != operation || !desired || target != session) return;
-                JSONObject reply = new JSONObject(result);
-                if (reply.has("error")) throw new IllegalStateException(reply.getString("error"));
-                boolean changedUrl = !endpoint.equals(url);
-                url = endpoint;
-                if (configured != null) { changed(); configured.run(); return; }
-                if (changedUrl || needsLoad) {
-                    // Attach the panel's delegates before the first navigation events.
+        Runnable connect = () -> {
+            if (generation != operation || !desired || target != session || !target.isOpen()) return;
+            BashKittenController.request(target, request).accept(result -> {
+                try {
+                    if (generation != operation || !desired || target != session) return;
+                    JSONObject reply = new JSONObject(result);
+                    if (reply.has("error")) throw new IllegalStateException(reply.getString("error"));
+                    boolean changedUrl = !endpoint.equals(url);
+                    url = endpoint;
+                    if (configured != null) { changed(); configured.run(); return; }
+                    if (changedUrl || needsLoad) {
+                        // Attach the panel's delegates before the first navigation events.
+                        changed();
+                        target.loadUri(endpoint);
+                        reloadOnConnect = false;
+                    }
                     changed();
-                    target.loadUri(endpoint);
-                    reloadOnConnect = false;
+                } catch (Exception exception) {
+                    if (remote != null) remoteFailed(remote, "Could not verify Agent connection: " + exception.getMessage());
+                    else fail("Could not verify Agent connection: " + exception.getMessage());
                 }
-                changed();
-            } catch (Exception exception) {
-                if (remote != null) remoteFailed(remote, "Could not verify Agent connection: " + exception.getMessage());
-                else fail("Could not verify Agent connection: " + exception.getMessage());
-            }
-        }, exception -> {
-            if (generation != operation) return;
-            if (remote != null) remoteFailed(remote, "Could not configure the protected Agent connection.");
-            else fail("Could not configure the protected Agent connection.");
-        });
+            }, exception -> {
+                if (generation != operation || !desired || target != session) return;
+                if (remote != null) remoteFailed(remote, "Could not configure the protected Agent connection.");
+                else fail("Could not configure the protected Agent connection.");
+            });
+        };
         if (!previousUrl.isEmpty() && (needsLoad || !previousUrl.equals(endpoint))) captureDraft(target, connect);
         else connect.run();
     }
