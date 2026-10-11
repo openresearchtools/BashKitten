@@ -35,10 +35,12 @@ export const BashKittenSettings = {
   },
   visible(browser, visible) { const view = views.get(browser); if (view) view.visible = visible === true; return true; },
   close(browser) { views.delete(browser); },
-  require(global) {
+  require(global, responseTo = null) {
     const context = global?.browsingContext, browser = context?.top.embedderElement;
     const view = browser && views.get(browser), principal = global?.documentPrincipal;
-    if (!view || !view.visible || context !== context.top || context.currentWindowGlobal !== global ||
+    // A native action may open Android Settings. Its response still belongs to
+    // this exact document, but only new actions require foreground visibility.
+    if (!view || (responseTo ? view !== responseTo : !view.visible) || context !== context.top || context.currentWindowGlobal !== global ||
         !principal?.isContentPrincipal || principal.isSystemPrincipal ||
         principal.originAttributes.geckoViewSessionContextId !== view.context ||
         global.documentURI?.spec !== SETTINGS_URI || principal.URI?.spec !== SETTINGS_URI) {
