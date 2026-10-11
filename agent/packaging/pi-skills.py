@@ -109,9 +109,10 @@ def curate(root, target):
     shutil.rmtree(search)
     if target == 'linux':
         shutil.rmtree(root / 'skills/termux-display')
-    package['pi']['skills'] = ['./skills/browser', './skills/websearch', './skills/subagents']
+        shutil.rmtree(root / 'skills/phoneuse', ignore_errors=True)
+    package['pi']['skills'] = ['./skills/browser', './skills/websearch', './skills/subagents', './skills/chats', './skills/ask-user', './desktop-guides/termux-use', './desktop-guides/computer-use']
     if target == 'android':
-        package['pi']['skills'].append('./skills/termux-display')
+        package['pi']['skills'].extend(['./skills/termux-display', './skills/phoneuse'])
     package['bashkitten'] = {'browserGuides': guides}
     package_file.write_text(json.dumps(package, indent=2) + '\n')
 

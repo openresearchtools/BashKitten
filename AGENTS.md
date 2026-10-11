@@ -26,7 +26,7 @@ Display is **local Termux and local containers only**, as explicitly clarified;
 saved remotes retain the existing encrypted Agent/service route. The plan
 supersedes older display/frontend/lifetime requirements only where stated, and
 does not authorize transport/authentication fallbacks or a Pi reimplementation.
-Its Pi release update is planned; the current runtime pin below is unchanged.
+The Pi runtime update is now pinned below; installed acceptance remains pending.
 All features in this plan are equally mandatory, including user-optional or
 default-Off functions and their integration, packaging and acceptance. Implement
 and integrate the complete feature scope before the first full BashKitten
@@ -343,8 +343,8 @@ cancellation and cleanup; remove superseded job/polling/open flows. The user
 explicitly rejected adding OS sandboxing or device-capability gates around
 LibreOffice conversion. Preserve the existing protected Agent/browser boundary.
 
-This branch reuses BashKitten's browser UI with unmodified Pi 1.0.2
-(`cd32f7725fdbddbaecdff5b1e68491563394e0ca`). It contains no Rust backend or
+This branch reuses BashKitten's browser UI with unmodified Pi 1.1.0
+(`abe508e1b89912adde45528136c3221eb69acdd7`). It contains no Rust backend or
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
 `docs/pi-termux.md` describes the architecture and native boundaries.
 

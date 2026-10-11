@@ -20,3 +20,12 @@ BrowserOS TypeScript snapshot/act/read contracts and mcp-prompt.ts at revision
 https://github.com/browseros-ai/BrowserOS/tree/5a4a9ef8f64522a9f20ccc212642ee4bba35ad49/packages/browseros-agent/packages/browser-mcp/src
 BashKitten documents its actual native Android/Linux interfaces; donor session
 ownership, MCP setup and workflow SDK commands are not part of that interface.
+
+ChatGPT usage transport and normalization in chatgpt-usage-data.mjs are adapted
+from llblab/pi-codex-usage v0.13.0, commit
+02a23c0707ccc4432f320ee14a47183d9bd7f4b1, MIT, copyright narumiruna and llblab.
+The full pristine donor and license are retained in vendor/pi-codex-usage.
+BashKitten retains only selected-account Pi auth and normalized quota windows;
+it removes Codex fallback, provider/credit controls, Telegram and donor polling.
+Window durations, multiple buckets, stale labels and backend-wide coalescing are
+BashKitten adaptations. Provider usage GET is the only added network request.

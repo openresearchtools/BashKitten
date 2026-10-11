@@ -3,9 +3,9 @@
 This branch runs unmodified Pi rather than porting its behavior:
 
 - Repository: https://github.com/earendil-works/pi
-- Release: `v1.0.2`
-- Commit: `cd32f7725fdbddbaecdff5b1e68491563394e0ca`
-- Packages: `@earendil-works/pi-coding-agent@1.0.2`, `@earendil-works/pi-ai@1.0.2`
+- Release: `v1.1.0`
+- Commit: `abe508e1b89912adde45528136c3221eb69acdd7`
+- Packages: `@earendil-works/pi-coding-agent@1.1.0`, `@earendil-works/pi-ai@1.1.0`
 - Full transitive dependency resolution and tarball integrity: `package-lock.json`
 - License: MIT (see `reference/PI-LICENSE`)
 
@@ -36,3 +36,25 @@ loss, trying the configured number of recoveries before stock Pi may retry a new
 request. It preserves Pi's native provider/parser and uses the same endpoint and
 authentication. `/pillama-resume off` disables it; the default is off. Settings
 live in BashKitten's private Pi profile, not the standalone Pi directory.
+
+
+The 11 October 2026 update uses the official v1.1.0 release commit and registry
+integrities. The adapter continues to use stock `get_state`, `get_entries`,
+`prompt` with steering, `clear_queue`, `fork`/`clone`, and native session parsing.
+Pi's own extension loader aliases SDK imports to the selected runtime; `chats`
+therefore reads that runtime's history parser without a second model runtime.
+This does not opt into experimental Pi Durable or migrate native JSONL sessions.
+
+The deferred `ask_user` extension returns a pending operational question at once.
+Its live worker owns the absolute two-minute deadline, atomic resolution and
+existing held-draft/steering delivery. A persisted Stop generation also prevents
+an older phone review or question answer from restarting stopped work. Recovery
+never blindly resubmits an ambiguous prompt. No Pi files are patched.
+
+ChatGPT subscription status uses only the selected model's supported Pi OAuth
+resolution and an account/workspace identity present in that resolved token.
+The source-observed usage endpoint is not a stable public API; an auth path that
+cannot prove that identity reports unavailable. No Codex process, credential-file
+scraping, provider switch, separate token refresh or API-key quota inference is
+used. Full donor provenance and MIT notices are in `pi/vendor/pi-codex-usage`.
+Source checks are separate from required installed terminal/browser acceptance.
