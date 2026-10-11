@@ -1547,7 +1547,11 @@
       if (message.role === 'user') {
         beginRenderedTurn(message.timestamp);
         const body = messageRow('user');
-        if (message.agentSource) {
+        if (message.agentSource?.kind === 'phone') {
+          const attribution = document.createElement('span'); attribution.className = 'agent-source';
+          attribution.textContent = { notification: 'Notification reply', call: 'Phone call', voicemail: 'Voicemail reply' }[message.agentSource.source];
+          body.append(attribution);
+        } else if (message.agentSource) {
           const attribution = document.createElement('button'); attribution.type = 'button'; attribution.className = 'agent-source';
           attribution.textContent = (message.agentSource.report ? 'Completed turn · ' : 'Agent · ') + message.agentSource.name;
           attribution.onclick = () => openSessionById(message.agentSource.id).catch(error => { $('#composerHint').textContent = error.message; });
