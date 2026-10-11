@@ -1,0 +1,70 @@
+# syntax=docker/dockerfile:1.7@sha256:b5f3b260a9678e1d83d2fce86eeddf79420b79147eaba2a25986f47133d73720
+# This recipe bootstraps the signed Open Research Tools APT archive and installs
+# the three independently versioned Buzzard OS guest packages from it. No
+# source tree, compiler, language toolchain, or local package artifact enters
+# the reference image build.
+FROM docker.io/library/debian:sid@sha256:900a6f89c05e3f3323f274eb9ce3bb2d35695fac097360dfc6f1cfe2e921996b
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Resolve every Debian package against the immutable archive snapshot named by
+# the pinned sid base.  The normal live sid source is restored after the image
+# is assembled so persistent guest machines continue to receive user-requested
+# package updates.
+COPY apt/debian-sid-snapshot.sources \
+    /etc/apt/sources.list.d/debian.sources
+COPY apt/99buzzardos-snapshot \
+    /etc/apt/apt.conf.d/99buzzardos-snapshot
+
+ARG BUZZARDOS_GUEST_VERSION=0.1.1
+ARG BUZZARDOS_DESKTOP_VERSION=0.1.3
+ARG BUZZARDOS_CUA_VERSION=0.1.0
+ARG OPENRESEARCHTOOLS_KEYRING_SHA256=e46f7b021b56748c749f49afa3ef97974e96fceeedeb0f2ac7ecbef8b676c441
+
+# Bootstrap only the public archive key/source package over HTTPS. APT then
+# authenticates the signed catalogue and verifies every Buzzard package hash.
+# Keeping the keyring and source installed makes persistent machines ordinary
+# APT-updatable systems after image construction.
+RUN apt-get -o Acquire::ForceIPv4=true update && \
+    apt-get -o Acquire::ForceIPv4=true install --yes --no-install-recommends \
+        ca-certificates \
+        wget && \
+    wget --quiet --output-document=/tmp/openresearchtools-archive-keyring.deb \
+        https://keyring.openresearchtools.com && \
+    printf '%s  %s\n' "$OPENRESEARCHTOOLS_KEYRING_SHA256" \
+        /tmp/openresearchtools-archive-keyring.deb \
+        | sha256sum --check --strict - && \
+    apt-get -o Acquire::ForceIPv4=true install --yes --no-install-recommends \
+        /tmp/openresearchtools-archive-keyring.deb && \
+    rm -f /tmp/openresearchtools-archive-keyring.deb && \
+    apt-get -o Acquire::ForceIPv4=true update && \
+    apt-get -o Acquire::ForceIPv4=true install --yes --no-install-recommends \
+        "buzzardoscua=${BUZZARDOS_CUA_VERSION}" \
+        "buzzardos-guest=${BUZZARDOS_GUEST_VERSION}" \
+        "buzzardos-desktop=${BUZZARDOS_DESKTOP_VERSION}" && \
+    rm -f \
+        /usr/share/applications/org.kde.ksecretd.desktop \
+        /usr/share/dbus-1/services/org.freedesktop.impl.portal.desktop.kwallet.service \
+        /usr/share/dbus-1/services/org.kde.kwalletd5.service \
+        /usr/share/dbus-1/services/org.kde.kwalletd6.service \
+        /usr/share/dbus-1/services/org.kde.secretservicecompat.service \
+        /usr/share/xdg-desktop-portal/portals/kwallet.portal && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY apt/debian-sid-live.sources \
+    /etc/apt/sources.list.d/debian.sources
+# The finished machine is a persistent desktop, not a disposable container.
+# Replace the immutable build snapshot with the live signed archive and retain
+# its package catalogue so package installation works immediately on first
+# boot. Distro APT timers keep this catalogue current afterwards.
+RUN rm -f /etc/apt/apt.conf.d/99buzzardos-snapshot && \
+    apt-get -o Acquire::ForceIPv4=true update
+
+COPY provision-image.sh /tmp/buzzardos-provision-image
+RUN chmod 0755 /tmp/buzzardos-provision-image && \
+    /tmp/buzzardos-provision-image && \
+    rm -f /tmp/buzzardos-provision-image
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/lib/systemd/systemd", "--system"]

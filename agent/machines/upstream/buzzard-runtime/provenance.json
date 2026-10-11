@@ -1,0 +1,97 @@
+{
+  "upstream": "https://github.com/openresearchtools/BuzzardOS",
+  "branch": "podman",
+  "commit": "6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0",
+  "license": "AGPL-3.0-or-later",
+  "scope": "Pristine runtime/lifecycle/rootfs/media and guest sudo source selection; imported before adaptations.",
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "8486a10c4393cee1c25392769ddd3b2d6c242d6ec7928e1414efff7dfb2f07ef"
+    },
+    {
+      "path": "NOTICE",
+      "sha256": "acc47753006301ccb9aa3fea680a0b535c1ccc769a6485bd4b3453a48eac33d3"
+    },
+    {
+      "path": "guest/sudo-bridge/Cargo.toml",
+      "sha256": "a34b08cf95ef6b28fd23102bbc960b00653a8057cc0d8256af42b19e200162f0"
+    },
+    {
+      "path": "guest/sudo-bridge/src/main.rs",
+      "sha256": "dd67c6e30eb633cdf2dbded81b633c454133fc0139c5d0507a13337d75e8173d"
+    },
+    {
+      "path": "guest/sudo-bridge/src/transport.rs",
+      "sha256": "354bc60dc62894b9f59a5fd7e12571b14d6b21588e7e2291a864f2120b7d7bba"
+    },
+    {
+      "path": "guest/Cargo.lock",
+      "sha256": "df8ae716ced1d4878d0cb624b529d6e1eea4f85ffdc6427a0266f0c1cb57bb46"
+    },
+    {
+      "path": "guest/assets/buzzardos-sudo.socket",
+      "sha256": "40f0f2264cca3bf46905138f0653bdd50302365f94e3f5d2169c53227e4341b3"
+    },
+    {
+      "path": "guest/assets/buzzardos-sudo@.service",
+      "sha256": "dfb04e98e9cc98b616ece03b621837d0aaa1505317c9a3d05e2b07727c17354a"
+    },
+    {
+      "path": "guest/assets/buzzardos-init",
+      "sha256": "95b6fd6f3c254ec99e86b45aa84dc45854226c06ec206cb4985ae74a93728612"
+    },
+    {
+      "path": "guest/assets/buzzardos-integration-agent",
+      "sha256": "a7d5fad0195217942a389ca63d8f17378ac34de1b94c72c227f6395f6cfc52c9"
+    },
+    {
+      "path": "guest/assets/buzzardos-desktop-services",
+      "sha256": "d5e1e948706998266f36506e7b194773b9df19e2890b44116239d9298344330d"
+    },
+    {
+      "path": "guest/assets/buzzardos-generator",
+      "sha256": "eb237b4f87c7117bc0303d1e13f4da02a4f040379ea0787bc18cb0f9d9c603e2"
+    },
+    {
+      "path": "guest/assets/buzzardos-fusermount",
+      "sha256": "c5c15808c1b79d3e33cdb6e1e24f6feea0f18a015635528e0d0c26e8fa1725c6"
+    },
+    {
+      "path": "guest/assets/buzzardos-fusermount-exec",
+      "sha256": "0e695ccd5bb64cd89d9f67a1a8b0668ec6cf03a86569f42a288908ca4b531ea1"
+    },
+    {
+      "path": "guest/assets/buzzardos-fusermount.socket",
+      "sha256": "90abc75af8c97b6e67210019eba4c0fcc4f390edc665cd6a96cb8bee897ed73d"
+    },
+    {
+      "path": "guest/assets/buzzardos-fusermount@.service",
+      "sha256": "7642b3a24da58674d35a64b3b60af4e671e16793a3e65784a8b1912d5a4aa2b6"
+    },
+    {
+      "path": "host/crates/wb-core/src/podman.rs",
+      "sha256": "865cbc7c619d8724e3200c6eeeecc73c2c5a9a4f79119eae1ad01ad11148adf9"
+    },
+    {
+      "path": "host/crates/wb-core/src/podman/rootfs.rs",
+      "sha256": "6be6d1e58709083f956de3258bceaca4924f3c032a17644c867f00aaa260ca2a"
+    },
+    {
+      "path": "host/crates/wb-core/src/media.rs",
+      "sha256": "6c88ed62587ef1e64411ef9e71c3ea696e236e9875a34450b5de2ba08a21857b"
+    },
+    {
+      "path": "host/crates/buzzardos-display/src/host_media.rs",
+      "sha256": "9788c7576634778c9432623f3db63629b993ce77ac89c2b820ce7c07cb9dd3e3"
+    },
+    {
+      "path": "host/crates/buzzardos/src/operations.rs",
+      "sha256": "d9c886e29d0756dc88a76525cefb095cd817ad937aed7667d247eb1490ea4522"
+    },
+    {
+      "path": "oci/desktop/Containerfile",
+      "sha256": "6d255b11a788b55b2e7128c4cd9cf113f8b1e30f2156249da6b42444f1c0ad10"
+    }
+  ]
+}
