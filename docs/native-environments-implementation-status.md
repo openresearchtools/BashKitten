@@ -13,20 +13,39 @@ acceptance is in progress. Startup, provisioning and presentation failures are
 being repaired together for the next candidate. No workstream is fully accepted;
 component compilation and source review do not establish installed acceptance.
 
-Installed revisions at this checkpoint are Android APK `6dee6b16f9`, Termux
-backend `a9dc65607a`, Termux OS `4c1f2bb98e`, and native Linux `7ecea9955c`.
-External artifact receipts retain full commits, checksums, source-equivalence
-records and matching notices; these are development candidates, not a release.
+Installed revisions at this checkpoint are Android 16/17 APK `fb1111c5d5` and
+native Linux `fb1111c5d5` on Wayland and Xorg. Android 16 has the `609e82c200`
+Termux backend/OS; Android 17 still has backend `a9dc65607a` and OS `4c1f2bb98e`
+while its upgrade is prepared. External receipts retain full commits, checksums,
+source-equivalence records and matching notices. These are development candidates.
 
-The next shared settings/sidebar batch is frozen at
-`609e82c2001f6aa18c745cf5dc252cc5038e128e`, committed and pushed. It replaces
-the separate native forms with protected Gecko settings views, keeps the
-separate settings gear and original Firefox menu, and repeats the flat
-Projects/Chats layout for Local, containers and remotes. The new common About
-registration requires real cached native browser builds on both targets;
-configuration passed and those builds are running. Java/Kotlin/resource,
-JavaScript/import/asset and private-dispatch source checks passed. No installed
-visual or feature acceptance is claimed for this revision yet.
+The shared settings/sidebar implementation in `609e82c200` received actual
+cached native builds on both targets: desktop 8m37s and Android 9m47s. Installed
+checks then found incorrect static-asset placement. `fb1111c5d5` corrected the
+archive placement and icon sizing, with verified unchanged native producers.
+The installed page then exposed a second failure: module loading from its
+resource URL was rejected by Gecko's CORS checks. `e375826bff` uses Gecko's
+existing non-linkable about-page chrome module path, retaining the unprivileged
+content principal, scoped CSP and native authorization. This batch also removes
+the written BashKitten toolbar pill, labels the gear Configuration, and deletes
+two unused native LocalAI forms. Packaging is running; installed settings
+acceptance remains blocked until this candidate is tested.
+
+Installed Xorg checks passed the flat hierarchy, corrected icons, wide/narrow
+sidebar behavior, draft preservation and Providers/General navigation. A real
+question card remained visible after the final reply and delivered one answer
+to its original chat. Other question cases remain pending. Container creation
+still used a legacy daemon surviving the package upgrade; its tar failure does
+not establish a failure of the newly installed export code. `84af6f3685` adds
+revision detection and safe idle replacement, retaining running guests and
+read/Stop/Cancel paths. Legacy services explicitly require a session/OS restart.
+The update behavior and fresh container retry still need installed verification.
+
+Android 16 is a separate official API 36 KVM guest with fresh Termux and no
+copied Pi profile. Setup-only package prerequisites were repaired with a normal
+full upgrade; its installed feature flows remain pending. Android 17's old
+controller did not answer a stop request during upgrade preparation; diagnosis
+is ongoing. No completion or stability claim follows from these package checks.
 
 Actual installed observations:
 
