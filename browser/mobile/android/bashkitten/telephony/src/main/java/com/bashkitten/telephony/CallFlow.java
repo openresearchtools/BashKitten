@@ -23,7 +23,7 @@ final class CallFlow implements AutoCloseable {
     private JSONArray mailbox=new JSONArray();
     private int mailboxIndex;
     private boolean listening,lateConfirmed,hasStopGeneration;
-    CallFlow(TelephonyRuntime owner,KittenConnection call){this.owner=owner;this.call=call;audio=new CallAudio(owner);}
+    CallFlow(TelephonyRuntime owner,KittenConnection call){this.owner=owner;this.call=call;audio=new CallAudio(owner,call.id);}
     private void transition(String state){generation++;audio.cancel();this.state=state;}
     private JSONObject request(Object...pairs){JSONObject value=TelephonyRuntime.json("callId",call.id,"menuRevision",generation,"backendId",call.backend,"sessionId",sessionId,"nativeSessionId",nativeSessionId);JSONObject extra=TelephonyRuntime.json(pairs);for(String key:TelephonyRuntime.keys(extra))TelephonyRuntime.put(value,key,extra.opt(key));return value;}
     private void ask(String action,JSONObject payload,Consumer<JSONObject> done){int token=generation;owner.gateway.request(action,payload).whenComplete((value,error)->owner.execute(()->{if(call.ended||token!=generation)return;if(error!=null)failure(error);else done.accept(value);}));}

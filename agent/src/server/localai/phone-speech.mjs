@@ -8,6 +8,16 @@ import { transcribeAudio } from './dictation.mjs';
 
 const uuid = value => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
 const response = value => Buffer.from(JSON.stringify(value));
+async function waitForCleanup(finished, signal) {
+  signal.throwIfAborted();
+  let cancelled;
+  try {
+    await Promise.race([finished, new Promise((_, reject) => {
+      cancelled = () => reject(signal.reason);
+      signal.addEventListener('abort', cancelled, { once: true });
+    })]);
+  } finally { signal.removeEventListener('abort', cancelled); }
+}
 async function readExact(stream, length, signal) {
   const parts = []; let size = 0;
   while (size < length) {
@@ -23,6 +33,17 @@ async function readExact(stream, length, signal) {
 /** Owned by the private controller, never a web/remote speech endpoint. */
 export class PhoneSpeech {
   constructor(localAI) { this.localAI = localAI; this.captures = new Map(); this.requests = new Map(); }
+  async synthesisAvailable(value, signal) {
+    const previous = this.synthesis;
+    if (previous && this.localAI.synthesis === previous.child && uuid(value.callId) && previous.callId === value.callId) {
+      // A keypad transition may reach us before its separate cancel packet.
+      // Only that same call's explicitly cancelled request can be superseded.
+      if (value.cancelledRequestId === previous.requestId) previous.abort.abort();
+      if (previous.abort.signal.aborted) await waitForCleanup(previous.finished, signal);
+    }
+    signal.throwIfAborted();
+    if (this.localAI.stopping || this.localAI.synthesis) throw Error('Speech synthesis is busy');
+  }
   async vadFiles() {
     const runtime = await runtimeInfo('whisper');
     if (!runtime?.capabilities?.streamingVad) throw Error('Download the current Whisper runtime in LocalAI to enable call speech detection');
@@ -34,7 +55,7 @@ export class PhoneSpeech {
   async ready() {
     try {
       if (!(await this.localAI.speechCapability()).available) throw Error('Set up Whisper or Parakeet in LocalAI');
-      await this.vadFiles(); await this.ttsCommand('Ready', '/proc/self/fd/1');
+      await this.vadFiles(); await this.ttsCommand('Ready', '/proc/self/fd/3');
       return { ready: true };
     } catch (error) { return { ready: false, error: error.message }; }
   }
@@ -48,7 +69,9 @@ export class PhoneSpeech {
     }
     const executable = path.join(path.dirname(runtime.binary), 'llama-tts');
     await fs.access(executable, fs.constants.X_OK);
-    return { argv: [executable, '-m', config.model, '-mm', config.projector, '-p', text,
+    // Released TTS treats even -n -1 as 512 frames; this loop ceiling does not
+    // allocate memory or size context. Let model EOS/cancellation finish speech.
+    return { argv: [executable, '-m', config.model, '-mm', config.projector, '-p', text, '-n', '2147483647',
       '--tts-speaker-file', config.voice, '--output', output,
       '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none',
       '-ngl', runtime.backend === 'cpu' ? '0' : '999', ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
@@ -111,14 +134,24 @@ export class PhoneSpeech {
         signal: abort.signal, acquire: id => this.localAI.acquireSpeech(id), release: (id, completed) => this.localAI.releaseSpeech(id, completed),
       }));
       if (action !== 'speech.synthesize') throw Error('Unknown speech operation');
+      await this.synthesisAvailable(value, abort.signal);
+      const command = await this.ttsCommand(value.text, '/proc/self/fd/3'); abort.signal.throwIfAborted();
+      await this.synthesisAvailable(value, abort.signal);
+      abort.signal.throwIfAborted();
       if (this.localAI.stopping || this.localAI.synthesis) throw Error('Speech synthesis is busy');
-      const command = await this.ttsCommand(value.text, '/proc/self/fd/1'); abort.signal.throwIfAborted();
-      if (this.localAI.stopping || this.localAI.synthesis) throw Error('Speech synthesis is busy');
-      const child = launchInference(command, { signal: abort.signal }), chunks = [];
+      const child = launchInference(command, { signal: abort.signal, outputPipe: true }), chunks = [];
       this.localAI.synthesis = child; this.localAI.synthesisState = { state: 'generating' };
-      const finished = new Promise((resolve,reject) => { child.once('error',reject); child.once('close', code => code === 0 ? resolve() : reject(Error('Call speech synthesis failed'))); });
-      this.localAI.synthesisFinished = finished.catch(() => {});
-      child.stdout.on('data', chunk => chunks.push(chunk)); child.stdin.end();
+      let release;
+      const owner = { child, abort, callId: value.callId, requestId: value.requestId, finished: new Promise(resolve => { release = resolve; }) };
+      this.synthesis = owner; this.localAI.synthesisFinished = owner.finished;
+      let processError;
+      // AbortError arrives before process/group cleanup. Keep the shared lease
+      // until close, which also follows an error when spawning fails.
+      const finished = new Promise((resolve,reject) => {
+        child.once('error', error => { processError = error; });
+        child.once('close', code => processError ? reject(processError) : code === 0 ? resolve() : reject(Error('Call speech synthesis failed')));
+      });
+      child.stdout?.on('data', chunk => chunks.push(chunk)); child.stdin?.on('error', () => {}); child.stdin?.end();
       try {
         await finished; abort.signal.throwIfAborted();
         const wav = Buffer.concat(chunks);
@@ -128,6 +161,8 @@ export class PhoneSpeech {
         for (const chunk of chunks) chunk.fill(0);
         if (child.exitCode === null) child.kill('SIGTERM');
         if (this.localAI.synthesis === child) { this.localAI.synthesis = null; this.localAI.synthesisState = { state: 'idle' }; }
+        if (this.synthesis === owner) this.synthesis = null;
+        release();
       }
     } finally { bytes.fill(0); signal?.removeEventListener('abort',cancelled); this.requests.delete(value.requestId); }
   }
