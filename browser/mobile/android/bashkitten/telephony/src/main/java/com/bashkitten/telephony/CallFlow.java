@@ -42,7 +42,7 @@ final class CallFlow implements AutoCloseable {
     private void chatActions(){while(!pending.isEmpty()){JSONObject event=pending.poll();if(spoken.contains(event.optString("entryId",event.optString("eventId"))))continue;if(event.optString("kind").equals("question")&&event.optLong("expiresAt",Long.MAX_VALUE)<System.currentTimeMillis())continue;eventPrompt(event);return;}transition("actions");prompt("Press or say 1 to send a message, 2 to read the last final message, or 3 to stream live. Press star for voicemail.");}
     private void newChat(){hasStopGeneration=false;draft="";transition("new");String creationId=UUID.randomUUID().toString();ask("phone.new",request("mode",owner.settings().optString("callDefault","calls"),"creationId",creationId),value->{sessionId=value.optString("sessionId");if(sessionId.isBlank()){failure(new IllegalStateException("Backend did not create a chat"));return;}capture("replace");});}
     private void capture(String mode){if(hasStopGeneration){captureReady(mode);return;}transition("preparing-capture");ask("phone.begin",request(),result->{stopGeneration=result.optLong("stopGeneration");hasStopGeneration=true;nativeSessionId=result.isNull("nativeSessionId")?"":result.optString("nativeSessionId","");captureReady(mode);});}
-    private void captureReady(String mode){transition("dictating");captureMode=mode;int token=generation;audio.capture(owner.settings(),text->{if(token!=generation)return;draft=mode.equals("append")&&!draft.isBlank()?draft+"\n"+text:text;submissionId=UUID.randomUUID().toString();review();},error->{if(token!=generation)return;owner.failed(error);if(!draft.isBlank())review();else chatActions();});}
+    private void captureReady(String mode){transition("dictating");captureMode=mode;int token=generation;audio.capture(owner.settings(),text->{if(token!=generation)return;draft=mode.equals("append")&&!draft.isBlank()?draft+"\n"+text:text;submissionId=UUID.randomUUID().toString();review();},error->{if(token!=generation)return;owner.callFailed(call.id,error);if(!draft.isBlank())review();else chatActions();});}
     private void review(){transition("review");prompt(draft+". Press or say 1 to send, 2 to change, or 3 to add more.");}
     private void send(){if(draft.isBlank())return;transition("sending");JSONObject payload=request("text",draft,"deliveryId",submissionId,"source",targetEvent!=null&&targetEvent.optBoolean("played")?"voicemail":"call","lateConfirmed",lateConfirmed,"stopGeneration",stopGeneration);
         if(targetEvent!=null){TelephonyRuntime.put(payload,"eventId",targetEvent.optString("eventId"));TelephonyRuntime.put(payload,"questionId",targetEvent.optString("questionId"));TelephonyRuntime.put(payload,"revision",targetEvent.optInt("revision",1));}
@@ -63,7 +63,7 @@ final class CallFlow implements AutoCloseable {
     }
     private void stopLive(){
         listening=false;if(liveRenewal!=null){liveRenewal.cancel(false);liveRenewal=null;}JSONObject subscription=liveSubscription;liveSubscription=null;
-        if(subscription!=null&&owner.gateway!=null)liveRequest(subscription,false).whenComplete((value,error)->{if(error!=null)owner.execute(()->owner.failed(error));});
+        if(subscription!=null&&owner.gateway!=null)liveRequest(subscription,false).whenComplete((value,error)->{if(error!=null)owner.execute(()->owner.callFailed(call.id,error));});
     }
     void live(JSONObject event){if(!listening||!Objects.equals(call.backend,event.optString("backendId"))||!sessionId.equals(event.optString("sessionId")))return;enqueue(event);}
     void enqueue(JSONObject event){if(spoken.contains(event.optString("entryId",event.optString("eventId"))))return;pending.add(event);if(state.equals("live"))drain();}
@@ -95,7 +95,7 @@ final class CallFlow implements AutoCloseable {
         if(state.equals("actions")){if(normalized.equals("send a message"))candidates.add("1");if(normalized.equals("read last final")||normalized.equals("read last message"))candidates.add("2");if(normalized.equals("stream live"))candidates.add("3");}
         if(candidates.size()!=1){prompt("No clear selection. Please choose an announced option.");return;}String selected=candidates.iterator().next();if(selected.equals("*")){if(call.backend!=null)voicemail();}else choose(selected);
     }
-    private void failure(Throwable error){owner.failed(error);transition("failed"); /* Remains hangup/keypad-responsive; no alternate speech engine or blind retry. */ }
+    private void failure(Throwable error){owner.callFailed(call.id,error);transition("failed"); /* Remains hangup/keypad-responsive; no alternate speech engine or blind retry. */ }
     void withdraw(String backend,String session){if(!Objects.equals(call.backend,backend))return;if(session==null||session.equals(sessionId)){draft="";targetEvent=null;pending.clear();transition("withdrawn");}}
     void resolved(String eventId,String status){
         pending.removeIf(item -> eventId.equals(item.optString("eventId")));
