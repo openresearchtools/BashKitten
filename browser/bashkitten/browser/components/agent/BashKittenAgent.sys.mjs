@@ -477,6 +477,10 @@ class AgentView {
           }, allowHttpStatus: (_download, status) => current() && status === 200 },
         target: pending,
       });
+      // This is a temporary preview transfer, not a user download. Firefox's
+      // DownloadCopySaver checks this flag before adding a history entry;
+      // retain that narrow upgrade seam without changing the channel's context.
+      download.saver.alreadyAddedToHistory = true;
       if (!current()) throw new Error("The document request was cancelled.");
       download.onchange = () => { if (!current() && !download.stopped) download.cancel().catch(console.error); };
       await download.start();
