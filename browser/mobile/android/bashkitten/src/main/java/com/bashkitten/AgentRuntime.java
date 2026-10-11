@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import org.json.*;
 import org.mozilla.geckoview.*;
+import com.bashkitten.phone.PhoneControlsRuntime;
 
 /** One application-owned Agent session. It is deliberately absent from the browser tab store. */
 public final class AgentRuntime {
@@ -23,6 +24,7 @@ public final class AgentRuntime {
     public interface Listener { void changed(); }
     final BrowserApp app;
     public final TermuxConnection termux;
+    final PhoneVoiceGateway phoneVoice;
     private final SecretStore identities;
     private final SecretStore remoteStore;
     // Serialize encrypted catalogue/identity transactions without blocking Gecko's UI.
@@ -32,7 +34,8 @@ public final class AgentRuntime {
     public GeckoSession session;
     public String state = "off", error = "", url = "", selected = "local";
     public JSONObject status = new JSONObject();
-    private boolean launched, desired, busy, polling, localControlRequested, termuxSetupAttempted;
+    private boolean launched, desired, busy, polling, termuxSetupAttempted;
+    private volatile boolean localControlRequested;
     private int operation;
     public boolean visible;
     public String setupStep = "";
@@ -58,6 +61,7 @@ public final class AgentRuntime {
         selected = app.policies.getString("agent.selected", "local");
         localControlRequested = app.policies.getBoolean("agent.localControlRequested", false);
         termuxSetupAttempted = app.policies.getBoolean("agent.termuxSetupAttempted", false);
+        phoneVoice = new PhoneVoiceGateway(app, this);
     }
     private <T> void stored(Callable<T> work, Consumer<T> done, Consumer<String> failure) {
         storage.execute(() -> {
@@ -93,8 +97,23 @@ public final class AgentRuntime {
         }, message -> { if (generation == operation) fail(message); });
     }
     public boolean isOnRequested() { return desired; }
+    public boolean localIsOnRequested() { return localControlRequested; }
+    /** Native hierarchy only: execute in the current enrolled protected document. */
+    public void navigation(String action, JSONObject value, Consumer<JSONObject> done, Consumer<String> failure) {
+        final GeckoSession target = session; final String backend = selected;
+        if (target == null || !state.equals("on")) { failure.accept("Connect to this backend first."); return; }
+        try {
+            JSONObject request = new JSONObject().put("method", "agent.navigation").put("params", new JSONObject().put("action", action).put("value", value));
+            BashKittenController.request(target, request.toString()).accept(reply -> {
+                if (target != session || !backend.equals(selected)) { failure.accept("The selected backend changed."); return; }
+                try { JSONObject result = new JSONObject(reply); if (result.has("error")) failure.accept(result.getString("error")); else done.accept(result.optJSONObject("result") == null ? new JSONObject() : result.getJSONObject("result")); }
+                catch (Exception error) { failure.accept(error.getMessage()); }
+            }, error -> failure.accept(error.getMessage()));
+        } catch (Exception error) { failure.accept(error.getMessage()); }
+    }
     private void recordLocalControl(boolean requested) {
         localControlRequested = requested;
+        if (!requested && app.display != null) app.display.revoke();
         app.policies.edit().putBoolean("agent.localControlRequested", requested).apply();
     }
     public void freshLaunch(Intent intent) {
@@ -162,9 +181,18 @@ public final class AgentRuntime {
             recordLocalControl(true);
             command("start", new JSONObject(), result -> {
                 if (generation != operation || !desired) return;
+                connectPhoneControls(); phoneVoice.ready();
                 busy = false; acceptStatus(result); poll();
             }, message -> { if (generation == operation) setup(message); });
         }, message -> { if (generation == operation) setup("connection", message); });
+    }
+    private void connectPhoneControls() {
+        PhoneControlsRuntime.get(app).setOwnerLinkListener(link -> {
+            app.main.post(() -> {
+                if (!localControlRequested || !termux.permissionGranted()) { PhoneControlsRuntime.get(app).disconnectOwner(); return; }
+                command("phone-control-connect", link, ignored -> {}, ignored -> PhoneControlsRuntime.get(app).disconnectOwner());
+            });
+        });
     }
     private void resetLocalSetup(Runnable done) {
         resetLocalConnection(() -> {
@@ -174,6 +202,7 @@ public final class AgentRuntime {
         });
     }
     private void resetLocalConnection(Runnable done) {
+        PhoneControlsRuntime.get(app).disconnectOwner();
         final int generation = operation;
         stored(() -> {
             JSONObject remembered = identities.read(); remembered.remove("local"); identities.write(remembered);
@@ -226,12 +255,13 @@ public final class AgentRuntime {
         batteryDeferred.add(batteryPackage); turnOn();
     }
     public void turnOff() {
+        if (!selected.equals("local")) { disconnectRemote(selected); return; }
+        PhoneControlsRuntime.get(app).disconnectOwner();
         if (state.equals("stopping")) return;
         boolean termuxInstalled = termux.installed();
         if (!termuxInstalled) recordLocalControl(false);
         boolean setupWithoutService = state.equals("setup") && (!termuxInstalled || !localControlRequested);
         desired = false; busy = true; operation++; state = "stopping"; error = "";
-        closeRemoteConnections();
         if (session != null) suspendSession(session);
         app.remoteControl.disconnect();
         changed();
@@ -268,8 +298,26 @@ public final class AgentRuntime {
         busy = false; state = "off"; error = ""; releaseWake(); changed();
     }
     private void releaseWake() {
-        closeRemoteConnections();
+        if (localControlRequested || remoteConnections.values().stream().anyMatch(connection -> !connection.isClosed())) return;
         app.startService(new Intent(app, BrowserKeepAliveService.class).setAction(BrowserKeepAliveService.AGENT_OFF));
+    }
+    public void setBackendOn(String id, boolean on, Consumer<String> failure) {
+        if (on) { select(id); if (!desired) turnOn(); return; }
+        if (!id.equals("local")) { disconnectRemote(id); return; }
+        if (selected.equals("local")) { turnOff(); return; }
+        // Stop only Termux's owned group while leaving the selected remote and
+        // independent mappings alive. No selection changes to accomplish power.
+        stopBackgroundLocal(failure);
+    }
+    private void stopBackgroundLocal(Consumer<String> failure) {
+        PhoneControlsRuntime.get(app).disconnectOwner();
+        command("stop", new JSONObject(), value -> {
+            JSONObject web = value.optJSONObject("web");
+            String current = web == null ? "" : web.optString("status");
+            if (current.equals("stopping") || current.equals("running")) { app.main.postDelayed(() -> stopBackgroundLocal(failure), 2000); return; }
+            if (!current.equals("stopped") && !current.equals("off")) { failure.accept(web == null ? "No Local shutdown status" : web.optString("error", "Local shutdown was not confirmed")); return; }
+            recordLocalControl(false); releaseWake(); changed();
+        }, failure);
     }
     private void setup(String message) { setup("retry", message); }
     private void setup(String step, String message) { busy = false; state = "setup"; setupStep = step; error = message; changed(); }
@@ -281,6 +329,15 @@ public final class AgentRuntime {
             setup("retry", message); return;
         }
         busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed();
+    }
+    public void connectToPhone(String id, Runnable done, Consumer<String> failure) {
+        if (id.equals("local")) { phoneVoice.ready(); phoneVoice.prepare().whenComplete((value,error) -> app.main.post(() -> { if(error == null)done.run();else failure.accept(error.getMessage()); })); return; }
+        remotes(saved -> { JSONObject record = saved.optJSONObject(id); if (record == null) { failure.accept("Remote no longer exists"); return; } phoneVoice.connectRemote(id, record.optString("name", id), done, failure); }, failure);
+    }
+    void phoneRemoteRequest(String id, String action, JSONObject value, JSONObject identity, Consumer<JSONObject> done, Consumer<String> failure) {
+        RemoteAgentConnection connection = remoteConnections.get(id);
+        if (connection == null || !connection.ready || connection.isClosed()) { failure.accept("Original remote is disconnected"); return; }
+        connection.request(client -> client.phone(action, value, identity), done, failure);
     }
     public void command(String name, JSONObject args, Consumer<JSONObject> done, Consumer<String> fail) {
         try { termux.run(new JSONObject().put("command", name).put("args", args), done, fail); }
@@ -496,6 +553,12 @@ public final class AgentRuntime {
         turnOn();
     }
     public void remotes(Consumer<JSONObject> done, Consumer<String> failure) { stored(remoteStore::read, done, failure); }
+    public void renameRemote(String id, String name, Runnable done, Consumer<String> failure) {
+        stored(() -> {
+            String value = name.trim(); if (value.isEmpty() || value.matches(".*[\\x00-\\x1f].*")) throw new IllegalArgumentException("Choose a remote name.");
+            JSONObject saved = remoteStore.read(); saved.getJSONObject(id).put("name", value); remoteStore.write(saved); return true;
+        }, ignored -> { phoneVoice.renameRemote(id, name); changed(); done.run(); }, failure);
+    }
     /** Called only after native TK2 decryption; no plaintext/legacy enrollment fallback. */
     public void importRemote(JSONObject bundle, Runnable done, Consumer<String> failure) {
         String id = bundle.optString("onion");
@@ -537,7 +600,7 @@ public final class AgentRuntime {
             if (session != null) suspendSession(session);
             state = "off"; error = ""; desired = false;
         }
-        changed();
+        releaseWake(); changed();
     }
     public void remoteServices(String id, Consumer<JSONObject> done, Consumer<String> failure) {
         RemoteAgentConnection connection = remoteConnections.get(id);
@@ -666,6 +729,7 @@ public final class AgentRuntime {
                 if (mappings != null) for (Iterator<String> keys = mappings.keys(); keys.hasNext();) {
                     contexts.add(mappings.getJSONObject(keys.next()).getString("context"));
                 }
+                phoneVoice.removeRemote(id);
                 app.closeServiceRoutes(id); serviceSnapshots.remove(id);
                 GeckoSession remote = sessions.remove(id);
                 if (remote != null && remote.isOpen()) { remote.stop(); remote.close(); }

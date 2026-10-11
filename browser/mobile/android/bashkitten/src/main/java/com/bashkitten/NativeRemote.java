@@ -87,6 +87,7 @@ final class NativeRemote implements AutoCloseable {
     JSONObject map(String id, int port) throws Exception { return new JSONObject(client.map(id, port)); }
     void unmap(String id) { client.unmap(id); }
     JSONArray mappings() throws Exception { return new JSONArray(client.mappings()); }
+    JSONObject phone(String action, JSONObject value, JSONObject identity) throws Exception { return json(client.phone(new JSONObject().put("action", action).put("value", value).put("identity", identity).toString().getBytes(StandardCharsets.UTF_8))); }
     JSONObject services() throws Exception { return json(client.services()); }
     JSONObject serviceAction(String id, String action) throws Exception { return json(client.serviceAction(id, action)); }
     private static JSONObject json(byte[] data) throws Exception {

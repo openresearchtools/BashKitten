@@ -18,6 +18,10 @@ public final class BrowserControlService extends Service {
         return START_NOT_STICKY;
     }
     private final IAgentBrowser.Stub binder = new IAgentBrowser.Stub() {
+        @Override public void registerDisplay(String version, IDisplaySource source) {
+            try { app.display.register(Binder.getCallingUid(), version, source); }
+            catch (Exception error) { throw new SecurityException(error.getMessage()); }
+        }
         @Override public PendingIntent requestAccess() { return app.grants.request(Binder.getCallingUid()); }
         @Override public PendingIntent showTab(String id) {
             int uid = Binder.getCallingUid(); String owner = app.grants.require(uid);

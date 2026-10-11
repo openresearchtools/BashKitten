@@ -30,6 +30,7 @@ import org.mozilla.fenix.FenixApplication
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.geckoview.GeckoView
 import com.bashkitten.BrowserApp
+import com.bashkitten.display.DisplayTabs
 
 class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Host {
     private val components get() = application.components
@@ -81,14 +82,15 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         return BrowserApp.Tab(id, owner, engine.bashKittenSession())
     }
 
-    override fun selected(): BrowserApp.Tab? = components.core.store.state.selectedTab?.let(::nativeTab)?.let {
+    override fun selected(): BrowserApp.Tab? = components.core.store.state.selectedTab?.takeUnless { it.contextId == DisplayTabs.CONTEXT }?.let(::nativeTab)?.let {
         BrowserApp.get(application).track(it, it.parentId)
     }
 
-    override fun list(): List<BrowserApp.Tab> = components.core.store.state.tabs.map(::nativeTab)
+    override fun list(): List<BrowserApp.Tab> = components.core.store.state.tabs.filterNot { it.contextId == DisplayTabs.CONTEXT }.map(::nativeTab)
 
     override fun refresh(tab: BrowserApp.Tab): Boolean {
         val state = components.core.store.state.tabs.find { it.id == tab.id } ?: return false
+        if (state.contextId == DisplayTabs.CONTEXT) return false
         val current = state.engineState.engineSession as? GeckoEngineSession
         if (tab.session !== current?.bashKittenSession()) {
             tab.session = current?.bashKittenSession()
@@ -118,6 +120,21 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
                 done.run()
             } catch (error: Exception) { fail.accept("Could not restore tab session") }
         }
+    }
+
+    override fun closeDisplay() {
+        components.core.store.state.tabs.filter { it.contextId == DisplayTabs.CONTEXT }
+            .forEach { components.useCases.tabsUseCases.removeTab(it.id) }
+    }
+    override fun openDisplay(environmentId: String) {
+        require(environmentId == "local") { "Android Display supports local Termux only" }
+        val existing = components.core.store.state.tabs.find { it.contextId == DisplayTabs.CONTEXT }
+        val id = existing?.id ?: components.useCases.tabsUseCases.addTab(
+            url = "about:blank", selectTab = true, startLoading = false,
+            contextId = DisplayTabs.CONTEXT, title = "Display · Local",
+        )
+        show(id)
+        (activity.get() as? HomeActivity)?.bashKittenAgentPanel?.showBrowser()
     }
 
     override fun close(id: String) { components.useCases.tabsUseCases.removeTab(id) }

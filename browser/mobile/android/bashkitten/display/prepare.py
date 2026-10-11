@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Materialize the pinned, patched module in build output. Never mutate donor source."""
+import argparse
+import fcntl
+import hashlib
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import xml.etree.ElementTree as ET
+
+HERE = Path(__file__).resolve().parent
+SOURCE = HERE.parents[3] / 'bashkitten/vendor/termux-x11/source'
+PIN = 'fa3a8b430e2896a19f44c99a9cb056254615ae06'
+
+
+def prepare(output):
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with (output.parent / '.prepare.lock').open('w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        metadata = json.loads((SOURCE.parent / 'source.json').read_text())
+        if metadata['commit'] != PIN:
+            raise ValueError('Unreviewed Termux:X11 pin')
+        patches = sorted((HERE / 'patches').glob('*.patch'))
+        digest = hashlib.sha256(Path(__file__).read_bytes() + (SOURCE.parent / 'source.json').read_bytes())
+        for patch in patches:
+            digest.update(patch.read_bytes())
+        identity = digest.hexdigest()
+        stamp = output / '.prepared'
+        if stamp.exists() and stamp.read_text() == identity:
+            return
+        staging = output.with_name(output.name + '.new')
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.copytree(SOURCE, staging)
+        for patch in patches:
+            subprocess.run(['patch', '--batch', '--forward', '-p1', '-i', str(patch)], cwd=staging, check=True)
+        java = staging / 'lorie/src/main/java/com/termux/x11'
+        # Native engine, input and extra-key machinery are reused; standalone app,
+        # preference Activity, accessibility interceptor and broadcasts are not shipped.
+        for name in ['MainActivity.java', 'LorieApp.java', 'LoriePreferences.java', 'CmdEntryPoint.java',
+                     'utils/KeyInterceptor.java', 'utils/X11ToolbarViewPager.java', 'utils/ImeHeightProvider.java']:
+            (java / name).unlink()
+        ns = '{http://schemas.android.com/apk/res-auto}'
+        fields = []
+        for node in ET.parse(staging / 'lorie/src/main/res/xml/preferences.xml').iter():
+            key = node.get(ns + 'key')
+            if not key or key == 'extra_keys_config':
+                continue
+            default = node.get(ns + 'defaultValue', '')
+            kind = {'EditTextPreference': 'String', 'SeekBarPreference': 'Int',
+                    'ListPreference': 'List', 'SwitchPreferenceCompat': 'Boolean'}.get(node.tag)
+            if not kind:
+                continue
+            if kind in ('String', 'List'):
+                default = json.dumps(default)
+            if key == 'displayResolutionMode':
+                default = '"native"'
+            # Browser content bounds already exclude IME: native dimensions follow it.
+            if key == 'adjustResolution':
+                default = 'false'
+            fields.append((kind, key, default or ('false' if kind == 'Boolean' else '0')))
+        content = '// Generated from the pinned Termux:X11 preferences; GPL-3.0-only.\npackage com.termux.x11;\n'
+        content += 'public final class Prefs extends LoriePreferences.PrefsProto {\n'
+        content += ' public final java.util.Map<String, Preference> keys = new java.util.HashMap<>();\n'
+        for kind, key, default in fields:
+            content += f' public final {kind}Preference {key} = new {kind}Preference("{key}", {default});\n'
+        content += ' public final StringPreference extra_keys_config = new StringPreference("extra_keys_config", com.termux.x11.utils.TermuxX11ExtraKeys.DEFAULT_IVALUE_EXTRA_KEYS);\n'
+        content += ' public Prefs(android.content.SharedPreferences values) { super(values);\n'
+        for _, key, _ in fields:
+            content += f' keys.put("{key}", {key});\n'
+        content += ' keys.put("extra_keys_config", extra_keys_config);\n }\n}\n'
+        (java / 'Prefs.java').write_text(content)
+        resources = staging / 'embedded-res/drawable'
+        resources.mkdir(parents=True)
+        for pattern in ['ic_extra_key_*.xml', 'ic_zoom_*.xml']:
+            for resource in (staging / 'lorie/src/main/res/drawable').glob(pattern):
+                shutil.copy2(resource, resources / resource.name)
+        # Each selected upstream resource keeps its original notices. No app manifest
+        # or broadcast receiver from the donor participates in manifest merging.
+        shutil.rmtree(output, ignore_errors=True)
+        staging.rename(output)
+        stamp.write_text(identity)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('output', type=Path)
+    prepare(parser.parse_args().output.resolve())

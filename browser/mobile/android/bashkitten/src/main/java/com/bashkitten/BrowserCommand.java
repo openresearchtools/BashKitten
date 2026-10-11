@@ -139,7 +139,7 @@ public final class BrowserCommand {
         if (index + 1 >= args.size()) throw new IllegalArgumentException(name + " needs a value");
         String value = args.remove(index + 1); args.remove(index); return value;
     }
-    private static int browserUid() throws Exception {
+    static int browserUid() throws Exception {
         Process process = new ProcessBuilder("/system/bin/cmd", "package", "list", "packages", "-U", "--user",
             Integer.toString(android.os.Process.myUid() / 100000), CommandProtocol.PACKAGE).redirectErrorStream(true).start();
         String text = new String(readAll(process.getInputStream()), StandardCharsets.UTF_8);
@@ -164,7 +164,7 @@ public final class BrowserCommand {
         if (commandContext != null) return commandContext;
         // app_process has no Application. Use Android's runtime context to send the
         // discovery broadcast; authorization still uses Binder.getCallingUid().
-        android.os.Looper.prepareMainLooper();
+        if (android.os.Looper.getMainLooper() == null) android.os.Looper.prepareMainLooper();
         Class<?> activityThread = Class.forName("android.app.ActivityThread");
         Object thread = activityThread.getMethod("systemMain").invoke(null);
         android.content.Context system = (android.content.Context) activityThread.getMethod("getSystemContext").invoke(thread);
@@ -172,6 +172,17 @@ public final class BrowserCommand {
         if (packages == null || packages.length == 0) throw new SecurityException("Run this command from an Android app such as Termux");
         commandContext = system.createPackageContext(packages[0], android.content.Context.CONTEXT_IGNORE_SECURITY);
         return commandContext;
+    }
+    static void initializeDisplay() throws Exception { commandContext(); }
+
+    /** Private typed display handoff; never exposed as a browser tool or JSON command. */
+    static android.os.IBinder displayEndpoint() throws Exception {
+        JSONObject response = nativeRequest(browserUid(), new JSONObject().put("method", "app.prepare"));
+        JSONObject result = response.optJSONObject("result");
+        if (response.has("error") || result == null || result.has("appGrant"))
+            throw new SecurityException("Approve Termux in BashKitten Agent access before starting Display");
+        if (result.optBoolean("foregroundRequired")) throw new IllegalStateException("Open BashKitten before starting Display");
+        return appEndpoint;
     }
     private static JSONObject nativeRequest(int browserUid, JSONObject request) throws Exception {
         if (appEndpoint == null || !appEndpoint.isBinderAlive()) {

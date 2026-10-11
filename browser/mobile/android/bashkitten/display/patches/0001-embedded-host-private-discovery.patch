@@ -1,0 +1,541 @@
+--- a/lorie/src/main/cpp/lorie/activity.cpp
++++ b/lorie/src/main/cpp/lorie/activity.cpp
+@@ -99,41 +99,8 @@
+ }
+ 
+ // @CriticalNative: no implicit JNIEnv*/jclass, unlike the @FastNative entries below.
+-static jboolean requestConnection(__unused jlong ptr) {
+-#define check(cond, fmt, ...) if ((cond)) do { __android_log_print(ANDROID_LOG_ERROR, "requestConnection", fmt, ## __VA_ARGS__); goto end; } while (0)
+-    bool sent = JNI_FALSE;
+-    // We do not want to block GUI thread for a long time so we will set timeout to 20 msec.
+-    struct sockaddr_in server = { .sin_family = AF_INET, .sin_port = htons(PORT) };
+-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+-    int so_error, sock = socket(AF_INET, SOCK_STREAM, 0);
+-    check(sock < 0, "Could not create socket: %s", strerror(errno));
+-    check(fcntl(sock, F_SETFL, O_NONBLOCK) < 0, "failed to set socket non-block: %s", strerror(errno));
+-    int r;
+-    r = connect(sock, (struct sockaddr *)&server, sizeof(server));
+-    check(r < 0 && errno != EINPROGRESS, "failed to connect socket: %s", strerror(errno));
+-    if (r < 0 && errno == EINPROGRESS) {
+-        // Connection is in progress; use poll to wait for it
+-        struct pollfd pfd = { .fd = sock, .events = POLLOUT };
+-        r = poll(&pfd, 1, 20);  // timeout set to 50ms
+-        if (!r) goto end;
+-        // check(!r, "Connection timed out after 20ms."); // We do not want to flood logcat with this message
+-        check(r < 0, "poll failed: %s", strerror(errno));
+-        socklen_t len = sizeof(so_error);
+-        check(getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_error, &len) < 0, "getsockopt failed: %s", strerror(errno));
+-        if (so_error == ECONNREFUSED) goto end; // Regular situation which happens often if server is not started. No need to spam logcat with this.
+-        check(so_error != 0, "Connection failed: %s", strerror(so_error));
+-
+-        check(write(sock, MAGIC, sizeof(MAGIC)) < 0, "failed to send message: %s", strerror(errno));
+-        sent = JNI_TRUE;
+-        goto end;
+-    }
+-
+-    check(1, "something went wrong: %s, %s", strerror(errno), strerror(r));
+-
+-    end: if (sock >= 0) close(sock);
+-    return sent;
+-#undef errorReturn
+-}
++// Discovery is exclusively the approved Binder source, never a TCP knock.
++static jboolean requestConnection(__unused jlong ptr) { return JNI_FALSE; }
+ 
+ static jlong nativeInit(JNIEnv *env, jobject thiz) {
+     if (!Charset.self) {
+@@ -145,7 +112,7 @@
+         CharBuffer.self = FindClassOrDie(env,  "java/nio/CharBuffer");
+         CharBuffer.toString = FindMethodOrDie(env, CharBuffer.self, "toString", "()Ljava/lang/String;", JNI_FALSE);
+ 
+-        MainActivity.self = FindClassOrDie(env,  "com/termux/x11/MainActivity");
++        MainActivity.self = FindClassOrDie(env,  "com/termux/x11/LorieHost");
+         MainActivity.clientConnectedStateChanged = FindMethodOrDie(env, MainActivity.self, "clientConnectedStateChanged", "()V", JNI_FALSE);
+         MainActivity.resetIme = FindMethodOrDie(env, env->GetObjectClass(thiz), "resetIme", "()V", JNI_FALSE);
+     }
+@@ -163,7 +130,7 @@
+     vm->AttachCurrentThread(&env, nullptr);
+     thiz = env->NewGlobalRef(view);
+ 
+-    jfieldID activityField = env->GetFieldID(env->GetObjectClass(view), "activity", "Lcom/termux/x11/MainActivity;");
++    jfieldID activityField = env->GetFieldID(env->GetObjectClass(view), "activity", "Lcom/termux/x11/LorieHost;");
+     jobject a = env->GetObjectField(view, activityField);
+     if (a)
+         activity = env->NewGlobalRef(a);
+@@ -225,7 +192,6 @@
+                     }
+                     read(connFd, clipboard, e.clipboardSend.count);
+                     clipboard[e.clipboardSend.count] = 0;
+-                    log(DEBUG, "Clipboard content (%zu symbols) is %s", strlen(clipboard), clipboard);
+                     jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "setClipboardText","(Ljava/lang/String;)V");
+                     jobject bb = env->NewDirectByteBuffer(clipboard, strlen(clipboard));
+                     jobject charset = env->CallStaticObjectMethod(Charset.self, Charset.forName, env->NewStringUTF("UTF-8"));
+@@ -345,7 +311,6 @@
+         if (!length)
+             return;
+ 
+-        log(DEBUG, "Parsing text: %.*s", length, str);
+ 
+         while (*p) {
+             wchar_t wc;
+@@ -359,7 +324,6 @@
+             if (len == 0)
+                 break;
+ 
+-            log(DEBUG, "Sending unicode event: %lc (U+%X)", wc, wc);
+             lorieEvent e = { .unicode = { .t = EVENT_UNICODE, .code = (uint32_t) wc } };
+             write(r->connFd, &e, sizeof(e));
+             p += len;
+@@ -543,31 +507,6 @@
+     jclass cls = env->FindClass("com/termux/x11/LorieView");
+     env->RegisterNatives(cls, methods, sizeof(methods)/sizeof(methods[0]));
+ 
+-    pthread_t freeformLookupThread;
+-    pthread_create(&freeformLookupThread, nullptr, +[](void* arg) -> void* {
+-        auto* vm = (JavaVM*) arg;
+-        JNIEnv* threadEnv;
+-        vm->AttachCurrentThread(&threadEnv, nullptr);
+-        jclass activityOptionsClass = threadEnv->FindClass("android/app/ActivityOptions");
+-        jmethodID method = activityOptionsClass ? threadEnv->GetMethodID(activityOptionsClass, "setLaunchWindowingMode", "(I)V") : nullptr;
+-        threadEnv->ExceptionClear();
+-        vm->DetachCurrentThread();
+-        return (void*) method;
+-    }, vm);
+-    void* freeformMethod;
+-    pthread_join(freeformLookupThread, &freeformMethod);
+-    ActivityOptions.setLaunchWindowingMode = (jmethodID) freeformMethod;
+-    if (!ActivityOptions.setLaunchWindowingMode)
+-        log(ERROR, "ActivityOptions.setLaunchWindowingMode(int) not found");
+-
+-    static JNINativeMethod mainActivityMethods[] = {
+-            {"nativeSetLaunchWindowingModeFreeform", "(Ljava/lang/Object;)V", (void *) +[](JNIEnv *env, __unused jclass clazz, jobject options) {
+-                if (ActivityOptions.setLaunchWindowingMode)
+-                    env->CallVoidMethod(options, ActivityOptions.setLaunchWindowingMode, 5); // WINDOWING_MODE_FREEFORM
+-            }},
+-    };
+-    env->RegisterNatives(env->FindClass("com/termux/x11/MainActivity"), mainActivityMethods, sizeof(mainActivityMethods)/sizeof(mainActivityMethods[0]));
+-
+     registerCmdEntryPointNatives(env);
+ 
+     return JNI_VERSION_1_6;
+--- a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
++++ b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
+@@ -310,9 +310,6 @@
+                     __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "got stylus event but device is not requested\n");
+                     break;
+                 }
+-                __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "got stylus event %f %f %d %d %d %d %s\n", e.stylus.x, e.stylus.y, e.stylus.pressure, e.stylus.tilt_x, e.stylus.tilt_y, e.stylus.orientation,
+-                                    device == lorieMouse ? "lorieMouse" : (device == loriePen ? "loriePen" : "lorieEraser"));
+-
+                 valuator_mask_set_double(&mask, 0, max(min(e.stylus.x, pScreenPtr->width), 0));
+                 valuator_mask_set_double(&mask, 1, max(min(e.stylus.y, pScreenPtr->height), 0));
+                 if (device != lorieMouse) {
+@@ -330,11 +327,9 @@
+                 for (int i=0; i<3; i++) {
+                     if (released & 0x1) {
+                         QueuePointerEvents(device, ButtonRelease, i + 1, POINTER_RELATIVE, nullptr);
+-                        __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "sending %d press", i+1);
+                     }
+                     if (pressed & 0x1) {
+                         QueuePointerEvents(device, ButtonPress, i + 1, POINTER_RELATIVE, nullptr);
+-                        __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "sending %d release", i+1);
+                     }
+                     released >>= 1;
+                     pressed >>= 1;
+@@ -393,7 +388,6 @@
+                         mieqProcessInputEvents();
+                     } else {
+                         int ks = ucs2keysym((long) (payload >> 1));
+-                        __android_log_print(ANDROID_LOG_DEBUG, "LorieNative", "Trying to input keysym %d\n", ks);
+                         lorieKeysymKeyboardEvent(ks, TRUE);
+                         lorieKeysymKeyboardEvent(ks, FALSE);
+                     }
+@@ -602,65 +596,10 @@
+ 
+ // Called from OsVendorInit() once the display number and "-tag" argument (if any) are resolved,
+ // so the port to knock on and the tag to report back to Java are already known.
+-void lorieListenForKnocks(int port, const char *tag) {
+-    struct sockaddr_in address = { .sin_family = AF_INET, .sin_port = htons(port), .sin_addr = { .s_addr = INADDR_ANY } };
+-    int fd, reuse = 1;
+-
++// BashKitten replaces upstream LAN knock discovery with approved Binder FD transfer.
++void lorieListenForKnocks(__unused int port, const char *tag) {
+     serverEnv->CallVoidMethod(thiz, setDocumentTag, tag ? serverEnv->NewStringUTF(tag) : nullptr);
+-
+-    // Even in the case if it will fail for some reason everything will work fine
+-    // But connection will be delayed a bit
+-
+-    if ((fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+-        log(ERROR, "Failed to create the knock-listening socket: %s", strerror(errno));
+-        serverEnv->CallVoidMethod(thiz, sendBroadcastDelayed);
+-        return;
+-    }
+-
+-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
+-    setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &reuse, sizeof(reuse));
+-
+-    if (bind(fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
+-        log(ERROR, "Failed to bind the knock-listening socket to port %d: %s", port, strerror(errno));
+-        close(fd);
+-        serverEnv->CallVoidMethod(thiz, sendBroadcastDelayed);
+-        return;
+-    }
+-
+-    if (listen(fd, 5) < 0) {
+-        log(ERROR, "Failed to listen on the knock-listening socket: %s", strerror(errno));
+-        close(fd);
+-        serverEnv->CallVoidMethod(thiz, sendBroadcastDelayed);
+-        return;
+-    }
+-
+-    SetNotifyFd(fd, +[](int fd, int ready, __unused void *data) {
+-        struct sockaddr_in address;
+-        socklen_t addrlen = sizeof(address);
+-        uint8_t buffer[512] = {0};
+-        int client, count;
+-
+-        if (ready & X_NOTIFY_ERROR) {
+-            RemoveNotifyFd(fd);
+-            close(fd);
+-            return;
+-        }
+-
+-        if ((client = accept(fd, (struct sockaddr *) &address, &addrlen)) < 0) {
+-            log(ERROR, "Failed to accept a connection on the knock-listening socket: %s", strerror(errno));
+-            return;
+-        }
+-
+-        if (poll((struct pollfd[]) {{ .fd = client, .events = POLLIN }}, 1, 200) > 0 &&
+-            (count = recv(client, buffer, sizeof(buffer), MSG_DONTWAIT)) > 0 &&
+-            !memcmp(buffer, MAGIC, min(count, sizeof(MAGIC)))) {
+-            log(DEBUG, "New client connection!\n");
+-            serverEnv->CallVoidMethod(thiz, sendBroadcast);
+-        }
+-        close(client);
+-    }, X_NOTIFY_READ, NULL);
+-
+-    serverEnv->CallVoidMethod(thiz, sendBroadcastDelayed);
++    serverEnv->CallVoidMethod(thiz, sendBroadcast);
+ }
+ 
+ void registerCmdEntryPointNatives(JNIEnv *env) {
+--- a/lorie/src/main/cpp/recipes/xserver.cmake
++++ b/lorie/src/main/cpp/recipes/xserver.cmake
+@@ -294,7 +294,7 @@
+ # -nostdlib++ keeps this shared object free of any libc++ dependency; renderer.cpp, activity.cpp,
+ # and cmdentrypoint.cpp are restricted to a runtime-free subset of C++ (no exceptions, no RTTI, no
+ # STL) to make that possible.
+-target_link_options(Xlorie PRIVATE "-Wl,--as-needed" "-Wl,--no-undefined" "-fvisibility=hidden" "-nostdlib++")
++target_link_options(Xlorie PRIVATE "-Wl,-z,max-page-size=16384" "-Wl,--as-needed" "-Wl,--no-undefined" "-fvisibility=hidden" "-nostdlib++")
+ target_link_libraries(Xlorie "-Wl,--whole-archive" ${XSERVER_LIBS} "-Wl,--no-whole-archive" android mediandk log m z EGL GLESv2)
+ target_compile_options(Xlorie PRIVATE ${compile_options} "$<$<COMPILE_LANGUAGE:C>:${c_only_compile_options}>" "$<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions;-fno-rtti>")
+ target_apply_patch(Xlorie "${CMAKE_CURRENT_SOURCE_DIR}/xserver" "${CMAKE_CURRENT_SOURCE_DIR}/patches/xserver.patch")
+--- a/lorie/src/main/java/com/termux/x11/LorieView.java
++++ b/lorie/src/main/java/com/termux/x11/LorieView.java
+@@ -66,7 +66,7 @@
+     private boolean clipboardSyncEnabled = false;
+     private boolean hardwareKbdScancodesWorkaround = false;
+     private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+-    private final MainActivity activity = MainActivity.findActivity(getContext());
++    private final LorieHost activity = LorieHost.find(getContext());
+     private Callback mCallback;
+     private final Point p = new Point();
+     private final Rect contentInsets = new Rect();
+@@ -431,7 +431,7 @@
+     @SuppressWarnings("unused")
+     private void setRendererViewport(int viewportLeft, int viewportTop, int viewportWidth, int viewportHeight,
+                                             float sourceLeft, float sourceTop, float sourceWidth, float sourceHeight) {
+-        MainActivity.handler.post(() -> {
++        LorieHost.handler.post(() -> {
+             inputViewport.set(viewportLeft, viewportTop, viewportLeft + viewportWidth, viewportTop + viewportHeight);
+             inputSourceLeft = sourceLeft;
+             inputSourceTop = sourceTop;
+@@ -547,7 +547,7 @@
+             KeyEvent.KEYCODE_SHIFT_RIGHT
+     );
+ 
+-    Handler keyReleaseHandler = new Handler(Looper.getMainLooper()) {
++    Handler keyReleaseHandler = new Handler(Looper.myLooper()) {
+         @Override public void handleMessage(Message msg) {
+             if (msg.what != 0)
+                 sendKeyEvent(0, msg.what, false);
+@@ -616,7 +616,7 @@
+         // with an empty string, or the request is left unresolved.
+         sendClipboardEvent(mNativeContext, text.getBytes(UTF_8));
+         if (!text.isEmpty())
+-            Log.d("CLIP", "sending clipboard contents: " + text);
++            ; // No clipboard-content logging in the embedded module.
+     }
+ 
+     public void handleClipboardChange() {
+@@ -641,6 +641,8 @@
+     @Override
+     public void onWindowFocusChanged(boolean hasFocus) {
+         super.onWindowFocusChanged(hasFocus);
++        activity.focus(hasFocus);
++        if (!hasFocus) return;
+ 
+         requestFocus();
+ 
+--- a/lorie/src/main/java/com/termux/x11/extrakeys/ExtraKeysView.java
++++ b/lorie/src/main/java/com/termux/x11/extrakeys/ExtraKeysView.java
+@@ -1,6 +1,6 @@
+ package com.termux.x11.extrakeys;
+ 
+-import static com.termux.x11.MainActivity.*;
++import static com.termux.x11.LorieHost.*;
+ 
+ import android.annotation.SuppressLint;
+ import android.content.Context;
+@@ -43,7 +43,7 @@
+ import androidx.annotation.NonNull;
+ import androidx.annotation.Nullable;
+ 
+-import com.termux.x11.MainActivity;
++import com.termux.x11.LorieHost;
+ import com.termux.x11.R;
+ 
+ /**
+@@ -216,8 +216,8 @@
+     /** The text size currently shared by every button, {@code 0} until it has been computed. */
+     private float mTextSize;
+ 
+-    private final MainActivity activity;
+-    { activity = MainActivity.findActivity(getContext()); }
++    private final LorieHost activity;
++    { activity = LorieHost.findActivity(getContext()); }
+ 
+     public ExtraKeysView(Context context, AttributeSet attrs) {
+         super(context, attrs);
+@@ -492,7 +492,7 @@
+             SpecialButtonState state = mSpecialButtons.get(SpecialButton.valueOf(buttonInfo.key));
+             if (state == null) return;
+             if (mHandler == null)
+-                mHandler = new Handler(Looper.getMainLooper());
++                mHandler = new Handler(Looper.myLooper());
+             mSpecialButtonsLongHoldRunnable = new SpecialButtonsLongHoldRunnable(state);
+             mHandler.postDelayed(mSpecialButtonsLongHoldRunnable, mLongPressTimeout);
+         }
+@@ -566,6 +566,7 @@
+     }
+ 
+     public void dismissPopup() {
++        if (mPopupWindow == null) return;
+         mPopupWindow.setContentView(null);
+         mPopupWindow.dismiss();
+         mPopupWindow = null;
+--- a/lorie/src/main/java/com/termux/x11/input/InputEventSender.java
++++ b/lorie/src/main/java/com/termux/x11/input/InputEventSender.java
+@@ -15,7 +15,7 @@
+ import android.view.KeyEvent;
+ import android.view.MotionEvent;
+ 
+-import com.termux.x11.MainActivity;
++import com.termux.x11.LorieHost;
+ 
+ import java.util.List;
+ import java.util.Set;
+@@ -36,7 +36,7 @@
+         KEYCODE_APP_SWITCH
+     );
+ 
+-    private final MainActivity mActivity;
++    private final LorieHost mActivity;
+     private final InputStub mInjector;
+     private final float[] mappedPoint = new float[2];
+ 
+@@ -57,7 +57,7 @@
+     /** Last Caps/Num/Scroll Lock state sent to the host, or -1 if none has been sent yet. */
+     private int mLockKeysState = -1;
+ 
+-    public InputEventSender(MainActivity activity, InputStub injector) {
++    public InputEventSender(LorieHost activity, InputStub injector) {
+         if (injector == null)
+             throw new NullPointerException();
+         mActivity = activity;
+@@ -219,7 +219,7 @@
+             syncLockKeysState(e.getMetaState());
+ 
+         if ((e.getFlags() & KeyEvent.FLAG_CANCELED) == KeyEvent.FLAG_CANCELED) {
+-            android.util.Log.d("KeyEvent", "We've got key event with FLAG_CANCELED, it will not be consumed. Details: " + e);
++            // Canceled input is not logged.
+             return true;
+         }
+ 
+--- a/lorie/src/main/java/com/termux/x11/input/TouchInputHandler.java
++++ b/lorie/src/main/java/com/termux/x11/input/TouchInputHandler.java
+@@ -39,7 +39,7 @@
+ import com.termux.x11.CmdEntryPoint;
+ import com.termux.x11.LoriePreferences;
+ import com.termux.x11.LorieView;
+-import com.termux.x11.MainActivity;
++import com.termux.x11.LorieHost;
+ import com.termux.x11.Prefs;
+ import com.termux.x11.utils.SamsungDexUtils;
+ 
+@@ -100,7 +100,7 @@
+ 
+     private InputStrategyInterface mInputStrategy;
+     private final InputEventSender mInjector;
+-    private final MainActivity mActivity;
++    private final LorieHost mActivity;
+     private final InputManager.InputDeviceListener mInputDeviceListener;
+     private final DisplayMetrics mMetrics = new DisplayMetrics();
+     private final float[] mappedPoint = new float[2];
+@@ -180,7 +180,7 @@
+         return ((currentBS & mask) != 0);
+     }
+ 
+-    private TouchInputHandler(MainActivity activity, RenderData renderData,
++    private TouchInputHandler(LorieHost activity, RenderData renderData,
+                               final InputEventSender injector, boolean isTouchpad) {
+         if (injector == null)
+             throw new NullPointerException();
+@@ -251,7 +251,7 @@
+         ((InputManager) mActivity.getSystemService(Context.INPUT_SERVICE)).registerInputDeviceListener(mInputDeviceListener, null);
+     }
+ 
+-    public TouchInputHandler(MainActivity activity, final InputEventSender injector) {
++    public TouchInputHandler(LorieHost activity, final InputEventSender injector) {
+         this(activity, null, injector, false);
+     }
+ 
+@@ -440,7 +440,7 @@
+ 
+         if (mInjector.pauseKeyInterceptingWithEsc) {
+             if (mInjector.dexMetaKeyCapture)
+-                SamsungDexUtils.dexMetaKeyCapture(mActivity, enabled);
++                mActivity.setMetaKeyCapture(enabled);
+             keyIntercepting = enabled;
+         }
+     }
+@@ -494,7 +494,7 @@
+             mActivity.getLorieView().releasePointerCapture();
+ 
+         keyIntercepting = !mInjector.pauseKeyInterceptingWithEsc || hasPointerCapture(mActivity.getLorieView());
+-        SamsungDexUtils.dexMetaKeyCapture(mActivity, mInjector.dexMetaKeyCapture && keyIntercepting);
++        mActivity.setMetaKeyCapture(mInjector.dexMetaKeyCapture && keyIntercepting);
+ 
+         swipeUpAction = extractUserActionFromPreferences(p, "swipeUp");
+         swipeDownAction = extractUserActionFromPreferences(p, "swipeDown");
+@@ -517,7 +517,7 @@
+         switch(pref.asList().get()) {
+             case "toggle soft keyboard": return (key, down) -> { if (down) mActivity.toggleKeyboardVisibility(); };
+             case "toggle additional key bar": return (key, down) -> { if (down) mActivity.toggleExtraKeys(); };
+-            case "open preferences": return (key, down) -> { if (down) mActivity.startActivity(new Intent(mActivity, LoriePreferences.class) {{ setAction(Intent.ACTION_MAIN); }}); };
++            case "open preferences": return (key, down) -> { if (down) mActivity.openPreferences(); };
+             case "release pointer and keyboard capture": return (key, down) -> { if (down) setCapturingEnabled(false); };
+             case "toggle fullscreen": return (key, down) -> { if (down) mActivity.prefs.fullscreen.put(!mActivity.prefs.fullscreen.get()); };
+             case "exit": return (key, down) -> { if (down) mActivity.finish(); };
+@@ -526,64 +526,6 @@
+             case "send media action": return (key, down) -> mActivity.getLorieView().sendKeyEvent(0, key, down);
+             default: return noAction;
+         }
+-    }
+-
+-    public static PendingIntent extractIntentFromPreferences(Context ctx, Prefs p, String name, int requestCode) {
+-        LoriePreferences.PrefsProto.Preference pref = p.keys.get(name + "Action");
+-        if (pref == null)
+-            return null;
+-
+-        switch(pref.asList().get()) {
+-            case "open preferences":
+-                return PendingIntent.getActivity(ctx, requestCode, new Intent(ctx, LoriePreferences.class) {{
+-                    putExtra("key", "value");
+-                    setPackage(ctx.getPackageName());
+-                    setAction(Intent.ACTION_MAIN);
+-                }}, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+-            case "restart activity": {
+-                MainActivity activity = (MainActivity) ctx;
+-                return PendingIntent.getActivity(activity, requestCode,
+-                        Intent.makeRestartActivityTask(activity.getComponentName())
+-                                .setData(activity.getTag().isEmpty() ? null : Uri.parse(activity.getTag())),
+-                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+-            }
+-            case "exit":
+-            case "toggle soft keyboard":
+-            case "toggle additional key bar":
+-            case "release pointer and keyboard capture":
+-                return PendingIntent.getBroadcast(ctx, requestCode, new Intent(MainActivity.ACTION_CUSTOM) {{
+-                    putExtra("what", name);
+-                    putExtra(CmdEntryPoint.EXTRA_DOCUMENT_TAG, ((MainActivity) ctx).getTag());
+-                    setPackage(ctx.getPackageName());
+-                }}, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+-            default: return null;
+-        }
+-    }
+-
+-    @SuppressLint("DiscouragedApi")
+-    public static String extractTitleFromPreferences(Context ctx, Prefs p, String name) {
+-        LoriePreferences.PrefsProto.Preference pref = p.keys.get(name + "Action");
+-        if (pref == null)
+-            return null;
+-
+-        String key = pref.asList().get().replace(' ', '_');
+-        int id = ctx.getResources().getIdentifier("lorie_notification_" + key, "string", ctx.getPackageName());
+-        return id == 0 ? null : ctx.getResources().getString(id);
+-    }
+-
+-    public static NotificationCompat.Builder setupNotification(Context ctx, Prefs prefs, NotificationCompat.Builder builder) {
+-        PendingIntent i;
+-
+-        if ((i = extractIntentFromPreferences(ctx, prefs, "notificationTap", 0)) != null)
+-            builder.setContentIntent(i);
+-
+-        if ((i = extractIntentFromPreferences(ctx, prefs, "notificationButton0", 1)) != null)
+-            builder.addAction(0, extractTitleFromPreferences(ctx, prefs, "notificationButton0"), i);
+-
+-        if ((i = extractIntentFromPreferences(ctx, prefs, "notificationButton1", 2)) != null)
+-            builder.addAction(0, extractTitleFromPreferences(ctx, prefs, "notificationButton1"), i);
+-
+-        return builder;
+     }
+ 
+     public boolean shouldInterceptKeys() {
+--- a/lorie/src/main/java/com/termux/x11/utils/TermuxX11ExtraKeys.java
++++ b/lorie/src/main/java/com/termux/x11/utils/TermuxX11ExtraKeys.java
+@@ -19,7 +19,7 @@
+ 
+ import com.termux.x11.extrakeys.*;
+ import com.termux.x11.LoriePreferences;
+-import com.termux.x11.MainActivity;
++import com.termux.x11.LorieHost;
+ 
+ import org.json.JSONException;
+ 
+@@ -27,7 +27,7 @@
+     @SuppressWarnings("FieldCanBeLocal")
+     private static final String LOG_TAG = "TermuxX11ExtraKeys";
+     private final View.OnKeyListener mEventListener;
+-    private final MainActivity mActivity;
++    private final LorieHost mActivity;
+     private final ExtraKeysView mExtraKeysView;
+     private final ClipboardManager mClipboardManager;
+     private ExtraKeysInfo mExtraKeysInfo;
+@@ -40,7 +40,7 @@
+     /** Defines the key for extra keys */
+     public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[['ESC','/',{key: '-', popup: '|'},'HOME','UP',{key: 'END', popup: 'ZOOM_IN'},{key: 'PGUP', popup: 'ZOOM_OUT'},{key: 'KEYBOARD', popup: 'ZOOM_RESET'}], ['TAB','CTRL','ALT','LEFT','DOWN','RIGHT','PGDN','PREFERENCES']]"; // Double row
+ 
+-    public TermuxX11ExtraKeys(@NonNull View.OnKeyListener eventlistener, MainActivity activity, ExtraKeysView extrakeysview) {
++    public TermuxX11ExtraKeys(@NonNull View.OnKeyListener eventlistener, LorieHost activity, ExtraKeysView extrakeysview) {
+         mEventListener = eventlistener;
+         mActivity = activity;
+         mExtraKeysView = extrakeysview;
+@@ -140,7 +140,7 @@
+ 
+     @Override
+     public boolean performExtraKeyButtonHapticFeedback(View view, ExtraKeyButton buttonInfo, Button button) {
+-        MainActivity.handler.postDelayed(() -> {
++        LorieHost.handler.postDelayed(() -> {
+             boolean pressed;
+             switch (buttonInfo.key) {
+                 case "CTRL":
+@@ -170,7 +170,7 @@
+         if ("KEYBOARD".equals(key))
+             mActivity.toggleKeyboardVisibility();
+         else if ("DRAWER".equals(key) || "PREFERENCES".equals(key))
+-            mActivity.startActivity(new Intent(mActivity, LoriePreferences.class) {{ setAction(ACTION_START_PREFERENCES_ACTIVITY); }});
++            mActivity.openPreferences();
+         else if ("EXIT".equals(key))
+             mActivity.finish();
+         else if ("PASTE".equals(key)) {

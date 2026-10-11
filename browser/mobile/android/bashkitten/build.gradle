@@ -23,7 +23,6 @@ android {
         consumerProguardFiles 'consumer-rules.pro'
     }
     buildFeatures { aidl true; buildConfig true }
-    sourceSets.main.aidl.srcDirs += '../bashkitten-sdk/src/main/aidl'
     sourceSets.main.assets.srcDirs += "$buildDir/generated/notices"
     androidResources { noCompress 'ja' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
@@ -39,6 +38,9 @@ repositories {
 }
 
 dependencies {
+    api project(':bashkitten-sdk')
+    implementation project(':bashkitten-display')
+    implementation project(':bashkitten-telephony')
     implementation files("${System.getenv('BASHKITTEN_REMOTE_CLIENT_DIR')}/bashkitten-remote.aar")
     implementation project(':geckoview')
     implementation project(':components:support-utils')

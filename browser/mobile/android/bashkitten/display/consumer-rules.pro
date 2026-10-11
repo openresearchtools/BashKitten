@@ -1,0 +1,3 @@
+-keep class com.termux.x11.** { *; }
+-keep class com.bashkitten.display.** { *; }
+-keep class com.bashkitten.DisplayPublisher { public static *; }

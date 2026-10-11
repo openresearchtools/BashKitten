@@ -43,7 +43,7 @@ public final class AgentRemotesActivity extends ProductActivity {
         app = BrowserApp.get(this);
         state = new ViewModelProvider(this).get(ImportState.class);
         state.app = app;
-        setTitle("Agent connections");
+        setTitle(getIntent().getBooleanExtra("connectOnly", false) ? "Connect to remote" : "Agent connections");
         LinearLayout root = column();
         root.addView(text("Connect with the encrypted QR from the host’s Share Local page. Termux is only needed to run Agent on this device.", 15));
         body = column(); root.addView(body);
@@ -78,6 +78,7 @@ public final class AgentRemotesActivity extends ProductActivity {
             button(body, "Cancel", () -> { state.encrypted = ""; state.password = ""; state.error = ""; render(); });
             return;
         }
+        if (!getIntent().getBooleanExtra("connectOnly", false)) {
         card(body, "Local", "This device · Termux", "local", false);
         LinearLayout connections = column(); body.addView(connections);
         app.agent.remotes(saved -> {
@@ -94,6 +95,7 @@ public final class AgentRemotesActivity extends ProductActivity {
             } catch (Exception error) { status.setText("Saved connections could not be opened: " + error.getMessage()); }
         }, message -> { if (!isFinishing() && !isDestroyed() && generation == renderGeneration) status.setText(message); });
         button(body, "Share Local", () -> startActivityForResult(new Intent(this, AgentShareActivity.class), SHARE_LOCAL));
+        }
         TextView title = text("Add a remote Agent", 20); title.setPadding(0, dp(24), 0, dp(8)); body.addView(title);
         button(body, "Scan QR", () -> new IntentIntegrator(this).setCaptureActivity(OnionCaptureActivity.class)
             .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setPrompt("Scan the encrypted connection QR")
