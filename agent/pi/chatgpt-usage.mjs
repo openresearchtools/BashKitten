@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import path from 'node:path';
+import os from 'node:os';
 import { cachedUsage, selectedUsageAuth, usageText } from './chatgpt-usage-data.mjs';
 export default function chatGPTUsage(pi) {
+  const root = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
   let generation = 0, identity, inflight, controller;
   const publish = (ctx, snapshot) => {
     const text = usageText(snapshot);
@@ -18,7 +21,7 @@ export default function chatGPTUsage(pi) {
       if (current !== generation) return;
       if (!auth) { identity = null; publish(ctx, ctx.model && ['openai', 'openai-codex'].includes(ctx.model.provider) ? { status: 'unavailable', observedAt: Date.now(), buckets: [] } : null); return; }
       if (identity !== auth.identity) { identity = auth.identity; publish(ctx, null); }
-      const result = await cachedUsage(auth, process.env.BASHKITTEN_DATA_DIR, signal);
+      const result = await cachedUsage(auth, root, signal);
       if (current !== generation || signal.aborted) return;
       // Logout/account change may occur during the request. Resolve through Pi
       // once more and discard the old identity's response without publishing it.
