@@ -5,10 +5,30 @@
   "type": "module",
   "license": "AGPL-3.0-only",
   "description": "BashKitten browser controls and native search skills for stock Pi",
-  "keywords": ["pi-package"],
-  "peerDependencies": { "typebox": "*" },
+  "keywords": [
+    "pi-package"
+  ],
+  "peerDependencies": {
+    "typebox": "*"
+  },
   "pi": {
-    "extensions": ["./extension.mjs", "./pillama.ts", "./subagents.mjs"],
-    "skills": ["./skills/browser-android", "./skills/browser-linux", "./skills/web-search", "./skills/termux-display", "./skills/subagents"]
+    "extensions": [
+      "./extension.mjs",
+      "./pillama.ts",
+      "./subagents.mjs",
+      "./chats.mjs",
+      "./ask-user.mjs",
+      "./chatgpt-usage.mjs"
+    ],
+    "skills": [
+      "./skills/browser-android",
+      "./skills/browser-linux",
+      "./skills/web-search",
+      "./skills/termux-display",
+      "./skills/subagents",
+      "./skills/chats",
+      "./skills/ask-user",
+      "./skills/phoneuse"
+    ]
   }
 }

@@ -1,13 +1,16 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
 import { PiRpc, translateEvent, activeBranch, usageView, displayMessage, queueItem, savedSession } from './rpc.mjs';
 import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, privateDir, json, jsonBody, dataDir, socketRequest } from '../common.mjs';
 import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { providerRevision } from './services.mjs';
 import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
-import { notifyTurn } from './notifications.mjs';
+import { notifyTurn, notifyQuestion, resolvedQuestion, notifyAssistantMessage } from './notifications.mjs';
+import { QuestionOwner } from './questions.mjs';
+import { createPhoneWorker } from '../phone/worker.mjs';
+import { inheritChatProject } from '../projects.mjs';
 import { claimInstance } from '../instance.mjs';
 import { attachmentImages } from '../files/files.mjs';
 import { browserSocketPath } from '../access/browser-channel.mjs';
@@ -21,6 +24,7 @@ let meta = await readMeta(id);
 // original process identity and browser socket until that process exits.
 meta.workerOwner = id;
 meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
+let phoneWorker, phoneSession;
 let rpc, providersVersion, busy = false, compacting = false, stopping = false, changing = false;
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
@@ -35,7 +39,47 @@ function checkpoint() {
   return work;
 }
 const clients = new Set(), dialogs = new Map();
-const extensionStatuses = new Map();
+const extensionStatuses = new Map(), liveToolCalls = new Map();
+const workerKey = randomBytes(32).toString('hex');
+const privateSocket = socketPath(meta.workerOwner + ':extensions');
+const questionOwner = new QuestionOwner({
+  owner: () => ({ nativeSessionId: meta.piSessionId }),
+  verify: async question => {
+    if (question.sessionId !== id || question.nativeSessionId !== meta.piSessionId) return false;
+    const history = await rpc.command('get_entries');
+    const branch = activeBranch(history.entries, history.leafId);
+    let origin = question.originToolCallId;
+    if (!origin) {
+      let call = question.toolCallId, current = liveToolCalls.get(call);
+      if (current?.name === 'ask_user') {
+        const seen = new Set();
+        while (current?.parent && !seen.has(call)) { seen.add(call); call = current.parent; current = liveToolCalls.get(call); }
+        origin = call;
+      } else origin = question.toolCallId;
+    }
+    const entry = branch.find(entry => entry.type === 'message' && entry.message?.role === 'assistant' &&
+      Array.isArray(entry.message.content) && entry.message.content.some(block => block.type === 'toolCall' && block.id === origin &&
+        (origin !== question.toolCallId || block.name === 'ask_user')));
+    if (!entry) return false;
+    // Nested stock codemode calls live below the model-issued tool call; their
+    // native parent remains the branch anchor even before its result is saved.
+    question.originToolCallId = origin; question.branchId = entry.id;
+    return true;
+  },
+  deliver: item => serial(async () => {
+    if (stopping || item.sessionId !== id || !questionOwner.validDelivery(item)) return { held: true };
+    meta.messages ||= [];
+    if (queue.some(q => q.agentDelivery === item.agentDelivery) || meta.messages.some(q => q.agentDelivery === item.agentDelivery)) return { held: true };
+    item.id = randomUUID(); queue.push(item);
+    meta.messages.push({ text: item.text, wire: item.wire, attachments: [], agentDelivery: item.agentDelivery });
+    try { await checkpoint(); await writeMeta(meta); await send(item); return { held: Boolean(item.held) }; }
+    catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
+  }),
+  changed: questions => emit({ type: 'questions_changed', questions }, false),
+  created: async question => notifyQuestion(await readMeta(question.sessionId), question),
+  resolved: async question => resolvedQuestion(await readMeta(question.sessionId), question),
+  error: error => emit({ type: 'notice', message: 'Question delivery: ' + error.message }, false),
+});
 let operations = Promise.resolve(), eventWork = Promise.resolve();
 let reportWork = Promise.resolve();
 async function reportCompleted(entryId, chatId = id, session = meta.piSessionId) {
@@ -54,7 +98,7 @@ async function reportCompleted(entryId, chatId = id, session = meta.piSessionId)
 }
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
 function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e); }
-function status() { return { runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
+function status() { return { stopGeneration: questionOwner.state.generation, questions: questionOwner.list(), runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
   steeringMessages: queue.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: queue.filter(q => q.kind !== 'steer').map(queueItem) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
 function emit(event, remember = true) {
@@ -71,6 +115,7 @@ function refresh(follow = true) {
 }
 async function readState(follow) {
   const [state, history, stats] = await Promise.all([rpc.command('get_state'), rpc.command('get_entries'), rpc.command('get_session_stats')]);
+  if (phoneSession !== state.sessionId) { await phoneWorker.adopt(state.sessionId); phoneSession = state.sessionId; }
   if (server && !changing && meta.piSessionId && state.sessionId !== meta.piSessionId) await adoptSession(state, follow);
   entries = activeBranch(history.entries, history.leafId);
   meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
@@ -86,6 +131,8 @@ async function readState(follow) {
 // and bind a new sidebar row to the session Pi selected; never serialize history.
 async function adoptSession(state, follow) {
   const previous = id, oldServer = server, oldOwnership = ownership;
+  await questionOwner.stop('The native chat session changed');
+  questionOwner.close();
   const subagents = await readSubagentSettings(previous);
   await draftWrites;
   id = state.sessionId;
@@ -93,7 +140,9 @@ async function adoptSession(state, follow) {
     title: state.sessionName || `Fork: ${meta.title}`, parentSession: previous, modified: Date.now() };
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   await writeMeta(meta);
+  await inheritChatProject(previous, id);
   await saveSubagentSettings(id, subagents);
+  await questionOwner.open(id);
   if (meta.subagentParent) {
     const last = (await savedSession(meta))?.getBranch().findLast(entry => entry.type === 'message' && entry.message.role === 'assistant');
     // Forked history is already past work, not a newly completed child turn.
@@ -107,7 +156,7 @@ async function adoptSession(state, follow) {
   oldOwnership.close();
   if (follow) emit({ type: 'session_changed', id }, false);
   for (const client of clients) client.end();
-  clients.clear(); events = []; dialogs.clear(); extensionStatuses.clear(); queue = [];
+  clients.clear(); events = []; dialogs.clear(); extensionStatuses.clear(); liveToolCalls.clear(); queue = [];
   busy = state.isStreaming; compacting = state.isCompacting;
   pendingModel = null;
   await checkpoint();
@@ -126,15 +175,20 @@ function reconcileQueue(event) {
   queueChanged();
 }
 async function launch() {
-  extensionStatuses.clear();
+  extensionStatuses.clear(); liveToolCalls.clear();
   const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
   providersVersion = await providerRevision();
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
-  rpc = new PiRpc(meta);
+  rpc = new PiRpc(meta, { ...phoneWorker.environment, BASHKITTEN_WORKER_SOCKET: privateSocket, BASHKITTEN_WORKER_KEY: workerKey });
   let lastAssistantMessage;
   rpc.on('event', event => {
-    if (event.type === 'message_end' && event.message.role === 'assistant') lastAssistantMessage = event.message;
+    if (event.type === 'tool_execution_start') liveToolCalls.set(event.toolCallId, { name: event.toolName, parent: event.parentToolCallId });
+    if (event.type === 'tool_execution_end') liveToolCalls.delete(event.toolCallId);
+    if (event.type === 'message_end' && event.message.role === 'assistant') {
+      lastAssistantMessage = event.message;
+      void notifyAssistantMessage(meta, event.message).catch(() => {});
+    }
     if (event.type === 'extension_ui_request' && event.method === 'setStatus') {
       if (event.statusText === undefined) extensionStatuses.delete(event.statusKey);
       else extensionStatuses.set(event.statusKey, event);
@@ -191,9 +245,10 @@ async function launch() {
     // failure; the worker's HTTP server does not exist until launch succeeds.
     if (!server) return;
     busy = compacting = false;
+    questionOwner.close(); extensionServer.close();
     emit({ type: 'notice', message: 'Pi stopped. Send a message to resume this session.' }, false);
     for (const res of clients) res.end('event: offline\ndata: {}\n\n');
-    server.close(() => process.exit(1));
+    server.close(() => { void phoneWorker.close().finally(() => process.exit(1)); });
   });
   await refresh();
   if (newSession && meta.title) await rpc.command('set_session_name', { name: meta.title });
@@ -252,9 +307,12 @@ async function prepareManagedModel(model = meta.model) {
 async function send(item) {
   allowRuntimeWork();
   await prepareManagedModel();
+  if (stopping || (item.questionId && !questionOwner.validDelivery(item)) || (item.phoneDelivery && item.stopGeneration !== questionOwner.state.generation) || (item.ownerGeneration !== undefined && item.ownerGeneration !== questionOwner.state.generation)) { item.held = item.recovered = true; await checkpoint(); return; }
   // Pi's prompt command is the authority for idle versus streaming delivery.
   item.delivery = 'submitted'; await checkpoint();
-  await rpc.command('prompt', { message: item.wire, images: item.images || await attachmentImages(item.attachments || []), streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
+  const images = item.images || await attachmentImages(item.attachments || []);
+  if (stopping || (item.questionId && !questionOwner.validDelivery(item)) || (item.phoneDelivery && item.stopGeneration !== questionOwner.state.generation) || (item.ownerGeneration !== undefined && item.ownerGeneration !== questionOwner.state.generation)) { item.held = item.recovered = true; await checkpoint(); return; }
+  await rpc.command('prompt', { message: item.wire, images, streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
   // Pi can expand skills/templates or transform input before message_start, so
   // its consumed text need not equal item.wire. After accepted preflight, an
   // empty native queue means this item is no longer pending even during a turn.
@@ -308,17 +366,20 @@ async function handle(req, res) {
   res.setHeader('Connection', 'close');
   try {
     if (req.url === '/events') {
+      void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'bashkitten-usage-refresh')) return rpc.command('prompt', { message: '/bashkitten-usage-refresh' }); }).catch(() => {});
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
       clients.add(res);
       res.write(`data: ${JSON.stringify({ ok: true, message: 'subscribed', data: snapshot() })}\n\n`);
       const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
       res.on('close', () => { clearInterval(heartbeat); clients.delete(res); }); return;
     }
+    if (req.url === '/questions') return json(res, { questions: questionOwner.list() });
     if (req.url === '/status') return json(res, { data: status() });
     if (req.url === '/view') return json(res, snapshot());
     if (req.url === '/fork-messages') return json(res, await rpc.command('get_fork_messages'));
     if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
-    const value = await jsonBody(req);
+    const value = await jsonBody(req), requestGeneration = questionOwner.state.generation;
+    if (req.url === '/questions/answer') return json(res, await questionOwner.answer(value));
     if (req.url === '/sidebar-changed') { emit({ type: 'sessions_changed' }, false); return json(res, { ok: true }); }
     if (req.url === '/subagent-settings') {
       const { commands } = await rpc.command('get_commands');
@@ -330,6 +391,7 @@ async function handle(req, res) {
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
       const pending = status();
+      await questionOwner.stop();
       await rpc.command('clear_queue'); queue = []; await checkpoint();
       await rpc.command('abort'); busy = compacting = false;
       await refresh(); events = []; emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
@@ -337,10 +399,12 @@ async function handle(req, res) {
     }
     if (req.url === '/shutdown') {
       stopping = true;
+      if (value.restart) questionOwner.close();
+      else await questionOwner.stop('Pi backend is Off');
       if (!value.restart) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
       await serial(async () => {
         await rebuildQueue(items => { for (const item of items) { item.recovered = true; item.held = true; delete item.editToken; } });
-        await rpc.command('abort'); await checkpoint(); await rpc.close();
+        await rpc.command('abort'); await checkpoint(); await rpc.close(); await phoneWorker.close();
       });
       json(res, { ok: true });
       for (const client of clients) client.end();
@@ -351,18 +415,29 @@ async function handle(req, res) {
       if (stopping) throw Error('Pi instance is stopping');
       if (req.url === '/barrier') { const state = await rpc.command('get_state'); return { idle: !state.isStreaming && !state.isCompacting && !dialogs.size && !queue.some(q => !q.held && !q.editToken) }; }
       if (!['/context', '/barrier'].includes(req.url)) allowRuntimeWork();
-      if (req.url === '/context') { pendingContext ||= Boolean(value.reload) || (await syncContext()) !== meta.contextVersion; await applyPending(); return { data: status() }; }
+      if (req.url === '/context') {
+        if (await providerRevision() !== providersVersion) {
+          for (const statusKey of ['chatgpt-usage', 'chatgpt-usage:data']) { extensionStatuses.delete(statusKey); emit({ type: 'extension_ui_request', method: 'setStatus', statusKey }, false); }
+          void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'bashkitten-usage-refresh')) return rpc.command('prompt', { message: '/bashkitten-usage-refresh invalidate' }); }).catch(() => {});
+        }
+        pendingContext ||= Boolean(value.reload) || (await syncContext()) !== meta.contextVersion;
+        await applyPending(); return { data: status() };
+      }
       if (req.url === '/message') {
-        await applyPending();
+        const stalePhone = requestGeneration !== questionOwner.state.generation || (value.phoneDelivery && value.stopGeneration !== questionOwner.state.generation);
+        if (!stalePhone) { await questionOwner.resume(requestGeneration); await applyPending(); }
         meta.messages ||= [];
-        if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { data: status() };
+        if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { held: Boolean(queue.find(item => item.agentDelivery === value.agentDelivery)?.held), data: status() };
         meta.messages.push({ text: value.text, wire: value.wire, attachments: value.attachments, agentSource: value.agentSource, agentDelivery: value.agentDelivery });
-        const item = { ...value, id: randomUUID(), kind: value.kind || 'queue' };
+        const item = { ...value, ownerGeneration: requestGeneration, id: randomUUID(), kind: value.kind || 'queue' };
         queue.push(item);
+        if (stalePhone) { item.held = item.recovered = true; await checkpoint(); await writeMeta(meta); queueChanged(); return { held: true, data: status() }; }
         try { await checkpoint(); await writeMeta(meta); await send(item); } catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
-        return { data: status() };
+        return { held: Boolean(item.held), data: status() };
       }
       if (req.url === '/queue') {
+        const changedDelivery = queue.find(q => q.id === value.id)?.agentDelivery;
+        if (['send', 'promote', 'edit'].includes(value.action)) await questionOwner.resume(requestGeneration);
         await applyPending();
         await rebuildQueue(items => {
           const index = items.findIndex(q => q.id === value.id), item = items[index];
@@ -371,17 +446,18 @@ async function handle(req, res) {
           else {
             if (item.editToken && item.editToken !== value.edit_token) throw Error('Edit is no longer owned by this tab');
             if (value.action === 'remove') items.splice(index, 1);
-            else if (value.action === 'send') { delete item.recovered; delete item.held; }
-            else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; }
+            else if (value.action === 'send') { delete item.recovered; delete item.held; delete item.questionId; delete item.phoneDelivery; item.ownerGeneration = requestGeneration; }
+            else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; delete item.questionId; delete item.phoneDelivery; item.ownerGeneration = requestGeneration; }
             else if (value.action === 'cancel_edit') delete item.editToken;
             else if (value.action === 'edit') {
               const prefix = item.agentSource ? item.wire.slice(0, item.wire.length - item.text.length) : '';
               const suffix = item.agentSource ? '' : item.wire.slice(item.text.length);
-              item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered;
+              item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered; delete item.questionId; delete item.phoneDelivery; item.ownerGeneration = requestGeneration;
               meta.messages.push({ text: item.text, wire: item.wire, attachments: item.attachments, agentSource: item.agentSource, agentDelivery: item.agentDelivery });
             } else throw Error('Unknown queue action');
           }
         });
+        if (changedDelivery && ['remove', 'send', 'promote', 'edit'].includes(value.action) && !queue.some(item => item.agentDelivery === changedDelivery && item.held)) await questionOwner.releaseHeld(changedDelivery, value.action === 'remove');
         await writeMeta(meta); return { data: status() };
       }
       if (req.url === '/fork' || req.url === '/clone') {
@@ -408,6 +484,15 @@ async function handle(req, res) {
   } catch (error) { json(res, { error: error.message }, 400); }
 }
 let server, ownership;
+const extensionServer = http.createServer(async (req, res) => {
+  try {
+    const supplied = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer /, ''));
+    const expected = Buffer.from(workerKey);
+    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return json(res, { error: 'Worker authorization required' }, 403);
+    if (req.method !== 'POST' || req.url !== '/questions/create') return json(res, { error: 'Unknown worker extension operation' }, 404);
+    return json(res, await questionOwner.request(await jsonBody(req)));
+  } catch (error) { json(res, { error: error.message }, 400); }
+});
 async function listen() {
   const boundId = id;
   server = http.createServer((req, res) => {
@@ -425,9 +510,15 @@ await privateDir(path.dirname(socketPath(id)));
 ownership = await claimInstance('pi-' + id);
 if (!ownership) process.exit(0);
 try {
-  await launch(); await listen();
+  phoneWorker = await createPhoneWorker({});
+  await launch(); await questionOwner.open(id);
+  for (const item of questionOwner.heldDeliveries()) if (!queue.some(existing => existing.agentDelivery === item.agentDelivery)) queue.push({ ...item, id: randomUUID() });
+  await checkpoint(); await listen();
+  await fs.rm(privateSocket, { force: true });
+  await new Promise((resolve, reject) => { extensionServer.once('error', reject); extensionServer.listen(privateSocket, resolve); });
+  await fs.chmod(privateSocket, 0o600);
   const last = entries.findLast(entry => entry.type === 'message' && entry.message.role === 'assistant');
   void reportCompleted(last && last.message.stopReason !== 'toolUse' ? last.id : null);
 }
-catch (error) { console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
-process.on('SIGTERM', async () => { stopping = true; await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });
+catch (error) { await phoneWorker?.close().catch(() => {}); console.error('Pi startup failed:', error.message); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(1); }
+process.on('SIGTERM', async () => { stopping = true; await questionOwner.stop('Pi backend is Off'); questionOwner.close(); extensionServer.close(); await fs.rm(privateSocket, { force: true }); await phoneWorker.close(); await rpc.close(); await fs.rm(socketPath(id) + '.lock', { force: true }); process.exit(0); });

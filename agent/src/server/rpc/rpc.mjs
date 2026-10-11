@@ -2,20 +2,15 @@ import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import fs from 'node:fs/promises';
 
 import { selectedRuntime, loadPi } from './runtime.mjs';
 import { browserSocketPath } from '../access/browser-channel.mjs';
+import { nativeSession } from '../chats.mjs';
 
 // Read native history without opening a second writable session manager.
 export async function savedSession(meta) {
   if (!meta.piFile) return null;
-  const { pi: { SessionManager, parseSessionEntries } } = await loadPi();
-  const text = await fs.readFile(meta.piFile, 'utf8').catch(error => { if (error.code === 'ENOENT') return ''; throw error; });
-  const entries = parseSessionEntries(text);
-  if (!entries.length) return null;
-  if (entries[0]?.type !== 'session') throw Error('Invalid native Pi session header');
-  return SessionManager.inMemory(entries[0].cwd || meta.cwd, undefined, entries);
+  return nativeSession((await loadPi()).pi, meta);
 }
 
 export function displayMessage(meta, message) {
@@ -45,7 +40,7 @@ export class JsonLines {
 
 export class PiRpc extends EventEmitter {
   pending = new Map();
-  constructor(meta) {
+  constructor(meta, extraEnvironment = {}) {
     super();
     this.runtime = selectedRuntime();
     const args = [this.runtime.cli, '--offline', '--mode', 'rpc'];
@@ -57,7 +52,8 @@ export class PiRpc extends EventEmitter {
       if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
       if (meta.thinking) args.push('--thinking', meta.thinking);
     }
-    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...process.env, PI_TELEMETRY: '0', BASHKITTEN_SESSION_ID: meta.id, BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('BASHKITTEN_PHONE_OWNER_') && !key.startsWith('BASHKITTEN_PHONE_REGISTRAR_')));
+    this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...inherited, ...extraEnvironment, PI_TELEMETRY: '0', BASHKITTEN_SESSION_ID: meta.id, BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {
       if (value.type === 'response') {

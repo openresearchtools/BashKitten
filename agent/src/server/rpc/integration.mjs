@@ -45,9 +45,21 @@ async function register() {
   const previousSkills = [...baseSkills, ...(platform === 'termux' ? ['skills/termux-display/SKILL.md'] : [])];
   const previousAllSkills = [...previousSkills, 'skills/subagents/SKILL.md'];
   const manifest = JSON.parse(await fs.readFile(path.join(integrationRoot, 'package.json'), 'utf8'));
-  const skills = manifest.bashkitten?.browserGuides
-    ? manifest.pi.skills.map(directory => directory.replace(/^\.\//, '') + '/SKILL.md')
-    : previousAllSkills;
+  const role = process.env.BASHKITTEN_EXECUTION_ROLE;
+  const roleGuide = role === 'termux' ? 'termux-use' : role === 'container' ? 'computer-use' : null;
+  const commonSkills = manifest.bashkitten?.browserGuides
+    ? manifest.pi.skills.filter(directory => !directory.startsWith('./desktop-guides/') && (directory !== './skills/phoneuse' || role === 'termux')).map(directory => directory.replace(/^\.\//, '') + '/SKILL.md')
+    : [...previousAllSkills, 'skills/chats/SKILL.md', 'skills/ask-user/SKILL.md', ...(role === 'termux' ? ['skills/phoneuse/SKILL.md'] : [])];
+  const skills = [...commonSkills];
+  if (roleGuide) {
+    const guide = `desktop-guides/${roleGuide}/SKILL.md`;
+    await fs.access(path.join(integrationRoot, guide));
+    skills.push(guide);
+  }
+  const registrationFile = path.join(dataDir, 'integrations/browser.json');
+  const previousRegistration = await readJson(registrationFile, {});
+  const previousPackaged = ['skills/browser/SKILL.md', 'skills/websearch/SKILL.md', 'skills/subagents/SKILL.md'];
+  if (platform === 'termux') previousPackaged.push('skills/termux-display/SKILL.md');
   const installed = current.getPackages().find(item => matches(item, integrationRoot));
   if (!installed) {
     await packageCommand(runtime.cli, 'install', integrationRoot);
@@ -57,7 +69,7 @@ async function register() {
       skills,
     } : item));
     await current.flush();
-  } else if ([baseSkills, previousSkills, previousAllSkills].some(previous => JSON.stringify(installed.skills) === JSON.stringify(previous))) {
+  } else if ([baseSkills, previousSkills, previousAllSkills, previousPackaged, previousRegistration.managedSkills].filter(Boolean).some(previous => JSON.stringify(installed.skills) === JSON.stringify(previous))) {
     // Upgrade only our original managed selection; preserve user skill filters.
     current.setPackages(current.getPackages().map(item => item === installed ? { ...item, skills } : item));
     await current.flush();
@@ -68,7 +80,7 @@ async function register() {
   if (current.getPackages().some(item => matches(item, legacy))) {
     await packageCommand(runtime.cli, 'remove', legacy);
   }
-  await writeJson(path.join(dataDir, 'integrations/browser.json'), { package: integrationRoot, platform, runtime: runtime.version });
+  await writeJson(path.join(dataDir, 'integrations/browser.json'), { package: integrationRoot, platform, runtime: runtime.version, executionRole: role || 'host', managedSkills: skills });
   return integrationStatus();
 }
 export async function integrationStatus() {
