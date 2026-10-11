@@ -212,11 +212,8 @@
     .settings-page { width: min(680px, calc(100% - 44px)); margin: 0 auto; padding: 28px 0 42px; }
     .settings-page h2 { margin: 0; font-size: 20px; }
     .settings-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-    .settings-tabs { position: sticky; top: 0; z-index: 2; background: var(--bg); display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 22px; overflow-x: auto; }
-    .settings-tabs button { flex: 1 0 auto; margin: 4px 0; padding: 10px 14px; border: 0; background: transparent; color: var(--muted); }
-    .settings-tabs button:hover, .settings-tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--text); }
-    .settings-page button:not([role="tab"]):not(.primary) { padding: 7px 10px; border: 1px solid var(--line); background: var(--surface-2); font-size: 12px; }
-    .settings-page button:not([role="tab"]):not(.primary):hover { border-color: var(--muted); }
+    .settings-page button:not(.primary) { padding: 7px 10px; border: 1px solid var(--line); background: var(--surface-2); font-size: 12px; }
+    .settings-page button:not(.primary):hover { border-color: var(--muted); }
     .settings-page button:disabled { opacity: .5; cursor: default; }
     .settings-panel { min-width: 0; }
     .settings-panel h3 { font-size: 15px; margin: 0 0 10px; }
@@ -628,14 +625,10 @@
       </div>
       <div id="chat"><div class="chat-inner"><div id="chatInner"></div><div id="questionCards" aria-live="polite"></div></div></div>
       <section id="diffView" class="hidden" aria-labelledby="diffTitle"><header class="diff-heading"><div><strong id="diffTitle"></strong><p id="diffNotice" class="meta" role="status"></p></div><button id="closeDiff" type="button" title="Close diff"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>Close diff</span></button></header><div id="fileDiff" tabindex="0" aria-label="File changes"></div></section>
-      <section id="settingsView" class="hidden">
+      <section id="settingsView" class="hidden" aria-labelledby="settingsHeading">
         <form id="settingsForm" class="settings-page">
-          <div class="settings-heading"><h2>Settings</h2><button id="settingsDone" type="button">Done</button></div>
-          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
-            <button id="tabApp" type="button" role="tab" aria-selected="true" aria-controls="settingsApp" data-settings-tab="app">App</button>
-            <button id="tabServices" type="button" role="tab" aria-selected="false" aria-controls="settingsServices" tabindex="-1" data-settings-tab="services">Providers</button>
-          </nav>
-          <section id="settingsApp" class="settings-panel" role="tabpanel" aria-labelledby="tabApp">
+          <div class="settings-heading"><h2 id="settingsHeading">General settings</h2><button id="settingsDone" type="button">Done</button></div>
+          <section id="settingsApp" class="settings-panel" aria-labelledby="settingsHeading">
           <div class="settings-grid">
             <label class="wide">Default working folder<span class="folder-field"><input id="defaultCwd"><button id="defaultCwdBrowse" type="button">Browse…</button></span></label>
             <label>Default model<select id="defaultModel"></select></label>
@@ -656,10 +649,8 @@
             <details id="installedPackages"><summary>Installed packages</summary><p id="packageInventoryStatus" class="meta"></p><div id="packageInventory" style="max-height:20rem;overflow:auto"></div></details>
           </div>
           <details class="settings-section"><summary>Pi processes</summary><p class="meta">Stopping Pi keeps its saved sessions and project files.</p><div id="piProcesses"></div></details>
-          <p class="settings-section meta"><a href="/__bashkitten_source__" target="_blank" rel="noopener noreferrer">Source code</a> · <a href="/__bashkitten_license__" target="_blank" rel="noopener noreferrer">AGPL-3.0-only</a>. BashKitten is free software, provided without warranty. Third-party licenses remain applicable.</p>
           </section>
-          <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
-            <h3>Pi providers</h3>
+          <section id="settingsServices" class="settings-panel hidden" aria-labelledby="settingsHeading">
             <p class="meta">Connect using Pi’s own browser login or API key setup. Credentials are shared with Pi on this server.</p>
             <div class="subscription-actions"><input id="serviceFilter" placeholder="Find a provider" aria-label="Find a provider"><button id="refreshServices" type="button">Refresh</button></div>
             <div id="serviceLogin" class="hidden settings-section" role="status"></div>
@@ -669,7 +660,7 @@
             <div id="piSessions"></div>
           </section>
           <div class="settings-section"><button id="signOut" type="button">Sign out</button></div>
-          <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save app settings</button></div>
+          <div id="settingsSaveRow" class="dialog-actions"><button class="primary">Save settings</button></div>
           <p id="settingsNotice" class="meta" role="status"></p>
         </form>
       </section>
@@ -826,7 +817,7 @@
     function renderGoalChip(){ draftChanged(); $('#goalChip').classList.toggle('hidden',!goalDraft); setRunButton(queueState.busy || Boolean(current?.running)); }
     let pendingRetainedAttachments = [];
     let folderView = {path: '', parent: null}, folderSelection = null, folderGeneration = 0;
-    let activeSettingsTab = 'app';
+    let activeSettingsSection = 'app';
     let queueState = {busy: false, steeringMessages: [], queuedMessages: []};
     let editingQueueId = null;
     let editingQueueToken = null;
@@ -1872,13 +1863,13 @@
         $('#defaultCwd').value = displayFolder(config.default_cwd);
         fillAgentForm('defaultAgents', config.default_subagents || agentDefaults);
       }
-      if (activeSettingsTab === 'services') await refreshServices();
+      if (activeSettingsSection === 'services') await refreshServices();
     }
 
 
     let packagePollBusy = false;
     async function refreshPackages() {
-      if (packagePollBusy || $('#settingsView').classList.contains('hidden')) return;
+      if (packagePollBusy || activeSettingsSection !== 'app' || $('#settingsView').classList.contains('hidden')) return;
       packagePollBusy = true;
       try {
         const status = await api('/api/control'), packages = status.packages;
@@ -2391,18 +2382,26 @@
       else $('#usageSummary').textContent = '';
     }
 
-    function showSettingsView(tab = activeSettingsTab) {
+    function showSettingsView(section = 'app') {
       closeImageViewer();
       setSidebar(false);
       closeFiles();
       closeFileDiff();
+      activeSettingsSection = section;
+      const heading = section === 'services' ? 'Providers' : 'General settings';
       $('#chat').classList.add('hidden');
       $('#composerWrap').classList.add('hidden');
       $('#settingsView').classList.remove('hidden');
-      refreshPackages();
-      $('#title').textContent = 'Settings';
+      $('#settingsView').scrollTop = 0;
+      $('#settingsHeading').textContent = heading;
+      $('#settingsApp').classList.toggle('hidden', section !== 'app');
+      $('#settingsServices').classList.toggle('hidden', section !== 'services');
+      $('#settingsSaveRow').classList.toggle('hidden', section !== 'app');
+      $('#settingsNotice').textContent = '';
+      if (section === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
+      else refreshPackages();
+      $('#title').textContent = heading;
       $('#title').classList.remove('hidden');
-      selectSettingsTab(tab);
       $('#folderBtn').classList.add('hidden');
       $('#usage').classList.add('hidden');
     }
@@ -3214,41 +3213,13 @@
       else $('#composer').requestSubmit();
     };
 
-    function selectSettingsTab(name, focus = false) {
-      activeSettingsTab = name;
-      $('#settingsView').scrollTop = 0;
-      for (const tab of document.querySelectorAll('[data-settings-tab]')) {
-        const selected = tab.dataset.settingsTab === name;
-        tab.setAttribute('aria-selected', String(selected));
-        tab.tabIndex = selected ? 0 : -1;
-        $('#' + tab.getAttribute('aria-controls')).classList.toggle('hidden', !selected);
-        if (selected && focus) tab.focus();
-      }
-      $('#settingsSaveRow').classList.toggle('hidden', name !== 'app');
-      $('#settingsNotice').textContent = '';
-      if (name === 'services') refreshServices().catch(error => { $('#settingsNotice').textContent = error.message; });
-    }
-    const settingsTabs = [...document.querySelectorAll('[data-settings-tab]')];
-    for (const tab of settingsTabs) {
-      tab.onclick = () => selectSettingsTab(tab.dataset.settingsTab);
-      tab.onkeydown = event => {
-        const visibleTabs = settingsTabs.filter(item => !item.classList.contains('hidden'));
-        const index = visibleTabs.indexOf(tab);
-        let next;
-        if (event.key === 'ArrowRight') next = (index + 1) % visibleTabs.length;
-        if (event.key === 'ArrowLeft') next = (index + visibleTabs.length - 1) % visibleTabs.length;
-        if (event.key === 'Home') next = 0;
-        if (event.key === 'End') next = visibleTabs.length - 1;
-        if (next !== undefined) { event.preventDefault(); selectSettingsTab(visibleTabs[next].dataset.settingsTab, true); }
-      };
-    }
     $('#settingsDone').onclick = showChatView;
     function settingsEdited() { settingsDirty = true; ++settingsDraftVersion; }
     $('#settingsApp .settings-grid').addEventListener('input', settingsEdited);
     $('#settingsApp .settings-grid').addEventListener('change', settingsEdited);
     $('#settingsForm').onsubmit = async event => {
       event.preventDefault();
-      if (activeSettingsTab !== 'app' || settingsSaving) return;
+      if (activeSettingsSection !== 'app' || settingsSaving) return;
       const button = event.submitter, version = settingsDraftVersion, previousCwd = pendingCwd;
       settingsSaving = true;
       if (button) button.disabled = true;
@@ -3796,8 +3767,8 @@
     $('#serviceFilter').oninput=renderServices;
     $('#importPiSessions').onclick=async()=>{try{const value=await api('/api/pi-sessions');const root=$('#piSessions');root.replaceChildren();for(const session of value.sessions){const button=document.createElement('button');button.type='button';button.className='folder-row';button.textContent=session.name+' · '+session.cwd;button.onclick=async()=>{try{const result=await api('/api/sessions/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:session.path})});const sessions=await loadSessions();await openSession(sessions.find(s=>s.id===result.id));}catch(error){$('#settingsNotice').textContent=error.message;}};root.append(button);}if(!value.sessions.length)root.textContent='No native Pi sessions found.';}catch(error){$('#settingsNotice').textContent=error.message;}};
     setInterval(()=>{if(csrf&&loginPending)api('/api/services/login-status').then(value=>renderServiceLogin(value.login)).catch(error=>{if(serviceLogin)serviceNotice(serviceLogin.provider,error.message);});},1000);
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&csrf&&activeSettingsTab==='services')refreshServices().then(()=>loadModels()).catch(()=>{});});
-    window.addEventListener('focus',()=>{if(csrf&&activeSettingsTab==='services')refreshServices().catch(()=>{});});
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden&&csrf&&activeSettingsSection==='services')refreshServices().then(()=>loadModels()).catch(()=>{});});
+    window.addEventListener('focus',()=>{if(csrf&&activeSettingsSection==='services')refreshServices().catch(()=>{});});
 
     let piRequests=[], activePiRequest=null;
     function showPiRequest(request) {
