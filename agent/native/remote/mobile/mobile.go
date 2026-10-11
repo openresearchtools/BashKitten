@@ -133,6 +133,9 @@ func (c *Connection) Mappings() (string, error) {
 	data, err := json.Marshal(c.client.Mappings())
 	return string(data), err
 }
+func (c *Connection) Phone(body []byte) ([]byte, error) {
+	return c.client.Phone(context.Background(), body)
+}
 func (c *Connection) Services() ([]byte, error) { return c.client.Services(context.Background()) }
 func (c *Connection) ServiceAction(id, action string) ([]byte, error) {
 	return c.client.ServiceAction(context.Background(), id, action)

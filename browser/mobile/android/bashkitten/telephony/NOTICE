@@ -1,0 +1,14 @@
+BashKitten telephony module, 2026-10-11.
+
+TelecomHelper, KittenConnectionService and KittenConnection adapt the account
+and connection lifecycle of Phony v2.6, DDOneApps and contributors, exact release
+5c52157dec285c73bc84dd1f388247d3741a127f. GPL-3.0 as provided in
+agent/vendor/phony/source/LICENSE. The unchanged release is retained there.
+
+Changes: Java library inside BashKitten's main APK; SIP account; validated
+backend contacts; supported outgoing handling; independent saved policy;
+asynchronous authenticated gateway; actual call menu DTMF; native transient
+call audio and configured phone LocalAI. Removed donor application/navigation,
+alarms/scheduling/snooze, external triggers, widgets, accessibility triggers,
+updates, fake/recorded audio, call recording and donor IVR/TTS configuration.
+No donor service or UI is packaged. Own integration files retain AGPL-3.0-only.

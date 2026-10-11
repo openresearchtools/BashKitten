@@ -52,7 +52,7 @@ export class PiRpc extends EventEmitter {
       if (meta.model && meta.model !== 'unknown/unknown') args.push('--model', meta.model);
       if (meta.thinking) args.push('--thinking', meta.thinking);
     }
-    const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('BASHKITTEN_PHONE_OWNER_') && !key.startsWith('BASHKITTEN_PHONE_REGISTRAR_')));
+    const inherited = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('BASHKITTEN_PHONE_OWNER_') && !key.startsWith('BASHKITTEN_PHONE_REGISTRAR_') && key !== 'BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN'));
     this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...inherited, ...extraEnvironment, PI_TELEMETRY: '0', BASHKITTEN_SESSION_ID: meta.id, BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {

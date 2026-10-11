@@ -64,3 +64,58 @@ func serviceControl(authorize tunnel.AuthorizeBearer, transport *http.Transport,
 		io.Copy(w, response.Body)
 	})
 }
+
+// Only the fixed agent Phone operation set can reach the private controller.
+// Reuses the exact service carrier authorizer; never forwards arbitrary URLs.
+func phoneControl(authorize tunnel.AuthorizeBearer, transport *http.Transport, generation string) http.Handler {
+	client := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodPost || r.URL.Path != "/services/agent/phone" || r.URL.RawPath != "" || r.URL.RawQuery != "" {
+			http.NotFound(w, r)
+			return
+		}
+		headers := r.Header.Values("Authorization")
+		if len(headers) != 1 || !strings.HasPrefix(headers[0], "Bearer ") || authorize(r.Context(), strings.TrimPrefix(headers[0], "Bearer ")) != nil {
+			http.Error(w, "unauthorized", 401)
+			return
+		}
+		var payload struct {
+			Action   string          `json:"action"`
+			Value    json.RawMessage `json:"value"`
+			Identity json.RawMessage `json:"identity"`
+		}
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&payload) != nil {
+			http.Error(w, "invalid phone request", 400)
+			return
+		}
+		switch payload.Action {
+		case "phone.register", "phone.disable", "phone.revoke", "phone.pending", "phone.ack", "phone.chats", "phone.settings", "phone.new", "phone.begin", "phone.last", "phone.live", "phone.live-ack", "phone.update-ack", "phone.reply":
+		default:
+			http.Error(w, "unsupported phone operation", 403)
+			return
+		}
+		body, err := json.Marshal(map[string]interface{}{"generation": generation, "action": payload.Action, "value": payload.Value, "identity": payload.Identity})
+		if err != nil {
+			http.Error(w, "invalid phone request", 400)
+			return
+		}
+		request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, "http://controller/remote-phone", bytes.NewReader(body))
+		if err != nil {
+			http.Error(w, "invalid phone request", 400)
+			return
+		}
+		request.Header.Set("Content-Type", "application/json")
+		response, err := client.Do(request)
+		if err != nil {
+			http.Error(w, "phone backend unavailable", 503)
+			return
+		}
+		defer response.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(response.StatusCode)
+		io.Copy(w, response.Body)
+	})
+}

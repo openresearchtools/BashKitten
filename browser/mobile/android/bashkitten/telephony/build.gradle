@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+apply plugin: 'com.android.library'
+android {
+    namespace 'com.bashkitten.telephony'
+    compileSdk { version = release(project.ext.compileSdkMajorVersion) { minorApiLevel = project.ext.compileSdkMinorVersion } }
+    defaultConfig { minSdk 31; targetSdk project.ext.targetSdkVersion }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies { implementation libs.androidx.core }
