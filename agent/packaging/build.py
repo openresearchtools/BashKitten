@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shutil
 import struct
 import subprocess
@@ -287,6 +288,9 @@ def package_browser(args, app, stage, version, auth):
     directory = args.browser_dir.resolve()
     manifest = directory / 'browser-artifact-manifest.txt'
     metadata = key_values(manifest)
+    component = runpy.run_path(str(ROOT / 'packaging/browser-component.py'))
+    compile_digest = component['fingerprint']('linux-' + args.architecture)
+    component['verify'](directory, 'linux-' + args.architecture, compile_digest)
     require(metadata.get('architecture') == args.architecture, 'Browser architecture mismatch')
     require(metadata.get('product_version') == version, 'Browser product version mismatch')
     archives = [p for p in directory.glob('bashkitten*.tar.*') if p.is_file()]
@@ -336,6 +340,12 @@ def package_browser(args, app, stage, version, auth):
     for name in ['browser-artifact-manifest.txt', 'browser-build-manifest.txt', 'SHA256SUMS']:
         require((directory / name).is_file(), f'Missing browser provenance: {name}')
         shutil.copy2(directory / name, provenance / name)
+    equivalence = directory / component['EQUIVALENCE']
+    if equivalence.exists():
+        shutil.copy2(equivalence, provenance / equivalence.name)
+        metadata['input_equivalence'] = read_json(equivalence)
+        metadata['producer_browser_input_sha256'] = metadata['browser_input_sha256']
+        metadata['browser_input_sha256'] = compile_digest
     run(['python3', str(REPOSITORY / 'browser/bashkitten/scripts/generate-third-party-notices.py'),
          '--browser-dir', str(browser), '--json-output', str(browser / 'notices/licenses.json')])
     return {'archive': archive.name, 'sha256': digest, **metadata}

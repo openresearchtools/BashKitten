@@ -35,6 +35,16 @@ inputs match, leaving the cache quota for compiler objects. Agent-only changes
 reassemble the Linux package without rebuilding unchanged Gecko. Cached binaries
 retain their actual producing commit in provenance. Native arm64 builds use an
 arm64 runner. Initial builds in the new repositories start with empty caches.
+The artifact verifier/cache policy is excluded from compile fingerprints. An
+older fingerprint is accepted only when recomputing it from the current compile
+inputs plus the producer's exact historical verifier blob gives the original
+digest. A checksummed equivalence receipt retains that blob, original source,
+manifest hash and successful producer steps; original manifests and binaries
+are unchanged. A later package-assembly failure does not discard a completed
+browser build: reuse requires successful build, verification and artifact upload
+steps in the same trusted completed builder run, plus full input/ABI/checksum
+verification. Cancelled, incomplete, failed-build or failed-verification runs are
+never reused. A successful run may also retain a previously verified cache hit.
 Android caches Gradle dependency downloads without storing the multi-gigabyte
 Mozilla bootstrap directory. Gradle task outputs use a separate Actions artifact
 with the repository's normal retention, restored from a successful builder run.

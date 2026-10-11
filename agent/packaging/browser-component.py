@@ -9,10 +9,14 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
+VERIFIER = 'agent/packaging/browser-component.py'
+EQUIVALENCE = 'browser-input-equivalence.json'
 
 
-def fingerprint(target):
-    paths = ['browser', 'agent/packaging/browser-component.py']
+def fingerprint(target, legacy_verifier=None):
+    # Cache policy is not compiler input. Preserve the old calculation only to
+    # prove equivalence of already-published artifacts; no producer is relabelled.
+    paths = ['browser'] + ([VERIFIER] if legacy_verifier else [])
     if target.startswith('android'):
         paths += ['.github/builders/android.yml', 'auth', 'agent/native/remote', 'agent/native/phone-control',
                   'agent/packaging/android-notices.py', 'agent/packaging/build.py',
@@ -37,6 +41,15 @@ def fingerprint(target):
         paths += ['.github/builders/linux.yml', 'agent/packaging/linux/prepare-runner.sh',
                   ':(exclude)browser/mobile/android', ':(exclude)browser/bashkitten/android']
     listing = subprocess.check_output(['git', 'ls-files', '--stage', '-z', '--', *paths], cwd=ROOT)
+    if legacy_verifier:
+        if not re.fullmatch('[0-9a-f]{40}', legacy_verifier):
+            raise ValueError('Invalid legacy verifier source identity')
+        entries = listing.split(b'\0')
+        matching = [i for i, entry in enumerate(entries) if entry.endswith(b'\t' + VERIFIER.encode())]
+        if len(matching) != 1:
+            raise ValueError('Missing tracked legacy verifier input')
+        entries[matching[0]] = f'100644 {legacy_verifier} 0\t{VERIFIER}'.encode()
+        listing = b'\0'.join(entries)
     return hashlib.sha256(target.encode() + b'\0' + listing).hexdigest()
 
 
@@ -46,6 +59,20 @@ def artifact_name(target, digest):
 
 def api(endpoint):
     return json.loads(subprocess.check_output(['gh', 'api', endpoint], text=True))
+
+
+def matching_input(directory, target, recorded, digest, producer):
+    if recorded == digest:
+        return
+    receipt = json.loads((Path(directory) / EQUIVALENCE).read_text())
+    manifest = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
+    if (receipt.get('schema') != 1 or receipt.get('target') != target or
+            receipt.get('producerSource') != producer or
+            receipt.get('producerFingerprint') != recorded or
+            receipt.get('compileFingerprint') != digest or
+            receipt.get('producerManifestSha256') != hashlib.sha256(manifest.read_bytes()).hexdigest() or
+            fingerprint(target, receipt.get('legacyVerifierBlob')) != recorded):
+        raise ValueError('Browser source equivalence does not match this source')
 
 
 def verify(directory, target, digest):
@@ -64,17 +91,19 @@ def verify(directory, target, digest):
         raise ValueError('Component checksums must cover the complete artifact')
     if target.startswith('android'):
         manifest = json.loads((directory / 'build-manifest.json').read_text())
-        if manifest.get('browser_input_sha256') != digest or manifest.get('architecture') != ('x86_64' if target == 'android-x86_64' else 'arm64-v8a'):
+        if manifest.get('architecture') != ('x86_64' if target == 'android-x86_64' else 'arm64-v8a'):
             raise ValueError('Android component inputs do not match this source')
         if not re.fullmatch('[0-9a-f]{40}', manifest.get('source', '')):
             raise ValueError('Android component has no producing source revision')
         apks = list(directory.glob('*.apk'))
         if len(apks) != 1 or manifest.get('apks', {}).get(apks[0].name) is None:
             raise ValueError('Expected one recorded production APK')
+        matching_input(directory, target, manifest.get('browser_input_sha256'), digest, manifest['source'])
     else:
         manifest = dict(line.split('=', 1) for line in (directory / 'browser-artifact-manifest.txt').read_text().splitlines())
-        if manifest.get('browser_input_sha256') != digest or manifest.get('architecture') != target.removeprefix('linux-'):
+        if manifest.get('architecture') != target.removeprefix('linux-') or not re.fullmatch('[0-9a-f]{40}', manifest.get('bashkitten_commit', '')):
             raise ValueError('Linux component inputs do not match this source')
+        matching_input(directory, target, manifest.get('browser_input_sha256'), digest, manifest['bashkitten_commit'])
 
 
 def verify_package(directory, target, source, digest):
@@ -93,6 +122,47 @@ def verify_package(directory, target, source, digest):
             raise ValueError('Package checksum mismatch')
 
 
+def completed_producer(repository, run, target):
+    if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure') or
+            run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
+            run['path'] != '.github/workflows/build.yml'):
+        return None
+    android = target.startswith('android')
+    verify_name = 'Verify the Android artifact and source inputs' if android else 'Verify the browser archive and source inputs'
+    build_names = (['Build Gecko for the selected architecture', 'Assemble the release browser',
+                    'Sign, verify and collect the production APK'] if android else ['Build the complete browser archive'])
+    jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+    for job in jobs:
+        steps = job.get('steps', [])
+        verification = next((s for s in steps if s['name'] == verify_name and s['conclusion'] == 'success'), None)
+        if not verification:
+            continue
+        upload = next((s for s in steps if s['number'] == verification['number'] + 1 and
+                       'actions/upload-artifact@' in s['name'] and s['conclusion'] == 'success'), None)
+        builds = [next((s for s in steps if s['name'] == name), {}) for name in build_names]
+        if not upload:
+            continue
+        if all(s.get('conclusion') == 'success' for s in builds):
+            return {'job': job['id'], 'build': builds, 'verify': verification, 'upload': upload}
+        # A successful workflow may itself have restored a verified producer.
+        # A failed workflow is reusable only after an actual successful build.
+        restored = next((s for s in steps if s['name'].startswith('Restore a matching completed ') and
+                         s['conclusion'] == 'success'), None)
+        if run['conclusion'] == 'success' and restored and all(s.get('conclusion') == 'skipped' for s in builds):
+            return {'job': job['id'], 'restored': restored, 'verify': verification, 'upload': upload}
+    return None
+
+
+def verifier_blob(source):
+    if not re.fullmatch('[0-9a-f]{40}', source):
+        raise ValueError('Invalid producer source revision')
+    local = subprocess.run(['git', 'rev-parse', '--verify', source + ':' + VERIFIER], cwd=ROOT,
+                           text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    if local.returncode == 0:
+        return local.stdout.strip()
+    return api(f'repos/openresearchtools/bashkitten/contents/{VERIFIER}?ref={source}')['sha']
+
+
 def restore(directory, target, digest):
     repository = os.environ['GITHUB_REPOSITORY']
     expected = 'openresearchtools/bashkitten-build-' + target.removeprefix('linux-')
@@ -101,18 +171,45 @@ def restore(directory, target, digest):
     name = artifact_name(target, digest)
     page = 1
     while True:
-        artifacts = api(f'repos/{repository}/actions/artifacts?name={name}&per_page=100&page={page}')['artifacts']
+        artifacts = api(f'repos/{repository}/actions/artifacts?per_page=100&page={page}')['artifacts']
         for artifact in artifacts:
-            if artifact['expired']:
+            if artifact['expired'] or not artifact['name'].startswith(f'bashkitten-browser-{target}-'):
                 continue
             run = api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
-            if run['conclusion'] != 'success' or run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main':
+            evidence = completed_producer(repository, run, target)
+            if not evidence:
                 continue
-            if run['path'] != '.github/workflows/build.yml':
-                continue
+            legacy = None
+            expected = digest
+            if artifact['name'] != name:
+                source = re.match(r'^BashKitten ([0-9a-f]{40}) / ', run.get('display_title', ''))
+                if not source:
+                    continue
+                legacy = verifier_blob(source[1])
+                expected = fingerprint(target, legacy)
+                if artifact['name'] != artifact_name(target, expected):
+                    continue
             subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', repository,
-                            '--name', name, '--dir', str(directory)], check=True)
-            verify(directory, target, digest)
+                            '--name', artifact['name'], '--dir', str(directory)], check=True)
+            verify(directory, target, expected)
+            if legacy:
+                manifest_file = Path(directory) / ('build-manifest.json' if target.startswith('android') else 'browser-artifact-manifest.txt')
+                manifest = json.loads(manifest_file.read_text()) if target.startswith('android') else dict(line.split('=', 1) for line in manifest_file.read_text().splitlines())
+                producer = manifest['source' if target.startswith('android') else 'bashkitten_commit']
+                if verifier_blob(producer) != legacy:
+                    raise ValueError('Producer verifier differs from the proven legacy input')
+                receipt = {'schema': 1, 'target': target, 'producerSource': producer,
+                           'producerFingerprint': expected, 'compileFingerprint': digest,
+                           'legacyVerifierBlob': legacy, 'repository': repository, 'run': run['id'],
+                           'artifact': artifact['id'], 'producerSteps': evidence,
+                           'producerManifestSha256': hashlib.sha256(manifest_file.read_bytes()).hexdigest()}
+                receipt_file = Path(directory) / EQUIVALENCE
+                if receipt_file.exists():
+                    raise ValueError('Unexpected receipt in legacy artifact')
+                receipt_file.write_text(json.dumps(receipt, indent=2) + '\n')
+                with (Path(directory) / 'SHA256SUMS').open('a') as output:
+                    output.write(hashlib.sha256(receipt_file.read_bytes()).hexdigest() + '  ' + EQUIVALENCE + '\n')
+                verify(directory, target, digest)
             print(f'Reused verified {target} browser from {run["html_url"]}', flush=True)
             return True
         if len(artifacts) < 100:
