@@ -12,7 +12,6 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
-import androidx.appcompat.widget.AppCompatButton;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.io.*;
@@ -28,7 +27,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button hideAgent;
     private final AgentSidecar sidecar;
     private final GeckoView view;
     private final ScrollView setup;
@@ -46,7 +44,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
-    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, Runnable openBrowserMenu) {
+    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, Runnable openBrowserMenu, Runnable openSettingsMenu) {
         super(activity); this.activity = activity; this.browser = browser;
         app = BrowserApp.get(activity); runtime = app.agent;
         sidecar = new AgentSidecar(activity, runtime);
@@ -60,15 +58,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray barTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.colorBackground});
         try { bar.setBackgroundColor(barTheme.getColor(0, 0)); } finally { barTheme.recycle(); }
         androidx.appcompat.widget.AppCompatImageButton toggle = new androidx.appcompat.widget.AppCompatImageButton(activity);
-        toggle.setImageResource(agentIcon); toggle.setContentDescription("Agent");
+        toggle.setImageResource(agentIcon); toggle.setContentDescription("BashKitten sidebar");
         toggle.setScaleType(ImageView.ScaleType.FIT_CENTER); toggle.setPadding(dp(10), dp(10), dp(10), dp(10));
         TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
-        toggle.setOnClickListener(v -> toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
-        bar.addView(barIcon("Chats", R.drawable.ic_agent_sidebar, sidecar::toggle), new LayoutParams(dp(40), -1));
-        hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
-        hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
+        toggle.setOnClickListener(v -> sidecar.toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
         bar.addView(new View(activity), new LayoutParams(0, 1, 1));
+        bar.addView(barIcon("BashKitten settings", R.drawable.ic_agent_gear, openSettingsMenu), new LayoutParams(dp(48), -1));
         ImageButton menu = barIcon("Browser menu", R.drawable.ic_agent_browser_menu, openBrowserMenu); bar.addView(menu, new LayoutParams(dp(48), -1));
         FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); chatContent.addView(body, new FrameLayout.LayoutParams(-1, -1));
@@ -88,7 +84,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         logScroll = new ScrollView(activity); logScroll.setNestedScrollingEnabled(true); logScroll.addView(log); logScroll.setVisibility(GONE);
         setupBody.addView(logScroll, new LayoutParams(-1, dp(240)));
         body.addView(setup, new LayoutParams(-1, 0, 1));
-        sidecar.attach(chatContent);
+        sidecar.attach(chatContent, body);
         addView(agent); addView(browser);
         runtime.attach(engine, this);
         setOnApplyWindowInsetsListener((v, insets) -> {
@@ -120,14 +116,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
         try { label.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
         return label;
-    }
-    private Button barButton(String label, Runnable action) {
-        AppCompatButton b = new AppCompatButton(activity, null, androidx.appcompat.R.attr.borderlessButtonStyle);
-        // Fenix supplies a stateful foreground for its current light/dark/private
-        // surface; do not combine it with the framework's default button fill.
-        TypedArray theme = activity.obtainStyledAttributes(new int[]{android.R.attr.textColorPrimary});
-        try { b.setTextColor(theme.getColorStateList(0)); } finally { theme.recycle(); }
-        return button(b, label, action);
     }
     private ImageButton barIcon(String label, int icon, Runnable action) { return iconButton(activity, label, icon, action); }
     static ImageButton iconButton(Activity activity, String label, int icon, Runnable action) {
@@ -165,7 +153,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
         if (!agentVisible) sidecar.close();
-        hideAgent.setVisibility(sideBySide ? VISIBLE : GONE);
         agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
         browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
@@ -422,7 +409,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (runtime.selected.equals("local") && (state.equals("setup") || state.equals("off") || state.equals("failed"))) {
             String previous = app.policies.getString("agent.lastRemote", "");
             if (runtime.remoteConnected(previous)) action("Back to remote", () -> runtime.select(previous));
-            action("Connect to remote", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class)));
+            action("Connect to remote", () -> AgentSettingsActivity.open(activity, "remotes"));
         }
         if (state.equals("off") || state.equals("failed") || state.equals("stop-failed")) return;
         if (!state.equals("setup")) return;
@@ -435,7 +422,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         }
         if (!runtime.selected.equals("local")) {
             action("Retry connection", runtime::turnOn);
-            action("Connect to remote", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class)));
+            action("Connect to remote", () -> AgentSettingsActivity.open(activity, "remotes"));
             return;
         }
         if (!runtime.termux.installed()) { action("Download Termux", this::downloadTermux); return; }
@@ -522,16 +509,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 .setNegativeButton("Cancel", null).show();
         } else app.remoteControl.authorize(activity, runtime.session, runtime.url, "Remote Agent");
     }
-    public void notifications() {
-        boolean[] enabled = {app.policies.getBoolean("agent.notifications", false), app.policies.getBoolean("agent.notifications.hidden", true), app.policies.getBoolean("agent.notifications.preview", true)};
-        new MaterialAlertDialogBuilder(activity).setTitle("Completed turns")
-            .setMultiChoiceItems(new String[]{"Notify when a turn completes", "Only while Agent is hidden", "Include message preview"}, enabled, (d,i,checked) -> enabled[i] = checked)
-            .setPositiveButton("Save", (d,w) -> {
-                app.policies.edit().putBoolean("agent.notifications", enabled[0]).putBoolean("agent.notifications.hidden", enabled[1]).putBoolean("agent.notifications.preview", enabled[2]).apply();
-                if (runtime.selected.equals("local")) try { runtime.command("notification-settings", new JSONObject().put("settings", new JSONObject().put("enabled", enabled[0]).put("onlyWhenHidden", enabled[1]).put("preview", enabled[2])), ignored -> {}, this::error); } catch (JSONException ignored) {}
-                if (enabled[0] && Build.VERSION.SDK_INT >= 33) activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION);
-            }).setNegativeButton("Cancel", null).show();
-    }
+    public void notifications() { AgentSettingsActivity.open(activity, "notifications"); }
     public void checkBrowserUpdate() {
         app.message("Checking for a BashKitten update…");
         new Thread(() -> {

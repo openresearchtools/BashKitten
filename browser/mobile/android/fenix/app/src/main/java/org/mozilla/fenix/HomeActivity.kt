@@ -539,7 +539,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         }
 
         if (this !is ExternalAppBrowserActivity) {
-            bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime, R.drawable.bashkitten_logo, ::openBashKittenBrowserMenu)
+            bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime, R.drawable.bashkitten_logo, ::openBashKittenBrowserMenu, { org.mozilla.fenix.bashkitten.BashKittenMenuDialog().show(supportFragmentManager, "bashkitten-settings-menu") })
             // Theme and tablet-layout recreation retain the selected pane. New
             // launches keep AgentPanel's full-Agent default; ACTION_MAIN also
             // explicitly selects Agent when delivered through onNewIntent.

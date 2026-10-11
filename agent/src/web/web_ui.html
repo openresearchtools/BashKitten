@@ -139,8 +139,6 @@
       text-align: left;
     }
     .new-chat:hover { background: var(--surface-2); }
-    #settingsBtn { flex: 0 0 auto; color: var(--text); }
-    .settings-glyph { font-size: 18px; line-height: 1; }
     #sessions { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 7px 8px 16px; }
     .folder-group { margin: 5px 0 12px; }
     .folder-heading {
@@ -613,9 +611,6 @@
         <button id="newBtn" class="new-chat" type="button">
           <span>New chat</span>
         </button>
-        <button id="settingsBtn" class="icon-button" type="button" title="Settings" aria-label="Settings">
-          <span class="settings-glyph" aria-hidden="true">&#9881;&#xfe0e;</span>
-        </button>
       </div>
       <div id="sessions"></div>
     </aside>
@@ -662,13 +657,6 @@
           </div>
           <details class="settings-section"><summary>Pi processes</summary><p class="meta">Stopping Pi keeps its saved sessions and project files.</p><div id="piProcesses"></div></details>
           <p class="settings-section meta"><a href="/__bashkitten_source__" target="_blank" rel="noopener noreferrer">Source code</a> · <a href="/__bashkitten_license__" target="_blank" rel="noopener noreferrer">AGPL-3.0-only</a>. BashKitten is free software, provided without warranty. Third-party licenses remain applicable.</p>
-          <div id="termuxNotifications" class="hidden settings-section">
-            <h3>Turn notifications</h3>
-            <label class="check-label"><input id="notifyEnabled" type="checkbox"> Notify when Pi finishes a turn</label>
-            <label class="check-label"><input id="notifyHidden" type="checkbox" checked> Only when this chat is not visible</label>
-            <label class="check-label"><input id="notifyPreview" type="checkbox" checked> Show a short message preview</label>
-            <p class="meta">BashKitten sends notifications while its background connection is enabled. Android notification settings control lock-screen visibility.</p>
-          </div>
           </section>
           <section id="settingsServices" class="settings-panel hidden" role="tabpanel" aria-labelledby="tabServices">
             <h3>Pi providers</h3>
@@ -880,7 +868,6 @@
       $('#filesTab').classList.remove('hidden');
       $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
       if (initialized && !$('#filePanel').classList.contains('hidden')) setFileTab(fileTab);
-      if (initialized) loadNotifications();
     }
     window.addEventListener('bashkitten-host-ready', configureNativeHost);
     configureNativeHost();
@@ -1514,7 +1501,7 @@
           submit.type = 'submit'; submit.textContent = question.status === 'expired' ? 'Send follow-up' : 'Reply';
           const send = async text => {
             if (!text.trim()) return;
-            const sessionId = question.sessionId;
+            const sessionId = question.sessionId, view = sessionView;
             let submission = questionSubmissions.get(question.questionId);
             if (!submission || submission.text !== text) { submission = { text, id: crypto.randomUUID() }; questionSubmissions.set(question.questionId, submission); }
             const deliveryId = submission.id;
@@ -1522,9 +1509,11 @@
             try {
               const result = await api(`/api/sessions/${sessionId}/questions/answer`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({questionId:question.questionId,revision:question.revision,deliveryId,text}) });
               questionDrafts.delete(question.questionId); questionSubmissions.delete(question.questionId);
-              if (current?.id === sessionId) {
+              if (current?.id === sessionId && sessionView === view) {
+                const version = questionVersion;
                 const snapshot = await api(`/api/sessions/${sessionId}/questions`);
-                renderQuestions(snapshot.questions);
+                if (current?.id !== sessionId || sessionView !== view) return;
+                if (version === questionVersion) renderQuestions(snapshot.questions);
                 if (result.followup) $('#composerHint').textContent = 'Late reply sent as an attributed follow-up.';
               }
             } catch (error) { state.textContent = error.message; for (const control of card.querySelectorAll('button,input')) control.disabled = false; }
@@ -1536,6 +1525,7 @@
         root.append(card);
       }
       if (focused) { const input = [...root.querySelectorAll('[data-question]')].find(card => card.dataset.question === focused)?.querySelector('input'); if (input) { input.focus({preventScroll:true}); if (selection) input.setSelectionRange(...selection); } }
+      if (follow) chat.scrollTop = chat.scrollHeight;
     }
 
     function liveCompaction(){let trace=$('#liveCompaction');if(!trace){trace=document.createElement('details');trace.id='liveCompaction';trace.className='turn-work';trace.open=true;const summary=document.createElement('summary');summary.textContent='Compacting context…';const body=document.createElement('div');body.className='turn-work-body';trace.append(summary,body);$('#chatInner').append(trace);}return trace;}
@@ -1870,7 +1860,6 @@
       config = value.config;
       serverPlatform = value.platform;
       $('#termuxPackageActions').classList.toggle('hidden', serverPlatform !== 'termux');
-      await loadNotifications();
       await refreshDictation();
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
@@ -1878,20 +1867,7 @@
       fillAgentForm('defaultAgents', config.default_subagents || agentDefaults);
       if (activeSettingsTab === 'services') await refreshServices();
     }
-    async function loadNotifications() {
-      $('#termuxNotifications').classList.toggle('hidden', nativeHost?.platform !== 'android');
-      if (nativeHost?.platform === 'android') {
-        try {
-          const notifications = await nativeHost.call('notification-settings', {});
-          $('#notifyEnabled').checked = Boolean(notifications.enabled);
-          $('#notifyHidden').checked = notifications.onlyWhenHidden !== false;
-          $('#notifyPreview').checked = notifications.preview !== false;
-        } catch (error) {
-          $('#termuxNotifications').classList.add('hidden');
-          $('#settingsNotice').textContent = error.message;
-        }
-      }
-    }
+
 
     let packagePollBusy = false;
     async function refreshPackages() {
@@ -2398,7 +2374,6 @@
       $('#settingsView').classList.add('hidden');
       $('#chat').classList.remove('hidden');
       $('#composerWrap').classList.remove('hidden');
-      $('#settingsBtn').classList.remove('active');
       $('#folderBtn').classList.remove('hidden');
       $('#usage').classList.remove('hidden');
       $('#title').classList.add('hidden');
@@ -2409,7 +2384,7 @@
       else $('#usageSummary').textContent = '';
     }
 
-    function showSettingsView() {
+    function showSettingsView(tab = activeSettingsTab) {
       closeImageViewer();
       setSidebar(false);
       closeFiles();
@@ -2418,10 +2393,9 @@
       $('#composerWrap').classList.add('hidden');
       $('#settingsView').classList.remove('hidden');
       refreshPackages();
-      $('#settingsBtn').classList.add('active');
       $('#title').textContent = 'Settings';
       $('#title').classList.remove('hidden');
-      selectSettingsTab(activeSettingsTab);
+      selectSettingsTab(tab);
       $('#folderBtn').classList.add('hidden');
       $('#usage').classList.add('hidden');
     }
@@ -2967,7 +2941,7 @@
       const command = text.split(/\s/)[0];
       const consume = () => { if (consumeDraft) { $('#prompt').value=''; $('#prompt').dispatchEvent(new Event('input')); } closeComposerActions(); };
       if (command === '/attach') { $('#files').click(); consume(); return; }
-      if (command === '/settings' || command === '/providers' || command === '/login') { consume(); showSettingsView(); if (command !== '/settings') selectSettingsTab('services'); return; }
+      if (command === '/settings' || command === '/providers' || command === '/login') { consume(); showSettingsView(command === '/settings' ? 'app' : 'services'); return; }
       if (!current) { $('#composerHint').textContent = 'Open a chat first.'; return; }
       try {
         if (command === '/fork') {
@@ -3233,10 +3207,6 @@
       else $('#composer').requestSubmit();
     };
 
-    $('#settingsBtn').onclick = () => {
-      if ($('#settingsView').classList.contains('hidden')) showSettingsView();
-      else showChatView();
-    };
     function selectSettingsTab(name, focus = false) {
       activeSettingsTab = name;
       $('#settingsView').scrollTop = 0;
@@ -3274,12 +3244,8 @@
       config.default_model = $('#defaultModel').value;
       config.default_thinking = $('#defaultThinking').value;
       config.default_subagents = readAgentForm('defaultAgents');
-      if (nativeHost?.platform === 'android') {
-        const notifications = await nativeHost.call('notification-settings', {enabled:$('#notifyEnabled').checked, onlyWhenHidden:$('#notifyHidden').checked, preview:$('#notifyPreview').checked});
-        config.notifications = notifications;
-        $('#notifyEnabled').checked = Boolean(notifications.enabled);
-      }
-      const saved=await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(config)});
+
+      const saved=await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'notifications')))});
       await loadModels();
       if (!current) {
         pendingCwd = config.default_cwd;
@@ -3920,13 +3886,17 @@
             while (!found && nextSessionOffset !== null) { await loadSessions(true); found = sessionCache.find(session => session.id === value.id); }
             if (!found) throw Error('Chat is unavailable');
             if (current?.id !== found.id) await openSession(found);
+            showChatView();
           } else await beginNewSession(value.projectId || null);
           const next = chatDrafts.get(current?.id || 'new:' + (pendingProjectId || ''));
           $('#prompt').value = '';
           if (next) await window.bashkittenDraft.restore(next);
           draftChanged(); return this.call('snapshot');
         }
-        if (action === 'settings') { $('#settingsBtn').click(); return true; }
+        if (action === 'settings' || action === 'general' || action === 'providers') {
+          showSettingsView(action === 'providers' ? 'services' : 'app');
+          return true;
+        }
         if (action === 'folders') {
           if (typeof value.requestId !== 'string' || !value.requestId) throw Error('Missing folder request identity');
           nativeFolderRequests.get(value.requestId)?.abort();

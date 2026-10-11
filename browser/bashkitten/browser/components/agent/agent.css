@@ -1,13 +1,12 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-#bashkitten-agent-pane { min-width: 320px; border-radius: 16px; overflow: clip; background: var(--toolbar-bgcolor, Canvas); color: var(--toolbar-color, CanvasText); }
+#bashkitten-agent-pane { position: relative; min-width: 320px; border-radius: 16px; overflow: clip; background: var(--toolbar-bgcolor, Canvas); color: var(--toolbar-color, CanvasText); }
 :root[bashkitten-agent-layout="split"] #bashkitten-agent-pane { width: 42vw; max-width: 70vw; border-inline-end: 1px solid var(--chrome-content-separator-color); }
-#bashkitten-agent-bar { min-height: 38px; align-items: center; gap: 6px; padding: 4px 8px; }
 #bashkitten-agent-pane button, #bashkitten-agent-pane select, .bashkitten-agent-dialog button, .bashkitten-agent-dialog input, .bashkitten-agent-dialog select { font: menu; color: inherit; background: var(--button-background-color, ButtonFace); border: 1px solid var(--border-color, ThreeDShadow); border-radius: 999px; padding: 6px 12px; }
 #bashkitten-agent-pane button { cursor: pointer; }
-#bashkitten-agent-bar > label { font-weight: 600; }
-#bashkitten-agent-pane #bashkitten-agent-choice { max-width: 180px; flex: 1; min-width: 70px; appearance: none; padding-inline-end: 28px; background-image: url("chrome://global/skin/icons/arrow-down.svg"); background-position: right 8px center; background-repeat: no-repeat; background-size: 12px; -moz-context-properties: fill; fill: currentColor; cursor: pointer; }
-#bashkitten-agent-pane #bashkitten-agent-choice:dir(rtl) { background-position: left 8px center; }
-#bashkitten-agent-pane #bashkitten-agent-menu { width: 32px; height: 32px; flex: 0 0 32px; padding: 0; border-radius: 50%; }
+#bashkitten-chats-toggle .toolbarbutton-icon { width: 28px; height: 28px; object-fit: contain; }
+#bashkitten-settings-button .toolbarbutton-icon { width: 16px; height: 16px; }
+#bashkitten-settings-menu { min-width: 250px; }
+#bashkitten-browser-menu-host:empty { display: none; }
 #bashkitten-agent-power { white-space: nowrap; }
 #bashkitten-agent-state { padding: 32px 24px; align-items: stretch; gap: 12px; overflow: auto; }
 #bashkitten-agent-state h2 { margin: 0; font-size: 20px; }
@@ -15,13 +14,20 @@
 #bashkitten-agent-views { min-height: 0; }
 #bashkitten-agent-views > browser { min-width: 0; min-height: 0; }
 #bashkitten-native-workspace, #bashkitten-native-chat { min-width: 0; min-height: 0; }
+#bashkitten-native-workspace { position: relative; }
+#bashkitten-agent-pane[data-sidecar-open="false"] #bashkitten-native-sidecar { display: none; }
+#bashkitten-agent-pane[data-sidecar-narrow="true"][data-sidecar-open="true"] #bashkitten-native-sidecar { position: absolute; inset-block: 0; inset-inline-start: 0; width: min(320px, 90%); z-index: 7; box-sizing: border-box; box-shadow: 4px 0 16px #0003; }
+#bashkitten-settings-view, #bashkitten-settings-view > browser { min-width: 0; min-height: 0; }
 #bashkitten-native-sidecar { --sidecar-bg: #e8e8e8; --sidecar-surface: #fff; --sidecar-active: #e5e5e7; --sidecar-line: #dcdcdf; --sidecar-text: #242426; --sidecar-muted: #66666b; width: 264px; min-width: 180px; overflow: auto; overscroll-behavior: contain; border-inline-end: 1px solid var(--sidecar-line); padding: 7px 8px 16px; background: var(--sidecar-bg); color: var(--sidecar-text); font: 14px Inter, ui-sans-serif, system-ui, sans-serif; }
 @media (prefers-color-scheme: dark) {
   #bashkitten-native-sidecar { --sidecar-bg: #252526; --sidecar-surface: #2b2b2b; --sidecar-active: #333337; --sidecar-line: #343438; --sidecar-text: #e8e8e8; --sidecar-muted: #a6a6aa; }
 }
 #bashkitten-native-sidecar .native-backend { margin-block-end: 16px; }
 #bashkitten-native-sidecar .native-backend + .native-backend { border-top: 1px solid var(--sidecar-line); padding-top: 8px; }
-#bashkitten-native-sidecar :is(.native-backend-heading, .native-chat, .native-chat-tools) { display: flex; min-width: 0; gap: 2px; align-items: center; }
+#bashkitten-native-sidecar .native-environment-group + .native-environment-group { border-top: 1px solid var(--sidecar-line); padding-top: 8px; }
+#bashkitten-native-sidecar :is(.native-backend-heading, .native-chat, .native-section-heading) { display: flex; min-width: 0; gap: 2px; align-items: center; }
+#bashkitten-native-sidecar .native-section-heading { min-height: 34px; padding-inline-start: 8px; font-size: 13px; font-weight: 600; color: var(--sidecar-muted); }
+#bashkitten-native-sidecar .native-section-heading > span { flex: 1; }
 #bashkitten-native-sidecar button { min-width: 30px; min-height: 30px; padding: 5px 7px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: inherit; font: inherit; }
 #bashkitten-native-sidecar button:hover { background: var(--sidecar-active); }
 #bashkitten-native-sidecar button:focus-visible { outline: 1px solid var(--sidecar-text); outline-offset: -1px; }
@@ -30,10 +36,11 @@
 #bashkitten-native-sidecar .native-backend-heading { min-height: 34px; }
 #bashkitten-native-sidecar .native-backend-heading .native-title { font-size: 13px; font-weight: 600; }
 #bashkitten-native-sidecar .native-backend-heading button:not(.native-title) { padding: 0; border-radius: 50%; color: var(--sidecar-muted); }
-#bashkitten-native-sidecar .native-chat-tools { min-height: 41px; margin-bottom: 5px; }
-#bashkitten-native-sidecar .native-chat-tools > button:first-child { flex: 1; text-align: start; min-height: 41px; padding-inline: 10px; }
-#bashkitten-native-sidecar .native-new-chat { display: flex; align-items: center; gap: 10px; }
-#bashkitten-native-sidecar .native-project-add { width: 34px; height: 34px; padding: 7px; color: var(--sidecar-muted); }
+#bashkitten-native-sidecar .native-control-icon { width: 16px; height: 16px; vertical-align: middle; -moz-context-properties: fill; fill: currentColor; }
+#bashkitten-native-sidecar .native-power-track { display: inline-block; position: relative; width: 26px; height: 14px; border-radius: 999px; background: var(--sidecar-line); vertical-align: middle; }
+#bashkitten-native-sidecar .native-power-track::after { content: ""; position: absolute; inset-block-start: 2px; inset-inline-start: 2px; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+#bashkitten-native-sidecar .native-power-toggle[aria-checked="true"] .native-power-track { background: var(--button-background-color-primary, AccentColor); color: var(--button-text-color-primary, AccentColorText); }
+#bashkitten-native-sidecar .native-power-toggle[aria-checked="true"] .native-power-track::after { inset-inline-start: 14px; }
 #bashkitten-native-sidecar svg { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vertical-align: middle; }
 #bashkitten-native-sidecar .native-chat { margin-block: 1px; border-radius: 12px; font-size: 13px; }
 #bashkitten-native-sidecar .native-chat:hover { background: var(--sidecar-surface); }
@@ -44,27 +51,12 @@
 #bashkitten-native-sidecar :is(.native-error, [role="status"]:not(.native-backend-state)) { max-height: 5.5em; overflow: auto; font-size: 12px; }
 #bashkitten-native-sidecar .native-backend-state { display: block; margin: 0 8px 4px; font-size: 12px; }
 #bashkitten-native-sidecar details { padding-inline-start: 8px; margin-block: 5px 12px; }
-#bashkitten-native-sidecar summary { padding: 7px 8px; border-radius: 12px; color: var(--sidecar-muted); font-size: 13px; font-weight: 570; cursor: pointer; }
+#bashkitten-native-sidecar summary { display: flex; align-items: center; padding: 7px 8px; border-radius: 12px; color: var(--sidecar-muted); font-size: 13px; font-weight: 570; cursor: pointer; }
+#bashkitten-native-sidecar summary > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #bashkitten-native-sidecar summary > svg { margin-inline-end: 9px; }
 #bashkitten-native-sidecar summary:hover { background: var(--sidecar-active); }
 #bashkitten-agent-pane[data-connections] #bashkitten-native-workspace { display: none; }
 :root[bashkitten-agent-layout="split"] #bashkitten-native-sidecar { width: 220px; }
-#bashkitten-agent-pane[data-connections] > :is(#bashkitten-agent-state, #bashkitten-agent-views) { display: none !important; }
-#bashkitten-agent-connections { flex: 1; min-height: 0; overflow: auto; padding: 24px; font: menu; }
-#bashkitten-agent-connections .connections-content { width: min(650px, 100%); margin-inline: auto; }
-#bashkitten-agent-connections .connections-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 16px; }
-#bashkitten-agent-connections h2 { margin: 0; font-size: 20px; }
-#bashkitten-agent-connections p { overflow-wrap: anywhere; line-height: 1.5; }
-#bashkitten-agent-connections form, #bashkitten-agent-connections label { display: grid; gap: 8px; }
-#bashkitten-agent-connections form { gap: 12px; }
-#bashkitten-agent-connections input, #bashkitten-agent-connections textarea { min-width: 0; padding: 8px 12px; border: 1px solid var(--border-color, ThreeDShadow); border-radius: 999px; background: Field; color: FieldText; font: inherit; }
-#bashkitten-agent-connections textarea { display: block; box-sizing: border-box; width: 100%; margin-block: 12px; border-radius: 16px; }
-#bashkitten-agent-connections input[type="checkbox"] { justify-self: start; }
-#bashkitten-agent-connections .share-local-content label:has(> input[type="checkbox"]) { grid-template-columns: auto 1fr; align-items: center; }
-#bashkitten-agent-connections .share-local-qr { display: block; width: 320px; max-width: 100%; height: auto; margin-block: 16px; }
-#bashkitten-agent-connections .connection-qr { display: block; box-sizing: border-box; width: fit-content; max-width: 100%; padding: 8px; border-radius: 16px; }
-#bashkitten-agent-connections .connection-qr > img { margin: 0; }
-#bashkitten-agent-connections [hidden] { display: none !important; }
 #bashkitten-agent-button { font-weight: 600; min-width: 110px; margin: 4px 2px; padding-inline: 18px; border-radius: 999px; }
 #bashkitten-agent-button[checked] { background: var(--tab-selected-bgcolor, var(--toolbar-bgcolor, Canvas)); box-shadow: 0 1px 4px #0003; }
 #bashkitten-agent-pane-toggle { min-width: 100px; }

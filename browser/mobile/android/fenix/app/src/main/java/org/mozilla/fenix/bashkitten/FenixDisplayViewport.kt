@@ -2,6 +2,11 @@
 package org.mozilla.fenix.bashkitten
 
 import android.graphics.Rect
+import android.widget.LinearLayout
+import android.widget.TextView
+import android.widget.ImageView
+import android.view.Gravity
+import androidx.appcompat.widget.AppCompatImageButton
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
@@ -31,8 +36,10 @@ class FenixDisplayViewport(
     private val store: BrowserStore,
     private val tabs: TabsUseCases,
     private val sessions: SessionUseCases,
+    private val openSettings: () -> Unit,
 ) : DefaultLifecycleObserver {
     private var viewport: DisplayViewport? = null
+    private var frame: LinearLayout? = null
     private var selectedId: String? = null
     private var started = false
     private var topToolbar = 0
@@ -58,7 +65,34 @@ class FenixDisplayViewport(
                         oldWebVisibility = web.visibility
                         web.visibility = View.INVISIBLE
                         // Browser chrome remains above this native slot.
-                        parent.addView(viewport, 1, CoordinatorLayout.LayoutParams(1, 1))
+                        val context = parent.context
+                        val density = context.resources.displayMetrics.density
+                        val stripHeight = (40 * density).toInt()
+                        val strip = LinearLayout(context).apply { gravity = Gravity.CENTER_VERTICAL }
+                        val colors = context.obtainStyledAttributes(intArrayOf(android.R.attr.colorBackground, android.R.attr.textColorPrimary, android.R.attr.selectableItemBackgroundBorderless))
+                        try {
+                            strip.setBackgroundColor(colors.getColor(0, 0))
+                            strip.addView(TextView(context).apply {
+                                text = "Display · Local"; textSize = 14f
+                                setTextColor(colors.getColorStateList(1))
+                                setPadding((16 * density).toInt(), 0, 0, 0)
+                            }, LinearLayout.LayoutParams(0, -2, 1f))
+                            strip.addView(AppCompatImageButton(context).apply {
+                                setImageResource(com.bashkitten.R.drawable.ic_agent_gear)
+                                imageTintList = colors.getColorStateList(1)
+                                background = colors.getDrawable(2)
+                                scaleType = ImageView.ScaleType.CENTER_INSIDE
+                                val padding = (8 * density).toInt(); setPadding(padding, padding, padding, padding)
+                                contentDescription = "Display setup"; tooltipText = "Display setup"
+                                setOnClickListener { openSettings() }
+                            }, LinearLayout.LayoutParams(stripHeight, stripHeight))
+                        } finally { colors.recycle() }
+                        frame = LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            addView(strip, LinearLayout.LayoutParams(-1, stripHeight))
+                            addView(viewport, LinearLayout.LayoutParams(-1, 0, 1f))
+                        }
+                        parent.addView(frame, 1, CoordinatorLayout.LayoutParams(1, 1))
                         bounds()
                     }
                     viewport?.selected(started)
@@ -76,7 +110,7 @@ class FenixDisplayViewport(
         topToolbar = top; bottomToolbar = bottom; bounds()
     }
     private fun bounds() {
-        val display = viewport ?: return
+        val display = frame ?: return
         if (parent.width <= 0 || parent.height <= 0) return
         val location = IntArray(2)
         parent.getLocationOnScreen(location)
@@ -100,8 +134,9 @@ class FenixDisplayViewport(
     override fun onStop(owner: LifecycleOwner) { started = false; viewport?.selected(false) }
     override fun onDestroy(owner: LifecycleOwner) { destroy() }
     private fun removeViewport() {
-        viewport?.let { it.selected(false); (it.parent as? ViewGroup)?.removeView(it); web.visibility = oldWebVisibility }
-        viewport = null; selectedId = null
+        viewport?.let { it.selected(false); web.visibility = oldWebVisibility }
+        frame?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        frame = null; viewport = null; selectedId = null
     }
     fun destroy() {
         collection.cancel()

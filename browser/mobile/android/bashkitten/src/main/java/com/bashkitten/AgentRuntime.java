@@ -894,20 +894,23 @@ public final class AgentRuntime {
             }
             if (command.equals("notify-turn")) { reply.accept(new JSONObject().put("result", notifyTurn(args)).toString()); return; }
             if (command.equals("sign-in")) { signIn(); reply.accept("{\"result\":true}"); return; }
-            if (!command.equals("notification-settings")) throw new SecurityException("Unsupported browser action.");
-            if (args.has("enabled")) {
-                app.policies.edit().putBoolean("agent.notifications", args.optBoolean("enabled"))
-                    .putBoolean("agent.notifications.hidden", args.optBoolean("onlyWhenHidden", true))
-                    .putBoolean("agent.notifications.preview", args.optBoolean("preview", true)).apply();
-                Activity current = activity.get();
-                if (args.optBoolean("enabled") && current != null && Build.VERSION.SDK_INT >= 33) current.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, AgentPanel.NOTIFICATION_PERMISSION);
-                if (selected.equals("local")) command("notification-settings", new JSONObject().put("settings", args), ignored -> {}, ignored -> {});
-            }
-            boolean permitted = Build.VERSION.SDK_INT < 33 || app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
-            JSONObject result = new JSONObject().put("enabled", permitted && app.policies.getBoolean("agent.notifications", false))
-                .put("onlyWhenHidden", app.policies.getBoolean("agent.notifications.hidden", true)).put("preview", app.policies.getBoolean("agent.notifications.preview", true));
-            reply.accept(new JSONObject().put("result", result).toString());
+            throw new SecurityException("Unsupported browser action.");
         } catch (Exception exception) { try { reply.accept(new JSONObject().put("error", exception.getMessage()).toString()); } catch (JSONException ignored) {} }
+    }
+    /** Owns ordinary completed-turn notification preferences; delivery still uses the existing owner. */
+    public JSONObject notificationSettings(Activity requester, JSONObject args) throws JSONException {
+        if (args.has("enabled")) {
+            app.policies.edit().putBoolean("agent.notifications", args.optBoolean("enabled"))
+                .putBoolean("agent.notifications.hidden", args.optBoolean("onlyWhenHidden", true))
+                .putBoolean("agent.notifications.preview", args.optBoolean("preview", true)).apply();
+            if (args.optBoolean("enabled") && requester != null && Build.VERSION.SDK_INT >= 33)
+                requester.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, AgentPanel.NOTIFICATION_PERMISSION);
+            if (selected.equals("local")) command("notification-settings", new JSONObject().put("settings", args), ignored -> {}, ignored -> {});
+        }
+        boolean permitted = Build.VERSION.SDK_INT < 33 || app.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+        return new JSONObject().put("enabled", permitted && app.policies.getBoolean("agent.notifications", false))
+            .put("onlyWhenHidden", app.policies.getBoolean("agent.notifications.hidden", true))
+            .put("preview", app.policies.getBoolean("agent.notifications.preview", true));
     }
     void agentPageReady(GeckoSession source, String address) {
         if (source == session && desired && state.equals("on") && selected.equals("local")) {

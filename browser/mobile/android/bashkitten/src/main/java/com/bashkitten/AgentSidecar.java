@@ -2,7 +2,6 @@
 package com.bashkitten;
 
 import android.app.Activity;
-import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.TypedArray;
 import android.graphics.Typeface;
@@ -19,7 +18,7 @@ import java.util.*;
 import java.util.function.Consumer;
 import org.json.*;
 
-/** Native narrow-screen drawer. Names are text; only stable backend/session IDs route. */
+/** Native responsive sidebar. Names are text; only stable backend/session IDs route. */
 public final class AgentSidecar {
     private final Activity activity;
     private final AgentRuntime runtime;
@@ -31,6 +30,10 @@ public final class AgentSidecar {
     private final LinearLayout body;
     private final TextView notice;
     private final FrameLayout drawer;
+    private final View backdrop;
+    private FrameLayout content;
+    private View chatBody;
+    private boolean compact = true;
     private final androidx.activity.OnBackPressedCallback back = new androidx.activity.OnBackPressedCallback(false) {
         @Override public void handleOnBackPressed() { close(); }
     };
@@ -47,14 +50,10 @@ public final class AgentSidecar {
         body = column(); body.setPadding(dp(8), dp(7), dp(8), dp(16)); scroll.addView(body);
         notice = text(""); notice.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         drawer = new FrameLayout(activity); drawer.setVisibility(View.GONE);
-        View backdrop = new View(activity); backdrop.setBackgroundColor(0x66000000); backdrop.setContentDescription("Close sidebar"); backdrop.setOnClickListener(ignored -> close());
+        backdrop = new View(activity); backdrop.setBackgroundColor(0x66000000); backdrop.setContentDescription("Close sidebar"); backdrop.setOnClickListener(ignored -> close());
         drawer.addView(backdrop, new FrameLayout.LayoutParams(-1, -1));
         scroll.setClickable(true); scroll.setClipToOutline(true);
         drawer.addView(scroll, new FrameLayout.LayoutParams(dp(300), -1, Gravity.START));
-        drawer.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
-            int width = Math.min(dp(300), Math.round((right - left) * .86f));
-            if (scroll.getLayoutParams().width != width) { scroll.getLayoutParams().width = width; scroll.requestLayout(); }
-        });
     }
     private int dp(int value) { return Math.round(value * activity.getResources().getDisplayMetrics().density); }
     private LinearLayout column() { LinearLayout result = new LinearLayout(activity); result.setOrientation(LinearLayout.VERTICAL); return result; }
@@ -110,34 +109,53 @@ public final class AgentSidecar {
     }
     private void error(String value) { notice.setText(value); notice.setVisibility(value == null || value.isEmpty() ? View.GONE : View.VISIBLE); }
     private JSONObject value(Object... pairs) { JSONObject value = new JSONObject(); try { for (int i = 0; i < pairs.length; i += 2) value.put((String) pairs[i], pairs[i + 1]); } catch (JSONException error) { throw new IllegalArgumentException(error); } return value; }
-    void attach(FrameLayout content) { content.addView(drawer, new FrameLayout.LayoutParams(-1, -1)); }
-    private boolean isOpen() { return drawer.getVisibility() == View.VISIBLE; }
+    void attach(FrameLayout content, View chatBody) {
+        this.content = content; this.chatBody = chatBody;
+        content.addView(drawer, new FrameLayout.LayoutParams(-1, -1, Gravity.START));
+        content.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> layout());
+        layout();
+    }
+    public boolean isOpen() { return drawer.getVisibility() == View.VISIBLE; }
+    private void layout() {
+        if (content == null || content.getWidth() <= 0) return;
+        compact = content.getWidth() < dp(720);
+        int width = compact ? Math.min(dp(300), Math.round(content.getWidth() * .86f)) : dp(300);
+        int overlayWidth = compact ? -1 : width;
+        if (drawer.getLayoutParams().width != overlayWidth) { drawer.getLayoutParams().width = overlayWidth; drawer.requestLayout(); }
+        if (scroll.getLayoutParams().width != width) { scroll.getLayoutParams().width = width; scroll.requestLayout(); }
+        backdrop.setVisibility(compact ? View.VISIBLE : View.GONE);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) chatBody.getLayoutParams();
+        int inset = isOpen() && !compact ? width : 0;
+        if (params.getMarginStart() != inset) { params.setMarginStart(inset); chatBody.setLayoutParams(params); }
+        GradientDrawable surface = shape(background, 0);
+        if (compact) surface.setCornerRadii(new float[]{0, 0, dp(24), dp(24), dp(24), dp(24), 0, 0});
+        scroll.setBackground(surface);
+    }
     public void toggle() {
         if (isOpen()) { close(); return; }
         readPalette();
-        GradientDrawable surface = shape(background, 0); surface.setCornerRadii(new float[]{0, 0, dp(24), dp(24), dp(24), dp(24), 0, 0});
-        scroll.setBackground(surface); drawer.setVisibility(View.VISIBLE);
+        drawer.setVisibility(View.VISIBLE); layout();
         if (activity instanceof androidx.activity.ComponentActivity) {
             back.setEnabled(true); ((androidx.activity.ComponentActivity) activity).getOnBackPressedDispatcher().addCallback(back);
         }
         render(); refresh();
     }
     private void cancelSelection() {
-        generation++; app.main.removeCallbacks(poll);
+        generation++; loading = false; app.main.removeCallbacks(poll);
         for (AgentRuntime.Listener listener : pendingSelections) runtime.detach(listener);
         pendingSelections.clear();
     }
-    public void close() { cancelSelection(); back.setEnabled(false); back.remove(); drawer.setVisibility(View.GONE); }
+    public void close() { cancelSelection(); back.setEnabled(false); back.remove(); drawer.setVisibility(View.GONE); layout(); }
     public void changed() { if (isOpen()) { render(); refresh(); } }
     private void refresh() {
         if (loading || !isOpen()) return;
         loading = true; final int epoch = generation;
-        runtime.remotes(value -> { if (epoch == generation) { remotes = value; render(); } }, this::error);
+        runtime.remotes(value -> { if (epoch == generation) { remotes = value; render(); } }, message -> { if (epoch == generation) error(message); });
         final String backend = runtime.selected;
         runtime.navigation("snapshot", value(), snapshot -> {
-            loading = false; if (epoch != generation) return;
+            if (epoch != generation) return; loading = false;
             snapshots.put(backend, snapshot); render(); app.main.removeCallbacks(poll); app.main.postDelayed(poll, 2000);
-        }, message -> { loading = false; if (epoch != generation) return; app.main.removeCallbacks(poll); app.main.postDelayed(poll, 2000); });
+        }, message -> { if (epoch != generation) return; loading = false; app.main.removeCallbacks(poll); app.main.postDelayed(poll, 2000); });
     }
     private void awaitReady(String backend, Runnable ready, int epoch, long until) {
         if (epoch != generation || !backend.equals(runtime.selected)) return;
@@ -167,15 +185,32 @@ public final class AgentSidecar {
     private void navigate(String backend, String action, JSONObject value, boolean dismiss) {
         select(backend, () -> runtime.navigation(action, value, snapshot -> {
             if (snapshot.has("sessions")) snapshots.put(backend, snapshot);
-            render(); if (dismiss) close();
+            render(); if (dismiss && compact) close();
         }, this::error));
     }
     private void render() {
         final int y = scroll.getScrollY(); body.removeAllViews();
         notice.setVisibility(notice.getText().length() == 0 ? View.GONE : View.VISIBLE); body.addView(notice);
+        Button display = button("Display", () -> { close(); com.bashkitten.display.DisplayTabs.open(activity, "local"); });
+        android.graphics.drawable.Drawable screen = activity.getDrawable(R.drawable.ic_agent_display).mutate(); screen.setTint(muted); screen.setBounds(0, 0, dp(18), dp(18));
+        display.setCompoundDrawablesRelative(screen, null, null, null); display.setCompoundDrawablePadding(dp(10)); body.addView(display);
+        divider();
         backend("local", "Local", false);
-        for (Iterator<String> keys = remotes.keys(); keys.hasNext();) { String id = keys.next(); JSONObject record = remotes.optJSONObject(id); if (record != null) { divider(); backend(id, record.optString("name", id), true); } }
+        divider();
+        section("Remotes", "Connect to remote", () -> AgentSettingsActivity.open(activity, "remotes"));
+        boolean firstRemote = true;
+        for (Iterator<String> keys = remotes.keys(); keys.hasNext();) {
+            String id = keys.next(); JSONObject record = remotes.optJSONObject(id); if (record == null) continue;
+            if (!firstRemote) divider(); firstRemote = false;
+            backend(id, record.optString("name", id), true);
+        }
         scroll.post(() -> scroll.scrollTo(0, y));
+    }
+    private void section(String title, String description, Runnable action) {
+        LinearLayout heading = row(); TextView label = text(title); label.setTypeface(null, Typeface.BOLD);
+        heading.addView(label, new LinearLayout.LayoutParams(0, dp(36), 1));
+        Button add = button("+", action); add.setContentDescription(description); add.setTooltipText(description); add.setTextSize(20); add.setGravity(Gravity.CENTER);
+        heading.addView(add, new LinearLayout.LayoutParams(dp(34), dp(34))); body.addView(heading);
     }
     private void backend(String id, String name, boolean remote) {
         LinearLayout heading = row(); Button title = button(name, () -> select(id, this::refresh)); title.setTypeface(null, Typeface.BOLD);
@@ -187,22 +222,16 @@ public final class AgentSidecar {
         power.setChecked(remote ? runtime.remoteConnected(id) : runtime.localIsOnRequested());
         power.setOnCheckedChangeListener((button, checked) -> runtime.setBackendOn(id, checked, this::error)); heading.addView(power);
         if (remote) heading.addView(icon(name + " actions", R.drawable.ic_agent_more, () -> remoteActions(id, name)));
-        else { heading.addView(icon("Local settings", R.drawable.ic_agent_settings, this::localSettings)); heading.addView(icon("Open Display", R.drawable.ic_agent_display, () -> com.bashkitten.display.DisplayTabs.open(activity, "local"))); }
         body.addView(heading);
         String status = id.equals(runtime.selected) ? runtime.state : remote ? (runtime.remoteConnected(id) ? "Connected" : "Disconnected") : (runtime.localIsOnRequested() ? "On requested" : "Off");
         title.setContentDescription(name + ", " + status); title.setTooltipText(status);
         if (id.equals(runtime.selected) && !runtime.error.isEmpty()) body.addView(text(runtime.error));
-        LinearLayout tools = row(); Button newChat = button("New chat", () -> navigate(id, "new", value(), true));
-        android.graphics.drawable.Drawable write = activity.getDrawable(R.drawable.ic_agent_new_chat).mutate(); write.setTint(muted); write.setBounds(0, 0, dp(17), dp(17));
-        newChat.setCompoundDrawablesRelative(write, null, null, null); newChat.setCompoundDrawablePadding(dp(10));
-        tools.addView(newChat, new LinearLayout.LayoutParams(0, dp(41), 1));
-        tools.addView(icon("New project", R.drawable.ic_agent_project_add, () -> select(id, () -> projectPicker(id)))); body.addView(tools);
+        section("Projects", "Create project in " + name, () -> select(id, () -> projectPicker(id)));
         JSONObject snapshot = snapshots.get(id);
-        if (snapshot == null) { body.addView(text("Select to load chats")); return; }
+        if (snapshot == null) { section("Chats", "New standalone chat in " + name, () -> navigate(id, "new", value(), true)); body.addView(text("Select to load chats")); return; }
         JSONArray chats = snapshot.optJSONArray("sessions"), projects = snapshot.optJSONArray("projects");
         if (chats == null) return;
         Set<String> ids = new HashSet<>(); for (int i = 0; i < chats.length(); i++) ids.add(chats.optJSONObject(i).optString("id"));
-        for (int i = 0; i < chats.length(); i++) { JSONObject chat = chats.optJSONObject(i); if ((chat.isNull("projectId") || chat.optString("projectId").isEmpty()) && !ids.contains(chat.optString("subagentParent"))) chat(id, chat, chats, projects, 0, new HashSet<>()); }
         if (projects != null) for (int i = 0; i < projects.length(); i++) {
             JSONObject project = projects.optJSONObject(i); String projectId = project.optString("id"), expansionKey = id + ":project:" + projectId;
             LinearLayout group = row();
@@ -210,10 +239,14 @@ public final class AgentSidecar {
             group.addView(expand);
             Button projectTitle = button(project.optString("name"), () -> { if (!collapsed.remove(expansionKey)) collapsed.add(expansionKey); render(); });
             projectTitle.setTextSize(13); projectTitle.setTextColor(muted); group.addView(projectTitle, new LinearLayout.LayoutParams(0, dp(34), 1));
-            group.addView(icon("New chat in " + project.optString("name"), R.drawable.ic_agent_new_chat, () -> navigate(id, "new", value("projectId", projectId), true)));
+            Button newChat = button("+", () -> navigate(id, "new", value("projectId", projectId), true));
+            newChat.setContentDescription("New chat in " + project.optString("name")); newChat.setTooltipText(newChat.getContentDescription()); newChat.setTextSize(20); newChat.setGravity(Gravity.CENTER);
+            group.addView(newChat, new LinearLayout.LayoutParams(dp(34), dp(34)));
             group.addView(icon("Project actions", R.drawable.ic_agent_more, () -> select(id, () -> projectActions(id, project)))); body.addView(group);
             if (!collapsed.contains(expansionKey)) for (int j = 0; j < chats.length(); j++) { JSONObject chat = chats.optJSONObject(j); if (projectId.equals(chat.optString("projectId")) && !ids.contains(chat.optString("subagentParent"))) chat(id, chat, chats, projects, 1, new HashSet<>()); }
         }
+        section("Chats", "New standalone chat in " + name, () -> navigate(id, "new", value(), true));
+        for (int i = 0; i < chats.length(); i++) { JSONObject chat = chats.optJSONObject(i); if ((chat.isNull("projectId") || chat.optString("projectId").isEmpty()) && !ids.contains(chat.optString("subagentParent"))) chat(id, chat, chats, projects, 0, new HashSet<>()); }
         if (!snapshot.isNull("nextOffset")) body.addView(button("Load more chats", () -> navigate(id, "more", value(), false)));
     }
     private void chat(String backend, JSONObject chat, JSONArray all, JSONArray projects, int depth, Set<String> seen) {
@@ -224,7 +257,7 @@ public final class AgentSidecar {
         if (hasChildren) {
             ImageButton expand = icon(collapsed.contains(expansionKey) ? "Expand subagents" : "Collapse subagents", R.drawable.ic_agent_chevron, () -> { if (!collapsed.remove(expansionKey)) collapsed.add(expansionKey); render(); });
             expand.setRotation(collapsed.contains(expansionKey) ? 0 : 90); row.addView(expand);
-        } else { View indent = new View(activity); row.addView(indent, new LinearLayout.LayoutParams(dp(24), dp(1))); }
+        }
         Button open = button(chat.optString("title"), () -> navigate(backend, "open", value("id", id), true)); open.setTextSize(13);
         boolean active = backend.equals(runtime.selected) && id.equals(snapshots.get(backend).optString("selected"));
         rowBackground(row, active, 12); open.setSelected(active); row.addView(open, new LinearLayout.LayoutParams(0, dp(36), 1));
@@ -279,14 +312,6 @@ public final class AgentSidecar {
             if (selected[0] == null || !backend.equals(runtime.selected) || session != runtime.session) { failure.setText("Choose a folder on this backend."); return; }
             runtime.navigation("project-create", value("name", name.getText().toString(), "cwd", selected[0]), result -> { snapshots.put(backend, result); dialog.dismiss(); render(); }, failure::setText);
         })); dialog.show(); load.accept("~");
-    }
-    private void localSettings() {
-        dialog().setTitle("Local settings").setItems(new String[]{"Chat settings", "LocalAI", "Display setup", "Share Local"}, (dialog, which) -> {
-            if (which == 0) navigate("local", "settings", value(), true);
-            if (which == 1) new AgentLocalAIDialog().show(((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-localai");
-            if (which == 2) new AgentDisplayDialog().show(((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-display");
-            if (which == 3) activity.startActivity(new Intent(activity, AgentShareActivity.class));
-        }).show();
     }
     private void remoteActions(String id, String name) {
         dialog().setTitle(name).setItems(new String[]{"Rename", "Connect to phone", "Delete remote"}, (dialog, which) -> {

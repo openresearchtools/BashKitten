@@ -4,9 +4,9 @@ import { BashKittenDrafts } from "resource:///modules/BashKittenDrafts.sys.mjs";
 import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
-import { localAISettings } from "resource:///modules/LocalAI.sys.mjs";
-import { serviceSettings } from "resource:///modules/ServiceSettings.sys.mjs";
-import { remoteServices } from "resource:///modules/RemoteServices.sys.mjs";
+import { BashKittenSettings, SETTINGS_URI } from "resource:///modules/BashKittenSettings.sys.mjs";
+import { LinuxPerformanceMonitor } from "resource:///modules/Performance.sys.mjs";
+import { remoteSettingsCall } from "resource:///modules/RemoteSettings.sys.mjs";
 import { NativeSidecar } from "resource:///modules/NativeSidecar.sys.mjs";
 import { connectMachine, disconnectMachine } from "resource:///modules/ContainerConnection.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
@@ -110,7 +110,7 @@ function control(command, data = {}) {
 }
 async function localControl(command, data = {}) {
   const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices"];
-  if (![...machineCommands, "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
+  if (![...machineCommands, "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-record", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -187,30 +187,23 @@ class AgentView {
     const doc = this.doc;
     this.win.windowUtils.loadSheetUsingURIString("chrome://browser/content/bashkitten/agent/agent.css", Ci.nsIStyleSheetService.AUTHOR_SHEET);
     this.pane = xul(doc, "vbox", { id: "bashkitten-agent-pane" });
-    const bar = html(doc, "div", { id: "bashkitten-agent-bar", style: "display:flex" });
-    bar.append(html(doc, "label", {}, "Agent"));
     this.sidecar = new NativeSidecar(this, control);
-    const add = html(doc, "button", { type: "button", "aria-label": "Add backend", title: "Connect remote or create container VM" }, "+");
-    add.addEventListener("click", () => this.sidecar.add()); bar.append(add);
     this.choice = { value: "" };
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
-    this.localAIButton = html(doc, "button", { type: "button" }, "LocalAI");
-    this.localAIButton.addEventListener("click", () => this.run(() => this.localAI()));
-    bar.append(this.localAIButton);
-    const menu = html(doc, "button", { id: "bashkitten-agent-menu", type: "button", "aria-label": "Browser menu", "aria-haspopup": "menu" }, "☰");
-    menu.addEventListener("click", event => this.win.PanelUI.toggle(event, menu));
-    bar.append(menu);
     this.state = html(doc, "section", { id: "bashkitten-agent-state" });
     this.viewBox = xul(doc, "vbox", { id: "bashkitten-agent-views", flex: "1" });
     const workspace = xul(doc, "hbox", { id: "bashkitten-native-workspace", flex: "1" });
     const chat = xul(doc, "vbox", { id: "bashkitten-native-chat", flex: "1" }); chat.append(this.state, this.viewBox);
-    workspace.append(this.sidecar.root, chat); this.pane.append(bar, workspace);
+    workspace.append(this.sidecar.root, chat); this.pane.append(workspace);
     const tabbox = doc.getElementById("tabbrowser-tabbox");
     tabbox.before(this.pane);
-    this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "Agent", class: "toolbarbutton-1", role: "tab", removable: "false", skipintoolbarset: "true", tooltiptext: "Agent" });
+    this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "BashKitten", class: "toolbarbutton-1", role: "tab", removable: "false", skipintoolbarset: "true", tooltiptext: "BashKitten" });
     this.button.addEventListener("command", () => this.show());
     doc.getElementById("tabbrowser-tabs").before(this.button);
+    this.chatsToggle = xul(doc, "toolbarbutton", { id: "bashkitten-chats-toggle", image: "chrome://branding/content/icon32.png", class: "toolbarbutton-1", tooltiptext: "Chats", "aria-label": "Chats", "aria-controls": "bashkitten-native-sidecar", "aria-expanded": String(this.sidecar.isOpen()) });
+    this.chatsToggle.addEventListener("command", () => { if (this.pane.hidden || this.connectionsPanel) { this.show(); this.sidecar.open(); } else this.sidecar.toggle(); });
+    this.button.before(this.chatsToggle);
     this.paneToggle = xul(doc, "toolbarbutton", { id: "bashkitten-agent-pane-toggle", label: "Hide Agent", class: "toolbarbutton-1", overflows: "false", tooltiptext: "Show or hide the Agent pane" });
     this.paneToggle.addEventListener("command", () => {
       this.browseWithAgent = !this.browseWithAgent;
@@ -222,8 +215,19 @@ class AgentView {
     const nativeMenu = xul(doc, "toolbarbutton", { id: "appMenu-bashkitten-about", label: "About BashKitten", class: "subviewbutton" });
     nativeMenu.addEventListener("command", () => { this.win.PanelUI.hide(); this.win.openAboutDialog(); });
     appMenu.before(nativeMenu);
+    this.installSettingsMenu();
+    // Move the real Firefox control while its navigation toolbar is collapsed.
+    // Keep its original node/listeners/anchor and exact browser-mode placement.
+    this.browserMenuControl = doc.getElementById("PanelUI-button");
+    this.browserMenuHome = doc.createComment("BashKitten Firefox menu home");
+    this.browserMenuControl.before(this.browserMenuHome);
+    this.browserMenuHost = xul(doc, "hbox", { id: "bashkitten-browser-menu-host", align: "center" });
+    doc.querySelector('#TabsToolbar > .titlebar-spacer[type="post-tabs"]').before(this.browserMenuHost);
     for (const item of doc.querySelectorAll('[command="cmd_newNavigator"], [command="Tools:PrivateBrowsing"], [command^="Profiles:"], #key_newNavigator, #key_privatebrowsing')) item.remove();
-    this.observer = { observe: () => this.refreshRemotes().catch(console.error) };
+    this.observer = { observe: () => {
+      this.refreshRemotes().catch(console.error);
+      if (this.settingsBrowser) BashKittenSettings.notify(this.settingsBrowser, "remotes.changed", {});
+    } };
     Services.obs.addObserver(this.observer, "bashkitten-agent-remote-changed");
     this.win.addEventListener("unload", () => this.destroy(), { once: true });
     // Listen to explicit tab choices, not TabSelect: restoration and the
@@ -256,6 +260,32 @@ class AgentView {
     DesktopLifetime.started();
   }
 
+  installSettingsMenu() {
+    const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "menu" });
+    const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
+    const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "BashKitten settings", "aria-label": "BashKitten settings", "aria-haspopup": "menu" });
+    gear.addEventListener("command", event => popup.openPopup(gear, "after_end", 0, 0, false, false, event));
+    this.button.after(gear);
+    for (const [section, title, image] of [
+      ["localai", "Local AI", "chrome://global/skin/icons/lightbulb.svg"],
+      ["notifications", "Notifications", "chrome://browser/skin/notification-fill-12.svg"],
+      ["phone-use", "Phone/Computer Use", "chrome://browser/skin/device-desktop.svg"],
+      ["remotes", "Remote Connections", "chrome://global/skin/icons/link.svg"],
+      ["telephone", "Telephone", "chrome://browser/skin/device-phone.svg"],
+      ["performance", "Performance", "chrome://global/skin/icons/performance.svg"],
+      ["providers", "Providers", "chrome://browser/skin/login.svg"],
+      ["general", "General settings", "chrome://global/skin/icons/settings.svg"],
+    ]) {
+      const item = xul(this.doc, "toolbarbutton", { label: title, image, class: "subviewbutton subviewbutton-iconic", role: "menuitem" });
+      item.addEventListener("command", () => {
+        popup.hidePopup();
+        this.openSettings(section).catch(error => this.dialog(title).content.append(html(this.doc, "p", { role: "alert" }, error.message)));
+      });
+      body.append(item);
+    }
+    popup.append(body); this.doc.getElementById("mainPopupSet").append(popup);
+  }
+
   async run(operation, { replace = false } = {}) {
     if (this.busy && (!replace || this.off) || DesktopLifetime.quitting) return;
     const running = {};
@@ -277,6 +307,7 @@ class AgentView {
     this.doc.documentElement.setAttribute("bashkitten-agent-layout", "full");
     this.button.setAttribute("checked", "true");
     this.button.setAttribute("aria-selected", "true");
+    if (this.browserMenuControl && this.browserMenuHost) this.browserMenuHost.append(this.browserMenuControl);
     this.activeBrowser?.focus();
   }
   browse() {
@@ -288,6 +319,7 @@ class AgentView {
     this.paneToggle.setAttribute("label", split ? "Hide Agent" : "Show Agent");
     this.button.removeAttribute("checked");
     this.button.setAttribute("aria-selected", "false");
+    if (this.browserMenuControl && this.browserMenuHome?.parentNode) this.browserMenuHome.after(this.browserMenuControl);
   }
 
   saveFileFrom(browser, url, referrerInfo) {
@@ -425,7 +457,6 @@ class AgentView {
 
   async refreshRemotes() {
     this.choice.value = this.selection;
-    this.localAIButton.hidden = Boolean(this.selection);
     await this.sidecar.refresh();
   }
 
@@ -436,7 +467,6 @@ class AgentView {
     this.cancelDocumentTransfers();
     this.closeConnections();
     this.selection = id;
-    this.localAIButton.hidden = Boolean(id);
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("remote switch");
     // Revoke pending remote authority now; Local must not wait for its process to exit.
@@ -463,7 +493,7 @@ class AgentView {
 
   async selectMachine(id, epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
     this.selection = id; this.remote = null; this.machineId = id;
-    this.off = false; this.localAIButton.hidden = true;
+    this.off = false;
     this.message("Connecting to container", "Opening its protected Agent…");
     const connection = await connectMachine(id, control, error => {
       if (epoch !== this.selectionEpoch || this.selection !== id || this.off) return;
@@ -504,7 +534,6 @@ class AgentView {
 
   async selectRemote(connection, forceLogin = false, epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
     this.selection = connection.id;
-    this.localAIButton.hidden = true;
     this.remote = connection;
     this.off = false;
     this.choice.value = connection.id;
@@ -523,7 +552,6 @@ class AgentView {
 
   async local(epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
     this.machineId = null;
-    this.localAIButton.hidden = false;
     this.selection = "";
     this.remote = null;
     this.choice.value = "";
@@ -878,52 +906,154 @@ class AgentView {
     }
   }
 
-  async localAI() {
-    if (this.selection || this.remote) throw new Error("Select Local to open LocalAI.");
-    this.closeConnections();
-    const { panel, content } = this.connectionPanel("LocalAI");
-    await localAISettings(content, control, this.win, () => this.connectionsPanel === panel && !this.selection && !this.remote);
+  async localAI() { return this.openSettings("localai"); }
+  async connectToPhone(id, title = "Telephone") { return this.openSettings(title === "Notifications" ? "notifications" : "telephone", { backendId: id }); }
+  async shareMachine(id) { return this.openSettings("share-local", { backendId: id }); }
+
+  async phoneStatus(backend) {
+    let result;
+    if (backend.kind === "machine") result = await this.machineLocalControl(backend.id, "phone-status");
+    else if (backend.kind === "local") result = await control("phone-status");
+    else {
+      const connection = await AgentRemotes.connection(backend.id);
+      const response = await AgentRemotes.request(connection, "/api/phone/status");
+      if (response.status !== 200) throw new Error(response.data?.error || "Sign in to this backend before checking its phone registration.");
+      result = response.data;
+    }
+    return { registrations: (result.registrations || []).map(({ name, connected, telephony, messages, lastSeenAt }) => ({ name, connected, telephony, messages, lastSeenAt })) };
   }
 
-  async connectToPhone(id) {
-    const backend = this.sidecar.backends?.find(item => item.id === id);
+  async openSettings(section, options = {}) {
+    this.show();
+    if (["general", "providers"].includes(section)) {
+      await this.sidecar.select(this.selection || "local");
+      return this.sidecar.navigation(section);
+    }
+    const backend = this.sidecar.backends?.find(item => item.id === (options.backendId || this.selection || "local"));
     if (!backend) throw new Error("This backend is no longer available.");
-    const { dialog, content } = this.dialog(backend.name + " · Phone"), status = html(this.doc, "p", { role: "status" }, "Checking phone registration…");
-    content.append(status);
-    try {
-      let result;
-      if (backend.kind === "machine") result = await this.machineLocalControl(id, "phone-status");
-      else if (backend.kind === "local") result = await control("phone-status");
-      else {
-        await this.sidecar.select(id);
-        const entry = ownedViews.get(this.activeBrowser);
-        if (entry?.connection.id !== id) throw new Error("The selected backend changed.");
-        const response = await AgentRemotes.request(entry.connection, "/api/phone/status");
-        if (response.status !== 200) throw new Error(response.data?.error || "Sign in to this backend before checking its phone registration.");
-        result = response.data;
+    if (section === "localai" && backend.kind !== "local") throw new Error("Select Local to open Local AI on this computer.");
+    if (section === "share-local" && backend.kind === "remote") throw new Error("Sharing is configured on the owning device.");
+    if (section === "machine" && backend.kind !== "machine") throw new Error("Choose a managed container.");
+    let epoch = this.selectionEpoch;
+    const panel = xul(this.doc, "vbox", { id: "bashkitten-settings-view", flex: "1" });
+    const browser = xul(this.doc, "browser", { type: "content", remote: "true", remoteType: "web", maychangeremoteness: "true", messagemanagergroup: "bashkitten-settings", flex: "1", disableglobalhistory: "true", "bashkitten-protected": "true" });
+    panel.append(browser);
+    this.connectionsPanel = panel; this.settingsBrowser = browser;
+    this.pane.append(panel); this.pane.setAttribute("data-connections", "true");
+    let closed = false;
+    const current = () => !closed && this.connectionsPanel === panel && this.selectionEpoch === epoch && !DesktopLifetime.quitting;
+    const request = (name, value = {}) => backend.kind === "machine" ? this.machineLocalControl(backend.id, name, value) : control(name, value);
+    const tests = new Set(), setups = new Map(), monitor = new LinuxPerformanceMonitor();
+    let performanceSession = null, performanceTask = null;
+    const pause = () => {
+      monitor.reset();
+      if (performanceSession) { const session = performanceSession; performanceSession = null; void control("performance-close", { session }).catch(() => {}); }
+    };
+    const theme = () => this.win.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const themeObserver = new this.win.MutationObserver(() => BashKittenSettings.notify(browser, "theme", { theme: theme() }));
+    themeObserver.observe(this.doc.documentElement, { attributes: true, attributeFilter: ["lwtheme", "lwthemetextcolor", "style"] });
+    const themeMedia = this.win.matchMedia("(prefers-color-scheme: dark)");
+    const themeChanged = () => BashKittenSettings.notify(browser, "theme", { theme: theme() });
+    themeMedia.addEventListener("change", themeChanged);
+    const cleanup = () => {
+      if (closed) return; closed = true; pause(); themeObserver.disconnect(); themeMedia.removeEventListener("change", themeChanged);
+      for (const owner of tests) void control("localai-router-model-test-cancel", { owner }).catch(console.error);
+      for (const setupId of setups.keys()) void request("share-cancel", { setupId }).catch(console.error);
+      tests.clear(); setups.clear();
+    };
+    const call = async (name, value) => {
+      if (!current() || closed) throw new Error("The settings owner changed.");
+      if (name.startsWith("machines.")) {
+        if (backend.kind !== "machine" || value.id !== undefined && value.id !== backend.id) throw new Error("This operation belongs to another container.");
+        if (["machines.connect-phone", "machines.share-local"].includes(name)) {
+          this.win.setTimeout(() => { if (current()) this.openSettings(name === "machines.connect-phone" ? "telephone" : "share-local", { backendId: backend.id }).catch(console.error); }, 0);
+          return { ok: true };
+        }
+        const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
+        if (name === "machines.display-capabilities") return BashKittenDisplay.capabilities();
+        const payload = { ...value, id: backend.id };
+        delete payload.displayCapabilities;
+        if (["machines.save", "machines.start", "machines.restart", "machines.retry"].includes(name)) payload.displayCapabilities = BashKittenDisplay.capabilities();
+        const result = await control(name, payload);
+        if (current() && ["machines.stop", "machines.delete"].includes(name) && this.selection === backend.id) {
+          await this.disconnectSelected();
+          if (this.connectionsPanel === panel && this.selection === backend.id) epoch = this.selectionEpoch;
+        }
+        if (current() && (name !== "machines.operation" || ["complete", "failed", "cancelled"].includes(result.operation?.state || result.state))) void this.sidecar.refresh().catch(console.error);
+        return result;
       }
-      if (!dialog.open) return;
-      const registrations = result?.registrations || [];
-      status.textContent = registrations.length ? "Phone registration belongs to this backend. Calling and message preferences are managed on the phone." : "No phone is registered with this backend.";
-      for (const phone of registrations) {
-        const group = html(this.doc, "section");
-        group.append(html(this.doc, "h3", {}, phone.name || "Phone"),
-          html(this.doc, "p", {}, phone.connected ? "Phone checked in within the last minute." : "Phone has not checked in recently."),
-          html(this.doc, "p", {}, `Calls: ${phone.telephony ? "On" : "Off"} · Replyable messages: ${phone.messages ? "On" : "Off"}`));
-        if (Number.isFinite(phone.lastSeenAt) && phone.lastSeenAt > 0) group.append(html(this.doc, "p", {}, "Last seen: " + new Date(phone.lastSeenAt).toLocaleString()));
-        content.append(group);
+      if (name === "phone-status") return this.phoneStatus(backend);
+      if (name === "phone-share") {
+        if (backend.kind === "remote") throw new Error("Sharing is configured on the owning device.");
+        this.win.setTimeout(() => { if (current()) this.openSettings("share-local", { backendId: backend.id }).catch(console.error); }, 0);
+        return { ok: true };
       }
-      content.append(html(this.doc, "p", {}, "On your phone, open this backend's saved remote in BashKitten, then choose Connect to phone. A container needs its own shared connection. A recent check-in does not confirm that calling or speech setup is ready."));
-      if (backend.kind !== "remote") {
-        const share = html(this.doc, "button", { type: "button" }, "Share Local");
-        share.addEventListener("click", () => { dialog.close(); this.run(() => backend.kind === "machine" ? this.shareMachine(id) : this.shareLocal()); }); content.append(share);
+      if (name === "desktop-display-status") return { available: backend.kind === "machine", backendName: backend.name, reason: backend.kind === "machine" ? "" : "Computer controls are available inside managed containers. Phone controls are configured on the phone." };
+      if (name === "desktop-display-open") {
+        if (backend.kind !== "machine") throw new Error("Select a managed container to open its desktop.");
+        await this.openMachineDisplay(backend.id); return { ok: true };
       }
-    } catch (error) { if (dialog.open) status.textContent = error.message; }
-  }
-
-  async shareMachine(id) {
-    const state = await control("machines.get", { id });
-    return this.shareLocal((command, value = {}) => this.machineLocalControl(id, command, value), "Share " + state.machine.name, id);
+      if (name.startsWith("remotes.")) return remoteSettingsCall(this, name, value, current, () => { epoch = this.selectionEpoch; });
+      if (name === "clipboard-copy") {
+        if (typeof value.text !== "string") throw new Error("Expected text to copy.");
+        Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value.text); return { ok: true };
+      }
+      if (name === "localai-open-record") return control("localai-record", value);
+      if (name === "performance-close") { pause(); return { ok: true }; }
+      if (name === "performance-sample") {
+        if (this.pane.hidden || this.doc.hidden || !this.doc.hasFocus() || this.win.windowState === this.win.STATE_MINIMIZED) { pause(); throw new Error("Performance sampling is paused while the view is hidden."); }
+        if (performanceTask) return performanceTask;
+        const session = performanceSession ||= Services.uuid.generateUUID().toString().slice(1, -1);
+        performanceTask = Promise.all([monitor.sample(), control("performance-sample", { session }).catch(error => ({ cpuPercent: null, reason: error.message }))]).then(([system, workload]) => ({ ...system, workload })).finally(() => {
+          performanceTask = null;
+          if (performanceSession !== session) void control("performance-close", { session }).catch(() => {});
+        });
+        return performanceTask;
+      }
+      if (name === "share-open-localai") {
+        if (backend.kind !== "local") throw new Error("Open Local AI on the owning device.");
+        this.win.setTimeout(() => { if (current()) this.localAI().catch(console.error); }, 0); return { ok: true };
+      }
+      if (name === "share-save-qr") {
+        const state = await request("share-status");
+        if (!current() || typeof state.qrDataUrl !== "string" || !state.qrDataUrl.startsWith("data:image/png;base64,")) throw new Error("Connection QR is unavailable.");
+        const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+        picker.init(this.win.browsingContext, "Download QR image", Ci.nsIFilePicker.modeSave); picker.defaultString = "bashkitten-connection.png"; picker.appendFilter("PNG image", "*.png");
+        const result = await new Promise(resolve => picker.open(resolve));
+        if (current() && [Ci.nsIFilePicker.returnOK, Ci.nsIFilePicker.returnReplace].includes(result)) await IOUtils.write(picker.file.path, Uint8Array.from(this.win.atob(state.qrDataUrl.split(",")[1]), char => char.charCodeAt(0)), { permissions: 0o600 });
+        return { ok: true };
+      }
+      if (name === "share-open-authenticator") {
+        const uri = setups.get(value.setupId);
+        if (!uri?.startsWith("otpauth://totp/")) throw new Error("Authenticator setup is no longer active.");
+        Cc["@mozilla.org/uriloader/external-protocol-service;1"].getService(Ci.nsIExternalProtocolService).loadURI(Services.io.newURI(uri), Services.scriptSecurityManager.getSystemPrincipal(), null, this.win.browsingContext, false, true); return { ok: true };
+      }
+      if (name === "localai-router-model-test") {
+        if (typeof value.owner !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value.owner)) throw new Error("Invalid model check identity.");
+        tests.add(value.owner);
+      }
+      if (["localai-router-model-test-cancel", "localai-router-model-test-status"].includes(name) && !tests.has(value.owner)) throw new Error("This model check belongs to another settings view.");
+      if (["share-confirm", "share-cancel"].includes(name) && !setups.has(value.setupId)) throw new Error("This account setup belongs to another settings view.");
+      if (["share-setup", "share-reissue"].includes(name) || name === "share-publish" && value.enabled || name === "service-action" && ["start", "reload"].includes(value.action)) {
+        const status = await request("start"); if (!current()) throw new Error("The settings owner changed.");
+        if (backend.kind === "local" && !this.selection && !this.remote) { this.off = false; await this.update(status); this.schedule(); }
+      }
+      const result = await (section === "share-local" ? request(name, value) : control(name, value));
+      if (name === "localai-router-model-test" && (!current() || closed)) await control("localai-router-model-test-cancel", { owner: value.owner });
+      if (["share-setup", "share-reissue"].includes(name) && result.setupId) {
+        if (!current() || closed) await request("share-cancel", { setupId: result.setupId });
+        else setups.set(result.setupId, result.otpauthUrl);
+      }
+      if (["share-confirm", "share-cancel"].includes(name)) setups.delete(value.setupId);
+      return result;
+    };
+    const revoke = BashKittenSettings.enroll(browser, {
+      info: { platform: "linux", section, backendName: section === "performance" ? "This Linux device" : backend.name, local: backend.kind === "local", backendKind: backend.kind, machineId: backend.kind === "machine" ? backend.id : null, operation: Boolean(options.operation), theme: theme(), connectOnly: Boolean(options.connectOnly) },
+      current, call, cleanup, pause, close: () => this.closeConnections(),
+    });
+    panel.addEventListener("close", () => { revoke(); if (this.settingsBrowser === browser) this.settingsBrowser = null; }, { once: true });
+    try { browser.loadURI(Services.io.newURI(SETTINGS_URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); }
+    catch (error) { this.closeConnections(); throw error; }
   }
 
   async openMachineDisplay(id) {
@@ -933,150 +1063,8 @@ class AgentView {
       presenterSocket: endpoint.presenterSocket }, { clipboard: payload => control("machines.clipboard", { ...payload, id }) });
   }
 
-  async shareLocal(request = control, title = "Share Local", machineId = null) {
-    this.closeConnections();
-    const { panel, content } = this.connectionPanel(title);
-    const description = html(this.doc, "p", {}, "Publish this device’s Local Agent through Tor. Other devices use your password and authenticator code.");
-    const body = html(this.doc, "div", { class: "share-local-content" });
-    const error = html(this.doc, "p", { role: "alert" });
-    content.append(description, body, error);
-    let busy = false, setupId = null;
-    const current = () => this.connectionsPanel === panel;
-    const ensureLocal = async () => {
-      const status = await request("start");
-      if (!machineId && !this.remote) { this.off = false; await this.update(status); this.schedule(); }
-    };
-    const run = async action => {
-      if (busy || !current()) return;
-      busy = true; error.textContent = "";
-      for (const button of body.querySelectorAll("button")) button.disabled = true;
-      try { await action(); } catch (failure) { if (current()) error.textContent = failure.message; }
-      finally { busy = false; for (const button of body.querySelectorAll("button")) button.disabled = false; }
-    };
-    const button = (title, action) => {
-      const node = html(this.doc, "button", { type: "button" }, title);
-      node.addEventListener("click", () => run(action)); return node;
-    };
-    const image = (url, title) => {
-      if (!/^data:image\/png;base64,[a-zA-Z0-9+/=]+$/.test(url || "")) throw new Error("The controller did not supply a valid QR image.");
-      return html(this.doc, "img", { src: url, alt: title, class: "share-local-qr" });
-    };
-    const render = state => {
-      if (!current()) return;
-      setupId = null; body.replaceChildren();
-      if (state.error) error.textContent = state.error;
-      if (state.reissueRequired) { body.append(button("Reissue identity", () => account(true))); return; }
-      if (state.phase !== "ready") {
-        if (state.migrationRequired) body.append(html(this.doc, "p", {}, "Replace the previous remote identity to use encrypted connections. Previously exported connections will stop working."));
-        body.append(button(state.migrationRequired ? "Reissue identity" : "Turn on", () => account(state.migrationRequired)));
-        return;
-      }
-      body.append(html(this.doc, "p", { role: "status" }, state.error ? "Publishing failed" : state.enabled ? (state.running ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off"));
-      body.append(button(state.enabled ? "Turn off" : "Turn on", async () => {
-        if (!state.enabled) await ensureLocal();
-        render(await request("share-publish", { enabled: !state.enabled }));
-      }));
-      const allow = html(this.doc, "input", { type: "checkbox" });
-      allow.checked = state.allowFileManager;
-      const permission = html(this.doc, "label", {}, "Allow remote file manager"); permission.prepend(allow);
-      allow.addEventListener("change", () => {
-        const allowed = allow.checked; allow.checked = state.allowFileManager;
-        run(async () => render(await request("share-files", { allowed })));
-      });
-      body.append(permission);
-      body.append(html(this.doc, "p", {}, state.address));
-      body.append(html(this.doc, "p", {}, "Connection QR — encrypted with your account password."));
-      const download = async () => {
-        const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
-        picker.init(this.win.browsingContext, "Download QR image", Ci.nsIFilePicker.modeSave);
-        picker.defaultString = "bashkitten-connection.png"; picker.appendFilter("PNG image", "*.png");
-        const result = await new Promise(resolve => picker.open(resolve));
-        if (result !== Ci.nsIFilePicker.returnOK && result !== Ci.nsIFilePicker.returnReplace) return;
-        const bytes = Uint8Array.from(this.win.atob(state.qrDataUrl.split(",")[1]), char => char.charCodeAt(0));
-        await IOUtils.write(picker.file.path, bytes, { permissions: 0o600 });
-      };
-      const qr = image(state.qrDataUrl, "Encrypted connection QR");
-      const save = button("", download); save.className = "connection-qr"; save.setAttribute("aria-label", "Download QR image"); save.append(qr);
-      body.append(save, button("Download QR image", download));
-      body.append(button("Reissue identity", () => account(true)));
-      const llama = html(this.doc, "div"); body.append(llama);
-      request("localai-status").then(local => {
-        if (!current() || !llama.isConnected) return;
-        const checkbox = html(this.doc, "input", { type: "checkbox" }); checkbox.checked = Boolean(local.llama.service?.enabled);
-        const label = html(this.doc, "label", {}, "Share llama.cpp"); label.prepend(checkbox); llama.append(label);
-        llama.append(html(this.doc, "p", {}, local.llama.service ? local.llama.service.state : "Configure llama.cpp in LocalAI first."));
-        checkbox.addEventListener("change", () => { const enabled = checkbox.checked; checkbox.checked = Boolean(local.llama.service?.enabled); run(async () => { await request("localai-share", { enabled }); render(await request("share-status")); }); });
-        if (!this.selection) llama.append(button("Open LocalAI", () => this.localAI()));
-      }).catch(failure => { if (llama.isConnected) llama.textContent = failure.message; });
-      const services = html(this.doc, "details"); services.append(html(this.doc, "summary", {}, "Services"));
-      const serviceBody = html(this.doc, "div"); services.append(serviceBody); body.append(services);
-      services.addEventListener("toggle", () => {
-        if (services.open && !serviceBody.hasChildNodes()) serviceSettings(serviceBody, request, this.win).catch(failure => { error.textContent = failure.message; });
-      });
-    };
-    const account = reissue => {
-      if (reissue && !Services.prompt.confirm(this.win, "Reissue identity?", "Disconnect all old clients and replace the remote account, authenticator and connection keys? Local chats and provider logins are kept.")) return;
-      body.replaceChildren();
-      const form = html(this.doc, "form");
-      const field = (title, type, autocomplete) => {
-        const label = html(this.doc, "label", {}, title), input = html(this.doc, "input", { type, required: "", autocomplete });
-        label.append(input); form.append(label); return input;
-      };
-      const username = field("Username", "text", "username");
-      const password = field("Password", "password", "new-password");
-      const confirmation = field("Confirm password", "password", "new-password");
-      const allow = html(this.doc, "input", { type: "checkbox" });
-      const permission = html(this.doc, "label", {}, "Allow remote file manager"); permission.prepend(allow); form.append(permission);
-      const submit = html(this.doc, "button", { type: "submit" }, "Set up authenticator");
-      let code;
-      form.append(submit); body.append(form);
-      panel.addEventListener("close", () => { password.value = confirmation.value = ""; }, { once: true });
-      form.addEventListener("submit", event => {
-        event.preventDefault();
-        run(async () => {
-          if (setupId) {
-            const result = await request("share-confirm", { setupId, code: code.value });
-            code.value = ""; render(result); return;
-          }
-          if (password.value !== confirmation.value) throw new Error("The passwords do not match.");
-          await ensureLocal();
-          if (!current()) return;
-          const pendingSetup = request(reissue ? "share-reissue" : "share-setup", { username: username.value, password: password.value, allowFileManager: allow.checked });
-          password.value = confirmation.value = "";
-          const setup = await pendingSetup;
-          if (!current()) { await request("share-cancel", { setupId: setup.setupId }); return; }
-          setupId = setup.setupId; form.replaceChildren();
-          form.append(html(this.doc, "p", {}, "Add this account to your authenticator, then enter its six-digit code."), image(setup.qrDataUrl, "Authenticator setup QR"));
-          if (setup.otpauthUrl?.startsWith("otpauth://totp/")) form.append(button("Open authenticator", async () => {
-            Cc["@mozilla.org/uriloader/external-protocol-service;1"].getService(Ci.nsIExternalProtocolService).loadURI(
-              Services.io.newURI(setup.otpauthUrl), Services.scriptSecurityManager.getSystemPrincipal(), null, this.win.browsingContext, false, true);
-          }));
-          code = field("Authenticator code", "text", "one-time-code"); code.inputMode = "numeric"; code.pattern = "[0-9]{6}"; code.maxLength = 6;
-          panel.addEventListener("close", () => { code.value = ""; }, { once: true });
-          submit.textContent = "Verify and publish"; form.append(submit);
-          code.focus();
-        });
-      });
-      username.focus();
-    };
-    panel.addEventListener("close", () => {
-      body.replaceChildren();
-      if (setupId) request("share-cancel", { setupId }).catch(console.error);
-    }, { once: true });
-    await run(async () => render(await request("share-status")));
-  }
-
-  connectionPanel(title) {
-    const panel = html(this.doc, "section", { id: "bashkitten-agent-connections", "aria-labelledby": "bashkitten-connections-title" });
-    const content = html(this.doc, "div", { class: "connections-content" });
-    const heading = html(this.doc, "div", { class: "connections-heading" });
-    const back = html(this.doc, "button", { type: "button" }, "Back to Agent");
-    back.addEventListener("click", () => this.closeConnections());
-    heading.append(back, html(this.doc, "h2", { id: "bashkitten-connections-title" }, title));
-    content.append(heading); panel.append(content);
-    this.connectionsPanel = panel; this.pane.append(panel); this.pane.setAttribute("data-connections", "true");
-    back.focus(); return { panel, content };
-  }
+  async computerUse() { return this.openSettings("phone-use"); }
+  async shareLocal() { return this.openSettings("share-local", { backendId: "local" }); }
 
   closeConnections() {
     const panel = this.connectionsPanel;
@@ -1088,105 +1076,72 @@ class AgentView {
     this.activeBrowser?.focus();
   }
 
-  async remotes(connectOnly = true) {
-    this.closeConnections();
-    const { panel, content } = this.connectionPanel(connectOnly ? "Connect to remote" : "Browser connections");
-    const error = html(this.doc, "p", { role: "alert" }), saved = html(this.doc, "div");
-    const report = async task => { try { error.textContent = ""; await task(); } catch (e) { error.textContent = e.message; } };
-    const button = (title, action) => {
-      const node = html(this.doc, "button", { type: "button" }, title);
-      node.addEventListener("click", async () => { node.disabled = true; await report(action); node.disabled = false; }); return node;
-    };
-    const refresh = async () => {
-      saved.replaceChildren();
-      for (const record of await AgentRemotes.list()) {
-        const item = html(this.doc, "section", { class: "connection-card" });
-        item.append(html(this.doc, "strong", {}, record.name), html(this.doc, "p", {}, record.url),
-          html(this.doc, "p", {}, record.migrationRequired ? "Import a new encrypted QR from this host’s Share Local setup." : record.state));
-        if (record.error) item.append(html(this.doc, "p", { role: "alert" }, record.error));
-        if (!record.migrationRequired) item.append(button("Connect", () => this.choose(record.id)),
-          button("Disconnect", async () => {
-            Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", record.id);
-            await AgentRemotes.disconnect(record.id);
-            if (this.remote?.id === record.id) {
-              this.off = true; this.power.textContent = "Turn on";
-              this.message("Remote disconnected", "Turn on to reconnect, or choose Local or another remote.");
-            }
-            await refresh();
-          }),
-          button("Allow browser control", async () => {
-            lazy.BrowserControlChannel.allowAgain(record.id);
-            if (this.remote?.id !== record.id) await this.choose(record.id);
-            if ((await AgentRemotes.connection(record.id)).state !== "ready") throw new Error("Finish remote sign-in first.");
-            await lazy.BrowserControlChannel.start(this.remote, { window: this.win });
-          }), button("Revoke browser control", () => lazy.BrowserControlChannel.revoke(record.id)));
-        item.append(button("Remove", async () => {
-          if (!Services.prompt.confirm(this.win, "Remove connection?", `Remove “${record.name}” and its saved login from this browser?`)) return;
-          await AgentRemotes.remove(record.id);
-          this.drafts.delete(`${record.id}:${record.identity}`);
-          if (this.remote?.id === record.id) { this.off = true; this.power.textContent = "Turn on"; this.message("Remote removed", "Choose Local or another saved remote."); }
-          await refresh(); await this.refreshRemotes();
-        }));
-        saved.append(item);
-        if (record.state === "ready") {
-          const services = html(this.doc, "details"), serviceBody = html(this.doc, "div");
-          services.append(html(this.doc, "summary", {}, "Services"), serviceBody); item.append(services);
-          services.addEventListener("toggle", () => {
-            if (services.open && !serviceBody.childElementCount) remoteServices(serviceBody, record.id, this.win, () => this.choose(record.id));
-          });
-        }
-      }
-    };
-    const form = html(this.doc, "form");
-    const passwordLabel = html(this.doc, "label", {}, "Connection password");
-    const password = html(this.doc, "input", { type: "password", autocomplete: "off", required: "" });
-    passwordLabel.append(password);
-    const image = html(this.doc, "input", { type: "file", accept: "image/*", "aria-label": "Upload encrypted connection QR image" });
-    const selected = html(this.doc, "p", { role: "status" });
-    const add = html(this.doc, "button", { type: "submit", disabled: "" }, "Connect");
-    let source = "", stopCamera = () => {};
-    const decoding = new AbortController();
-    const accept = text => {
-      if (!text.startsWith("TK2:")) throw new Error("Use the encrypted Connection QR from Share Local.");
-      source = text; selected.textContent = "Connection image ready. Enter its password."; add.disabled = false; password.focus();
-    };
-    image.addEventListener("change", () => report(async () => {
-      if (image.files[0]) accept(await this.decodeQR(await this.win.createImageBitmap(image.files[0]), decoding.signal));
-    }));
-    const camera = button("Scan QR", async () => {
-      stopCamera();
-      const stream = await this.win.navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-      if (this.connectionsPanel !== panel) { stream.getTracks().forEach(track => track.stop()); return; }
-      const video = html(this.doc, "video", { autoplay: "", muted: "", style: "width:100%;max-height:260px" });
-      let timer, stopped = false;
-      const capture = new AbortController();
-      const cancel = button("Cancel scan", () => stopCamera());
-      stopCamera = () => { stopped = true; capture.abort(); clearTimeout(timer); stream.getTracks().forEach(track => track.stop()); video.remove(); cancel.remove(); };
-      video.srcObject = stream; form.append(video, cancel);
-      const scan = async () => {
-        if (stopped || this.connectionsPanel !== panel) return stopCamera();
-        try {
-          if (video.readyState >= 2) { const text = await this.decodeQR(video, capture.signal); if (stopped) return; accept(text); stopCamera(); return; }
-        } catch (e) { if (stopped) return; if (e.message !== "No connection QR code was found.") { error.textContent = e.message; stopCamera(); return; } }
-        timer = setTimeout(scan, 250);
-      };
-      try { await video.play(); scan(); } catch (e) { stopCamera(); throw e; }
+  async remotes(connectOnly = true) { return this.openSettings("remotes", { connectOnly }); }
+
+  serviceKeyPrompt(title, current) {
+    const { dialog, content, actions } = this.dialog(title + " API key");
+    const input = html(this.doc, "input", { type: "password", autocomplete: "off", "aria-label": "Service API key" });
+    content.append(html(this.doc, "p", {}, "Save an empty field to clear the key. Close keeps the existing key."), input);
+    const save = html(this.doc, "button", { type: "button" }, "Save"); actions.prepend(save);
+    return new Promise(resolve => {
+      save.addEventListener("click", () => { if (!current()) return dialog.close(); const secret = input.value; input.value = ""; resolve(secret); dialog.close(); });
+      dialog.addEventListener("close", () => { input.value = ""; resolve(null); }, { once: true });
+      this.connectionsPanel?.addEventListener("close", () => dialog.close(), { once: true });
     });
-    form.append(image, camera, selected, passwordLabel, add);
-    form.addEventListener("submit", event => {
-      event.preventDefault(); add.disabled = true;
-      report(async () => {
-        const secret = password.value; password.value = "";
+  }
+
+  async enrollRemote(method, current) {
+    if (!["scan", "image"].includes(method)) throw new Error("Choose QR scan or image.");
+    const { dialog, content } = this.dialog("Connect to remote");
+    const password = html(this.doc, "input", { type: "password", autocomplete: "off", required: "", "aria-label": "Connection password" });
+    const feedback = html(this.doc, "p", { role: "status" });
+    const form = html(this.doc, "form"), submit = html(this.doc, "button", { type: "submit", disabled: "" }, "Connect");
+    form.append(html(this.doc, "p", {}, "Use the encrypted Connection QR and the password chosen in Share Local."), password, submit, feedback); content.append(form);
+    let source = "", stream = null, timer = null, enrolling = false, outcome = { ok: false };
+    this.connectionsPanel?.addEventListener("close", () => dialog.close(), { once: true });
+    const abort = new AbortController();
+    const accept = text => { if (!text.startsWith("TK2:")) throw new Error("Use an encrypted Connection QR."); source = text; submit.disabled = false; feedback.textContent = "Connection image ready."; password.focus(); };
+    const stop = () => { abort.abort(); clearTimeout(timer); stream?.getTracks().forEach(track => track.stop()); source = password.value = ""; };
+    dialog.addEventListener("close", stop, { once: true });
+    const result = new Promise(resolve => dialog.addEventListener("close", () => resolve(outcome), { once: true }));
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (enrolling || !dialog.open) return;
+      enrolling = true; submit.disabled = true;
+      const secret = password.value; password.value = "";
+      try {
+        if (!current()) throw new Error("The Remote Connections view is closed.");
         const record = await AgentRemotes.enroll(source, secret);
-        if (this.connectionsPanel !== panel) return;
-        source = ""; await this.refreshRemotes(); await this.choose(record.id);
-      }).finally(() => { add.disabled = !source; });
+        if (!current() || !dialog.open) return;
+        await this.refreshRemotes();
+        if (!current() || !dialog.open) return;
+        outcome = { ok: true, id: record.id }; dialog.close();
+      } catch (error) { if (dialog.open) feedback.textContent = error.message; }
+      finally { enrolling = false; submit.disabled = !source; }
     });
-    panel.addEventListener("close", () => { source = password.value = image.value = ""; decoding.abort(); stopCamera(); }, { once: true });
-    if (!connectOnly) content.append(saved, html(this.doc, "h3", {}, "Connect to remote"));
-    content.append(
-      html(this.doc, "p", {}, "Scan or upload its Connection QR. Use the password chosen in Share Local, then your authenticator code to sign in."), form, error);
-    if (!connectOnly) await report(refresh);
+    try {
+      if (method === "image") {
+        const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
+        picker.init(this.win.browsingContext, "Connection QR image", Ci.nsIFilePicker.modeOpen); picker.appendFilters(Ci.nsIFilePicker.filterImages);
+        if (await new Promise(resolve => picker.open(resolve)) !== Ci.nsIFilePicker.returnOK) { dialog.close(); return { ok: false }; }
+        const file = await this.win.File.createFromNsIFile(picker.file);
+        if (!dialog.open) return { ok: false };
+        accept(await this.decodeQR(await this.win.createImageBitmap(file), abort.signal));
+      } else {
+        stream = await this.win.navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        if (!dialog.open) { stop(); return { ok: false }; }
+        const video = html(this.doc, "video", { autoplay: "", muted: "", style: "width:100%;max-height:260px" }); video.srcObject = stream; form.prepend(video); await video.play();
+        const scan = async () => {
+          if (!dialog.open || abort.signal.aborted) return;
+          try { if (video.readyState >= 2) { accept(await this.decodeQR(video, abort.signal)); stream.getTracks().forEach(track => track.stop()); video.remove(); return; } }
+          catch (error) { if (error.message !== "No connection QR code was found." && dialog.open) feedback.textContent = error.message; }
+          if (dialog.open) timer = setTimeout(scan, 250);
+        }; void scan();
+      }
+    } catch (error) { if (dialog.open) feedback.textContent = error.message; }
+    const completed = await result;
+    if (completed.ok) this.win.setTimeout(() => { if (current()) this.choose(completed.id).catch(console.error); }, 0);
+    return { ok: completed.ok };
   }
 
   async decodeQR(source, signal) {

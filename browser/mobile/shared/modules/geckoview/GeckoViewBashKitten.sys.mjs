@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 import { GeckoViewModule } from "resource://gre/modules/GeckoViewModule.sys.mjs";
+import { BashKittenSettings } from "resource://gre/modules/BashKittenSettings.sys.mjs";
 import { BashKittenHost } from "resource://gre/modules/BashKittenHost.sys.mjs";
 import { BashKittenAndroid } from "resource://gre/modules/BashKittenAndroid.sys.mjs";
 
@@ -16,6 +17,7 @@ const commands = new Set(["snapshot", "act", "read", "evaluate", "wait", "consol
 export class GeckoViewBashKitten extends GeckoViewModule {
   onInit() {
     BashKittenHost.register();
+    BashKittenSettings.register();
     this.references = new Map();
     this.agentRequests = new Set();
     this.context = this.settings.sessionContextId;
@@ -30,6 +32,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     this.cancelLoginResponse();
     if (protectedContext(this.context)) Services.obs.removeObserver(this, "http-on-opening-request");
     BashKittenHost.close(this.browser);
+    BashKittenSettings.close(this.browser);
     for (const channel of this.agentRequests) channel.cancel(Cr.NS_BINDING_ABORTED);
     this.agentRequests.clear();
     if (this.agentHost) certificates.clearAgentCA(this.agentHost, { geckoViewSessionContextId: this.context });
@@ -47,6 +50,13 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
   }
   async request({ method, params = {} }) {
+    if (BashKittenSettings.isContext(this.context)) {
+      if (method === "settings.configure") return BashKittenSettings.configure(this.browser, this.context, params);
+      if (method === "settings.visibility") return BashKittenSettings.visible(this.browser, params.visible);
+      if (method === "settings.event") return BashKittenSettings.event(this.browser, params);
+      if (method === "settings.close") { BashKittenSettings.close(this.browser); return true; }
+      throw new Error("Settings views cannot be controlled");
+    }
     if (method === "configure") {
       BashKittenAndroid.configure(this.context, this.browserId, params);
       return { ready: true };

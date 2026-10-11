@@ -36,7 +36,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     private ScheduledFuture<?> remotePoll;
     PhoneVoiceGateway(BrowserApp app,AgentRuntime agent){
         this.app=app;this.agent=agent;phone=TelephonyRuntime.get(app);
-        phone.install(this,()->app.main.post(()->{android.app.Activity activity=agent.activity.get();if(activity!=null)new AgentLocalAIDialog().show(((androidx.fragment.app.FragmentActivity)activity).getSupportFragmentManager(),"agent-localai");}));
+        phone.install(this,()->app.main.post(()->{android.app.Activity activity=agent.activity.get();if(activity!=null)AgentSettingsActivity.open(activity,"localai");}));
         phone.setEnabledListener(enabled->{desired=enabled;if(enabled){try{app.keepAlive();start();}catch(RuntimeException denied){phone.transportError(denied.getMessage());}}else close();});
     }
     void ready(){if(desired){port=0;start();}}

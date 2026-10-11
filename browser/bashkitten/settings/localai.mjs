@@ -1,14 +1,20 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+import { confirm } from './ui.mjs';
+
 const HTML = 'http://www.w3.org/1999/xhtml';
 
-/** Trusted desktop controls. No host-management capability enters Agent HTML. */
-export async function localAISettings(parent, control, win, isLocal) {
+/** Shared view; the owned native settings actor authorizes every operation. */
+export async function renderSection({ root: parent, call: control, info, signal }) {
+  if (info.local !== true) { parent.textContent = 'Select Local to use LocalAI.'; return; }
+  const win = parent.ownerDocument.defaultView;
+  const isLocal = () => info.local === true;
+  const mobile = info.platform === 'android';
   const doc = parent.ownerDocument;
   const node = (tag, text = '') => { const result = doc.createElementNS(HTML, tag); result.textContent = text; return result; };
   const message = node('p'), body = node('div'); message.setAttribute('role', 'status'); parent.append(message, body);
   let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus, routerPresetNode;
   const engineStatus = {};
-  const active = () => parent.isConnected && isLocal();
+  const active = () => !signal.aborted && parent.isConnected && isLocal();
   const call = async (name, args) => { if (!active()) throw Error('Select Local to use LocalAI'); return control(name, args); };
   const run = async (action, feedback = message) => {
     if (busy || !active()) return;
@@ -30,19 +36,33 @@ export async function localAISettings(parent, control, win, isLocal) {
     input.value = value; label.append(input); parent.append(label); return input;
   };
   const check = (parent, text, checked) => { const label = node('label', text), input = node('input'); input.type = 'checkbox'; input.checked = checked; label.prepend(input); parent.append(label); return input; };
-  const copy = value => { Cc['@mozilla.org/widget/clipboardhelper;1'].getService(Ci.nsIClipboardHelper).copyString(value); message.textContent = 'Copied'; };
+  const copy = async text => { await call('clipboard-copy', { text }); if (active()) message.textContent = 'Copied'; };
+  const openRecord = async (engine, record) => {
+    const value = await call('localai-open-record', { engine, record });
+    if (!active() || typeof value?.content !== 'string') return;
+    const dialog = node('dialog'), content = node('pre', value.content), close = node('button', 'Close');
+    dialog.append(node('h2', value.name), content, close); parent.append(dialog);
+    const dispose = () => { signal.removeEventListener('abort', dispose); dialog.remove(); };
+    close.type = 'button'; close.onclick = dispose;
+    dialog.addEventListener('cancel', event => { event.preventDefault(); dispose(); });
+    signal.addEventListener('abort', dispose, { once: true }); dialog.showModal(); close.focus();
+  };
   const pick = async (title, kind = 'file', initial = '') => {
     const chooser = node('section'); chooser.className = 'connection-card';
     chooser.setAttribute('role', 'dialog'); chooser.setAttribute('aria-label', title);
     chooser.append(node('h3', title)); parent.append(chooser);
-    const location = field(chooser, 'Backend folder or path', initial);
+    const location = field(chooser, 'Folder or file path', initial);
     const listing = node('div'), feedback = node('p'); feedback.setAttribute('role', 'status');
     listing.style.cssText = 'max-height:24rem;overflow:auto;display:flex;flex-direction:column;align-items:stretch';
     const filename = kind === 'save' ? field(chooser, 'New filename', initial.split('/').at(-1)) : null;
     let current, pending = false, finished = false, resolve;
     const result = new Promise(done => { resolve = done; });
     const observer = new win.MutationObserver(() => { if (!active() || !chooser.isConnected) finish(null); });
-    const finish = value => { if (finished) return; finished = true; observer.disconnect(); chooser.remove(); resolve(value); };
+    const finish = value => { if (finished) return; finished = true; observer.disconnect(); signal.removeEventListener('abort', cancelled); doc.removeEventListener('visibilitychange', visibility); chooser.remove(); resolve(value); };
+    const cancelled = () => finish(null);
+    const visibility = () => { if (doc.hidden) finish(null); };
+    signal.addEventListener('abort', cancelled, { once: true });
+    doc.addEventListener('visibilitychange', visibility);
     const action = (label, handler) => {
       const element = node('button', label); element.type = 'button';
       element.onclick = async () => {
@@ -70,7 +90,7 @@ export async function localAISettings(parent, control, win, isLocal) {
     };
     chooser.append(action('Open path', () => browse(location.value)), listing, feedback);
     if (kind !== 'file') chooser.append(action(kind === 'folder' ? 'Use this folder' : 'Use this filename', () => {
-      if (!current) throw Error('Open a backend folder first');
+      if (!current) throw Error('Open a folder first');
       if (filename && (!filename.value.trim() || /[\/\0]/.test(filename.value) || ['.', '..'].includes(filename.value))) throw Error('Enter a filename without a directory');
       finish(filename ? current.path.replace(/\/$/, '') + '/' + filename.value : current.path);
     }));
@@ -89,10 +109,14 @@ export async function localAISettings(parent, control, win, isLocal) {
   const draw = value => {
     if (!active()) return;
     state = value; refreshVisibleModels = null; routerPresetNode = null; body.replaceChildren();
+    if (state.needsSetup) {
+      body.append(node('p', 'Set up Termux Local before configuring local models.'), button('Set up Local', () => call('localai-setup')));
+      return;
+    }
     for (const engine of ['llama', 'whisper']) {
       const current = state[engine], config = current.config;
       const section = node('details'); section.open = engine === 'llama'; section.className = 'connection-card';
-      section.append(node('summary', engine === 'llama' ? 'llama.cpp' : 'Whisper dictation'));
+      section.append(node('summary', engine === 'llama' ? 'llama.cpp' : 'Whisper / Parakeet dictation'));
       engineStatus[engine] = node('p', [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, engine === 'llama' ? current.runtime?.backend && current.runtime.backend + ' runtime (per-model device)' : current.runtime?.selectedBackend].filter(Boolean).join(' · '));
       section.append(engineStatus[engine]);
       if (engine === 'whisper') section.append(node('p', 'Loads on demand for microphone messages on this Agent, including connected phones. Audio stays in memory and is discarded after transcription.'));
@@ -103,7 +127,9 @@ export async function localAISettings(parent, control, win, isLocal) {
       const updateMode = () => { binary.disabled = mode.value !== 'custom'; chooseBinary.disabled = mode.value !== 'custom'; folder.disabled = mode.value !== 'custom'; };
       mode.onchange = updateMode; updateMode();
       const savedBackend = engine === 'llama' && config.backend === 'cpu' ? 'vulkan' : config.backend;
-      const backend = select(section, engine === 'llama' ? 'Runtime package' : 'Device', engine === 'llama' ? [['auto', 'Automatic'], ['cuda', 'CUDA + CPU'], ['vulkan', 'Vulkan + CPU']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], savedBackend);
+      const backend = select(section, engine === 'llama' ? 'Runtime package' : 'Device', mobile
+        ? engine === 'llama' ? [['vulkan', 'Vulkan + CPU']] : [['cpu', 'CPU'], ['vulkan', 'GPU (Vulkan)']]
+        : engine === 'llama' ? [['auto', 'Automatic'], ['cuda', 'CUDA + CPU'], ['vulkan', 'Vulkan + CPU']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], savedBackend);
       if (engine === 'llama') section.append(node('p', 'Choose CPU or a GPU for each model below. Launcher environment applies to all router models.'));
       const version = node('p'); version.setAttribute('role', 'status'); section.append(version);
       section.append(button('Check now', async () => {
@@ -114,10 +140,7 @@ export async function localAISettings(parent, control, win, isLocal) {
         if (mode.value !== config.mode || backend.value !== savedBackend) throw Error('Save the runtime choice first');
         const result = await call('localai-install', { engine }); message.textContent = result.phase;
       }));
-      if (current.runtime?.root) for (const [label, filename] of [['Licenses', 'LICENSES.txt'], ['Source record', 'SOURCE.json']]) section.append(button(label, () => {
-        const file = Cc['@mozilla.org/file/local;1'].createInstance(Ci.nsIFile); file.initWithPath(current.runtime.root + '/' + filename);
-        win.openTrustedLinkIn(Services.io.newFileURI(file).spec, 'tab');
-      }));
+      if (current.runtime?.root) for (const [label, record] of [['Licenses', 'license'], ['Source record', 'source']]) section.append(button(label, () => openRecord(engine, record)));
       const launcher = node('details'); launcher.append(node('summary', 'Launcher and environment')); section.append(launcher);
       launcher.append(node('p', 'The default launcher supplies the executable, port and saved configuration. Override these settings only when needed.'));
       const port = field(launcher, 'Port — 0 chooses an available port', config.port); port.type = 'number'; port.min = '0'; port.max = '65535';
@@ -128,7 +151,7 @@ export async function localAISettings(parent, control, win, isLocal) {
       const env = engine === 'llama' ? field(launcher, 'Environment — JSON object', JSON.stringify(config.env), true) : null;
       let preset, startup, imported, keyFile, model, keepRunning, autoSend;
       if (engine === 'llama') {
-        preset = pickerField(section, 'Router INI', config.preset);
+        preset = pickerField(section, 'Router INI', config.preset, 'save');
         routerPresetNode = preset;
         section.append(button('Add / edit router models', () => editRouterModels(preset.value, path => { preset.value = path; })));
         section.append(button('Edit router INI', () => editINI(preset.value, path => { preset.value = path; })));
@@ -139,8 +162,8 @@ export async function localAISettings(parent, control, win, isLocal) {
         section.append(importNode);
       } else {
         const modelKind = select(section, 'Speech model', [['whisper', 'Whisper'], ['parakeet', 'Parakeet']], config.modelKind || 'whisper');
-        modelKind.onchange = () => { config.modelKind = modelKind.value; if (modelKind.value === 'parakeet') { argv.value = ''; keepRunning.checked = false; } };
-        model = pickerField(section, 'whisper.cpp model (ggml-*.bin)', config.model);
+        modelKind.onchange = () => { config.modelKind = modelKind.value; if (modelKind.value === 'parakeet') { argv.value = ''; keepRunning.checked = false; } updateSpeechControls(); };
+        model = pickerField(section, 'Speech model file', config.model);
         keepRunning = check(section, 'Keep Whisper running after transcription', config.keepRunning);
         autoSend = check(section, 'Automatically send voice messages', config.autoSend);
       }
@@ -148,13 +171,20 @@ export async function localAISettings(parent, control, win, isLocal) {
         const next = { ...config, mode: mode.value, binary: mode.value === 'custom' ? binary.value : '', backend: backend.value, port: Number(port.value),
           argv: argv.value.trim() ? JSON.parse(argv.value) : [], cwd: cwd.value, env: env ? JSON.parse(env.value) : {} };
         if (engine === 'llama') Object.assign(next, { preset: preset.value, startup: startup.checked, importToPi: imported.checked, keyFile: keyFile.value });
-        else Object.assign(next, { model: model.value, keepRunning: keepRunning.checked, autoSend: autoSend.checked });
+        else Object.assign(next, { model: model.value, keepRunning: config.modelKind === 'parakeet' ? false : keepRunning.checked, autoSend: autoSend.checked, ...(config.modelKind === 'parakeet' ? { argv: [] } : {}) });
         draw(await call('localai-save', { engine, config: next, revision: state.revision })); message.textContent = 'Saved. Reload applies command changes to a running engine.';
       }));
-      for (const action of ['start', 'stop', 'reload']) section.append(button(action === 'start' ? 'Start' : action === 'stop' ? 'Stop' : 'Reload', async () => {
-        if (action === 'reload' && !Services.prompt.confirm(win, 'Reload engine?', 'Restart with the saved command? Active inference will end.')) return;
+      const actions = ['start', 'stop', 'reload'].map(action => button(action === 'start' ? 'Start' : action === 'stop' ? 'Stop' : 'Reload', async () => {
+        if (action === 'reload' && !await confirm(parent, { title: 'Reload engine?', message: 'Restart with the saved command? Active inference will end.' }, signal)) return;
         draw(await call('localai-action', { engine, action }));
       }));
+      section.append(...actions);
+      const updateSpeechControls = () => {
+        if (engine !== 'whisper') return;
+        const parakeet = config.modelKind === 'parakeet';
+        for (const element of [port.parentElement, argv.parentElement, keepRunning.parentElement, ...actions]) element.hidden = parakeet;
+      };
+      updateSpeechControls();
       body.append(section);
       if (config.mode === 'managed') void call('localai-check', { engine }).then(result => { if (active() && version.isConnected) version.textContent = `${result.version} · ${result.backend} · ${result.updateAvailable ? 'Update available' : 'Up to date'}`; }).catch(error => { if (version.isConnected) version.textContent = error.message; });
     }
@@ -171,7 +201,7 @@ export async function localAISettings(parent, control, win, isLocal) {
     const config = state.tts.config, section = node('details'); section.className = 'connection-card';
     section.append(node('summary', 'Speech synthesis · llama-tts'), node('p', 'Uses the managed llama.cpp runtime. Both families need their matching projector and reference speech. Models provides compatible downloads.'));
     const family = select(section, 'Model family', [['pocket', 'Pocket TTS'], ['qwen3', 'Qwen3-TTS']], config.modelKind);
-    const backend = select(section, 'Device', [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], config.backend);
+    const backend = select(section, 'Device', mobile ? [['cpu', 'CPU'], ['vulkan', 'GPU (Vulkan)']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], config.backend);
     const model = pickerField(section, 'Model GGUF', config.model), projector = pickerField(section, 'Matching mmproj GGUF', config.projector), voice = pickerField(section, 'Reference voice audio', config.voice), language = field(section, 'Language code', config.language);
     section.append(button('Save changes', async () => { draw(await call('localai-save', { engine: 'tts', config: { ...config, backend: backend.value, modelKind: family.value, model: model.value, projector: projector.value, voice: voice.value, language: language.value }, revision: state.revision })); }));
     const prompt = field(section, 'Text to speak', '', true), output = field(section, 'New output WAV file', '');
@@ -203,6 +233,7 @@ export async function localAISettings(parent, control, win, isLocal) {
     const device = select(form, 'Run on', [['none', 'CPU']], 'none');
     const deviceNote = node('p'); form.append(deviceNote);
     const layers = field(form, 'GPU layers — all, auto, or a number', '0');
+    layers.parentElement.hidden = mobile;
     const fit = check(form, 'Fit the model to available memory', true);
     const cacheGpu = check(form, 'Keep KV cache on GPU', false);
     const flash = select(form, 'Flash attention', [['auto', 'Automatic'], ['on', 'On'], ['off', 'Off']], 'auto');
@@ -221,23 +252,27 @@ export async function localAISettings(parent, control, win, isLocal) {
       try { const result = await control('localai-router-model-test-cancel', { owner }); if (owner === testOwner) showTest(result); }
       catch (error) { if (editor.isConnected) status.textContent = error.message; }
     };
+    const visibilityTest = () => { if (doc.hidden) void cancelTest(); };
+    const disposeTest = () => { observer.disconnect(); signal.removeEventListener('abort', disposeTest); doc.removeEventListener('visibilitychange', visibilityTest); void cancelTest(); };
     const observer = new win.MutationObserver(() => {
-      if (!active() || !editor.isConnected) { observer.disconnect(); void cancelTest(); }
+      if (!active() || !editor.isConnected) disposeTest();
     });
+    signal.addEventListener('abort', disposeTest, { once: true });
+    doc.addEventListener('visibilitychange', visibilityTest);
     const populate = selected => {
       const value = catalogue.models.find(item => item.name === selected);
       const config = value?.config || { device: 'none', gpuLayers: 0, contextSize: 0, fit: true, cacheGpu: false, flashAttention: 'auto', idleMinutes: 0 };
       originalName = value?.name; name.value = value?.name || ''; model.value = config.model || ''; projector.value = config.projector || '';
       context.value = config.contextSize ?? 0; layers.value = config.gpuLayers ?? 'auto'; fit.checked = config.fit !== false;
       cacheGpu.checked = config.cacheGpu !== false; flash.value = config.flashAttention || 'auto'; extra.value = config.extra || '';
-      const choices = [['none', 'CPU'], ['', 'Engine default'], ...catalogue.devices.map(item => [item.id, item.label || item.id])];
-      for (const backend of ['cuda', 'vulkan']) {
+      const choices = mobile ? [['none', 'CPU'], ...catalogue.devices.filter(item => item.backend === 'vulkan').map(item => [item.id, 'GPU (Vulkan)'])] : [['none', 'CPU'], ['', 'Engine default'], ...catalogue.devices.map(item => [item.id, item.label || item.id])];
+      for (const backend of mobile ? [] : ['cuda', 'vulkan']) {
         const devices = catalogue.devices.filter(item => item.backend === backend);
         if (devices.length > 1) choices.push([devices.map(item => item.id).join(','), 'All ' + backend.toUpperCase() + ' GPUs']);
       }
-      if (config.device && !choices.some(([id]) => id === config.device)) {
+      if (typeof config.device === 'string' && !choices.some(([id]) => id === config.device)) {
         const available = config.device.split(',').every(id => catalogue.devices.some(item => item.id === id));
-        choices.push([config.device, config.device + (available ? ' (saved selection)' : ' (saved; not currently available)')]);
+        choices.push([config.device, config.device ? config.device + (available ? ' (saved selection)' : ' (saved; not currently available)') : 'Engine default (saved)']);
       }
       device.replaceChildren(...choices.map(([id, label]) => { const option = node('option', label); option.value = id; return option; })); device.value = config.device ?? '';
       deviceNote.textContent = catalogue.deviceError || '';
@@ -289,7 +324,7 @@ export async function localAISettings(parent, control, win, isLocal) {
     editor.append(button('Check model load', async () => {
       if (running()) throw Error('A load check is already running');
       if (!originalName || dirty || name.value !== originalName || savedConfig !== JSON.stringify(editedConfig())) throw Error('Save this model before checking its load');
-      testOwner = Services.uuid.generateUUID().toString().slice(1, -1);
+      testOwner = [...win.crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, '0')).join('').replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
       testState = 'loading';
       try { showTest(await call('localai-router-model-test', { file: catalogue.file, revision: catalogue.revision, name: originalName, owner: testOwner })); }
       catch (error) { await cancelTest(); throw error; }
@@ -320,7 +355,8 @@ export async function localAISettings(parent, control, win, isLocal) {
     const status = await call('native-models-status'); root.replaceChildren();
     const directory = pickerField(root, 'Models directory', status.directory, 'folder');
     root.append(button('Save models directory', async () => {
-      await call('project-root', { path: directory.value }); await call('native-models-settings', { directory: directory.value }); message.textContent = 'Models directory saved';
+      if (!mobile) await call('project-root', { path: directory.value });
+      await call('native-models-settings', { directory: directory.value }); message.textContent = 'Models directory saved';
     }));
     const tokenPanel = node('details'); tokenPanel.append(node('summary', 'Hugging Face token'));
     const token = field(tokenPanel, status.hasToken ? 'Saved privately on this host' : 'Optional token for gated models'); token.type = 'password';
@@ -391,13 +427,20 @@ export async function localAISettings(parent, control, win, isLocal) {
     refreshVisibleModels = () => root.isConnected && root.parentElement.open ? refreshJobs() : undefined;
   };
   await run(async () => draw(await call('localai-status')));
+  if (!active() || state?.needsSetup) return;
   // Update status only while this native panel is visible. Never replace an
   // unfinished configuration/INI edit with a background status response.
+  let timer = null, polling = false;
   const poll = async () => {
-    if (!active()) return;
+    timer = null;
+    if (!active() || doc.hidden || polling) return;
+    polling = true;
     try {
       if (!busy) {
         const latest = await call('localai-status');
+        if (!active() || doc.hidden) return;
+        if (latest.needsSetup) return;
+        if (!state) { draw(latest); return; }
         for (const engine of ['llama', 'whisper']) {
           const current = latest[engine];
           if (engineStatus[engine]?.isConnected) engineStatus[engine].textContent = [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, engine === 'llama' ? current.runtime?.backend && current.runtime.backend + ' runtime (per-model device)' : current.runtime?.selectedBackend].filter(Boolean).join(' · ');
@@ -409,7 +452,16 @@ export async function localAISettings(parent, control, win, isLocal) {
         await refreshVisibleModels?.();
       }
     } catch (error) { if (active()) message.textContent = error.message; }
-    if (active()) win.setTimeout(poll, 2000);
+    finally {
+      polling = false;
+      if (active() && !doc.hidden) timer = win.setTimeout(poll, 2000);
+    }
   };
-  win.setTimeout(poll, 2000);
+  const visibility = () => {
+    win.clearTimeout(timer); timer = null;
+    if (active() && !doc.hidden && !polling) void poll();
+  };
+  doc.addEventListener('visibilitychange', visibility, { signal });
+  signal.addEventListener('abort', () => win.clearTimeout(timer), { once: true });
+  if (active() && !doc.hidden) timer = win.setTimeout(poll, 2000);
 }
