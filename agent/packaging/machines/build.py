@@ -147,7 +147,9 @@ def build(args):
     runtime = cache / 'machines'; (runtime / 'bin').mkdir(parents=True, exist_ok=True)
     epoch = output(['git', 'log', '-1', '--format=%ct'], ROOT)
     env = {**os.environ, 'GOTOOLCHAIN': 'local', 'GOPROXY': 'off', 'GOSUMDB': 'off',
-           'GOTELEMETRY': 'off', 'GOFLAGS': '-mod=vendor -trimpath', 'CGO_ENABLED': '1',
+           # Materialized donors have no nested Git checkout. Do not embed the
+           # enclosing build workspace's VCS identity; explicit release pins are above.
+           'GOTELEMETRY': 'off', 'GOFLAGS': '-mod=vendor -trimpath -buildvcs=false', 'CGO_ENABLED': '1',
            'CARGO_NET_OFFLINE': 'true', 'CARGO_INCREMENTAL': '0', 'SOURCE_DATE_EPOCH': epoch,
            'PI_TELEMETRY': '0', 'DO_NOT_TRACK': '1', 'OTEL_SDK_DISABLED': 'true',
            'OMP_WAIT_POLICY': 'ACTIVE', 'GOMP_SPINCOUNT': 'INFINITE'}
