@@ -24,6 +24,11 @@ existing entries. Normal XDG autostart runs `bashkitten-os session`, which owns
 runtime layout, the Settings portal and the optional guest indicator. No login
 script installs packages or repeatedly resets desktop preferences.
 
+The portal preference is seeded during that explicit provisioning only when
+the owned profile has no generic or XFCE portal configuration. Its template
+stays in BashKitten OS's private data directory; the package does not replace
+`xfce4-session`'s system portal file or overwrite user portal choices.
+
 The container owner exports its execution role, desktop context and guest service
 status file. The Termux session records its actual X11/session-bus context in the
 private owner-provided path. `bashkitten-desktop-context` resolves that context per
