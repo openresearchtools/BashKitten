@@ -17,50 +17,93 @@ are additional mandatory amendments. Their source is integrated in `fb867067e4`;
 the combined `3c35d56d7c` Android/Termux/Linux development packages were built
 and installed. Whole-feature acceptance remains in progress.
 
-The current development candidate is
-`005d3e5b2d45dcb899f57d40b22e92f9b7cc6a93`. Its Linux package is fully built,
-source-verified and installed on the native Wayland host and real Xorg VM.
-The matched Android APK and Termux package are now installed on Android 16/17
-with BashKitten OS `0f16d716aa`. Installed APK hashes, backend revision, OS producer
-stamp and standard file manifests match; package verification is clean and normal
-postinst sets the paired loader to `0400` with the correct owner. Both Android
-apps were left stopped after installation; their new UI acceptance is pending.
-Installation receipts are `verification/android16-005d/installation.json` and
-`verification/android17-005d/installation.json` in the Build repository. This candidate uses
-the BashKitten OS package from `0f16d716aa`, private engine from `136d077c9f`
-and the freshly built guest package from `47620b1f83`. The native Gecko producer
-remains `609e82c200`, with exact input-equality and separate assembly receipts;
-the Android loader producer remains `780540ddf7`. The Linux and Android guard
-producers remain `9ffeedb41d` and `bb8061b0b9`, respectively.
+The current installed development candidate is
+`656abcd94b180ce52bee5b27a77b4e704ec5ed13`. Its Linux package is installed on the
+native Wayland host and real Xorg VM. The matched APK and Termux package are
+installed on Android 16/17. Package hashes, exact backend revision, OS producer,
+bootstrap metadata, guard and paired loader are verified; normal postinst sets
+the loader to `0400` and package verification is clean. These installations
+preserved the existing acceptance profiles; they are upgrade evidence, not fresh
+architecture acceptance.
 
-The `005d3e5b2d` package/source checksums and full corresponding-source collector
-passed. Independent inspection found 2,046 nonempty Linux offline notice records,
-including all 619 private-machine notices and the corrected full Plotters texts.
-It also found one package metadata defect: the recorded machine-archive checksum
-was overwritten by a library checksum. Input-archive and executable/library
-validation passed; runtime bytes are unaffected. `300e12d6bd` fixes that field
-for the next package. The immutable `005d3e5b2d` package retains this documented
-provenance limitation and is not a release-readiness claim.
+The candidate contains BashKitten OS from `0f16d716aa`, private engine from
+`136d077c9f` and a guest package built at `656abcd94b`. Its guest launcher prevents
+automatic crash-count Troubleshoot Mode for the managed browser through the
+supported environment setting; other browser launches are unchanged. The native
+Gecko producer remains `609e82c200`, with exact input-equality and separate
+assembly receipts. Android loader producer `780540ddf7`, Linux guard producer
+`9ffeedb41d` and Android guard producer `bb8061b0b9` remain recorded separately.
+The complete matching source collector and package checks passed. Linux includes
+2,046 nonempty full notice records; Android includes 2,014. These are build and
+provenance results, not a whole-product traffic or release acceptance claim.
 
-Initial installed `005d3e5b2d` Xorg checks pass the Callback label and selected
-Local page. Fresh machine creation succeeds, but its settings can race the older
-catalogue response; reopening after refresh works. `bdb08fdb58` repairs that race
-for the next candidate. The new machine is still preparing. A retained guest's
-`Browser exited 0` was traced during a normal Start to automatic Firefox
-Troubleshoot Mode after repeated crash tests, followed by a duplicate profile
-attempt; its managed-launch repair is pending. Neither startup is accepted yet.
-Raw code Download now reaches
-the normal Save File dialog, with actual saved-content verification still pending.
-These observations are recorded in
-`acceptance/xorg-vm-control/candidate-005d-ui.json` in the Build repository.
-The Wayland host also passes the visible Callback check, recorded in
-`verification/desktop-005d/installation.json`; this is not a calling-flow pass.
-The following committed source changes are
-also outside the installed `005d3e5b2d` candidate: `f4ac3e519e` matches question
-cards to chat styling; `a794347f3b` keeps the selected chat subscribed to turns
-started through an external entry point; `79b55863d8` clears a prior call's error
-when a new call begins; and `300e12d6bd` corrects package provenance above. Their
-source checks do not establish installed results.
+Actual Android 16 `656abcd94b` question cards now use the shared font, surfaces,
+rounded choices and custom-reply field in both explicit Light and Dark themes.
+The settled card appears beside its original tool call. A separate Follow device
+issue remains: changing Android night mode updated the native toolbar but left
+the open Agent page light; selecting explicit Dark updated it correctly. The
+original Follow device/light setting was restored. Saved screenshots are
+`verification/android16-656a/question-light.png` and
+`question-explicit-dark.png`. This presentation result does not establish every
+question delivery or dismissal case.
+
+The previous `005d3e5b2d` installed Xorg candidate passed fresh machine creation,
+actual native Display frames/input, compact Display chrome and ordinary tab
+navigation. Interactive guest sudo passed Ctrl-Z, `fg`, further input and Ctrl-C
+with a restored shell and empty jobs list. Thunar installed a real `.deb` and its
+APT dependencies without a password. A real KeePassXC AppImage launched through
+FUSE without an extracted-directory fallback. CSV showed its Unicode content;
+code and raw Markdown downloads reached the native Save File dialog and saved
+matching bytes. These are specific flow results, not the complete application,
+preview or desktop matrix. Evidence is in
+`acceptance/xorg-vm-control/candidate-005d-ui.json`.
+
+Android 16 `005d3e5b2d` showed Callback, matching installed Termux packages and
+Pi 1.1.0 in Updates. Its normal contact editor saved
+`kitten-phone@bashkitten.local`; calling that contact reached the managed call UI
+and normal hangup worked. The retained per-Local test alias still contains the
+old development address and is correctly rejected. There is no migration or
+transport fallback, and no fresh per-backend contact pass yet. A pending question
+was dismissed through its visible ×; subsequent distinct model questions were
+stopped normally. Because Stop interrupted queued delivery, that check does not
+establish complete dismissal acknowledgment. The public APT feed still lacks
+this development release, so local pairing does not prove a public-feed update.
+Evidence is in `verification/android16-005d/manual-progress.json`.
+
+A severe Xorg test-VM slowdown was independently traced to the installed
+AT-SPI 2.56.2 GTK bridge leaking dead process descriptors. The test host was
+repaired through its already configured official Debian backports packages and
+a normal VM reboot. Its previously busy desktop processes then showed no leaked
+pidfds and negligible sampled CPU. This is test-host maintenance, not a product
+patch or an inference-speed claim. New product guest dependency selection is
+being checked separately. The retained older guest also received the exact
+nested `656abcd94b` backend/guest and OS packages through normal APT/dpkg in its
+correct user namespace. Installed payloads and stable data/configuration were
+verified; normal native Start now reports Running and produces Display frames.
+Neither manual installed-file changes nor replacement rootfs/profile data were
+used to obtain that result.
+
+Candidate `656abcd94b` includes the new-container catalogue race fix, selected-chat
+external-turn subscription fix, prior-call error cleanup and machine-archive
+provenance correction. Their complete installed retests remain in progress.
+The older `005d3e5b2d` archive metadata recorded a library checksum instead of its
+validated input archive checksum; the runtime bytes were unaffected. That
+immutable artifact retains its documented limitation.
+
+Two further source fixes are committed and pushed but are outside installed
+`656abcd94b`: `a392e89b7c` permits hiding an expired question after historical
+Stop while retaining current ownership/branch checks, and `b2a0338e04` allows an
+already authorized settings response to return after an Android settings handoff
+only to the same registered document. New actions still require visibility.
+Their syntax and independent source reviews passed; installed retests await the
+next integrated candidate.
+
+Current receipts in the Build repository include
+`verification/combined-desktop-656a.json`, `source-release-656a.json`,
+`android-termux-handoff-656a.json`, `desktop-656a/installation.json`,
+`android16-656a/installation.json`, `android17-656a/installation.json`,
+`retained-guest-656/installation.json` and
+`xorg-atspi-005d/post-reboot-baseline.json`.
 
 The previous combined development candidate was
 `0cf34b8857d8d6faef040ca1135038bded74618c`, installed on the native Wayland
@@ -428,13 +471,13 @@ Checkpoint receipts are under `/run/media/user/Data/BashkittenBuild/`:
 | --- | --- | --- |
 | Android Display / paired Termux loader | Separate renderer and approved UID/FD bridge committed; matched current APK/backend/OS installed | Partial Android 17 rendered viewport/navigation; input/resize/lifetime matrix pending |
 | Linux Display / persistent gateway | Native module committed; current native helper/package source checks pass | Partial actual Xorg fresh-machine Display/input; complete Wayland/Xorg matrix pending |
-| Container lifecycle / private Podman | Persistent owner, private engine/namespace lifetime, guest lifecycle/sudo and desktop context packaged in `0cf34b8857` | Fresh Xorg creation/Display/interactive input pass; retained-guest startup and Ctrl-Z failures open; full lifecycle pending |
+| Container lifecycle / private Podman | Persistent owner, private engine/namespace lifetime, guest lifecycle/sudo and desktop context packaged; managed-launch correction in `656abcd94b` | Fresh Xorg creation/Display and sudo job control pass on `005d3e5b2d`; upgraded retained guest runs and renders on `656abcd94b`; full lifecycle matrix pending |
 | Native sidecar / projects / chats | Android hierarchy committed; desktop hierarchy, project folder ownership and private container connection integrated | Partial Xorg project/cwd/move/draft and one subagent completion path; Android/full matrix pending |
 | BashKitten OS / XFCE | Shared launcher/settings, layout, tray, scaling, application actions and role-specific CUA skills committed; Linux/native Termux packages built; fresh Termux initialization passes | Partial Xorg launcher/settings/input observations; remaining Termux/Linux desktop matrix open |
 | Phone controls / phoneuse | Main-APK module, live worker grants, revocation and CLI committed; Android-only configuration | Android 16 earlier Apps discovery/list and feature-Off denial; current Android 17 themes/master-choice retention observed; complete authorization/revocation matrix pending |
 | Telephony / contacts / messages / voicemail | Native library, private gateway, confirmed call speech, encrypted remote hooks and shared question delivery committed; integrated Java compilation passes | Pending |
 | Pi release / usage / ask_user | Pi 1.1.0, selected-account usage and deferred questions integrated using stock APIs | Pending |
-| Sources / licensing / telemetry / packages | `0cf34b8857` package/source checks and expanded offline notice collection pass with distinct native producers retained | Full architecture, traffic and installed release acceptance pending |
+| Sources / licensing / telemetry / packages | `656abcd94b` package/source checks and expanded offline notice collection pass with distinct native producers retained | Full architecture, traffic and installed release acceptance pending |
 
 Cuttlefish remains on stock Android 17 build 16373615 with native KVM, 16 GiB RAM
 and 128 GiB SSD userdata. The separate libvirt test VM
