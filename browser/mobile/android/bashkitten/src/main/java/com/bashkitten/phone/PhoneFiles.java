@@ -15,6 +15,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 final class PhoneFiles {
+    private static final String transientDirectory="phone-control-"+UUID.randomUUID();
+    static File temporary(Context context,String prefix,String suffix)throws IOException{
+        File directory=new File(context.getCacheDir(),transientDirectory);
+        if(!directory.isDirectory()&&!directory.mkdir()&&!directory.isDirectory())throw new IOException("Phone temporary storage unavailable");
+        return File.createTempFile(prefix,suffix,directory);
+    }
+    static void discardPrevious(Context context){
+        File[] entries=context.getCacheDir().listFiles();if(entries==null)return;
+        for(File entry:entries){String name=entry.getName();
+            if(name.startsWith("phone-control-")&&!name.equals(transientDirectory)){
+                try{if(!entry.getCanonicalPath().equals(entry.getAbsolutePath())){entry.delete();continue;}}catch(IOException ignored){continue;}
+                File[] children=entry.listFiles();if(children!=null)for(File child:children)child.delete();entry.delete();
+            }else if(name.startsWith("phone-screen-")||name.startsWith("phone-share-")||name.startsWith("phone-replace-"))entry.delete();
+        }
+    }
     private final Context context;private final PhonePolicy policy;private final PhoneRequestScope scope;
     private static final class SharedFile {final File file;final String name;SharedFile(File file,String name){this.file=file;this.name=name;}}
     private static final List<SharedFile> shares=Collections.synchronizedList(new ArrayList<>());
@@ -31,8 +46,9 @@ final class PhoneFiles {
         final long generation=policy.generation();
         shareIO.execute(()->{String error=null;PhoneRequestScope scope=new PhoneRequestScope();sharing.add(scope);
             try {for(Uri uri:received){if(!"content".equals(uri.getScheme()))throw new SecurityException("Only deliberately shared content is accepted");Runnable check=()->policy.require(PhonePolicy.Feature.FILES,generation);check.run();
-                File file=File.createTempFile("phone-share-",".data",context.getCacheDir());boolean kept=false;
-                try {String name=new PhoneFiles(context,policy).name(uri);try(InputStream in=scope.own(context.getContentResolver().openInputStream(uri));OutputStream out=scope.own(new FileOutputStream(file))){copy(in,out,check);}check.run();shares.add(new SharedFile(file,name));kept=true;}finally{if(!kept)file.delete();}
+                android.content.pm.ProviderInfo source=context.getPackageManager().resolveContentProvider(uri.getAuthority(),0);if(source==null)throw new SecurityException("Shared provider unavailable");PhoneProviders.allowPackage(context,source.packageName);
+                File file=temporary(context,"share-",".data");boolean kept=false;
+                try {String name=new PhoneFiles(context,policy,scope).name(uri,check);try(InputStream in=scope.own(context.getContentResolver().openInputStream(uri));OutputStream out=scope.own(new FileOutputStream(file))){copy(in,out,check);}check.run();shares.add(new SharedFile(file,name));kept=true;}finally{if(!kept)file.delete();}
             }}catch(Exception failure){error="Shared file unavailable or access was revoked";}finally{scope.close();sharing.remove(scope);}
             done.accept(error);
         });
@@ -40,17 +56,22 @@ final class PhoneFiles {
     static void clearShares(){for(PhoneRequestScope scope:sharing)scope.close();sharing.clear();synchronized(shares){for(SharedFile share:shares)share.file.delete();shares.clear();}}
     JSONArray locations(){try{return new JSONArray(policy.preferences.getString("locations","[]"));}catch(Exception e){return new JSONArray();}}
     private JSONObject location(String id)throws Exception{JSONArray all=locations();for(int i=0;i<all.length();i++){JSONObject item=all.getJSONObject(i);if(item.optString("id").equals(id))return item;}throw new SecurityException("Location not granted");}
-    private Uri resolve(JSONObject location,String path,boolean create)throws Exception{
+    private Cursor query(Uri uri,String[] columns,Runnable check)throws Exception{
+        android.os.CancellationSignal signal=new android.os.CancellationSignal();scope.own((AutoCloseable)signal::cancel);check.run();
+        Cursor cursor=context.getContentResolver().query(uri,columns,null,null,null,signal);return cursor==null?null:scope.own(cursor);
+    }
+    private Uri resolve(JSONObject location,String path,boolean create,Runnable check)throws Exception{
         Uri tree=Uri.parse(location.getString("uri"));boolean granted=false;for(UriPermission p:context.getContentResolver().getPersistedUriPermissions())if(p.getUri().equals(tree)&&p.isReadPermission()&&(!create||p.isWritePermission()))granted=true;
         if(!granted)throw new SecurityException("Location Android access revoked");
         Uri current=DocumentsContract.buildDocumentUriUsingTree(tree,DocumentsContract.getTreeDocumentId(tree));
         String[] names=path.isEmpty()?new String[0]:path.split("/",-1);
         for(int i=0;i<names.length;i++){
+            check.run();
             String name=names[i];if(name.isEmpty()||name.equals(".")||name.equals("..")||name.indexOf('\0')>=0)throw new IllegalArgumentException("Use relative document path");
-            Uri child=null;try(Cursor c=context.getContentResolver().query(DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getDocumentId(current)),new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME},null,null,null)){
+            Uri child=null;try(Cursor c=query(DocumentsContract.buildChildDocumentsUriUsingTree(tree,DocumentsContract.getDocumentId(current)),new String[]{DocumentsContract.Document.COLUMN_DOCUMENT_ID,DocumentsContract.Document.COLUMN_DISPLAY_NAME},check)){
                 if(c!=null)while(c.moveToNext())if(name.equals(c.getString(1))){child=DocumentsContract.buildDocumentUriUsingTree(tree,c.getString(0));break;}
             }
-            if(child==null&&create&&i==names.length-1)child=DocumentsContract.createDocument(context.getContentResolver(),current,"application/octet-stream",name);
+            if(child==null&&create&&i==names.length-1){check.run();child=DocumentsContract.createDocument(context.getContentResolver(),current,"application/octet-stream",name);}
             if(child==null)throw new FileNotFoundException();current=child;
         }
         return current;
@@ -64,10 +85,10 @@ final class PhoneFiles {
         JSONObject location=location(a.getString("location"));
         boolean writing=Set.of("files.write","files.append","files.replace","files.download").contains(command),deleting=command.equals("files.delete");
         if(!location.optBoolean("read")||(writing&&!location.optBoolean("write"))||(deleting&&!location.optBoolean("delete")))throw new SecurityException("Location policy denies operation");
-        Uri uri=resolve(location,a.optString("path"),writing);check.run();
+        Uri uri=resolve(location,a.optString("path"),writing,check);check.run();
         switch(command){
             case "files.list":
-                JSONArray list=new JSONArray();try(Cursor c=context.getContentResolver().query(DocumentsContract.buildChildDocumentsUriUsingTree(uri,DocumentsContract.getDocumentId(uri)),new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE},null,null,null)){
+                JSONArray list=new JSONArray();try(Cursor c=query(DocumentsContract.buildChildDocumentsUriUsingTree(uri,DocumentsContract.getDocumentId(uri)),new String[]{DocumentsContract.Document.COLUMN_DISPLAY_NAME,DocumentsContract.Document.COLUMN_MIME_TYPE,DocumentsContract.Document.COLUMN_SIZE},check)){
                     if(c!=null)while(c.moveToNext()){check.run();list.put(new JSONObject().put("name",c.getString(0)).put("type",c.getString(1)).put("size",c.isNull(2)?JSONObject.NULL:c.getLong(2)));}
                 }return result(new JSONObject().put("files",list));
             case "files.read":return new PhoneCommand.Result(scope.own(context.getContentResolver().openInputStream(uri)),"application/octet-stream",null);
@@ -77,7 +98,7 @@ final class PhoneFiles {
             case "files.replace":
                 String find=a.getString("find");if(find.isEmpty())throw new IllegalArgumentException("Find text must not be empty");
                 // Stream the replacement into an owned temporary document before replacing the target.
-                File temp=File.createTempFile("phone-replace-",".txt",context.getCacheDir());
+                File temp=temporary(context,"replace-",".txt");
                 try{
                     try(Reader in=new InputStreamReader(scope.own(context.getContentResolver().openInputStream(uri)),StandardCharsets.UTF_8);Writer out=new OutputStreamWriter(new FileOutputStream(temp),StandardCharsets.UTF_8)){
                         StringBuilder pending=new StringBuilder();int next;while((next=in.read())!=-1){check.run();pending.append((char)next);if(pending.length()>=find.length()){if(pending.toString().equals(find)){out.write(a.getString("text"));pending.setLength(0);}else{out.write(pending.charAt(0));pending.deleteCharAt(0);}}}out.write(pending.toString());
@@ -90,7 +111,7 @@ final class PhoneFiles {
         }
         check.run();return result(new JSONObject().put("status","completed"));
     }
-    private String name(Uri uri){try(Cursor c=context.getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){if(c!=null&&c.moveToFirst())return c.getString(0);}catch(Exception ignored){}return "Shared file";}
+    private String name(Uri uri,Runnable check)throws Exception{try(Cursor c=query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},check)){if(c!=null&&c.moveToFirst())return c.getString(0);}return "Shared file";}
     private static PhoneCommand.Result result(JSONObject json){return new PhoneCommand.Result(json);}
     static void copy(InputStream in,OutputStream out,Runnable check)throws IOException{if(in==null||out==null)throw new FileNotFoundException();byte[] bytes=new byte[65536];int n;while((n=in.read(bytes))!=-1){check.run();out.write(bytes,0,n);}check.run();}
     static void requirePublic(InetAddress address){

@@ -62,8 +62,16 @@ async function main() {
   let directory;
   if (!output) { directory = await fsp.mkdtemp(path.join(os.tmpdir(), 'bashkitten-phone-')); await fsp.chmod(directory, 0o700); output = path.join(directory, command === 'screen.screenshot' ? 'screen.png' : 'file'); }
   output = path.resolve(output);
-  try { await pipeline(response, fs.createWriteStream(output, { flags: 'wx', mode: 0o600 }), { signal: controller.signal }); }
-  catch (error) { await fsp.rm(output, { force: true }); if (directory) await fsp.rm(directory, { recursive: true, force: true }); throw error; }
+  let destination;
+  try {
+    destination = await fsp.open(output, 'wx', 0o600);
+    await pipeline(response, destination.createWriteStream(), { signal: controller.signal });
+  } catch (error) {
+    response.destroy();
+    if (destination) { await destination.close().catch(() => {}); await fsp.rm(output, { force: true }); }
+    if (directory) await fsp.rm(directory, { recursive: true, force: true });
+    throw error;
+  }
   process.stdout.write(JSON.stringify({ path: output, temporary: Boolean(directory), type: response.headers['content-type'] }) + '\n');
 }
 main().finally(() => clearInterval(renewal)).catch(error => { process.stderr.write(JSON.stringify({ error: error.message, code: controller.signal.aborted ? 'cancelled' : 'unavailable' }) + '\n'); process.exitCode = 1; });
