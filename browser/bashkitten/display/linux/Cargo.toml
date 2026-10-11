@@ -1,0 +1,22 @@
+[package]
+name = "bashkitten-display"
+version = "1.0.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+
+[dependencies]
+anyhow = "1.0"
+libc = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+png = "0.18"
+wayland-protocols = { version = "0.32", features = ["server", "staging", "unstable"] }
+wayland-server = "0.31"
+xkbcommon = "0.8"
+
+[profile.release]
+lto = "thin"
+strip = true
+
+[workspace]

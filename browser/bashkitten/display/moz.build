@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+    XPIDL_SOURCES += ["native/nsIBashKittenDisplay.idl"]
+    XPIDL_MODULE = "bashkitten_display"
+    SOURCES += ["native/BashKittenDisplay.cpp"]
+    XPCOM_MANIFESTS += ["native/components.conf"]
+    LOCAL_INCLUDES += [
+        "/dom/media", "/dom/media/mediaelement", "/gfx/layers", "/gfx/layers/ipc",
+        "/toolkit/components/jsoncpp/include", "/widget/gtk",
+    ]
+    USE_LIBS += ["jsoncpp"]
+    FINAL_LIBRARY = "xul"
+    EXTRA_JS_MODULES += ["BashKittenDisplay.sys.mjs"]
+    JAR_MANIFESTS += ["jar.mn"]
