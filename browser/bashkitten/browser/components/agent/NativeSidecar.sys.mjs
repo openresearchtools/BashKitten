@@ -13,6 +13,12 @@ export class NativeSidecar {
     this.notice = this.node("p", { role: "status" }); this.root.append(this.notice);
   }
   node(tag, attrs = {}, text) { const node = this.doc.createElementNS(NS, tag); for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); if (text !== undefined) node.textContent = text; return node; }
+  icon(kind) {
+    const paths = { folder: "M3 7V5h6l2 2h10v13H3V7Z", project: "M3 7V5h6l2 2h10v13H3V7Zm5 6h8m-4-4v8", compose: "M12 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-7M15 3l6 6M10 14l-1 4 4-1L22 8l-3-3Z" };
+    const svg = this.doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24"); svg.setAttribute("aria-hidden", "true");
+    const path = this.doc.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("d", paths[kind]); svg.append(path); return svg;
+  }
   button(text, label, action) {
     const button = this.node("button", { type: "button", title: label, "aria-label": label }, text);
     button.addEventListener("click", async () => { button.disabled = true; try { this.notice.textContent = ""; await action(); } catch (error) { this.notice.textContent = error.message; } finally { button.disabled = false; } }); return button;
@@ -111,8 +117,12 @@ export class NativeSidecar {
       if (backend.kind !== "local") section.append(this.node("small", { class: "native-backend-state", role: "status" }, backend.state || "Disconnected"));
       if (backend.error || backend.lastError) section.append(this.node("p", { class: "native-error" }, backend.error || backend.lastError));
       const snapshot = this.cache.get(backend.id), tools = this.node("div", { class: "native-chat-tools" });
-      tools.append(this.button("+ Chat", "New standalone chat", async () => { await this.select(backend.id); await this.navigation("new"); await this.refreshChats(); }),
-        this.button("+ Project", "Create project", async () => { await this.select(backend.id); await this.projectPicker(); })); section.append(tools);
+      const newChat = this.button("New chat", "New standalone chat", async () => { await this.select(backend.id); await this.navigation("new"); await this.refreshChats(); });
+      newChat.className = "native-new-chat"; newChat.prepend(this.icon("compose"));
+      const newProject = this.button("", "Create project", async () => { await this.select(backend.id); await this.projectPicker(); });
+      newProject.className = "native-project-add";
+      newProject.append(this.icon("project"));
+      tools.append(newChat, newProject); section.append(tools);
       if (!snapshot) { section.append(this.node("small", {}, "Select to load chats")); continue; }
       const sessions = snapshot.sessions || [], known = new Set(sessions.map(session => session.id));
       const roots = sessions.filter(session => !known.has(session.subagentParent));
@@ -130,9 +140,11 @@ export class NativeSidecar {
       for (const project of snapshot.projects || []) {
         const group = this.node("details"); group.open = this.expanded.get(backend.id + ":" + project.id) !== false;
         group.addEventListener("toggle", () => this.expanded.set(backend.id + ":" + project.id, group.open));
-        group.append(this.node("summary", {}, project.name));
+        const summary = this.node("summary"); summary.append(this.icon("folder"), this.node("span", {}, project.name)); group.append(summary);
         const actions = this.node("div", { class: "native-chat-tools" });
-        actions.append(this.button("+ Chat", "New chat in " + project.name, async () => { await this.select(backend.id); await this.navigation("new", { projectId: project.id }); await this.refreshChats(); }),
+        const newProjectChat = this.button("New chat", "New chat in " + project.name, async () => { await this.select(backend.id); await this.navigation("new", { projectId: project.id }); await this.refreshChats(); });
+        newProjectChat.className = "native-new-chat"; newProjectChat.prepend(this.icon("compose"));
+        actions.append(newProjectChat,
           this.button("⋯", "Project actions", async () => { await this.select(backend.id); this.projectActions(project); })); group.append(actions);
         for (const chat of roots.filter(chat => chat.projectId === project.id)) appendChat(chat, group);
         section.append(group);

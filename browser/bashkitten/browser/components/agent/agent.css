@@ -15,17 +15,40 @@
 #bashkitten-agent-views { min-height: 0; }
 #bashkitten-agent-views > browser { min-width: 0; min-height: 0; }
 #bashkitten-native-workspace, #bashkitten-native-chat { min-width: 0; min-height: 0; }
-#bashkitten-native-sidecar { width: 240px; min-width: 150px; overflow: auto; border-inline-end: 1px solid var(--chrome-content-separator-color); padding: 8px; font: menu; }
+#bashkitten-native-sidecar { --sidecar-bg: #e8e8e8; --sidecar-surface: #fff; --sidecar-active: #e5e5e7; --sidecar-line: #dcdcdf; --sidecar-text: #242426; --sidecar-muted: #66666b; width: 264px; min-width: 180px; overflow: auto; overscroll-behavior: contain; border-inline-end: 1px solid var(--sidecar-line); padding: 7px 8px 16px; background: var(--sidecar-bg); color: var(--sidecar-text); font: 14px Inter, ui-sans-serif, system-ui, sans-serif; }
+@media (prefers-color-scheme: dark) {
+  #bashkitten-native-sidecar { --sidecar-bg: #252526; --sidecar-surface: #2b2b2b; --sidecar-active: #333337; --sidecar-line: #343438; --sidecar-text: #e8e8e8; --sidecar-muted: #a6a6aa; }
+}
 #bashkitten-native-sidecar .native-backend { margin-block-end: 16px; }
-#bashkitten-native-sidecar :is(.native-backend-heading, .native-chat, .native-chat-tools) { display: flex; gap: 3px; align-items: center; }
-#bashkitten-native-sidecar button { padding: 4px 7px; min-width: 26px; }
-#bashkitten-native-sidecar .native-title { flex: 1; min-width: 0; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; border-color: transparent; }
-#bashkitten-native-sidecar .native-backend-heading .native-title { font-weight: 600; }
-#bashkitten-native-sidecar .native-chat[data-selected="true"] { border-radius: 12px; background: var(--button-background-color-active, Highlight); }
-#bashkitten-native-sidecar :is(p, small) { overflow-wrap: anywhere; }
-#bashkitten-native-sidecar details { padding-inline-start: 8px; margin-block: 6px; }
+#bashkitten-native-sidecar .native-backend + .native-backend { border-top: 1px solid var(--sidecar-line); padding-top: 8px; }
+#bashkitten-native-sidecar :is(.native-backend-heading, .native-chat, .native-chat-tools) { display: flex; min-width: 0; gap: 2px; align-items: center; }
+#bashkitten-native-sidecar button { min-width: 30px; min-height: 30px; padding: 5px 7px; border: 1px solid transparent; border-radius: 12px; background: transparent; color: inherit; font: inherit; }
+#bashkitten-native-sidecar button:hover { background: var(--sidecar-active); }
+#bashkitten-native-sidecar button:focus-visible { outline: 1px solid var(--sidecar-text); outline-offset: -1px; }
+#bashkitten-native-sidecar button:disabled { opacity: .52; cursor: default; }
+#bashkitten-native-sidecar .native-title { flex: 1; min-width: 0; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#bashkitten-native-sidecar .native-backend-heading { min-height: 34px; }
+#bashkitten-native-sidecar .native-backend-heading .native-title { font-size: 13px; font-weight: 600; }
+#bashkitten-native-sidecar .native-backend-heading button:not(.native-title) { padding: 0; border-radius: 50%; color: var(--sidecar-muted); }
+#bashkitten-native-sidecar .native-chat-tools { min-height: 41px; margin-bottom: 5px; }
+#bashkitten-native-sidecar .native-chat-tools > button:first-child { flex: 1; text-align: start; min-height: 41px; padding-inline: 10px; }
+#bashkitten-native-sidecar .native-new-chat { display: flex; align-items: center; gap: 10px; }
+#bashkitten-native-sidecar .native-project-add { width: 34px; height: 34px; padding: 7px; color: var(--sidecar-muted); }
+#bashkitten-native-sidecar svg { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vertical-align: middle; }
+#bashkitten-native-sidecar .native-chat { margin-block: 1px; border-radius: 12px; font-size: 13px; }
+#bashkitten-native-sidecar .native-chat:hover { background: var(--sidecar-surface); }
+#bashkitten-native-sidecar .native-chat[data-selected="true"] { background: var(--sidecar-active); }
+#bashkitten-native-sidecar .native-chat > .native-title { font-size: 13px; font-weight: 430; padding: 7px 9px; }
+#bashkitten-native-sidecar :is(p, small) { overflow-wrap: anywhere; color: var(--sidecar-muted); }
+#bashkitten-native-sidecar > p:empty { display: none; }
+#bashkitten-native-sidecar :is(.native-error, [role="status"]:not(.native-backend-state)) { max-height: 5.5em; overflow: auto; font-size: 12px; }
+#bashkitten-native-sidecar .native-backend-state { display: block; margin: 0 8px 4px; font-size: 12px; }
+#bashkitten-native-sidecar details { padding-inline-start: 8px; margin-block: 5px 12px; }
+#bashkitten-native-sidecar summary { padding: 7px 8px; border-radius: 12px; color: var(--sidecar-muted); font-size: 13px; font-weight: 570; cursor: pointer; }
+#bashkitten-native-sidecar summary > svg { margin-inline-end: 9px; }
+#bashkitten-native-sidecar summary:hover { background: var(--sidecar-active); }
 #bashkitten-agent-pane[data-connections] #bashkitten-native-workspace { display: none; }
-:root[bashkitten-agent-layout="split"] #bashkitten-native-sidecar { width: 160px; }
+:root[bashkitten-agent-layout="split"] #bashkitten-native-sidecar { width: 220px; }
 #bashkitten-agent-pane[data-connections] > :is(#bashkitten-agent-state, #bashkitten-agent-views) { display: none !important; }
 #bashkitten-agent-connections { flex: 1; min-height: 0; overflow: auto; padding: 24px; font: menu; }
 #bashkitten-agent-connections .connections-content { width: min(650px, 100%); margin-inline: auto; }
