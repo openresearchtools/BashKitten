@@ -3463,3 +3463,15 @@ installation and progress must remain nonblocking for browser UI. Desktop
 packages remain entirely managed by system APT; remove its embedded package
 update controls rather than adding a second desktop updater. Preserve source
 and license delivery in the existing browser About/settings.
+
+### Readable local calling address — 11 October 2026
+
+Use **`bashkitten.local`**, rather than `bashkitten.invalid`, in newly created
+Kitten calling/contact addresses. The user requested this because “invalid”
+looks like a broken address. Keep the existing managed Telecom account and
+opaque backend aliases; this changes their native identifier's presentation,
+not the transport or backend authorization. The user explicitly rejected
+retrospective compatibility for these unreleased development changes: accept
+only the new `.local` addresses, with no old `.invalid` alias fallback or
+migration. Do not retarget deleted/revoked identities, add contacts access or
+rewrite the user's contacts silently. Contacts still use Android's normal editor.
