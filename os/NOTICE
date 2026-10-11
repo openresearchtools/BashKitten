@@ -15,8 +15,9 @@ Retained and adapted source:
 - BuzzardOS podman, 6c1b89f25c196ae7ab4a8f20e166b27e4ee94cc0:
   Thunar custom-action identities/merge behavior, AGPL-3.0-or-later.
 - XFCE panel 4.20.8, 56211a5feb13158447c930c8de2b713a9256c1be:
-  GPL-2.0-or-later, libxfce4panel LGPL-2.1-or-later. Only the per-window
-  Two app mode action is patched; stock tasklist and systray implementations remain.
+  GPL-2.0-or-later, libxfce4panel LGPL-2.1-or-later. The per-window
+  Two app mode action and a generated-header build dependency are patched;
+  stock tasklist and systray implementations remain.
 - Xfwm4 4.20.0, 7cadce33226be955fa2677b97a1969701d246b80:
   default decoration theme, GPL-2.0-or-later. Recolored to Gnozzard palette.
 - BashKitten kitten-with-glasses logo, AGPL-3.0-only; original retained in

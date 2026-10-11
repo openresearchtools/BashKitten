@@ -1,0 +1,18 @@
+From: BashKitten contributors
+Subject: [PATCH] meson: order common compilation after its generated enum header
+
+common/panel-utils.h includes libxfce4panel.h, which includes the generated
+enum-types header. A clean parallel build can compile panel-utils before the
+header exists. Declare the header as an input without linking the common
+library to libxfce4panel or changing runtime behavior.
+
+--- a/common/meson.build
++++ b/common/meson.build
+@@ -1,6 +1,7 @@
+ libpanel_common = static_library(
+   'panel-common',
+   [
++    libpanel_enums[0],
+     'panel-debug.c',
+     'panel-debug.h',
+     'panel-utils.c',
