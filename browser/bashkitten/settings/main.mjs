@@ -4,7 +4,7 @@ const sections = Object.freeze({
   updates: { title: 'Updates', module: './updates.mjs', platform: 'android' },
   localai: { title: 'Local AI', module: './localai.mjs' },
   notifications: { title: 'Notifications', module: './phone.mjs' },
-  telephone: { title: 'Telephone', module: './phone.mjs' },
+  telephone: { title: 'Callback', module: './phone.mjs' },
   'phone-use': { title: 'Phone use', module: './device-controls.mjs', platform: 'android' },
   remotes: { title: 'Remote Connections', module: './remotes.mjs' },
   performance: { title: 'Performance', module: './performance.mjs' },

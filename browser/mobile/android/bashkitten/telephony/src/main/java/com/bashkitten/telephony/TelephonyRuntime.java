@@ -55,7 +55,7 @@ public final class TelephonyRuntime {
     public String connectionState() { Backend current = gateway; return current == null ? "not-started" : current.connectionState(); }
     public CompletableFuture<JSONObject> settingsSnapshot() { return job(() -> new JSONObject(settings().toString())); }
     public CompletableFuture<JSONObject> startupSnapshot() { return job(() -> json("enabled", settings().optBoolean("startup"), "available", true,
-        "detail", enabled("telephony") || enabled("messages") ? "Restores enabled calling and message connections when BashKitten opens. Local must be available." : "Turn on Calls or Messages in Telephone settings to use this option.")); }
+        "detail", enabled("telephony") || enabled("messages") ? "Restores enabled calling and message connections when BashKitten opens. Local must be available." : "Turn on Calls or Messages in Callback settings to use this option.")); }
     public CompletableFuture<JSONObject> setStartup(boolean enabled) { return configure(json("startup", enabled)).thenCompose(ignored -> startupSnapshot()); }
     private TelephonyRuntime(Context context) {
         this.context = context; telecom = new TelecomHelper(context);

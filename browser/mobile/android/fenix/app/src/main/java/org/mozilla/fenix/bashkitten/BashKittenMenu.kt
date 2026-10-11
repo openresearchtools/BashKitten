@@ -48,7 +48,7 @@ class BashKittenMenuDialog : BottomSheetDialogFragment() {
                                     Triple("notifications", "Notifications", iconsR.drawable.mozac_ic_notification_24),
                                     Triple("phone-use", "Phone use", iconsR.drawable.mozac_ic_device_mobile_24),
                                     Triple("remotes", "Remote Connections", iconsR.drawable.mozac_ic_link_24),
-                                    Triple("telephone", "Telephone", agentR.drawable.ic_agent_phone),
+                                    Triple("telephone", "Callback", agentR.drawable.ic_agent_phone),
                                     Triple("performance", "Performance", agentR.drawable.ic_agent_performance),
                                     Triple("providers", "Providers", iconsR.drawable.mozac_ic_extension_24),
                                     Triple("updates", "Updates", iconsR.drawable.mozac_ic_download_24),
