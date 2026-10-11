@@ -1,0 +1,36 @@
+{
+  "release": "v1.12.0",
+  "commit": "3777403d148283c5a18a3e8122ff819da4eed808",
+  "pristine_import": "653010bc9d",
+  "adapted_root": "browser/mobile/android/bashkitten/src/main/java/com/bashkitten/phone",
+  "operations": {
+    "PhoneProviders.java": [
+      "services/notifications/NotificationProviderImpl.kt",
+      "foss/services/location/FossLocationProviderImpl.kt"
+    ],
+    "PhoneAccessibilityService.java": [
+      "services/accessibility/McpAccessibilityService.kt",
+      "services/accessibility/AccessibilityServiceProviderImpl.kt"
+    ],
+    "PhoneFiles.java": [
+      "services/storage/FileOperationProviderImpl.kt",
+      "services/storage/StorageLocationProviderImpl.kt"
+    ],
+    "PhoneNotificationService.java": [
+      "services/notifications/McpNotificationListenerService.kt"
+    ]
+  },
+  "removed": [
+    "MCP server/catalog/protocol/SDK",
+    "provider setup/onboarding/API keys",
+    "camera/microphone",
+    "donor UI",
+    "tunnels/native payloads",
+    "event/geofence/Wifi channels/webhooks",
+    "OAuth",
+    "remote icons",
+    "updates",
+    "persistent logs",
+    "unsupported close_app"
+  ]
+}
