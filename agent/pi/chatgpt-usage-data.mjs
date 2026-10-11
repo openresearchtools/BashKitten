@@ -58,8 +58,8 @@ export async function selectedUsageAuth(ctx) {
   // workspace mismatch is unavailable; never guess a personal account instead.
   if (typeof account !== 'string' || !account || (headers.has('chatgpt-account-id') && headers.get('chatgpt-account-id') !== account)) return null;
   headers.set('chatgpt-account-id', account); headers.set('accept', 'application/json');
-  const key = createHash('sha256').update(model.provider + ':' + account).digest('hex');
-  return { key, headers };
+  const key = createHash('sha256').update(account).digest('hex');
+  return { key, identity: model.provider + ':' + key, headers };
 }
 async function read(file) { try { return JSON.parse(await fs.readFile(file, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } }
 async function save(file, value) {
