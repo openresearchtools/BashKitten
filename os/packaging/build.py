@@ -15,6 +15,15 @@ def meson():return shlex.split(os.environ.get('BASHKITTEN_MESON','meson'))
 def write(path,text,mode=0o644):
     path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text);path.chmod(mode)
 
+def write_md5sums(stage):
+    records=[]
+    for path in sorted(stage.rglob('*')):
+        relative=path.relative_to(stage)
+        if relative.parts[0]=='DEBIAN' or path.is_symlink() or not path.is_file():continue
+        with path.open('rb') as stream:checksum=hashlib.file_digest(stream,'md5').hexdigest()
+        records.append(checksum+'  '+relative.as_posix()+'\n')
+    write(stage/'DEBIAN/md5sums',''.join(records))
+
 def cache_key(args,prefix):
     key=hashlib.sha256((ROOT/'upstream/sources.json').read_bytes())
     for patch in sorted((ROOT/'patches').rglob('*.patch')):
@@ -183,6 +192,8 @@ def main():
     termux=args.target=='termux'
     if args.architecture not in ({'aarch64','x86_64'} if termux else {'amd64','arm64'}):parser.error('Target/architecture mismatch')
     if not re.fullmatch(r'[0-9][0-9A-Za-z.+:~_-]*',args.version):parser.error('Invalid package version')
+    source_commit=args.source_commit or subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip()
+    if not re.fullmatch(r'[a-f0-9]{40}',source_commit):parser.error('Invalid source commit')
     args.build_dir=args.build_dir.resolve();args.output=args.output.resolve();args.output.mkdir(parents=True,exist_ok=True)
     stage=args.build_dir/'stage';shutil.rmtree(stage,ignore_errors=True);stage.mkdir(parents=True)
     prefix='/data/data/com.termux/files/usr' if termux else '/usr'
@@ -195,6 +206,8 @@ def main():
     shutil.copyfile(REPO/'browser/bashkitten/browser/branding/assets/bashkitten-logo-glasses-original.png',share/'logo.png')
     shutil.copytree(ROOT/'licenses',share/'licenses');shutil.copy(ROOT/'NOTICE',share/'NOTICE')
     shutil.copy(ROOT/'upstream/sources.json',share/'sources.json')
+    write(share/'build.json',json.dumps({'schemaVersion':1,'sourceCommit':source_commit,
+        'version':args.version,'target':args.target,'architecture':args.architecture},indent=2)+'\n')
     for record in records:
         donor=ROOT/'upstream'/record['name']
         for relative in record['files']:
@@ -257,11 +270,12 @@ Description: BashKitten OS desktop customization
     runpy.run_path(str(REPO/'agent/packaging/build.py'))['elf_payload'](stage,args.architecture,termux)
     if args.stage_only:
         print(stage);return
+    write_md5sums(stage)
     artifact=args.output/f'BashKittenOS_{args.version}_{args.architecture}.deb'
     run(['dpkg-deb','--root-owner-group','--build',stage,artifact])
     write(Path(str(artifact)+'.sha256'),digest(artifact)+'  '+artifact.name+'\n')
     provenance={'target':args.target,'architecture':args.architecture,'version':args.version,'panelKey':panel_key,'sources':[{k:v for k,v in r.items() if k!='files'} for r in records],
-        'sourceCommit':args.source_commit or subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip(),'depends':dependencies}
+        'sourceCommit':source_commit,'depends':dependencies}
     write(Path(str(artifact)+'.json'),json.dumps(provenance,indent=2)+'\n')
     print(artifact)
 if __name__=='__main__':main()

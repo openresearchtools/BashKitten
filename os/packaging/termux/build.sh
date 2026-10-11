@@ -46,6 +46,11 @@ termux_step_make_install() {
     cp -a "$TERMUX_PKG_BUILDDIR/component/stage$TERMUX_PREFIX/." "$TERMUX_PREFIX/"
 }
 termux_step_create_debscripts() {
+    # Hash the final payload, after the framework's ELF/shebang processing.
+    python3 - "$TERMUX_PKG_SRCDIR/repo/os/packaging/build.py" "$TERMUX_PKG_MASSAGEDIR" <<'PY'
+import pathlib, runpy, sys
+runpy.run_path(sys.argv[1])["write_md5sums"](pathlib.Path(sys.argv[2]))
+PY
     cat > postinst <<EOF
 #!$TERMUX_PREFIX/bin/sh
 set -e
