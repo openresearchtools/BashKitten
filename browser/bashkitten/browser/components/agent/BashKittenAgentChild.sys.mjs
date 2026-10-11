@@ -21,7 +21,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     const entry = new Map(Services.cpmm.sharedData.get("BashKittenAgentContexts") || []).get(principal.originAttributes.userContextId);
     if (!entry || principal.originNoSuffix !== entry.origin || this.browsingContext !== this.browsingContext.top) return;
     const win = this.contentWindow;
-    const host = Cu.cloneInto({ platform: "linux", local: entry.local, navigation: true }, win);
+    const host = Cu.cloneInto({ platform: "linux", local: entry.local, navigation: true, providerLogin: entry.providerLogin === true }, win);
     Cu.exportFunction((command, data = {}) => new win.Promise((resolve, reject) => {
       this.call(command, Cu.cloneInto(data, {}), entry).then(
         result => resolve(Cu.cloneInto(result, win)),
@@ -58,6 +58,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     if (command === "cancel-file-view") return this.sendQuery("CancelFileView");
     if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view.");
     if (command === "sign-in") return this.sendQuery("SignIn");
+    if (command === "provider-login-open" && entry.providerLogin === true && typeof data.attemptId === "string" && typeof data.url === "string") return this.sendQuery("ProviderLogin", { attemptId: data.attemptId, url: data.url });
     if (command === "view-file" && typeof data.url === "string") {
       const url = new URL(data.url, this.document.location.href);
       if (url.origin !== entry.origin || url.username || url.password || url.hash ||

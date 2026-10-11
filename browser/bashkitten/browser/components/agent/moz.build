@@ -9,8 +9,10 @@ EXTRA_JS_MODULES += [
     "BashKittenSettingsParent.sys.mjs",
     "ContainerConnection.sys.mjs",
     "DesktopLifetime.sys.mjs",
+    "DesktopAutostart.sys.mjs",
     "NativeSidecar.sys.mjs",
     "Performance.sys.mjs",
+    "ProviderLogin.sys.mjs",
     "RemoteSettings.sys.mjs",
 ]
 JAR_MANIFESTS += ["jar.mn"]

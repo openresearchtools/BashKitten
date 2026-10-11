@@ -14,6 +14,7 @@ import { podman, installed, run } from './process.mjs';
 import { startMedia, stopMedia, mediaDevices, mediaStatus, integrationArguments } from './media.mjs';
 import { duringUpdate, mutations, runtimeVersion, updateMessage, updateError } from './update.mjs';
 import { binary } from '../access/paths.mjs';
+import { installPendingAutostart, stoppedAutostart } from './autostart.mjs';
 import { shutdownOwnedMachines, stopOwnedGateway as stopGateway } from './shutdown.mjs';
 
 process.umask(0o077);
@@ -302,6 +303,7 @@ async function start(config, job) {
     if(!gateway || await processStart(gateway.pid)!==gateway.started) throw Error('The container is running but its display gateway stopped. Explicitly restart the machine to restore Display');
     await saveState(id,{state:'running'}); return;
   }
+  await installPendingAutostart(await load(id));
   if (info && state.definition !== definition(config)) { await podman(['rm',containerName(id)],{output:job.output,signal:job.signal}); info=null; }
   await saveState(id,{state:'starting',lastError:null});
   await job.phase('Starting the private display and guest services');
@@ -580,8 +582,21 @@ async function action(name,value={},requestSignal) {
     }
     return {type,text:new TextDecoder('utf-8',{fatal:true}).decode(result.stdout)};
   }
+  if(name==='autostart-status'||name==='autostart-save') return catalogue(async()=>{
+    if(active.has(value.id))throw Error('Wait for the current machine operation before editing startup commands');
+    const current=await load(value.id),info=await inspect(value.id);
+    const command=name.slice('autostart-'.length)==='save'?'autostart-save':'autostart-status';
+    if(info?.State?.Running) return guestCall(value.id,command,command==='autostart-save'?{revision:value.revision,commands:value.commands}:{});
+    return stoppedAutostart(current,command==='autostart-save'?{revision:value.revision,commands:value.commands}:undefined);
+  });
   if(name==='guest-control') {
-    if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-files','localai-share','service-status','service-save','service-remove','service-action','local-session','status','start','stop'].includes(value.command))throw Error('Unsupported guest settings operation');
+    if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-startup','share-files','localai-share','service-status','service-save','service-remove','service-action','local-session','status','start','stop',
+      'provider-login-describe','provider-login-status','provider-login-callback','provider-login-cancel',
+      'performance-sample','performance-close','localai-status','localai-record','localai-browse','localai-router-models','localai-router-model-save',
+      'localai-router-model-test','localai-router-model-test-status','localai-router-model-test-cancel','localai-save','localai-model-use',
+      'localai-synthesize','localai-synthesis-cancel','localai-ini','localai-check','localai-install','localai-quantize','localai-cancel',
+      'localai-action','localai-refresh','native-models-catalogue','native-models-preset','native-models-status','native-models-settings',
+      'native-models-search','native-models-repository','native-models-download','native-models-action','project-root'].includes(value.command))throw Error('Unsupported guest settings operation');
     return guestCall(value.id,value.command,value.value||{});
   }
   if(name==='start')return catalogue(async()=>{const cfg=await saveCapabilities(value);return begin(value.id,'start',job=>start(cfg,job));});

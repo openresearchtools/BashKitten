@@ -54,7 +54,7 @@ export class PiRpc extends EventEmitter {
     }
     // Filter the final merge too: no owner/registrar authority, including the
     // separate Phone HTTP token, can enter Pi through extra launch settings.
-    const inherited = Object.fromEntries(Object.entries({ ...process.env, ...extraEnvironment }).filter(([key]) => !key.startsWith('BASHKITTEN_PHONE_OWNER_') && !key.startsWith('BASHKITTEN_PHONE_REGISTRAR_') && key !== 'BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN'));
+    const inherited = Object.fromEntries(Object.entries({ ...process.env, ...extraEnvironment }).filter(([key]) => !key.startsWith('BASHKITTEN_PHONE_OWNER_') && !key.startsWith('BASHKITTEN_PHONE_REGISTRAR_') && !key.startsWith('BASHKITTEN_PROVIDER_OWNER_') && key !== 'BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN'));
     this.child = spawn(process.execPath, args, { cwd: meta.cwd, env: { ...inherited, PI_TELEMETRY: '0', BASHKITTEN_SESSION_ID: meta.id, BASHKITTEN_BROWSER_SOCKET: browserSocketPath(meta.browserOwner || meta.workerOwner || meta.id) }, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child.stdout.setEncoding('utf8');
     const lines = new JsonLines(value => {

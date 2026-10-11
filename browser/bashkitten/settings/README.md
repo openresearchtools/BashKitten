@@ -24,6 +24,19 @@ generic command executor. It receives a frozen `bashkittenSettings` object with
 `info`, `call(method, args)` and `subscribe(type, listener)`. Shared renderers use
 `renderSection({root, call, subscribe, info, signal})`.
 
+Autostart uses `autostart.get`, `autostart.set({id, enabled})` and
+`autostart.commands.save({environmentId, revision, commands})`. Native adapters
+resolve the current authoritative service flags and validate each target again
+on mutation. The shared page stores no parallel startup choices. Its snapshot
+contains grouped service entries and local execution environments, with command
+configuration revisions and actual process states. Informational on-demand
+services have no boolean startup field and therefore no pretend server switch.
+Command edits keep their environment and revision; a concurrent agent edit must
+be reported as a conflict, not overwritten. Opening or refreshing this page
+does not start services or run commands. Managed-container settings retain their
+native container identity and use that guest's private controller, configuration
+and Pi profile; saved remote connections retain their separate encrypted route.
+
 On Android, `AgentSettingsActivity` owns the private GeckoSession outside the
 ordinary-tab registry. `BashKittenSettingsController` is its typed event seam;
 `GeckoViewBashKitten` supplies only enrollment, visibility, event and close hooks.

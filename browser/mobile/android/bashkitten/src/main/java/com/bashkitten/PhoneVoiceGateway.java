@@ -26,7 +26,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     private volatile ServerSocket server;
     private volatile byte[] key;
     private volatile int port;
-    private volatile boolean desired,starting;
+    private volatile boolean desired,requested,starting;
     private volatile long epoch;
     private final Set<Socket> accepted=ConcurrentHashMap.newKeySet();
     private boolean current(long token){return desired && token==epoch;}
@@ -37,9 +37,15 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     PhoneVoiceGateway(BrowserApp app,AgentRuntime agent){
         this.app=app;this.agent=agent;phone=TelephonyRuntime.get(app);
         phone.install(this,()->app.main.post(()->{android.app.Activity activity=agent.activity.get();if(activity!=null)AgentSettingsActivity.open(activity,"localai");}));
-        phone.setEnabledListener(enabled->{desired=enabled;if(enabled){try{app.keepAlive();start();}catch(RuntimeException denied){phone.transportError(denied.getMessage());}}else close();});
+        phone.setEnabledListener(enabled->{desired=enabled;requested=enabled;if(enabled){try{app.keepAlive();start();}catch(RuntimeException denied){phone.transportError(denied.getMessage());}}else close();});
+        // Restoring a saved master is not itself a request to start transport.
+        phone.settingsSnapshot().thenAccept(settings->app.main.post(()->desired=settings.optBoolean("telephony")||settings.optBoolean("messages")));
     }
-    void ready(){if(desired){port=0;start();}}
+    CompletableFuture<Void> restoreStartup(){return phone.settingsSnapshot().thenCompose(settings->{
+        if(!settings.optBoolean("startup")||!settings.optBoolean("telephony")&&!settings.optBoolean("messages"))return CompletableFuture.completedFuture(null);
+        return prepare();
+    });}
+    void ready(){if(desired&&requested){port=0;start();}}
     synchronized void start(){
         if(!desired||starting||port!=0)return;starting=true;final long token=++epoch;
         if(remotePoll==null)remotePoll=delivery.scheduleWithFixedDelay(this::pollRemotes,2,2,TimeUnit.SECONDS);
@@ -91,7 +97,14 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     }catch(Exception denied){/* Unauthenticated or disconnected peers receive no native data. */}finally{accepted.remove(socket);}}
     @Override public CompletableFuture<Void> prepare(){
         CompletableFuture<Void> ready=new CompletableFuture<>();
-        app.main.post(()->{try{if(!desired)throw new IllegalStateException("Phone is off");app.keepAlive();start();awaitReady(ready,System.currentTimeMillis()+30000);}catch(Exception denied){ready.completeExceptionally(denied);}});
+        phone.settingsSnapshot().whenComplete((settings,error)->app.main.post(()->{
+            try{
+                if(error!=null)throw new CompletionException(error);
+                desired=settings.optBoolean("telephony")||settings.optBoolean("messages");
+                if(!desired)throw new IllegalStateException("Phone is off");
+                requested=true;app.keepAlive();start();awaitReady(ready,System.currentTimeMillis()+30000);
+            }catch(Exception denied){ready.completeExceptionally(denied);}
+        }));
         return ready;
     }
     private void awaitReady(CompletableFuture<Void> ready,long deadline){

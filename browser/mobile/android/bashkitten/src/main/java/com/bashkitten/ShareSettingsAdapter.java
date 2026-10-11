@@ -19,7 +19,7 @@ import org.json.JSONObject;
 /** Local-only host operations; never forwards administration over a remote route. */
 public final class ShareSettingsAdapter {
     private static final int SAVE_QR = 4821;
-    private static final Set<String> COMMANDS = Set.of("share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "localai-share");
+    private static final Set<String> COMMANDS = Set.of("share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "localai-share");
     private final Activity activity;
     private final AgentRuntime runtime;
     private final String installation;
@@ -69,6 +69,7 @@ public final class ShareSettingsAdapter {
                 }
                 if (method.equals("share-open-localai")) { AgentSettingsActivity.open(activity, "localai"); result.complete(new JSONObject()); return; }
                 if (!COMMANDS.contains(method)) throw new SecurityException("Unsupported Share Local operation");
+                if (method.equals("share-startup") && (args.length() != 1 || !(args.get("enabled") instanceof Boolean))) throw new IllegalArgumentException("Choose whether publishing starts automatically");
                 if (method.equals("share-confirm") || method.equals("share-cancel")) requireSetup(args);
                 if ((method.equals("share-setup") || method.equals("share-reissue")) && pendingSetup != null) throw new IllegalStateException("Finish or cancel the current authenticator setup first.");
                 if (method.equals("service-action") && !Set.of("start", "stop", "reload").contains(args.optString("action"))) throw new IllegalArgumentException("Unsupported service action");

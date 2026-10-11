@@ -27,7 +27,7 @@ import org.mozilla.geckoview.*;
 /** Browser-owned Gecko settings document, never registered as an ordinary tab. */
 public final class AgentSettingsActivity extends ProductActivity {
     private static final String URI = "about:bashkitten-settings";
-    private static final Set<String> SECTIONS = new HashSet<>(Arrays.asList("localai", "notifications", "phone-use", "remotes", "telephone", "performance", "display", "share-local"));
+    private static final Set<String> SECTIONS = new HashSet<>(Arrays.asList("localai", "notifications", "phone-use", "remotes", "telephone", "performance", "display", "share-local", "autostart"));
     private static final Set<String> LOCAL_AI = new HashSet<>(Arrays.asList(("localai-status localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action").split(" ")));
     private BrowserApp app;
     private GeckoSession session;
@@ -38,6 +38,7 @@ public final class AgentSettingsActivity extends ProductActivity {
     private RemoteSettingsAdapter remotes;
     private DisplaySettingsAdapter display;
     private ShareSettingsAdapter share;
+    private AutostartSettingsAdapter autostart;
     private ExecutorService counters;
     private PerformanceMonitor monitor;
     private String performanceLease;
@@ -87,6 +88,7 @@ public final class AgentSettingsActivity extends ProductActivity {
         } else if (section.equals("remotes")) remotes = new RemoteSettingsAdapter(this, this::event);
         else if (section.equals("display")) display = new DisplaySettingsAdapter(this, this::event);
         else if (section.equals("share-local")) share = new ShareSettingsAdapter(this, this::event);
+        else if (section.equals("autostart")) autostart = new AutostartSettingsAdapter(this, this::event);
         BashKittenSettingsController.setDelegate(session, section, this::call);
         session.open(app.host.runtime()); view.setSession(session);
         JSONObject info = object("section", section, "platform", "android", "backendName", "Local", "local", true, "theme", theme());
@@ -127,6 +129,7 @@ public final class AgentSettingsActivity extends ProductActivity {
             else if (remotes != null) operation = remotes.dispatch(method, args);
             else if (display != null) operation = display.dispatch(method, args);
             else if (share != null) operation = share.dispatch(method, args);
+            else if (autostart != null) operation = autostart.dispatch(method, args);
             else if (section.equals("localai")) operation = localAI(method, args);
             else if (section.equals("performance") && method.equals("performance-sample")) operation = sample();
             else if (section.equals("performance") && method.equals("performance-close")) { stopCounters(); operation = CompletableFuture.completedFuture(new JSONObject()); }
@@ -233,6 +236,7 @@ public final class AgentSettingsActivity extends ProductActivity {
     @Override protected void onDestroy() {
         stopCounters(); cancelModelCheck(); closed = true;
         if (phone != null) phone.close(); if (remotes != null) remotes.close(); if (display != null) display.close(); if (share != null) share.close();
+        if (autostart != null) autostart.close();
         if (session != null) { BashKittenSettingsController.setDelegate(session, section, null); view.releaseSession(); session.close(); session = null; }
         super.onDestroy();
     }

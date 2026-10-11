@@ -816,6 +816,7 @@
     let current = null;
     let source = null;
     let config = null;
+    let settingsDirty = false, settingsSaving = false, settingsDraftVersion = 0, modelsGeneration = 0;
     const agentDefaults = { enabled: false, count: 3, model: '', thinking: '' };
     let chatAgents = { ...agentDefaults }, subagentTarget = null;
     const collapsedAgents = new Set();
@@ -1778,18 +1779,22 @@
     }
 
     async function loadModels() {
+      const generation = ++modelsGeneration, view = sessionView, sessionId = current?.id;
       const selected = $('#model').value;
       const thinking = $('#thinking').value;
       const value = await api('/api/models' + (current ? '?session=' + current.id : ''));
+      if (generation !== modelsGeneration || view !== sessionView || sessionId !== current?.id) return;
       models = value.models;
       modelDefaults = { model: value.defaultModel || '', thinking: value.defaultThinking || '' };
       fillSelect($('#model'), models, current ? current.model || '' : selected || modelDefaults.model);
-      fillSelect($('#defaultModel'), models, value.defaultModel);
-      setThinking($('#defaultModel'), $('#defaultThinking'));
       const nextThinking = current ? current.thinking || thinking : thinking || modelDefaults.thinking;
       if ([...$('#thinking').options].some(option => option.value === nextThinking)) $('#thinking').value = nextThinking;
-      $('#defaultThinking').value = value.defaultThinking;
-      fillAgentForm('defaultAgents', config?.default_subagents || agentDefaults);
+      if (!settingsDirty) {
+        fillSelect($('#defaultModel'), models, value.defaultModel);
+        setThinking($('#defaultModel'), $('#defaultThinking'));
+        $('#defaultThinking').value = value.defaultThinking;
+        fillAgentForm('defaultAgents', config?.default_subagents || agentDefaults);
+      }
     }
 
     function showAgentChoice() { $('#subagents').value = chatAgents.enabled ? 'on' : 'off'; $('#phoneMode').value = current?.phone?.mode || 'off'; $('#phoneMode').disabled = !current; }
@@ -1863,8 +1868,10 @@
       await refreshDictation();
       folderLocations = value.locations || [];
       pendingCwd = config.default_cwd;
-      $('#defaultCwd').value = displayFolder(config.default_cwd);
-      fillAgentForm('defaultAgents', config.default_subagents || agentDefaults);
+      if (!settingsDirty) {
+        $('#defaultCwd').value = displayFolder(config.default_cwd);
+        fillAgentForm('defaultAgents', config.default_subagents || agentDefaults);
+      }
       if (activeSettingsTab === 'services') await refreshServices();
     }
 
@@ -2837,7 +2844,7 @@
       draftChanged();
       $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
     });
-    $('#defaultCwdBrowse').onclick = () => openFolderPicker('Default working folder', $('#defaultCwd').value, path => { $('#defaultCwd').value = displayFolder(path); });
+    $('#defaultCwdBrowse').onclick = () => openFolderPicker('Default working folder', $('#defaultCwd').value, path => { $('#defaultCwd').value = displayFolder(path); settingsEdited(); });
     $('#folderGo').onclick = () => loadFolder($('#folderPath').value.trim()).catch(error => alert(error.message));
     $('#folderUp').onclick = () => folderView.parent && loadFolder(folderView.parent).catch(error => alert(error.message));
     $('#createFolder').onclick = async () => {
@@ -3236,27 +3243,40 @@
       };
     }
     $('#settingsDone').onclick = showChatView;
+    function settingsEdited() { settingsDirty = true; ++settingsDraftVersion; }
+    $('#settingsApp .settings-grid').addEventListener('input', settingsEdited);
+    $('#settingsApp .settings-grid').addEventListener('change', settingsEdited);
     $('#settingsForm').onsubmit = async event => {
       event.preventDefault();
+      if (activeSettingsTab !== 'app' || settingsSaving) return;
+      const button = event.submitter, version = settingsDraftVersion, previousCwd = pendingCwd;
+      settingsSaving = true;
+      if (button) button.disabled = true;
       try {
-      if (activeSettingsTab !== 'app') return;
-      config.default_cwd = $('#defaultCwd').value;
-      config.default_model = $('#defaultModel').value;
-      config.default_thinking = $('#defaultThinking').value;
-      config.default_subagents = readAgentForm('defaultAgents');
-
-      const saved=await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.fromEntries(Object.entries(config).filter(([key]) => key !== 'notifications')))});
-      await loadModels();
-      if (!current) {
+      const next = { ...config, default_cwd: $('#defaultCwd').value, default_model: $('#defaultModel').value,
+        default_thinking: $('#defaultThinking').value, default_subagents: readAgentForm('defaultAgents') };
+      const saved = await api('/api/settings', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify(Object.fromEntries(Object.entries(next).filter(([key]) => key !== 'notifications')))});
+      config = saved.config;
+      ++modelsGeneration;
+      if (version === settingsDraftVersion) {
+        settingsDirty = false;
+        $('#defaultCwd').value = displayFolder(config.default_cwd);
+      }
+      let refreshError;
+      await loadModels().catch(error => { refreshError = error; });
+      if (!current && !pendingProjectId && pendingCwd === previousCwd) {
         pendingCwd = config.default_cwd;
         chatAgents = { ...config.default_subagents }; showAgentChoice();
         $('#model').value = modelDefaults.model;
         setThinking($('#model'));
         $('#thinking').value = modelDefaults.thinking;
       }
-      $('#settingsNotice').textContent = 'Settings saved.';
+      $('#settingsNotice').textContent = 'Settings saved.' + (settingsDirty ? ' New edits have not been saved.' : '') + (refreshError ? ' Could not refresh models: ' + refreshError.message : '');
       } catch (error) {
         $('#settingsNotice').textContent = error.message;
+      } finally {
+        settingsSaving = false;
+        if (button) button.disabled = false;
       }
     };
     function renderSnapshot(data = {}) {
@@ -3750,7 +3770,7 @@
         const line=document.createElement('p');line.className='meta';line.textContent=event.message||event.instructions||'';root.append(line);
         const links=event.type==='auth_url'?[{url:event.url,label:'Open browser login'}]:event.type==='device_code'?[{url:event.verificationUri,label:'Open verification page'}]:(event.links||[]);
         if(event.userCode){const code=document.createElement('strong');code.textContent=event.userCode;root.append(code);}
-        for(const link of links){if(!/^https?:\/\//.test(link.url))continue;const a=document.createElement('a');a.textContent=link.label||'Open login';a.href=link.url;a.target='_blank';a.rel='noopener';root.append(a);}
+        for(const link of links){if(!/^https?:\/\//.test(link.url))continue;const a=document.createElement('a');a.textContent=link.label||'Open login';a.href=link.url;a.target='_blank';a.rel='noopener';if(event.nativeCallback&&nativeHost?.providerLogin){a.onclick=click=>{click.preventDefault();nativeHost.call('provider-login-open',{attemptId:login.id,url:link.url}).catch(error=>serviceNotice(login.provider,error.message));};}root.append(a);}
       }
       if(login.error){const p=document.createElement('p');p.textContent=login.error;root.append(p);}
       if(login.prompt){

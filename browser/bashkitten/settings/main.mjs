@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 const sections = Object.freeze({
+  autostart: { title: 'Autostart', module: './autostart.mjs' },
   localai: { title: 'Local AI', module: './localai.mjs' },
   notifications: { title: 'Notifications', module: './phone.mjs' },
   telephone: { title: 'Telephone', module: './phone.mjs' },

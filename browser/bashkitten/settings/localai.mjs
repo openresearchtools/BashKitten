@@ -5,9 +5,9 @@ const HTML = 'http://www.w3.org/1999/xhtml';
 
 /** Shared view; the owned native settings actor authorizes every operation. */
 export async function renderSection({ root: parent, call: control, info, signal }) {
-  if (info.local !== true) { parent.textContent = 'Select Local to use LocalAI.'; return; }
+  if (info.local !== true && info.backendKind !== 'machine') { parent.textContent = 'Select Local or a managed container to use LocalAI.'; return; }
   const win = parent.ownerDocument.defaultView;
-  const isLocal = () => info.local === true;
+  const isLocal = () => info.local === true || info.backendKind === 'machine';
   const mobile = info.platform === 'android';
   const doc = parent.ownerDocument;
   const node = (tag, text = '') => { const result = doc.createElementNS(HTML, tag); result.textContent = text; return result; };
@@ -18,7 +18,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
     job.progress?.downloaded ? `${(job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', job.error].filter(Boolean).join(' · ') : '';
   const followJob = job => { feedbackJob = job?.id; message.textContent = jobMessage(job); };
   const active = () => !signal.aborted && parent.isConnected && isLocal();
-  const call = async (name, args) => { if (!active()) throw Error('Select Local to use LocalAI'); return control(name, args); };
+  const call = async (name, args) => { if (!active()) throw Error('This environment’s LocalAI settings are no longer open.'); return control(name, args); };
   const run = async (action, feedback = message) => {
     if (busy || !active()) return;
     busy = true; feedback.textContent = '';
@@ -188,7 +188,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
       if (current.service?.command) { const command = node('pre', JSON.stringify(current.service.command.argv, null, 2)); command.style.cssText = 'max-height:6em;overflow:auto;white-space:pre-wrap'; launcher.append(command); }
       const cwd = pickerField(launcher, 'Working directory', config.cwd, 'folder');
       const env = engine === 'llama' ? field(launcher, 'Environment — JSON object', JSON.stringify(config.env), true) : null;
-      let preset, startup, imported, keyFile, model, keepRunning, autoSend;
+      let preset, startup, startupNote, imported, keyFile, model, keepRunning, autoSend;
       if (engine === 'llama') {
         preset = pickerField(section, 'Router INI', config.preset, 'save');
         routerPresetNode = preset;
@@ -203,6 +203,8 @@ export async function renderSection({ root: parent, call: control, info, signal 
         const modelKind = select(section, 'Speech model', [['whisper', 'Whisper'], ['parakeet', 'Parakeet']], config.modelKind || 'whisper');
         modelKind.onchange = () => { config.modelKind = modelKind.value; if (modelKind.value === 'parakeet') { argv.value = ''; keepRunning.checked = false; } updateSpeechControls(); };
         model = pickerField(section, 'Speech model file', config.model);
+        startup = check(section, 'Start Whisper when this Agent starts', config.startup === true);
+        startupNote = node('p'); section.append(startupNote);
         keepRunning = check(section, 'Keep Whisper running after transcription', config.keepRunning);
         autoSend = check(section, 'Automatically send voice messages', config.autoSend);
       }
@@ -210,7 +212,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
         const next = { ...config, mode: mode.value, binary: mode.value === 'custom' ? binary.value : '', backend: backend.value, port: Number(port.value),
           argv: argv.value.trim() ? JSON.parse(argv.value) : [], cwd: cwd.value, env: env ? JSON.parse(env.value) : {} };
         if (engine === 'llama') Object.assign(next, { preset: preset.value, startup: startup.checked, importToPi: imported.checked, keyFile: keyFile.value });
-        else Object.assign(next, { model: model.value, keepRunning: config.modelKind === 'parakeet' ? false : keepRunning.checked, autoSend: autoSend.checked, ...(config.modelKind === 'parakeet' ? { argv: [] } : {}) });
+        else Object.assign(next, { model: model.value, startup: startup.checked, keepRunning: config.modelKind === 'parakeet' ? false : keepRunning.checked, autoSend: autoSend.checked, ...(config.modelKind === 'parakeet' ? { argv: [] } : {}) });
         draw(await call('localai-save', { engine, config: next, revision: state.revision })); message.textContent = 'Saved. Reload applies command changes to a running engine.';
       }));
       const actions = ['start', 'stop', 'reload'].map(action => button(action === 'start' ? 'Start' : action === 'stop' ? 'Stop' : 'Reload', async () => {
@@ -221,6 +223,9 @@ export async function renderSection({ root: parent, call: control, info, signal 
       const updateSpeechControls = () => {
         if (engine !== 'whisper') return;
         const parakeet = config.modelKind === 'parakeet';
+        startup.disabled = parakeet;
+        startupNote.textContent = parakeet ? 'Parakeet starts for each transcription; this runtime has no persistent server. The saved Whisper startup choice is retained.' : '';
+        startupNote.hidden = !parakeet;
         for (const element of [port.parentElement, argv.parentElement, keepRunning.parentElement, ...actions]) element.hidden = parakeet;
       };
       updateSpeechControls();
@@ -239,6 +244,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
     if (!state.tts) return;
     const config = state.tts.config, section = node('details'); section.className = 'connection-card';
     section.append(node('summary', 'Speech synthesis · llama-tts'), node('p', 'Uses the managed llama.cpp runtime. Both families need their matching projector and reference speech. Models provides compatible downloads.'));
+    if (state.tts.startupCapability?.detail) section.append(node('p', state.tts.startupCapability.detail));
     const family = select(section, 'Model family', [['pocket', 'Pocket TTS'], ['qwen3', 'Qwen3-TTS']], config.modelKind);
     const backend = select(section, 'Device', mobile ? [['cpu', 'CPU'], ['vulkan', 'GPU (Vulkan)']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], config.backend);
     const model = pickerField(section, 'Model GGUF', config.model), projector = pickerField(section, 'Matching mmproj GGUF', config.projector), voice = pickerField(section, 'Reference voice audio', config.voice), language = field(section, 'Language code', config.language);

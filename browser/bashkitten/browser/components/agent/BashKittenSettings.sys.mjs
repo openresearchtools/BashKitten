@@ -7,8 +7,9 @@ const allowed = {
   notifications: new Set(["phone-status", "phone-share"]),
   telephone: new Set(["phone-status", "phone-share"]),
   performance: new Set(["performance-sample", "performance-close"]),
-  remotes: new Set(["remotes.list", "remotes.connect", "remotes.disconnect", "remotes.remove", "remotes.rename", "remotes.enroll", "remotes.services", "remotes.save-mapping", "remotes.service-key", "remotes.service-action", "remotes.open-service", "remotes.copy-service", "remotes.allow-browser", "remotes.revoke-browser", "remotes.share-local"]),
-  "share-local": new Set(["share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "localai-share", "share-save-qr", "share-open-authenticator", "share-open-localai"]),
+  autostart: new Set(["autostart.get", "autostart.set", "autostart.commands.save"]),
+  remotes: new Set(["remotes.list", "remotes.connect", "remotes.disconnect", "remotes.remove", "remotes.rename", "remotes.enroll", "remotes.services", "remotes.save-mapping", "remotes.service-key", "remotes.service-action", "remotes.open-service", "remotes.copy-service", "remotes.allow-browser", "remotes.revoke-browser", "remotes.share-local", "remotes.local-autostart", "remotes.autostart"]),
+  "share-local": new Set(["share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "localai-share", "share-save-qr", "share-open-authenticator", "share-open-localai"]),
   machine: new Set(["machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.media-devices", "machines.display-capabilities", "machines.connect-phone", "machines.share-local"]),
 };
 

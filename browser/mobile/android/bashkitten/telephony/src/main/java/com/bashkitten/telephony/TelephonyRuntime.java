@@ -44,9 +44,12 @@ public final class TelephonyRuntime {
     private String error = "";
     private Runnable openLocalAI;
     private Consumer<Boolean> enabledListener;
-    public void setEnabledListener(Consumer<Boolean> listener) { execute(() -> { enabledListener = listener; main.post(() -> listener.accept(enabled("telephony") || enabled("messages"))); }); }
+    public void setEnabledListener(Consumer<Boolean> listener) { execute(() -> enabledListener = listener); }
     public void transportError(String error) { execute(() -> failed(new IllegalStateException(error))); }
     public CompletableFuture<JSONObject> settingsSnapshot() { return job(() -> new JSONObject(settings().toString())); }
+    public CompletableFuture<JSONObject> startupSnapshot() { return job(() -> json("enabled", settings().optBoolean("startup"), "available", true,
+        "detail", enabled("telephony") || enabled("messages") ? "Restores enabled calling and message connections when BashKitten opens. Local must be available." : "Turn on Calls or Messages in Telephone settings to use this option.")); }
+    public CompletableFuture<JSONObject> setStartup(boolean enabled) { return configure(json("startup", enabled)).thenCompose(ignored -> startupSnapshot()); }
     private TelephonyRuntime(Context context) {
         this.context = context; telecom = new TelecomHelper(context);
         file = new AtomicFile(new File(context.getFilesDir(), "phone-delivery.json"));
@@ -56,7 +59,7 @@ public final class TelephonyRuntime {
         if (state != null) return;
         try (InputStream input = file.openRead()) { state = new JSONObject(new String(input.readAllBytes(), StandardCharsets.UTF_8)); }
         catch (FileNotFoundException missing) { state = new JSONObject(); }
-        if (!state.has("settings")) state.put("settings", json("telephony", false, "messages", false, "recent", 5, "finish", "either", "silenceSeconds", 4, "ordinaryDefault", "off", "callDefault", "calls"));
+        if (!state.has("settings")) state.put("settings", json("telephony", false, "messages", false, "startup", false, "recent", 5, "finish", "either", "silenceSeconds", 4, "ordinaryDefault", "off", "callDefault", "calls"));
         for (String key : new String[]{"backends", "events", "mailbox", "tombstones", "acceptAfter"}) if (!state.has(key)) state.put(key, new JSONObject());
     }
     void save() {
@@ -97,7 +100,7 @@ public final class TelephonyRuntime {
                 while (keys.hasNext()) {
                     String key = keys.next(); Object value = patch.get(key);
                     switch (key) {
-                        case "telephony": case "messages": if (!(value instanceof Boolean)) throw new IllegalArgumentException("Invalid switch"); break;
+                        case "telephony": case "messages": case "startup": if (!(value instanceof Boolean)) throw new IllegalArgumentException("Invalid switch"); break;
                         case "recent": if (!(value instanceof Number) || ((Number)value).intValue() < 1 || ((Number)value).intValue() > 9) throw new IllegalArgumentException("Choose 1–9 recent chats"); break;
                         case "silenceSeconds": if (!(value instanceof Number) || !Double.isFinite(((Number)value).doubleValue()) || ((Number)value).doubleValue() <= 0) throw new IllegalArgumentException("Silence must be a positive duration"); break;
                         case "finish": if (!List.of("hash", "silence", "either").contains(value)) throw new IllegalArgumentException("Invalid dictation completion"); break;
@@ -108,8 +111,9 @@ public final class TelephonyRuntime {
                     next.put(key, value);
                 }
                 for (String master : List.of("telephony", "messages")) if (next.optBoolean(master) && !enabled(master)) put(state.optJSONObject("acceptAfter"), master, System.currentTimeMillis());
+                boolean mastersChanged = next.optBoolean("telephony") != enabled("telephony") || next.optBoolean("messages") != enabled("messages");
                 state.put("settings", next); save();
-                if (enabledListener != null) main.post(() -> enabledListener.accept(next.optBoolean("telephony") || next.optBoolean("messages")));
+                if (mastersChanged && enabledListener != null) main.post(() -> enabledListener.accept(next.optBoolean("telephony") || next.optBoolean("messages")));
                 if (!enabled("telephony")) {
                     for (KittenConnection call : new ArrayList<>(calls.values())) end(call, DisconnectCause.CANCELED);
                     telecom.unregister(); invalidateRoute("calls");

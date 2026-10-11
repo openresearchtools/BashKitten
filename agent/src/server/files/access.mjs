@@ -6,6 +6,8 @@ import os from 'node:os';
 import { dataDir, readJson } from '../common.mjs';
 import { paths, authBin } from '../access/paths.mjs';
 import { bundledRoot } from '../rpc/runtime.mjs';
+import { machineRoot, storageRoot, runtimeRoot } from '../machines/config.mjs';
+import { platform } from '../platform/index.mjs';
 
 const context = new AsyncLocalStorage();
 const requests = new Set(), listeners = new Set();
@@ -71,7 +73,8 @@ export const canonicalManagerPath = value => contains('/data/user/0/com.termux',
   ? '/data/data/com.termux' + value.slice('/data/user/0/com.termux'.length) : value;
 const privatePaths = [
   ...['access', 'run', 'display', 'llama', 'localai', 'models', 'updates', 'runtimes',
-    'runtime.json', 'control.json', 'server.json', 'settings.json'].map(name => path.join(dataDir, name)),
+    'runtime.json', 'control.json', 'server.json', 'settings.json', 'autostart.json'].map(name => path.join(dataDir, name)),
+  machineRoot, storageRoot, ...(platform === 'linux' ? [runtimeRoot] : []),
   bundledRoot.replace(/\/$/, ''), authBin, path.join(os.homedir(), '.config/systemd/user'),
   ...(process.env.PREFIX ? [process.env.PREFIX] : []),
 ].map(canonicalManagerPath);

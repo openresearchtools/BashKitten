@@ -45,6 +45,7 @@ export class AccessStack {
       // Phone administration is private to the controller and HTTP owner;
       // the general instance token is inherited by ordinary Pi workers.
       this.phoneOwnerToken = randomToken();
+      this.providerOwnerToken = randomToken();
       this.guestBrowserToken = guestBrowserRole() ? randomToken() : '';
       this.localToken = randomToken(); this.localGeneration = randomUUID();
       this.localCookieName = '__Host-bashkitten_local_' + identity.instanceId.replaceAll('-', '');
@@ -56,6 +57,7 @@ export class AccessStack {
           BASHKITTEN_ACCESS_ORIGIN: this.origin, BASHKITTEN_PROXY_TOKEN: this.proxyToken,
           BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN: this.guestBrowserToken,
           BASHKITTEN_PHONE_OWNER_HTTP_TOKEN: this.phoneOwnerToken,
+          BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN: this.providerOwnerToken,
           BASHKITTEN_INSTANCE_TOKEN: this.instanceToken, BASHKITTEN_BACKEND_SOCKET: paths.backend,
           BASHKITTEN_AUTH_SOCKET: paths.auth, BASHKITTEN_LOCAL_COOKIE: this.localCookieName,
           BASHKITTEN_LOCAL_TOKEN: this.localToken });
@@ -393,6 +395,7 @@ ${backend('remote')}
   async stop() { this.stopping = true; this.ready = false; await this.stopChildren(); this.info = null; }
   async stopChildren() {
     this.phoneOwnerToken = null;
+    this.providerOwnerToken = null;
     this.remote?.cancelPending();
     for (const child of [...this.children].reverse()) await terminate(child);
     this.children = []; this.authStarted = false; this.tunnel = null; this.tunnelStarted = false; this.localToken = null; this.localGeneration = null;

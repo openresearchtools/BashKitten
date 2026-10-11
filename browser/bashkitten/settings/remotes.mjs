@@ -6,7 +6,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
   const active = () => !signal.aborted && root.isConnected;
   const run = runStatus(root, signal), cards = new Map();
   let snapshot, refreshing = false;
-  const intro = node(root, 'p', 'Connect with the encrypted connection QR from the host’s Share Local setup.');
+  const intro = node(root, 'p', 'Saved connections belong to this app. Connect with the encrypted connection QR from the host’s Share Local setup.');
   const local = node(root, 'section'), saved = node(root, 'div'), enrollment = node(root, 'details');
   local.className = 'connection-card'; enrollment.className = 'connection-card';
   enrollment.open = !!info.connectOnly;
@@ -14,9 +14,21 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
   const action = (parent, title, work) => button(parent, title, () => run(work));
   local.append(node(root, 'h2', 'Local'));
   const localDescription = node(root, 'p'); local.append(localDescription);
+  const localAutostart = check(local, 'Start Local when BashKitten opens', false);
+  localAutostart.disabled = true;
+  localAutostart.onchange = () => {
+    const enabled = localAutostart.checked; localAutostart.checked = snapshot?.localAutostart === true;
+    void run(async () => { await call('remotes.local-autostart', { enabled }); await refresh(); });
+  };
   action(local, 'Open Agent', () => call('remotes.connect', { id: 'local' }));
-  action(local, 'Share Local', () => call('remotes.share-local', {}));
-  root.append(intro, local, saved, enrollment);
+  const sharing = info.backendKind === 'machine' ? node(root, 'section') : local;
+  if (sharing !== local) {
+    sharing.className = 'connection-card'; sharing.append(node(root, 'h2', info.backendName));
+  }
+  const share = action(sharing, 'Share Local', () => call('remotes.share-local', {}));
+  root.append(intro, local);
+  if (sharing !== local) root.append(sharing);
+  root.append(saved, enrollment);
   const enroll = method => async () => {
     await call('remotes.enroll', { method });
     if (active()) await refresh();
@@ -91,6 +103,11 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
       if (serviceDetails.open && !serviceBody.childElementCount) void run(async () => showServices(serviceBody, record.id, await call('remotes.services', { id: record.id })));
     };
     const editing = node(root, 'details'); editing.append(node(root, 'summary', 'Connection settings'));
+    const autostart = check(editing, 'Connect when BashKitten opens', record.autostart === true);
+    autostart.onchange = () => {
+      const enabled = autostart.checked; autostart.checked = record.autostart === true;
+      void run(async () => { await call('remotes.autostart', { id: record.id, enabled }); await refresh(); });
+    };
     const name = field(editing, 'Name', record.name);
     action(editing, 'Save name', async () => { await call('remotes.rename', { id: record.id, name: name.value }); await refresh(); });
     if (snapshot.capabilities?.browserControl) {
@@ -104,6 +121,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
     card.append(editing);
     return { card, update(value) {
       Object.assign(record, value);
+      autostart.checked = record.autostart === true;
       title.textContent = record.name; address.textContent = record.url || ''; address.hidden = !record.url;
       status.textContent = record.migrationRequired ? 'Import a new encrypted QR from this host’s Share Local setup.' : record.state;
       error.textContent = record.error || '';
@@ -119,6 +137,9 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
       const result = await call('remotes.list', {});
       if (!active()) return;
       snapshot = result; localDescription.textContent = result.localLabel || 'This device';
+      share.textContent = result.shareLabel || (info.backendKind === 'machine' ? `Share ${info.backendName}` : 'Share Local');
+      localAutostart.checked = result.localAutostart === true;
+      localAutostart.disabled = typeof result.localAutostart !== 'boolean';
       scan.hidden = result.capabilities?.scan === false;
       const present = new Set();
       for (const value of result.remotes || []) {

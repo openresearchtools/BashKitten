@@ -42,6 +42,7 @@ class BashKittenMenuDialog : BottomSheetDialogFragment() {
                         MenuFrame(contentModifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                             MenuGroup {
                                 val rows = listOf(
+                                    Triple("autostart", "Autostart", iconsR.drawable.mozac_ic_autoplay_24),
                                     Triple("display", "Display setup", agentR.drawable.ic_agent_display),
                                     Triple("localai", "Local AI", iconsR.drawable.mozac_ic_sparkle_24),
                                     Triple("notifications", "Notifications", iconsR.drawable.mozac_ic_notification_24),

@@ -20,7 +20,7 @@ import { ensureIntegration } from './rpc/integration.mjs';
 import { AccessStack } from './access/stack.mjs';
 import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
-import { acquireWake, releaseWake } from './access/wake.mjs';
+import { acquireWake, releaseWake, wakeHeld } from './access/wake.mjs';
 import { LocalAI } from './localai/localai.mjs';
 import { curatedModels, downloadPreset } from './localai/models.mjs';
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
@@ -33,6 +33,7 @@ import { PhoneGateway } from './phone-gateway.mjs';
 import { PhoneSpeech } from './localai/phone-speech.mjs';
 import { unixRequest } from './access/io.mjs';
 import { machineControl } from './machines/index.mjs';
+import { AutostartCommands } from './autostart.mjs';
 
 export const controlSocket = paths.control;
 const stateFile = path.join(dataDir, 'control.json');
@@ -47,7 +48,7 @@ export async function controlRequest(command, value) {
   }
   const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
-    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command.startsWith('share-') ? 180000 : 30000); }
+    try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command === 'autostart-startup' || command.startsWith('share-') ? 180000 : 30000); }
     catch (error) {
       // A fresh launch can reach the old controller after its status reply but
       // before shutdown finishes. Retry rejected starts or failed connections,
@@ -61,17 +62,18 @@ export async function controlRequest(command, value) {
     }
   }
 }
-function spawnManager(detached, browserOwner) {
+function spawnManager(detached, browserOwner, initialWeb) {
   const log = detached ? openSync(path.join(dataDir, 'control.log'), 'a', 0o600) : null;
   const child = spawn(binary('runtime-guard'), [process.execPath, script, 'serve'], {
     detached, stdio: detached ? ['ignore', log, log] : 'inherit',
     env: { ...process.env, BASHKITTEN_TERMUX: platform === 'termux' ? '1' : '0',
-      ...(platform === 'linux' && browserOwner ? { BASHKITTEN_BROWSER_PID: String(browserOwner.pid), BASHKITTEN_BROWSER_STARTED: browserOwner.started } : {}) },
+      ...(platform === 'linux' && browserOwner ? { BASHKITTEN_BROWSER_PID: String(browserOwner.pid), BASHKITTEN_BROWSER_STARTED: browserOwner.started } : {}),
+      ...(initialWeb === false || platform === 'linux' && browserOwner ? { BASHKITTEN_INITIAL_WEB_STATE: '0' } : {}) },
   });
   if (log !== null) closeSync(log);
   return child;
 }
-export async function ensureManager({ waitForShutdown = false, browserOwner } = {}) {
+export async function ensureManager({ waitForShutdown = false, browserOwner, initialWeb } = {}) {
   await privateDir(path.dirname(controlSocket));
   let child, error, draining = false;
   for (const deadline = Date.now() + 30000; Date.now() < deadline;) {
@@ -83,7 +85,7 @@ export async function ensureManager({ waitForShutdown = false, browserOwner } = 
     } catch (failure) {
       if (!['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(failure.code)) throw failure;
       if (!child || child.exitCode !== null || child.signalCode !== null) {
-        child = spawnManager(true, browserOwner); child.unref();
+        child = spawnManager(true, browserOwner, initialWeb); child.unref();
         child.on('error', value => { error = value; });
       }
     }
@@ -131,6 +133,7 @@ async function serve() {
     console.error('Recovered invalid controller power state; preserved the damaged control.json');
   }
   let serial = Promise.resolve();
+  let shutdownRequested = false;
   let starting = false, stopping = false, lastError = state.error || null, restartPending = false, exiting = false;
   let browserOwner = null, browserWatcher = null, browserClosing = false, browserAdoption = Promise.resolve(), monitor;
   // The existing subreaper owns all launched workloads, including detached Pi
@@ -148,6 +151,7 @@ async function serve() {
   });
   // The Display CLI imports this controller; load its implementation only in the manager.
   const display = platform === 'termux' ? new (await import('./platform/termux/display.mjs')).TermuxDisplay() : null;
+  const customStartup = new AutostartCommands();
   const localAI = new LocalAI(stack.services);
   if (localAI) await localAI.initialize();
   const phoneDispatch = async (action, value, identity) => {
@@ -156,6 +160,15 @@ async function serve() {
     const result = JSON.parse(response.body); if (response.status !== 200) throw Error(result.error || 'Phone backend request failed'); return result;
   };
   const phoneGateway = new PhoneGateway({ dispatch: phoneDispatch, speech: new PhoneSpeech(localAI) });
+  const providerLogin = async (action, value) => {
+    if (!stack.ready || !/^[a-f0-9]{64}$/.test(stack.providerOwnerToken || '')) throw Error('The owning Agent backend is off');
+    const response = await unixRequest(paths.backend, '/api/instance/provider-login', { method: 'POST',
+      headers: { host: new URL(stack.origin).host, authorization: 'Bearer ' + stack.providerOwnerToken, 'content-type': 'application/json' },
+      body: JSON.stringify({ action, value }), timeout: 10000 });
+    const result = JSON.parse(response.body);
+    if (response.status !== 200) throw Error(result.error || 'Provider login request failed');
+    return result;
+  };
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
@@ -218,6 +231,27 @@ async function serve() {
       throw error;
     }
   }
+  let startupErrors = {}, appStartupApplied = false;
+  const backgroundActive = () => customStartup.active || Boolean(display?.child) || [...stack.services.running.values()].some(owner => owner.child);
+  async function startupStatus() {
+    const errors = { ...startupErrors, ...Object.fromEntries(localAI.errors) };
+    if (display?.error) errors.display = display.error;
+    for (const [id, owner] of stack.services.running) if (owner.error) errors[id] = owner.error;
+    return { ...await customStartup.status(), active: backgroundActive(), startupErrors: errors };
+  }
+  async function startConfiguredServices() {
+    if (browserClosing || shutdownRequested || exiting) throw Error('BashKitten is stopping');
+    appStartupApplied = true; startupErrors = {};
+    // Termux's existing owner acquires its wake lock before starting any work;
+    // a failed native prerequisite must not produce a doomed background launch.
+    try { await acquireWake(); }
+    catch (error) { startupErrors.wake = error.message; return; }
+    if (browserClosing || shutdownRequested || exiting) return;
+    const work = [['commands', () => customStartup.startup()], ['services', () => stack.services.startup()],
+      ['localai', () => localAI.startup()], ...(display ? [['display', () => display.startup()]] : [])];
+    await Promise.all(work.map(async ([name, start]) => { try { await start(); } catch (error) { startupErrors[name] = error.message; } }));
+    if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake();
+  }
   async function startWeb() {
     if (starting || stopping || stack.ready) return;
     starting = true; lastError = null;
@@ -225,8 +259,8 @@ async function serve() {
       await acquireWake();
       resumeDownloads();
       await stack.start();
-      await stack.services.startup();
-      if (localAI) { await localAI.startup(); await localAI.importProvider(); }
+      await startConfiguredServices();
+      await localAI.importProvider();
     } catch (error) {
       lastError = error.message; state.web = false;
       await stopGroup().catch(failure => { lastError += '; ' + failure.message; });
@@ -250,7 +284,7 @@ async function serve() {
     const serviceError = await stack.services.stopAll().then(() => null, error => error);
     await shutdownDownloads();
     await stack.stop();
-    await releaseWake();
+    if (!customStartup.active) await releaseWake();
     if (workerError) throw workerError;
     if (displayError) throw displayError;
     if (speechError) throw speechError;
@@ -274,7 +308,7 @@ async function serve() {
       const current = await socketRequest(socketPath(meta.id), '/status', undefined, 1000).catch(() => null);
       return { id: meta.id, title: meta.title, cwd: meta.cwd, running: Boolean(current), ...current?.data };
     }));
-    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, browserOwner, attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
+    return { version: 2, platform, manager: { pid: process.pid, revision, exiting, browserOwner, backgroundActive: backgroundActive(), attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
       packages: { ...await updateStatus(), job: await jobs.status() },
       web: { status: stopping ? 'stopping' : starting || stack.reconfiguring ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
         desired: state.web, url: stack.ready || stack.reconfiguring ? stack.origin : undefined, error: lastError, ...await stack.status() },
@@ -295,6 +329,12 @@ async function serve() {
       await turnOff(); if (!stopping) scheduleExit();
       return status();
     }
+    if (command === 'autostart-status') return startupStatus();
+    if (command === 'autostart-save') { await customStartup.save(value); if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); return startupStatus(); }
+    if (command === 'autostart-startup') {
+      if (browserClosing || stopping) throw Error('BashKitten is stopping');
+      if (!appStartupApplied) await startConfiguredServices(); return startupStatus();
+    }
     if (command === 'phone-status') return phoneDispatch('phone.status', {}, null);
     if (command === 'phone-gateway-connect') { if (platform !== 'termux') throw Error('Phone speech gateway belongs to Termux'); return phoneGateway.connect(value); }
     if (command === 'phone-gateway-disconnect') { await phoneGateway.disable(); return { ok: true }; }
@@ -305,6 +345,7 @@ async function serve() {
         cookie: { name: stack.localCookieName, value: stack.localToken } };
     }
     // Private native IPC only; none of these commands is forwarded by the web API.
+    if (['provider-login-describe', 'provider-login-status', 'provider-login-callback', 'provider-login-cancel'].includes(command)) return providerLogin(command.slice('provider-login-'.length), value);
     if (command === 'guest-browser-connect') return guestBrowserBootstrap(stack, value);
     if (command === 'phone-control-connect') return configurePhoneOwner(value);
     if (command === 'phone-control-disconnect') { await disconnectPhoneOwner(); return { disconnected: true }; }
@@ -313,10 +354,12 @@ async function serve() {
       if (!display) throw Error('Display is available only in local Termux');
       if (command === 'display-status') return display.status();
       if (command === 'display-save') return display.save(value);
-      if (command === 'display-stop') return display.stop();
+      if (command === 'display-stop') { const result = await display.stop(); if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); return result; }
       if (command !== 'display-start') throw Error('Unknown display action');
-      if (!stack.ready || stopping) throw Error('Turn on the local Agent before starting Display');
-      return display.start();
+      if (stopping || browserClosing || exiting) throw Error('BashKitten is stopping');
+      await acquireWake();
+      try { return await display.start(); }
+      finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
     }
     if (command.startsWith('localai-')) {
       if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: ['localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
@@ -363,6 +406,7 @@ async function serve() {
     if (command === 'share-confirm') return remote.confirm(value);
     if (command === 'share-cancel') return remote.cancelSetup(value);
     if (command === 'share-publish') return remote.setEnabled(value.enabled);
+    if (command === 'share-startup') return remote.setStartup(value.enabled);
     if (command === 'share-files') return remote.setFileManager(value.allowed);
     if (command === 'service-status') return stack.services.status();
     if (command === 'service-save') return stack.services.save(value);
@@ -392,7 +436,11 @@ async function serve() {
       const current = await jobs.status();
       await jobs.start(value.retry ? current?.kind : value.kind, value.retry ? current?.input : value.input || {}, Boolean(value.retry));
     } else if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
-      if (command === 'stop' || command === 'shutdown') { await turnOff(); if (!stopping) scheduleExit(); }
+      if (command === 'stop' || command === 'shutdown') {
+        if (command === 'shutdown') shutdownRequested = true;
+        await turnOff();
+        if (!stopping && (command === 'shutdown' || !browserOwner && !customStartup.active)) scheduleExit();
+      }
       else {
         if (browserClosing || stopping) throw Object.assign(Error('Agent is completing shutdown'), { code: 'AGENT_SHUTTING_DOWN' });
         if (jobs.busy && command === 'restart') throw Error('Wait for package maintenance to finish');
@@ -464,6 +512,8 @@ async function serve() {
     setTimeout(async () => {
       clearInterval(monitor);
       browserWatcher?.kill('SIGTERM'); browserWatcher = null;
+      await customStartup.stopAll();
+      await releaseWake();
       await closePhoneOwner();
       await phoneGateway.close();
       await fs.rm(lock, { force: true });
@@ -473,20 +523,27 @@ async function serve() {
   // Recover an interrupted On state in the same queue as explicit commands.
   // A browser's first start must wait for recovery to publish its HTTPS URL.
   if (platform === 'linux' && process.env.BASHKITTEN_BROWSER_PID) {
-    try { await adoptBrowser({ pid: Number(process.env.BASHKITTEN_BROWSER_PID), started: process.env.BASHKITTEN_BROWSER_STARTED }); }
+    try {
+      await adoptBrowser({ pid: Number(process.env.BASHKITTEN_BROWSER_PID), started: process.env.BASHKITTEN_BROWSER_STARTED });
+    }
     catch (error) { await turnOff(error.message); scheduleExit(); return; }
   }
+  // Only a newly spawned native controller applies this bootstrap choice.
+  // An already-running backend and standalone CLI/guest recovery are unchanged.
+  if (process.env.BASHKITTEN_INITIAL_WEB_STATE === '0') { state.web = false; await persist(); }
+  delete process.env.BASHKITTEN_INITIAL_WEB_STATE;
   serial = serial.then(async () => { if (state.web) await startWeb(); }).catch(() => {});
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
   let failedHealth = 0;
   monitor = setInterval(() => {
     serial = serial.then(async () => {
-      if (stopping && !jobs.busy) { await turnOff(); if (!stopping) scheduleExit(); return; }
+      if (stopping && !jobs.busy) { await turnOff(); if (!stopping && (shutdownRequested || browserClosing || !browserOwner && !customStartup.active)) scheduleExit(); return; }
       if (!stopping && stack.ready) {
         failedHealth = await stack.healthy() ? 0 : failedHealth + 1;
         if (failedHealth >= 2) { await turnOff('Agent service health check failed'); return; }
       }
+      if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake();
       if (jobs.busy || stopping) return;
       if (restartPending) {
         if (state.web) await startWeb();
@@ -500,7 +557,7 @@ async function serve() {
       }
     }).catch(error => { lastError = error.message; });
   }, 3000);
-  process.on('SIGTERM', () => { serial = serial.then(async () => { await turnOff(); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; }); });
+  process.on('SIGTERM', () => { shutdownRequested = true; serial = serial.then(async () => { await turnOff(); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; }); });
   process.on('SIGINT', () => process.emit('SIGTERM'));
 }
 
@@ -522,7 +579,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
       const input = process.argv[3];
       const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin)).toString() || '{}') : input ? JSON.parse(input) : {};
       const performanceCommand = ['performance-sample', 'performance-close'].includes(command);
-      if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager({ browserOwner: value.browserOwner });
+      if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager({ browserOwner: value.browserOwner, initialWeb: value.initialWeb });
+      delete value.initialWeb;
       const result = await controlRequest(command, command === 'status' && !value.browserOwner ? undefined : value).catch(error => {
         if (performanceCommand && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return command === 'performance-close' ? { ok: true } : performanceUnavailable('The local Agent is off');
         if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };

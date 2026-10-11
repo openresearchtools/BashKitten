@@ -1,6 +1,7 @@
 import { platform } from '../platform/index.mjs';
 import { command } from './io.mjs';
 let held = false;
+export const wakeHeld = () => held;
 export async function acquireWake() {
   if (platform !== 'termux' || held) return;
   await command('termux-wake-lock', [], { timeout: 15000 });

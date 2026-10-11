@@ -61,6 +61,9 @@ if (!/^[a-f0-9]{64}$/.test(instanceToken || '')) throw Error('Private controller
 const phoneOwnerToken = process.env.BASHKITTEN_PHONE_OWNER_HTTP_TOKEN;
 delete process.env.BASHKITTEN_PHONE_OWNER_HTTP_TOKEN;
 if (!/^[a-f0-9]{64}$/.test(phoneOwnerToken || '')) throw Error('Private Phone controller token required');
+const providerOwnerToken = process.env.BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN;
+delete process.env.BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN;
+if (!/^[a-f0-9]{64}$/.test(providerOwnerToken || '')) throw Error('Private provider controller token required');
 const started = await processStart(process.pid);
 await syncContext();
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +104,7 @@ async function startWorker(id, explicit) {
       const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
       const phoneSlot = await createPhoneWorkerSlot(id);
       const workerEnvironment = withoutPhoneIssuers(process.env); delete workerEnvironment.BASHKITTEN_GUEST_BROWSER_OWNER_TOKEN;
+      delete workerEnvironment.BASHKITTEN_PROVIDER_OWNER_HTTP_TOKEN;
       let child;
       try {
         child = spawn(process.execPath, [path.join(here, '../rpc/worker.mjs'), id], { detached: true, stdio: ['ignore', log, log], env: { ...workerEnvironment, ...phoneSlot.environment, BASHKITTEN_BROWSER_SOCKET: browserSocket, BASHKITTEN_BROWSER_OWNER: browserOwner } });
@@ -288,6 +292,11 @@ async function handler(req, res) {
       if (typeof block !== 'boolean') throw Error('Choose file-manager policy transition');
       await refreshManagerPolicy(async () => { await Promise.all([revokeRemoteFileJobs(), revokeRemotePreviews()]); }, block);
       return json(res, { ok: true });
+    }
+    if (route === '/api/instance/provider-login') {
+      if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + providerOwnerToken) throw Object.assign(Error('Invalid provider controller token'), { status: 403 });
+      const { action, value = {} } = await jsonBody(req);
+      return json(res, services.nativeLogin(action, value));
     }
     if (route === '/api/instance/phone') {
       if (req.method !== 'POST' || req.headers.authorization !== 'Bearer ' + phoneOwnerToken) throw Object.assign(Error('Invalid Phone controller token'), { status: 403 });
