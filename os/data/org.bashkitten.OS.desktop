@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=BashKitten OS
+Comment=Desktop scaling and window settings
+Exec=bashkitten-os settings
+Icon=bashkitten-os
+Categories=Settings;DesktopSettings;
+Terminal=false
+StartupNotify=true

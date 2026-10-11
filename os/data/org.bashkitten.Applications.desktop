@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Applications
+Exec=bashkitten-os launcher
+Icon=bashkitten-os
+NoDisplay=true
+Terminal=false

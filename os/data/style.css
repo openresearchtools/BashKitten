@@ -1,0 +1,15 @@
+/* Palette adapted from Gnozzard 59ca6d56, GPL-3.0-or-later. */
+.bashkitten-os { background: #222222; color: #ffffff; }
+.bashkitten-os scrolledwindow, .bashkitten-os viewport, .bashkitten-os flowbox,
+.bashkitten-os menu, .bashkitten-os menuitem { background: #222222; color: #ffffff; }
+.bashkitten-os label { color: inherit; }
+.bashkitten-os button { background: #282828; color: #ffffff; border-color: #3f3f3f; }
+.bashkitten-os button:hover { background: #3f3f3f; }
+.bashkitten-os menuitem:hover { background: #3f3f3f; }
+.bashkitten-os button:focus, .bashkitten-os button:checked { border-color: #ff7139; }
+.bashkitten-os entry { background: #282828; color: #ffffff; caret-color: #ff7139; }
+.bashkitten-os entry:focus { border-color: #ff7139; }
+.bashkitten-os switch:checked { background: #ff7139; color: #181818; }
+.bashkitten-os .dim-label { color: #c8c8c8; }
+.bashkitten-os flowboxchild { padding: 5px; }
+.bashkitten-divider { background: #ff7139; }
