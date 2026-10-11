@@ -8,7 +8,7 @@ import { lookupChats } from '../src/server/chats.mjs';
 export default function chats(pi) {
   pi.registerTool({
     name: 'chats', label: 'Chats', exposure: 'deferred',
-    description: 'Read-only list, plain-text search and read of this backend’s BashKitten chats. Read the chats skill. Returns stable chat/entry references and optional project names; never starts or messages another agent.',
+    description: 'Read-only BashKitten chat lookup on this backend: list finds titles/projects, search finds conversation text, and read requires the returned chat id. Read the chats skill. Returns native entry references; never starts or messages another agent.',
     parameters: Type.Object({ action: Type.Union([Type.Literal('list'), Type.Literal('search'), Type.Literal('read')]),
       query: Type.Optional(Type.String()), id: Type.Optional(Type.String()), projectId: Type.Optional(Type.String()),
       leafId: Type.Optional(Type.String()), offset: Type.Optional(Type.Integer({ minimum: 0 })), limit: Type.Optional(Type.Integer({ minimum: 1 })) }, { additionalProperties: false }),
