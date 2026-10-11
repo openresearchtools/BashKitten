@@ -99,7 +99,7 @@ final class RemoteBrowserControl {
                 throw new IllegalArgumentException("Select an enrolled Agent server first");
             String serverOrigin = new URI(endpoint.getScheme(), null, endpoint.getHost(), endpoint.getPort(), null, null, null).toString();
             int version = generation;
-            new MaterialAlertDialogBuilder(activity).setTitle("Allow this Agent to control your browser?")
+            new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("Allow this Agent to control your browser?")
                 .setMessage(name + " (" + serverOrigin + ") can read and act in ordinary browsing tabs, including signed-in pages. Agent and login views remain protected. Disconnecting, signing out or switching servers revokes this connection.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Allow", (dialog, which) -> {

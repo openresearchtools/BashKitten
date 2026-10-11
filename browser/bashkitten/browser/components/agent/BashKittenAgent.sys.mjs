@@ -1026,9 +1026,13 @@ class AgentView {
       monitor.reset();
       if (performanceSession) { const session = performanceSession; performanceSession = null; void request("performance-close", { session }).catch(() => {}); }
     };
-    const theme = () => this.win.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    const theme = () => {
+      const scheme = this.win.getComputedStyle(this.pane).colorScheme;
+      if (scheme === "light" || scheme === "dark") return scheme;
+      return this.win.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    };
     const themeObserver = new this.win.MutationObserver(() => BashKittenSettings.notify(browser, "theme", { theme: theme() }));
-    themeObserver.observe(this.doc.documentElement, { attributes: true, attributeFilter: ["lwtheme", "lwthemetextcolor", "style"] });
+    themeObserver.observe(this.doc.documentElement, { attributes: true, attributeFilter: ["lwtheme", "lwtheme-brighttext", "lwthemetextcolor", "lwt-toolbar", "style"] });
     const themeMedia = this.win.matchMedia("(prefers-color-scheme: dark)");
     const themeChanged = () => BashKittenSettings.notify(browser, "theme", { theme: theme() });
     themeMedia.addEventListener("change", themeChanged);

@@ -128,7 +128,8 @@ public final class AgentSidecar {
         int inset = isOpen() && !compact ? width : 0;
         if (params.getMarginStart() != inset) { params.setMarginStart(inset); chatBody.setLayoutParams(params); }
         GradientDrawable surface = shape(background, 0);
-        if (compact) surface.setCornerRadii(new float[]{0, 0, dp(24), dp(24), dp(24), dp(24), 0, 0});
+        // Keep the sidecar flush with browser content while rounding its outer top corner.
+        surface.setCornerRadii(new float[]{dp(16), dp(16), compact ? dp(24) : 0, compact ? dp(24) : 0, compact ? dp(24) : 0, compact ? dp(24) : 0, 0, 0});
         scroll.setBackground(surface);
     }
     public void toggle() {

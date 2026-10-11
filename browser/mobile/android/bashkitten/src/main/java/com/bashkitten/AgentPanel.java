@@ -322,7 +322,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 activity.startActivityForResult(pick, FILE_REQUEST); return fileResult;
             }
             @Override public GeckoResult<PromptResponse> onAlertPrompt(GeckoSession s, AlertPrompt p) {
-                GeckoResult<PromptResponse> result = new GeckoResult<>(); new MaterialAlertDialogBuilder(activity).setMessage(p.message).setPositiveButton("OK", (d,w) -> result.complete(p.dismiss())).setOnCancelListener(d -> result.complete(p.dismiss())).show(); return result;
+                GeckoResult<PromptResponse> result = new GeckoResult<>(); new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setMessage(p.message).setPositiveButton("OK", (d,w) -> result.complete(p.dismiss())).setOnCancelListener(d -> result.complete(p.dismiss())).show(); return result;
             }
         });
     }
@@ -504,7 +504,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             return;
         }
         if (app.remoteControl.active()) {
-            new MaterialAlertDialogBuilder(activity).setTitle("Agent browser control")
+            new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("Agent browser control")
                 .setMessage("This Agent can control ordinary browser tabs.")
                 .setPositiveButton("Disconnect", (d,w) -> app.remoteControl.disconnect())
                 .setNegativeButton("Cancel", null).show();
@@ -547,7 +547,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                 }
                 if (download == null) { app.main.post(() -> app.message("BashKitten is up to date.")); return; }
                 String link = download, version = available;
-                app.main.post(() -> new MaterialAlertDialogBuilder(activity).setTitle("BashKitten " + version).setMessage("A browser update is available. Testing release only; not ready for production.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
+                app.main.post(() -> new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("BashKitten " + version).setMessage("A browser update is available. Testing release only; not ready for production.").setPositiveButton("Download", (d,w) -> app.create(BrowserApp.USER, false, link, tab -> { app.show(tab); showBrowser(); }, app::message)).setNegativeButton("Later", null).show());
             } catch (Exception error) { app.main.post(() -> app.message("The update check failed: " + error.getMessage())); }
         }, "bashkitten-update").start();
     }
@@ -558,7 +558,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try (InputStream input = connection.getInputStream()) { return new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8); }
         finally { connection.disconnect(); }
     }
-    public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new MaterialAlertDialogBuilder(activity).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
+    public void packages(){LinearLayout content=new LinearLayout(activity);content.setOrientation(VERTICAL);TextView output=new TextView(activity);output.setTypeface(android.graphics.Typeface.MONOSPACE);output.setTextIsSelectable(true);ScrollView scroll=new ScrollView(activity);scroll.addView(output);content.addView(button("Check for updates",()->packageCommand("check-packages",output)));content.addView(button("Update packages",()->packageCommand("update-packages",output)));content.addView(scroll,new LayoutParams(-1,dp(320)));new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setTitle("Packages").setView(content).setPositiveButton("Close",null).show();packageCommand("status",output);}
     private void packageCommand(String command, TextView output) {
         try {
             if (command.equals("status")) { runtime.command("package-inventory", new JSONObject(), value -> output.setText(inventoryText(value)), output::setText); return; }
@@ -590,6 +590,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     private void error(String text){message.setText(text);Toast.makeText(activity,text,Toast.LENGTH_LONG).show();}
     private void download(WebResponse response){
-        new Thread(()->{Uri target=null;try{String name=mozilla.components.support.utils.DownloadUtils.INSTANCE.extractFileNameFromUrl(response.headers.get("Content-Disposition"),response.uri);ContentValues values=new ContentValues();values.put(MediaStore.Downloads.DISPLAY_NAME,name);values.put(MediaStore.Downloads.MIME_TYPE,response.headers.get("Content-Type"));values.put(MediaStore.Downloads.IS_PENDING,1);target=activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);if(target==null)throw new IOException();try(InputStream input=response.body;OutputStream output=activity.getContentResolver().openOutputStream(target)){if(input==null||output==null)throw new IOException();input.transferTo(output);}values.clear();values.put(MediaStore.Downloads.IS_PENDING,0);activity.getContentResolver().update(target,values,null,null);Uri saved=target;app.main.post(()->new MaterialAlertDialogBuilder(activity).setMessage("Saved "+name).setPositiveButton("Open",(d,w)->{try{activity.startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(saved,response.headers.get("Content-Type")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));}catch(Exception e){app.message("Saved in Downloads.");}}).setNegativeButton("Close",null).show());}catch(Exception e){if(target!=null)activity.getContentResolver().delete(target,null,null);app.main.post(()->error("Download failed."));}},"agent-download").start();
+        new Thread(()->{Uri target=null;try{String name=mozilla.components.support.utils.DownloadUtils.INSTANCE.extractFileNameFromUrl(response.headers.get("Content-Disposition"),response.uri);ContentValues values=new ContentValues();values.put(MediaStore.Downloads.DISPLAY_NAME,name);values.put(MediaStore.Downloads.MIME_TYPE,response.headers.get("Content-Type"));values.put(MediaStore.Downloads.IS_PENDING,1);target=activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);if(target==null)throw new IOException();try(InputStream input=response.body;OutputStream output=activity.getContentResolver().openOutputStream(target)){if(input==null||output==null)throw new IOException();input.transferTo(output);}values.clear();values.put(MediaStore.Downloads.IS_PENDING,0);activity.getContentResolver().update(target,values,null,null);Uri saved=target;app.main.post(()->new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setMessage("Saved "+name).setPositiveButton("Open",(d,w)->{try{activity.startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(saved,response.headers.get("Content-Type")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));}catch(Exception e){app.message("Saved in Downloads.");}}).setNegativeButton("Close",null).show());}catch(Exception e){if(target!=null)activity.getContentResolver().delete(target,null,null);app.main.post(()->error("Download failed."));}},"agent-download").start();
     }
 }
