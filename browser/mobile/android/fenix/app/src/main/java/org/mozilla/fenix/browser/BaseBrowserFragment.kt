@@ -427,10 +427,19 @@ abstract class BaseBrowserFragment :
         return binding.root
     }
 
+    private var bashKittenDisplay: org.mozilla.fenix.bashkitten.FenixDisplayViewport? = null
+
     final override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         // DO NOT ADD ANYTHING ABOVE THIS getProfilerTime CALL!
         val profilerStartTime = requireComponents.core.engine.profiler?.getProfilerTime()
 
+        if (customTabSessionId == null) {
+            bashKittenDisplay = org.mozilla.fenix.bashkitten.FenixDisplayViewport(
+                viewLifecycleOwner, binding.browserLayout, binding.swipeRefresh,
+                requireComponents.core.store, requireComponents.useCases.tabsUseCases,
+                requireComponents.useCases.sessionUseCases,
+            )
+        }
         initializeUI(view)
 
         appLinksFeature.set(
@@ -1677,6 +1686,7 @@ abstract class BaseBrowserFragment :
         bottomToolbarHeight: Int,
     ) {
         val context = requireContext()
+        bashKittenDisplay?.toolbarInsets(topToolbarHeight, bottomToolbarHeight)
 
         if (isToolbarDynamic(context) && webAppToolbarShouldBeVisible) {
             getEngineView().setDynamicToolbarMaxHeight(topToolbarHeight + bottomToolbarHeight)
@@ -2337,6 +2347,8 @@ abstract class BaseBrowserFragment :
      * Dereference these views when the fragment view is destroyed to prevent memory leaks
      */
     override fun onDestroyView() {
+        bashKittenDisplay?.destroy()
+        bashKittenDisplay = null
         super.onDestroyView()
 
         // Diagnostic breadcrumb for "Display already aquired" crash:

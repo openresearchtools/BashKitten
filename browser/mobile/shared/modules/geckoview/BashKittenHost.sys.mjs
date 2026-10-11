@@ -56,6 +56,14 @@ export const BashKittenHost = {
 
   close(browser) { views.delete(browser); },
 
+  async navigation(browser, data) {
+    const global = browser.browsingContext.currentWindowGlobal;
+    const view = this.require(global);
+    const result = await global.getActor("BashKittenHost").sendQuery("Navigation", data);
+    if (this.require(global) !== view) throw new Error("The selected Agent changed");
+    return result;
+  },
+
   suspend(browser) {
     const view = views.get(browser);
     if (view) view.suspended = true;

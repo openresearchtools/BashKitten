@@ -25,11 +25,9 @@ public final class TabOptionsActivity extends ProductActivity {
         }
         add(root, "Private Tor sites", () -> startActivity(new Intent(this, OnionActivity.class)));
         add(root, "Revoke agent access", () -> {
-            app.grants.revokeAll();
-            app.commands.revokeAll();
+            app.revokeAgentAccess();
             app.refresh();
             for (BrowserApp.Tab owned : new ArrayList<>(app.tabs.values())) if (!owned.owner.equals(BrowserApp.USER)) app.close(owned);
-            app.message("Agent access revoked");
         });
         add(root, "Licenses and source", () -> startActivity(new Intent(this, LicensesActivity.class)));
         showContent(root, true);

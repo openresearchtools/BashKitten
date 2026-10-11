@@ -11,6 +11,7 @@ final class AppCommandGateway extends Binder {
     static final String CALLBACK = DESCRIPTOR + ".Callback";
     static final int CONNECT = IBinder.FIRST_CALL_TRANSACTION;
     static final int RESULT = CONNECT + 1;
+    static final int DISPLAY_REGISTER = CONNECT + 2;
     private final BrowserApp app;
     AppCommandGateway(BrowserApp app) { this.app = app; }
     private android.app.PendingIntent launchIntent(String response) {
@@ -30,6 +31,16 @@ final class AppCommandGateway extends Binder {
         } catch (Exception error) { return null; }
     }
     @Override protected boolean onTransact(int code, Parcel data, Parcel reply, int flags) throws RemoteException {
+        if (code == DISPLAY_REGISTER) {
+            data.enforceInterface(DESCRIPTOR);
+            if (reply == null) return false;
+            try {
+                app.display.register(Binder.getCallingUid(), data.readString(),
+                    com.bashkitten.api.IDisplaySource.Stub.asInterface(data.readStrongBinder()));
+                reply.writeNoException();
+            } catch (Exception error) { reply.writeException(new SecurityException(error.getMessage())); }
+            return true;
+        }
         if (code != CONNECT) return super.onTransact(code, data, reply, flags);
         data.enforceInterface(DESCRIPTOR);
         int uid = Binder.getCallingUid();

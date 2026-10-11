@@ -26,6 +26,7 @@ export class BashKittenHostChild extends JSWindowActorChild {
       if (!window || window.closed || window.document !== this.document) return;
       const bridge = Cu.createObjectIn(window);
       bridge.platform = "android";
+      bridge.navigation = true;
       Cu.exportFunction((command, args = {}) => new window.Promise((resolve, reject) => {
         let json;
         try {
@@ -68,6 +69,11 @@ export class BashKittenHostChild extends JSWindowActorChild {
       throw new Error("The Agent document changed");
     }
     const draft = Cu.waiveXrays(window).bashkittenDraft;
+    if (name === "Navigation") {
+      const navigation = Cu.waiveXrays(window).bashkittenNavigation;
+      if (!navigation) throw new Error("The chat is still connecting");
+      return Cu.cloneInto(await navigation.call(data.action, Cu.cloneInto(data.value || {}, window)), {});
+    }
     if (name === "CaptureDraft") {
       return typeof draft?.capture === "function"
         ? Cu.cloneInto(await draft.capture(), {}, { wrapReflectors: true }) : null;

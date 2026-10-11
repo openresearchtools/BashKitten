@@ -32,6 +32,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final Button location, hideAgent;
     private final SwitchCompat power;
     private final ImageButton display, localAI;
+    private final AgentSidecar sidecar;
     private final GeckoView view;
     private final ScrollView setup;
     private final ScrollView logScroll;
@@ -52,6 +53,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, Runnable openBrowserMenu) {
         super(activity); this.activity = activity; this.browser = browser;
         app = BrowserApp.get(activity); runtime = app.agent;
+        sidecar = new AgentSidecar(activity, runtime);
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
         setOrientation(HORIZONTAL);
         // Weighted panes must keep a bounded height: baseline alignment first
@@ -77,18 +79,20 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             if (!checked || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn();
             updatePower();
         });
-        bar.addView(power, new LayoutParams(dp(56), -1));
-        location = barButton("Local", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class))); bar.addView(location, new LayoutParams(0, -1, 1));
+        Button chats = barButton("☷", () -> sidecar.show(bar)); chats.setContentDescription("Environments, projects and chats"); bar.addView(chats, new LayoutParams(dp(40), -1));
+        location = barButton("+", () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class).putExtra("connectOnly", true))); location.setContentDescription("Connect to remote"); bar.addView(location, new LayoutParams(dp(40), -1));
         display = barIcon("Display", R.drawable.ic_agent_display, () -> {
             if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
                 ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-display");
         });
-        bar.addView(display, new LayoutParams(dp(40), -1));
+        // Display and power belong to the Local backend heading.
         localAI = barIcon("LocalAI", R.drawable.ic_agent_localai, () -> {
             if (runtime.selected.equals("local")) new AgentLocalAIDialog().show(
                 ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-localai");
         });
         bar.addView(localAI, new LayoutParams(dp(40), -1));
+        Button phone = barButton("☎", () -> com.bashkitten.telephony.PhonePanel.show(activity, com.bashkitten.phone.PhoneControlsPanel.build(activity)));
+        phone.setContentDescription("Phone"); bar.addView(phone, new LayoutParams(dp(40), -1));
         bar.addView(barIcon("Performance", R.drawable.ic_agent_performance, () -> new AgentPerformanceDialog().show(
             ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-performance")), new LayoutParams(dp(40), -1));
         Button menu = barButton("☰", openBrowserMenu); menu.setContentDescription("Browser menu"); bar.addView(menu, new LayoutParams(dp(48), -1));
@@ -204,7 +208,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         }
         layoutPanels();
     }
-    public void destroy() { destroyed = true; if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
+    public void destroy() { destroyed = true; sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     private void updatePower() {
         boolean stopping = runtime.state.equals("stopping"), stopFailed = runtime.state.equals("stop-failed");
@@ -222,7 +226,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     @Override public void changed() {
         if (microphone != null) microphone.changed();
         updatePower();
-        location.setText(runtime.selected.equals("local") ? "Local ▾" : "Remote ▾");
+        sidecar.changed();
         display.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
         localAI.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
         connectionStatus.setText("Connecting to Agent…");

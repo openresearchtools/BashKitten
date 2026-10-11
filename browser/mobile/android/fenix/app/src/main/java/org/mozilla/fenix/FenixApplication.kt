@@ -201,6 +201,8 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
      */
     @SuppressLint("NewApi")
     protected open fun initializeFenixProcess() {
+        // The native viewport child contains no Gecko, Agent, accounts or telemetry.
+        if (android.app.Application.getProcessName().endsWith(":display")) return
         // [TIMER] Record the start of the [PerfStartup.applicationOnCreate] metric here. Do this
         // manually because Glean has not started initializing yet. Note that by this point the
         // content providers from Fenix and its libraries have run their initializers already.

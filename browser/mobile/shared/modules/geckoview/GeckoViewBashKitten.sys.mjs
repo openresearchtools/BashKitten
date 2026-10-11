@@ -62,6 +62,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       }
       if (method === "agent.captureDraft") return BashKittenHost.captureDraft(this.browser);
       if (method === "agent.restoreDraft") return BashKittenHost.restoreDraft(this.browser);
+      if (method === "agent.navigation") return BashKittenHost.navigation(this.browser, params);
       if (method === "agent.configure") return this.configureAgent(params);
       if (method === "agent.disconnect") {
         this.agentLogin = false;

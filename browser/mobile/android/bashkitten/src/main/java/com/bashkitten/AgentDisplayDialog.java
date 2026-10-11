@@ -5,8 +5,6 @@ import android.app.Dialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -31,10 +29,7 @@ import org.json.JSONObject;
 
 /** Local-only view of the same command/lifecycle used by Termux Pi. */
 public final class AgentDisplayDialog extends AppCompatDialogFragment implements AgentRuntime.Listener {
-    private static final String X11 = "com.termux.x11";
     private static final String PROMPT = "Use the termux-display skill to set up XFCE for this device and save a working launch command, using supported GPU acceleration if available.";
-    // Official Termux GitHub signer; installer package names cannot prove this.
-    private static final String GITHUB_SIGNER = "B6DA01480EEFD5FBF2CD3771B8D1021EC791304BDD6C4BF41D3FAABAD48EE5E1";
     private DisplayState state;
     private LinearLayout body;
 
@@ -66,27 +61,20 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
         else if (body != null && !state.editing) render();
     }
     private boolean local() { return state.runtime.selected.equals("local"); }
-    private boolean installed() {
-        try { return requireContext().getPackageManager().getApplicationInfo(X11, 0).enabled; }
-        catch (PackageManager.NameNotFoundException error) { return false; }
-    }
     private void render() {
         if (body == null || !isAdded()) return;
         body.removeAllViews();
         if (!local()) return;
-        text(body, "Run desktop apps in an XFCE desktop using Termux:X11.");
+        text(body, "Run desktop apps in the native Display tab. Closing the tab keeps your desktop apps running.");
         if (state.runtime.shareNeedsSetup()) {
             button(body, "Set up Local", () -> { state.runtime.turnOn(); dismiss(); }); return;
-        }
-        if (!installed()) {
-            text(body, "Install Termux:X11, then return to Display.");
-            button(body, "Download X11", this::download);
         }
         JSONObject value = state.value;
         TextView status = text(body, state.busy ? state.progress : value == null ? "Display status unavailable" : "Display · " + value.optString("state"));
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         if (!state.error.isEmpty()) text(body, state.error);
         if (value == null) { if (!state.busy) button(body, "Retry", () -> state.call("display-status", new JSONObject())); return; }
+        if (!value.optString("launcherNote").isEmpty()) text(body, value.optString("launcherNote"));
         String error = value.optString("error");
         if (!error.isEmpty() && !error.equals(state.error)) text(body, error);
         org.json.JSONArray others = value.optJSONArray("otherDisplaySockets");
@@ -119,11 +107,9 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
             boolean running = value.optString("state").equals("running"), stopping = value.optString("state").equals("stopping");
             LinearLayout controls = row();
             if (running || stopping) button(controls, "Stop", () -> state.call("display-stop", new JSONObject()));
-            else if (installed()) button(controls, "Start", () -> state.call("display-start", new JSONObject()));
-            if (running && installed()) button(controls, "Open X11", () -> {
-                Intent intent = requireContext().getPackageManager().getLaunchIntentForPackage(X11);
-                if (intent == null) { state.error = "Termux:X11 has no enabled launch activity."; render(); }
-                else startActivity(intent);
+            else button(controls, "Start", () -> state.call("display-start", new JSONObject()));
+            if (running) button(controls, "Open Display", () -> {
+                com.bashkitten.display.DisplayTabs.open(requireActivity(), "local"); dismiss();
             });
         }
         if (!value.optString("output").isEmpty()) {
@@ -132,30 +118,6 @@ public final class AgentDisplayDialog extends AppCompatDialogFragment implements
         }
         text(body, "Ask your agent"); code(PROMPT, 3);
         button(body, "Copy prompt", () -> copy(PROMPT, "Prompt copied"));
-    }
-    private void download() {
-        PackageManager packages = requireContext().getPackageManager();
-        byte[] digest = new byte[GITHUB_SIGNER.length() / 2];
-        for (int i = 0; i < digest.length; i++) digest[i] = (byte) Integer.parseInt(GITHUB_SIGNER.substring(i * 2, i * 2 + 2), 16);
-        boolean matching = packages.hasSigningCertificate(TermuxConnection.PACKAGE, digest, PackageManager.CERT_INPUT_SHA256);
-        if (!matching) {
-            new MaterialAlertDialogBuilder(requireContext()).setTitle("Termux:X11")
-                .setMessage("This Termux uses a different signing key. Download the official standalone X11 APK; your Termux installation stays in place.")
-                .setPositiveButton("Download", (d, w) -> download(false)).setNegativeButton("Cancel", null).show();
-            return;
-        }
-        new MaterialAlertDialogBuilder(requireContext()).setTitle("Termux:X11")
-            .setMessage("The shared-UID version matches your GitHub Termux. If Android rejects that version, choose the standalone APK.")
-            .setPositiveButton("Shared UID", (d, w) -> download(true))
-            .setNeutralButton("Standalone", (d, w) -> download(false)).setNegativeButton("Cancel", null).show();
-    }
-    private void download(boolean shared) {
-        if (!local()) return;
-        // Upstream ships both ARM64 and x86_64 in each universal APK. The
-        // signing/shared-UID choice is independent of the device architecture.
-        String url = "https://github.com/termux/termux-x11/releases/download/nightly/termux-x11-universal-" + (shared ? "sharedUid-" : "") + "debug.apk";
-        BrowserApp app = state.runtime.app;
-        app.create(BrowserApp.USER, false, url, tab -> { app.show(tab); dismissAllowingStateLoss(); }, error -> { state.error = error; render(); });
     }
     private void copy(String value, String feedback) {
         ((ClipboardManager) requireContext().getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Display", value));

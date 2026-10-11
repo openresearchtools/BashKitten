@@ -19,8 +19,9 @@ const prefix = process.env.PREFIX || '/data/data/com.termux/files/usr';
 const shell = () => path.join(prefix, 'bin/sh');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const temporary = process.env.TMPDIR || path.join(prefix, 'tmp');
-const defaultCommand = `exec termux-x11 "$DISPLAY" -nolisten tcp -xstartup 'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
+const defaultCommand = `exec bashkitten-x11 "$DISPLAY" -nolisten tcp -xstartup 'env LIBGL_ALWAYS_SOFTWARE=true dbus-launch --exit-with-session xfce4-session'
 `;
+const legacyDefault = defaultCommand.replace('bashkitten-x11', 'termux-x11');
 
 function requireTermux() {
   if (platform !== 'termux') throw Error('Display is available only in local Termux');
@@ -35,11 +36,13 @@ async function desktopReady(environment) {
 async function command() {
   requireTermux();
   await privateDir(directory);
-  // Never replace a saved command when the package or controller is upgraded.
+  // Only the exact untouched old generated default migrates to the private loader.
   await fs.writeFile(displayCommand, defaultCommand, { flag: 'wx', mode: 0o600 }).catch(error => {
     if (error.code !== 'EEXIST') throw error;
   });
-  return fs.readFile(displayCommand, 'utf8');
+  const saved = await fs.readFile(displayCommand, 'utf8');
+  if (saved === legacyDefault) { await writePrivate(displayCommand, defaultCommand); return defaultCommand; }
+  return saved;
 }
 
 async function validate(text) {
@@ -76,6 +79,8 @@ export class TermuxDisplay {
     });
     return { state: this.state, error: this.error, output: this.output,
       command: text, revision: digest(text), commandPath: displayCommand,
+      launcherNote: /(?:^|[\s/])termux-x11(?:\s|$)/m.test(text) && !text.includes('bashkitten-x11')
+        ? 'This saved command uses independent Termux:X11. Change its server launcher to bashkitten-x11 to show it in Display; your other settings are preserved.' : '',
       previousCommandPath: previousCommand, environment: this.environment,
       otherDisplaySockets: sockets.filter(name => /^X\d+$/.test(name)).map(name => ':' + name.slice(1))
         .filter(display => display !== this.environment.DISPLAY),
@@ -104,7 +109,8 @@ export class TermuxDisplay {
     }) || await fs.lstat(path.join(temporary, '.X11-unix', `X${number}`)).then(() => true, error => {
       if (error.code === 'ENOENT') return false; throw error;
     })) number++;
-    this.environment = { DISPLAY: `:${number}` };
+    this.environment = { DISPLAY: `:${number}`, BASHKITTEN_EXECUTION_ROLE: 'termux',
+      BASHKITTEN_DATA_DIR: dataDir, BASHKITTEN_DESKTOP_CONTEXT: path.join(directory, 'context.json') };
     const env = { ...process.env, ...this.environment };
     await writePrivate(runningCommand, text);
     this.activeCommand = text; this.error = ''; this.output = ''; this.state = 'starting';

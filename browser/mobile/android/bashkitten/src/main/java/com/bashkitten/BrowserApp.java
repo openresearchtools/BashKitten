@@ -16,6 +16,8 @@ public final class BrowserApp extends ContextWrapper {
     public interface Provider { BrowserApp bashKitten(); }
     public interface Host {
         GeckoRuntime runtime();
+        void openDisplay(String environmentId);
+        void closeDisplay();
         Tab create(String owner, String contextId);
         Tab selected();
         List<Tab> list();
@@ -44,6 +46,7 @@ public final class BrowserApp extends ContextWrapper {
     final SharedPreferences policies;
     public final Host host;
     public final AgentRuntime agent;
+    public final DisplayBroker display;
     final RemoteBrowserControl remoteControl;
     final LinkedHashMap<String, Tab> tabs = new LinkedHashMap<>();
     public static final String USER = "local-user";
@@ -83,6 +86,7 @@ public final class BrowserApp extends ContextWrapper {
         transfers = new FileTransfers(this);
         appCommands = new AppCommandGateway(this);
         agent = new AgentRuntime(this);
+        display = new DisplayBroker(this);
         previews = new DocumentPreviews(this);
         remoteControl = new RemoteBrowserControl(this);
     }
@@ -341,10 +345,10 @@ public final class BrowserApp extends ContextWrapper {
     boolean ownsDownload(String id, String owner) { return owner.equals(policies.getString("download." + id + ".owner", USER)); }
     public boolean agentTab(String id) { return !USER.equals(policies.getString(id + ".owner", USER)); }
     public void closeUnapprovedTabs() {
-        transfers.revokeAll(); commands.revokeAll();
+        transfers.revokeAll(); commands.revokeAll(); display.revalidate();
     }
     public void revokeAgentAccess() {
-        grants.revokeAll(); commands.revokeAll(); transfers.revokeAll(); remoteControl.disconnect();
+        grants.revokeAll(); display.revoke(); commands.revokeAll(); transfers.revokeAll(); remoteControl.disconnect();
         message("Agent access revoked");
     }
     void close(Tab tab) {

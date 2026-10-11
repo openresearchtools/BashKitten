@@ -46,6 +46,10 @@ System.setProperty('android.home', gradle.mozconfig.substs.ANDROID_SDK_ROOT)
 
 include ':annotations', ':messaging_example', ':port_messaging_example', ':bashkitten'
 project(':bashkitten').projectDir = new File("${topsrcdir}/mobile/android/bashkitten")
+include ':bashkitten-sdk', ':bashkitten-display', ':bashkitten-telephony'
+project(':bashkitten-sdk').projectDir = new File("${topsrcdir}/mobile/android/bashkitten-sdk")
+project(':bashkitten-display').projectDir = new File("${topsrcdir}/mobile/android/bashkitten/display")
+project(':bashkitten-telephony').projectDir = new File("${topsrcdir}/mobile/android/bashkitten/telephony")
 include ':geckoview'
 include ':android-components'
 

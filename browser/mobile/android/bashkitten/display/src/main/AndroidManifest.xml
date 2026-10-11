@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <service android:name="com.bashkitten.display.DisplayRendererService"
+            android:exported="false" android:process=":display" android:stopWithTask="false" />
+    </application>
+</manifest>
