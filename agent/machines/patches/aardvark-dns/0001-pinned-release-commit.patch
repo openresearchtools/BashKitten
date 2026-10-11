@@ -1,0 +1,31 @@
+--- a/build.rs
++++ b/build.rs
+@@ -1,6 +1,5 @@
+ use chrono::{DateTime, Utc};
+ use std::env;
+-use std::process::Command;
+ 
+ fn main() {
+     // Generate the default 'cargo:' instruction output
+@@ -19,12 +18,14 @@
+         std::env::var("TARGET").unwrap()
+     );
+ 
+-    // get git commit
+-    let command = Command::new("git").args(["rev-parse", "HEAD"]).output();
+-    let commit = match command {
+-        Ok(output) => String::from_utf8(output.stdout).unwrap(),
+-        // if error, e.g. build from source with git repo, just show empty string
+-        Err(_) => "".to_string(),
+-    };
++    // BashKitten builds materialized release sources outside a Git checkout.
++    // Require the verified upstream pin instead of discovering an enclosing repo.
++    println!("cargo:rerun-if-env-changed=BASHKITTEN_UPSTREAM_COMMIT");
++    let commit = env::var("BASHKITTEN_UPSTREAM_COMMIT")
++        .expect("BASHKITTEN_UPSTREAM_COMMIT must contain the verified release commit");
++    assert!(
++        commit.len() == 40 && commit.bytes().all(|byte| byte.is_ascii_hexdigit()),
++        "BASHKITTEN_UPSTREAM_COMMIT must be a full release commit"
++    );
+     println!("cargo:rustc-env=GIT_COMMIT={commit}");
+ }
