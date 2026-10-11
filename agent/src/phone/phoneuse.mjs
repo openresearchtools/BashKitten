@@ -56,6 +56,9 @@ async function main() {
   if (response.headers['content-type'] === 'application/json') {
     const chunks = []; for await (const chunk of response) chunks.push(chunk);
     const value = JSON.parse(Buffer.concat(chunks)); if (response.statusCode !== 200 || value.error) throw Error(value.error || 'Phone command failed');
+    if (['status', 'capabilities', 'help'].includes(command) && Array.isArray(value.result?.commands)) {
+      value.result.commands = value.result.commands.map(entry => ({ ...entry, command: `phoneuse ${entry.command.replace('.', ' ')}` }));
+    }
     process.stdout.write(JSON.stringify(value.result) + '\n'); return;
   }
   if (response.statusCode !== 200) { response.destroy(); throw Error('Phone command failed'); }
