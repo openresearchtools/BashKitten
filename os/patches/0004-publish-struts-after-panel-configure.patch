@@ -1,0 +1,93 @@
+--- a/panel/panel-window.c
++++ b/panel/panel-window.c
+@@ -163,6 +163,11 @@
+ panel_window_style_updated (GtkWidget *widget);
+ static void
+ panel_window_realize (GtkWidget *widget);
++static void
++panel_window_unrealize (GtkWidget *widget);
++static gboolean
++panel_window_configure_event (GtkWidget *widget,
++                              GdkEventConfigure *event);
+ #ifdef HAVE_GTK_LAYER_SHELL
+ static void
+ panel_window_hide (GtkWidget *widget);
+@@ -379,6 +384,8 @@
+   StrutsEgde struts_edge;
+   gulong struts[N_STRUTS];
+   guint struts_enabled : 1;
++  GdkRectangle struts_configured;
++  guint struts_configured_valid : 1;
+ 
+   /* dark mode */
+   gboolean dark_mode;
+@@ -488,6 +495,8 @@
+   gtkwidget_class->screen_changed = panel_window_screen_changed;
+   gtkwidget_class->style_updated = panel_window_style_updated;
+   gtkwidget_class->realize = panel_window_realize;
++  gtkwidget_class->unrealize = panel_window_unrealize;
++  gtkwidget_class->configure_event = panel_window_configure_event;
+ #ifdef HAVE_GTK_LAYER_SHELL
+   if (gtk_layer_is_supported ())
+     {
+@@ -2106,6 +2115,42 @@
+ 
+ 
+ 
++/* BashKitten OS: X11 struts must follow the WM's applied panel geometry.
++ * Publishing before its move can leave a resized desktop's workarea stale.
++ * No X round trip, timer, or alternate window-sizing policy is introduced. */
++static gboolean
++panel_window_configure_event (GtkWidget *widget,
++                              GdkEventConfigure *event)
++{
++  PanelWindow *window = PANEL_WINDOW (widget);
++  GtkWidgetClass *parent = GTK_WIDGET_CLASS (panel_window_parent_class);
++  gboolean handled = parent->configure_event != NULL
++                       ? parent->configure_event (widget, event) : FALSE;
++
++  if (WINDOWING_IS_X11 ())
++    {
++      window->struts_configured = (GdkRectangle) { event->x, event->y,
++                                                  event->width, event->height };
++      window->struts_configured_valid = TRUE;
++      if (gtk_widget_get_mapped (widget)
++          && window->struts_edge != STRUTS_EDGE_NONE
++          && window->autohide_behavior == AUTOHIDE_BEHAVIOR_NEVER)
++        panel_window_screen_struts_set (window);
++    }
++  return handled;
++}
++
++
++static void
++panel_window_unrealize (GtkWidget *widget)
++{
++  PanelWindow *window = PANEL_WINDOW (widget);
++  window->struts_configured_valid = FALSE;
++  memset (window->struts, 0, sizeof (window->struts));
++  GTK_WIDGET_CLASS (panel_window_parent_class)->unrealize (widget);
++}
++
++
+ static void
+ panel_window_realize (GtkWidget *widget)
+ {
+@@ -2278,7 +2323,16 @@
+      The screen height/width can't be calculated from monitor geometry
+      because it can extend beyond the lowest/rightmost monitor. */
+   scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (window));
+-  if (window->struts_edge == STRUTS_EDGE_TOP)
++  if (window->autohide_behavior == AUTOHIDE_BEHAVIOR_NEVER
++      && window->struts_configured_valid
++      && !gdk_rectangle_equal (&window->struts_configured, alloc))
++    {
++      /* Withdraw the previous reservation until ConfigureNotify matches the
++       * latest allocation. The zero -> actual change also refreshes Xfwm when
++       * a height-only move leaves the final strut values numerically equal.
++       * Initial mapping retains the upstream pre-map reservation behavior. */
++    }
++  else if (window->struts_edge == STRUTS_EDGE_TOP)
+     {
+       /* the window is snapped on the top screen edge */
+       struts[STRUT_TOP] = (alloc->y + alloc->height) * scale_factor;

@@ -40,3 +40,7 @@ environments plan requires the installed BashKitten Display flows on Android,
 Wayland and an actual Xorg host, including layout/dialogs, app installation,
 scaling, accessibility, both tray protocols, user-setting preservation and
 responsiveness under load.
+
+The named panel resize patch publishes X11 reservations after the window manager
+acknowledges the panel's latest geometry. It preserves first-map reservations,
+user panel placement and autohide, without a hardcoded margin or UI-thread wait.
