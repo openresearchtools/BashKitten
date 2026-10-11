@@ -13,6 +13,8 @@ import { defaults, validate, prepareRuntime, prepareStorage, machineRoot, packag
 import { podman, installed, run } from './process.mjs';
 import { startMedia, stopMedia, mediaDevices, mediaStatus, integrationArguments } from './media.mjs';
 import { duringUpdate, mutations, runtimeVersion, updateMessage, updateError } from './update.mjs';
+import { binary } from '../access/paths.mjs';
+import { shutdownOwnedMachines, stopOwnedGateway as stopGateway } from './shutdown.mjs';
 
 process.umask(0o077);
 await privateDir(machineRoot);
@@ -20,11 +22,75 @@ await privateDir(path.dirname(daemonSocket));
 const owner = await claimInstance('machines');
 if (!owner) process.exit(0);
 await fs.rm(daemonSocket, { force: true });
-await prepareStorage();
 const active = new Map();
 const runtime = await runtimeVersion(true), started = await processStart(process.pid);
 let updatePending = false, retiring = false, retirementStarted = false, mutationRequests = 0, upgradeCheck;
 const activationWatchers = new Map(), activationWaiters = new Set();
+let server, browserOwner, browserWatcher, closing = false, shutdownPromise, shutdownReply = false, exiting = false;
+let browserAdoption = Promise.resolve();
+function armGuard() {
+  if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The container runtime guard is unavailable');
+  process.kill(process.ppid, 'SIGTERM');
+}
+function shutdown() {
+  if (shutdownPromise) return shutdownPromise;
+  closing = true;
+  for (const watcher of activationWatchers.values()) watcher.close();
+  activationWatchers.clear();
+  for (const wake of activationWaiters) wake();
+  for (const job of active.values()) job.cancel.abort();
+  shutdownPromise = (async () => {
+    // Let cancelled commands unwind before inspecting the durable private store.
+    // The guard bounds cleanup even when a child or the JS event loop is stuck.
+    await Promise.race([Promise.allSettled([...active.values()].map(job => job.completion)), sleep(2000)]);
+    return shutdownOwnedMachines({ stopMedia });
+  })();
+  return shutdownPromise;
+}
+function exitOwner(code = 0) {
+  if (exiting) return;
+  exiting = true;
+  browserWatcher?.kill('SIGTERM'); browserWatcher = null;
+  server?.close(); server?.closeAllConnections();
+  owner.close(); process.exit(code);
+}
+function terminate() {
+  try { armGuard(); } catch (error) { console.error('Container runtime guard:', error.message); }
+  void shutdown().then(() => exitOwner(), error => { console.error('Container shutdown:', error.message); exitOwner(1); });
+}
+function adoptBrowser(value) {
+  const result = browserAdoption.then(async () => {
+    if (closing) throw Error('The container service is stopping');
+    if (!Number.isInteger(value?.pid) || value.pid < 2 || !/^[1-9][0-9]*$/.test(value.started || '')) throw Error('Invalid browser process identity');
+    if (browserOwner) {
+      if (browserOwner.pid !== value.pid || browserOwner.started !== value.started) throw Error('Containers belong to another browser process');
+      return;
+    }
+    if (await processStart(value.pid) !== value.started || (await fs.stat(`/proc/${value.pid}`)).uid !== process.getuid()) throw Error('The browser process is no longer running');
+    const child = spawn(binary('runtime-guard'), ['wait-owner', String(value.pid), value.started, 'guard-stop'], { stdio: ['ignore', 'pipe', 'inherit'] });
+    browserWatcher = child;
+    child.once('exit', () => { if (browserWatcher === child && !retirementStarted) terminate(); });
+    child.once('error', () => { if (browserWatcher === child && !retirementStarted) terminate(); });
+    try {
+      await new Promise((resolve, reject) => {
+        let output = '';
+        const finish = error => {
+          clearTimeout(timer); child.stdout.off('data', data); child.off('exit', ended); child.off('error', finish);
+          error ? reject(error) : resolve();
+        };
+        const timer = setTimeout(() => finish(Error('Could not track the browser process')), 5000);
+        const data = bytes => { output += bytes; if (output === 'ready\n') finish(); else if (output.length > 64 || output.includes('\n')) finish(Error('Invalid browser lifetime tracker response')); };
+        const ended = () => finish(Error('The browser lifetime tracker could not start'));
+        child.stdout.on('data', data); child.once('exit', ended); child.once('error', finish);
+      });
+      if (closing || await processStart(value.pid) !== value.started) throw Error('The browser process is no longer running');
+      browserOwner = { pid: value.pid, started: value.started };
+    } catch (error) { child.kill('SIGTERM'); throw error; }
+  });
+  browserAdoption = result.catch(() => {}); return result;
+}
+process.on('SIGTERM', () => { if (shutdownReply) void shutdown().catch(() => {}); else terminate(); });
+process.on('SIGINT', () => process.emit('SIGTERM'));
 function watchActivation(id) {
   if (activationWatchers.has(id)) return;
   try {
@@ -44,7 +110,7 @@ async function pendingActivations() {
   return result;
 }
 let catalogueQueue = Promise.resolve();
-const catalogue = fn => { const result = catalogueQueue.then(fn); catalogueQueue = result.catch(() => {}); return result; };
+const catalogue = fn => { const result = catalogueQueue.then(() => { if (closing) throw Error('The container service is stopping'); return fn(); }); catalogueQueue = result.catch(() => {}); return result; };
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function records() {
@@ -94,30 +160,33 @@ async function operation(id) {
   return readJson(p.operation, null);
 }
 async function begin(id, kind, work) {
+  if (closing) throw Error('The container service is stopping');
   if (active.has(id)) throw Error('This machine already has an operation in progress');
   // Reserve before the first await; starts/cancel/delete can arrive concurrently.
   const cancel = new AbortController();
-  active.set(id, { id: null, cancel });
+  let completed;
+  const completion = new Promise(resolve => { completed = resolve; });
+  active.set(id, { id: null, cancel, completion });
   let current;
-  try { current = await load(id); } catch (error) { active.delete(id); throw error; }
+  try { current = await load(id); cancel.signal.throwIfAborted(); } catch (error) { active.delete(id); completed(); throw error; }
   const job = { id: randomUUID(), machineId: id, kind, state: 'running', phase: 'Preparing', startedAt: new Date().toISOString(), exitCode: null };
   const stream = createWriteStream(current.files.output, { flags: 'w', mode: 0o600 });
-  try { await new Promise((resolve,reject) => { stream.once('open', resolve); stream.once('error',reject); }); } catch (error) { active.delete(id); throw error; }
+  try { await new Promise((resolve,reject) => { stream.once('open', resolve); stream.once('error',reject); }); } catch (error) { active.delete(id); completed(); throw error; }
   let streamError;
   stream.on('error', error => { streamError = error; cancel.abort(); });
   const context = { ...job, signal: cancel.signal, output: data => { if(stream.write(data)) return; return new Promise((resolve,reject) => { const done=error=>{stream.off('drain',drained);stream.off('error',failed);error?reject(error):resolve();}; const drained=()=>done();const failed=e=>done(e);stream.once('drain',drained);stream.once('error',failed); }); },
     phase: async phase => { job.phase = phase; await writeJson(current.files.operation, job); },
     check: () => { if (cancel.signal.aborted) throw Error('Operation cancelled'); if (streamError) throw streamError; },
   };
-  active.set(id, { ...job, cancel });
+  active.set(id, { ...job, cancel, completion });
   try {
     await writeJson(current.files.operation, job);
     await saveState(id, { operation: job.id, lastError: null, state: kind === 'create' ? 'preparing' : kind === 'delete' ? 'deleting' : kind === 'stop' ? 'stopping' : 'starting' });
-  } catch (error) { active.delete(id); stream.destroy(); throw error; }
+  } catch (error) { active.delete(id); completed(); stream.destroy(); throw error; }
   // The independent daemon owns this promise. Closing the native view never cancels it.
   void (async () => {
     try {
-      await work(context); context.check();
+      context.check(); await work(context); context.check();
       job.state = 'complete'; job.exitCode = 0;
     } catch (error) {
       job.state = cancel.signal.aborted ? 'cancelled' : 'failed'; job.error = error.message; job.exitCode = 1;
@@ -128,7 +197,7 @@ async function begin(id, kind, work) {
       try {
         if (!stream.destroyed) await new Promise(resolve => stream.end(resolve));
         if (await fs.stat(current.files.directory).catch(() => null)) await writeJson(current.files.operation, job);
-      } finally { active.delete(id); }
+      } finally { active.delete(id); completed(); }
     }
   })().catch(error => console.error('Machine operation state could not be persisted:', error.message));
   return { machine: brief(current), operation: job };
@@ -184,6 +253,7 @@ async function startGateway(config, job) {
   const p = locations(config.id);
   const existing = await readJson(path.join(p.runtime,'gateway.json'), null);
   if (existing && existing.pid && await processStart(existing.pid) === existing.started) return existing;
+  await stopGateway(config.id); job.check();
   const executable = path.join(packageRoot, '../display/bashkitten-display');
   await fs.access(executable, fs.constants.X_OK);
   await fs.rm(path.join(p.display,'ready.json'), { force: true });
@@ -197,6 +267,7 @@ async function startGateway(config, job) {
     }
   }
   const file = await fs.open(path.join(p.directory,'display.log'),'a',0o600);
+  try { job.check(); } catch (error) { await file.close(); throw error; }
   const child = spawn(executable,args,{stdio:['ignore',file.fd,file.fd],detached:true});
   await Promise.all([file.close(), new Promise((resolve,reject) => { child.once('spawn',resolve); child.once('error',reject); })]);
   child.unref();
@@ -216,17 +287,8 @@ async function startGateway(config, job) {
   }
   throw Error('The private display gateway did not become ready');
 }
-async function stopGateway(id) {
-  const p = locations(id), record = await readJson(path.join(p.runtime,'gateway.json'),null);
-  if (record && await processStart(record.pid) === record.started) {
-    process.kill(record.pid,'SIGTERM');
-    for (const until=Date.now()+5000;Date.now()<until && await processStart(record.pid)===record.started;) await sleep(50);
-    if (await processStart(record.pid)===record.started) process.kill(record.pid,'SIGKILL');
-  }
-  await fs.rm(path.join(p.runtime,'gateway.json'),{force:true});
-  await fs.rm(path.join(p.display,'ready.json'),{force:true});
-}
 async function start(config, job) {
+  job.check();
   const id=config.id, p=await prepareRuntime(id), state=await readJson(p.state,{});
   watchActivation(id);
   if (!state.provisioned) throw Error('Finish creating this machine before starting it');
@@ -241,9 +303,11 @@ async function start(config, job) {
     await saveState(id,{state:'running'}); return;
   }
   if (info && state.definition !== definition(config)) { await podman(['rm',containerName(id)],{output:job.output,signal:job.signal}); info=null; }
+  await saveState(id,{state:'starting',lastError:null});
   await job.phase('Starting the private display and guest services');
   let gateway;
   try {
+    job.check();
     gateway=await startGateway(config,job);
     await writeJson(path.join(p.settings,'display.json'),{machineId:id,mode:gateway.mode,software:gateway.mode==='software',width:1280,height:720});
     await writeJson(path.join(p.settings,'integration.json'),{schema:1,media:Object.fromEntries(Object.entries(config.integrations.media).map(([k,v])=>[k,v.enabled]))});
@@ -255,6 +319,7 @@ async function start(config, job) {
     await checkRuntimeIdentity(id,info);
     await fs.rm(path.join(p.exchange,'agent/guest-browser-status.json'),{force:true});
     await fs.rm(path.join(p.exchange,'integration-status.json'),{force:true});
+    job.check();
     await podman(['start',containerName(id)],{output:job.output,signal:job.signal});
     let browserError;
     for (const until=Date.now()+60000;Date.now()<until;) {
@@ -373,7 +438,13 @@ async function edit(value) {
   });
 }
 async function action(name,value={},requestSignal) {
-  if(name==='status') return {schema:2,pid:process.pid,started,runtime,updatePending};
+  if(name==='status') return {schema:3,pid:process.pid,started,runtime,updatePending,stopping:closing};
+  if(name==='browser-shutdown') {
+    if (!browserOwner || browserOwner.pid !== value.browserOwner?.pid || browserOwner.started !== value.browserOwner?.started) throw Error('This browser does not own these containers');
+    shutdownReply = true; armGuard();
+    return shutdown();
+  }
+  if(closing) throw Error('The container service is stopping');
   if(name==='upgrade') {
     if(value.pid!==process.pid || value.started!==started) throw Error('The container service changed while preparing its update');
     updatePending = true;
@@ -425,7 +496,7 @@ async function action(name,value={},requestSignal) {
       if(pending?.id === value.ack.id) await saveState(value.ack.machineId,{activation:pending.id});
     }
     let activations = await pendingActivations();
-    if (!activations.length && value.wait && !retiring) {
+    if (!activations.length && value.wait && !retiring && !closing) {
       await new Promise(resolve => { const finish=()=>{clearTimeout(timer);activationWaiters.delete(finish);resolve();}; const timer=setTimeout(finish,20000);activationWaiters.add(finish); });
       activations=await pendingActivations();
     }
@@ -535,6 +606,17 @@ async function action(name,value={},requestSignal) {
   });
   throw Error('Unknown machine action');
 }
+// Bind the initial browser before recovering or starting any machine. A browser
+// which died while systemd was starting us must not leave an unowned service.
+try {
+  await adoptBrowser({ pid: Number(process.env.BASHKITTEN_BROWSER_PID), started: process.env.BASHKITTEN_BROWSER_STARTED });
+  await prepareStorage();
+} catch (error) {
+  console.error('Container browser ownership:', error.message);
+  try { armGuard(); } catch {}
+  await shutdown().catch(failure => console.error('Container shutdown:', failure.message));
+  exitOwner(1);
+}
 // On daemon recovery preserve partial creations/errors instead of claiming Ready.
 for(const r of await records()) {
   watchActivation(r.config.id);
@@ -544,19 +626,23 @@ for(const r of await records()) {
     await saveState(r.config.id,{state:'error',lastError:'Previous machine operation was interrupted'});
   }
 }
-const server=http.createServer(async(req,res)=>{
+server=http.createServer(async(req,res)=>{
   const request=new AbortController();
   res.once('close',()=>{if(!res.writableEnded)request.abort();});
   const name=req.url.slice(1), mutation=mutations.has(name);
   if(mutation)mutationRequests++;
   try {
-    if(req.url==='/status')return json(res,await action('status'));
+    if(req.url==='/status' && req.method==='GET')return json(res,await action('status'));
     if(req.method!=='POST')throw Error('Use POST for native machine actions');
-    const result=await action(name,await jsonBody(req),request.signal);
+    const value=await jsonBody(req);
+    if(name!=='browser-shutdown' && value.browserOwner)await adoptBrowser(value.browserOwner);
+    const result=await action(name,value,request.signal);
+    if(name==='browser-shutdown') {
+      if(res.destroyed)exitOwner();else {res.once('finish',()=>exitOwner());res.once('close',()=>exitOwner());}
+    }
     if(name==='upgrade' && result.restarting) {
-      // Idle, with new lifecycle work fenced. Flush this reply before closing
-      // the listener and releasing the systemd owner. Closing a browser never
-      // enters this path and no running guest or operation is cancelled here.
+      // Idle update only: flush the reply before releasing the systemd owner.
+      // Browser Quit has a separate cleanup path; updates preserve busy work.
       const retire=()=>{
         if(retirementStarted)return;
         retirementStarted=true;
@@ -567,9 +653,13 @@ const server=http.createServer(async(req,res)=>{
     }
     if(!res.destroyed)json(res,result);
   }
-  catch(error){if(!res.destroyed)json(res,{error:error.message,code:error.code},400);}
+  catch(error){
+    if(name==='browser-shutdown' && shutdownReply) {
+      if(res.destroyed)exitOwner(1);else {res.once('finish',()=>exitOwner(1));res.once('close',()=>exitOwner(1));}
+    }
+    if(!res.destroyed)json(res,{error:error.message,code:error.code},400);
+  }
   finally {if(mutation)mutationRequests--;}
 });
 await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(daemonSocket,resolve);});
 await fs.chmod(daemonSocket,0o600);
-process.on('SIGTERM',()=>{for(const job of active.values())job.cancel.abort();server.close(()=>{owner.close();process.exit(0);});});

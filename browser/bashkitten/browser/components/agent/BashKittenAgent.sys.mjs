@@ -24,9 +24,8 @@ const contexts = new Map();
 const ownedViews = new WeakMap();
 let actorRegistered = false;
 let browserOwner;
-let adoptedLocal = false;
 let closingLocal = false;
-const localOperations = new Set();
+const localProcesses = new Set();
 const documentCleanups = new Set();
 AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: remove temporary documents", () =>
   Promise.allSettled([...documentCleanups].map(cleanup => cleanup())));
@@ -35,29 +34,60 @@ let shuttingDown;
 function shutdown() {
   if (!shuttingDown) {
     closingLocal = true;
-    shuttingDown = stopOwnedRuntime().finally(() => { closingLocal = false; shuttingDown = null; });
+    let deadline;
+    shuttingDown = Promise.race([
+      stopOwnedRuntime(),
+      new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("Owned runtime cleanup did not finish within 105 seconds.")), 105000); }),
+    ]).finally(() => { clearTimeout(deadline); closingLocal = false; });
+    // Keep this same bounded result for Gecko's later shutdown blocker. A
+    // cancelled Quit followed by new native activity resets it in control().
   }
   return shuttingDown;
 }
 async function stopOwnedRuntime() {
-  try { await DesktopLifetime.view?.saveCurrentDraft(); }
-  catch (error) { console.error("Could not save the Agent draft before Quit", error); }
-  await Promise.allSettled([...localOperations]);
-  await lazy.BrowserControlChannel.close("browser quitting");
-  await AgentRemotes.deactivate();
-  if (!browserOwner || !adoptedLocal) return;
+  // Fence the owners immediately, before draft capture or an unfinished native
+  // request can delay their guards. Stop request clients too: an in-flight
+  // startup client must not retry and recreate an owner during Quit.
+  const owners = [stopOwnedMachines(), stopOwnedLocal()];
+  for (const process of localProcesses) void process.kill(0).catch(console.error);
+  const draft = (async () => {
+    let timer;
+    try {
+      await Promise.race([
+        DesktopLifetime.view?.saveCurrentDraft(),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Draft capture timed out.")), 2000); }),
+      ]);
+    } catch (error) { console.error("Could not save the Agent draft before Quit", error); }
+    finally { clearTimeout(timer); }
+  })();
+  // Every owner must receive shutdown even if another cleanup fails. Machines
+  // are independent of Local and may be running while its heading is Off.
+  const stopped = await Promise.allSettled([
+    ...owners,
+    lazy.BrowserControlChannel.close("browser quitting"),
+    draft.then(() => AgentRemotes.deactivate()),
+  ]);
+  const failures = stopped.filter(result => result.status === "rejected");
+  if (failures.length) throw new Error(failures.map(result => result.reason?.message || result.reason).join("; "));
+}
+async function stopOwnedMachines() {
+  if (!browserOwner) return;
+  const status = await localControl("machines.browser-shutdown", { browserOwner: await browserOwner }, 90000);
+  if (status.stopped !== true) throw new Error(status.error || "Owned containers have not stopped.");
+}
+async function stopOwnedLocal() {
+  if (!browserOwner) return;
   const owner = await browserOwner;
-  let status;
-  do {
-    status = await localControl("browser-shutdown", { browserOwner: owner });
+  const deadline = Date.now() + 45000;
+  while (Date.now() < deadline) {
+    const status = await localControl("browser-shutdown", { browserOwner: owner }, deadline - Date.now());
     DesktopLifetime.shutdownStatus(status);
+    if (status.web?.status === "stopped" || status.web?.status === "off") return;
     if (status.web?.status === "stopping" || status.web?.status === "running") {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } else break;
-  } while (true);
-  if (status.web?.status !== "stopped" && status.web?.status !== "off") {
-    throw new Error(status.web?.error || "Owned services have not stopped.");
+      await new Promise(resolve => setTimeout(resolve, Math.min(1000, Math.max(0, deadline - Date.now()))));
+    } else throw new Error(status.web?.error || "Owned services have not stopped.");
   }
+  throw new Error("Owned services have not confirmed shutdown within 45 seconds.");
 }
 
 
@@ -70,7 +100,7 @@ async function localBrowserOwner() {
       const started = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/)[19];
       if (!/^[1-9][0-9]*$/.test(started)) throw new Error("Could not identify the browser process.");
       const owner = { pid, started };
-      AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: stop owned local Agent", async () => {
+      AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: stop owned runtime", async () => {
         try { await shutdown(); }
         catch (error) { console.error("BashKitten Agent shutdown failed", error); }
       });
@@ -103,33 +133,48 @@ async function readPipe(pipe) {
 /** No public HTTP bootstrap endpoint and no command supplied by page content. */
 function control(command, data = {}) {
   if (closingLocal || DesktopLifetime.quitting) return Promise.reject(new Error("BashKitten is quitting."));
-  const operation = localControl(command, data);
-  localOperations.add(operation);
-  operation.then(() => localOperations.delete(operation), () => localOperations.delete(operation));
-  return operation;
+  shuttingDown = null;
+  return localControl(command, data);
 }
-async function localControl(command, data = {}) {
-  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices"];
+async function localControl(command, data = {}, timeoutMs) {
+  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown"];
   if (![...machineCommands, "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-record", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
-  if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
+  // Native requests can start owners without turning Local on (for example,
+  // container startup or LocalAI settings). Bind every such owner to this exact
+  // browser process. Shutdown must never create or adopt an absent owner.
+  const stopping = ["browser-shutdown", "machines.browser-shutdown"].includes(command);
+  if (!stopping) {
+    data = { ...data, browserOwner: await localBrowserOwner() };
+    if (closingLocal || DesktopLifetime.quitting) throw new Error("BashKitten is quitting.");
+  }
   const process = await Subprocess.call({
     command: CONTROLLER, arguments: [command, "--stdin"], stderr: "pipe",
   });
-  const output = Promise.all([readPipe(process.stdout), readPipe(process.stderr)]);
-  await process.stdin.write(JSON.stringify(data));
-  await process.stdin.close();
-  const timeout = setTimeout(() => process.kill(), 180000);
-  let result;
-  try { result = await process.wait(); } finally { clearTimeout(timeout); }
-  const [stdout, stderr] = await output;
-  let response;
-  try { response = JSON.parse(stdout || stderr); } catch { throw new Error("The local Agent controller did not return a valid response."); }
-  if (result.exitCode || response.error) throw new Error(response.error || stderr.slice(-2000) || "The local Agent operation failed.");
-  if (command === "start") adoptedLocal = true;
-  if ((command === "stop" || command === "browser-shutdown") && response.web?.status === "stopped") adoptedLocal = false;
-  return response;
+  if (!stopping && (closingLocal || DesktopLifetime.quitting)) {
+    void process.kill(0).catch(console.error);
+    throw new Error("BashKitten is quitting.");
+  }
+  if (!stopping) localProcesses.add(process);
+  let timeout;
+  try {
+    return await Promise.race([
+      (async () => {
+        const output = Promise.all([readPipe(process.stdout), readPipe(process.stderr)]);
+        const request = (async () => { await process.stdin.write(JSON.stringify(data)); await process.stdin.close(); return process.wait(); })();
+        const [result, [stdout, stderr]] = await Promise.all([request, output]);
+        let response;
+        try { response = JSON.parse(stdout || stderr); } catch { throw new Error("The local Agent controller did not return a valid response."); }
+        if (result.exitCode || response.error) throw new Error(response.error || stderr.slice(-2000) || "The local Agent operation failed.");
+        return response;
+      })(),
+      new Promise((_, reject) => { timeout = setTimeout(() => {
+        void process.kill(0).catch(console.error);
+        reject(new Error(stopping ? "Owned runtime shutdown has not been confirmed." : "The local Agent operation timed out."));
+      }, Math.max(1, timeoutMs ?? (stopping ? 45000 : 180000))); }),
+    ]);
+  } finally { clearTimeout(timeout); localProcesses.delete(process); }
 }
 
 /** Parent actors must verify the actual protected browser, not just its URL. */

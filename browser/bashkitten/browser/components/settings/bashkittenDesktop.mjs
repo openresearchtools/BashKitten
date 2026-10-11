@@ -2,9 +2,6 @@
 
 import { Preferences } from "chrome://global/content/preferences/Preferences.mjs";
 import { SettingGroupManager } from "chrome://browser/content/preferences/config/SettingGroupManager.mjs";
-import { DesktopLifetime } from "resource:///modules/DesktopLifetime.sys.mjs";
-
-const KEEP = "bashkitten.desktop.keepInTray";
 const AUTOSTART = "[Desktop Entry]\nType=Application\nName=BashKitten\nExec=/usr/bin/bashkitten --start-in-tray\nTryExec=/usr/bin/bashkitten\nIcon=com.bashkitten\nTerminal=false\nStartupNotify=false\n";
 
 function startupFile() {
@@ -61,28 +58,9 @@ Preferences.addSetting({
   },
 });
 
-Preferences.add({ id: KEEP, type: "bool" });
-Preferences.addSetting({
-  id: "bashkittenKeepInTray",
-  pref: KEEP,
-  get: value => value ?? true,
-  onUserChange(enabled) {
-    if (!enabled) DesktopLifetime.reveal();
-  },
-  setup(emitChange) {
-    Services.obs.addObserver(emitChange, "bashkitten-tray-changed");
-    return () => Services.obs.removeObserver(emitChange, "bashkitten-tray-changed");
-  },
-  getControlConfig(config, _deps, setting) {
-    const description = !setting.value ? "Closing the window quits BashKitten and stops its owned services." : DesktopLifetime.tray?.available ? "Closing hides this window. Use the tray icon to reopen it or Quit to stop owned services." : "No system tray is available. The window stays reachable; closing it quits BashKitten.";
-    return { ...config, controlAttrs: { ".description": description } };
-  },
-});
-
 SettingGroupManager.registerGroup("bashkittenDesktop", {
   l10nId: "bashkitten-desktop-heading",
   items: [
     { id: "bashkittenStartOnLogin", l10nId: "bashkitten-start-on-login" },
-    { id: "bashkittenKeepInTray", l10nId: "bashkitten-keep-in-tray" },
   ],
 });
