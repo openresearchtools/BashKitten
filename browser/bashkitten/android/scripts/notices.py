@@ -12,11 +12,11 @@ ROOT = Path(__file__).resolve().parents[3]
 def bundles():
     revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     intro = "\n".join([
-        "Wild Buzzard for Android\n\nCopyright notices and source availability\n",
-        "This product uses Mozilla Gecko and the Fenix interface. Mozilla's source licenses, copyright notices and about:license are retained. Wild Buzzard is an independent fork.\n",
+        "BashKitten for Android\n\nCopyright notices and source availability\n",
+        "This product uses Mozilla Gecko and the Fenix interface. Mozilla's source licenses, copyright notices and about:license are retained. BashKitten is an independent fork.\n",
         f"Build source: https://github.com/openresearchtools/bashkitten/tree/{revision}\n",
-        "Complete corresponding source is available at that revision, including patches, build scripts and the inherited source history. External source revisions are recorded below.\n",
-        "BrowserOS tool-contract and Mozilla Firefox DevTools MCP provenance is retained below. The Android APK does not bundle the desktop CLI, torrents, agent runtimes, or BashKitten search extensions.\n",
+        "Complete corresponding source is available at that revision, including retained upstream sources, patches and build scripts. External source revisions are recorded below.\n",
+        "BrowserOS tool-contract and Mozilla Firefox DevTools MCP provenance is retained below. The APK includes native Display, Phone controls and Telephony modules. Its paired Termux backend supplies the private Node/Pi, search and desktop runtime packages; their full component notices are included in offline About.\n",
         "Android library notices are generated from resolved dependencies with the same OSS license plugin used by Fenix and are available in Android library licenses.\n",
     ])
 
