@@ -336,19 +336,26 @@ fn duplicate_fd(descriptor: RawFd) -> io::Result<RawFd> {
 }
 
 fn matching_terminal_mask(descriptors: &[OwnedFd], tty: RawFd) -> io::Result<u8> {
-    let tty_metadata = descriptor_metadata(tty)?;
+    let tty_device = terminal_device(tty)?;
     let mut mask = 0;
     for (index, descriptor) in descriptors.iter().enumerate() {
         let fd = descriptor.as_raw_fd();
-        let metadata = descriptor_metadata(fd)?;
-        if unsafe { libc::isatty(fd) } == 1
-            && metadata.st_dev == tty_metadata.st_dev
-            && metadata.st_rdev == tty_metadata.st_rdev
-        {
+        if unsafe { libc::isatty(fd) } == 1 && terminal_device(fd)? == tty_device {
             mask |= 1 << index;
         }
     }
     Ok(mask)
+}
+
+fn terminal_device(descriptor: RawFd) -> io::Result<libc::c_uint> {
+    // /dev/tty's inode reports the alias device (5:0), not the terminal behind
+    // it. Compare the actual TTY so stdio is routed through the new PTY rather
+    // than leaving the command and our relay competing to read the original.
+    let mut device = 0;
+    if unsafe { libc::ioctl(descriptor, libc::TIOCGDEV as _, &mut device) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(device)
 }
 
 fn validate_descriptors(descriptors: &[OwnedFd], tty_mask: u8, has_tty: bool) -> io::Result<()> {
