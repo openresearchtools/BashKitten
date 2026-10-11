@@ -66,15 +66,18 @@ async def run():
         while not stopped.is_set():
             # The guest HOME already isolates the product's single profile.
             # BashKitten deliberately rejects Firefox's profile/instance flags.
-            child=await launch('/usr/bin/bashkitten')
+            # Gecko's unattended-start setting prevents previous startup crashes
+            # from opening a modal Troubleshoot Mode prompt before guest control
+            # is ready. Keep the profile and its crash records unchanged.
+            child=await launch('/usr/bin/bashkitten',child_env={**env,'MOZ_DISABLE_AUTO_SAFE_MODE':'1'})
             code=await child.wait()
             children.remove(child)
             if not stopped.is_set():
                 write_json(agent_run/'guest-browser-status.json',{'connected':False,'pid':child.pid,'error':f'Browser exited ({code})'})
                 try: await asyncio.wait_for(stopped.wait(),2)
                 except asyncio.TimeoutError: pass
-    async def launch(*args):
-        child=await asyncio.create_subprocess_exec(*map(str,args),env=env)
+    async def launch(*args,child_env=env):
+        child=await asyncio.create_subprocess_exec(*map(str,args),env=child_env)
         children.append(child)
         return child
     try:
