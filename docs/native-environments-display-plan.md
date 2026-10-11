@@ -3300,3 +3300,86 @@ survive explicit browser Quit/death, and the optional Close-as-Quit preference.
 Verify window/tab closure and Quit/force-kill/crash separately on both native
 Wayland and Xorg, including Local Off and active containers/remote connections.
 Source changes alone are not lifetime acceptance.
+
+### Mobile toolbar and unified Autostart — 11 October 2026
+
+The user's latest placement correction keeps the clickable BashKitten logo on
+the left of the mobile toolbar and groups **Display, Configuration, native
+Firefox menu**, in that order, on the right. Display uses the matching native
+icon and opens the local Termux viewport in one click. Display setup remains in
+Configuration. This supersedes the preceding mobile gear/sidebar Display
+placement, without adding remote Display or changing desktop container controls.
+
+Add **Autostart** to Configuration on both platforms. It brings the existing
+startup choices together: Local, each container, each saved remote connection,
+Telephone, LocalAI services, remote publishing and Display. Add missing startup
+hooks and matching **Start automatically** controls in the applicable individual
+setup/settings pages. The unified page and those pages edit the same saved
+authoritative choice; do not create copies that can disagree. Preserve existing
+choices and distinguish startup policy from current running state. Display's
+choice controls whether its desktop starts in the background, independently of
+opening or closing the viewport. Keep service names and supported behavior
+truthful; a one-shot speech command is not an already-running server.
+
+Allow named custom startup commands with their launch arguments, working
+directory and environment, stored in editable configuration beneath the owning
+BashKitten data directory. Users and their local agent can add, edit or remove
+these entries. Support them separately in native desktop Local, Termux and each
+managed container; execute inside the selected environment, never accidentally
+on its host. Retain stable command identities, configured enabled state and real
+startup errors. Reuse the existing private native controller and owned process
+guard, without a new public management route, general command grant or permanent
+independent host service. Remote entries reconnect through the existing encrypted
+route; this adds no remote-host management bypass or transport fallback.
+
+All startup, configuration IO and process supervision remain nonblocking. Start
+each enabled item once for its actual service-owner lifetime, handle dependencies
+and stop/revocation races, and do not relaunch commands merely because a settings
+page opens or a browser view reconnects. Honor permissions and setup readiness;
+autostart never grants Android permissions or produces unsolicited calls.
+Desktop custom commands and their descendants share the preceding lifetime
+rule: closing a tab/window preserves work, while Quit, force-quit or browser
+crash stops every owned process. Stopping a container also stops its commands.
+Android retains its separately specified Termux background lifetime.
+
+Acceptance must exercise the installed startup controls and direct config edits
+for all supported environments, enabled/disabled choices, launch failures,
+duplicate prevention, Local Off, Display background startup, and normal Close
+versus Quit/crash cleanup. Include the new toolbar and ordinary settings touch
+targets on Android; source checks and successful packaging are not these passes.
+
+### Container-owned configuration from the host — 11 October 2026
+
+The user further clarified that selecting a container chat makes its own
+configuration available from the host's controls. Its Pi provider logins,
+credentials, models, LocalAI services, startup commands and other backend
+settings remain owned by that container. The user must not need to open the
+guest BashKitten browser manually to manage them. Use the existing authenticated
+private Unix-socket controller with explicit container identity, scoped native
+actions and a clearly named target in settings. Preserve each container's
+independent Pi profile and OAuth lifecycle; do not copy host credentials or
+silently redirect a failed container action to Local. Navigation or a delayed
+reply must not retarget an already-open configuration view to a different backend.
+
+Containers may also configure and publish their own remote service. Their
+private socket is the host's local control path only. A remote client still
+connects through the full existing Tor/Chisel/Caddy/Authelia route, with that
+backend's remote authentication and enrollment. Keep these connection types,
+identities and permissions separate, even when the endpoint ultimately belongs
+to the same container. Saved remotes remain standalone backends; this does not
+grant new remote management authority or introduce a socket/auth/transport
+fallback. Verify container provider setup, LocalAI and publishing through host
+controls, then verify remote access separately over the intended encrypted route.
+
+### Display keeps normal browser navigation — 11 October 2026
+
+The user reiterated that an open desktop remains a browser tab. Keep the normal
+tab controls reachable while viewing it: switch or close tabs, open other tabs
+and return to BashKitten without closing the desktop session. Reuse Firefox's
+existing navigation controls rather than presenting a replacement full-screen
+application with no route back. Embedded Termux:X11 retains its native keyboard,
+pointer, rotation and keyboard-inset behavior inside the remaining viewport.
+Account for those browser controls when sizing the display; closing or switching
+the tab detaches only its renderer and leaves its desktop/backend running.
+Verify these actions on the installed Android and desktop candidates, including
+with the keyboard open and while the display is busy or stalled.
