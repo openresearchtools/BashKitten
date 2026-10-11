@@ -12,14 +12,14 @@ m4_define([libxfce4panel_verinfo], [4:0:0]) dnl current:revision:age
 m4_define([libxfce4panel_version_api], [2.0])
 m4_define([xfce4_panel_config_version], [2])
 m4_define([copyright_year], [2026])
-XDT_VERSION_INIT([4.20.7])
+XDT_VERSION_INIT([4.20.8])
 
 dnl minimum required versions
 m4_define([glib_minimum_version], [2.72.0])
 m4_define([gtk_minimum_version], [3.24.0])
 m4_define([cairo_minimum_version], [1.16])
 m4_define([xfce4_minimum_version], [4.18.0])
-m4_define([libxfce4windowing_minimum_version], [4.20.1])
+m4_define([libxfce4windowing_minimum_version], [4.20.6])
 
 m4_define([libx11_minimum_version], [1.6.7])
 m4_define([libxext_minimum_version], [1.0.0])

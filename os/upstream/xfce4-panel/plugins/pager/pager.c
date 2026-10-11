@@ -415,6 +415,7 @@ pager_plugin_scroll_event (GtkWidget *widget,
   PagerPlugin *plugin = PAGER_PLUGIN (widget);
   XfwWorkspace *active_ws;
   XfwWorkspace *new_ws;
+  XfwWorkspaceManager *manager;
   GdkMonitor *monitor;
   GList *workspaces;
   gint active_n;
@@ -447,33 +448,94 @@ pager_plugin_scroll_event (GtkWidget *widget,
   active_ws = panel_utils_get_active_workspace_for_monitor (plugin->xfw_screen, monitor);
   active_n = panel_utils_get_workspace_number_for_monitor (plugin->xfw_screen, monitor, active_ws);
 
-  if (scrolling_direction == GDK_SCROLL_UP
-      || scrolling_direction == GDK_SCROLL_LEFT)
-    active_n--;
-  else
-    active_n++;
-
   n_workspaces = panel_utils_get_workspace_count_for_monitor (plugin->xfw_screen, monitor) - 1;
 
-  if (plugin->wrap_workspaces)
+  /* Having one workspace is a special case: could be viewport mode (compiz) */
+  if (n_workspaces == 0)
     {
-      /* wrap around */
-      if (active_n < 0)
-        active_n = n_workspaces;
-      else if (active_n > n_workspaces)
-        active_n = 0;
-    }
-  else if (active_n < 0 || active_n > n_workspaces)
-    {
-      /* we do not need to do anything */
-      return TRUE;
-    }
+      /* Do we really have only one workspace or are we in viewport mode */
+      if (xfw_workspace_get_state (active_ws) & XFW_WORKSPACE_STATE_VIRTUAL)
+        {
+          /* Viewport mode (compiz) */
+          guint scale_factor = gtk_widget_get_scale_factor (GTK_WIDGET (plugin));
+          GdkRectangle *rect = xfw_workspace_get_geometry (active_ws);
+          GdkScreen *screen = gdk_screen_get_default ();
+          int viewport_x;
+          int viewport_y;
+          int screen_width;
+          int workspace_width;
+          int scroll_direction;
 
-  workspaces = panel_utils_list_workspaces_for_monitor (plugin->xfw_screen, monitor);
-  new_ws = g_list_nth_data (workspaces, active_n);
-  g_list_free (workspaces);
-  if (new_ws != NULL && active_ws != new_ws)
-    xfw_workspace_activate (new_ws, NULL);
+          /* Total workspace size, e.g. 5120x1024 (5120=4x1280)
+           * Only width is needed, virtual workspaces are stacked horizontally */
+          workspace_width = rect->width;
+          /* Current screensize, e.g. 1280x1024 */
+          screen_width = panel_screen_get_width (screen) * scale_factor;
+          /* Current viewportcoordinates, e.g. 0,0 or 1280,0 */
+          viewport_x = rect->x;
+          viewport_y = rect->y;
+
+          if (scrolling_direction == GDK_SCROLL_UP
+              || scrolling_direction == GDK_SCROLL_LEFT)
+            scroll_direction = -1;
+          else
+            scroll_direction = 1;
+
+          /* Viewportscroll is only in x-direction */
+          viewport_x = viewport_x + (scroll_direction * screen_width);
+
+          if (plugin->wrap_workspaces)
+            {
+              /* Wrap if needed */
+              if (viewport_x > workspace_width)
+                viewport_x = 0;
+              if (viewport_x < 0)
+                viewport_x = workspace_width - screen_width;
+            }
+          else if (viewport_x < 0 || viewport_x >= workspace_width)
+            {
+              /* Wrap disabled, no need to do anything */
+              return TRUE;
+            }
+          manager = xfw_screen_get_workspace_manager (plugin->xfw_screen);
+          xfw_workspace_group_move_viewport (xfw_workspace_manager_list_workspace_groups (manager)->data,
+                                             viewport_x, viewport_y, NULL);
+        }
+      else
+        {
+          /* Only one workspace, no need to do anything */
+          return TRUE;
+        }
+    }
+  else
+    {
+      /* Real workspaces */
+      if (scrolling_direction == GDK_SCROLL_UP
+          || scrolling_direction == GDK_SCROLL_LEFT)
+        active_n--;
+      else
+        active_n++;
+
+      if (plugin->wrap_workspaces)
+        {
+          /* Wrap around */
+          if (active_n < 0)
+            active_n = n_workspaces;
+          else if (active_n > n_workspaces)
+            active_n = 0;
+        }
+      else if (active_n < 0 || active_n > n_workspaces)
+        {
+          /* We do not need to do anything */
+          return TRUE;
+        }
+
+      workspaces = panel_utils_list_workspaces_for_monitor (plugin->xfw_screen, monitor);
+      new_ws = g_list_nth_data (workspaces, active_n);
+      g_list_free (workspaces);
+      if (new_ws != NULL && active_ws != new_ws)
+        xfw_workspace_activate (new_ws, NULL);
+    }
 
   return TRUE;
 }
@@ -655,7 +717,6 @@ pager_plugin_screen_changed (GtkWidget *widget,
                              GdkScreen *previous_screen)
 {
   PagerPlugin *plugin = PAGER_PLUGIN (widget);
-  GdkScreen *screen;
   XfwScreen *xfw_screen;
   XfwWorkspaceManager *manager;
 
@@ -664,16 +725,18 @@ pager_plugin_screen_changed (GtkWidget *widget,
   if (plugin->xfw_screen != xfw_screen)
     {
       if (plugin->xfw_screen != NULL)
-        g_object_unref (plugin->xfw_screen);
+        {
+          manager = xfw_screen_get_workspace_manager (xfw_screen);
+          g_signal_handlers_disconnect_by_data (xfw_workspace_manager_list_workspace_groups (manager)->data, plugin);
+          g_signal_handlers_disconnect_by_data (plugin->xfw_screen, plugin);
+          g_object_unref (plugin->xfw_screen);
+        }
 
       plugin->xfw_screen = xfw_screen;
       manager = xfw_screen_get_workspace_manager (xfw_screen);
       pager_plugin_screen_layout_changed (plugin, NULL);
 
-      screen = gdk_screen_get_default ();
-      g_signal_connect_object (G_OBJECT (screen), "monitors-changed",
-                               G_CALLBACK (pager_plugin_screen_layout_changed), plugin, G_CONNECT_SWAPPED);
-      g_signal_connect_object (G_OBJECT (screen), "size-changed",
+      g_signal_connect_object (G_OBJECT (xfw_screen), "monitors-changed",
                                G_CALLBACK (pager_plugin_screen_layout_changed), plugin, G_CONNECT_SWAPPED);
       g_signal_connect_object (G_OBJECT (xfw_screen), "window-manager-changed",
                                G_CALLBACK (pager_plugin_screen_layout_changed), plugin, G_CONNECT_SWAPPED);
@@ -701,6 +764,9 @@ pager_plugin_construct (XfcePanelPlugin *panel_plugin)
     { "numbering", G_TYPE_BOOLEAN },
     { NULL }
   };
+
+  /* setup transation domain */
+  xfce_textdomain (GETTEXT_PACKAGE, PACKAGE_LOCALE_DIR, "UTF-8");
 
   xfce_panel_plugin_menu_show_configure (panel_plugin);
 
