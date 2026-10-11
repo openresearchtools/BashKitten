@@ -1,3 +1,15 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 toolkit.jar:
-% resource bashkitten-settings resource://gre/bashkitten-settings/ contentaccessible=yes
+% resource bashkitten-settings %content/bashkitten-settings/ contentaccessible=yes
+  content/bashkitten-settings/device-controls.mjs (device-controls.mjs)
+  content/bashkitten-settings/display-settings.mjs (display-settings.mjs)
+  content/bashkitten-settings/index.html (index.html)
+  content/bashkitten-settings/localai.mjs (localai.mjs)
+  content/bashkitten-settings/machine.mjs (machine.mjs)
+  content/bashkitten-settings/main.mjs (main.mjs)
+  content/bashkitten-settings/performance.mjs (performance.mjs)
+  content/bashkitten-settings/phone.mjs (phone.mjs)
+  content/bashkitten-settings/remotes.mjs (remotes.mjs)
+  content/bashkitten-settings/settings.css (settings.css)
+  content/bashkitten-settings/share-local.mjs (share-local.mjs)
+  content/bashkitten-settings/ui.mjs (ui.mjs)
