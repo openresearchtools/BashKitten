@@ -6,16 +6,24 @@ import xml.etree.ElementTree as ET
 from .common import PREFIX,SHARE,linux_guest
 
 
-def atomic(path,text):
+def atomic(path,text,replace=True):
     path.parent.mkdir(parents=True,exist_ok=True)
     descriptor,name=tempfile.mkstemp(prefix='.'+path.name,dir=path.parent)
     try:
         with os.fdopen(descriptor,'w') as stream:stream.write(text)
-        os.replace(name,path)
+        if replace:os.replace(name,path)
+        else:
+            try:os.link(name,path)
+            except FileExistsError:pass
     finally:Path(name).unlink(missing_ok=True)
 
 def initialize():
     config=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))
+    portals=config/'xdg-desktop-portal'
+    # User portal choices take precedence; this is a provisioning default, not
+    # a package-owned replacement for xfce4-session's system configuration.
+    if not any(os.path.lexists(portals/name) for name in ('portals.conf','xfce-portals.conf')):
+        atomic(portals/'xfce-portals.conf',(SHARE/'xfce-portals.conf').read_text(),replace=False)
     channel_dir=config/'xfce4/xfconf/xfce-perchannel-xml'
     for source in (SHARE/'defaults').glob('*.xml'):
         target=channel_dir/source.name

@@ -214,7 +214,9 @@ def main():
     (schema/'gschemas.compiled').unlink()
     write(base/'share/dbus-1/services/org.freedesktop.impl.portal.desktop.bashkitten.service',(ROOT/'data/org.freedesktop.impl.portal.desktop.bashkitten.service').read_text().replace('@PREFIX@',prefix))
     write(base/'share/xdg-desktop-portal/portals/bashkitten.portal',(ROOT/'data/bashkitten.portal').read_text())
-    write(base/'share/xdg-desktop-portal/xfce-portals.conf',(ROOT/'data/xfce-portals.conf').read_text().replace('default=gtk\n','') if termux else (ROOT/'data/xfce-portals.conf').read_text())
+    # xfce4-session owns the public XFCE portal default on both target systems.
+    # Provision this private template into an unset owned profile instead.
+    write(share/'xfce-portals.conf',(ROOT/'data/xfce-portals.conf').read_text().replace('default=gtk\n','') if termux else (ROOT/'data/xfce-portals.conf').read_text())
     icon=base/'share/icons/hicolor/256x256/apps/bashkitten-os.png';icon.parent.mkdir(parents=True,exist_ok=True)
     # Existing source logo, no workstation-only dependency or enlarged tiny icon.
     shutil.copy(share/'logo.png',icon)
