@@ -1,0 +1,8 @@
+# Pristine import; adaptation follows in separate commits.
+name = "Android Remote Control MCP"
+repository = "https://github.com/danielealbano/android-remote-control-mcp"
+release = "v1.12.0"
+commit = "3777403d148283c5a18a3e8122ff819da4eed808"
+license = "MIT"
+source = "upstream"
+automatic_updates = false
