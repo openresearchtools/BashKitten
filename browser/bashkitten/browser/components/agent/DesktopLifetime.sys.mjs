@@ -23,7 +23,8 @@ export const DesktopLifetime = {
       this.tray.init(view.win, this.observer);
     } catch (error) { this.tray?.close(); this.tray = null; console.error("BashKitten tray unavailable", error); }
     this.changes = new view.win.MutationObserver(() => this.updateStatus());
-    for (const node of [view.power, view.choice, view.state]) this.changes.observe(node, { subtree: true, childList: true, characterData: true, attributes: true });
+    // Backend selection now lives in the sidecar; view.choice is plain state.
+    for (const node of [view.power, view.state]) this.changes.observe(node, { subtree: true, childList: true, characterData: true, attributes: true });
     Services.obs.addObserver(this.observer, "bashkitten-agent-remote-changed");
     view.win.addEventListener("unload", () => {
       this.changes.disconnect();
