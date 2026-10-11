@@ -8,7 +8,6 @@ import android.os.*;
 import androidx.annotation.Keep;
 import com.bashkitten.api.*;
 import com.bashkitten.display.DisplayProtocol;
-import java.net.URL;
 import java.util.concurrent.*;
 import dalvik.annotation.optimization.CriticalNative;
 
@@ -26,10 +25,9 @@ public final class CmdEntryPoint {
         handler = new Handler(Looper.getMainLooper());
         try { Class.forName("com.bashkitten.DisplayPublisher").getMethod("initialize").invoke(null); }
         catch (Exception error) { throw new IllegalStateException("Could not initialize Termux Display authorization", error); }
-        String resource = "lib/" + Build.SUPPORTED_ABIS[0] + "/libXlorie.so";
-        URL library = CmdEntryPoint.class.getClassLoader().getResource(resource);
-        if (library == null) throw new IllegalStateException("Install BashKitten for this Android architecture");
-        System.load(library.getFile().replace("file:", ""));
+        // The paired loader supplies Android's nativeLibraryDir for this APK.
+        // Fenix extracts compressed libraries; an APK zip path cannot load them.
+        System.loadLibrary("Xlorie");
         CmdEntryPoint server = new CmdEntryPoint();
         if (!server.start(args)) System.exit(1);
         Looper.loop();

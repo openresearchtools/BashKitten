@@ -40,6 +40,10 @@ GPU worker. Closing/switching tabs never sends Display Stop to Termux.
 Termux's UID. The generated loader checks the actual publisher SHA-256 and exact
 Display protocol version, with no environment override. Its small recipe in
 `loader/build.py` produces the command, dex JAR, manifest/checksums and notices.
+The verified package's `ApplicationInfo.nativeLibraryDir` supplies the class
+loader's native search path. `System.loadLibrary("Xlorie")` then loads Android's
+extracted library; Fenix's compressed APK entries cannot be loaded through a
+direct `base.apk!/lib/...` path. No caller-provided library path is accepted.
 Package the JAR at `usr/lib/bashkitten/display/bashkitten-x11-loader.jar`, and
 the command at `usr/bin/bashkitten-x11` with mode `0755`; source/signing identity
 mismatch is an error. The loader recipe publishes a read-only `0400` JAR.
