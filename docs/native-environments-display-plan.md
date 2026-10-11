@@ -3251,10 +3251,12 @@ destinations, flat repeated sidebar and native browser menu remain as specified.
 
 ### Display configuration entry — 11 October 2026
 
-The user explicitly retains Termux **Display** under the Android Configuration
-gear. This opens the same Display setup used by the viewport: editable launch
+The user explicitly retains Termux **Display setup** under the Android
+Configuration gear. This opens the same setup used by the viewport: editable launch
 command, saved-command controls and the existing agent-help skill/prompt. The
 UI and Local Pi edit the same durable `display/launch.sh` beneath BashKitten's
 data directory; retain custom commands across upgrades and use them on the next
 start. Embedding Termux:X11 does not remove this setup or create a second command
-store. This entry configures local Termux only and adds no remote Display path.
+store. The user further clarified that this entry opens setup, while the
+existing Display button still opens the desktop itself. It configures local
+Termux only and adds no remote Display path.
