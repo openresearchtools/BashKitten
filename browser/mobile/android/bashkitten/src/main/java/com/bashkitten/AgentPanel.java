@@ -13,7 +13,6 @@ import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
 import androidx.appcompat.widget.AppCompatButton;
-import androidx.appcompat.widget.SwitchCompat;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.io.*;
@@ -29,9 +28,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final AgentRuntime runtime;
     private final View browser;
     private final LinearLayout agent, bar, body;
-    private final Button hideAgent, localAI;
-    private final SwitchCompat power;
-    private final ImageButton location, display;
+    private final Button hideAgent;
     private final AgentSidecar sidecar;
     private final GeckoView view;
     private final ScrollView setup;
@@ -46,7 +43,6 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private boolean split;
     private boolean browserUi;
     private boolean destroyed;
-    private boolean updatingPower;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
@@ -69,33 +65,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
-        power = new SwitchCompat(activity);
-        power.setShowText(false); power.setTextOn("On"); power.setTextOff("Off");
-        power.setContentDescription("Agent power"); power.setGravity(Gravity.CENTER);
-        power.setSwitchMinWidth(dp(40)); power.setMinWidth(0); power.setMinimumWidth(0);
-        power.setPadding(dp(4), 0, dp(4), 0);
-        power.setOnCheckedChangeListener((button, checked) -> {
-            if (updatingPower) return;
-            if (!checked || runtime.state.equals("stop-failed")) runtime.turnOff(); else runtime.turnOn();
-            updatePower();
-        });
         bar.addView(barIcon("Chats", R.drawable.ic_agent_sidebar, sidecar::toggle), new LayoutParams(dp(40), -1));
-        location = barIcon("Add connection", R.drawable.ic_agent_add, () -> activity.startActivity(new Intent(activity, AgentRemotesActivity.class).putExtra("connectOnly", true))); bar.addView(location, new LayoutParams(dp(40), -1));
-        display = barIcon("Display", R.drawable.ic_agent_display, () -> {
-            if (runtime.selected.equals("local")) new AgentDisplayDialog().show(
-                ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-display");
-        });
-        // Display and power belong to the Local backend heading.
-        localAI = barButton("AI", () -> {
-            if (runtime.selected.equals("local")) new AgentLocalAIDialog().show(
-                ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-localai");
-        });
-        localAI.setContentDescription("LocalAI"); localAI.setTooltipText("LocalAI");
-        bar.addView(localAI, new LayoutParams(dp(40), -1));
-        bar.addView(barIcon("Phone", R.drawable.ic_agent_phone, () -> com.bashkitten.telephony.PhonePanel.show(
-            activity, com.bashkitten.phone.PhoneControlsPanel.build(activity))), new LayoutParams(dp(40), -1));
-        bar.addView(barIcon("Performance", R.drawable.ic_agent_performance, () -> new AgentPerformanceDialog().show(
-            ((androidx.fragment.app.FragmentActivity) activity).getSupportFragmentManager(), "agent-performance")), new LayoutParams(dp(40), -1));
         hideAgent = barButton("−", () -> { split = false; layoutPanels(); });
         hideAgent.setContentDescription("Hide Agent pane"); bar.addView(hideAgent, new LayoutParams(dp(40), -1));
         bar.addView(new View(activity), new LayoutParams(0, 1, 1));
@@ -192,16 +162,13 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private void layoutPanels() {
         int availableWidth = getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp);
         boolean sideBySide = !browserUi && split && !shown && availableWidth >= dp(600);
-        // Fixed touch targets need 296dp, or 336dp with the split-only Hide
-        // control. Keep both panes usable without clipping the Agent toolbar.
-        float agentShare = Math.max(.46f, Math.min(1f, (dp(336) + agent.getPaddingLeft() + agent.getPaddingRight()) / (float) Math.max(1, availableWidth)));
         boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
         if (!agentVisible) sidecar.close();
         hideAgent.setVisibility(sideBySide ? VISIBLE : GONE);
-        agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? agentShare : 0));
+        agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
-        browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? 1f - agentShare : 1));
+        browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
         runtime.visible = agentVisible;
         if (microphone != null) microphone.changed();
         if (runtime.session != null) runtime.session.setActive(agentVisible);
@@ -223,25 +190,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     public void destroy() { destroyed = true; sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); if (w != oldw) layoutPanels(); }
-    private void updatePower() {
-        boolean stopping = runtime.state.equals("stopping"), stopFailed = runtime.state.equals("stop-failed");
-        // The switch controls the complete Agent group for Local and Remote.
-        // Keep an unconfirmed stop visibly on so toggling off retries shutdown.
-        updatingPower = true;
-        try { power.setChecked(runtime.isOnRequested() || stopFailed); }
-        finally { updatingPower = false; }
-        power.setEnabled(!stopping);
-        String status = runtime.state.equals("starting") ? "Starting" : stopping ? "Stopping"
-            : stopFailed ? "Shutdown not confirmed; toggle off to retry" : runtime.isOnRequested() ? "On" : "Off";
-        power.setTooltipText("Agent: " + status);
-        if (Build.VERSION.SDK_INT >= 30) power.setStateDescription(status);
-    }
     @Override public void changed() {
         if (microphone != null) microphone.changed();
-        updatePower();
         sidecar.changed();
-        display.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
-        localAI.setVisibility(runtime.selected.equals("local") ? VISIBLE : GONE);
         connectionStatus.setText("Connecting to Agent…");
         boolean online = runtime.state.equals("on") || runtime.state.equals("login");
         if (runtime.session != null && runtime.session != attached) {

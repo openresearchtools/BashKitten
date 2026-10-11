@@ -23,8 +23,15 @@ public final class PhoneControlsPanel {
             this.activity = activity; this.root = root; policy = PhoneControlsRuntime.get(activity).policy;
         }
     }
+    public static Context settingsContext(Activity activity) {
+        return new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).getContext();
+    }
+    public static void show(Activity activity) {
+        LinearLayout body = body(settingsContext(activity)); body.addView(build(activity));
+        com.bashkitten.telephony.PhoneSettingsUi.show(body, "Phone controls");
+    }
     public static View build(Activity activity) {
-        Context context = new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).getContext();
+        Context context = settingsContext(activity);
         LinearLayout root = new LinearLayout(context); root.setOrientation(LinearLayout.VERTICAL);
         Binding binding = new Binding(activity, root); root.setTag(binding); Runnable update = () -> refresh(root);
         android.view.ViewTreeObserver.OnWindowFocusChangeListener focus = focused -> { if (focused) refresh(root); };
@@ -52,7 +59,7 @@ public final class PhoneControlsPanel {
         if (binding.detail != null) { binding.detail.show(); return; }
         LinearLayout body = body(binding.root.getContext());
         Runnable update = () -> renderActions(binding, body);
-        update.run(); AlertDialog dialog = show(body, "Allowed actions"); binding.detail = dialog;
+        update.run(); AlertDialog dialog = com.bashkitten.telephony.PhoneSettingsUi.show(body, "Allowed actions"); binding.detail = dialog;
         android.view.ViewTreeObserver.OnWindowFocusChangeListener focus = focused -> { if (focused) update.run(); };
         body.getViewTreeObserver().addOnWindowFocusChangeListener(focus); binding.policy.observe(update);
         dialog.setOnDismissListener(ignored -> {

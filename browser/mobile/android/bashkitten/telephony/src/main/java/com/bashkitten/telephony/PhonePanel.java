@@ -23,64 +23,57 @@ import static com.bashkitten.telephony.PhoneSettingsUi.*;
 /** Setup-only native UI. State, storage, Telecom and speech remain with the async owner. */
 public final class PhonePanel {
     private PhonePanel() { }
-    public static void show(Activity activity, View controls) { new Panel(activity, controls).show(); }
+    public static void showCalls(Activity activity, Context themedContext) { new Panel(activity, themedContext).show(true); }
+    public static void showMessages(Activity activity, Context themedContext) { new Panel(activity, themedContext).show(false); }
 
     private static final class Panel {
         final Activity activity;
         final Context context;
-        final View controls;
         final TelephonyRuntime owner;
         final Set<AlertDialog> children = new HashSet<>();
         JSONObject state = new JSONObject();
         boolean syncing, closed;
-        SwitchCompat calls, messages;
+        SwitchCompat master;
         TextView status;
-        Panel(Activity activity, View controls) {
-            this.activity = activity; this.controls = controls;
-            context = controls == null ? activity : controls.getContext();
-            owner = TelephonyRuntime.get(activity);
+        Panel(Activity activity, Context themedContext) {
+            this.activity = activity; context = themedContext; owner = TelephonyRuntime.get(activity);
         }
         boolean alive() { return !closed && !activity.isFinishing() && !activity.isDestroyed(); }
         JSONObject settings() { JSONObject result = state.optJSONObject("settings"); return result == null ? new JSONObject() : result; }
-        void show() {
+        void show(boolean calling) {
             LinearLayout body = body(context);
-            calls = toggle(body, "Calls", false, enabled -> {
+            String setting = calling ? "telephony" : "messages";
+            master = toggle(body, calling ? "Calls" : "Messages", false, enabled -> {
                 if (syncing) return;
-                if (enabled && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                if (enabled && calling && activity.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
                     activity.requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 7328);
-                owner.configure(TelephonyRuntime.json("telephony", enabled));
-            });
-            boolean supported = Build.VERSION.SDK_INT >= 35 && activity.getSystemService(TelecomManager.class) != null
-                && activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELECOM);
-            calls.setEnabled(false);
-            if (!supported) text(body, "Calls aren't supported on this device.");
-            action(body, "Call setup", this::callSetup).setEnabled(supported);
-            action(body, "Call settings", () -> deliverySettings(true));
-            action(body, "Contacts and voicemail", this::contacts);
-            divider(body);
-            messages = toggle(body, "Messages", false, enabled -> {
-                if (syncing) return;
-                if (enabled && Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                if (enabled && !calling && Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                     activity.requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 7329);
-                owner.configure(TelephonyRuntime.json("messages", enabled));
+                owner.configure(TelephonyRuntime.json(setting, enabled));
             });
-            messages.setEnabled(false);
-            action(body, "Message settings", () -> deliverySettings(false));
+            master.setEnabled(false);
+            boolean supported = !calling || Build.VERSION.SDK_INT >= 35 && activity.getSystemService(TelecomManager.class) != null
+                && activity.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELECOM);
+            if (calling) {
+                if (!supported) text(body, "Calls aren't supported on this device.");
+                action(body, "Call setup", this::callSetup).setEnabled(supported);
+                action(body, "Call settings", () -> deliverySettings(true));
+                action(body, "Contacts and voicemail", this::contacts);
+            } else action(body, "Message settings", () -> deliverySettings(false));
             status = text(body, "Loading…");
-            divider(body); if (controls != null) body.addView(controls);
             Consumer<JSONObject> observer = value -> {
                 if (!alive()) return;
                 state = value; JSONObject saved = value.optJSONObject("settings");
                 if (saved == null) { status.setText(value.optString("error", "Loading…")); return; }
                 syncing = true;
-                try { calls.setChecked(saved.optBoolean("telephony")); messages.setChecked(saved.optBoolean("messages")); }
+                try { master.setChecked(saved.optBoolean(setting)); }
                 finally { syncing = false; }
-                calls.setEnabled(supported || saved.optBoolean("telephony")); messages.setEnabled(true);
+                master.setEnabled(supported || saved.optBoolean(setting));
                 String error = value.optString("error");
-                String message = !error.isBlank() ? error : (saved.optBoolean("telephony") || saved.optBoolean("messages")) && !value.optBoolean("connected") ? "Turn on Local to connect your chats." : "";
+                String message = !error.isBlank() ? error : saved.optBoolean(setting) && !value.optBoolean("connected") ? "Turn on Local to connect your chats." : "";
                 status.setText(message); status.setVisibility(message.isBlank() ? View.GONE : View.VISIBLE);
             };
-            AlertDialog dialog = PhoneSettingsUi.show(body, "Phone");
+            AlertDialog dialog = PhoneSettingsUi.show(body, calling ? "Telephone" : "Notifications");
             dialog.setOnDismissListener(ignored -> {
                 closed = true; owner.unobserve(observer);
                 for (AlertDialog child : new ArrayList<>(children)) child.dismiss();
