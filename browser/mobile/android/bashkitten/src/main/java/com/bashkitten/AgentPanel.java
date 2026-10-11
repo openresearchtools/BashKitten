@@ -33,6 +33,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final ScrollView logScroll;
     private final TextView message, log, connectionStatus;
     private final LinearLayout actions;
+    private final ImageButton displayButton;
     private GeckoSession attached;
     private AgentMicrophone microphone;
     private String renderedState = "";
@@ -64,7 +65,10 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> sidecar.toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
         bar.addView(new View(activity), new LayoutParams(0, 1, 1));
-        bar.addView(barIcon("Display", R.drawable.ic_agent_display, () -> com.bashkitten.display.DisplayTabs.open(activity, "local")), new LayoutParams(dp(48), -1));
+        displayButton = barIcon("Display", R.drawable.ic_agent_display, () -> com.bashkitten.display.DisplayTabs.toggle(activity, "local"));
+        displayButton.setBackgroundResource(R.drawable.bashkitten_display_toggle);
+        bar.addView(displayButton, new LayoutParams(dp(48), -1));
+        displayChanged();
         bar.addView(barIcon("Configuration", R.drawable.ic_agent_gear, openSettingsMenu), new LayoutParams(dp(48), -1));
         ImageButton menu = barIcon("Browser menu", R.drawable.ic_agent_browser_menu, openBrowserMenu); bar.addView(menu, new LayoutParams(dp(48), -1));
         FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));
@@ -137,6 +141,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private Button button(Button b, String label, Runnable action) { b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
     public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
+    public void displayChanged() {
+        boolean open = app.host.displayOpen();
+        displayButton.setActivated(open);
+        if (Build.VERSION.SDK_INT >= 30) displayButton.setStateDescription(open ? "Open" : "Closed");
+        displayButton.setTooltipText(open ? "Close Display" : "Open Display");
+    }
     public void showBrowser() { shown = false; split = true; browserUi = false; layoutPanels(); }
     public Bundle saveLayoutState() {
         Bundle state = new Bundle(); state.putBoolean("shown", shown); state.putBoolean("split", split); return state;
@@ -162,6 +172,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (runtime.session != null) runtime.session.setActive(agentVisible);
     }
     public void resume() {
+        displayChanged();
         app.showPendingApproval(activity);
         if (runtime.state.equals("on")) {
             runtime.refresh();

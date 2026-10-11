@@ -26,6 +26,7 @@ import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams
 import androidx.core.view.isVisible
 import mozilla.components.browser.state.action.AwesomeBarAction
+import mozilla.components.browser.state.selector.selectedTab
 import mozilla.components.browser.state.state.CustomTabSessionState
 import mozilla.components.browser.state.state.ExternalAppType
 import mozilla.components.browser.state.store.BrowserStore
@@ -332,6 +333,13 @@ class BrowserToolbarComposable(
         cfr: mozilla.components.compose.browser.toolbar.BrowserToolbarCFR?,
         useMinimalBottomToolbarWhenEnteringText: Boolean,
     ) {
+        val displaySelected by browserStore.observeAsComposableState {
+            customTabSession == null && it.selectedTab?.contextId == com.bashkitten.display.DisplayTabs.CONTEXT
+        }
+        if (displaySelected && activity is org.mozilla.fenix.HomeActivity) {
+            org.mozilla.fenix.bashkitten.DisplayToolbar(activity, store)
+            return
+        }
         androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (activity is org.mozilla.fenix.HomeActivity) {
                 org.mozilla.fenix.bashkitten.AgentButton { activity.showBashKittenAgent() }

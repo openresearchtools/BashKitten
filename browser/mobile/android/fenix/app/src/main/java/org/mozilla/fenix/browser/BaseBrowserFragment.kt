@@ -438,6 +438,7 @@ abstract class BaseBrowserFragment :
                 viewLifecycleOwner, binding.browserLayout, binding.swipeRefresh,
                 requireComponents.core.store, requireComponents.useCases.tabsUseCases,
                 requireComponents.useCases.sessionUseCases,
+                chrome = { listOfNotNull(_browserToolbar?.layout, _bottomToolbarContainerView?.toolbarContainerView, browserNavigationBar?.layout) },
             )
         }
         initializeUI(view)
@@ -1404,6 +1405,7 @@ abstract class BaseBrowserFragment :
                 toolbarStore = toolbarStore,
                 settings = settings,
                 hideWhenKeyboardShown = true,
+                browserStore = store.takeIf { customTabSessionId == null },
             )
 
         // set the summarize CFR binding only for regular, non-custom tabs

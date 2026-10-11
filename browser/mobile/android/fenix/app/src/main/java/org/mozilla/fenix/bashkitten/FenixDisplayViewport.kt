@@ -31,6 +31,7 @@ class FenixDisplayViewport(
     private val store: BrowserStore,
     private val tabs: TabsUseCases,
     private val sessions: SessionUseCases,
+    private val chrome: () -> List<View>,
 ) : DefaultLifecycleObserver {
     private var viewport: DisplayViewport? = null
     private var selectedId: String? = null
@@ -44,8 +45,8 @@ class FenixDisplayViewport(
             .distinctUntilChanged().collect { selected ->
                 if (selected?.second == DisplayTabs.CONTEXT) {
                     if (selected.third != "about:blank") {
-                        // The address bar still browses normally. Move that navigation to an
-                        // ordinary tab; no website inherits a native Display capability.
+                        // Redirect any browser navigation to an ordinary tab; no website
+                        // inherits a native Display capability, even without an address bar.
                         tabs.addTab(url = selected.third)
                         sessions.loadUrl("about:blank", sessionId = selected.first)
                         return@collect
@@ -60,6 +61,7 @@ class FenixDisplayViewport(
                         // Browser chrome remains above this native slot.
                         parent.addView(viewport, 1, CoordinatorLayout.LayoutParams(1, 1))
                         bounds()
+                        store.dispatch(ContentAction.UpdateExpandedToolbarStateAction(selected.first, true))
                     }
                     viewport?.selected(started)
                     if (store.state.selectedTab?.content?.title != "Display · Local") {
@@ -86,8 +88,22 @@ class FenixDisplayViewport(
         // the platform leaves the browser layout at its unresized height.
         val left = maxOf(0, visible.left - location[0])
         val right = minOf(parent.width, visible.right - location[0])
-        val top = maxOf(topToolbar, visible.top - location[1])
-        val bottom = minOf(parent.height - bottomToolbar, visible.bottom - location[1])
+        val visibleTop = maxOf(0, visible.top - location[1])
+        val visibleBottom = minOf(parent.height, visible.bottom - location[1])
+        val visibleMiddle = visibleTop + (visibleBottom - visibleTop) / 2
+        val toolbarViews = chrome().filter { it.isShown && it.height > 0 }
+        var measuredTop = if (toolbarViews.isEmpty()) topToolbar else 0
+        var measuredBottom = if (toolbarViews.isEmpty()) bottomToolbar else 0
+        toolbarViews.forEach { view ->
+            val position = IntArray(2)
+            view.getLocationOnScreen(position)
+            val y = position[1] - location[1]
+            if (y + view.height <= visibleTop || y >= visibleBottom) return@forEach
+            if (y + view.height / 2 < visibleMiddle) measuredTop = maxOf(measuredTop, y + view.height)
+            else measuredBottom = maxOf(measuredBottom, parent.height - y)
+        }
+        val top = maxOf(measuredTop, visibleTop)
+        val bottom = minOf(parent.height - measuredBottom, visibleBottom)
         val width = (right - left).coerceAtLeast(1)
         val height = (bottom - top).coerceAtLeast(1)
         val params = display.layoutParams as CoordinatorLayout.LayoutParams

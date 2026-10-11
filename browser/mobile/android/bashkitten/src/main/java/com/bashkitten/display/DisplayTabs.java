@@ -10,6 +10,12 @@ import org.json.JSONObject;
 public final class DisplayTabs {
     public static final String CONTEXT = "bashkitten-display-local";
     private DisplayTabs() {}
+    public static void toggle(Activity activity, String environmentId) {
+        if (!"local".equals(environmentId)) throw new IllegalArgumentException("Android Display is local Termux only");
+        BrowserApp app = BrowserApp.get(activity);
+        if (app.host.displayOpen()) app.host.closeDisplay();
+        else open(activity, environmentId);
+    }
     public static void open(Activity activity, String environmentId) {
         if (!"local".equals(environmentId)) throw new IllegalArgumentException("Android Display is local Termux only");
         BrowserApp app = BrowserApp.get(activity);

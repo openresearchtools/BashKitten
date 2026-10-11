@@ -44,7 +44,10 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         windows.start()
         CoroutineScope(Dispatchers.Main).launch {
             components.core.store.flow().map { state -> state.tabs.map { it.id }.toSet() }
-                .distinctUntilChanged().collect { BrowserApp.get(application).previewTabsChanged(it) }
+                .distinctUntilChanged().collect {
+                    BrowserApp.get(application).previewTabsChanged(it)
+                    (activity.get() as? HomeActivity)?.bashKittenAgentPanel?.displayChanged()
+                }
         }
         CoroutineScope(Dispatchers.Main).launch {
             components.core.store.flow().map { state ->
@@ -124,9 +127,12 @@ class FenixAgentHost(private val application: FenixApplication) : BrowserApp.Hos
         }
     }
 
+    override fun displayOpen() = components.core.store.state.tabs.any { it.contextId == DisplayTabs.CONTEXT }
     override fun closeDisplay() {
+        val selectedDisplay = components.core.store.state.selectedTab?.contextId == DisplayTabs.CONTEXT
         components.core.store.state.tabs.filter { it.contextId == DisplayTabs.CONTEXT }
             .forEach { components.useCases.tabsUseCases.removeTab(it.id) }
+        if (selectedDisplay) (activity.get() as? HomeActivity)?.showBashKittenAgent()
     }
     override fun openDisplay(environmentId: String) {
         require(environmentId == "local") { "Android Display supports local Termux only" }

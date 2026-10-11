@@ -15,12 +15,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.coordinatorlayout.widget.CoordinatorLayout.LayoutParams
 import androidx.core.view.isVisible
+import mozilla.components.browser.state.selector.selectedTab
+import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.compose.browser.toolbar.NavigationBar
 import mozilla.components.compose.browser.toolbar.store.BrowserToolbarStore
 import mozilla.components.compose.browser.toolbar.store.ToolbarGravity.Bottom
 import mozilla.components.compose.browser.toolbar.store.ToolbarGravity.Top
 import mozilla.components.support.utils.KeyboardState
 import mozilla.components.support.utils.keyboardAsState
+import mozilla.components.lib.state.ext.observeAsComposableState
 import org.mozilla.fenix.R
 import org.mozilla.fenix.theme.FirefoxTheme
 import org.mozilla.fenix.utils.Settings
@@ -41,6 +44,7 @@ class BrowserNavigationBar(
     private val toolbarStore: BrowserToolbarStore,
     private val settings: Settings,
     private val hideWhenKeyboardShown: Boolean,
+    private val browserStore: BrowserStore? = null,
     ) {
     val layout = NavigationBarComposeView(context) {
         DefaultNavigationBarContent()
@@ -77,6 +81,12 @@ class BrowserNavigationBar(
 
     @Composable
     private fun DefaultNavigationBarContent() {
+        // Native Display places these same tab/menu actions in its compact row,
+        // including while the IME is open. Custom and ordinary tabs are unchanged.
+        val displaySelected = browserStore?.observeAsComposableState {
+            it.selectedTab?.contextId == com.bashkitten.display.DisplayTabs.CONTEXT
+        }?.value == true
+        if (displaySelected) return
         val uiState by toolbarStore.stateFlow.collectAsState()
         val toolbarGravity = remember(settings) {
             when (settings.shouldUseBottomToolbar) {
