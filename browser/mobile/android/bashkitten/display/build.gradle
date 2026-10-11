@@ -1,4 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+plugins {
+    alias(libs.plugins.kotlin.android)
+}
+
 apply plugin: 'com.android.library'
 
 def source = layout.buildDirectory.dir('termux-x11').get().asFile
