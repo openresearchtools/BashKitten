@@ -7,18 +7,23 @@ amendments. This record tracks evidence and does not reduce that combined scope.
 
 ## Current checkpoint — 11 October 2026
 
-Feature implementations are integrated across the nine workstreams. The first
-whole-scope Android/Linux candidates have been built and installed; actual app
+The original feature implementations were integrated across the nine workstreams.
+The first whole-scope Android/Linux candidates have been built and installed; actual app
 acceptance is in progress. Startup, provisioning and presentation failures are
 being repaired together for the next candidate. No workstream is fully accepted;
 component compilation and source review do not establish installed acceptance.
+The later Autostart, selected-container configuration and mobile toolbar requests
+are additional mandatory amendments. Their source is integrated in `fb867067e4`;
+the combined Android/Termux/Linux build and installed acceptance remain pending.
 
-Installation records cover Android 16/17 APK `e375826bff`; the actual shared
-settings cases below cover Android 16 and native Linux `e375826bff` on Wayland
-and real Xorg. Both Android backends were upgraded to `a807ba48ed`, with OS source
+Android 16/17 now have APK `0753b2edfc`; earlier shared settings cases below also
+cover Android 16 and native Linux `e375826bff` on Wayland and real Xorg.
+Both Android backends remain `a807ba48ed`, with OS source
 `609e82c200`. Desktop `0753b2edfc` is now installed on the Wayland host and Xorg
-VM. Its corrected Configuration menu was observed on Wayland; fresh guest
-preparation is running on Xorg, with acceptance still pending. External receipts retain full commits,
+VM. Its corrected Configuration menus were observed on Wayland and Android 17.
+Fresh Xorg guest preparation progressed past the unsupported launcher arguments
+but exposed profile-validation, desktop bus environment and stale display-socket
+failures; their repairs await the next installed candidate. External receipts retain full commits,
 checksums, distinct native producers and assembly revisions, source-equivalence
 records and matching notices. These are development candidates.
 
@@ -40,15 +45,18 @@ Phone use configuration is Android-only. Display setup remains in Configuration,
 separate from the existing Display action that opens the desktop. The installed
 Wayland `0753b2edfc` Configuration menu shows Local AI, Notifications, Remote
 Connections, Telephone, Performance, Providers and General settings, without a
-Phone/Computer Use entry. This is a menu check, not a retest of every destination;
-the latest Android presentation still requires installed verification.
+Phone/Computer Use entry. Android 17's installed menu has Display setup and Phone
+use. These are menu checks, not a retest of every destination. The subsequent
+right-hand Display/gear/menu placement in `c9f4572d5c` is source-only so far.
 
 Installed Xorg checks passed the flat hierarchy, corrected icons, wide/narrow
 sidebar behavior, draft preservation and Providers/General navigation. A real
 question card remained visible after the final reply and delivered one answer
 to its original chat; other question cases remain pending. The installed
-`e375826bff` candidate correctly refused creation through a legacy machine
-daemon, showing the session/OS-restart requirement added by `84af6f3685`.
+`e375826bff` candidate refused creation through a legacy machine daemon,
+showing the session/OS-restart requirement added by `84af6f3685`. The user
+rejected that requirement; `2b11aef9b3` replaces it with owned application
+shutdown and the new browser-lifetime guard, without an OS/session restart.
 After a normal VM reboot, actual UI Retry completed the Debian/XFCE image build,
 rootfs export and materialization, then visibly failed at guest browser startup.
 `c4aab21296` removes unsupported guest `--no-remote`/`--profile` arguments.
@@ -72,10 +80,49 @@ endurance/no-leak proof or acceptance of phone delivery and wider lifecycle case
 
 A fresh Android 17 Display attempt reached the native viewport but failed to
 attach: Android rejected the packaged loader JAR as writable before its Java
-entry point. The browser returned to chat normally. `da996b644e` restores the
-donor's read-only loader mode in both generation and Termux package assembly,
-with atomic generator output. Normal package upgrade and Display retesting
-remain required; no APK/native rebuild or platform policy override is needed.
+entry point. The browser returned to chat normally. `da996b644e` made generation
+atomic/read-only, but its read-only package payload then failed ordinary Termux
+dpkg upgrade during deferred writeback. `ef6057afa0` follows the donor's correct
+installation pattern: payload `0600`, changed immediately to `0400` in postinst.
+Android 16 was left with a fully installed/auditable prior backend after cleanup.
+The corrected normal upgrade and Display retest remain required; this loader
+repair needs package assembly, not an APK/native rebuild or policy override.
+
+Android 16's `0753b2edfc` Phone controls page exposed a 63-pixel settings touch
+offset. `c9f4572d5c` moves system insets to GeckoView's parent so rendering and
+input share an origin. The narrow Java compilation passed; installed verification
+remains pending. With the observed offset compensated during diagnosis, Phone
+master Off retained saved feature choices and disabled their controls; optional
+Accessibility groups stayed unavailable without its grant. Notification permission
+was requested normally, and absent Android Auto was reported honestly. This is
+settings evidence, not Phone tool authorization, call or message delivery acceptance.
+
+`2b11aef9b3` binds Local, independent containers and helper cleanup to the actual
+desktop browser identity, including Local Off. Normal window Close keeps work
+in the tray or minimized window; explicit Quit and browser death stop owned
+workloads. Independent source review covered pending-launch cancellation,
+legacy cleanup deadlines and pipe shutdown. The old idle host service was
+stopped directly without a desktop restart. None of these observations replaces
+the required installed Quit/force-kill/crash matrix for the new implementation.
+
+`87c53d93da` removes the unused Adjust reporting dependency and retains complete
+JNA 5.18.1 sources and full native/libffi notices; retained archive/license hashes
+pass. The installed APK still contains its previous dependencies until rebuilt.
+The Plotters full-grant repair in `7b2bc1e56c` also requires refreshed search
+artifact notices/source. Complete artifact and network-traffic audits remain open.
+
+`fb867067e4` adds the unified Autostart page and individual startup hooks,
+config-based custom commands under the existing owner, and selected-container
+LocalAI/settings/provider login through the private Unix controller. Container
+provider callbacks remain bound to their live Pi attempt and enrolled browser tab,
+including Firefox browsing-context replacement. Container publishing still uses
+its separate Tor/Chisel/Caddy/Authelia identity and route. Remote file-manager
+protection includes startup and machine configuration/storage. Display setup can
+manage a background desktop while Local is Off; its viewport retains ordinary
+browser tab navigation. Shared/native JavaScript and embedded script syntax,
+75-source Android Java compilation, Kotlin checks and source review passed.
+These are source/compiler checks; startup, callback and Display user flows still
+need the next installed candidate. The frozen plan's scope is unchanged.
 
 Actual installed observations:
 
