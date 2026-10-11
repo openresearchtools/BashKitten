@@ -11,6 +11,10 @@ const modes = ['off', 'call-in', 'messages', 'calls'];
 const registrationPath = id => path.join(root, 'registrations', digest(id) + '.json');
 const policyPath = id => path.join(sessionDir(id), 'phone.json');
 const eventsPath = path.join(dataDir, 'notifications');
+async function eventFiles(directory) {
+  try { return await fs.readdir(directory); }
+  catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+}
 async function projectTitle(meta) { const catalogue=await readJson(path.join(dataDir,'projects.json'),{projects:[],chats:{}}); return catalogue.projects.find(p=>p.id===catalogue.chats[meta.id])?.name || ''; }
 const textOf = message => typeof message?.content === 'string' ? message.content : (message?.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 export async function phonePolicy(sessionId) { return readJson(policyPath(sessionId), { mode: 'off' }); }
@@ -80,8 +84,8 @@ export async function pendingPhoneEvents(phoneId) {
   if (!registration || registration.revoked) throw Error('Phone is not registered');
   const seenFile=path.join(root,'seen',digest(phoneId)+'.json'),seen=await readJson(seenFile,{});
   if(Date.now()-(seen.at||0)>15000)await writeJson(seenFile,{at:Date.now()});
-  await privateDir(eventsPath); const result = [];
-  for (const name of await fs.readdir(eventsPath)) {
+  const result = [];
+  for (const name of await eventFiles(eventsPath)) {
     if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
     const file = path.join(eventsPath, name), record = await readJson(file, null), event = record?.phone;
     if (!event || event.phoneId !== phoneId || record.phoneState !== 'pending') continue;
@@ -193,8 +197,8 @@ export class PhoneBackend {
 }
 
 export async function pendingPhoneLive(phoneId) {
-  const directory=path.join(root,'live');await privateDir(directory);const result=[];
-  for(const name of await fs.readdir(directory)){if(!/^[a-f0-9]{64}\.json$/.test(name))continue;const file=path.join(directory,name),value=await readJson(file,null);if(!value||value.phoneId!==phoneId)continue;if(value.expiresAt<Date.now()){await fs.rm(file,{force:true});continue;}
+  const directory=path.join(root,'live');const result=[];
+  for(const name of await eventFiles(directory)){if(!/^[a-f0-9]{64}\.json$/.test(name))continue;const file=path.join(directory,name),value=await readJson(file,null);if(!value||value.phoneId!==phoneId)continue;if(value.expiresAt<Date.now()){await fs.rm(file,{force:true});continue;}
     const meta=await readMeta(value.sessionId),policy=await authorizedPolicy(meta);if(!policy||policy.generation!==value.generation){await fs.rm(file,{force:true});continue;}
     const history=await savedSession(meta),entry=history?.getEntries().find(e=>e.type==='message'&&e.message?.role==='assistant'&&e.message.timestamp===value.timestamp&&digest(textOf(e.message))===value.textDigest);if(!entry)continue;
     result.push({...value,key:name.slice(0,-5),entryId:entry.id,text:textOf(entry.message),title:meta.title});
@@ -214,5 +218,5 @@ async function phoneWithdrawal(policy, sessionId) {
   const eventId=digest(`phone-policy:${policy.phoneId}:${sessionId || ''}:${randomUUID()}`);
   await createJson(path.join(eventsPath,eventId+'.json'),{phoneControlState:'pending',phoneControl:{eventId,phoneId:policy.phoneId,backendId:policy.backendId,generation:policy.generation,sessionId}});
 }
-export async function pendingPhoneUpdates(phoneId){const result=[];await privateDir(eventsPath);for(const name of await fs.readdir(eventsPath)){if(!/^[a-f0-9]{64}\.json$/.test(name))continue;const value=await readJson(path.join(eventsPath,name),null);if(value?.phoneControlState==='pending'&&value.phoneControl?.phoneId===phoneId)result.push(value.phoneControl);}return result;}
+export async function pendingPhoneUpdates(phoneId){const result=[];for(const name of await eventFiles(eventsPath)){if(!/^[a-f0-9]{64}\.json$/.test(name))continue;const value=await readJson(path.join(eventsPath,name),null);if(value?.phoneControlState==='pending'&&value.phoneControl?.phoneId===phoneId)result.push(value.phoneControl);}return result;}
 export async function acknowledgePhoneUpdate(phoneId,eventId){if(!/^[a-f0-9]{64}$/.test(eventId))throw Error('Invalid phone update');const file=path.join(eventsPath,eventId+'.json'),value=await readJson(file,null);if(value?.phoneControl?.phoneId!==phoneId)throw Error('Phone update registration changed');await writeJson(file,{...value,phoneControlState:'sent'});}
