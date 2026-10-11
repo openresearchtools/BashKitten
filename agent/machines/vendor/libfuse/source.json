@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "name": "libfuse",
+  "version": "fuse-3.18.3",
+  "repository": "https://github.com/libfuse/libfuse.git",
+  "commit": "3dbcfce64ba0dd529cec7b94305662e7901a991b",
+  "sources": [
+    {
+      "path": "source",
+      "repository": "https://github.com/libfuse/libfuse.git",
+      "commit": "3dbcfce64ba0dd529cec7b94305662e7901a991b",
+      "git_archive_sha256": "28ce65df85af891ff8288d7fc10259d0e07a01c734af24e80f98b2c155412560"
+    }
+  ],
+  "license_paths": [
+    "source/LICENSE"
+  ],
+  "modified": false,
+  "source_inventory_sha256": "def13ee379ce2b898582d88a93dddfe41876b1b13be24529fd3d997473cede2c"
+}
