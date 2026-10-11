@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+    include("/ipc/chromium/chromium-config.mozbuild")
     XPIDL_SOURCES += ["native/nsIBashKittenDisplay.idl"]
     XPIDL_MODULE = "bashkitten_display"
     SOURCES += ["native/BashKittenDisplay.cpp"]
