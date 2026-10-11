@@ -4,6 +4,13 @@
 
 The requested next architecture is recorded in
 [docs/native-environments-display-plan.md](docs/native-environments-display-plan.md).
+Its **User presentation amendment — 11 October 2026** records the latest UI
+correction: preserve the original flat sidebar, embed the Android drawer inside
+the Agent panel, and move Local AI, Notifications, Phone/Computer Use, Remote
+Connections, Telephone and Performance into the native Firefox three-line menu
+under BashKitten controls (above Settings on mobile). This supersedes their
+earlier top-bar placement below; keep the browser menu at the far right and use
+the existing native styling, distinct icons and plain user-facing labels.
 The agreed original is permanently pinned at commit
 `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, tagged
 `bashkitten/plan/native-environments-2026-10-11`. Read the
