@@ -1520,7 +1520,6 @@
     }
     const questionDrafts = new Map(), questionSubmissions = new Map(), questionCards = new Map();
     let questionState = [], questionRenderKey = '', questionVersion = 0;
-    const hasPendingQuestion = () => questionState.some(question => question.status === 'pending' && !question.dismissed);
     function placeQuestionCards(tool = null) {
       const anchors = new Map();
       for (const {question, card} of questionCards.values()) {
@@ -1778,17 +1777,12 @@
         setRunButton(false);
         $('#composerHint').textContent = editingQueueId ? 'Editing queued message · Esc to cancel' : '';
         loadSessions().catch(() => {});
-        const settledView = sessionView, settledSource = source;
+        // Keep observing this chat: phone replies and agent messages can
+        // start another turn without a submission from this document.
+        const settledView = sessionView;
         setTimeout(async () => {
           if (sessionView !== settledView) return;
           await refreshQueue().catch(() => {});
-          if (sessionView !== settledView) return;
-          // Optional questions keep changing after Pi's final turn. Keep their
-          // existing event stream until resolution instead of freezing the card.
-          if (source === settledSource && !queueState.busy && !queuedItems().length && !hasPendingQuestion()) {
-            source?.close();
-            source = null;
-          }
         }, 120);
       } else if (event.type === 'usage') {
         renderUsage(event.data);
@@ -2497,7 +2491,9 @@
             consume(value);
           } catch {}
         };
-        stream.onerror=()=>{if(sessionView===view&&subscribed)refreshQueue().then(()=>{if(sessionView===view&&source===stream&&!queueState.busy&&!hasPendingQuestion()){stream.close();source=null;}}).catch(()=>{});};
+        // EventSource reconnects transient failures. Idle does not mean offline;
+        // the explicit offline event below owns worker-shutdown handling.
+        stream.onerror=()=>{if(sessionView===view&&source===stream&&subscribed)refreshQueue().catch(()=>{});};
         stream.addEventListener('offline', () => {
           clearTimeout(timeout);
           stream.close();
@@ -3248,8 +3244,7 @@
         $('#prompt').value = [...restored, draft].filter(value => value?.trim()).join('\n\n');
         $('#prompt').dispatchEvent(new Event('input'));
         renderAttachments();
-        source?.close();
-        source = null;
+        // Stop cancels work, not observation of this still-running worker.
         current.running = false;
         renderQueueState({busy: false});
         $('#composerHint').textContent = restored.length || draft ? 'Draft kept. Send when ready to continue.' : '';
