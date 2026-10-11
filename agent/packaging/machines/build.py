@@ -211,7 +211,9 @@ def build(args):
                 command(['make', '-j' + jobs, 'bin', 'bin/conmon', 'GIT_COMMIT=' + record['commit']])
                 copy_executable(source / 'bin/conmon', runtime / 'bin/conmon')
             elif name in ('netavark', 'aardvark-dns'):
-                command(['cargo', 'build', '--release', '--frozen', '--offline', '--jobs', jobs, '--bin', name])
+                rust_env = {**env, 'BASHKITTEN_UPSTREAM_COMMIT': record['commit']}
+                run(['cargo', 'build', '--release', '--frozen', '--offline', '--jobs', jobs, '--bin', name],
+                    source, rust_env, log)
                 copy_executable(Path(env['CARGO_TARGET_DIR']) / 'release' / name, runtime / 'bin' / name)
             elif name == 'passt':
                 passt_binaries = ('passt', 'pasta', 'pesto') + (('passt.avx2', 'pasta.avx2') if architecture == 'amd64' else ())

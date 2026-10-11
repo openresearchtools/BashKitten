@@ -31,3 +31,11 @@ The named patch is retained under patches/podman and the private path is supplie
 by the tracked build recipe. Original source and full Apache-2.0 notices remain
 in vendor/podman; the modification retains those terms. Package provenance records
 the patch checksum and build recipe checksum alongside the original release pin.
+
+Private netavark 2.1.0 and aardvark-dns 2.1.0 build metadata modifications,
+11 October 2026: require each verified upstream release commit supplied by the
+tracked recipe instead of discovering the enclosing build workspace's Git commit.
+The named patches are retained under patches/netavark and patches/aardvark-dns.
+Original source and full Apache-2.0 notices remain in their vendor directories;
+the modifications retain those terms. Package provenance records both patch
+checksums and the recipe checksum alongside the original release pins.
