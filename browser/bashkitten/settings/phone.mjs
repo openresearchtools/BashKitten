@@ -21,22 +21,28 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
     if (info.backendKind === 'local' || info.backendKind === 'machine') button(root, 'Share Local', () => run(() => call('phone-share')));
     return;
   }
-  let state = await call('snapshot'), page = 'main', revision = 0, eventError;
+  let state = await call('snapshot'), page = 'main', revision = 0, eventError, activeMailbox;
   if (signal.aborted) return;
   const clean = subscribe('phone-state', value => {
     if (signal.aborted) return;
     state = value;
     if (eventError) eventError.textContent = state.error || '';
-    if (page === 'main') overview();
-    else if (page === 'contacts') contacts();
+    refreshPage();
   });
   signal.addEventListener('abort', clean, { once: true });
   const refresh = async () => {
     const value = await call('snapshot');
-    if (!signal.aborted) { state = value; if (page === 'main') overview(); else if (page === 'contacts') contacts(); }
+    if (!signal.aborted) { state = value; refreshPage(); }
   };
   root.ownerDocument.defaultView.addEventListener('focus', () => { void refresh().catch(() => {}); }, { signal });
+  function refreshPage() {
+    if (page === 'main') overview();
+    else if (page === 'contacts') contacts();
+    else if (page === 'voicemail' && activeMailbox)
+      voicemail(activeMailbox.id, state.backends?.[activeMailbox.id]?.name || activeMailbox.name);
+  }
   function screen(name, title) {
+    if (name !== 'voicemail') activeMailbox = null;
     page = name; revision++; root.replaceChildren();
     if (name !== 'main') { button(root, 'Back', overview); root.append(node(root, 'h2', title)); }
     eventError = node(root, 'p', state.error || ''); eventError.setAttribute('role', 'alert'); root.append(eventError);
@@ -170,6 +176,7 @@ export async function renderSection({ root, call, subscribe, info, signal }) {
     }
   }
   function voicemail(id, name) {
+    activeMailbox = { id, name };
     screen('voicemail', `Voicemail · ${name || 'BashKitten'}`);
     const items = Object.values(state.mailbox || {}).filter(item => item.backendId === id);
     if (!items.length) message('No voicemail');
