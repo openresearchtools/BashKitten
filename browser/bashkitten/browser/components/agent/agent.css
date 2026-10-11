@@ -14,6 +14,18 @@
 #bashkitten-agent-state p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
 #bashkitten-agent-views { min-height: 0; }
 #bashkitten-agent-views > browser { min-width: 0; min-height: 0; }
+#bashkitten-native-workspace, #bashkitten-native-chat { min-width: 0; min-height: 0; }
+#bashkitten-native-sidecar { width: 240px; min-width: 150px; overflow: auto; border-inline-end: 1px solid var(--chrome-content-separator-color); padding: 8px; font: menu; }
+#bashkitten-native-sidecar .native-backend { margin-block-end: 16px; }
+#bashkitten-native-sidecar :is(.native-backend-heading, .native-chat, .native-chat-tools) { display: flex; gap: 3px; align-items: center; }
+#bashkitten-native-sidecar button { padding: 4px 7px; min-width: 26px; }
+#bashkitten-native-sidecar .native-title { flex: 1; min-width: 0; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; border-color: transparent; }
+#bashkitten-native-sidecar .native-backend-heading .native-title { font-weight: 600; }
+#bashkitten-native-sidecar .native-chat[data-selected="true"] { border-radius: 12px; background: var(--button-background-color-active, Highlight); }
+#bashkitten-native-sidecar :is(p, small) { overflow-wrap: anywhere; }
+#bashkitten-native-sidecar details { padding-inline-start: 8px; margin-block: 6px; }
+#bashkitten-agent-pane[data-connections] #bashkitten-native-workspace { display: none; }
+:root[bashkitten-agent-layout="split"] #bashkitten-native-sidecar { width: 160px; }
 #bashkitten-agent-pane[data-connections] > :is(#bashkitten-agent-state, #bashkitten-agent-views) { display: none !important; }
 #bashkitten-agent-connections { flex: 1; min-height: 0; overflow: auto; padding: 24px; font: menu; }
 #bashkitten-agent-connections .connections-content { width: min(650px, 100%); margin-inline: auto; }

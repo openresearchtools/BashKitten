@@ -373,7 +373,7 @@
     .composer-toolbar select { field-sizing: content; flex: 0 1 auto; height: 27px; min-width: 0; padding: 0 18px 0 4px; overflow: hidden; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; }
     .composer-toolbar select:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
     .composer-toolbar select:focus { border-color: var(--line); outline: 0; box-shadow: none; }
-    #model { max-width: min(220px, 44%); } #thinking, #subagents { max-width: 26%; }
+    #model { max-width: min(220px, 44%); } #thinking, #subagents, #phoneMode { max-width: 26%; }
     .toolbar-spacer { flex: 1; }
     #attachBtn { width: 27px; height: 27px; }
     #folderBtn:not(:disabled) { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
@@ -450,6 +450,11 @@
     .chat-heading { min-width:0; flex:1; }
     #usage { flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #usageSummary { display:block; overflow:hidden; text-overflow:ellipsis; }
+    #chatgptUsage { display:block; max-width:100%; overflow-x:auto; scrollbar-width:none; line-height:12px; }
+    .question-card { border:1px solid var(--line); border-radius:var(--radius-control); padding:12px; margin:12px 0; }
+    .question-card .question-choices { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+    .question-card form { display:flex; gap:6px; margin-top:8px; }
+    .question-card input { flex:1; min-width:0; }
     #pillamaStatus { display:block; max-width:100%; overflow-x:auto; scrollbar-width:none; line-height:12px; }
     #pillamaStatus:focus-visible { outline:1px solid var(--line); }
     #sidebarToggle { display:none; }
@@ -563,10 +568,10 @@
       .topbar { flex-wrap:nowrap; gap:4px; padding:5px 8px; }
       .chat-heading { flex-basis:auto; }
       #usage { position:absolute; top:43px; left:48px; right:45px; width:auto; font-size:9px; }
-      .topbar:has(#pillamaStatus:not(.hidden)) { align-items:flex-start; padding-top:3px; }
-      .topbar:has(#pillamaStatus:not(.hidden)) .icon-button { width:28px; height:28px; min-height:28px; }
-      .topbar:has(#pillamaStatus:not(.hidden)) .chat-heading { height:28px; }
-      .topbar:has(#pillamaStatus:not(.hidden)) #usage { top:32px; line-height:12px; }
+      .topbar:has(:is(#pillamaStatus,#chatgptUsage):not(.hidden)) { align-items:flex-start; padding-top:3px; }
+      .topbar:has(:is(#pillamaStatus,#chatgptUsage):not(.hidden)) .icon-button { width:28px; height:28px; min-height:28px; }
+      .topbar:has(:is(#pillamaStatus,#chatgptUsage):not(.hidden)) .chat-heading { height:28px; }
+      .topbar:has(:is(#pillamaStatus,#chatgptUsage):not(.hidden)) #usage { top:32px; line-height:12px; }
       #folderBtn { max-width:100%; padding:0; }
       #folderLabel { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .settings-grid { grid-template-columns:1fr; }
@@ -576,7 +581,7 @@
     @media (max-height: 260px) {
       /* Landscape with the keyboard open must leave room to type and send. */
       #workspace { grid-template-rows: auto minmax(0, 1fr) minmax(0, auto); }
-      .topbar, .topbar:has(#pillamaStatus:not(.hidden)) { min-height: 32px; flex-wrap: nowrap; align-items: center; padding: 0 8px; gap: 4px; }
+      .topbar, .topbar:has(:is(#pillamaStatus,#chatgptUsage):not(.hidden)) { min-height: 32px; flex-wrap: nowrap; align-items: center; padding: 0 8px; gap: 4px; }
       .topbar .icon-button { width: 28px; height: 28px; }
       .chat-heading { flex-basis: auto; }
       #usage { display: none; }
@@ -587,6 +592,10 @@
       #composerActions { position: fixed; left: 8px; bottom: 36px; max-height: calc(100dvh - 40px); overflow-y: auto; }
       .settings-page { padding-top: 8px; }
     }
+    #app.native-navigation { grid-template-columns: minmax(0, 1fr); }
+    #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr) 300px; }
+    @media (max-width: 1000px) { #app.native-navigation.files-open { grid-template-columns: minmax(0, 1fr); } }
+    #app.native-navigation #sidebar, #app.native-navigation #sidebarToggle { display:none; }
   </style>
 </head>
 <body>
@@ -619,10 +628,10 @@
           <strong id="title" class="hidden">Settings</strong>
           <button id="folderBtn" type="button" title="Set working folder" aria-label="Working folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v2M3 7h7l2 3h8a1 1 0 0 1 1 1l-2 9H3L1 9a2 2 0 0 1 2-2Z"/></svg><span id="folderLabel">Set folder</span></button>
         </div>
-        <div id="usage"><span id="usageSummary"></span><span id="pillamaStatus" class="hidden" tabindex="0" aria-label="llama.cpp performance"></span></div><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
+        <div id="usage"><span id="usageSummary"></span><span id="pillamaStatus" class="hidden" tabindex="0" aria-label="llama.cpp performance"></span><span id="chatgptUsage" class="hidden" tabindex="0" aria-label="ChatGPT subscription usage"></span></div><button id="piInstance" class="icon-button hidden" type="button" aria-label="Stop Pi instance" title="Stop Pi instance">■</button><button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false">▤</button>
       </header>
       </div>
-      <div id="chat"><div id="chatInner" class="chat-inner"></div></div>
+      <div id="chat"><div class="chat-inner"><div id="chatInner"></div><div id="questionCards" aria-live="polite"></div></div></div>
       <section id="diffView" class="hidden" aria-labelledby="diffTitle"><header class="diff-heading"><div><strong id="diffTitle"></strong><p id="diffNotice" class="meta" role="status"></p></div><button id="closeDiff" type="button" title="Close diff"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>Close diff</span></button></header><div id="fileDiff" tabindex="0" aria-label="File changes"></div></section>
       <section id="settingsView" class="hidden">
         <form id="settingsForm" class="settings-page">
@@ -700,6 +709,7 @@
               <select id="model" title="Model" aria-label="Model"></select>
               <select id="thinking" title="Reasoning" aria-label="Reasoning"></select>
               <select id="subagents" title="Subagents" aria-label="Subagents"><option value="off">Agents off</option><option value="on">Agents on</option><option value="settings">Settings…</option></select>
+              <select id="phoneMode" title="Phone" aria-label="Phone"><option value="off">Phone off</option><option value="call-in">Call-in only</option><option value="messages">Messages</option><option value="calls">Calls</option></select>
               <span class="toolbar-spacer"></span>
               <button id="dictationButton" class="primary hidden" type="button" title="Dictate a message" aria-label="Dictate a message" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button>
               <button id="sendBtn" class="primary" type="button" data-mode="play" title="Send" aria-label="Send">▶</button>
@@ -821,7 +831,7 @@
     const agentDefaults = { enabled: false, count: 3, model: '', thinking: '' };
     let chatAgents = { ...agentDefaults }, subagentTarget = null;
     const collapsedAgents = new Set();
-    let pendingCwd = '';
+    let pendingCwd = '', pendingProjectId = null;
     let pendingFiles = [];
     let goalDraft = false;
     function renderGoalChip(){ draftChanged(); $('#goalChip').classList.toggle('hidden',!goalDraft); setRunButton(queueState.busy || Boolean(current?.running)); }
@@ -843,7 +853,8 @@
     let loadingHistory = false;
     let sessionView = 0;
     let liveToolCalls = new Map();
-    let sessionCache = [];
+    let sessionCache = [], projectCache = [];
+    const chatDrafts = new Map();
     let nextSessionOffset = null;
     let loadingSessions = null;
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
@@ -862,6 +873,7 @@
     function configureNativeHost() {
       nativeHost = window.bashkittenHost || null;
       nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
+      $('#app').classList.toggle('native-navigation', Boolean(nativeHost?.navigation));
       $('#filesToggle').classList.toggle('hidden', !fileManagerAllowed);
       $('#filesToggle').textContent = '▤';
       $('#filesToggle').title = 'Files and changes';
@@ -1433,6 +1445,7 @@
     function resetUsage() {
       displayedUsage = null;
       renderPillama();
+      renderChatGPTUsage();
       renderGoal(null);
       setCompacting(false);
       $('#usageSummary').textContent = '';
@@ -1451,9 +1464,72 @@
       line.classList.toggle('hidden', !line.textContent);
     }
     function renderExtensionStatuses(statuses = []) {
+      renderChatGPTUsage(statuses.find(value => value.statusKey === 'chatgpt-usage:data')?.statusText);
       renderPillama(statuses.find(value => value.statusKey === 'pillama')?.statusText);
       const thinking = statuses.find(value => value.statusKey === 'pillama:thinking');
       if (thinking) showPiRequest(thinking);
+    }
+
+    function renderChatGPTUsage(text) {
+      const line = $('#chatgptUsage'); let snapshot;
+      try { snapshot = text ? JSON.parse(text) : null; } catch { snapshot = null; }
+      line.classList.toggle('hidden', !snapshot);
+      if (!snapshot) { line.textContent = ''; return; }
+      if (snapshot.status === 'unavailable') { line.textContent = 'ChatGPT usage unavailable'; return; }
+      const pieces = (snapshot.buckets || []).flatMap(bucket => (bucket.windows || []).map(window => {
+        const seconds = window.durationSeconds;
+        const label = seconds === 604800 ? 'Weekly' : seconds % 3600 === 0 ? `${seconds / 3600}h` : seconds % 60 === 0 ? `${seconds / 60}m` : `${seconds}s`;
+        const options = { hour:'2-digit', minute:'2-digit', ...(seconds === 604800 ? { year:'numeric', month:'short', day:'numeric' } : {}) };
+        return `${bucket.id === 'codex' ? '' : bucket.id + ' · '}${label} ${window.remainingPercent.toFixed(0)}% remaining · resets ${new Date(window.resetAt).toLocaleString(undefined, options)}`;
+      }));
+      line.textContent = (snapshot.status === 'stale' ? 'Stale · ' : '') + pieces.join(' | ');
+      line.title = `Observed ${new Date(snapshot.observedAt).toLocaleString()} · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
+    }
+    const questionDrafts = new Map(), questionSubmissions = new Map();
+    function renderQuestions(questions = []) {
+      const root = $('#questionCards'); if (!root) return;
+      const focused = document.activeElement?.closest('[data-question]')?.dataset.question;
+      const selection = focused ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
+      root.replaceChildren();
+      for (const question of questions) {
+        if (question.sessionId !== current?.id) continue;
+        const card = document.createElement('section'); card.className = 'question-card'; card.dataset.question = question.questionId;
+        const title = document.createElement('strong'); title.textContent = question.text;
+        const state = document.createElement('div'); state.className = 'meta';
+        state.textContent = question.status === 'pending' ? `Optional question · reply by ${new Date(question.deadline).toLocaleTimeString()}` : question.status === 'expired' ? 'Expired · a reply now is a new follow-up' : question.status === 'answered' ? 'Answered' : 'Cancelled';
+        if (question.deliveryStatus === 'held') state.textContent += ' · delivery held; review queued drafts';
+        card.append(title, state);
+        if (question.answer) { const answer = document.createElement('p'); answer.textContent = question.answer; card.append(answer); }
+        if (['pending','expired'].includes(question.status)) {
+          const choices = document.createElement('div'); choices.className = 'question-choices';
+          const form = document.createElement('form'), input = document.createElement('input'), submit = document.createElement('button');
+          input.type = 'text'; input.placeholder = 'Custom reply…'; input.setAttribute('aria-label','Reply to '+question.text); input.value = questionDrafts.get(question.questionId) || '';
+          input.oninput = () => questionDrafts.set(question.questionId, input.value);
+          submit.type = 'submit'; submit.textContent = question.status === 'expired' ? 'Send follow-up' : 'Reply';
+          const send = async text => {
+            if (!text.trim()) return;
+            const sessionId = question.sessionId;
+            let submission = questionSubmissions.get(question.questionId);
+            if (!submission || submission.text !== text) { submission = { text, id: crypto.randomUUID() }; questionSubmissions.set(question.questionId, submission); }
+            const deliveryId = submission.id;
+            for (const control of card.querySelectorAll('button,input')) control.disabled = true;
+            try {
+              const result = await api(`/api/sessions/${sessionId}/questions/answer`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({questionId:question.questionId,revision:question.revision,deliveryId,text}) });
+              questionDrafts.delete(question.questionId); questionSubmissions.delete(question.questionId);
+              if (current?.id === sessionId) {
+                const snapshot = await api(`/api/sessions/${sessionId}/questions`);
+                renderQuestions(snapshot.questions);
+                if (result.followup) $('#composerHint').textContent = 'Late reply sent as an attributed follow-up.';
+              }
+            } catch (error) { state.textContent = error.message; for (const control of card.querySelectorAll('button,input')) control.disabled = false; }
+          };
+          for (const option of question.options || []) { const button = document.createElement('button'); button.type = 'button'; button.textContent = option; button.onclick = () => send(option); choices.append(button); }
+          form.onsubmit = event => { event.preventDefault(); void send(input.value); };
+          form.append(input, submit); card.append(choices, form);
+        }
+        root.append(card);
+      }
+      if (focused) { const input = [...root.querySelectorAll('[data-question]')].find(card => card.dataset.question === focused)?.querySelector('input'); if (input) { input.focus({preventScroll:true}); if (selection) input.setSelectionRange(...selection); } }
     }
 
     function liveCompaction(){let trace=$('#liveCompaction');if(!trace){trace=document.createElement('details');trace.id='liveCompaction';trace.className='turn-work';trace.open=true;const summary=document.createElement('summary');summary.textContent='Compacting context…';const body=document.createElement('div');body.className='turn-work-body';trace.append(summary,body);$('#chatInner').append(trace);}return trace;}
@@ -1543,6 +1619,7 @@
     }
 
     function renderEvent(event) {
+      if (event.type === 'questions_changed') { renderQuestions(event.questions); return; }
       if (event.type === 'session') return;
       if (event.type === 'sessions_changed') { loadSessions().catch(error => { $('#composerHint').textContent = error.message; }); return; }
       if (event.type === 'subagent_settings') { chatAgents = event.settings; if (current) current.subagents = chatAgents; showAgentChoice(); return; }
@@ -1716,7 +1793,13 @@
       fillAgentForm('defaultAgents', config?.default_subagents || agentDefaults);
     }
 
-    function showAgentChoice() { $('#subagents').value = chatAgents.enabled ? 'on' : 'off'; }
+    function showAgentChoice() { $('#subagents').value = chatAgents.enabled ? 'on' : 'off'; $('#phoneMode').value = current?.phone?.mode || 'off'; $('#phoneMode').disabled = !current; }
+    $('#phoneMode').onchange = async () => {
+      if (!current) return; const id = current.id, mode = $('#phoneMode').value; $('#phoneMode').disabled = true;
+      try { const value = await api(`/api/sessions/${id}/phone`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) }); if (current?.id === id) current.phone = value.phone; const item = sessionCache.find(s => s.id === id); if (item) item.phone = value.phone; }
+      catch (error) { alert(error.message); }
+      finally { showAgentChoice(); }
+    };
     function agentThinking(prefix) {
       const select = $('#' + prefix + 'Thinking'), model = $('#' + prefix + 'Model');
       const old = select.value;
@@ -2075,6 +2158,10 @@
     }
 
     function renderSessionSidebar(sessions) {
+      if (nativeHost?.navigation) {
+        window.dispatchEvent(new Event('BashKittenNavigationChanged'));
+        return;
+      }
       const root = $('#sessions');
       const scrollTop = root.scrollTop;
       root.innerHTML = '';
@@ -2225,6 +2312,7 @@
       if (append && nextSessionOffset === null) return sessionCache;
       loadingSessions = (async () => {
         const value = await api(`/api/sessions?limit=100&offset=${append ? nextSessionOffset : 0}`);
+        projectCache = value.projects || [];
         const byId = new Map(sessionCache.map(session => [session.id, session]));
         for (const session of value.sessions) byId.set(session.id, session);
         sessionCache = [...byId.values()].sort((a,b) => b.modified - a.modified || b.id.localeCompare(a.id));
@@ -2240,7 +2328,7 @@
           }
         }
         renderSessionSidebar(sessionCache);
-        if (nextSessionOffset !== null) {
+        if (nextSessionOffset !== null && !nativeHost?.navigation) {
           const more = document.createElement('button');
           more.type = 'button';
           more.textContent = 'Load more chats';
@@ -2390,6 +2478,7 @@
         if (sessionView !== view) return;
         closeImageViewer();
         current = {...session};
+        pendingProjectId = null;
         chatAgents = { ...agentDefaults, ...session.subagents }; showAgentChoice();
         let ancestor = session.subagentParent;
         while (ancestor) { collapsedAgents.delete(ancestor); ancestor = sessionCache.find(item => item.id === ancestor)?.subagentParent; }
@@ -2421,6 +2510,7 @@
         renderedEntries = new Set();
         resetUsage();
         $('#chatInner').innerHTML = '';
+        renderQuestions([]);
         $('#composerHint').textContent = 'Opening chat…';
         const resumed = await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
         if (sessionView !== view) return;
@@ -2445,7 +2535,7 @@
       }
     }
 
-    async function beginNewSession() {
+    async function beginNewSession(projectId = null) {
       void cancelDictation();
       const view = ++sessionView;
       if (editingQueueId) await cancelQueueEdit();
@@ -2453,6 +2543,8 @@
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
+      pendingProjectId = projectId;
+      renderQuestions([]);
       chatAgents = { ...agentDefaults, ...config?.default_subagents }; showAgentChoice();
       history.replaceState(null, '', location.pathname + location.search);
       sendVisibility();
@@ -2470,11 +2562,12 @@
       resetUsage();
       renderAttachments();
       renderQueueState();
-      pendingCwd = config?.default_cwd || '';
+      pendingCwd = projectId ? projectCache.find(project => project.id === projectId)?.cwd : config?.default_cwd || '';
+      if (projectId && !pendingCwd) throw Error('Project is unavailable');
       $('#title').textContent = 'New chat';
       $('#composerHint').textContent = '';
       $('#folderLabel').textContent = displayFolder(pendingCwd) || 'Set folder';
-      $('#folderBtn').disabled = Boolean(current);
+      $('#folderBtn').disabled = Boolean(current || pendingProjectId);
       $('#folderBtn').title = 'Set working folder';
       setRunButton(false);
       $('#usageSummary').textContent = '';
@@ -2910,10 +3003,13 @@
           const createForm = new FormData();
           createForm.append('prompt', text);
           createForm.append('cwd', pendingCwd);
+          if (pendingProjectId) createForm.append('projectId', pendingProjectId);
           createForm.append('model', $('#model').value);
           createForm.append('thinking', $('#thinking').value);
           createForm.append('subagents', JSON.stringify(chatAgents));
           const result = await api('/api/sessions', {method: 'POST', body: createForm});
+          chatDrafts.delete('new:' + (pendingProjectId || ''));
+          pendingProjectId = null;
           const sessions = await loadSessions();
           current = sessions.find(session => session.id === result.id) || {id: result.id, title: text || 'Image session', cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value, running: true};
           history.replaceState(null, '', '#session=' + current.id);
@@ -3008,11 +3104,13 @@
       // Keep the composer's independent draft/attachments untouched throughout.
       if (!destination) {
         const form = new FormData(); form.append('prompt', text); form.append('cwd', pendingCwd);
+        if (pendingProjectId) form.append('projectId', pendingProjectId);
         form.append('model', $('#model').value); form.append('thinking', $('#thinking').value);
         form.append('subagents', JSON.stringify(chatAgents));
         const result = await api('/api/sessions', { method: 'POST', body: form, signal: capture.abort.signal });
         if (dictation !== capture || dictationDestination() !== capture.destination) return;
         destination = { id: result.id, title: text, cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value };
+        chatDrafts.delete('new:' + (pendingProjectId || '')); pendingProjectId = null;
         current = destination; capture.destination = dictationDestination();
         history.replaceState(null, '', '#session=' + destination.id);
         renderSessionSidebar(await loadSessions());
@@ -3194,6 +3292,7 @@
       if (!(data.entries || []).length && !(data.events || []).length) showWelcome();
       renderQueueState(data); applyModelSelection(data.modelSelection); renderUsage(data.usage);
       renderExtensionStatuses(data.extensionStatuses);
+      renderQuestions(data.questions);
       setCompacting(data.compacting);
       if (current) {
         current.running = Boolean(data.busy);
@@ -3704,6 +3803,8 @@
 
     let piRequests=[], activePiRequest=null;
     function showPiRequest(request) {
+      if (request.method === 'setStatus' && request.statusKey === 'chatgpt-usage:data') { renderChatGPTUsage(request.statusText); return; }
+      if (request.method === 'setStatus' && request.statusKey === 'chatgpt-usage') return;
       if (request.method === 'setStatus' && request.statusKey === 'pillama') {
         renderPillama(request.statusText); return;
       }
@@ -3741,9 +3842,9 @@
     // The enrolled native browser retains this visible composer across origin
     // changes and restarts. These hooks never send or queue a message or audio.
     window.bashkittenDraft = {
-      capture() {
+      capture(includeStored = true) {
         if (!initialized || draftRestoring) return null;
-        return {sessionId:current?.id || null,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null};
+        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
       },
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
@@ -3751,6 +3852,7 @@
         const prompt = $('#prompt').value;
         let view = sessionView;
         try {
+          for (const item of value.chatDrafts || []) if (Array.isArray(item) && typeof item[0] === 'string' && item[1] && typeof item[1].text === 'string') chatDrafts.set(item[0], item[1]);
           if (value.sessionId && /^[a-f0-9-]{36}$/.test(value.sessionId)) {
             history.replaceState(null, '', '#session=' + value.sessionId);
             const session = await linkedSession(await loadSessions());
@@ -3760,8 +3862,8 @@
               const opening = openSession(session); view = sessionView;
               await opening;
             }
-          } else if (current) {
-            const opening = beginNewSession(); view = sessionView;
+          } else if (current || value.projectId !== pendingProjectId) {
+            const opening = beginNewSession(value.projectId || null); view = sessionView;
             await opening;
           }
           if (sessionView !== view || $('#prompt').value !== prompt) return;
@@ -3783,6 +3885,56 @@
           $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
         } finally { draftRestoring = false; }
       }
+    };
+    // Called only by the browser-owned protected document adapter. This does
+    // not expose native controllers or filesystem authority to web content.
+    const nativeFolderRequests = new Map();
+    window.bashkittenNavigation = {
+      async call(action, value = {}) {
+        if (action === 'folders-cancel') { nativeFolderRequests.get(value.requestId)?.abort(); nativeFolderRequests.delete(value.requestId); return true; }
+        if (!initialized || !csrf) throw Error('The chat is still connecting');
+        if (action === 'snapshot') return { sessions: sessionCache, projects: projectCache,
+          selected: current?.id || null, nextOffset: nextSessionOffset, fileManager: fileManagerAllowed };
+        if (action === 'more' || action === 'refresh') { await loadSessions(action === 'more'); return this.call('snapshot'); }
+        if (action === 'open' || action === 'new') {
+          const key = current?.id || 'new:' + (pendingProjectId || '');
+          const draft = window.bashkittenDraft.capture(false);
+          if (draft) chatDrafts.set(key, draft);
+          // Preserve the held queue edit and its original per-chat token while
+          // another chat is shown. Clearing local controls must not release it.
+          if (editingQueueId) await cancelQueueEdit(false);
+          if (action === 'open') {
+            let found = sessionCache.find(session => session.id === value.id);
+            while (!found && nextSessionOffset !== null) { await loadSessions(true); found = sessionCache.find(session => session.id === value.id); }
+            if (!found) throw Error('Chat is unavailable');
+            if (current?.id !== found.id) await openSession(found);
+          } else await beginNewSession(value.projectId || null);
+          const next = chatDrafts.get(current?.id || 'new:' + (pendingProjectId || ''));
+          $('#prompt').value = '';
+          if (next) await window.bashkittenDraft.restore(next);
+          draftChanged(); return this.call('snapshot');
+        }
+        if (action === 'settings') { $('#settingsBtn').click(); return true; }
+        if (action === 'folders') {
+          if (typeof value.requestId !== 'string' || !value.requestId) throw Error('Missing folder request identity');
+          nativeFolderRequests.get(value.requestId)?.abort();
+          const request = new AbortController(); nativeFolderRequests.set(value.requestId, request);
+          try { return await api('/api/folders?path=' + encodeURIComponent(value.path || '~'), {signal:request.signal}); }
+          finally { if (nativeFolderRequests.get(value.requestId) === request) nativeFolderRequests.delete(value.requestId); }
+        }
+        const request = (route, method, body) => api(route, { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        if (action === 'project-create') await request('/api/projects', 'POST', value);
+        else if (action === 'project-rename') await request('/api/projects/' + encodeURIComponent(value.id), 'PATCH', { name: value.name });
+        else if (action === 'project-remove') await request('/api/projects/' + encodeURIComponent(value.id), 'DELETE', { confirm: true });
+        else if (action === 'move') await request('/api/sessions/' + encodeURIComponent(value.id) + '/project', 'POST', { projectId: value.projectId || null });
+        else if (action === 'rename') await request('/api/sessions/' + encodeURIComponent(value.id), 'PATCH', { name: value.name });
+        else if (action === 'remove') {
+          await request('/api/sessions/' + encodeURIComponent(value.id), 'DELETE', { confirm: true });
+          sessionCache = sessionCache.filter(session => session.id !== value.id); chatDrafts.delete(value.id);
+          if (current?.id === value.id) await beginNewSession();
+        } else throw Error('Unknown navigation action');
+        await loadSessions(); return this.call('snapshot');
+      },
     };
     boot();
     setInterval(() => {

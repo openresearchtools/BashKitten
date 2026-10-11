@@ -14,12 +14,13 @@ export class BashKittenAgentParent extends JSWindowActorParent {
   async receiveMessage({ name, data }) {
     const entry = protectedAgentView(this);
     if (!entry) throw new Error("This document is not an active Agent view.");
+    if (name === "NavigationChanged") { entry.host.sidecar?.refreshChats(); return; }
     if (name === "Ready" || name === "DraftReady") { await entry.host.contentReady(entry, this, name === "DraftReady"); return; }
     if (name === "DraftChanged") return entry.host.saveDraft(entry, this);
     if (name === "SignIn") { await entry.host.signIn(); return { ok: true }; }
     if (name === "CancelFileView") { await entry.host.cancelDocumentTransfers(); return { ok: true }; }
     if (name === "ViewFile") return entry.host.viewFile(this.browsingContext.embedderElement, data.url);
-    if (!entry.local) throw new Error("This action is available only in the local Agent view.");
+    if (!entry.local || entry.connection.machineId) throw new Error("This action is available only in the host Agent view.");
     if (name === "ChooseFolder") return entry.host.chooseFolder(this.browsingContext.embedderElement, data);
     if (name === "OpenFolder") {
       if (typeof data.path !== "string" || !PathUtils.isAbsolute(data.path) || data.path.includes("\0")) throw new Error("Invalid folder path.");

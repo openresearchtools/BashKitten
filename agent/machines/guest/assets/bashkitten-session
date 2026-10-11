@@ -53,7 +53,9 @@ async def run():
     if display.get('software'):
         env['LIBGL_ALWAYS_SOFTWARE']='1'
     generation = str(uuid.uuid4())
+    owner_start = Path('/proc/self/stat').read_text().rsplit(') ',1)[1].split()[19]
     write_json(CONTEXT,{'generation':generation,'ownerPid':os.getpid(),
+               'ownerStartTime':owner_start,
                'environment':{key:env[key] for key in ['DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS']}})
     stopped=asyncio.Event()
     for sig in [signal.SIGTERM,signal.SIGINT]:

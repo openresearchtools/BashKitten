@@ -27,12 +27,24 @@ import { downloadsStatus, searchModels, modelRepository, startDownload, controlD
 import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
 import { WorkloadPerformance, performanceUnavailable } from './performance.mjs';
+import { initializePhoneOwner, configurePhoneOwner, disconnectPhoneOwner, closePhoneOwner } from './phone/owner.mjs';
+import { guestBrowserBootstrap } from './access/guest-browser.mjs';
+import { PhoneGateway } from './phone-gateway.mjs';
+import { PhoneSpeech } from './localai/phone-speech.mjs';
+import { unixRequest } from './access/io.mjs';
+import { machineControl } from './machines/index.mjs';
 
 export const controlSocket = paths.control;
 const stateFile = path.join(dataDir, 'control.json');
 const script = fileURLToPath(import.meta.url);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export async function controlRequest(command, value) {
+  // Machines have their own user-service lifetime. Even the CLI must bypass
+  // Local's manager/guard so Local Off cannot tear down container work.
+  if (command.startsWith('machines.')) {
+    if (platform !== 'linux') throw Error('Container machines require the native Linux host');
+    return machineControl(command.slice('machines.'.length), value);
+  }
   const deadline = Date.now() + 120000;
   for (let attempt = 0; ; attempt++) {
     try { return await socketRequest(controlSocket, '/' + command, value, command === 'whisper-acquire' ? 0 : command === 'start' || command === 'restart' || command.startsWith('share-') ? 180000 : 30000); }
@@ -102,6 +114,7 @@ async function serve() {
   await privateDir(path.dirname(controlSocket));
   const ownership = await claimInstance('control');
   if (!ownership) return;
+  await initializePhoneOwner();
   await fs.rm(controlSocket, { force: true });
   const lock = controlSocket + '.lock';
   await fs.writeFile(lock, String(process.pid), { mode: 0o600 });
@@ -136,6 +149,12 @@ async function serve() {
   const display = platform === 'termux' ? new (await import('./platform/termux/display.mjs')).TermuxDisplay() : null;
   const localAI = new LocalAI(stack.services);
   if (localAI) await localAI.initialize();
+  const phoneDispatch = async (action, value, identity) => {
+    if (!stack.ready || !/^[a-f0-9]{64}$/.test(stack.phoneOwnerToken || '')) throw Error('The owning Agent backend is off');
+    const response = await unixRequest(paths.backend, '/api/instance/phone', { method: 'POST', headers: { host: new URL(stack.origin).host, authorization: 'Bearer ' + stack.phoneOwnerToken, 'content-type': 'application/json' }, body: JSON.stringify({ action, value, identity }), timeout: 120000 });
+    const result = JSON.parse(response.body); if (response.status !== 200) throw Error(result.error || 'Phone backend request failed'); return result;
+  };
+  const phoneGateway = new PhoneGateway({ dispatch: phoneDispatch, speech: new PhoneSpeech(localAI) });
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices, 'check-packages': checkPackages, 'update-packages': updatePackages,
@@ -214,6 +233,8 @@ async function serve() {
     if (failure) throw failure.reason;
   }
   async function stopGroup() {
+    await phoneGateway.close();
+    await disconnectPhoneOwner();
     await stack.stopIngress();
     // Complete the rest of group cleanup even if a worker needs the guard's
     // final descendant cleanup.
@@ -269,12 +290,19 @@ async function serve() {
       await turnOff(); if (!stopping) scheduleExit();
       return status();
     }
+    if (command === 'phone-status') return phoneDispatch('phone.status', {}, null);
+    if (command === 'phone-gateway-connect') { if (platform !== 'termux') throw Error('Phone speech gateway belongs to Termux'); return phoneGateway.connect(value); }
+    if (command === 'phone-gateway-disconnect') { await phoneGateway.disable(); return { ok: true }; }
+    if (command === 'remote-phone') { const published = await remote.state(); if (!stack.ready || stopping || !stack.tunnelStarted || !published.enabled || published.id !== value.generation) throw Error('Remote phone enrollment changed'); return phoneDispatch(value.action, value.value, value.identity); }
     if (command === 'local-session') {
       if (!stack.ready) throw Error('Turn on Agent before connecting');
       return { url: stack.origin, identity: stack.identity, generation: stack.localGeneration,
         cookie: { name: stack.localCookieName, value: stack.localToken } };
     }
     // Private native IPC only; none of these commands is forwarded by the web API.
+    if (command === 'guest-browser-connect') return guestBrowserBootstrap(stack, value);
+    if (command === 'phone-control-connect') return configurePhoneOwner(value);
+    if (command === 'phone-control-disconnect') { await disconnectPhoneOwner(); return { disconnected: true }; }
     if (command === 'remote-pi-import') return importRemoteProvider(value);
     if (command.startsWith('display-')) {
       if (!display) throw Error('Display is available only in local Termux');
@@ -420,6 +448,8 @@ async function serve() {
     setTimeout(async () => {
       clearInterval(monitor);
       browserWatcher?.kill('SIGTERM'); browserWatcher = null;
+      await closePhoneOwner();
+      await phoneGateway.close();
       await fs.rm(lock, { force: true });
       server.close(() => { ownership.close(); process.exit(0); });
     }, 100).unref();
@@ -456,7 +486,10 @@ async function serve() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   const command = process.argv[2] || 'status';
-  if (command === 'serve') {
+  if (command === 'machine-transport') {
+    try { await (await import('./machines/browser-transport.mjs')).browserTransport(process.argv[3]); }
+    catch (error) { console.error(JSON.stringify({error:error.message})); process.exitCode = 1; }
+  } else if (command === 'serve') {
     if (process.env.BASHKITTEN_GUARDED === '1' && Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) await serve();
     else {
       await privateDir(dataDir);
@@ -469,7 +502,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
       const input = process.argv[3];
       const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin)).toString() || '{}') : input ? JSON.parse(input) : {};
       const performanceCommand = ['performance-sample', 'performance-close'].includes(command);
-      if (command !== 'browser-shutdown' && !performanceCommand) await ensureManager();
+      if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager();
       const result = await controlRequest(command, command === 'status' ? undefined : value).catch(error => {
         if (performanceCommand && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return command === 'performance-close' ? { ok: true } : performanceUnavailable('The local Agent is off');
         if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };

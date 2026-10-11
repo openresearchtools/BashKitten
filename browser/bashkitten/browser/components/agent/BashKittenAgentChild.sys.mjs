@@ -2,6 +2,7 @@
 
 export class BashKittenAgentChild extends JSWindowActorChild {
   handleEvent(event) {
+    if (event.type === "BashKittenNavigationChanged") { this.sendAsyncMessage("NavigationChanged"); return; }
     if (event.type === "BashKittenDraftReady") {
       this.draftChanged = false;
       this.draftStarting = this.sendQuery("DraftReady").then(() => {
@@ -20,7 +21,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     const entry = new Map(Services.cpmm.sharedData.get("BashKittenAgentContexts") || []).get(principal.originAttributes.userContextId);
     if (!entry || principal.originNoSuffix !== entry.origin || this.browsingContext !== this.browsingContext.top) return;
     const win = this.contentWindow;
-    const host = Cu.cloneInto({ platform: "linux", local: entry.local }, win);
+    const host = Cu.cloneInto({ platform: "linux", local: entry.local, navigation: true }, win);
     Cu.exportFunction((command, data = {}) => new win.Promise((resolve, reject) => {
       this.call(command, Cu.cloneInto(data, {}), entry).then(
         result => resolve(Cu.cloneInto(result, win)),
@@ -36,6 +37,11 @@ export class BashKittenAgentChild extends JSWindowActorChild {
   }
 
   async receiveMessage({ name, data }) {
+    if (name === "Navigation") {
+      const navigation = this.contentWindow.wrappedJSObject.bashkittenNavigation;
+      if (!navigation) throw new Error("The chat is still connecting");
+      return Cu.cloneInto(await navigation.call(data.action, Cu.cloneInto(data.value || {}, this.contentWindow)), {});
+    }
     const api = this.contentWindow.wrappedJSObject.bashkittenDraft;
     if (name === "CaptureDraft") return api ? Cu.cloneInto(await api.capture(), {}, { wrapReflectors: true }) : null;
     if (name === "RestoreDraft") {

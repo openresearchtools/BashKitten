@@ -7,6 +7,8 @@ import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { localAISettings } from "resource:///modules/LocalAI.sys.mjs";
 import { serviceSettings } from "resource:///modules/ServiceSettings.sys.mjs";
 import { remoteServices } from "resource:///modules/RemoteServices.sys.mjs";
+import { NativeSidecar } from "resource:///modules/NativeSidecar.sys.mjs";
+import { connectMachine, disconnectMachine } from "resource:///modules/ContainerConnection.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
@@ -107,7 +109,8 @@ function control(command, data = {}) {
   return operation;
 }
 async function localControl(command, data = {}) {
-  if (!["start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
+  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices"];
+  if (![...machineCommands, "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   if (command === "start") data = { ...data, browserOwner: await localBrowserOwner() };
@@ -148,7 +151,7 @@ export const BashKittenAgent = {
     if (!actorRegistered) {
       ChromeUtils.registerWindowActor("BashKittenAgent", {
         parent: { esModuleURI: "resource:///modules/BashKittenAgentParent.sys.mjs" },
-        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { capture: true, wantUntrusted: true }, BashKittenDraftChanged: { capture: true, wantUntrusted: true } } },
+        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { capture: true, wantUntrusted: true }, BashKittenDraftChanged: { capture: true, wantUntrusted: true }, BashKittenNavigationChanged: { capture: true, wantUntrusted: true } } },
         allFrames: false,
         messageManagerGroups: ["bashkitten-agent"],
         matches: ["https://*/*"],
@@ -175,6 +178,7 @@ class AgentView {
     this.currentIdentity = null;
     this.layout = "full";
     this.browseWithAgent = Services.prefs.getBoolPref("bashkitten.agent.splitBrowsing", true);
+    this.localOn = false;
   }
 
   async init() {
@@ -185,22 +189,12 @@ class AgentView {
     this.pane = xul(doc, "vbox", { id: "bashkitten-agent-pane" });
     const bar = html(doc, "div", { id: "bashkitten-agent-bar", style: "display:flex" });
     bar.append(html(doc, "label", {}, "Agent"));
-    this.choice = html(doc, "select", { id: "bashkitten-agent-choice", "aria-label": "Agent connection: Local or remote", title: "Choose Local, a saved remote, or Connect to remote…" });
-    this.choice.addEventListener("change", () => this.run(() => {
-      if (this.choice.value === "connect-remote") {
-        this.choice.value = this.remote?.id || "";
-        return this.remotes();
-      }
-      if (this.choice.value === "share-local") {
-        this.choice.value = this.remote?.id || "";
-        return this.shareLocal();
-      }
-      return this.choose(this.choice.value);
-    }, { replace: !["connect-remote", "share-local"].includes(this.choice.value) }));
-    bar.append(this.choice);
+    this.sidecar = new NativeSidecar(this, control);
+    const add = html(doc, "button", { type: "button", "aria-label": "Add backend", title: "Connect remote or create container VM" }, "+");
+    add.addEventListener("click", () => this.sidecar.add()); bar.append(add);
+    this.choice = { value: "" };
     this.power = html(doc, "button", { id: "bashkitten-agent-power", type: "button" }, "Starting…");
     this.power.addEventListener("click", () => this.run(() => this.off ? this.start() : this.stop()));
-    bar.append(this.power);
     this.localAIButton = html(doc, "button", { type: "button" }, "LocalAI");
     this.localAIButton.addEventListener("click", () => this.run(() => this.localAI()));
     bar.append(this.localAIButton);
@@ -209,7 +203,9 @@ class AgentView {
     bar.append(menu);
     this.state = html(doc, "section", { id: "bashkitten-agent-state" });
     this.viewBox = xul(doc, "vbox", { id: "bashkitten-agent-views", flex: "1" });
-    this.pane.append(bar, this.state, this.viewBox);
+    const workspace = xul(doc, "hbox", { id: "bashkitten-native-workspace", flex: "1" });
+    const chat = xul(doc, "vbox", { id: "bashkitten-native-chat", flex: "1" }); chat.append(this.state, this.viewBox);
+    workspace.append(this.sidecar.root, chat); this.pane.append(bar, workspace);
     const tabbox = doc.getElementById("tabbrowser-tabbox");
     tabbox.before(this.pane);
     this.button = xul(doc, "toolbarbutton", { id: "bashkitten-agent-button", label: "Agent", class: "toolbarbutton-1", role: "tab", removable: "false", skipintoolbarset: "true", tooltiptext: "Agent" });
@@ -248,8 +244,14 @@ class AgentView {
     DesktopLifetime.attach(this, shutdown);
     this.show();
     await this.refreshRemotes();
+    void (async () => {
+      const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
+      await control("machines.startup", { displayCapabilities: BashKittenDisplay.capabilities() });
+      await this.sidecar.refresh();
+    })().catch(error => { this.sidecar.notice.textContent = `Container startup: ${error.message}`; });
+    void this.watchMachineActivations();
     const selected = Services.prefs.getStringPref("bashkitten.agent.selectedRemote", "");
-    await this.run(() => selected && [...this.choice.options].some(option => option.value === selected)
+    await this.run(() => selected && this.sidecar.backends.some(backend => backend.id === selected)
       ? this.choose(selected) : this.start());
     DesktopLifetime.started();
   }
@@ -259,8 +261,9 @@ class AgentView {
     const running = {};
     this.busy = running;
     this.power.disabled = true;
-    try { await operation(); }
-    catch (error) { if (this.busy === running) this.failure(error); }
+    let epoch = this.selectionEpoch;
+    try { const task = operation(); epoch = this.selectionEpoch; await task; }
+    catch (error) { if (this.busy === running && epoch === this.selectionEpoch) this.failure(error); }
     finally {
       if (this.busy === running) { this.busy = false; this.power.disabled = DesktopLifetime.quitting; }
     }
@@ -310,7 +313,7 @@ class AgentView {
 
   async resolveLocalFile(browser, value) {
     const entry = ownedViews.get(browser);
-    if (!entry?.local || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to open this file.");
+    if (!entry?.local || entry.connection.machineId || this.off || this.activeBrowser !== browser) throw new Error("Select the host Agent to open a host file.");
     const url = new URL(value);
     if (url.origin !== new URL(entry.connection.url).origin || url.protocol !== "https:" || url.hostname !== "127.0.0.1" || url.username || url.password ||
         !/^\/api\/(?:files\/content|sessions\/[a-f0-9-]{36}\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) throw new Error("Only local Agent files can be opened.");
@@ -403,7 +406,7 @@ class AgentView {
 
   async chooseFolder(browser, { title, path } = {}) {
     const entry = ownedViews.get(browser);
-    if (!entry?.local || this.off || this.activeBrowser !== browser) throw new Error("Select the local Agent to choose a folder.");
+    if (!entry?.local || entry.connection.machineId || this.off || this.activeBrowser !== browser) throw new Error("Use this backend's folder picker.");
     const picker = Cc["@mozilla.org/filepicker;1"].createInstance(Ci.nsIFilePicker);
     picker.init(this.win.browsingContext, typeof title === "string" ? title.slice(0, 200) : "Choose a folder", Ci.nsIFilePicker.modeGetFolder);
     if (typeof path === "string" && PathUtils.isAbsolute(path) && !path.includes("\0")) {
@@ -421,17 +424,15 @@ class AgentView {
   }
 
   async refreshRemotes() {
-    const remotes = await AgentRemotes.list();
-    this.choice.replaceChildren(html(this.doc, "option", { value: "" }, "Local"));
-    for (const remote of remotes) {
-      this.choice.append(html(this.doc, "option", { value: remote.id }, remote.name));
-    }
-    this.choice.append(html(this.doc, "option", { value: "connect-remote" }, "Connect to remote…"), html(this.doc, "option", { value: "share-local" }, "Share Local"));
     this.choice.value = this.selection;
     this.localAIButton.hidden = Boolean(this.selection);
+    await this.sidecar.refresh();
   }
 
   async choose(id) {
+    const epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1;
+    await this.saveCurrentDraft();
+    if (epoch !== this.selectionEpoch || this.win.closed) return;
     this.cancelDocumentTransfers();
     this.closeConnections();
     this.selection = id;
@@ -441,15 +442,67 @@ class AgentView {
     // Revoke pending remote authority now; Local must not wait for its process to exit.
     AgentRemotes.deactivate(false).catch(console.error);
     this.remote = null;
+    this.machineId = null;
     this.activeBrowser = null;
     for (const browser of this.views.values()) browser.hidden = true;
     Services.prefs.setStringPref("bashkitten.agent.selectedRemote", id);
-    if (!id) return this.local();
-    const connection = await AgentRemotes.activate(id);
-    await this.selectRemote(connection || await AgentRemotes.connection(id));
+    try {
+      if (!id) return await this.local(epoch);
+      if (this.sidecar.backends?.some(backend => backend.id === id && backend.kind === "machine")) return await this.selectMachine(id, epoch);
+      const connection = await AgentRemotes.activate(id);
+      if (epoch !== this.selectionEpoch) return;
+      const selected = connection || await AgentRemotes.connection(id);
+      if (epoch !== this.selectionEpoch) return;
+      await this.selectRemote(selected, false, epoch);
+    } catch (error) {
+      if (epoch !== this.selectionEpoch) return;
+      this.failure(error);
+      throw error;
+    }
   }
 
-  async selectRemote(connection, forceLogin = false) {
+  async selectMachine(id, epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
+    this.selection = id; this.remote = null; this.machineId = id;
+    this.off = false; this.localAIButton.hidden = true;
+    this.message("Connecting to container", "Opening its protected Agent…");
+    const connection = await connectMachine(id, control, error => {
+      if (epoch !== this.selectionEpoch || this.selection !== id || this.off) return;
+      void this.disconnectSelected();
+      this.message("Container disconnected", error.message);
+      this.sidecar.notice.textContent = error.message;
+    }, () => epoch === this.selectionEpoch && this.selection === id && !this.off && !this.win.closed);
+    if (epoch !== this.selectionEpoch || this.selection !== id || this.off) { await disconnectMachine(id, connection.transportGeneration); return; }
+    await this.connect(connection, true, { reload: true });
+  }
+
+  machineLocalControl(id, command, value = {}) {
+    const { browserOwner, ...guestValue } = value;
+    return control("machines.guest-control", { id, command, value: guestValue });
+  }
+
+  async watchMachineActivations() {
+    try {
+      while (!this.win.closed && !DesktopLifetime.quitting) {
+        const { activations } = await control("machines.activations", { wait: true });
+        if (this.win.closed || DesktopLifetime.quitting) return;
+        for (const activation of activations) {
+          await this.sidecar.refresh();
+          try {
+            if (!this.sidecar.backends.some(backend => backend.id === activation.machineId)) continue;
+            this.win.restore(); this.win.focus(); this.show();
+            // An explicit guest-tray Open may replace a pending selection.
+            // Do not consume it through run(), which can skip while busy.
+            await this.choose(activation.machineId);
+          } catch (error) { this.sidecar.notice.textContent = error.message; }
+          finally { await control("machines.activations", { ack: activation }); }
+        }
+      }
+    } catch (error) {
+      if (!this.win.closed && !DesktopLifetime.quitting) this.sidecar.notice.textContent = `Container activation: ${error.message}`;
+    }
+  }
+
+  async selectRemote(connection, forceLogin = false, epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
     this.selection = connection.id;
     this.localAIButton.hidden = true;
     this.remote = connection;
@@ -457,10 +510,10 @@ class AgentView {
     this.choice.value = connection.id;
     this.message("Connecting to remote", "Opening the enrolled Tor connection…");
     const result = await AgentRemotes.connect(connection.id, forceLogin);
-    if (this.selection !== connection.id || this.off) return;
+    if (epoch !== this.selectionEpoch || this.selection !== connection.id || this.off) return;
     this.remote = result.connection;
     if (result.loginURL) AgentRemotes.onLogin(connection.id, (error, ready) => {
-      if (this.selection !== connection.id || this.off) return;
+      if (epoch !== this.selectionEpoch || this.selection !== connection.id || this.off) return;
       if (error) { this.failure(error); return; }
       this.remote = ready;
       this.run(() => this.connect(ready, false, { reload: true }));
@@ -468,44 +521,81 @@ class AgentView {
     await this.connect(result.connection, false, { reload: Boolean(result.loginURL), navigateTo: result.loginURL });
   }
 
-  async local() {
+  async local(epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
+    this.machineId = null;
     this.localAIButton.hidden = false;
     this.selection = "";
     this.remote = null;
     this.choice.value = "";
     this.currentIdentity = null;
     this.localConnection = null;
-    return this.start();
+    return this.start(epoch);
   }
 
-  async start() {
+  async start(epoch = this.selectionEpoch = (this.selectionEpoch || 0) + 1) {
     this.closeConnections();
     if (this.off) this.localConnection = null;
     this.off = false;
     this.power.textContent = "Starting…";
     this.message("Starting Agent", "Connecting to your local service…");
+    if (this.machineId) return this.selectMachine(this.machineId, epoch);
     if (this.remote) {
       const connection = await AgentRemotes.activate(this.remote.id);
-      return this.selectRemote(connection || await AgentRemotes.connection(this.remote.id));
+      if (epoch !== this.selectionEpoch) return;
+      const selected = connection || await AgentRemotes.connection(this.remote.id);
+      if (epoch !== this.selectionEpoch) return;
+      return this.selectRemote(selected, false, epoch);
     }
     const status = await control("start");
+    this.localOn = true;
+    if (epoch !== this.selectionEpoch) return;
     await this.update(status);
     this.schedule();
   }
 
   async stop() {
-    this.cancelDocumentTransfers();
-    this.closeConnections();
-    clearTimeout(this.timer);
-    this.off = true;
-    await lazy.BrowserControlChannel.close("Agent turned off");
-    await AgentRemotes.deactivate();
-    this.localConnection = null;
-    this.power.textContent = "Stopping…";
-    this.message("Stopping Agent", "Waiting for owned services to stop safely…");
-    if (this.remote && !adoptedLocal) {
-      this.stopped();
+    const epoch = this.selectionEpoch;
+    if (this.machineId && this.selection === this.machineId) {
+      const id = this.machineId;
+      await control("machines.stop", { id });
+      if (epoch === this.selectionEpoch && this.machineId === id) await this.disconnectSelected();
+      await this.sidecar.refresh(); return;
+    }
+    if (this.remote) {
+      await AgentRemotes.disconnect(this.remote.id);
+      if (epoch === this.selectionEpoch) await this.disconnectSelected();
+      await this.sidecar.refresh();
       return;
+    }
+    return this.stopLocal();
+  }
+
+  async disconnectSelected() {
+    this.selectionEpoch = (this.selectionEpoch || 0) + 1;
+    this.off = true;
+    this.cancelDocumentTransfers();
+    lazy.BrowserControlChannel.close("Selected backend disconnected");
+    if (this.activeBrowser) this.activeBrowser.hidden = true;
+    this.message("Backend disconnected", "Reconnect from its heading. Its saved chats remain available.");
+    if (this.machineId) await disconnectMachine(this.machineId);
+  }
+
+  async stopLocal() {
+    const selectedLocal = !this.selection;
+    const epoch = selectedLocal ? this.selectionEpoch = (this.selectionEpoch || 0) + 1 : this.selectionEpoch;
+    if (selectedLocal) await this.saveCurrentDraft();
+    clearTimeout(this.timer);
+    if (selectedLocal && epoch === this.selectionEpoch) {
+      this.cancelDocumentTransfers();
+      this.closeConnections();
+      this.off = true;
+      await lazy.BrowserControlChannel.close("Local Agent turned off");
+      if (epoch === this.selectionEpoch && !this.selection) await AgentRemotes.deactivate(false);
+    }
+    this.localConnection = null;
+    if (selectedLocal && epoch === this.selectionEpoch) {
+      this.power.textContent = "Stopping…";
+      this.message("Stopping Local", "Waiting for owned Local services to stop safely…");
     }
     let status = await control("stop");
     while (status.web?.status === "stopping" || status.web?.status === "running") {
@@ -513,19 +603,23 @@ class AgentView {
       status = await control("stop");
     }
     if (status.web?.status !== "stopped" && status.web?.status !== "off") throw new Error(status.web?.error || "Agent shutdown has not been confirmed. Retry Turn off.");
-    this.stopped();
+    this.localOn = false;
+    if (selectedLocal && epoch === this.selectionEpoch && !this.selection && this.off) this.stopped();
+    await this.sidecar.refresh();
   }
 
   stopped() {
     this.closeConnections();
     lazy.BrowserControlChannel.close("Agent stopped");
-    AgentRemotes.deactivate().catch(console.error);
+    AgentRemotes.deactivate(false).catch(console.error);
     this.localConnection = null;
-    for (const browser of this.views.values()) {
+    for (const [key, browser] of this.views) {
+      const entry = ownedViews.get(browser);
+      if (!entry?.local || entry.connection.machineId) continue;
       ownedViews.delete(browser);
       browser.remove();
+      this.views.delete(key);
     }
-    this.views.clear();
     this.activeBrowser = null;
     this.power.textContent = "Turn on";
     this.message("Agent off", "Your browser remains open. Turn on to reconnect to your saved chats.");
@@ -534,6 +628,8 @@ class AgentView {
   async update(status, { reload = false } = {}) {
     if (this.off || this.selection) return;
     const web = status.web || {};
+    this.localOn = !["failed", "stopped", "off"].includes(web.status);
+    this.sidecar?.render();
     if (web.error || ["failed", "stopped", "off"].includes(web.status)) {
       this.off = true;
       this.stopped();
@@ -587,9 +683,12 @@ class AgentView {
   }
 
   async connect(connection, local, { reload = false, navigateTo = null } = {}) {
+    const epoch = this.selectionEpoch;
     if (!connection?.url || !Number.isInteger(connection.userContextId)) throw new Error("The Agent connection is missing its protected browser identity.");
     const origin = new URL(connection.url).origin;
-    contexts.set(connection.userContextId, { origin, local });
+    // Container filesystem operations belong to its backend picker/downloads;
+    // native-local login does not grant access to host filesystem UI.
+    contexts.set(connection.userContextId, { origin, local: local && !connection.machineId });
     Services.ppmm.sharedData.set("BashKittenAgentContexts", [...contexts]);
     Services.ppmm.sharedData.flush();
     const key = connection.id || connection.identity?.instanceId || `local:${connection.userContextId}`;
@@ -626,9 +725,12 @@ class AgentView {
         onStateChange() {}, onProgressChange() {}, onStatusChange() {}, onSecurityChange() {}, onContentBlockingEvent() {},
       }, Ci.nsIWebProgress.NOTIFY_LOCATION);
       browser.addEventListener("oop-browser-crashed", () => {
-        if (!this.off) this.run(() => local ? this.reconnect() : this.selectRemote(this.remote));
+        browser.bashkittenCrashed = true;
+        if (browser === this.activeBrowser && !this.off) this.run(() => ownedViews.get(browser)?.local ? this.reconnect() : this.selectRemote(this.remote));
       });
     }
+    reload ||= Boolean(browser.bashkittenCrashed);
+    browser.bashkittenCrashed = false;
     connection.requestContext = browser.browsingContext;
     const previousEntry = ownedViews.get(browser);
     if (previousEntry?.draftKey === draftKey && previousEntry.connection.url === connection.url) {
@@ -647,6 +749,7 @@ class AgentView {
           if (draft) this.drafts.set(draftKey, draft);
         } catch (error) { console.warn("Could not retain Agent draft after a content crash", error); }
       }
+      if (epoch !== this.selectionEpoch || this.off || this.activeBrowser !== browser) return;
       browser.setAttribute("data-agent-url", connection.url);
       const target = new URL(navigateTo || connection.url);
       const draftSession = this.drafts.get(draftKey)?.sessionId;
@@ -660,15 +763,23 @@ class AgentView {
   schedule() {
     clearTimeout(this.timer);
     if (this.off || this.selection) return;
+    const epoch = this.selectionEpoch;
     this.timer = setTimeout(async () => {
-      try { await this.update(await control("status")); } catch (error) { this.failure(error); }
-      this.schedule();
+      try {
+        const status = await control("status");
+        if (epoch === this.selectionEpoch && !this.selection && !this.off) await this.update(status);
+      } catch (error) { if (epoch === this.selectionEpoch && !this.selection && !this.off) this.failure(error); }
+      if (epoch === this.selectionEpoch) this.schedule();
     }, 5000);
   }
   async reconnect() {
+    if (this.machineId && this.selection === this.machineId && !this.off) return this.selectMachine(this.machineId);
     if (this.off || this.remote) return;
+    const epoch = this.selectionEpoch;
     this.localGeneration = null;
-    await this.update(await control("status"), { reload: true });
+    const status = await control("status");
+    if (epoch !== this.selectionEpoch || this.off || this.selection) return;
+    await this.update(status, { reload: true });
   }
   message(title, text, action) {
     this.state.replaceChildren(html(this.doc, "h2", {}, title), html(this.doc, "p", {}, text));
@@ -774,9 +885,57 @@ class AgentView {
     await localAISettings(content, control, this.win, () => this.connectionsPanel === panel && !this.selection && !this.remote);
   }
 
-  async shareLocal() {
+  async connectToPhone(id) {
+    const backend = this.sidecar.backends?.find(item => item.id === id);
+    if (!backend) throw new Error("This backend is no longer available.");
+    const { dialog, content } = this.dialog(backend.name + " · Phone"), status = html(this.doc, "p", { role: "status" }, "Checking phone registration…");
+    content.append(status);
+    try {
+      let result;
+      if (backend.kind === "machine") result = await this.machineLocalControl(id, "phone-status");
+      else if (backend.kind === "local") result = await control("phone-status");
+      else {
+        await this.sidecar.select(id);
+        const entry = ownedViews.get(this.activeBrowser);
+        if (entry?.connection.id !== id) throw new Error("The selected backend changed.");
+        const response = await AgentRemotes.request(entry.connection, "/api/phone/status");
+        if (response.status !== 200) throw new Error(response.data?.error || "Sign in to this backend before checking its phone registration.");
+        result = response.data;
+      }
+      if (!dialog.open) return;
+      const registrations = result?.registrations || [];
+      status.textContent = registrations.length ? "Phone registration belongs to this backend. Calling and message preferences are managed on the phone." : "No phone is registered with this backend.";
+      for (const phone of registrations) {
+        const group = html(this.doc, "section");
+        group.append(html(this.doc, "h3", {}, phone.name || "Phone"),
+          html(this.doc, "p", {}, phone.connected ? "Phone checked in within the last minute." : "Phone has not checked in recently."),
+          html(this.doc, "p", {}, `Calls: ${phone.telephony ? "On" : "Off"} · Replyable messages: ${phone.messages ? "On" : "Off"}`));
+        if (Number.isFinite(phone.lastSeenAt) && phone.lastSeenAt > 0) group.append(html(this.doc, "p", {}, "Last seen: " + new Date(phone.lastSeenAt).toLocaleString()));
+        content.append(group);
+      }
+      content.append(html(this.doc, "p", {}, "On your phone, open this backend's saved remote in BashKitten, then choose Connect to phone. A container needs its own shared connection. A recent check-in does not confirm that calling or speech setup is ready."));
+      if (backend.kind !== "remote") {
+        const share = html(this.doc, "button", { type: "button" }, "Share Local");
+        share.addEventListener("click", () => { dialog.close(); this.run(() => backend.kind === "machine" ? this.shareMachine(id) : this.shareLocal()); }); content.append(share);
+      }
+    } catch (error) { if (dialog.open) status.textContent = error.message; }
+  }
+
+  async shareMachine(id) {
+    const state = await control("machines.get", { id });
+    return this.shareLocal((command, value = {}) => this.machineLocalControl(id, command, value), "Share " + state.machine.name, id);
+  }
+
+  async openMachineDisplay(id) {
+    const endpoint = await control("machines.display", { id });
+    const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
+    return BashKittenDisplay.open(this.win, { kind: "container", id, name: endpoint.name,
+      presenterSocket: endpoint.presenterSocket }, { clipboard: payload => control("machines.clipboard", { ...payload, id }) });
+  }
+
+  async shareLocal(request = control, title = "Share Local", machineId = null) {
     this.closeConnections();
-    const { panel, content } = this.connectionPanel("Share Local");
+    const { panel, content } = this.connectionPanel(title);
     const description = html(this.doc, "p", {}, "Publish this device’s Local Agent through Tor. Other devices use your password and authenticator code.");
     const body = html(this.doc, "div", { class: "share-local-content" });
     const error = html(this.doc, "p", { role: "alert" });
@@ -784,8 +943,8 @@ class AgentView {
     let busy = false, setupId = null;
     const current = () => this.connectionsPanel === panel;
     const ensureLocal = async () => {
-      const status = await control("start");
-      if (!this.remote) { this.off = false; await this.update(status); this.schedule(); }
+      const status = await request("start");
+      if (!machineId && !this.remote) { this.off = false; await this.update(status); this.schedule(); }
     };
     const run = async action => {
       if (busy || !current()) return;
@@ -815,14 +974,14 @@ class AgentView {
       body.append(html(this.doc, "p", { role: "status" }, state.error ? "Publishing failed" : state.enabled ? (state.running ? "Publishing is on" : "Publishing resumes when Local is turned on") : "Publishing is off"));
       body.append(button(state.enabled ? "Turn off" : "Turn on", async () => {
         if (!state.enabled) await ensureLocal();
-        render(await control("share-publish", { enabled: !state.enabled }));
+        render(await request("share-publish", { enabled: !state.enabled }));
       }));
       const allow = html(this.doc, "input", { type: "checkbox" });
       allow.checked = state.allowFileManager;
       const permission = html(this.doc, "label", {}, "Allow remote file manager"); permission.prepend(allow);
       allow.addEventListener("change", () => {
         const allowed = allow.checked; allow.checked = state.allowFileManager;
-        run(async () => render(await control("share-files", { allowed })));
+        run(async () => render(await request("share-files", { allowed })));
       });
       body.append(permission);
       body.append(html(this.doc, "p", {}, state.address));
@@ -841,18 +1000,18 @@ class AgentView {
       body.append(save, button("Download QR image", download));
       body.append(button("Reissue identity", () => account(true)));
       const llama = html(this.doc, "div"); body.append(llama);
-      control("localai-status").then(local => {
+      request("localai-status").then(local => {
         if (!current() || !llama.isConnected) return;
         const checkbox = html(this.doc, "input", { type: "checkbox" }); checkbox.checked = Boolean(local.llama.service?.enabled);
         const label = html(this.doc, "label", {}, "Share llama.cpp"); label.prepend(checkbox); llama.append(label);
         llama.append(html(this.doc, "p", {}, local.llama.service ? local.llama.service.state : "Configure llama.cpp in LocalAI first."));
-        checkbox.addEventListener("change", () => { const enabled = checkbox.checked; checkbox.checked = Boolean(local.llama.service?.enabled); run(async () => { await control("localai-share", { enabled }); render(await control("share-status")); }); });
+        checkbox.addEventListener("change", () => { const enabled = checkbox.checked; checkbox.checked = Boolean(local.llama.service?.enabled); run(async () => { await request("localai-share", { enabled }); render(await request("share-status")); }); });
         if (!this.selection) llama.append(button("Open LocalAI", () => this.localAI()));
       }).catch(failure => { if (llama.isConnected) llama.textContent = failure.message; });
       const services = html(this.doc, "details"); services.append(html(this.doc, "summary", {}, "Services"));
       const serviceBody = html(this.doc, "div"); services.append(serviceBody); body.append(services);
       services.addEventListener("toggle", () => {
-        if (services.open && !serviceBody.hasChildNodes()) serviceSettings(serviceBody, control, this.win).catch(failure => { error.textContent = failure.message; });
+        if (services.open && !serviceBody.hasChildNodes()) serviceSettings(serviceBody, request, this.win).catch(failure => { error.textContent = failure.message; });
       });
     };
     const account = reissue => {
@@ -876,16 +1035,16 @@ class AgentView {
         event.preventDefault();
         run(async () => {
           if (setupId) {
-            const result = await control("share-confirm", { setupId, code: code.value });
+            const result = await request("share-confirm", { setupId, code: code.value });
             code.value = ""; render(result); return;
           }
           if (password.value !== confirmation.value) throw new Error("The passwords do not match.");
           await ensureLocal();
           if (!current()) return;
-          const request = control(reissue ? "share-reissue" : "share-setup", { username: username.value, password: password.value, allowFileManager: allow.checked });
+          const pendingSetup = request(reissue ? "share-reissue" : "share-setup", { username: username.value, password: password.value, allowFileManager: allow.checked });
           password.value = confirmation.value = "";
-          const setup = await request;
-          if (!current()) { await control("share-cancel", { setupId: setup.setupId }); return; }
+          const setup = await pendingSetup;
+          if (!current()) { await request("share-cancel", { setupId: setup.setupId }); return; }
           setupId = setup.setupId; form.replaceChildren();
           form.append(html(this.doc, "p", {}, "Add this account to your authenticator, then enter its six-digit code."), image(setup.qrDataUrl, "Authenticator setup QR"));
           if (setup.otpauthUrl?.startsWith("otpauth://totp/")) form.append(button("Open authenticator", async () => {
@@ -902,9 +1061,9 @@ class AgentView {
     };
     panel.addEventListener("close", () => {
       body.replaceChildren();
-      if (setupId) control("share-cancel", { setupId }).catch(console.error);
+      if (setupId) request("share-cancel", { setupId }).catch(console.error);
     }, { once: true });
-    await run(async () => render(await control("share-status")));
+    await run(async () => render(await request("share-status")));
   }
 
   connectionPanel(title) {
@@ -929,9 +1088,9 @@ class AgentView {
     this.activeBrowser?.focus();
   }
 
-  async remotes() {
+  async remotes(connectOnly = true) {
     this.closeConnections();
-    const { panel, content } = this.connectionPanel("Browser connections");
+    const { panel, content } = this.connectionPanel(connectOnly ? "Connect to remote" : "Browser connections");
     const error = html(this.doc, "p", { role: "alert" }), saved = html(this.doc, "div");
     const report = async task => { try { error.textContent = ""; await task(); } catch (e) { error.textContent = e.message; } };
     const button = (title, action) => {
@@ -1024,9 +1183,10 @@ class AgentView {
       }).finally(() => { add.disabled = !source; });
     });
     panel.addEventListener("close", () => { source = password.value = image.value = ""; decoding.abort(); stopCamera(); }, { once: true });
-    content.append(saved, html(this.doc, "h3", {}, "Connect to remote"),
+    if (!connectOnly) content.append(saved, html(this.doc, "h3", {}, "Connect to remote"));
+    content.append(
       html(this.doc, "p", {}, "Scan or upload its Connection QR. Use the password chosen in Share Local, then your authenticator code to sign in."), form, error);
-    await report(refresh);
+    if (!connectOnly) await report(refresh);
   }
 
   async decodeQR(source, signal) {
@@ -1088,6 +1248,7 @@ class AgentView {
   }
 
   async contentReady(entry, actor, draftReady = false) {
+    const epoch = this.selectionEpoch;
     const location = this.activeBrowser?.currentURI;
     if (!location || location.pathQueryRef.startsWith("/login")) {
       lazy.BrowserControlChannel.close("authentication required");
@@ -1101,7 +1262,11 @@ class AgentView {
       this.drafts.delete(entry.draftKey);
       actor.draftInitialized = true;
     }
-    lazy.BrowserControlChannel.start(entry.connection, { local: entry.local, window: this.win }).catch(error => console.error("Browser control connection failed", error));
+    // The guest's ordinary browser owns container browser tools. Its Pi never
+    // acquires the host browser simply because the host displays its chat.
+    if (epoch !== this.selectionEpoch || this.off || !actor || protectedAgentView(actor) !== entry) return;
+    if (!entry.connection.machineId) lazy.BrowserControlChannel.start(entry.connection, { local: entry.local, window: this.win }).catch(error => console.error("Browser control connection failed", error));
+    void this.sidecar.refreshChats();
   }
 
   async signIn() {
@@ -1133,6 +1298,7 @@ class AgentView {
   }
 
   destroy() {
+    this.selectionEpoch = (this.selectionEpoch || 0) + 1;
     this.closeConnections();
     clearTimeout(this.timer);
     lazy.BrowserControlChannel.close("browser closed");

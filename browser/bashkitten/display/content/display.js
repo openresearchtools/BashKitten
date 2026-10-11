@@ -57,6 +57,7 @@ async function clipboard(action) {
       if(closed) return;
       if(result.type==="image/png") {
         const blob=await (await fetch(`data:image/png;base64,${result.dataBase64}`)).blob();
+        if(closed) return;
         await navigator.clipboard.write([new ClipboardItem({"image/png":blob})]);
       } else if(result.type==="text/plain") await navigator.clipboard.writeText(result.text);
       else throw new Error("The desktop clipboard has no supported text or image.");
@@ -68,13 +69,11 @@ async function clipboard(action) {
       for(const item of items) {
         if(item.types.includes("image/png")) {
           const blob=await item.getType("image/png");
-          if(blob.size>16*1024*1024) throw new Error("Clipboard image exceeds 16 MiB.");
           const dataBase64=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(",")[1]);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob);});
           request={action,type:"image/png",dataBase64};break;
         }
         if(item.types.includes("text/plain")) {
           const blob=await item.getType("text/plain");
-          if(blob.size>16*1024*1024) throw new Error("Clipboard text exceeds 16 MiB.");
           request={action,type:"text/plain",text:await blob.text()};
         }
       }
