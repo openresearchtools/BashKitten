@@ -453,6 +453,9 @@
     #usageSummary { display:block; overflow:hidden; text-overflow:ellipsis; }
     #chatgptUsage { display:block; max-width:100%; overflow-x:auto; scrollbar-width:none; line-height:12px; }
     .question-card { border:1px solid var(--line); border-radius:var(--radius-control); padding:12px; margin:12px 0; }
+    .question-heading { display:flex; align-items:flex-start; gap:8px; }
+    .question-heading strong { flex:1; min-width:0; }
+    .question-heading .icon-button { flex-shrink:0; }
     .question-card .question-choices { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
     .question-card form { display:flex; gap:6px; margin-top:8px; }
     .question-card input { flex:1; min-width:0; }
@@ -1356,6 +1359,7 @@
         // Final message blocks replace streaming placeholders in provider order.
         // Thinking may have been re-created immediately before this call.
         body.append(details);
+        placeQuestionCards(details);
         return details;
       }
       details = document.createElement('details');
@@ -1381,6 +1385,7 @@
       details.append(summary, toolBody);
       renderToolSource(details, block);
       body.append(details);
+      placeQuestionCards(details);
       return details;
     }
 
@@ -1459,29 +1464,65 @@
       line.textContent = (snapshot.status === 'stale' ? 'Stale · ' : '') + pieces.join(' | ');
       line.title = `Observed ${new Date(snapshot.observedAt).toLocaleString()} · ${Intl.DateTimeFormat().resolvedOptions().timeZone}`;
     }
-    const questionDrafts = new Map(), questionSubmissions = new Map();
+    const questionDrafts = new Map(), questionSubmissions = new Map(), questionCards = new Map();
     let questionState = [], questionRenderKey = '', questionVersion = 0;
-    const hasPendingQuestion = () => questionState.some(question => question.status === 'pending');
+    const hasPendingQuestion = () => questionState.some(question => question.status === 'pending' && !question.dismissed);
+    function placeQuestionCards(tool = null) {
+      const anchors = new Map();
+      for (const {question, card} of questionCards.values()) {
+        if (question.status === 'pending' && !question.dismissed) {
+          const pending = $('#questionCards');
+          if (!tool && card.parentNode !== pending) pending.append(card);
+          continue;
+        }
+        const callId = question.originToolCallId || question.toolCallId;
+        if (tool && tool.dataset.call !== callId) continue;
+        const anchor = anchors.get(callId) || tool || findTool(callId);
+        // Earlier segments and other native branches are not current history.
+        // Attach only when the recorded originating tool is actually rendered.
+        if (anchor) { if (anchor.nextSibling !== card) anchor.after(card); anchors.set(callId, card); }
+        else card.remove();
+      }
+    }
     function renderQuestions(questions = []) {
       const root = $('#questionCards'); if (!root) return;
       questionVersion++;
       questionState = questions.filter(question => question.sessionId === current?.id);
       const key = JSON.stringify([current?.id, questionState]);
-      if (key === questionRenderKey) return;
+      if (key === questionRenderKey) { placeQuestionCards(); return; }
       questionRenderKey = key;
       const chat = $('#chat'), follow = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 100;
       const focused = document.activeElement?.closest('[data-question]')?.dataset.question;
       const selection = focused ? [document.activeElement.selectionStart, document.activeElement.selectionEnd] : null;
-      root.replaceChildren();
+      for (const {card} of questionCards.values()) card.remove();
+      questionCards.clear();
       for (const question of questionState) {
         const card = document.createElement('section'); card.className = 'question-card'; card.dataset.question = question.questionId;
+        questionCards.set(question.questionId, {question, card});
+        const heading = document.createElement('div'); heading.className = 'question-heading';
         const title = document.createElement('strong'); title.textContent = question.text;
+        heading.append(title);
         const state = document.createElement('div'); state.className = 'meta';
-        state.textContent = question.status === 'pending' ? `Optional question · reply by ${new Date(question.deadline).toLocaleTimeString()}` : question.status === 'expired' ? 'Expired · a reply now is a new follow-up' : question.status === 'answered' ? 'Answered' : 'Cancelled';
+        state.textContent = question.dismissed ? 'Dismissed' : question.status === 'pending' ? `Optional question · reply by ${new Date(question.deadline).toLocaleTimeString()}` : question.status === 'expired' ? 'Expired · a reply now is a new follow-up' : question.status === 'answered' ? 'Answered' : 'Cancelled';
         if (question.deliveryStatus === 'held') state.textContent += ' · delivery held; review queued drafts';
-        card.append(title, state);
-        if (question.answer) { const answer = document.createElement('p'); answer.textContent = question.answer; card.append(answer); }
-        if (['pending','expired'].includes(question.status)) {
+        card.append(heading, state);
+        // Answers already appear once as attributed native Pi user messages.
+        if (!question.dismissed && ['pending','expired'].includes(question.status)) {
+          const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'icon-button'; dismiss.textContent = '×';
+          dismiss.title = 'Dismiss question'; dismiss.setAttribute('aria-label', 'Dismiss question: '+question.text);
+          dismiss.onclick = async () => {
+            const sessionId = question.sessionId, view = sessionView;
+            for (const control of card.querySelectorAll('button,input')) control.disabled = true;
+            try {
+              await api(`/api/sessions/${sessionId}/questions/dismiss`, {method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({questionId:question.questionId,revision:question.revision})});
+              questionDrafts.delete(question.questionId); questionSubmissions.delete(question.questionId);
+              if (current?.id !== sessionId || sessionView !== view) return;
+              const version = questionVersion;
+              const snapshot = await api(`/api/sessions/${sessionId}/questions`);
+              if (current?.id === sessionId && sessionView === view && version === questionVersion) renderQuestions(snapshot.questions);
+            } catch (error) { state.textContent = error.message; for (const control of card.querySelectorAll('button,input')) control.disabled = false; }
+          };
+          heading.append(dismiss);
           const choices = document.createElement('div'); choices.className = 'question-choices';
           const form = document.createElement('form'), input = document.createElement('input'), submit = document.createElement('button');
           input.type = 'text'; input.placeholder = 'Custom reply…'; input.setAttribute('aria-label','Reply to '+question.text); input.value = questionDrafts.get(question.questionId) || '';
@@ -1496,6 +1537,7 @@
             for (const control of card.querySelectorAll('button,input')) control.disabled = true;
             try {
               const result = await api(`/api/sessions/${sessionId}/questions/answer`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({questionId:question.questionId,revision:question.revision,deliveryId,text}) });
+              if (result.status === 'cancelled' || result.question?.dismissed) throw Error('This question is closed. Your reply was not sent; draft kept.');
               questionDrafts.delete(question.questionId); questionSubmissions.delete(question.questionId);
               if (current?.id === sessionId && sessionView === view) {
                 const version = questionVersion;
@@ -1504,15 +1546,19 @@
                 if (version === questionVersion) renderQuestions(snapshot.questions);
                 if (result.followup) $('#composerHint').textContent = 'Late reply sent as an attributed follow-up.';
               }
-            } catch (error) { state.textContent = error.message; for (const control of card.querySelectorAll('button,input')) control.disabled = false; }
+            } catch (error) {
+              state.textContent = error.message;
+              if (current?.id === sessionId && sessionView === view) $('#composerHint').textContent = error.message;
+              for (const control of card.querySelectorAll('button,input')) control.disabled = false;
+            }
           };
           for (const option of question.options || []) { const button = document.createElement('button'); button.type = 'button'; button.textContent = option; button.onclick = () => send(option); choices.append(button); }
           form.onsubmit = event => { event.preventDefault(); void send(input.value); };
           form.append(input, submit); card.append(choices, form);
         }
-        root.append(card);
       }
-      if (focused) { const input = [...root.querySelectorAll('[data-question]')].find(card => card.dataset.question === focused)?.querySelector('input'); if (input) { input.focus({preventScroll:true}); if (selection) input.setSelectionRange(...selection); } }
+      placeQuestionCards();
+      if (focused) { const input = questionCards.get(focused)?.card.querySelector('input'); if (input?.isConnected) { input.focus({preventScroll:true}); if (selection) input.setSelectionRange(...selection); } }
       if (follow) chat.scrollTop = chat.scrollHeight;
     }
 

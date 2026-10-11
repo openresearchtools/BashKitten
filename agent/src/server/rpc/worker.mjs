@@ -389,6 +389,7 @@ async function handle(req, res) {
     if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
     const value = await jsonBody(req), requestGeneration = questionOwner.state.generation;
     if (req.url === '/questions/answer') return json(res, await questionOwner.answer(value));
+    if (req.url === '/questions/dismiss') return json(res, await questionOwner.dismiss(value));
     if (req.url === '/sidebar-changed') { emit({ type: 'sessions_changed' }, false); return json(res, { ok: true }); }
     if (req.url === '/subagent-settings') {
       const { commands } = await rpc.command('get_commands');

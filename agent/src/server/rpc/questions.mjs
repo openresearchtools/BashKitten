@@ -102,6 +102,29 @@ export class QuestionOwner {
     }
     this.schedule();
   }
+  dismiss(input) {
+    return this.serial(async () => {
+      const question = this.state.records.find(q => q.questionId === input.questionId);
+      if (!question || input.revision !== question.revision) throw Error('This question or its revision is no longer available');
+      if (input.source !== 'web' || !await this.authorize(input)) throw Error('This question cannot be dismissed from this source');
+      const result = () => ({ question, status: question.status, deliveryStatus: question.deliveryStatus });
+      if (question.dismissed || !['pending', 'expired'].includes(question.status)) return result();
+      if (!this.validDelivery(question)) throw Error('This chat is stopped or no longer owns the question');
+      if (!await this.verify(question) || !this.validDelivery(question)) throw Error('The originating question is no longer on this active chat branch');
+      // The absolute deadline still wins if branch verification crossed it.
+      if (question.status === 'pending' && question.deadline <= Date.now()) await this.expire();
+      if (!this.validDelivery(question)) throw Error('This chat is stopped or no longer owns the question');
+      question.dismissed = true; question.dismissedAt = Date.now();
+      if (question.status === 'expired') {
+        // Hide the remaining reply control without changing the timeout or
+        // delivering another notice after the original expiry resolution.
+        await this.publish(question); return result();
+      }
+      question.status = 'cancelled'; question.reason = 'User dismissed this question'; question.resolvedAt = question.dismissedAt;
+      await this.dispatch(question, `[Optional question ${question.questionId}: ${question.text}]\nUser dismissed this optional question without an answer. Proceed with the best long-term solution. This is not a user choice or permission approval.`, 'question:' + question.questionId + ':dismissal', 'dismissal');
+      return result();
+    });
+  }
   answer(input) {
     return this.serial(async () => {
       const question = this.state.records.find(q => q.questionId === input.questionId);
@@ -109,6 +132,8 @@ export class QuestionOwner {
       if (!['web', 'call', 'notification', 'voicemail'].includes(input.source)) throw Error('Invalid question reply source');
       if (typeof input.text !== 'string' || !input.text.trim() || typeof input.deliveryId !== 'string' || !input.deliveryId) throw Error('A reply and stable delivery ID are required');
       if (!await this.authorize(input)) throw Error('This reply source is no longer enabled for this chat');
+      // The dismissal notice's accepted delivery is not acceptance of this reply.
+      if (question.dismissed) return { question, status: 'cancelled', deliveryStatus: 'held' };
       if (question.status === 'pending' && question.deadline <= Date.now()) await this.expire();
       if (question.status === 'cancelled' || !this.validDelivery(question)) return { question, status: 'cancelled', deliveryStatus: 'held' };
       const followup = async () => {

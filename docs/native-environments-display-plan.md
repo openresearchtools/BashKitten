@@ -3475,3 +3475,30 @@ retrospective compatibility for these unreleased development changes: accept
 only the new `.local` addresses, with no old `.invalid` alias fallback or
 migration. Do not retarget deleted/revoked identities, add contacts access or
 rewrite the user's contacts silently. Contacts still use Android's normal editor.
+
+### Completed questions stay with their chat turn — 11 October 2026
+
+The user requested that completed optional questions remain at their original
+position in the conversation instead of accumulating in a permanent collection
+in front of the chat. Keep pending questions available in the active inline
+question area. When answered, expired or cancelled, show the settled card and
+its recorded outcome beside the original question in the transcript.
+
+Native Pi history remains the source for the question's originating tool call
+and the existing attributed answer or timeout turn. Reuse the operational
+question identity and resolution state for presentation; do not write duplicate
+history, replay a delivery, migrate sessions or create a second transcript.
+Reopening or switching chats must preserve the correct chronological placement
+without exposing another chat's questions. The shared resolution owner,
+120-second deadline, Stop handling and call/notification reply paths are unchanged.
+
+Unanswered question cards also have an **×** dismissal control. Dismissing a
+pending question resolves it as Dismissed through the same question owner,
+stops that question's deadline/invitations and sends one attributed notice
+through the existing Pi queue to proceed without an answer. It never supplies
+a choice, grants permission or stops Pi. For an already expired question, ×
+removes its remaining follow-up control without sending another timeout notice
+or rewriting the delivered expiry. Keep the settled record with its original
+question. Repeated clicks and races with answers, expiry, Stop or backend Off
+must not duplicate delivery or revive a stopped chat; verify the originating
+native session/branch before resolving the request.
