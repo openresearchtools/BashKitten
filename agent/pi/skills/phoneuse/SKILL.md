@@ -7,7 +7,8 @@ description: Use enabled phone controls from an authorized local session. Check 
 
 Run `phoneuse status`, then `phoneuse capabilities` through the shell. Read
 `phoneuse help GROUP` only for the enabled group needed for the task. Commands
-accept typed `--name value` arguments; complex arrays use `--args-json '{...}'`.
+use `phoneuse GROUP ACTION`, for example `phoneuse apps list`, as shown by discovery.
+They accept typed `--name value` arguments; complex arrays use `--args-json '{...}'`.
 Only currently enabled commands appear. Permissions/settings are the user's
 native Phone panel: commands cannot enable themselves or request extra access.
 
