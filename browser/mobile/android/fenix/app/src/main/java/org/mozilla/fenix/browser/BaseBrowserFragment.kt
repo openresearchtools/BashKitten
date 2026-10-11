@@ -438,7 +438,6 @@ abstract class BaseBrowserFragment :
                 viewLifecycleOwner, binding.browserLayout, binding.swipeRefresh,
                 requireComponents.core.store, requireComponents.useCases.tabsUseCases,
                 requireComponents.useCases.sessionUseCases,
-                { com.bashkitten.AgentSettingsActivity.open(requireActivity(), "display") },
             )
         }
         initializeUI(view)
