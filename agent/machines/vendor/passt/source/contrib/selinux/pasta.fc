@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# contrib/selinux/pasta.fc - SELinux profile: File Context for pasta
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+/usr/bin/pasta						system_u:object_r:pasta_exec_t:s0
+/usr/bin/pasta.avx2					system_u:object_r:pasta_exec_t:s0
+/tmp/pasta\.pcap					system_u:object_r:pasta_log_t:s0
+/var/run/pasta\.pid					system_u:object_r:pasta_pid_t:s0
+/run/user/[0-9]+/netns				system_u:object_r:ifconfig_var_run_t:s0
+/run/user/[0-9]+/containers/networks/rootless-netns	system_u:object_r:ifconfig_var_run_t:s0
+# In case XDG_RUNTIME_DIR is not set (i.e. no systemd user session) Podman falls
+# back to a location under /tmp
+/tmp/storage-run-[0-9]+/netns					system_u:object_r:ifconfig_var_run_t:s0
+/tmp/storage-run-[0-9]+/containers/networks/rootless-netns		system_u:object_r:ifconfig_var_run_t:s0
+/tmp/containers-user-[0-9]+/netns					system_u:object_r:ifconfig_var_run_t:s0
+/tmp/containers-user-[0-9]+/containers/networks/rootless-netns	system_u:object_r:ifconfig_var_run_t:s0

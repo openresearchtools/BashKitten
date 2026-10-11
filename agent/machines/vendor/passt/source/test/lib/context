@@ -1,0 +1,130 @@
+#! /bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/context - Run commands in different contexts (host, guest, namespace etc.)
+#
+# Copyright Red Hat
+# Author: David Gibson <david@gibson.dropbear.id.au>
+
+NSTOOL="${BASEPATH}/nstool"
+
+# context_setup_common() - Create outline of a new context
+# $1:	Context name
+context_setup_common() {
+	__name="$1"
+	__log="${LOGDIR}/context_${__name}.log"
+	echo -n "${__name}$ " > "${__log}"
+}
+
+# context_setup_host() - Create a new context for running commands on the host
+# $1:	Context name
+context_setup_host() {
+	__name="$1"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	context_setup_common "${__name}"
+	echo sh -c > "${__enter}"
+}
+
+# context_setup_nstool() - Create a new context for running commands with nstool exec
+# $1:	Context name
+# $2:	nstool control socket
+context_setup_nstool() {
+	__name="$1"
+	__sock="$2"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	# Wait for the ns to be ready
+	${NSTOOL} info -w "${__sock}" > /dev/null
+	context_setup_common "${__name}"
+	echo "${NSTOOL} exec ${__sock} -- sh -c" > "${__enter}"
+}
+
+# context_setup_guest() - Create a new context for running commands in a guest
+# $1:        Context name
+# $2:        CID to use for vsock
+context_setup_guest() {
+	__name="$1"
+	__cid="$2"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	__ssh="${STATESETUP}/context_${__name}.ssh"
+	context_setup_common "${__name}"
+
+	cat > "${__ssh}" <<EOF
+Host ${__name}
+	User root
+	UserKnownHostsFile ${STATESETUP}/context_${__name}.hosts
+	StrictHostKeyChecking no
+	IdentityFile ${BASEPATH}/guest-key
+	IdentityAgent none
+	ProxyCommand socat - VSOCK-CONNECT:${__cid}:22
+EOF
+	echo "ssh -F ${__ssh} ${__name}" > "${__enter}"
+
+	# Wait for the guest to be booted and accepting connections
+	wait_for ssh -F "${__ssh}" "${__name}" :
+}
+
+# context_teardown() - Remove a context (leave log files intact)
+# $1:	Context name
+context_teardown() {
+	__name="$1"
+	__prefix="${STATESETUP}/context_${__name}"
+	rm -f "${__prefix}.enter" "${__prefix}.ssh" "${__prefix}.hosts"
+}
+
+# context_exists() - Test if a context currently exists
+# $1:	Context name
+context_exists() {
+	__name="$1"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	[ -f "${__enter}" ]
+}
+
+# context_run() - Run a shell command in a context, and wait for it to finish
+# $1:	Context name
+# $*:	Command to start
+context_run() {
+	__name="$1"
+	__log="${LOGDIR}/context_${__name}.log"
+	__enter="${STATESETUP}/context_${__name}.enter"
+	__stdout="$(mktemp -u "${STATESETUP}/context_${__name}.stdout.XXXXXXXX")"
+	__stderr="$(mktemp -u "${STATESETUP}/context_${__name}.stderr.XXXXXXXX")"
+	shift
+	echo "$*" >> "${__log}"
+	mkfifo "${__stdout}" "${__stderr}"
+	tee -a "${__log}" < "${__stdout}" &
+	tee -a "${__log}" < "${__stderr}" >&2 &
+	$(cat ${__enter}) "$*" >> "${__stdout}" 2>> "${__stderr}"
+	rc=$?
+	rm "${__stdout}" "${__stderr}"
+	[ ${DEBUG} -eq 1 ] && echo "[Exit code: $rc]" >> "${__log}"
+	echo -n "${__name}$ " >> "${__log}"
+	return $rc
+}
+
+# context_run_bg() - Start a shell command in a context
+# $1:	Context name
+# $*:	Command to start
+context_run_bg() {
+	__name="$1"
+	__pidfile="${STATESETUP}/context_${__name}.pid"
+	context_run "$@" &
+	echo $! > "${__pidfile}"
+}
+
+# context_wait() - Wait for background command in a context to complete
+# $1:	Context name
+# Returns the status of the completed command
+context_wait() {
+	__name="$1"
+	__pidfile="${STATESETUP}/context_${__name}.pid"
+	__pid=$(cat "${__pidfile}")
+	rm "${__pidfile}"
+	wait ${__pid}
+}

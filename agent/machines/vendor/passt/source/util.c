@@ -1,0 +1,1151 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+
+/* PASST - Plug A Simple Socket Transport
+ *  for qemu/UNIX domain socket mode
+ *
+ * PASTA - Pack A Subtle Tap Abstraction
+ *  for network namespace/tap device mode
+ *
+ * util.c - Convenience helpers
+ *
+ * Copyright (c) 2020-2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
+#include <sched.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <net/ethernet.h>
+#include <sys/uio.h>
+#include <fcntl.h>
+#include <string.h>
+#include <time.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <linux/errqueue.h>
+#include <linux/in6.h>
+
+#include "util.h"
+#include "iov.h"
+#include "passt.h"
+#include "log.h"
+#include "pcap.h"
+#include "serialise.h"
+#ifdef HAS_GETRANDOM
+#include <sys/random.h>
+#endif
+
+/* Zero-filled buffer to pad 802.3 frames, up to 60 (ETH_ZLEN) bytes */
+uint8_t eth_pad[ETH_ZLEN] = { 0 };
+
+/**
+ * sock_l4_() - Create and bind socket to socket address
+ * @c:		Execution context
+ * @type:	epoll type
+ * @sa:		Socket address to bind to
+ * @ifname:	Interface for binding, NULL for any
+ * @v6only:	If >= 0, set IPV6_V6ONLY socket option to this value
+ *
+ * Return: newly created socket, negative error code on failure
+ */
+static int sock_l4_(const struct ctx *c, enum epoll_type type,
+		    const union sockaddr_inany *sa, const char *ifname,
+		    int v6only)
+{
+	sa_family_t af = sa->sa_family;
+	bool freebind = false;
+	int fd, y = 1, ret;
+	uint8_t proto;
+	int socktype;
+
+	switch (type) {
+	case EPOLL_TYPE_TCP_LISTEN:
+		proto = IPPROTO_TCP;
+		socktype = SOCK_STREAM | SOCK_NONBLOCK;
+		freebind = c->freebind;
+		break;
+	case EPOLL_TYPE_UDP_LISTEN:
+	case EPOLL_TYPE_UDP:
+		freebind = c->freebind;
+		proto = IPPROTO_UDP;
+		socktype = SOCK_DGRAM | SOCK_NONBLOCK;
+		break;
+	case EPOLL_TYPE_PING:
+		if (af == AF_INET)
+			proto = IPPROTO_ICMP;
+		else
+			proto = IPPROTO_ICMPV6;
+		socktype = SOCK_DGRAM | SOCK_NONBLOCK;
+		break;
+	default:
+		assert(0);
+	}
+
+	fd = socket(af, socktype, proto);
+
+	ret = -errno;
+	if (fd < 0) {
+		warn("L4 socket: %s", strerror_(-ret));
+		return ret;
+	}
+
+	if (fd > FD_REF_MAX) {
+		close(fd);
+		return -EBADF;
+	}
+
+	if (v6only >= 0) {
+		if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY,
+			       &v6only, sizeof(v6only))) {
+			debug("Failed to set IPV6_V6ONLY to %d on socket %i",
+			      v6only, fd);
+		}
+	}
+
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &y, sizeof(y)))
+		debug("Failed to set SO_REUSEADDR on socket %i", fd);
+
+	if (proto == IPPROTO_UDP) {
+		int pktinfo = af == AF_INET ? IP_PKTINFO : IPV6_RECVPKTINFO;
+		int recverr = af == AF_INET ? IP_RECVERR : IPV6_RECVERR;
+		int level = af == AF_INET ? IPPROTO_IP : IPPROTO_IPV6;
+
+		if (setsockopt(fd, level, recverr, &y, sizeof(y)))
+			die_perror("Failed to set RECVERR on socket %i", fd);
+
+		if (setsockopt(fd, level, pktinfo, &y, sizeof(y)))
+			die_perror("Failed to set PKTINFO on socket %i", fd);
+	}
+
+	if (ifname && *ifname) {
+		/* Supported since kernel version 5.7, commit c427bfec18f2
+		 * ("net: core: enable SO_BINDTODEVICE for non-root users"). If
+		 * it's unsupported, don't bind the socket at all, because the
+		 * user might rely on this to filter incoming connections.
+		 */
+		if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE,
+			       ifname, strlen(ifname))) {
+			char str[SOCKADDR_STRLEN];
+
+			ret = -errno;
+			warn("SO_BINDTODEVICE %s failed for %s on %s: %s",
+			     ifname, EPOLL_TYPE_STR(type),
+			     sockaddr_ntop(sa, str, sizeof(str)),
+			     strerror_(-ret));
+			close(fd);
+			return ret;
+		}
+	}
+
+	if (freebind) {
+		int level = af == AF_INET ? IPPROTO_IP : IPPROTO_IPV6;
+		int opt = af == AF_INET ? IP_FREEBIND : IPV6_FREEBIND;
+
+		if (setsockopt(fd, level, opt, &y, sizeof(y))) {
+			err_perror("Failed to set %s on socket %i",
+				   af == AF_INET ? "IP_FREEBIND"
+				                 : "IPV6_FREEBIND",
+				   fd);
+		}
+	}
+
+	if (bind(fd, &sa->sa, socklen_inany(sa)) < 0) {
+		/* We'll fail to bind to low ports if we don't have enough
+		 * capabilities, and we'll fail to bind on already bound ports,
+		 * this is fine. This might also fail for ICMP because of a
+		 * broken SELinux policy, see icmp_tap_handler().
+		 */
+		if (type != EPOLL_TYPE_PING) {
+			ret = -errno;
+			close(fd);
+			return ret;
+		}
+	}
+
+	return fd;
+}
+
+/**
+ * sock_l4() - Create and bind socket to given address
+ * @c:		Execution context
+ * @type:	epoll type
+ * @sa:		Socket address to bind to
+ * @ifname:	Interface for binding, NULL for any
+ *
+ * Return: newly created socket, negative error code on failure
+ */
+int sock_l4(const struct ctx *c, enum epoll_type type,
+	    const union sockaddr_inany *sa, const char *ifname)
+{
+	int v6only = -1;
+
+	/* The option doesn't exist for IPv4 sockets, and we don't care about it
+	 * for IPv6 sockets with a non-wildcard address.
+	 */
+	if (sa->sa_family == AF_INET6 &&
+	    IN6_IS_ADDR_UNSPECIFIED(&sa->sa6.sin6_addr))
+		v6only = 1;
+
+	return sock_l4_(c, type, sa, ifname, v6only);
+}
+
+/**
+ * sock_l4_dualstack_any() - Create dualstack socket bound to :: and 0.0.0.0
+ * @c:		Execution context
+ * @type:	epoll type
+ * @port	Port to bind to (:: and 0.0.0.0)
+ * @ifname:	Interface for binding, NULL for any
+ *
+ * Return: newly created socket, negative error code on failure
+ *
+ * A dual stack socket is effectively bound to both :: and 0.0.0.0.
+ */
+int sock_l4_dualstack_any(const struct ctx *c, enum epoll_type type,
+			  in_port_t port, const char *ifname)
+{
+	union sockaddr_inany sa = {
+		.sa6.sin6_family = AF_INET6,
+		.sa6.sin6_addr = in6addr_any,
+		.sa6.sin6_port = htons(port),
+	};
+
+	/* Dual stack sockets require IPV6_V6ONLY == 0.  Usually that's the
+	 * default, but sysctl net.ipv6.bindv6only can change that, so set the
+	 * sockopt explicitly.
+	 */
+	return sock_l4_(c, type, &sa, ifname, 0);
+}
+
+/**
+ * sock_unix() - Create and bind AF_UNIX socket
+ * @sock_path:	Socket path. If empty, set on return (UNIX_SOCK_PATH as prefix)
+ *
+ * Return: socket descriptor on success, won't return on failure
+ */
+int sock_unix(char *sock_path)
+{
+	int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+	struct sockaddr_un addr = {
+		.sun_family = AF_UNIX,
+	};
+	int i;
+
+	if (fd < 0)
+		die_perror("Failed to open UNIX domain socket");
+
+	for (i = 1; i < UNIX_SOCK_MAX; i++) {
+		char *path = addr.sun_path;
+		int ex, ret;
+
+		if (*sock_path)
+			memcpy(path, sock_path, UNIX_PATH_MAX);
+		else if (snprintf_check(path, UNIX_PATH_MAX - 1,
+					UNIX_SOCK_PATH, i))
+			die_perror("Can't build UNIX domain socket path");
+
+		ex = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
+			    0);
+		if (ex < 0)
+			die_perror("Failed to check for UNIX domain conflicts");
+
+		ret = connect(ex, (const struct sockaddr *)&addr, sizeof(addr));
+		if (!ret || (errno != ENOENT && errno != ECONNREFUSED &&
+			     errno != EACCES)) {
+			if (*sock_path)
+				die("Socket path %s already in use", path);
+
+			close(ex);
+			continue;
+		}
+		close(ex);
+
+		unlink(path);
+		ret = bind(fd, (const struct sockaddr *)&addr, sizeof(addr));
+		if (*sock_path && ret)
+			die_perror("Failed to bind UNIX domain socket");
+
+		if (!ret)
+			break;
+	}
+
+	if (i == UNIX_SOCK_MAX)
+		die_perror("Failed to bind UNIX domain socket");
+
+	info("UNIX domain socket bound at %s", addr.sun_path);
+	if (!*sock_path)
+		memcpy(sock_path, addr.sun_path, UNIX_PATH_MAX);
+
+	return fd;
+}
+
+/**
+ * sock_probe_features() - Probe for socket features we might use
+ * @c:		Execution context
+ */
+void sock_probe_features(struct ctx *c)
+{
+	int v = INT_MAX / 2, s;
+	const char lo[] = "lo";
+	socklen_t sl;
+
+	s = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
+	if (s < 0) {
+		c->low_wmem = c->low_rmem = 1;
+		return;
+	}
+
+	/* Check if setting high SO_SNDBUF and SO_RCVBUF is allowed */
+	sl = sizeof(v);
+	if (setsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, sizeof(v))	||
+	    getsockopt(s, SOL_SOCKET, SO_SNDBUF, &v, &sl) ||
+	    (size_t)v < SNDBUF_BIG)
+		c->low_wmem = 1;
+
+	v = INT_MAX / 2;
+	if (setsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, sizeof(v))	||
+	    getsockopt(s, SOL_SOCKET, SO_RCVBUF, &v, &sl) ||
+	    (size_t)v < RCVBUF_BIG)
+		c->low_rmem = 1;
+
+	/* Check if SO_BINDTODEVICE is available
+	 *
+	 * Supported since kernel version 5.7, commit c427bfec18f2 ("net: core:
+	 * enable SO_BINDTODEVICE for non-root users").  Some distro kernels may
+	 * have backports, of course.  Record whether we can use it so that we
+	 * can give more useful diagnostics.
+	 */
+	if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE, lo, sizeof(lo) - 1)) {
+		if (errno != EPERM)
+			warn_perror("Unexpected error probing SO_BINDTODEVICE");
+		c->no_bindtodevice = 1;
+	}
+
+	/* Check if IPv6 sockets are usable */
+	close(s);
+	s = socket(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
+	if (s < 0) {
+		c->no_ipv6 = true;
+		return;
+	}
+
+	close(s);
+}
+
+/**
+ * timespec_diff_us() - Report difference in microseconds between two timestamps
+ * @a:		Minuend timestamp
+ * @b:		Subtrahend timestamp
+ *
+ * Return: difference in microseconds (wraps after 2^63 / 10^6s ~= 292k years)
+ */
+int64_t timespec_diff_us(const struct timespec *a, const struct timespec *b)
+{
+	if (a->tv_nsec < b->tv_nsec) {
+		return (a->tv_nsec + 1000000000 - b->tv_nsec) / 1000 +
+		       (a->tv_sec - b->tv_sec - 1) * 1000000;
+	}
+
+	return (a->tv_nsec - b->tv_nsec) / 1000 +
+	       (a->tv_sec - b->tv_sec) * 1000000;
+}
+
+/**
+ * timespec_diff_ms() - Report difference in milliseconds between two timestamps
+ * @a:		Minuend timestamp
+ * @b:		Subtrahend timestamp
+ *
+ * Return: difference in milliseconds
+ */
+long timespec_diff_ms(const struct timespec *a, const struct timespec *b)
+{
+	return timespec_diff_us(a, b) / 1000;
+}
+
+/**
+ * ns_enter() - Enter configured user (unless already joined) and network ns
+ * @c:		Execution context
+ *
+ * Won't return on failure
+ *
+ * #syscalls:pasta setns
+ */
+void ns_enter(const struct ctx *c)
+{
+	if (setns(c->pasta_netns_fd, CLONE_NEWNET))
+		die_perror("setns() failed entering netns");
+}
+
+/**
+ * ns_is_init() - Is the caller running in the "init" user namespace?
+ *
+ * Return: true if caller is in init, false otherwise, won't return on failure
+ */
+bool ns_is_init(void)
+{
+	const char root_uid_map[] = "         0          0 4294967295\n";
+	char buf[sizeof(root_uid_map)] = { 0 };
+	bool ret = true;
+	int fd;
+
+	if ((fd = open("/proc/self/uid_map", O_RDONLY | O_CLOEXEC)) < 0)
+		die_perror("Can't determine if we're in init namespace");
+
+	if (read(fd, buf, sizeof(root_uid_map)) != sizeof(root_uid_map) - 1 ||
+	    strncmp(buf, root_uid_map, sizeof(root_uid_map)))
+		ret = false;
+
+	close(fd);
+	return ret;
+}
+
+/**
+ * struct open_in_ns_args - Parameters for do_open_in_ns()
+ * @c:		Execution context
+ * @fd:		Filled in with return value from open()
+ * @err:	Filled in with errno if open() failed
+ * @path:	Path to open
+ * @flags:	open() flags
+ */
+struct open_in_ns_args {
+	const struct ctx *c;
+	int fd;
+	int err;
+	const char *path;
+	int flags;
+};
+
+/**
+ * do_open_in_ns() - Enter namespace and open a file
+ * @arg:	See struct open_in_ns_args
+ *
+ * Must be called via NS_CALL()
+ */
+static int do_open_in_ns(void *arg)
+{
+	struct open_in_ns_args *a = (struct open_in_ns_args *)arg;
+
+	ns_enter(a->c);
+
+	a->fd = open(a->path, a->flags);
+	a->err = errno;
+
+	return 0;
+}
+
+/**
+ * open_in_ns() - open() within the pasta namespace
+ * @c:		Execution context
+ * @path:	Path to open
+ * @flags:	open() flags
+ *
+ * Return: fd of open()ed file or -1 on error, errno is set to indicate error
+ */
+int open_in_ns(const struct ctx *c, const char *path, int flags)
+{
+	struct open_in_ns_args arg = {
+		.c = c, .path = path, .flags = flags,
+	};
+
+	NS_CALL(do_open_in_ns, &arg);
+	errno = arg.err;
+	return arg.fd;
+}
+
+/**
+ * pidfile_write() - Write PID to file, if requested to do so, and close it
+ * @fd:		Open PID file descriptor, closed on exit, -1 to skip writing it
+ * @pid:	PID value to write
+ */
+void pidfile_write(int fd, pid_t pid)
+{
+	char pid_buf[12];
+	int n;
+
+	if (fd == -1)
+		return;
+
+	n = snprintf(pid_buf, sizeof(pid_buf), "%i\n", pid);
+
+	if (write(fd, pid_buf, n) < 0) {
+		perror("PID file write");
+		passt_exit(EXIT_FAILURE);
+	}
+
+	close(fd);
+}
+
+/**
+ * output_file_open() - Open file for output, if needed
+ * @path:	Path for output file
+ * @flags:	Flags for open() other than O_CREAT, O_TRUNC, O_CLOEXEC
+ *
+ * Return: file descriptor on success, -1 on failure with errno set by open()
+ */
+int output_file_open(const char *path, int flags)
+{
+	/* We use O_CLOEXEC here, but clang-tidy as of LLVM 16 to 19 looks for
+	 * it in the 'mode' argument if we have one
+	 */
+	return open(path, O_CREAT | O_TRUNC | O_CLOEXEC | flags,
+		    /* NOLINTNEXTLINE(android-cloexec-open) */
+		    S_IRUSR | S_IWUSR);
+}
+
+/**
+ * __daemon() - daemon()-like function writing PID file before parent exits
+ * @pidfile_fd:	Open PID file descriptor
+ * @devnull_fd:	Open file descriptor for /dev/null
+ *
+ * Return: 0 in the child process on success. The parent process exits.
+ * 	   Does not return in either process on failure (calls _exit).
+ */
+int __daemon(int pidfile_fd, int devnull_fd)
+{
+	pid_t pid = fork();
+
+	if (pid == -1) {
+		perror("fork");
+		passt_exit(EXIT_FAILURE);
+	}
+
+	if (pid) {
+		pidfile_write(pidfile_fd, pid);
+		passt_exit(EXIT_SUCCESS);
+	}
+
+	if (setsid()				< 0 ||
+	    dup2(devnull_fd, STDIN_FILENO)	< 0 ||
+	    dup2(devnull_fd, STDOUT_FILENO)	< 0 ||
+	    dup2(devnull_fd, STDERR_FILENO)	< 0)
+		passt_exit(EXIT_FAILURE);
+
+	return 0;
+}
+
+/**
+ * fls() - Find last (most significant) bit set in word
+ * @x:		Word
+ *
+ * Note: unlike ffs() and other implementations of fls(), notably the one from
+ * the Linux kernel, the starting position is 0 and not 1, that is, fls(1) = 0.
+ *
+ * Return: position of most significant bit set, starting from 0, -1 if none
+ */
+int fls(unsigned long x)
+{
+	int y = 0;
+
+	if (!x)
+		return -1;
+
+	while (x >>= 1)
+		y++;
+
+	return y;
+}
+
+/**
+ * ilog2() - Integral part (floor) of binary logarithm (logarithm to the base 2)
+ * @x:		Argument
+ *
+ * Return: integral part of binary logarithm of @x, -1 if undefined (if @x is 0)
+ */
+int ilog2(unsigned long x)
+{
+	return fls(x);
+}
+
+/**
+ * write_file() - Replace contents of file with a string
+ * @path:	File to write
+ * @buf:	String to write
+ *
+ * Return: 0 on success, -1 on any error
+ */
+int write_file(const char *path, const char *buf)
+{
+	int fd = open(path, O_WRONLY | O_TRUNC | O_CLOEXEC);
+	size_t len = strlen(buf);
+
+	if (fd < 0) {
+		warn_perror("Could not open %s", path);
+		return -1;
+	}
+
+	while (len) {
+		ssize_t rc = write(fd, buf, len);
+
+		if (rc <= 0) {
+			warn_perror("Couldn't write to %s", path);
+			break;
+		}
+
+		buf += rc;
+		len -= rc;
+	}
+
+	close(fd);
+	return len == 0 ? 0 : -1;
+}
+
+/**
+ * read_file() - Read contents of file into a NULL-terminated buffer
+ * @path:	Path to file to read
+ * @buf:	Buffer to store file contents
+ * @buf_size:	Size of buffer
+ *
+ * Return: number of bytes read on success, negative error code on failure
+ */
+static ssize_t read_file(const char *path, char *buf, size_t buf_size)
+{
+	size_t total_read = 0;
+	int fd;
+
+	if (!buf_size)
+		return -EINVAL;
+
+	fd = open(path, O_RDONLY | O_CLOEXEC);
+
+	if (fd < 0)
+		return -errno;
+
+	while (total_read < buf_size) {
+		ssize_t rc = read(fd, buf + total_read, buf_size - total_read);
+
+		if (rc < 0) {
+			int errno_save = errno;
+			close(fd);
+			return -errno_save;
+		}
+
+		if (rc == 0)
+			break;
+
+		total_read += rc;
+	}
+
+	close(fd);
+
+	if (total_read >= buf_size) {
+		buf[buf_size - 1] = '\0';
+		return -ENOBUFS;
+	}
+
+	buf[total_read] = '\0';
+
+	return total_read;
+}
+
+/**
+ * read_file_integer() - Read an integer value from a file
+ * @path:	Path to file to read
+ * @fallback:	Default value if file can't be read
+ *
+ * Return: integer value, @fallback on failure
+ */
+intmax_t read_file_integer(const char *path, intmax_t fallback)
+{
+	ssize_t bytes_read;
+	char buf[BUFSIZ];
+	intmax_t value;
+	char *end;
+
+	bytes_read = read_file(path, buf, sizeof(buf));
+
+	if (bytes_read < 0)
+		goto error;
+
+	if (bytes_read == 0) {
+		debug("Empty file %s", path);
+		goto error;
+	}
+
+	errno = 0;
+	value = strtoimax(buf, &end, 10);
+	if (*end && *end != '\n') {
+		debug("Non-numeric content in %s", path);
+		goto error;
+	}
+	if (errno) {
+		debug("Out of range value in %s: %s", path, buf);
+		goto error;
+	}
+
+	return value;
+
+error:
+	debug("Couldn't read %s, using %"PRIdMAX" as default value",
+	      path, fallback);
+	return fallback;
+}
+
+#ifdef __ia64__
+/* Needed by do_clone() below: glibc doesn't export the prototype of __clone2(),
+ * use the description from clone(2).
+ */
+int __clone2(int (*fn)(void *), void *stack_base, size_t stack_size, int flags,
+	     void *arg, ... /* pid_t *parent_tid, struct user_desc *tls,
+	     pid_t *child_tid */ );
+#endif
+
+/**
+ * do_clone() - Wrapper of __clone2() for ia64, clone() for other architectures
+ * @fn:		Entry point for child
+ * @stack_area:	Stack area for child: we'll point callees to the middle of it
+ * @stack_size:	Total size of stack area, passed to callee divided by two
+ * @flags:	clone() system call flags
+ * @arg:	Argument to @fn
+ *
+ * Return: thread ID of child, -1 on failure
+ */
+int do_clone(int (*fn)(void *),
+/* false positive, see https://trac.cppcheck.net/ticket/14847 */
+/* cppcheck-suppress [funcArgNamesDifferentUnnamed,unmatchedSuppression] */
+	     char *stack_area, size_t stack_size, int flags, void *arg)
+{
+#ifdef __ia64__
+	return __clone2(fn, stack_area + stack_size / 2, stack_size / 2,
+			flags, arg);
+#else
+	return clone(fn, stack_area + stack_size / 2, flags, arg);
+#endif
+}
+
+/**
+ * write_remainder() - write the tail of an IO vector to an fd
+ * @fd:		File descriptor
+ * @iov:	IO vector
+ * @iovcnt:	Number of entries in @iov
+ * @skip:	Number of bytes of the vector to skip writing
+ * @length:	Maximum number of bytes of the vector to write
+ *
+ * Return: 0 on success, -1 on error (with errno set)
+ *
+ * #syscalls writev
+ */
+int write_remainder(int fd, const struct iovec *iov, size_t iovcnt,
+		    size_t skip, size_t length)
+{
+	size_t i = 0, offset;
+
+	while (length &&
+	       (i += iov_skip_bytes(iov + i, iovcnt - i, skip, &offset)) < iovcnt) {
+		ssize_t rc;
+		size_t end;
+
+		if (offset) {
+			size_t len = MIN(length, iov[i].iov_len - offset);
+
+			/* Write the remainder of the partially written buffer */
+			if (write_all_buf(fd, (char *)iov[i].iov_base + offset,
+					  len) < 0)
+				return -1;
+
+			length -= len;
+			i++;
+
+			if (!length || i >= iovcnt)
+				break;
+		}
+
+		end = iov_skip_bytes(iov + i, iovcnt - i, length, NULL);
+
+		/* Write a trailing partial buffer */
+		if (!end) {
+			size_t len = MIN(length, iov[i].iov_len);
+
+			if (write_all_buf(fd, iov[i].iov_base, len) < 0)
+				return -1;
+			break;
+		}
+
+		/* Write as much of the remaining whole buffers as we can */
+		rc = writev(fd, &iov[i], end);
+		if (rc < 0)
+			return -1;
+
+		length -= rc;
+		skip = rc;
+	}
+	return 0;
+}
+
+/**
+ * read_remainder() - Read the tail of an IO vector from a file descriptor
+ * @fd:		File descriptor
+ * @iov:	IO vector
+ * @cnt:	Number of entries in @iov
+ * @skip:	Number of bytes of the vector to skip reading
+ *
+ * Return: 0 on success, -1 on error (with errno set)
+ *
+ * Note: mode-specific seccomp profiles need to enable readv() to use this.
+ */
+/* cppcheck-suppress unusedFunction */
+int read_remainder(int fd, const struct iovec *iov, size_t cnt, size_t skip)
+{
+	size_t i = 0, offset;
+
+	while ((i += iov_skip_bytes(iov + i, cnt - i, skip, &offset)) < cnt) {
+		ssize_t rc;
+
+		if (offset) {
+			assert(offset < iov[i].iov_len);
+			/* Read the remainder of the partially read buffer */
+			if (read_all_buf(fd, (char *)iov[i].iov_base + offset,
+					 iov[i].iov_len - offset) < 0)
+				return -1;
+			i++;
+		}
+
+		if (cnt == i)
+			break;
+
+		/* Fill as many of the remaining buffers as we can */
+		rc = readv(fd, &iov[i], cnt - i);
+		if (rc < 0)
+			return -1;
+
+		if (rc == 0) {
+			errno = ENODATA;
+			return -1;
+		}
+
+		skip = rc;
+	}
+	return 0;
+}
+
+/** sockaddr_ntop() - Convert a socket address to text format
+ * @sa:		Socket address
+ * @dst:	output buffer, minimum SOCKADDR_STRLEN bytes
+ * @size:	size of buffer at @dst
+ *
+ * Return: on success, a non-null pointer to @dst, NULL on failure
+ */
+const char *sockaddr_ntop(const void *sa, char *dst, socklen_t size)
+{
+	sa_family_t family = ((const struct sockaddr *)sa)->sa_family;
+	socklen_t off = 0;
+
+#define IPRINTF(...)							\
+	do {								\
+		off += snprintf(dst + off, size - off, __VA_ARGS__);	\
+		if (off >= size)					\
+			return NULL;					\
+	} while (0)
+
+#define INTOP(af, addr)							\
+	do {								\
+		if (!inet_ntop((af), (addr), dst + off, size - off))	\
+			return NULL;					\
+		off += strlen(dst + off);				\
+	} while (0)
+
+	switch (family) {
+	case AF_UNSPEC:
+		IPRINTF("<unspecified>");
+		break;
+
+	case AF_INET: {
+		const struct sockaddr_in *sa4 = sa;
+
+		INTOP(AF_INET, &sa4->sin_addr);
+		IPRINTF(":%hu", ntohs(sa4->sin_port));
+		break;
+	}
+
+	case AF_INET6: {
+		const struct sockaddr_in6 *sa6 = sa;
+
+		IPRINTF("[");
+		INTOP(AF_INET6, &sa6->sin6_addr);
+		IPRINTF("]:%hu", ntohs(sa6->sin6_port));
+		break;
+	}
+
+		/* FIXME: Implement AF_UNIX */
+	default:
+		errno = EAFNOSUPPORT;
+		return NULL;
+	}
+
+#undef IPRINTF
+#undef INTOP
+
+	return dst;
+}
+
+/** eth_ntop() - Convert an Ethernet MAC address to text format
+ * @mac:	MAC address
+ * @dst:	Output buffer, minimum ETH_ADDRSTRLEN bytes
+ * @size:	Size of buffer at @dst
+ *
+ * Return: on success, a non-null pointer to @dst, NULL on failure
+ */
+const char *eth_ntop(const unsigned char *mac, char *dst, size_t size)
+{
+	int len;
+
+	len = snprintf(dst, size, "%02x:%02x:%02x:%02x:%02x:%02x",
+		       mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+	if (len < 0 || (size_t)len >= size)
+		return NULL;
+
+	return dst;
+}
+
+/** str_ee_origin() - Convert socket extended error origin to a string
+ * @ee:		Socket extended error structure
+ *
+ * Return: static string describing error origin
+ */
+const char *str_ee_origin(const struct sock_extended_err *ee)
+{
+	const char *const desc[] = {
+		[SO_EE_ORIGIN_NONE]  = "<no origin>",
+		[SO_EE_ORIGIN_LOCAL] = "Local",
+		[SO_EE_ORIGIN_ICMP]  = "ICMP",
+		[SO_EE_ORIGIN_ICMP6] = "ICMPv6",
+	};
+
+	if (ee->ee_origin < ARRAY_SIZE(desc))
+		return desc[ee->ee_origin];
+
+	return "<invalid>";
+}
+
+/**
+ * snprintf_check() - snprintf() wrapper, checking for truncation and errors
+ * @str:	Output buffer
+ * @size:	Maximum size to write to @str
+ * @format:	Message
+ *
+ * Return: false on success, true on truncation or error, sets errno on failure
+ */
+bool snprintf_check(char *str, size_t size, const char *format, ...)
+{
+	va_list ap;
+	int rc;
+
+	va_start(ap, format);
+	rc = vsnprintf(str, size, format, ap);
+	va_end(ap);
+
+	if (rc < 0) {
+		errno = EIO;
+		return true;
+	}
+
+	if ((size_t)rc >= size) {
+		errno = ENOBUFS;
+		return true;
+	}
+
+	return false;
+}
+
+#define DEV_RANDOM	"/dev/random"
+
+/**
+ * raw_random() - Get high quality random bytes
+ * @buf:	Buffer to fill with random bytes
+ * @buflen:	Number of bytes of random data to put in @buf
+ *
+ * Assumes that the random data is essential, and will die() if unable to obtain
+ * it.
+ */
+void raw_random(void *buf, size_t buflen)
+{
+	size_t random_read = 0;
+#ifndef HAS_GETRANDOM
+	int fd = open(DEV_RANDOM, O_RDONLY | O_CLOEXEC);
+
+	if (fd < 0)
+		die_perror("Couldn't open %s", DEV_RANDOM);
+#endif
+
+	while (random_read < buflen) {
+		ssize_t ret;
+
+#ifdef HAS_GETRANDOM
+		ret = getrandom((char *)buf + random_read,
+				buflen - random_read, GRND_RANDOM);
+#else
+		ret = read(fd, (char *)buf + random_read,
+			   buflen - random_read);
+#endif
+
+		if (ret == -1 && errno == EINTR)
+			continue;
+
+		if (ret < 0)
+			die_perror("Error on random data source");
+
+		if (ret == 0)
+			break;
+
+		random_read += ret;
+	}
+
+#ifndef HAS_GETRANDOM
+	close(fd);
+#endif
+
+	if (random_read < buflen)
+		die("Unexpected EOF on random data source");
+}
+
+/**
+ * encode_domain_name() - Encode domain name according to RFC 1035, section 3.1
+ * @buf:		Buffer to fill in with encoded domain name
+ * @domain_name:	Input domain name string with terminator
+ *
+ * The buffer's 'buf' size has to be >= strlen(domain_name) + 2
+ */
+void encode_domain_name(char *buf, const char *domain_name)
+{
+	size_t i;
+	char *p;
+
+	buf[0] = strcspn(domain_name, ".");
+	p = buf + 1;
+	for (i = 0; domain_name[i]; i++) {
+		if (domain_name[i] == '.')
+			p[i] = strcspn(domain_name + i + 1, ".");
+		else
+			p[i] = domain_name[i];
+	}
+	p[i] = 0L;
+}
+
+/**
+ * abort_with_msg() - Print error message and abort
+ * @fmt:	Format string
+ * @...:	Format parameters
+ */
+void abort_with_msg(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vlogmsg(true, false, LOG_CRIT, fmt, ap);
+	va_end(ap);
+
+	/* This may actually cause a SIGSYS instead of SIGABRT, due to seccomp,
+	 * but that will still get the job done.
+	 */
+	abort();
+}
+
+/**
+ * passt_exit() - Perform vital cleanup and exit
+ *
+ * We don't use exit(3) because on some C library versions it can do unexpected
+ * things that hit our seccomp profile (e.g. futex() calls).  This is a bespoke
+ * wrapper around _exit(2) performing just the cleanup that we need.
+ *
+ * #syscalls fsync
+ */
+void passt_exit(int status)
+{
+	if (passt_ctx.fd_tap_listen >= 0)
+		close(passt_ctx.fd_tap_listen);
+	if (passt_ctx.fd_repair_listen >= 0)
+		close(passt_ctx.fd_repair_listen);
+	if (passt_ctx.fd_control_listen >= 0)
+		close(passt_ctx.fd_control_listen);
+
+	/* Make sure we don't leave the pcap file truncated */
+	if (pcap_fd != -1 && fsync(pcap_fd))
+		warn_perror("Failed to flush pcap file, it might be truncated");
+
+	/* Make sure we don't leave an incomplete log */
+	if (log_file != -1)
+		(void)fsync(log_file);
+
+	/* Make sure we don't leave any messages incomplete */
+	(void)fflush(stderr);
+	(void)fflush(stdout);
+
+	_exit(status);
+}
+
+/**
+ * clamped_scale() - Scale @x from 100% to f% depending on @y's value
+ * @x:		Value to scale
+ * @y:		Value determining scaling
+ * @lo:		Lower bound for @y (start of y-axis slope)
+ * @hi:		Upper bound for @y (end of y-axis slope)
+ * @f:		Scaling factor, percent (might be less or more than 100)
+ *
+ * Return: @x scaled by @f * linear interpolation of @y between @lo and @hi
+ *
+ * In pictures:
+ *
+ *                f % -> ,----   * If @y < lo (for example, @y is y0), return @x
+ *                      /|   |
+ *                     / |   |   * If @lo < @y < @hi (for example, @y is y1),
+ *                    /  |   |     return @x scaled by a factor linearly
+ * (100 + f) / 2 % ->/   |   |     interpolated between 100% and f% depending on
+ *                  /|   |   |     @y's position between @lo (100%) and @hi (f%)
+ *                 / |   |   |
+ *                /  |   |   |   * If @y > @hi (for example, @y is y2), return
+ * 100 % -> -----'   |   |   |     @x * @f / 100
+ *           |   |   |   |   |
+ *          y0  lo  y1  hi  y2   Example: @f = 150, @lo = 10, @hi = 20, @y = 15,
+ *                                        @x = 1000
+ *                                        -> interpolated factor is 125%
+ *                                        -> return 1250
+ */
+long clamped_scale(long x, long y, long lo, long hi, long f)
+{
+	if (y < lo)
+		return x;
+
+	if (y > hi)
+		return x * f / 100;
+
+	return x - (x * (y - lo) / (hi - lo)) * (100 - f) / 100;
+}
+
+/**
+ * make_ugid_map() - Create userns UID & GID mappings
+ * @pid:	PID of process owning the userns, or 0 for self
+ * @uid:	Parent UID to map to 0 within userns
+ * @gid:	Parent GID to map to 0 within userns
+ */
+void make_ugid_map(pid_t pid, uid_t uid, gid_t gid)
+{
+	char setgroups_path[PATH_MAX] = "/proc/self/setgroups";
+	char uidmap_path[PATH_MAX] = "/proc/self/uid_map";
+	char gidmap_path[PATH_MAX] = "/proc/self/gid_map";
+	char uidmap[BUFSIZ], gidmap[BUFSIZ];
+
+	if (pid) {
+		if (snprintf_check(uidmap_path, sizeof(uidmap_path),
+				   "/proc/%u/uid_map", pid))
+			die_perror("Can't build uidmap path");
+
+		if (snprintf_check(gidmap_path, sizeof(gidmap_path),
+				   "/proc/%u/gid_map", pid))
+			die_perror("Can't build gidmap path");
+
+		if (snprintf_check(setgroups_path, sizeof(setgroups_path),
+				   "/proc/%u/setgroups", pid))
+			die_perror("Can't build setgroups path");
+	}
+
+	if (snprintf_check(uidmap, sizeof(uidmap), "0 %u 1", uid))
+		die_perror("Can't build uidmap");
+
+	if (snprintf_check(gidmap, BUFSIZ, "0 %u 1", gid))
+		die_perror("Can't build gidmap");
+
+	if (write_file(uidmap_path, uidmap) ||
+	    write_file(setgroups_path, "deny") ||
+	    write_file(gidmap_path, gidmap))
+		warn("Couldn't configure user mappings");
+}

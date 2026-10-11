@@ -1,0 +1,24 @@
+# Our binary.
+/catatonit
+/release/
+
+# Autoconf generated files for binaries.
+/Makefile
+/Makefile.in
+/aclocal.m4
+/autom4te.cache/
+/config.*
+!/config.h.in
+/compile
+/configure
+/depcomp
+/install-sh
+/missing
+/ltmain.sh
+/libtool
+/m4/
+/stamp-h?
+.deps/
+.dirstamp
+*.o
+*~

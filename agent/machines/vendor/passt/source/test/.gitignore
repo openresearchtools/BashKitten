@@ -1,0 +1,15 @@
+test_logs/
+mbuto/
+podman/
+*.img
+QEMU_EFI.fd
+*.qcow2
+*.raw
+*.raw.xz
+*.bin
+nstool
+rampstream
+guest-key
+guest-key.pub
+/exeter/
+*.bats

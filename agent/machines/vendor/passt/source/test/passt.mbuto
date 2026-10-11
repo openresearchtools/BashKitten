@@ -1,0 +1,110 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# test/passt.mbuto - mbuto (https://mbuto.sh) profile for test images
+#
+# Copyright (c) 2022 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+PROGS="${PROGS:-ash,dash,bash ip mount ls insmod mkdir ln cat chmod lsmod
+       modprobe find grep mknod mv rm umount jq iperf3 dhclient hostname
+       sed tr chown sipcalc cut socat dd strace ping tail killall sleep sysctl
+       nproc tcp_rr tcp_crr udp_rr which tee seq bc sshd ssh-keygen cmp tcpdump
+       env}"
+
+# OpenSSH 9.8 introduced split binaries, with sshd being the daemon, and
+# sshd-session the per-session program. We need the latter as well, and the path
+# depends on the distribution. It doesn't exist on older versions.
+for bin in /usr/lib/openssh/sshd-session /usr/lib/ssh/sshd-session \
+	   /usr/libexec/openssh/sshd-session; do
+	command -v "${bin}" >/dev/null && PROGS="${PROGS} ${bin}"
+done
+
+# OpenSSH 10 adds sshd-auth as well
+for bin in /usr/lib/openssh/sshd-auth /usr/lib/ssh/sshd-auth \
+	   /usr/libexec/openssh/sshd-auth; do
+	command -v "${bin}" >/dev/null && PROGS="${PROGS} ${bin}"
+done
+
+KMODS="${KMODS:- virtio_net virtio_pci vmw_vsock_virtio_transport}"
+
+LINKS="${LINKS:-
+	 ash,dash,bash		/init
+	 ash,dash,bash		/bin/sh
+	 sshd			/usr/sbin/sshd
+	 dhclient		/usr/sbin/dhclient
+	 sysctl			/usr/sbin/sysctl}"
+
+DIRS="${DIRS} /tmp /usr/sbin /usr/bin /usr/share /var/log /var/lib /etc/ssh /run/sshd /root/.ssh"
+
+COPIES="${COPIES} small.bin,/root/small.bin medium.bin,/root/medium.bin big.bin,/root/big.bin rampstream,/bin/rampstream rampstream-check.sh,/bin/rampstream-check.sh"
+
+FIXUP="${FIXUP}"'
+	mv /sbin/* /usr/sbin || :
+	rm -rf /sbin
+	ln -s /usr/sbin /sbin
+	cat > /sbin/dhclient-script << EOF
+#!/bin/sh
+LOG=/var/log/dhclient-script.log
+echo \${reason} \${interface} >> \$LOG
+env >> \$LOG
+set >> \$LOG
+
+[ -n "\${new_interface_mtu}" ]       && ip link set dev \${interface} mtu \${new_interface_mtu}
+
+[ -n "\${new_ip_address}" ]          && ip addr add \${new_ip_address}/\${new_subnet_mask} dev \${interface}
+[ -n "\${new_routers}" ]             && for r in \${new_routers}; do ip route add default via \${r} dev \${interface}; done
+:> /etc/resolv.conf
+[ -n "\${new_domain_name_servers}" ] && for d in \${new_domain_name_servers}; do echo "nameserver \${d}" >> /etc/resolv.conf; done
+[ -n "\${new_domain_name}" ]         && echo "search \${new_domain_name}" >> /etc/resolf.conf
+[ -n "\${new_domain_search}" ]       && (printf "search"; for d in \${new_domain_search}; do printf " %s" "\${d}"; done; printf "\n") >> /etc/resolv.conf
+[ -n "\${new_ip6_address}" ]         && ip addr add \${new_ip6_address}/\${new_ip6_prefixlen} dev \${interface}
+[ -n "\${new_dhcp6_name_servers}" ]  && for d in \${new_dhcp6_name_servers}; do echo "nameserver \${d}%\${interface}" >> /etc/resolv.conf; done
+[ -n "\${new_dhcp6_domain_search}" ] && (printf "search"; for d in \${new_dhcp6_domain_search}; do printf " %s" "\${d}"; done; printf "\n") >> /etc/resolv.conf
+[ -n "\${new_host_name}" ]           && echo "\${new_host_name}" > /tmp/new_host_name
+[ -n "\${new_fqdn_fqdn}" ]           && echo "\${new_fqdn_fqdn}" > /tmp/new_fqdn_fqdn
+exit 0
+EOF
+	chmod 755 /sbin/dhclient-script
+	mv /bin/* /usr/bin || :
+	rm -rf /bin
+	ln -s /usr/bin /bin
+	ln -s /run /var/run
+	:> /etc/fstab
+
+	# sshd via vsock
+	cat > /etc/passwd << EOF
+root:x:0:0:root:/root:/bin/sh
+tcpdump:x:72:72:tcpdump:/:/sbin/nologin
+sshd:x:100:100:Privilege-separated SSH:/var/empty/sshd:/sbin/nologin
+EOF
+	cat > /etc/shadow << EOF
+root:::0:99999:7:::
+EOF
+	chmod 000 /etc/shadow
+
+	cat > /etc/ssh/sshd_config << EOF
+Subsystem sftp internal-sftp
+EOF
+	ssh-keygen -A
+	chmod 700 /root/.ssh
+	chmod 700 /run/sshd
+	# Alternative location for the priv separation dir
+	ln -s /run/sshd /usr/share/empty.sshd
+
+	cat > /root/.ssh/authorized_keys <<EOF
+'"$(cat guest-key.pub 2>/dev/null || :)"'
+EOF
+	chmod 600 /root/.ssh/authorized_keys
+	chmod 700 /root
+	socat VSOCK-LISTEN:22,fork EXEC:"/sbin/sshd -i -e" 2> /var/log/vsock-ssh.log &
+	sh +m
+'
+
+OUTPUT="KERNEL=__KERNEL__
+INITRD=__INITRD__
+"

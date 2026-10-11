@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "name": "fuse-overlayfs",
+  "version": "v1.18",
+  "repository": "https://github.com/containers/fuse-overlayfs.git",
+  "commit": "899cdaab386dc37b3dddc1c5d9cc3c093960e7cd",
+  "sources": [
+    {
+      "path": "source",
+      "repository": "https://github.com/containers/fuse-overlayfs.git",
+      "commit": "899cdaab386dc37b3dddc1c5d9cc3c093960e7cd",
+      "git_archive_sha256": "42fdb339924f3574257bbadadf53b8577328367ad5eedf90f9dbdf66cf824625"
+    }
+  ],
+  "license_paths": [
+    "source/COPYING"
+  ],
+  "modified": false,
+  "source_inventory_sha256": "ed6564ae265dbb4e86690ca28eaa63d7065e93048865ec034d8e2ae819ec9b1f"
+}

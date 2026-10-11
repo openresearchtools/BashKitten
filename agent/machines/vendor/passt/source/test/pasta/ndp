@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/pasta/ndp - Check DHCP and DHCPv6 functionality in pasta mode
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+nstools	ip jq sipcalc grep cut
+htools	ip jq sipcalc grep cut
+
+test	Interface name
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+check	[ -n "__IFNAME__" ]
+ns	ip link set dev __IFNAME__ up
+# Wait for SLAAC & DAD to complete
+ns	while ! ip -j -6 addr show dev __IFNAME__ | jq -e '.[].addr_info.[] | select(.protocol == "kernel_ra")'; do sleep 0.1; done
+
+test	SLAAC: prefix
+nsout	ADDR6 ip -j -6 addr show|jq -rM '[.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.protocol == "kernel_ra") | .local + "/" + (.prefixlen | tostring)] | .[0]'
+nsout	PREFIX6 sipcalc __ADDR6__ | grep prefix | cut -d' ' -f4
+hout	HOST_ADDR6 ip -j -6 addr show|jq -rM ['.[] | select(.ifname == "__IFNAME__").addr_info[] | select(.scope != "host" and .scope != "link" and .deprecated != true).local]| join("/64 ")'
+hout	HOST_PREFIX6 sipcalc __HOST_ADDR6__/64 | grep prefix | cut -d' ' -f4 | tr '\n' ' '
+check	echo "__HOST_PREFIX6__" | grep -wq "__PREFIX6__"
+
+test	SLAAC: route
+nsout	GW6 ip -j -6 route show|jq -rM '.[] | select(.dst == "default").gateway'
+hout	HOST_GW6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").gateway] | .[0]'
+check	[ __GW6__ = __HOST_GW6__ ]

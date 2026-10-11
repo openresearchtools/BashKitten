@@ -1,0 +1,64 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/migrate/bidirectional - Check migration with messages in both directions
+#
+# Copyright (c) 2025 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+g1tools	ip jq dhclient socat cat
+htools	ip jq
+
+set	MAP_HOST4 192.0.2.1
+set	MAP_HOST6 2001:db8:9a55::1
+set	MAP_NS4 192.0.2.2
+set	MAP_NS6 2001:db8:9a55::2
+
+test	Interface name
+g1out	IFNAME1 ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+hout	HOST_IFNAME ip -j -4 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
+hout	HOST_IFNAME6 ip -j -6 route show|jq -rM '[.[] | select(.dst == "default").dev] | .[0]'
+check	[ -n "__IFNAME1__" ]
+
+test	DHCP: address
+guest1	ip link set dev __IFNAME1__ up
+guest1	/sbin/dhclient -4 __IFNAME1__
+g1out	ADDR1 ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME1__").addr_info[0].local'
+hout	HOST_ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__HOST_IFNAME__").addr_info[0].local'
+check	[ "__ADDR1__" = "__HOST_ADDR__" ]
+
+test	TCP/IPv4: guest1/guest2 > host, host > guest1/guest2
+g1out	GW1 ip -j -4 route show|jq -rM '.[] | select(.dst == "default").gateway'
+
+hostb	socat -u TCP4-LISTEN:10006 OPEN:__STATESETUP__/msg,create,trunc
+guest1b	socat -u TCP4-LISTEN:10001 OPEN:msg,create,trunc
+sleep	1
+
+guest1b	socat -u UNIX-RECV:proxy.sock,null-eof TCP4:__MAP_HOST4__:10006
+hostb	socat -u UNIX-RECV:__STATESETUP__/proxy.sock,null-eof TCP4:__ADDR1__:10001
+sleep	1
+guest1	printf "Hello from guest 1" | socat -u STDIN UNIX:proxy.sock
+host	printf "Dear guest 1," | socat -u STDIN UNIX:__STATESETUP__/proxy.sock
+sleep	1
+
+mon	echo "migrate tcp:0:20005" | socat -u STDIN UNIX:__STATESETUP__/qemu_1_mon.sock
+
+sleep	2
+guest2	printf " and from guest 2" | socat -u STDIN UNIX:proxy.sock,shut-null
+host	printf " you are now guest 2" | socat -u STDIN UNIX:__STATESETUP__/proxy.sock,shut-null
+
+hostw
+# FIXME: guest2w doesn't work here because shell jobs are (also) from guest #1,
+# use sleep 1 for the moment
+sleep	1
+
+hout	MSG cat __STATESETUP__/msg
+check	[ "__MSG__" = "Hello from guest 1 and from guest 2" ]
+
+g2out	MSG cat msg
+check	[ "__MSG__" = "Dear guest 1, you are now guest 2" ]

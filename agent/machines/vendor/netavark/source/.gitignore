@@ -1,0 +1,14 @@
+/bin/
+target/
+targets/
+*.swp
+netavark.1
+netavark-firewalld.7
+vendor/
+vendor-tarball/
+.idea/*
+contrib/systemd/*/*.service
+.vscode*
+rpm/RPMS
+rpm/SRPMS
+rpm/*.tar.gz

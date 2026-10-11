@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "name": "netavark",
+  "version": "v2.1.0",
+  "repository": "https://github.com/containers/netavark.git",
+  "commit": "8e91ad1d947ed325327b638f0cb906bea1f7d0ab",
+  "sources": [
+    {
+      "path": "source",
+      "repository": "https://github.com/containers/netavark.git",
+      "commit": "8e91ad1d947ed325327b638f0cb906bea1f7d0ab",
+      "git_archive_sha256": "e6abbd7206bbdb431a7d6b186e8dad1d37e77a4522fe8104b6ce1785ea26bd8c"
+    }
+  ],
+  "license_paths": [
+    "source/LICENSE"
+  ],
+  "modified": false,
+  "vendor": {
+    "file": "netavark-v2.1.0-vendor.tar.gz",
+    "url": "https://github.com/containers/netavark/releases/download/v2.1.0/netavark-v2.1.0-vendor.tar.gz",
+    "sha256": "532779573b7f4c2606e43f8471132bb9072417feed9ee06a4e309cf3fa066ab8"
+  },
+  "source_inventory_sha256": "15a5423d3348253867c4dc52d3085abf65e14598fe1bc3df3479cc434152a626"
+}

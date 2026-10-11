@@ -1,0 +1,445 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/lib/test - List tests and run them, evaluating directives from files
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+# test_iperf3s() - Start iperf3 server
+# $1:	Destination/server context
+# $2:	Port number
+test_iperf3s() {
+	__sctx="${1}"
+	__port="${2}"
+
+	pane_or_context_run "${__sctx}" 'iperf3 -s -p'${__port}' -D -I s.pid'
+}
+
+# test_iperf3k() - Kill iperf3 server
+# $1:	Destination/server context
+test_iperf3k() {
+	__sctx="${1}"
+
+	pane_or_context_run "${__sctx}" 'kill -INT $(cat s.pid)'
+
+	sleep 1		# Wait for kernel to free up ports
+}
+
+# test_iperf3() - Ugly helper for iperf3 directive
+# $1:	Variable name: to put the measure bandwidth into
+# $2:	Source/client context
+# $3:	Destination name or address for client
+# $4:	Port number, ${i} is translated to process index
+# $5:	Run time, in seconds
+# $@:	Client options
+test_iperf3() {
+	__var="${1}"; shift
+	__cctx="${1}"; shift
+	__dest="${1}"; shift
+	__port="${1}"; shift
+	__time="${1}"; shift
+
+	pane_or_context_run "${__cctx}" 'rm -f c.json'
+
+        # A 1s wait for connection on what's basically a local link
+        # indicates something is pretty wrong
+        __timeout=1000
+	pane_or_context_run "${__cctx}" 				\
+		 'iperf3 -J -c '${__dest}' -p '${__port}		\
+		 '	 --connect-timeout '${__timeout}		\
+		 '	 -t'${__time}' -i0 '"${@}"' > c.json'		\
+
+	__jval=".end.sum_received.bits_per_second"
+
+	__bw=$(pane_or_context_output "${__cctx}"			\
+		 'cat c.json | jq -rMs "map('${__jval}') | add"')
+
+	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__var}__" "${__bw}" )"
+}
+
+# test_iperf3m() - Ugly helper for iperf3 directive, guest migration variant
+# $1:	Variable name: to put the measure bandwidth into
+# $2:	Initial source/client context
+# $3:	Second source/client context the guest is moving to
+# $4:	Destination name or address for client
+# $5:	Port number, ${i} is translated to process index
+# $6:	Run time, in seconds
+# $7:	Client options
+test_iperf3m() {
+	__var="${1}"; shift
+	__cctx="${1}"; shift
+	__cctx2="${1}"; shift
+	__dest="${1}"; shift
+	__port="${1}"; shift
+	__time="${1}"; shift
+
+	pane_or_context_run "${__cctx}" 'rm -f c.json'
+
+        # A 1s wait for connection on what's basically a local link
+        # indicates something is pretty wrong
+        __timeout=1000
+	pane_or_context_run_bg "${__cctx}" 				\
+		 'iperf3 -J -c '${__dest}' -p '${__port}		\
+		 '	 --connect-timeout '${__timeout}		\
+		 '	 -t'${__time}' -i0 '"${@}"' > c.json'		\
+
+	__jval=".end.sum_received.bits_per_second"
+
+	sleep $((${__time} + 3))
+
+	pane_or_context_output "${__cctx2}"				\
+		 'cat c.json'
+
+	__bw=$(pane_or_context_output "${__cctx2}"			\
+		 'cat c.json | jq -rMs "map('${__jval}') | add"')
+
+	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__var}__" "${__bw}" )"
+}
+
+test_one_line() {
+	__line="${1}"
+
+	[ ${DEBUG} -eq 1 ] && info DEBUG: "${__line}"
+
+	# Strip comments
+	__line="${__line%%#*}"
+
+	if [ -n "${TEST_ONE_in_def}" ]; then
+		[ "${__line}" = "endef" ] && TEST_ONE_in_def= && return
+		# Append $__line to variable TEST_ONE_DEF_<definition name>
+		__ifs="${IFS}"
+		IFS=
+		eval TEST_ONE_DEF_$TEST_ONE_in_def=\"\$\(printf \"%s\\n%s\" \"\$TEST_ONE_DEF_$TEST_ONE_in_def\" \"$__line\"\)\"
+		IFS="${__ifs}"
+		return
+	fi
+
+	# tab-split command and arguments, apply variable substitutions
+	__cmd="${__line%%$(printf '\t')*}"
+	__arg="${__line#*$(printf '\t')*}"
+	__arg="$(subs_apply "${TEST_ONE_subs}" "${__arg}")"
+
+	[ ${TEST_ONE_nok} -eq 1 ] && [ "${__cmd}" != "test" ] && continue
+	case ${__cmd} in
+	"def")
+		TEST_ONE_in_def="${__arg}"
+		# Clear variable TEST_ONE_DEF_<definition name>
+		__ifs="${IFS}"
+		IFS= eval TEST_ONE_DEF_$TEST_ONE_in_def=
+		IFS="${__ifs}"
+		;;
+	"test")
+		[ ${TEST_ONE_perf_nok} -eq 0 ] || TEST_ONE_nok=1
+		[ ${TEST_ONE_nok} -eq 1 ] && status_test_fail
+		[ ${TEST_ONE_nok} -eq 0 ] && status_test_ok
+
+		status_test_start "${__arg}"
+		TEST_ONE_nok=0
+		TEST_ONE_perf_nok=0
+		;;
+	"host")
+		pane_or_context_run host "${__arg}" || TEST_ONE_nok=1
+		;;
+	"hostb")
+		pane_or_context_run_bg host "${__arg}"
+		;;
+	"hostw")
+		pane_or_context_wait host || TEST_ONE_nok=1
+		;;
+	"hint")
+		tmux send-keys -t ${PANE_HOST} "C-c"
+		;;
+	"htools")
+		pane_or_context_run host 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
+		;;
+	"passt")
+		pane_or_context_run passt "${__arg}" || TEST_ONE_nok=1
+		;;
+	"passtb")
+		pane_or_context_run_bg passt "${__arg}"
+		;;
+	"passtw")
+		pane_or_context_wait passt || TEST_ONE_nok=1
+		;;
+	"pint")
+		tmux send-keys -t ${PANE_PASST} "C-c"
+		;;
+	"pout")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output passt "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"guest")
+		pane_or_context_run guest "${__arg}" || TEST_ONE_nok=1
+		;;
+	"guestb")
+		pane_or_context_run_bg guest "${__arg}"
+		;;
+	"guestw")
+		pane_or_context_wait guest || TEST_ONE_nok=1
+		;;
+	"guest1")
+		pane_or_context_run guest_1 "${__arg}" || TEST_ONE_nok=1
+		;;
+	"guest1b")
+		pane_or_context_run_bg guest_1 "${__arg}"
+		;;
+	"guest1w")
+		pane_or_context_wait guest_1 || TEST_ONE_nok=1
+		;;
+	"gtools")
+		pane_or_context_run guest 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
+		;;
+	"g1tools")
+		pane_or_context_run guest_1 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
+		;;
+	"g2tools")
+		pane_or_context_run guest_2 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
+		;;
+	"guest2")
+		pane_or_context_run guest_2 "${__arg}" || TEST_ONE_nok=1
+		;;
+	"guest2b")
+		pane_or_context_run_bg guest_2 "${__arg}"
+		;;
+	"guest2w")
+		pane_or_context_wait guest_2 || TEST_ONE_nok=1
+		;;
+	"mon")
+		pane_or_context_run mon "${__arg}" || TEST_ONE_nok=1
+		;;
+	"monb")
+		pane_or_context_run_bg mon "${__arg}"
+		;;
+	"ns")
+		pane_or_context_run ns "${__arg}" || TEST_ONE_nok=1
+		;;
+	"ns1")
+		pane_or_context_run ns1 "${__arg}" || TEST_ONE_nok=1
+		;;
+	"ns2")
+		pane_or_context_run ns2 "${__arg}" || TEST_ONE_nok=1
+		;;
+	"nsb")
+		pane_or_context_run_bg ns "${__arg}"
+		;;
+	"ns1b")
+		pane_or_context_run_bg ns1 "${__arg}"
+		;;
+	"ns2b")
+		pane_or_context_run_bg ns2 "${__arg}"
+		;;
+	"nsw")
+		pane_or_context_wait ns || TEST_ONE_nok=1
+		;;
+	"ns1w")
+		pane_or_context_wait ns1 || TEST_ONE_nok=1
+		;;
+	"ns2w")
+		pane_or_context_wait ns2 || TEST_ONE_nok=1
+		;;
+	"nstools")
+		pane_or_context_run ns 'which '"${__arg}"' >/dev/null' || TEST_ONE_skip=1
+		;;
+	"gout")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output guest "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"g1out")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output guest_1 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"g2out")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output guest_2 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"hout")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output host "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"nsout")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output ns "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"ns1out")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output ns1 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"ns2out")
+		__varname="${__arg%% *}"
+		__output="$(pane_or_context_output ns2 "${__arg#* }")"
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__varname}__" "${__output}")"
+		;;
+	"check")
+		info_check "${__arg}"
+		__nok=0
+		eval "${__arg} || __nok=1"
+		if [ ${__nok} -eq 1 ]; then
+			TEST_ONE_nok=1
+			info_check_failed
+		else
+			info_check_passed
+		fi
+		;;
+	"sleep")
+		sleep "${__arg}"
+		;;
+	"info")
+		info "${__arg}"
+		;;
+	"report")
+		perf_report ${__arg}
+		;;
+	"th")
+		table_header ${__arg}
+		;;
+	"tr")
+		table_row "${__arg}"
+		;;
+	"tl")
+		table_line "${__arg}"
+		;;
+	"te")
+		table_end
+		;;
+	"td")
+		table_value ${__arg} || TEST_ONE_perf_nok=1
+		;;
+	"bw")
+		table_value_throughput ${__arg} || TEST_ONE_perf_nok=1
+		;;
+	"lat")
+		table_value_latency ${__arg} || TEST_ONE_perf_nok=1
+		;;
+	"iperf3s")
+		test_iperf3s ${__arg}
+                ;;
+	"iperf3k")
+		test_iperf3k ${__arg}
+                ;;
+	"iperf3")
+		test_iperf3 ${__arg}
+		;;
+	"iperf3m")
+		test_iperf3m ${__arg}
+		;;
+	"set")
+		TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__${__arg%% *}__" "${__arg#* }")"
+		;;
+
+	# Demo commands
+	"say")
+		text_write "${__arg}"
+		;;
+	"em")
+		em_write "${__arg}"
+		;;
+	"nl")
+		info_nolog ""
+		;;
+	"hl")
+		pane_highlight "${__arg}"
+		;;
+	"bsp")
+		text_backspace "${__arg}"
+		;;
+	"killp")
+		pane_kill "${__arg}"
+		;;
+	"resize")
+		pane_resize ${__arg}
+		;;
+	*)
+		__def_body="$(eval printf \"\$TEST_ONE_DEF_$__cmd\")"
+		if [ -n "${__def_body}" ]; then
+			__ifs="${IFS}"
+			IFS='
+'
+			for __def_line in ${__def_body}; do
+				IFS="${__ifs}" test_one_line "${__def_line}"
+			done
+			IFS="${__ifs}"
+		fi
+		;;
+	esac
+}
+
+# test_one() - Run a single test file evaluating directives
+# $1:	Name of test file, relative to test/ directory
+test_one() {
+	TEST_ONE_dirclean=
+	__test_file="test/${1}"
+
+	__type="$(file -b --mime-type ${__test_file})"
+	if [ "${__type}" = "text/x-shellscript" ]; then
+		status_file_start "${1}" 1
+		"${__test_file}" && status_test_ok || status_test_fail
+		return
+	fi
+
+	if [ ${DEMO} -eq 0 ]; then
+		__ntests="$(grep -c "^test$(printf '\t')" "${__test_file}")"
+		status_file_start "${1}" "${__ntests}"
+	fi
+
+	[ ${CI} -eq 1 ] && video_link "${1}"
+
+	TEST_ONE_subs="$(list_add_pair "" "__BASEPATH__" "${BASEPATH}")"
+	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__STATESETUP__" "${STATESETUP}")"
+	STATEDIR="${STATEBASE}/${1}"
+	mkdir -p "${STATEDIR}"
+	TEST_ONE_subs="$(list_add_pair "${TEST_ONE_subs}" "__STATEDIR__" "${STATEDIR}")"
+	TEST_ONE_nok=-1
+	TEST_ONE_perf_nok=0
+	TEST_ONE_skip=0
+	TEST_ONE_in_def=
+	while IFS= read -r __line; do
+		test_one_line "${__line}"
+		[ ${TEST_ONE_skip} -eq 1 ] && break
+	done < "${__test_file}"
+
+	for __d in ${TEST_ONE_dirclean}; do
+		rm -rf ${__d}
+	done
+
+	[ ${DEMO} -eq 1 ] && return
+
+	[ ${TEST_ONE_skip} -eq 1 ] && status_test_skip && return
+	[ ${TEST_ONE_perf_nok} -eq 0 ] || TEST_ONE_nok=1
+	[ ${TEST_ONE_nok} -eq 0 ] && status_test_ok || status_test_fail
+}
+
+# test() - Build list of tests to run, in order, then issue test_one()
+# $@:	Test files to run, relative to test/
+test() {
+	__list=
+
+	cd test
+	for __f; do
+		__type="$(file -b --mime-type ${__f})"
+		if [ "${__type}" = "text/x-shellscript" ]; then
+			__list="$(list_add "${__list}" "${__f}")"
+			continue
+		fi
+		__list="$(list_add "${__list}" "${__f}")"
+	done
+	cd ..
+
+	for __f in ${__list}; do
+		test_one "${__f}"
+	done
+}

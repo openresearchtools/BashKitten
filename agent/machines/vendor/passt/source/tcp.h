@@ -1,0 +1,61 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later
+ * Copyright (c) 2021 Red Hat GmbH
+ * Author: Stefano Brivio <sbrivio@redhat.com>
+ */
+
+#ifndef TCP_H
+#define TCP_H
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#include <netinet/in.h>
+#include <sys/socket.h>
+
+#include "fwd.h"
+
+#define TCP_TIMER_INTERVAL		1000	/* ms */
+
+struct ctx;
+
+void tcp_timer_handler(const struct ctx *c, union epoll_ref ref,
+		       const struct timespec *now);
+void tcp_listen_handler(const struct ctx *c, union epoll_ref ref,
+			const struct timespec *now);
+void tcp_sock_handler(const struct ctx *c, union epoll_ref ref,
+		      uint32_t events, const struct timespec *now);
+int tcp_tap_handler(const struct ctx *c, uint8_t pif, sa_family_t af,
+		    const void *saddr, const void *daddr, uint32_t flow_lbl,
+		    const struct pool *p, int idx, const struct timespec *now);
+int tcp_init(struct ctx *c);
+void tcp_defer_handler(struct ctx *c, const struct timespec *now);
+
+void tcp_update_l2_buf(const unsigned char *eth_d);
+
+extern bool peek_offset_cap;
+
+/**
+ * struct tcp_ctx - Execution context for TCP routines
+ * @scan_in:		Port scanning state for inbound packets
+ * @scan_out:		Port scanning state for outbound packets
+ * @timer_run:		Timestamp of most recent timer run
+ * @pipe_size:		Size of pipes for spliced connections
+ * @rto_max:		Maximum retry timeout (in s)
+ * @syn_retries:	SYN retries using exponential backoff timeout
+ * @syn_linear_timeouts: SYN retries before using exponential backoff timeout
+ * @keepalive_run:	Time we last issued tap-side keepalives
+ * @inactivity_run:	Time we last scanned for inactive connections
+ */
+struct tcp_ctx {
+	struct fwd_scan scan_in;
+	struct fwd_scan scan_out;
+	struct timespec timer_run;
+	size_t pipe_size;
+	int rto_max;
+	uint8_t syn_retries;
+	uint8_t syn_linear_timeouts;
+	time_t keepalive_run;
+	time_t inactivity_run;
+};
+
+#endif /* TCP_H */

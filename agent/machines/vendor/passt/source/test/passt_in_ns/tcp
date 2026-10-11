@@ -1,0 +1,254 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+# PASST - Plug A Simple Socket Transport
+#  for qemu/UNIX domain socket mode
+#
+# PASTA - Pack A Subtle Tap Abstraction
+#  for network namespace/tap device mode
+#
+# test/passt_in_ns/tcp - Check TCP functionality for passt in ns with pasta
+#
+# Copyright (c) 2021 Red Hat GmbH
+# Author: Stefano Brivio <sbrivio@redhat.com>
+
+gtools	socat ip jq
+htools	socat ip jq
+nstools	socat ip jq
+
+set	MAP_HOST4 192.0.2.1
+set	MAP_HOST6 2001:db8:9a55::1
+set	MAP_NS4 192.0.2.2
+set	MAP_NS6 2001:db8:9a55::2
+
+set	TEMP_BIG __STATEDIR__/test_big.bin
+set	TEMP_SMALL __STATEDIR__/test_small.bin
+set	TEMP_NS_BIG __STATEDIR__/test_ns_big.bin
+set	TEMP_NS_SMALL __STATEDIR__/test_ns_small.bin
+
+test	TCP/IPv4: host to guest: big transfer
+guestb	socat -u TCP4-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/big.bin TCP4:127.0.0.1:10001
+guestw
+guest	cmp test_big.bin /root/big.bin
+
+test	TCP/IPv4: host to ns (spliced): big transfer
+nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_NS_BIG__,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/big.bin TCP4:127.0.0.1:10002
+nsw
+check	cmp __TEMP_NS_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv4: guest to host: big transfer
+hostb	socat -u TCP4-LISTEN:10003 OPEN:__TEMP_BIG__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/big.bin TCP4:__MAP_HOST4__:10003
+hostw
+check	cmp __TEMP_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv4: guest to ns: big transfer
+nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_NS_BIG__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/big.bin TCP4:__MAP_NS4__:10002
+nsw
+check	cmp __TEMP_NS_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv4: ns to host (spliced): big transfer
+hostb	socat -u TCP4-LISTEN:10003 OPEN:__TEMP_BIG__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP4:127.0.0.1:10003
+hostw
+check	cmp __TEMP_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv4: ns to host (via tap): big transfer
+hostb	socat -u TCP4-LISTEN:10003 OPEN:__TEMP_BIG__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP4:__MAP_HOST4__:10003
+hostw
+check	cmp __TEMP_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv4: ns to guest (using loopback address): big transfer
+guestb	socat -u TCP4-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP4:127.0.0.1:10001
+guestw
+guest	cmp test_big.bin /root/big.bin
+
+test	TCP/IPv4: ns to guest (using namespace address): big transfer
+guestb	socat -u TCP4-LISTEN:10001 OPEN:test_big.bin,create,trunc
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	ADDR ip -j -4 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP4:__ADDR__:10001
+guestw
+guest	cmp test_big.bin /root/big.bin
+
+test	TCP/IPv4: host to guest: small transfer
+guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/small.bin TCP4:127.0.0.1:10001
+guestw
+guest	cmp test_small.bin /root/small.bin
+
+test	TCP/IPv4: host to ns (spliced): small transfer
+nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_NS_SMALL__,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/small.bin TCP4:127.0.0.1:10002
+nsw
+check	cmp __TEMP_NS_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv4: guest to host: small transfer
+hostb	socat -u TCP4-LISTEN:10003 OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/small.bin TCP4:__MAP_HOST4__:10003
+hostw
+check	cmp __TEMP_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv4: guest to ns: small transfer
+nsb	socat -u TCP4-LISTEN:10002 OPEN:__TEMP_NS_SMALL__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/small.bin TCP4:__MAP_NS4__:10002
+nsw
+check	cmp __TEMP_NS_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv4: ns to host (spliced): small transfer
+hostb	socat -u TCP4-LISTEN:10003 OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP4:127.0.0.1:10003
+hostw
+check	cmp __TEMP_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv4: ns to host (via tap): small transfer
+hostb	socat -u TCP4-LISTEN:10003 OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP4:__MAP_HOST4__:10003
+hostw
+check	cmp __TEMP_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv4: ns to guest (using loopback address): small transfer
+guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP4:127.0.0.1:10001
+guestw
+guest	cmp test_small.bin /root/small.bin
+
+test	TCP/IPv4: ns to guest (using namespace address): small transfer
+guestb	socat -u TCP4-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP4:__ADDR__:10001
+guestw
+guest	cmp test_small.bin /root/small.bin
+
+test	TCP/IPv6: host to guest: big transfer
+guestb	socat -u TCP6-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/big.bin TCP6:[::1]:10001
+guestw
+guest	cmp test_big.bin /root/big.bin
+
+test	TCP/IPv6: host to ns (spliced): big transfer
+nsb	socat -u TCP6-LISTEN:10002 OPEN:__TEMP_NS_BIG__,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/big.bin TCP6:[::1]:10002
+nsw
+check	cmp __TEMP_NS_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv6: guest to host: big transfer
+hostb	socat -u TCP6-LISTEN:10003 OPEN:__TEMP_BIG__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/big.bin TCP6:[__MAP_HOST6__]:10003
+hostw
+check	cmp __TEMP_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv6: guest to ns: big transfer
+nsb	socat -u TCP6-LISTEN:10002 OPEN:__TEMP_NS_BIG__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/big.bin TCP6:[__MAP_NS6__]:10002
+nsw
+check	cmp __TEMP_NS_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv6: ns to host (spliced): big transfer
+hostb	socat -u TCP6-LISTEN:10003 OPEN:__TEMP_BIG__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP6:[::1]:10003
+hostw
+check	cmp __TEMP_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv6: ns to host (via tap): big transfer
+hostb	socat -u TCP6-LISTEN:10003 OPEN:__TEMP_BIG__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP6:[__MAP_HOST6__]:10003
+hostw
+check	cmp __TEMP_BIG__ __BASEPATH__/big.bin
+
+test	TCP/IPv6: ns to guest (using loopback address): big transfer
+guestb	socat -u TCP6-LISTEN:10001 OPEN:test_big.bin,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP6:[::1]:10001
+guestw
+guest	cmp test_big.bin /root/big.bin
+
+test	TCP/IPv6: ns to guest (using namespace address): big transfer
+guestb	socat -u TCP6-LISTEN:10001 OPEN:test_big.bin,create,trunc
+nsout	IFNAME ip -j link show | jq -rM '.[] | select(.link_type == "ether").ifname'
+nsout	ADDR6 ip -j -6 addr show|jq -rM '.[] | select(.ifname == "__IFNAME__").addr_info[0].local'
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/big.bin TCP6:[__ADDR6__]:10001
+guestw
+guest	cmp test_big.bin /root/big.bin
+
+test	TCP/IPv6: host to guest: small transfer
+guestb	socat -u TCP6-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/small.bin TCP6:[::1]:10001
+guestw
+guest	cmp test_small.bin /root/small.bin
+
+test	TCP/IPv6: host to ns (spliced): small transfer
+nsb	socat -u TCP6-LISTEN:10002 OPEN:__TEMP_NS_SMALL__,create,trunc
+sleep	1
+host	socat -u OPEN:__BASEPATH__/small.bin TCP6:[::1]:10002
+nsw
+check	cmp __TEMP_NS_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv6: guest to host: small transfer
+hostb	socat -u TCP6-LISTEN:10003 OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+guest	socat -u OPEN:/root/small.bin TCP6:[__MAP_HOST6__]:10003
+hostw
+check	cmp __TEMP_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv6: guest to ns: small transfer
+nsb	socat -u TCP6-LISTEN:10002 OPEN:__TEMP_NS_SMALL__
+sleep	1
+guest	socat -u OPEN:/root/small.bin TCP6:[__MAP_NS6__]:10002
+nsw
+check	cmp __TEMP_NS_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv6: ns to host (spliced): small transfer
+hostb	socat -u TCP6-LISTEN:10003 OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP6:[::1]:10003
+hostw
+check	cmp __TEMP_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv6: ns to host (via tap): small transfer
+hostb	socat -u TCP6-LISTEN:10003 OPEN:__TEMP_SMALL__,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP6:[__MAP_HOST6__]:10003
+hostw
+check	cmp __TEMP_SMALL__ __BASEPATH__/small.bin
+
+test	TCP/IPv6: ns to guest (using loopback address): small transfer
+guestb	socat -u TCP6-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP6:[::1]:10001
+guestw
+guest	cmp test_small.bin /root/small.bin
+
+test	TCP/IPv6: ns to guest (using namespace address): small transfer
+guestb	socat -u TCP6-LISTEN:10001 OPEN:test_small.bin,create,trunc
+sleep	1
+ns	socat -u OPEN:__BASEPATH__/small.bin TCP6:[__ADDR6__]:10001
+guestw
+guest	cmp test_small.bin /root/small.bin
