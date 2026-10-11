@@ -48,7 +48,9 @@ public final class PhoneAccessibilityService extends AccessibilityService {
         if(command.startsWith("screen."))result=screen(command,a,check);
         else if(command.startsWith("navigation.")){
             Map<String,Integer> actions=Map.of("back",GLOBAL_ACTION_BACK,"home",GLOBAL_ACTION_HOME,"recents",GLOBAL_ACTION_RECENTS,"notifications",GLOBAL_ACTION_NOTIFICATIONS,"quicksettings",GLOBAL_ACTION_QUICK_SETTINGS,"keyboard",GLOBAL_ACTION_BACK);
-            int action=actions.get(command.substring(11));boolean success=onMain(()->{boundary(check);return performGlobalAction(action);},check);result=new JSONObject().put("accepted",success);
+            int action=actions.get(command.substring(11));boolean success=onMain(()->{boundary(check);
+                if(command.equals("navigation.keyboard")&&getWindows().stream().noneMatch(window->window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD))return false;
+                return performGlobalAction(action);},check);result=new JSONObject().put("accepted",success);
         }else if(command.startsWith("text."))result=text(command,a,check);
         else result=touch(command,a,check);
         check.run();return new PhoneCommand.Result(result);
@@ -109,15 +111,24 @@ public final class PhoneAccessibilityService extends AccessibilityService {
         CompletableFuture<Boolean> future=new CompletableFuture<>();onMain(()->{boundary(check);if(!dispatchGesture(gesture.build(),new GestureResultCallback(){@Override public void onCompleted(GestureDescription g){future.complete(true);}@Override public void onCancelled(GestureDescription g){future.complete(false);}},main))future.complete(false);return true;},check);
         return new JSONObject().put("completed",PhoneProviders.waitFor(future,check,duration+5000));
     }
+    private void captureBoundary(Runnable check){
+        boundary(check);for(AccessibilityWindowInfo window:getWindows()){AccessibilityNodeInfo root=window.getRoot();if(root!=null)try{
+            String name=String.valueOf(root.getPackageName());
+            // Ordinary inactive system bars must not disable every screenshot.
+            // Recents/shade remain protected whenever they own the active view.
+            boolean systemBar=name.equals("com.android.systemui")&&window.getType()==AccessibilityWindowInfo.TYPE_SYSTEM&&!window.isActive()&&!window.isFocused();
+            if(protectedPackage(name)&&!systemBar)throw new SecurityException("Protected window is visible");
+        }finally{root.recycle();}}
+    }
     private PhoneCommand.Result screenshot(Runnable check)throws Exception{
-        boundary(check);for(AccessibilityWindowInfo window:getWindows()){AccessibilityNodeInfo root=window.getRoot();if(root!=null)try{if(protectedPackage(root.getPackageName()))throw new SecurityException("Protected window is visible");}finally{root.recycle();}}
+        captureBoundary(check);
         CompletableFuture<Bitmap> future=new CompletableFuture<>();
-        onMain(()->{boundary(check);takeScreenshot(Display.DEFAULT_DISPLAY,Runnable::run,new TakeScreenshotCallback(){
-            @Override public void onSuccess(ScreenshotResult result){try(HardwareBuffer buffer=result.getHardwareBuffer()){check.run();Bitmap hardware=Bitmap.wrapHardwareBuffer(buffer,result.getColorSpace());if(hardware==null)throw new IllegalStateException("Screenshot unavailable");Bitmap pixels=hardware.copy(Bitmap.Config.ARGB_8888,false);hardware.recycle();if(!future.complete(pixels))pixels.recycle();}catch(Exception e){future.completeExceptionally(e);}}
+        onMain(()->{boundary(check);takeScreenshot(Display.DEFAULT_DISPLAY,PhoneControlsRuntime.get(this)::background,new TakeScreenshotCallback(){
+            @Override public void onSuccess(ScreenshotResult result){try(HardwareBuffer buffer=result.getHardwareBuffer()){captureBoundary(check);Bitmap hardware=Bitmap.wrapHardwareBuffer(buffer,result.getColorSpace());if(hardware==null)throw new IllegalStateException("Screenshot unavailable");Bitmap pixels=hardware.copy(Bitmap.Config.ARGB_8888,false);hardware.recycle();if(!future.complete(pixels))pixels.recycle();}catch(Exception e){future.completeExceptionally(e);}}
             @Override public void onFailure(int error){future.completeExceptionally(new IllegalStateException("Android rejected screenshot: "+error));}
         });return true;},check);
-        Bitmap bitmap=PhoneProviders.waitFor(future,check,10000);File file=File.createTempFile("phone-screen-",".png",getCacheDir());
-        try{boundary(check);try(OutputStream out=new FileOutputStream(file)){if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Screenshot encode failed");}check.run();return new PhoneCommand.Result(new FileInputStream(file),"image/png",()->file.delete());}catch(Exception e){file.delete();throw e;}finally{bitmap.recycle();}
+        Bitmap bitmap=PhoneProviders.waitFor(future,check,10000);File file=PhoneFiles.temporary(this,"screen-",".png");
+        try{captureBoundary(check);try(OutputStream out=new FileOutputStream(file)){if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IOException("Screenshot encode failed");}check.run();return new PhoneCommand.Result(new FileInputStream(file),"image/png",()->file.delete());}catch(Exception e){file.delete();throw e;}finally{bitmap.recycle();}
     }
     private <T>T onMain(Callable<T> action,Runnable check)throws Exception{CompletableFuture<T> future=new CompletableFuture<>();main.post(()->{try{check.run();future.complete(action.call());}catch(Exception e){future.completeExceptionally(e);}});return PhoneProviders.waitFor(future,check,10000);}
 }

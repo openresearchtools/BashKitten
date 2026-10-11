@@ -19,19 +19,21 @@ public final class PhoneControlsRuntime {
     }
     final Context context; public final PhonePolicy policy;
     private final PhoneGrantRegistry grants; private final ExecutorService io=Executors.newCachedThreadPool();
-    private final Map<String,PhoneProviders> providers=new HashMap<>();
+    private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
+    private final Map<Socket,ActiveRequest> active=new ConcurrentHashMap<>();
     private final Set<Socket> connections=ConcurrentHashMap.newKeySet();
     private volatile ServerSocket listener; private volatile String issuer="";
     private volatile Consumer<JSONObject> ownerChanged;
     private volatile Socket ownerWatch;
-    private PhoneControlsRuntime(Context context) { this.context=context;policy=new PhonePolicy(context);grants=new PhoneGrantRegistry(policy); }
+    private PhoneControlsRuntime(Context context) { this.context=context;policy=new PhonePolicy(context);grants=new PhoneGrantRegistry(policy);io.execute(()->PhoneFiles.discardPrevious(context)); }
     /** Set by the native controller, delivering the link through Termux's stdin bridge. */
     public void setOwnerLinkListener(Consumer<JSONObject> callback) { ownerChanged=callback; reconcile(); }
     public boolean connected(){return listener!=null&&ownerWatch!=null&&!ownerWatch.isClosed();}
+    void background(Runnable task){io.execute(task);}
     public void disconnectOwner() { io.execute(() -> { stop(); }); }
     public void reconcile() { io.execute(() -> {
         synchronized(this) {
-            grants.clear(); PhoneFiles.clearShares(); providers.values().forEach(PhoneProviders::close); providers.clear();
+            grants.clear(); PhoneFiles.clearShares(); cancelRequests(null);
             for(Socket socket:connections) if(socket!=ownerWatch) try { socket.close(); } catch(IOException ignored) { }
             if(!policy.master()) stop();
             else if(listener==null) try { start(); } catch(IOException error) { stop(); }
@@ -53,11 +55,21 @@ public final class PhoneControlsRuntime {
         grants.clear(); issuer=""; ownerWatch=null;policy.stateChanged();
         ServerSocket old=listener;listener=null;if(old!=null)try{old.close();}catch(IOException ignored){}
         for(Socket socket:connections)try{socket.close();}catch(IOException ignored){}
-        providers.values().forEach(PhoneProviders::close);providers.clear();
+        cancelRequests(null);PhoneFiles.clearShares();
     }
-    private synchronized PhoneProviders provider(PhoneCommand command) {
-        if(!policy.effective(command.feature))throw new SecurityException("Phone feature unavailable");
-        return providers.computeIfAbsent(command.feature.name(),key -> new PhoneProviders(context,policy,command.feature));
+    private static final class ActiveRequest implements AutoCloseable {
+        final Socket socket;final PhoneGrantRegistry.Grant grant;final PhoneProviders provider;
+        ActiveRequest(Socket socket,PhoneGrantRegistry.Grant grant,PhoneProviders provider){this.socket=socket;this.grant=grant;this.provider=provider;}
+        public void close(){try{socket.close();}catch(IOException ignored){}provider.close();}
+    }
+    private void cancelRequests(String worker) {
+        for(ActiveRequest request:active.values())if(worker==null||request.grant.worker.equals(worker))request.close();
+    }
+    private synchronized void detachOwner(Socket expected) {
+        if(expected!=null&&ownerWatch!=expected)return;
+        Socket previous=ownerWatch;ownerWatch=null;grants.clear();cancelRequests(null);PhoneFiles.clearShares();
+        if(previous!=null)try{previous.close();}catch(IOException ignored){}
+        policy.stateChanged();
     }
     private void serve(Socket socket) {
         boolean sent=false;
@@ -86,15 +98,16 @@ public final class PhoneControlsRuntime {
                 if(binary || !constant(authorization,"Owner "+issuer) || issuer.isEmpty())throw new SecurityException("Owner authorization required");
                 JSONObject result;
                 if(command.equals("owner.watch")) {
-                    Socket previous=ownerWatch;ownerWatch=socket;policy.stateChanged();if(previous!=null&&previous!=socket)try{previous.close();}catch(IOException ignored){}
+                    synchronized(this){detachOwner(null);ownerWatch=socket;policy.stateChanged();}
                     socket.setSoTimeout(0);out.write("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nCache-Control: no-store\r\nConnection: close\r\n\r\nready\n".getBytes(StandardCharsets.US_ASCII));out.flush();sent=true;
                     try { while(in.read()!=-1) { /* owner closes this lifetime channel on shutdown */ } }
-                    finally { if(ownerWatch==socket){ownerWatch=null;grants.clear();policy.stateChanged();} }
+                    finally { detachOwner(socket); }
                     return;
                 }
-                if(command.equals("owner.issue")){if(ownerWatch==null||ownerWatch.isClosed())throw new SecurityException("Native controller disconnected");result=grants.issue(args);}
-                else if(command.equals("owner.revoke")){grants.revoke(args.getString("worker"));result=new JSONObject().put("revoked",true);}
-                else if(command.equals("owner.disconnect")){result=new JSONObject().put("revoked",true);grants.clear();}
+                if(command.equals("owner.issue")){synchronized(this){if(ownerWatch==null||ownerWatch.isClosed())throw new SecurityException("Native controller disconnected");result=grants.issue(args);}
+                    for(ActiveRequest running:active.values())try{grants.check(running.grant);}catch(SecurityException changed){running.close();}}
+                else if(command.equals("owner.revoke")){String worker=args.getString("worker");grants.revoke(worker);cancelRequests(worker);result=new JSONObject().put("revoked",true);}
+                else if(command.equals("owner.disconnect")){result=new JSONObject().put("revoked",true);detachOwner(null);}
                 else throw new IllegalArgumentException("Unknown owner command");
                 send(out,200,new JSONObject().put("result",result));sent=true;return;
             }
@@ -110,15 +123,22 @@ public final class PhoneControlsRuntime {
             Runnable check=() -> { grants.check(grant);policy.require(definition.feature,generation);if(socket.isClosed()||Thread.currentThread().isInterrupted()||android.os.SystemClock.elapsedRealtime()>deadline)throw new CancellationException("Phone request cancelled or deadline elapsed"); };
             check.run();
             if(binary&&!command.equals("files.write")&&!command.equals("files.append"))throw new IllegalArgumentException("Command does not accept bytes");
-            PhoneCommand.Result result=provider(definition).execute(command,args,binary?body:null,check);
+            PhoneProviders provider=new PhoneProviders(context,policy,definition.feature);
+            ActiveRequest running=new ActiveRequest(socket,grant,provider);active.put(socket,running);
+            // Lease/deadline cancellation closes blocked provider streams, even
+            // when no bytes arrive to reach the next normal dispatch check.
+            ScheduledFuture<?> expiry=deadlines.scheduleAtFixedRate(()->{try{check.run();}catch(Exception ended){running.close();}},0,1,TimeUnit.SECONDS);
             try {
+                check.run();PhoneCommand.Result result=provider.execute(command,args,binary?body:null,check);
+                try {
                 check.run();
                 if(result.stream==null){send(out,200,new JSONObject().put("result",result.json));sent=true;}
                 else {
                     out.write(("HTTP/1.1 200 OK\r\nContent-Type: "+result.type+"\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));sent=true;
                     byte[] buffer=new byte[65536];int count;while((count=result.stream.read(buffer))!=-1){check.run();out.write(buffer,0,count);}out.flush();
                 }
-            } finally { if(result.stream!=null)result.stream.close();if(result.cleanup!=null)result.cleanup.close(); }
+                } finally { if(result.stream!=null)result.stream.close();if(result.cleanup!=null)result.cleanup.close(); }
+            } finally { expiry.cancel(false);active.remove(socket);provider.close(); }
         } catch(Exception error) {
             if(!sent&&!socket.isClosed())try{send(socket.getOutputStream(),error instanceof SecurityException?403:400,new JSONObject().put("error",error instanceof SecurityException?"Phone authorization, feature or protected surface denied":error instanceof CancellationException?"Phone request cancelled; do not replay an uncertain action":"Phone operation failed: "+error.getClass().getSimpleName()).put("code",error instanceof SecurityException?"denied":error instanceof CancellationException?"cancelled":"unavailable"));}catch(Exception ignored){}
         } finally {connections.remove(socket);try{socket.close();}catch(IOException ignored){}}

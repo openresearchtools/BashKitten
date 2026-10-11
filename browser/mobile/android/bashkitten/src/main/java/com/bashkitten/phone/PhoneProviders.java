@@ -20,17 +20,18 @@ final class PhoneProviders implements AutoCloseable {
     private final Context context;private final PhonePolicy policy;private final PhonePolicy.Feature feature;
     private final Set<PhoneRequestScope> requests=ConcurrentHashMap.newKeySet();
     private final Set<CancellationSignal> cancellations=ConcurrentHashMap.newKeySet();
+    private volatile boolean closed;
     PhoneProviders(Context context,PhonePolicy policy,PhonePolicy.Feature feature){this.context=context;this.policy=policy;this.feature=feature;}
-    public void close(){for(CancellationSignal s:cancellations)s.cancel();cancellations.clear();for(PhoneRequestScope scope:requests)scope.close();requests.clear();}
+    public void close(){closed=true;for(CancellationSignal s:cancellations)s.cancel();cancellations.clear();for(PhoneRequestScope scope:requests)scope.close();requests.clear();}
     PhoneCommand.Result execute(String command,JSONObject a,InputStream body,Runnable check)throws Exception{
-        check.run();JSONObject result;
+        check.run();if(closed)throw new CancellationException("Phone request closed");JSONObject result;
         switch(feature){
             case APPS:result=apps(command,a,check);break;
             case NOTIFICATIONS:result=notifications(command,a,check);break;
             case CLIPBOARD:result=clipboard(command,a,check);break;
             case LOCATION:result=location(a,check);break;
             case FILES:
-                PhoneRequestScope scope=new PhoneRequestScope();requests.add(scope);
+                PhoneRequestScope scope=new PhoneRequestScope();requests.add(scope);if(closed)scope.close();
                 try {
                     PhoneCommand.Result value=new PhoneFiles(context,policy,scope).execute(command,a,body,check);
                     if(value.stream==null){scope.close();requests.remove(scope);return value;}
@@ -81,7 +82,7 @@ final class PhoneProviders implements AutoCloseable {
         Location value;
         if(!a.optBoolean("fresh",true))value=manager.getLastKnownLocation(provider);
         else{
-            CompletableFuture<Location> future=new CompletableFuture<>();CancellationSignal signal=new CancellationSignal();cancellations.add(signal);
+            CompletableFuture<Location> future=new CompletableFuture<>();CancellationSignal signal=new CancellationSignal();cancellations.add(signal);if(closed)signal.cancel();
             try{check.run();manager.getCurrentLocation(provider,signal,Runnable::run,future::complete);value=waitFor(future,check,10000);}finally{signal.cancel();cancellations.remove(signal);}
         }
         check.run();if(value==null)throw new IllegalStateException("No location fix available");
