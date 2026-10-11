@@ -455,13 +455,20 @@
     #usage { flex:0 1 auto; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #usageSummary { display:block; overflow:hidden; text-overflow:ellipsis; }
     #chatgptUsage { display:block; max-width:100%; overflow-x:auto; scrollbar-width:none; line-height:12px; }
-    .question-card { border:1px solid var(--line); border-radius:var(--radius-control); padding:12px; margin:12px 0; }
+    /* Use the same surface, type and controls as the composer/settings. */
+    .question-card { border:1px solid var(--line); border-radius:var(--radius-card); padding:12px; margin:12px 0; background:var(--surface); color:var(--text); font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
     .question-heading { display:flex; align-items:flex-start; gap:8px; }
-    .question-heading strong { flex:1; min-width:0; }
+    .question-heading strong { flex:1; min-width:0; font-weight:600; }
     .question-heading .icon-button { flex-shrink:0; }
     .question-card .question-choices { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
-    .question-card form { display:flex; gap:6px; margin-top:8px; }
-    .question-card input { flex:1; min-width:0; }
+    .question-card button:not(.icon-button) { appearance:none; min-height:32px; max-width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface-2); color:var(--text); font-size:12px; overflow-wrap:anywhere; }
+    .question-card button:not(.icon-button):not(:disabled):hover { border-color:var(--muted); }
+    .question-card form { display:flex; align-items:center; gap:6px; margin-top:8px; }
+    .question-card form button { flex-shrink:0; }
+    .question-card input { appearance:none; flex:1; min-width:0; padding:9px 10px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface); color:var(--text); }
+    .question-card input::placeholder { color:var(--muted); opacity:1; }
+    .question-card input:disabled { opacity:.52; }
+    .question-card :is(button,input):focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     #pillamaStatus { display:block; max-width:100%; overflow-x:auto; scrollbar-width:none; line-height:12px; }
     #pillamaStatus:focus-visible { outline:1px solid var(--line); }
     #sidebarToggle { display:none; }
