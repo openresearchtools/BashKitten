@@ -546,17 +546,26 @@ fn run_server_request(mut connection: UnixStream, request: Request) -> io::Resul
     let mut slave = None;
     if let Some(tty) = tty {
         let (new_master, new_slave) = open_pty(tty)?;
+        // Keep sudo's parent in the same session, in a different process
+        // group. A session created only in sudo leaves its group orphaned,
+        // so the kernel discards its job-control stop before we can relay it.
+        if unsafe { libc::getsid(0) } != unsafe { libc::getpid() }
+            && unsafe { libc::setsid() } < 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        if unsafe { libc::ioctl(new_slave.as_raw_fd(), libc::TIOCSCTTY as _, 0) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
         master = Some(new_master);
         slave = Some(new_slave);
     }
-    send_frame(&mut connection, FRAME_READY, &[])?;
-
     let child = unsafe { libc::fork() };
     if child < 0 {
         return Err(io::Error::last_os_error());
     }
     if child == 0 {
-        let result = child_exec(&request, master.as_ref(), slave.as_ref());
+        let result = child_exec(&request, master.as_ref(), slave.as_ref(), &mut connection);
         let message = format!("bashkitten sudo handoff failed: {result}\n");
         let output = if request.tty_mask != 0 {
             slave.as_ref().map(AsRawFd::as_raw_fd).unwrap_or(2)
@@ -576,19 +585,39 @@ fn run_server_request(mut connection: UnixStream, request: Request) -> io::Resul
     )
 }
 
-fn child_exec(request: &Request, master: Option<&OwnedFd>, slave: Option<&OwnedFd>) -> io::Error {
+fn child_exec(
+    request: &Request,
+    master: Option<&OwnedFd>,
+    slave: Option<&OwnedFd>,
+    connection: &mut UnixStream,
+) -> io::Error {
     if let Some(master) = master {
         unsafe { libc::close(master.as_raw_fd()) };
     }
-    if let Some(slave) = slave {
-        if unsafe { libc::setsid() } < 0 {
-            return io::Error::last_os_error();
-        }
-        if unsafe { libc::ioctl(slave.as_raw_fd(), libc::TIOCSCTTY as _, 0) } != 0 {
-            return io::Error::last_os_error();
-        }
-    } else if unsafe { libc::setpgid(0, 0) } != 0 {
+    if unsafe { libc::setpgid(0, 0) } != 0 {
         return io::Error::last_os_error();
+    }
+    if let Some(slave) = slave {
+        // The broker initially owns the foreground. Claim it before exec
+        // without a background SIGTTOU, then restore the inherited mask.
+        let mut blocked = unsafe { mem::zeroed::<libc::sigset_t>() };
+        let mut previous = MaybeUninit::<libc::sigset_t>::uninit();
+        unsafe {
+            libc::sigemptyset(&mut blocked);
+            libc::sigaddset(&mut blocked, libc::SIGTTOU);
+        }
+        if unsafe { libc::sigprocmask(libc::SIG_BLOCK, &blocked, previous.as_mut_ptr()) } != 0 {
+            return io::Error::last_os_error();
+        }
+        let foreground = unsafe { libc::tcsetpgrp(slave.as_raw_fd(), libc::getpgrp()) };
+        let error = (foreground != 0).then(io::Error::last_os_error);
+        let previous = unsafe { previous.assume_init() };
+        if unsafe { libc::sigprocmask(libc::SIG_SETMASK, &previous, std::ptr::null_mut()) } != 0 {
+            return io::Error::last_os_error();
+        }
+        if let Some(error) = error {
+            return error;
+        }
     }
     if unsafe { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGHUP) } != 0 {
         return io::Error::last_os_error();
@@ -631,6 +660,11 @@ fn child_exec(request: &Request, master: Option<&OwnedFd>, slave: Option<&OwnedF
     }
     if unsafe { libc::setresuid(INTERACTIVE_UID as libc::uid_t, 0, 0) } != 0 {
         return io::Error::last_os_error();
+    }
+    // Only now may the client enter raw mode and relay terminal input: this
+    // child already owns the PTY foreground and all descriptor setup is done.
+    if let Err(error) = send_frame(connection, FRAME_READY, &[]) {
+        return error;
     }
     exec_real_sudo(request)
 }
