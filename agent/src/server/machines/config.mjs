@@ -11,6 +11,9 @@ export const machineRoot = path.join(dataDir, 'machines');
 // Keep Unix names below the kernel pathname limit even for long data-drive roots.
 // Only temporary endpoints live here; rootfs/config/image storage stays in dataDir.
 export const runtimeRoot = path.join(process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`, 'bashkitten', createHash('sha256').update(dataDir).digest('hex').slice(0,12), 'm');
+// Podman's pause/ns_handles state follows XDG_RUNTIME_DIR, independently of
+// storage.conf. Never join the host user's shared rootless Podman namespace.
+export const podmanRuntime = path.join(runtimeRoot, 'podman');
 export const storageRoot = path.join(dataDir, 'podman');
 export const helper = name => path.join(packageRoot, 'bin', name);
 export const daemonSocket = path.join(dataDir, 'run', 'machines.sock');
@@ -42,7 +45,9 @@ export async function prepareStorage() {
   const runtimeParent = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`;
   const runtimeStat = await fs.stat(runtimeParent);
   if (!runtimeStat.isDirectory() || runtimeStat.uid !== process.getuid() || runtimeStat.mode & 0o077) throw Error('A private owned XDG runtime directory is required');
-  for (const dir of [machineRoot, runtimeRoot, storageRoot, path.join(storageRoot, 'graph'), path.join(storageRoot, 'run'), path.join(storageRoot, 'config')]) await privateDir(dir);
+  const existing = await fs.lstat(podmanRuntime).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
+  if (existing && (!existing.isDirectory() || existing.uid !== process.getuid())) throw Error('Private Podman runtime directory ownership changed');
+  for (const dir of [machineRoot, runtimeRoot, podmanRuntime, storageRoot, path.join(storageRoot, 'graph'), path.join(storageRoot, 'run'), path.join(storageRoot, 'config')]) await privateDir(dir);
   const q = JSON.stringify;
   const config = path.join(storageRoot, 'config');
   // Explicit paths prevent adopting host containers or silently finding distro helpers.
@@ -58,6 +63,11 @@ export async function prepareStorage() {
 }
 export const podmanEnvironment = (overrides = {}) => ({ ...Object.fromEntries(Object.entries({...process.env,...overrides}).filter(([key]) => !/^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$)/.test(key))),
   PATH: [path.join(packageRoot,'bin'),overrides.PATH ?? process.env.PATH].filter(Boolean).join(path.delimiter),
+  XDG_RUNTIME_DIR: podmanRuntime,
+  BASHKITTEN_DATA_DIR: dataDir,
+  // Only the engine receives the private runtime root. Its cgroup control still
+  // uses the real host user bus; media helpers retain their original environment.
+  DBUS_SESSION_BUS_ADDRESS: overrides.DBUS_SESSION_BUS_ADDRESS ?? process.env.DBUS_SESSION_BUS_ADDRESS ?? `unix:path=${path.join(process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`, 'bus')}`,
   CONTAINERS_CONF: path.join(storageRoot, 'config/containers.conf'),
   CONTAINERS_STORAGE_CONF: path.join(storageRoot, 'config/storage.conf'),
   CONTAINERS_REGISTRIES_CONF: path.join(storageRoot, 'config/registries.conf'),
@@ -91,10 +101,10 @@ export function validate(config, id) {
   if (typeof config.autostart !== 'boolean') throw Error('Startup must be On or Off');
   const c = config.launch;
   if (!c || !path.isAbsolute(c.executable || '') || !path.isAbsolute(c.cwd || '') || !Array.isArray(c.arguments) || c.arguments.some(a => typeof a !== 'string' || a.includes('\0'))) throw Error('Launch needs an absolute executable, working directory and argument array');
-  if (Object.keys(c.environment || {}).some(key => /^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$|BASHKITTEN_DATA_DIR$)/.test(key))) throw Error('Keep the private machine storage and control environment');
+  if (Object.keys(c.environment || {}).some(key => /^(CONTAINERS?_|PODMAN_CONNECTIONS_CONF$|REGISTRY_AUTH_FILE$|BASHKITTEN_DATA_DIR$|BASHKITTEN_GUARD(?:ED|_PID)$|XDG_RUNTIME_DIR$)/.test(key))) throw Error('Keep the private machine storage and control environment');
   if (!c.environment || typeof c.environment !== 'object' || Array.isArray(c.environment) || Object.entries(c.environment).some(([k,v]) => !/^[A-Za-z_][A-Za-z_0-9]*$/.test(k) || typeof v !== 'string' || v.includes('\0'))) throw Error('Launch environment must contain valid string variables');
   const args = c.arguments;
-  if (args.some(a => /^--(?:root|runroot|storage-driver|storage-opt|connection|url|remote)(?:=|$)/.test(a))) throw Error('Keep the private local Podman storage and engine');
+  if (args.some(a => /^--(?:root|runroot|storage-driver|storage-opt|connection|url|remote|namespace)(?:=|$)/.test(a))) throw Error('Keep the private local Podman storage and engine');
   if (args[0] !== 'create' || args.filter(a => a === '--name').length !== 1 || args[args.indexOf('--name') + 1] !== containerName(id)) throw Error('The native command must create this machine with its stable --name');
   if (!args.some((a,i) => a === '--label' && args[i+1] === `${machineLabel}=${id}`)) throw Error('Keep the machine ownership label');
   if (!args.includes(userNamespace) || args.some(a => (a.startsWith('--userns') && a !== userNamespace) || a.startsWith('--uidmap') || a.startsWith('--gidmap'))) throw Error('Changing the UID/GID map requires migrating existing rootfs ownership; keep the saved keep-id map');

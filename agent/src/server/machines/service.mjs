@@ -9,8 +9,8 @@ import { randomUUID } from 'node:crypto';
 import { privateDir, readJson, writeJson, json, jsonBody, socketRequest } from '../common.mjs';
 import { claimInstance, processStart } from '../instance.mjs';
 import { defaults, validate, prepareRuntime, prepareStorage, machineRoot, packageRoot, daemonSocket, locations,
-  load, containerName, machineLabel, definition, helper, userNamespace, mount, podmanEnvironment } from './config.mjs';
-import { podman, installed, run } from './process.mjs';
+  load, containerName, machineLabel, definition, helper, userNamespace, mount } from './config.mjs';
+import { podman, podmanLaunch, installed } from './process.mjs';
 import { startMedia, stopMedia, mediaDevices, mediaStatus, integrationArguments } from './media.mjs';
 import { duringUpdate, mutations, runtimeVersion, updateMessage, updateError } from './update.mjs';
 import { binary } from '../access/paths.mjs';
@@ -314,7 +314,7 @@ async function start(config, job) {
     await writeJson(path.join(p.settings,'display.json'),{machineId:id,mode:gateway.mode,software:gateway.mode==='software',width:1280,height:720});
     await writeJson(path.join(p.settings,'integration.json'),{schema:1,media:Object.fromEntries(Object.entries(config.integrations.media).map(([k,v])=>[k,v.enabled]))});
     if (!info) {
-      await run(config.launch.executable,config.launch.arguments,{cwd:config.launch.cwd,env:podmanEnvironment(config.launch.environment),output:job.output,signal:job.signal});
+      await podmanLaunch(config.launch.executable,config.launch.arguments,{cwd:config.launch.cwd,env:config.launch.environment,output:job.output,signal:job.signal});
       info=await inspect(id); if (!info) throw Error('Podman did not create the machine');
       await saveState(id,{definition:definition(config)});
     }

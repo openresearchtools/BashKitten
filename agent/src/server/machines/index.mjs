@@ -11,6 +11,10 @@ import { duringUpdate, runtimeVersion, sameRuntime, updateMessage, legacyUpdateM
 const unit = 'bashkitten-machines-' + digest(dataDir).slice(0,16);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const serviceScript = fileURLToPath(new URL('./service.mjs', import.meta.url));
+async function cleanupOrphans() {
+  await run(binary('runtime-guard'), [process.execPath, fileURLToPath(new URL('./shutdown.mjs', import.meta.url)), 'serve'], { env: { ...process.env, BASHKITTEN_DATA_DIR: dataDir } });
+  return { stopped: true };
+}
 
 async function stopLegacy(current) {
   const identity = {pid:current.pid, started:await processStart(current.pid), script:serviceScript};
@@ -29,8 +33,7 @@ async function stopLegacy(current) {
   } catch (error) {
     failure = error;
   }
-  const {shutdownOwnedMachines} = await import('./shutdown.mjs');
-  await shutdownOwnedMachines();
+  await cleanupOrphans();
   if (failure) throw failure;
   return {stopped:true};
 }
@@ -108,8 +111,7 @@ export async function machineControl(action, value = {}) {
     try {
       const current = await ready();
       if (!current) {
-        const {shutdownOwnedMachines} = await import('./shutdown.mjs');
-        return await shutdownOwnedMachines();
+        return await cleanupOrphans();
       }
       if (current.schema < 3) return await stopLegacy(current);
       return await socketRequest(daemonSocket, '/browser-shutdown', value, 30000);

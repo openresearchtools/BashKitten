@@ -20,6 +20,18 @@ sign-out or computer restart is required. Explicit Quit verifies the old service
 unit/process ownership, stops it and its private guests, including with Local Off.
 Background update checks never kill work based on a possibly stale idle snapshot.
 
+Podman's rootless pause helper and namespace handles use a separate, per-data-root
+XDG runtime directory, as well as the private image/container store. Quit/crash
+cleanup fences and drains accepted engine commands, stops owned guests, then
+releases only that private helper through its guard-owned identity and a pidfd.
+It does not run `podman system migrate`, rewrite network choices or remove images.
+Earlier development packages used the user's shared `libpod/tmp/pause.pid` even
+with private image storage. That legacy shared helper is deliberately not killed:
+unrelated host Podman may have joined it. New commands use private namespace state;
+existing rootfs/images remain intact, and Podman retains saved database paths.
+Acceptance of the new cleanup on installed builds is required separately from
+source checks, including forced browser exit and an unrelated host Podman workload.
+
 Each named machine has a stable UUID directory below `$BASHKITTEN_DATA_DIR/machines`.
 `launch.json` is the canonical editable executable/argv/environment/cwd definition;
 `Containerfile` is its saved installation recipe. Runtime status and credentials
