@@ -234,7 +234,15 @@ export class NativeSidecar {
       this.button("Connect to phone", "Connect this backend to phone", () => { dialog.close(); return this.host.connectToPhone(remote.id); }),
       this.button("Delete remote", "Delete saved remote", async () => { if (!Services.prompt.confirm(this.host.win, "Delete remote?", `Forget “${remote.name}” and its login? Its machine and chats are kept.`)) return; await AgentRemotes.remove(remote.id); if (this.selected() === remote.id) await this.host.disconnectSelected(); dialog.close(); await this.refresh(); }));
   }
-  createMachine() { this.textDialog("Container name", "", async name => { const result = await this.control("machines.create", { name, displayCapabilities: await this.displayCapabilities() }); await this.refresh(); await this.operation(result.machine?.id || result.id); }); }
+  createMachine() {
+    this.textDialog("Container name", "", async name => {
+      const result = await this.control("machines.create", { name, displayCapabilities: await this.displayCapabilities() });
+      // A coalesced catalogue request may have started before this machine existed.
+      await this.refreshTask;
+      await this.refresh();
+      if (!this.closed) await this.operation(result.machine?.id || result.id);
+    });
+  }
   machineSettings(id) { return this.host.openSettings("machine", { backendId: id }); }
   operation(id) { return this.host.openSettings("machine", { backendId: id, operation: true }); }
 
