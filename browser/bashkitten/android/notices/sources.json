@@ -102,5 +102,55 @@
     "licensePath": "src/ext/mulodi/LICENSE.TXT",
     "notice": "tor-mulodi-LICENSE",
     "sha256": "415ec2b15961f8b34859a50af386663f552bb62b9fffd69e8eb676c792ea022e"
+  },
+  {
+    "name": "jna",
+    "version": "5.18.1",
+    "repository": "https://github.com/java-native-access/jna",
+    "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+    "sourceArchive": "jna-3c493c1642b1555d541755e0984c968ba6c0f540-src-full.zip",
+    "licensePath": "LICENSE",
+    "notice": "jna-LICENSE",
+    "sha256": "07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1"
+  },
+  {
+    "name": "jna-apache",
+    "version": "5.18.1",
+    "repository": "https://github.com/java-native-access/jna",
+    "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+    "sourceArchive": "jna-3c493c1642b1555d541755e0984c968ba6c0f540-src-full.zip",
+    "licensePath": "AL2.0",
+    "notice": "jna-AL2.0",
+    "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+  },
+  {
+    "name": "jna-lgpl",
+    "version": "5.18.1",
+    "repository": "https://github.com/java-native-access/jna",
+    "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+    "sourceArchive": "jna-3c493c1642b1555d541755e0984c968ba6c0f540-src-full.zip",
+    "licensePath": "LGPL2.1",
+    "notice": "jna-LGPL2.1",
+    "sha256": "eea173a556abac0370461e57e12aab266894ea6be3874c2be05fd87871f75449"
+  },
+  {
+    "name": "jna-libffi",
+    "version": "5.18.1",
+    "repository": "https://github.com/java-native-access/jna",
+    "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+    "sourceArchive": "jna-3c493c1642b1555d541755e0984c968ba6c0f540-src-full.zip",
+    "licensePath": "native/libffi/LICENSE",
+    "notice": "jna-libffi-LICENSE",
+    "sha256": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388"
+  },
+  {
+    "name": "jna-libffi-buildtools",
+    "version": "5.18.1",
+    "repository": "https://github.com/java-native-access/jna",
+    "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+    "sourceArchive": "jna-3c493c1642b1555d541755e0984c968ba6c0f540-src-full.zip",
+    "licensePath": "native/libffi/LICENSE-BUILDTOOLS",
+    "notice": "jna-libffi-LICENSE-BUILDTOOLS",
+    "sha256": "e67978cd18816c0cb7d29aaaacde7b7447402c2fb321a051698890a8eaedda94"
   }
 ]

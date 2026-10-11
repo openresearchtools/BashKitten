@@ -50,8 +50,18 @@ def bundles():
             else: break
         blocker += '\n\nFilter list: ' + file.name + '\n' + '\n'.join(headers)
     qr = "QR scanner\n\n" + dependencies([record for record in records if record['name'] == 'zxing-android'])
+    jna_records = [record for record in records if record['name'] == 'jna' or record['name'].startswith('jna-')]
+    required_jna = {'LICENSE', 'AL2.0', 'LGPL2.1', 'native/libffi/LICENSE', 'native/libffi/LICENSE-BUILDTOOLS'}
+    if {record['licensePath'] for record in jna_records} != required_jna:
+        raise RuntimeError('Missing complete JNA/native libffi notices')
+    versions = {record['version'] for record in jna_records}
+    catalog = (ROOT / 'gradle/libs.versions.toml').read_text().splitlines()
+    declared = [line.split('=', 1)[1].strip().strip('"') for line in catalog if line.startswith('jna = "')]
+    if len(declared) != 1 or versions != {declared[0]}:
+        raise RuntimeError('JNA source notices do not match the declared Android dependency')
+    jna = f"Java Native Access {declared[0]} — Java, JNI dispatch and libffi\n\n" + dependencies(jna_records)
     sections = {'BASHKITTEN-NOTICES.txt': product, 'TOR-NOTICES.txt': tor,
-                'BLOCKER-NOTICES.txt': blocker, 'QR-NOTICES.txt': qr}
+                'BLOCKER-NOTICES.txt': blocker, 'QR-NOTICES.txt': qr, 'JNA-NOTICES.txt': jna}
     sections['THIRD-PARTY-NOTICES.txt'] = "\n\n".join(sections.values())
     return sections
 

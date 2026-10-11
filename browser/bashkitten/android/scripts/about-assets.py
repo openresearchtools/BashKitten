@@ -65,12 +65,17 @@ metadata = sorted(apk_licenses.rglob('third_party_license_metadata'))
 if not metadata:
     raise SystemExit(f'The resolved Android dependency license inventory is missing: {apk_licenses}')
 seen = set()
+full_licenses = {'Java Native Access': (a.native_notices / 'JNA-NOTICES.txt').read_text().strip()}
 for table in metadata:
     blob = (table.parent / 'third_party_licenses').read_bytes()
     for line in table.read_text().splitlines():
         position, name = line.split(' ', 1)
         start, count = map(int, position.split(':'))
         text = blob[start:start + count].decode('utf-8').strip()
+        # Maven's JNA POM contains only license URLs; show its retained complete
+        # release notices, including the JNI library's bundled libffi grant.
+        if name in full_licenses:
+            text = full_licenses[name]
         if not text:
             raise SystemExit(f'Missing license text: {name}')
         if (name, text) in seen:

@@ -58,5 +58,17 @@
     "commit": "24d02945fec5f2c5a65b24ea7848cb5ca18f9f81",
     "file": "zxing-android-embedded-24d02945fec5f2c5a65b24ea7848cb5ca18f9f81.tar.gz",
     "sha256": "7e68394b7da8344d6a1ffe3609439e6ae2d4269f41085e85f78a0e4263f77300"
+  },
+  {
+    "repository": "https://github.com/java-native-access/jna",
+    "release": "5.18.1",
+    "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+    "file": "jna-3c493c1642b1555d541755e0984c968ba6c0f540-src-full.zip",
+    "sha256": "4d17f6e54f182667812fe66a1c67eed3be0e14139c5c725496966d6e4c461abb",
+    "sourcePath": "dist/src-full.zip",
+    "sourceUrl": "https://raw.githubusercontent.com/java-native-access/jna/3c493c1642b1555d541755e0984c968ba6c0f540/dist/src-full.zip",
+    "mavenCoordinate": "net.java.dev.jna:jna:5.18.1@aar",
+    "mavenArtifactSha256": "7f053e3ec99e14dd71259c82c1c8a02738d64a13c31226b2acc170f3060951e0",
+    "contents": "Unmodified upstream complete source distribution: Java, JNI libjnidispatch, materialized native/libffi, build files and full licenses."
   }
 ]
