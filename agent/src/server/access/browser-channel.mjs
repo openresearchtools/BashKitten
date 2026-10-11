@@ -34,6 +34,11 @@ function deliver(channel) {
   channel.poll.finish({ commands: channel.queue.splice(0) });
 }
 function targetFor(sessionId) {
+  if (process.env.BASHKITTEN_EXECUTION_ROLE === 'container') {
+    const owned = [...channels.values()].find(channel => channel.nativeGuest);
+    if (!owned) throw failure('The container browser is unavailable');
+    return owned;
+  }
   const selected = bindings.get(sessionId);
   if (selected) {
     const channel = [...channels.values()].find(item => item.clientId === selected.clientId && item.owner === selected.owner);
@@ -108,7 +113,7 @@ export async function handleBrowserChannel(req, res, record, route) {
     if (!['linux', 'android'].includes(input.platform) || typeof input.clientId !== 'string' || input.clientId.length > 128) throw Error('Invalid browser identity');
     for (const old of channels.values()) if (old.clientId === input.clientId && old.key === record.key) close(old);
     const channel = { id: randomUUID(), clientId: input.clientId, key: record.key, owner: record.username, platform: input.platform,
-      name: String(input.name || 'Browser').slice(0, 100), capabilities: input.capabilities || {}, queue: [], pending: new Map() };
+      nativeGuest: record.nativeGuest === true, name: String(input.name || 'Browser').slice(0, 100), capabilities: input.capabilities || {}, queue: [], pending: new Map() };
     channel.unwatch = watch(record, () => close(channel, 'Browser authentication expired'));
     channels.set(channel.id, channel); touch(channel); json(res, { channelId: channel.id }); return true;
   }

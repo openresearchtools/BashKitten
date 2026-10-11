@@ -4,12 +4,134 @@ import { BrowserControl } from "chrome://remote/content/bashkitten/BrowserContro
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
+const lazy = {};
+ChromeUtils.defineESModuleGetters(lazy, {
+  Subprocess: "resource://gre/modules/Subprocess.sys.mjs",
+  AsyncShutdown: "resource://gre/modules/AsyncShutdown.sys.mjs",
+  BrowserWindowTracker: "resource:///modules/BrowserWindowTracker.sys.mjs",
+});
+
 /** An authenticated outbound channel. It never opens a browser-control listener. */
 export const BrowserControlChannel = {
   current: null,
   declined: new Set(),
   pending: null,
   epoch: 0,
+
+  // This requests a role, not a grant. The private controller validates the
+  // namespace, installed executable, parent PID and registered profile before
+  // returning any commands. No page or profile file can authorize this path.
+  get guestRequested() {
+    return Services.appinfo.OS === "Linux" &&
+      Services.env.get("BASHKITTEN_GUEST_BROWSER") === "1" &&
+      Services.env.get("BASHKITTEN_EXECUTION_ROLE") === "container" &&
+      /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(Services.env.get("BASHKITTEN_MACHINE_ID"));
+  },
+
+  startGuest() {
+    if (!this.guestRequested) return Promise.reject(new Error("Not a managed guest browser"));
+    if (this.guestStartup) return this.guestStartup;
+    if (!this.guestLifetime) {
+      this.guestLifetime = true;
+      Services.startup.enterLastWindowClosingSurvivalArea();
+      lazy.AsyncShutdown.profileBeforeChange.addBlocker("Guest browser control", () => this.closeGuest());
+    }
+    this.guestStartup = this.openGuest().catch(() => {
+      Services.obs.notifyObservers(null, "bashkitten-browser-control-disconnected", "container");
+    }).finally(() => { this.guestStartup = null; });
+    return this.guestStartup;
+  },
+
+  async openGuest() {
+    const state = { controller: new AbortController(), results: new Map(), write: Promise.resolve(), connected: false, generation: 0 };
+    this.guest = state;
+    state.process = await lazy.Subprocess.call({
+      command: "/usr/lib/bashkitten/node/bin/node",
+      arguments: ["/usr/lib/bashkitten/src/server/access/guest-browser-relay.mjs"],
+      stderr: "pipe",
+    });
+    // Do not expose command content, credentials or runtime output in logs.
+    const stderr = (async () => { while (await state.process.stderr.readString()) {} })().catch(() => {});
+    const send = value => {
+      state.write = state.write.then(() => state.process.stdin.write(JSON.stringify(value) + "\n"));
+      return state.write;
+    };
+    try {
+      if (state.controller.signal.aborted) throw new Error("Guest browser is stopping");
+      const capabilities = await BrowserControl.execute({ method: "capabilities" });
+      await send({ version: 1, browserPid: Services.appinfo.processID,
+        profile: PathUtils.profileDir, clientId: crypto.randomUUID(), capabilities });
+      let buffered = "";
+      for (let chunk; (chunk = await state.process.stdout.readString());) {
+        buffered += chunk;
+        let newline;
+        while ((newline = buffered.indexOf("\n")) !== -1) {
+          const command = JSON.parse(buffered.slice(0, newline));
+          buffered = buffered.slice(newline + 1);
+          if (command.ready === true) { state.controller = new AbortController(); state.generation++; state.connected = true; continue; }
+          if (command.disconnected) {
+            state.connected = false; state.generation++; state.controller.abort(); state.results.clear();
+            Services.obs.notifyObservers(null, "bashkitten-browser-control-disconnected", "container");
+            continue;
+          }
+          if (command.closed) throw new Error("Guest browser control disconnected");
+          if (!state.connected || typeof command.id !== "string" || typeof command.method !== "string" ||
+              !command.params || typeof command.params !== "object" || Array.isArray(command.params)) {
+            throw new Error("Invalid guest browser command");
+          }
+          let entry = state.results.get(command.id);
+          if (!entry) {
+            entry = { complete: false };
+            entry.promise = this.executeGuest(state, command).then(result => ({ result }),
+              error => ({ error: { code: "browser_command_failed", message: error.message } }));
+            state.results.set(command.id, entry);
+          }
+          // Keep reading while commands run; the normal dispatcher owns its
+          // operation lifetime. Closing the helper cancels outstanding work.
+          const generation = state.generation;
+          void entry.promise.then(result => {
+            entry.complete = true;
+            for (const [id, cached] of state.results) {
+              if (state.results.size <= 256) break;
+              if (cached.complete) state.results.delete(id);
+            }
+            if (generation === state.generation && !state.controller.signal.aborted) return send({ id: command.id, ...result });
+          }).catch(() => state.process.kill());
+        }
+      }
+      throw new Error("Guest browser control closed");
+    } finally {
+      state.connected = false;
+      state.controller.abort();
+      state.process.kill();
+      await state.process.wait().catch(() => {});
+      await stderr;
+    }
+  },
+
+  async executeGuest(state, command) {
+    const { signal } = state.controller;
+    if (!lazy.BrowserWindowTracker.getTopWindow() &&
+        (["tabs.create", "tabs.open"].includes(command.method) ||
+         (command.method === "tabs" && ["new", "open", "create"].includes(command.params.action)))) {
+      // Last-window close keeps the ordinary browser runtime alive. An explicit
+      // new-tab command may reveal a new ordinary window, never an Agent view.
+      state.openingWindow ||= (async () => {
+        const win = lazy.BrowserWindowTracker.openWindow();
+        await win.delayedStartupPromise;
+      })().finally(() => { state.openingWindow = null; });
+      await state.openingWindow;
+    }
+    return BrowserControl.execute({ method: command.method, params: command.params }, { signal });
+  },
+
+  async closeGuest() {
+    const state = this.guest;
+    if (!state) return;
+    state.controller.abort();
+    state.process?.kill();
+    await state.process?.wait().catch(() => {});
+  },
 
   observe(_subject, topic, connectionId) {
     if (topic === "bashkitten-agent-control-revoke" &&
@@ -19,10 +141,12 @@ export const BrowserControlChannel = {
   },
 
   get status() {
+    if (this.guestRequested) return { connected: this.guest?.connected === true, connectionId: "container" };
     return this.current ? { connected: true, connectionId: this.current.connection.id } : { connected: false };
   },
 
   start(connection, options = {}) {
+    if (this.guestRequested) return Promise.reject(new Error("Managed guests use their own browser controller"));
     const key = `${connection.id}\0${connection.url}`;
     if (this.pending?.key === key) return this.pending.task;
     const pending = { key, id: connection.id };
@@ -106,15 +230,20 @@ export const BrowserControlChannel = {
       if (!Array.isArray(commands) || commands.length > 64) throw new Error("Invalid browser command batch");
       await Promise.all(commands.map(async command => {
         if (!command || typeof command.id !== "string") throw new Error("Invalid browser command identity");
-        let completed = state.results.get(command.id);
-        if (!completed) {
-          completed = BrowserControl.execute({ method: command.method, params: command.params }, {
+        let entry = state.results.get(command.id);
+        if (!entry) {
+          entry = { complete: false };
+          entry.promise = BrowserControl.execute({ method: command.method, params: command.params }, {
             signal: state.controller.signal,
           }).then(result => ({ result }), error => ({ error: { code: "browser_command_failed", message: error.message } }));
-          state.results.set(command.id, completed);
-          while (state.results.size > 256) state.results.delete(state.results.keys().next().value);
+          state.results.set(command.id, entry);
         }
-        const result = await completed;
+        const result = await entry.promise;
+        entry.complete = true;
+        for (const [id, cached] of state.results) {
+          if (state.results.size <= 256) break;
+          if (cached.complete) state.results.delete(id);
+        }
         if (state.controller.signal.aborted) return;
         await this.post(state, "result", { channelId: state.channelId, id: command.id, ...result });
       }));

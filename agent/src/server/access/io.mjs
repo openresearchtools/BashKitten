@@ -1,9 +1,9 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 
-export function unixRequest(socketPath, route, { method = 'GET', headers = {}, body, limit = Infinity, timeout = 15000 } = {}) {
+export function unixRequest(socketPath, route, { method = 'GET', headers = {}, body, limit = Infinity, timeout = 15000, signal } = {}) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ socketPath, path: route, method, headers }, res => {
+    const req = http.request({ socketPath, path: route, method, headers, signal }, res => {
       let bytes = 0; const chunks = [];
       res.on('data', value => { bytes += value.length; if (bytes > limit) res.destroy(Error('Local service response exceeded its limit')); else chunks.push(value); });
       res.on('error', reject);
