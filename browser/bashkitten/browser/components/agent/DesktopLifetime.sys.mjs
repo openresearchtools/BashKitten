@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
 
-const KEEP = "bashkitten.desktop.keepInTray";
-
 export const DesktopLifetime = {
   autostart: false,
   quitting: false,
@@ -49,8 +47,14 @@ export const DesktopLifetime = {
     this.autostart = false;
   },
   hide() {
-    if (this.quitting || !Services.prefs.getBoolPref(KEEP, true)) return false;
-    return this.tray?.hide() || false;
+    if (this.quitting) return false;
+    if (this.tray?.hide()) return true;
+    // Closing is never Quit. Without a tray keep the existing window reachable
+    // through the taskbar, and leave its owned runtime and desktops running.
+    const window = this.view?.win;
+    if (!window || window.closed) return false;
+    window.minimize();
+    return true;
   },
   reveal() {
     this.autostart = false;
@@ -65,25 +69,23 @@ export const DesktopLifetime = {
     view.off = true;
     view.power.disabled = view.choice.disabled = true;
     view.show();
-    view.message("Quitting BashKitten", "Stopping owned services safely. Any active package transaction must finish first.");
+    view.message("Quitting BashKitten", "Stopping owned services and containers…");
     this.updateStatus();
-    this.shutdown().then(() => {
+    const finish = error => {
+      if (error) {
+        console.error("BashKitten cleanup was not confirmed before Quit", error);
+        view.message("Quitting BashKitten", `Cleanup was not confirmed: ${error.message || error}. Browser exit will trigger the owned runtime guards.`);
+      }
       // A tab's beforeunload handler can still cancel Gecko's final quit.
       if (!Services.startup.quit(Ci.nsIAppStartup.eAttemptQuit)) {
         this.quitting = false;
         view.power.disabled = view.choice.disabled = false;
         delete view.win.skipNextCanClose;
-        view.stopped();
+        if (error) view.message("Quit cancelled", `Cleanup was not confirmed: ${error.message || error}`);
+        else view.stopped();
       }
-    }).catch(error => {
-      this.quitting = false;
-      view.message("Quit has not completed", `${error.message || error} Choose Quit to retry.`);
-      const retry = view.doc.createElementNS("http://www.w3.org/1999/xhtml", "button");
-      retry.textContent = "Retry Quit";
-      retry.addEventListener("click", () => this.quit());
-      view.state.append(retry);
-      this.updateStatus();
-    });
+    };
+    Promise.resolve().then(() => this.shutdown()).then(() => finish(), finish);
   },
   shutdownStatus(status) {
     const job = status.packages?.job, view = this.view;

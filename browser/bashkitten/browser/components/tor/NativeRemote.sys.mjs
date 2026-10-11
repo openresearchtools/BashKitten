@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 /** Browser-private pipes to the shared native client, with acknowledged NSS persistence. */
 export class NativeRemote {
@@ -78,9 +79,16 @@ export class NativeRemote {
     this.pending.clear();
     AsyncShutdown.profileBeforeChange.removeBlocker(this.shutdown);
     this.closing = (async () => {
-      await this.process.stdin.close().catch(() => {});
-      await this.process.kill(1000);
-      await this.process.wait();
+      // A stalled reader must not make pipe flushing delay termination.
+      const killed = this.process.kill(1000);
+      const closed = this.process.stdin.close(true).catch(() => {});
+      let deadline;
+      try {
+        await Promise.race([
+          Promise.all([killed, closed]),
+          new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("Native remote shutdown was not confirmed.")), 5000); }),
+        ]);
+      } finally { clearTimeout(deadline); }
     })();
     return this.closing;
   }

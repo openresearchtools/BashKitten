@@ -9,7 +9,10 @@ import { packageRoot } from './config.mjs';
 export const duringUpdate = new Set(['status','list','get','operation','activations','cancel','stop','endpoint','display','clipboard','guest-control','media-devices']);
 export const mutations = new Set(['create','save','startup','start','stop','restart','retry','delete']);
 export const updateMessage = 'BashKitten has been updated. Let current container operations finish and stop running containers to load the updated container service.';
-export const legacyUpdateMessage = 'BashKitten has been updated. This older container service needs a desktop sign-out or computer restart to load the update. Running containers are unchanged; you can still view, stop or cancel them.';
+
+// Only pre-ownership development services lack the in-process drain protocol.
+// Explicit application Quit now stops those too; an OS/session restart is never needed.
+export const legacyUpdateMessage = 'Quit and reopen BashKitten to finish this container service update. Running containers stay available until Quit.';
 
 export async function runtimeVersion(running = false) {
   const manifest = await readJson(path.join(packageRoot, '..', 'build-platform.json'), null);

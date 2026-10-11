@@ -2,6 +2,7 @@
 import { Subprocess } from "resource://gre/modules/Subprocess.sys.mjs";
 import { AsyncShutdown } from "resource://gre/modules/AsyncShutdown.sys.mjs";
 import { AgentRemotes } from "resource:///modules/AgentRemotes.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const connections = new Map(), routes = new Map(), generations = new Map();
 const proxy = Cc["@mozilla.org/network/protocol-proxy-service;1"].getService(Ci.nsIProtocolProxyService);
@@ -19,8 +20,22 @@ const filter = {
   },
 };
 proxy.registerChannelFilter(filter, 1);
-AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: close machine views", () =>
-  Promise.allSettled([...connections.keys()].map(id => disconnectMachine(id))));
+AsyncShutdown.profileBeforeChange.addBlocker("BashKitten: close machine views", async () => {
+  const results = await Promise.allSettled([...connections.keys()].map(id => disconnectMachine(id)));
+  for (const result of results) if (result.status === "rejected") console.error("Container view shutdown was not confirmed", result.reason);
+});
+
+async function closeProcess(process) {
+  const killed = process.kill(1000);
+  const closed = process.stdin.close(true).catch(() => {});
+  let deadline;
+  try {
+    await Promise.race([
+      Promise.all([killed, closed]),
+      new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("Container connection shutdown was not confirmed.")), 5000); }),
+    ]);
+  } finally { clearTimeout(deadline); }
+}
 
 export async function disconnectMachine(id, expectedGeneration) {
   const item = connections.get(id);
@@ -31,8 +46,7 @@ export async function disconnectMachine(id, expectedGeneration) {
   if (item.context) routes.set(item.context, null);
   Services.obs.notifyObservers(null, "bashkitten-agent-control-revoke", "machine:" + id);
   Services.obs.notifyObservers(null, "net:prune-all-connections");
-  await item.process.stdin.close().catch(() => {});
-  await item.process.kill(1000); await item.process.wait();
+  await closeProcess(item.process);
 }
 
 export async function connectMachine(id, control, onClose, isSelected = () => true) {
@@ -44,7 +58,7 @@ export async function connectMachine(id, control, onClose, isSelected = () => tr
   pending();
   const process = await Subprocess.call({ command: "/usr/bin/bashkittenctl", arguments: ["machine-transport", id], stderr: "pipe" });
   if (generations.get(id) !== generation || !isSelected()) {
-    await process.stdin.close().catch(() => {}); await process.kill(1000); await process.wait();
+    await closeProcess(process);
     pending();
   }
   const item = { process, generation }; connections.set(id, item);

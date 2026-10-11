@@ -2,8 +2,11 @@
 
 The native browser calls `machineControl(action, value)` in
 `src/server/machines/index.mjs`. A separate systemd user service owns provisioning,
-private Podman and the persistent guest display/media/backend lifetime. It is not
-under Local's runtime guard. Missing rootless-user/systemd prerequisites are
+private Podman and the guest display/media/backend lifetime. Local Off and closing
+a Display tab/window preserve that work. Desktop Quit, forced browser termination
+or browser crash must stop the entire owned runtime, including this service and
+its containers, through the native browser identity and runtime guard. This does
+not delete machines or stop unrelated processes. Missing rootless-user/systemd prerequisites are
 reported; no system-Podman or alternate-runtime fallback is used.
 
 The service reports the package revision and the Node executable it loaded.
@@ -11,10 +14,11 @@ After an update, its owner refuses new provisioning/start/configuration work,
 while reads, Stop and Cancel remain available. It retires only when accepted
 operations, running containers and their display/media processes have finished;
 the next native request starts the installed version. A native ownership lock
-serializes replacement across browser/controller processes. Browser Quit never
-stops this persistent owner. Older services without this drain protocol require
-a desktop sign-out or computer restart, which is reported explicitly; a client
-does not kill a legacy owner from a potentially stale idle snapshot.
+serializes replacement across browser/controller processes. Pre-protocol
+development services can be stopped by application Quit and reopening; no desktop
+sign-out or computer restart is required. Explicit Quit verifies the old service's
+unit/process ownership, stops it and its private guests, including with Local Off.
+Background update checks never kill work based on a possibly stale idle snapshot.
 
 Each named machine has a stable UUID directory below `$BASHKITTEN_DATA_DIR/machines`.
 `launch.json` is the canonical editable executable/argv/environment/cwd definition;

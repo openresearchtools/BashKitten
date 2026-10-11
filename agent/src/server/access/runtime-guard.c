@@ -184,7 +184,7 @@ static int pipe_output(char **command) {
  * heartbeat. A pidfd cannot silently become a different process after PID reuse.
  * This helper remains a child of the existing controller/subreaper; it never
  * signals an arbitrary PID or survives the controller that requested it. */
-static int wait_owner(const char *pid_text, const char *started_text) {
+static int wait_owner(const char *pid_text, const char *started_text, bool stop_group) {
     pid_t parent = getppid();
     child_setup(parent, SIGKILL);
     char *end;
@@ -206,18 +206,45 @@ static int wait_owner(const char *pid_text, const char *started_text) {
         close(descriptor);
         return 125;
     }
+    int guard_descriptor = -1;
+    if (stop_group) {
+        struct identity controller_identity, guard_before, guard_after;
+        const char *guard_text = getenv("BASHKITTEN_GUARD_PID");
+        char *guard_end = NULL;
+        long guard = guard_text ? strtol(guard_text, &guard_end, 10) : 0;
+        if (!guard_text || *guard_end || guard <= 1 || guard > INT_MAX ||
+            !identify(parent, &controller_identity) || controller_identity.parent != guard ||
+            !identify((pid_t)guard, &guard_before)) {
+            close(descriptor); return 125;
+        }
+        guard_descriptor = (int)syscall(SYS_pidfd_open, (pid_t)guard, 0);
+        if (guard_descriptor < 0 || !identify((pid_t)guard, &guard_after) ||
+            guard_before.started != guard_after.started) {
+            if (guard_descriptor >= 0) close(guard_descriptor);
+            close(descriptor); return 125;
+        }
+    }
     struct pollfd owner = {.fd = descriptor, .events = POLLIN};
     if (poll(&owner, 1, 0) != 0) {
+        if (guard_descriptor >= 0) close(guard_descriptor);
         close(descriptor);
         return 125;
     }
     if (puts("ready") < 0 || fflush(stdout) != 0) {
+        if (guard_descriptor >= 0) close(guard_descriptor);
         close(descriptor);
         return 125;
     }
     int result;
     do { result = poll(&owner, 1, -1); } while (result < 0 && errno == EINTR);
     close(descriptor);
+    if (guard_descriptor >= 0) {
+        // Arm the existing guard's deadline even if the JS controller is busy.
+        // This pidfd belongs to our verified ancestor, never an unrelated PID.
+        if (syscall(SYS_pidfd_send_signal, guard_descriptor, SIGTERM, NULL, 0) != 0 && errno != ESRCH)
+            perror("runtime-guard: stop browser-owned group");
+        close(guard_descriptor);
+    }
     return result > 0 && (owner.revents & POLLIN) ? 0 : 125;
 }
 
@@ -263,8 +290,8 @@ int main(int argc, char **argv) {
     if (setrlimit(RLIMIT_CORE, &no_core) != 0) { perror("runtime-guard: disable core dumps"); return 125; }
     if (argc >= 3 && strcmp(argv[1], "pipe-output") == 0)
         return pipe_output(&argv[2]);
-    if (argc == 4 && strcmp(argv[1], "wait-owner") == 0)
-        return wait_owner(argv[2], argv[3]);
+    if ((argc == 4 || (argc == 5 && strcmp(argv[4], "guard-stop") == 0)) && strcmp(argv[1], "wait-owner") == 0)
+        return wait_owner(argv[2], argv[3], argc == 5);
     if (argc < 4 || strcmp(argv[argc - 1], "serve") != 0) {
         fprintf(stderr, "Usage: runtime-guard <node> <control.mjs> serve\n");
         return 64;

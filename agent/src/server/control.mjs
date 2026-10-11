@@ -53,7 +53,7 @@ export async function controlRequest(command, value) {
       // before shutdown finishes. Retry rejected starts or failed connections,
       // never an operation whose response was lost after connecting.
       if (command === 'start' && ['AGENT_SHUTTING_DOWN', 'ENOENT', 'ECONNREFUSED'].includes(error.code) && Date.now() < deadline) {
-        await ensureManager({ waitForShutdown: true });
+        await ensureManager({ waitForShutdown: true, browserOwner: value?.browserOwner });
         continue;
       }
       if (command !== 'status' || attempt >= 10 || !['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(error.code)) throw error;
@@ -61,16 +61,17 @@ export async function controlRequest(command, value) {
     }
   }
 }
-function spawnManager(detached) {
+function spawnManager(detached, browserOwner) {
   const log = detached ? openSync(path.join(dataDir, 'control.log'), 'a', 0o600) : null;
   const child = spawn(binary('runtime-guard'), [process.execPath, script, 'serve'], {
     detached, stdio: detached ? ['ignore', log, log] : 'inherit',
-    env: { ...process.env, BASHKITTEN_TERMUX: platform === 'termux' ? '1' : '0' },
+    env: { ...process.env, BASHKITTEN_TERMUX: platform === 'termux' ? '1' : '0',
+      ...(platform === 'linux' && browserOwner ? { BASHKITTEN_BROWSER_PID: String(browserOwner.pid), BASHKITTEN_BROWSER_STARTED: browserOwner.started } : {}) },
   });
   if (log !== null) closeSync(log);
   return child;
 }
-export async function ensureManager({ waitForShutdown = false } = {}) {
+export async function ensureManager({ waitForShutdown = false, browserOwner } = {}) {
   await privateDir(path.dirname(controlSocket));
   let child, error, draining = false;
   for (const deadline = Date.now() + 30000; Date.now() < deadline;) {
@@ -82,7 +83,7 @@ export async function ensureManager({ waitForShutdown = false } = {}) {
     } catch (failure) {
       if (!['EPIPE', 'ECONNRESET', 'ECONNREFUSED', 'ENOENT'].includes(failure.code)) throw failure;
       if (!child || child.exitCode !== null || child.signalCode !== null) {
-        child = spawnManager(true); child.unref();
+        child = spawnManager(true, browserOwner); child.unref();
         child.on('error', value => { error = value; });
       }
     }
@@ -131,7 +132,7 @@ async function serve() {
   }
   let serial = Promise.resolve();
   let starting = false, stopping = false, lastError = state.error || null, restartPending = false, exiting = false;
-  let browserOwner = null, browserWatcher = null, browserClosing = false;
+  let browserOwner = null, browserWatcher = null, browserClosing = false, browserAdoption = Promise.resolve(), monitor;
   // The existing subreaper owns all launched workloads, including detached Pi
   // workers and router/model children; unrelated Termux/Pi processes are outside it.
   const performance = new WorkloadPerformance({ pid: process.ppid, started: await processStart(process.ppid) });
@@ -165,7 +166,11 @@ async function serve() {
   await jobs.init();
   await ensureIntegration();
   async function persist() { await writeJson(stateFile, { ...state, error: lastError }); }
-  async function adoptBrowser(value) {
+  function adoptBrowser(value) {
+    const pending = browserAdoption.then(() => bindBrowser(value));
+    browserAdoption = pending.catch(() => {}); return pending;
+  }
+  async function bindBrowser(value) {
     if (platform !== 'linux') throw Error('Browser-owned Agent is only available on Linux');
     if (!Number.isInteger(value?.pid) || value.pid < 2 || !/^[1-9][0-9]*$/.test(value.started || '')) throw Error('Invalid browser process identity');
     if (browserClosing) throw Error('The previous browser is stopping Agent; retry Turn on');
@@ -174,11 +179,12 @@ async function serve() {
       return;
     }
     if (await processStart(value.pid) !== value.started || (await fs.stat(`/proc/${value.pid}`)).uid !== process.getuid()) throw Error('The browser process is no longer running');
-    const child = spawn(binary('runtime-guard'), ['wait-owner', String(value.pid), value.started], { stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(binary('runtime-guard'), ['wait-owner', String(value.pid), value.started, 'guard-stop'], { stdio: ['ignore', 'pipe', 'inherit'] });
     browserWatcher = child;
     const closed = error => {
       if (browserWatcher !== child || exiting) return;
       browserWatcher = null; browserClosing = true;
+      if (Number(process.env.BASHKITTEN_GUARD_PID) === process.ppid) process.kill(process.ppid, 'SIGTERM');
       serial = serial.then(async () => { await turnOff(error); if (!stopping) scheduleExit(); }).catch(error => { lastError = error.message; });
     };
     child.once('exit', code => closed(code === 0 ? null : 'Browser lifetime tracking stopped'));
@@ -285,8 +291,7 @@ async function serve() {
     if (command === 'status') return status();
     if (exiting) throw Object.assign(Error('Agent controller is completing shutdown; retry Turn on'), { code: 'AGENT_SHUTTING_DOWN' });
     if (command === 'browser-shutdown') {
-      if (!browserOwner || browserOwner.pid !== value.browserOwner?.pid || browserOwner.started !== value.browserOwner?.started) throw Error('This browser does not own the local Agent');
-      browserClosing = true;
+      beginBrowserShutdown(value);
       await turnOff(); if (!stopping) scheduleExit();
       return status();
     }
@@ -416,9 +421,13 @@ async function serve() {
   }
   const server = http.createServer(async (req, res) => {
     try {
-      if (req.url === '/status') return json(res, await status());
+      if (req.url === '/status' && req.method === 'GET') return json(res, await status());
       if (req.method !== 'POST') throw Error('Use POST for control actions');
       const value = await jsonBody(req);
+      // Arm the native deadline before joining a potentially blocked queue.
+      if (req.url === '/browser-shutdown') beginBrowserShutdown(value);
+      if (platform === 'linux' && value.browserOwner && req.url !== '/browser-shutdown') await adoptBrowser(value.browserOwner);
+      if (req.url === '/status') return json(res, await status());
       // Sampling is local, read-only and on demand. It must not queue behind a
       // model loading or package operation, and never starts/stops a workload.
       if (req.url === '/performance-sample') return json(res, await performance.sample(value));
@@ -444,6 +453,12 @@ async function serve() {
       json(res, await operation);
     } catch (error) { json(res, { error: error.message, code: error.code }, 400); }
   });
+  function beginBrowserShutdown(value) {
+    if (!browserOwner || browserOwner.pid !== value.browserOwner?.pid || browserOwner.started !== value.browserOwner?.started) throw Error('This browser does not own the local Agent');
+    browserClosing = true;
+    if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The desktop runtime guard is unavailable');
+    process.kill(process.ppid, 'SIGTERM');
+  }
   function scheduleExit() {
     if (exiting) return; exiting = true;
     setTimeout(async () => {
@@ -457,11 +472,15 @@ async function serve() {
   }
   // Recover an interrupted On state in the same queue as explicit commands.
   // A browser's first start must wait for recovery to publish its HTTPS URL.
+  if (platform === 'linux' && process.env.BASHKITTEN_BROWSER_PID) {
+    try { await adoptBrowser({ pid: Number(process.env.BASHKITTEN_BROWSER_PID), started: process.env.BASHKITTEN_BROWSER_STARTED }); }
+    catch (error) { await turnOff(error.message); scheduleExit(); return; }
+  }
   serial = serial.then(async () => { if (state.web) await startWeb(); }).catch(() => {});
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(controlSocket, resolve); });
   await fs.chmod(controlSocket, 0o600);
   let failedHealth = 0;
-  const monitor = setInterval(() => {
+  monitor = setInterval(() => {
     serial = serial.then(async () => {
       if (stopping && !jobs.busy) { await turnOff(); if (!stopping) scheduleExit(); return; }
       if (!stopping && stack.ready) {
@@ -503,8 +522,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
       const input = process.argv[3];
       const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin)).toString() || '{}') : input ? JSON.parse(input) : {};
       const performanceCommand = ['performance-sample', 'performance-close'].includes(command);
-      if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager();
-      const result = await controlRequest(command, command === 'status' ? undefined : value).catch(error => {
+      if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager({ browserOwner: value.browserOwner });
+      const result = await controlRequest(command, command === 'status' && !value.browserOwner ? undefined : value).catch(error => {
         if (performanceCommand && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return command === 'performance-close' ? { ok: true } : performanceUnavailable('The local Agent is off');
         if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };
         throw error;

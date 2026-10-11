@@ -3,23 +3,47 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dataDir, privateDir, socketRequest } from '../common.mjs';
-import { claimInstance } from '../instance.mjs';
+import { backendAlive, claimInstance, processStart } from '../instance.mjs';
+import { binary } from '../access/paths.mjs';
 import { daemonSocket, digest } from './config.mjs';
 import { run } from './process.mjs';
 import { duringUpdate, runtimeVersion, sameRuntime, updateMessage, legacyUpdateMessage, updateError } from './update.mjs';
 const unit = 'bashkitten-machines-' + digest(dataDir).slice(0,16);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const serviceScript = fileURLToPath(new URL('./service.mjs', import.meta.url));
+
+async function stopLegacy(current) {
+  const identity = {pid:current.pid, started:await processStart(current.pid), script:serviceScript};
+  const main = await run('/usr/bin/systemctl', ['--user','show',unit,'--property=MainPID','--value'], {signal:AbortSignal.timeout(5000)});
+  if (!identity.started || Number(main.stdout.trim()) !== identity.pid || !await backendAlive(identity)) throw Error('The container service owner changed during Quit');
+  // Only explicit browser Quit enters here. The pre-ownership service cannot
+  // drain itself, so terminate its verified unit, then stop its private guests.
+  let failure;
+  try {
+    await run('/usr/bin/systemctl', ['--user','kill','--kill-whom=all','--signal=SIGTERM',unit], {signal:AbortSignal.timeout(5000),allowFailure:true});
+    for (const until=Date.now()+2000; Date.now()<until && await processStart(identity.pid)===identity.started;) await sleep(50);
+    // The main process may have exited while a helper remains. The caller holds
+    // the update lock, so this unit cannot be replaced during whole-unit cleanup.
+    await run('/usr/bin/systemctl', ['--user','kill','--kill-whom=all','--signal=SIGKILL',unit], {signal:AbortSignal.timeout(5000),allowFailure:true});
+    await run('/usr/bin/systemctl', ['--user','stop',unit], {signal:AbortSignal.timeout(5000)});
+  } catch (error) {
+    failure = error;
+  }
+  const {shutdownOwnedMachines} = await import('./shutdown.mjs');
+  await shutdownOwnedMachines();
+  if (failure) throw failure;
+  return {stopped:true};
+}
+
 async function ready() {
   try { return await socketRequest(daemonSocket, '/status', undefined, 1000); }
   catch (error) { if (!['ENOENT','ECONNREFUSED','ECONNRESET','EPIPE'].includes(error.code)) throw error; return null; }
 }
-async function ensure() {
+async function ensure(browserOwner) {
   if (process.platform !== 'linux' || process.env.BASHKITTEN_EXECUTION_ROLE === 'container') throw Error('Container creation is available on the native Linux host only');
   let current = await ready();
   const desired = await runtimeVersion();
   if (current?.schema >= 2 && sameRuntime(current.runtime, desired) && !current.updatePending) return;
-  // Legacy services have no atomic drain. Never turn a racy status snapshot
-  // into permission to terminate their jobs or display/media children.
   if (current && current.schema < 2) return legacyUpdateMessage;
   await privateDir(dataDir);
   let ownership;
@@ -43,6 +67,7 @@ async function ensure() {
       }
       if (current) throw Error('The container service is finishing its update. Try again shortly.');
     }
+    if (!Number.isInteger(browserOwner?.pid) || browserOwner.pid < 2 || !browserOwner.started || await processStart(browserOwner.pid) !== browserOwner.started) throw Error('Open BashKitten before starting its containers');
     await privateDir(path.dirname(daemonSocket));
     // --collect removes the exited transient unit asynchronously. Wait for it
     // before creating the replacement with the same persistent ownership name.
@@ -56,9 +81,11 @@ async function ensure() {
     }
     const args = ['--user','--collect','--service-type=exec', '--unit=' + unit,
       '--property=KillMode=mixed','--property=Delegate=yes','--property=TimeoutStopSec=45','--property=UMask=0077',
-      '--setenv=BASHKITTEN_DATA_DIR=' + dataDir];
+      '--setenv=BASHKITTEN_DATA_DIR=' + dataDir,
+      '--setenv=BASHKITTEN_BROWSER_PID=' + browserOwner.pid,
+      '--setenv=BASHKITTEN_BROWSER_STARTED=' + browserOwner.started];
     for (const key of ['HOME','PATH','XDG_RUNTIME_DIR','DBUS_SESSION_BUS_ADDRESS','PIPEWIRE_REMOTE','PULSE_SERVER']) if (process.env[key]) args.push('--setenv=' + key + '=' + process.env[key]);
-    args.push('--', process.execPath, fileURLToPath(new URL('./service.mjs', import.meta.url)));
+    args.push('--', binary('runtime-guard'), process.execPath, serviceScript, 'serve');
     const result = await run('/usr/bin/systemd-run', args, { allowFailure: true });
     // A concurrent caller may have already created this exact unit.
     for (const until = Date.now() + 15000; Date.now() < until;) {
@@ -71,7 +98,26 @@ async function ensure() {
   } finally { ownership.close(); }
 }
 export async function machineControl(action, value = {}) {
-  const pending = await ensure();
+  if (action === 'browser-shutdown') {
+    await privateDir(dataDir);
+    let ownership;
+    for (const until=Date.now()+25000; !(ownership=await claimInstance('machines-update'));) {
+      if (Date.now()>=until) throw Error('The container service is still changing during Quit');
+      await sleep(100);
+    }
+    try {
+      const current = await ready();
+      if (!current) {
+        const {shutdownOwnedMachines} = await import('./shutdown.mjs');
+        return await shutdownOwnedMachines();
+      }
+      if (current.schema < 3) return await stopLegacy(current);
+      return await socketRequest(daemonSocket, '/browser-shutdown', value, 30000);
+    } finally {
+      ownership.close();
+    }
+  }
+  const pending = await ensure(value.browserOwner);
   if (pending && !duringUpdate.has(action)) throw updateError(pending);
   const result = await socketRequest(daemonSocket, '/' + action, value, 30000);
   return pending ? { ...result, serviceUpdate: { pending:true, message:pending } } : result;
