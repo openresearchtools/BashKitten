@@ -2,15 +2,7 @@
 import { node, check, button, runStatus, confirm } from './ui.mjs';
 
 const labels = { APPS: 'Apps and links', SCREEN: 'Read screen', TOUCH: 'Touch and gestures', TEXT: 'Typing' };
-export async function renderSection({ root, call, subscribe, info, signal }) {
-  if (info.platform !== 'android') {
-    const status = await call('desktop-display-status'); if (signal.aborted) return;
-    const run = runStatus(root, signal);
-    root.append(node(root, 'p', status.available ? `Computer use runs inside ${status.backendName || info.backendName || 'this container'}’s desktop.` : status.reason || 'Select a managed container to use its desktop.'));
-    if (status.available) button(root, 'Open display', () => run(() => call('desktop-display-open')));
-    root.append(node(root, 'p', 'Phone controls are set up on your Android phone.'));
-    return;
-  }
+export async function renderSection({ root, call, subscribe, signal }) {
   let state = await call('snapshot'), page = 'main';
   if (signal.aborted) return;
   const clean = subscribe('phone-controls-state', value => {

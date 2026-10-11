@@ -266,7 +266,6 @@ class AgentView {
     for (const [section, title, image] of [
       ["localai", "Local AI", "chrome://global/skin/icons/lightbulb.svg"],
       ["notifications", "Notifications", "chrome://browser/skin/notification-fill-12.svg"],
-      ["phone-use", "Phone/Computer Use", "chrome://browser/skin/device-desktop.svg"],
       ["remotes", "Remote Connections", "chrome://global/skin/icons/link.svg"],
       ["telephone", "Telephone", "chrome://browser/skin/device-phone.svg"],
       ["performance", "Performance", "chrome://global/skin/icons/performance.svg"],
@@ -981,11 +980,6 @@ class AgentView {
         this.win.setTimeout(() => { if (current()) this.openSettings("share-local", { backendId: backend.id }).catch(console.error); }, 0);
         return { ok: true };
       }
-      if (name === "desktop-display-status") return { available: backend.kind === "machine", backendName: backend.name, reason: backend.kind === "machine" ? "" : "Computer controls are available inside managed containers. Phone controls are configured on the phone." };
-      if (name === "desktop-display-open") {
-        if (backend.kind !== "machine") throw new Error("Select a managed container to open its desktop.");
-        await this.openMachineDisplay(backend.id); return { ok: true };
-      }
       if (name.startsWith("remotes.")) return remoteSettingsCall(this, name, value, current, () => { epoch = this.selectionEpoch; });
       if (name === "clipboard-copy") {
         if (typeof value.text !== "string") throw new Error("Expected text to copy.");
@@ -1056,7 +1050,6 @@ class AgentView {
       presenterSocket: endpoint.presenterSocket }, { clipboard: payload => control("machines.clipboard", { ...payload, id }) });
   }
 
-  async computerUse() { return this.openSettings("phone-use"); }
   async shareLocal() { return this.openSettings("share-local", { backendId: "local" }); }
 
   closeConnections() {
