@@ -476,7 +476,7 @@ async function handler(req, res) {
       requireMethod(req, ['POST']);
       return json(res, await moveChat(id, (await jsonBody(req)).projectId));
     }
-    if (action === 'questions' || action === 'questions/answer') {
+    if (action === 'questions' || action === 'questions/answer' || action === 'questions/dismiss') {
       requireMethod(req, action === 'questions' ? ['GET'] : ['POST']);
       if (!await running(id)) {
         if (action !== 'questions') throw Error('This chat is stopped. Resume it explicitly before sending a reply.');
