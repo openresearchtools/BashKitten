@@ -12,7 +12,10 @@
       "git_archive_sha256": "a1e672f0e83dae43e72266a0427342f78afaef86e1772a76f538ac8f7b208706"
     }
   ],
-  "license_paths": [],
+  "license_paths": [
+    "source/LICENSES/BSD-3-Clause.txt",
+    "source/LICENSES/GPL-2.0-or-later.txt"
+  ],
   "modified": false,
   "source_inventory_sha256": "6d8fe5d79bd1a2a3b425efa4b50be56d9888d86210a8820eba440bfc60e81b0b"
 }

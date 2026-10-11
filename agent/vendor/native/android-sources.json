@@ -1,0 +1,62 @@
+[
+  {
+    "repository": "https://github.com/guardianproject/tor-android",
+    "commit": "170a3b4b7d13078142d34f5ac536d8f9c3cb89b6",
+    "file": "tor-android-170a3b4b7d13078142d34f5ac536d8f9c3cb89b6.tar.gz",
+    "sha256": "4e46a89fa45d5aa3ff104ab9e1857ead0d63d7770aa47ca020f923ef867de747"
+  },
+  {
+    "repository": "https://github.com/guardianproject/jtorctl",
+    "commit": "039dfb5a75cd857d112d068f873ebd2967882987",
+    "file": "jtorctl-039dfb5a75cd857d112d068f873ebd2967882987.tar.gz",
+    "sha256": "677f7bdcf0030ebd2b02a32bd53a06918e1770b73321a6f793073624ad5c3f61"
+  },
+  {
+    "repository": "https://github.com/bitmold/tor",
+    "commit": "8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece",
+    "file": "tor-8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece.tar.gz",
+    "sha256": "3b05fc392a78855b6b4736c9c6660b0b197b2114e339ae98eb8b1181c80f7f78"
+  },
+  {
+    "repository": "https://github.com/libevent/libevent",
+    "commit": "79ddfb460847999b807cba76d04e73891f29c6ee",
+    "file": "libevent-79ddfb460847999b807cba76d04e73891f29c6ee.tar.gz",
+    "sha256": "b2f050a2e5b0631ca851de514c19739896b1ef0f7f0b79a1bc5a81f63db1335b"
+  },
+  {
+    "repository": "https://github.com/openssl/openssl",
+    "commit": "45e844fa2a14ec92d146bd8f5778ac130b6625fb",
+    "file": "openssl-45e844fa2a14ec92d146bd8f5778ac130b6625fb.tar.gz",
+    "sha256": "f54250b21795bb01240f3f9b42c384868d04460e339e39275aaaf93487f2d903"
+  },
+  {
+    "repository": "https://github.com/madler/zlib",
+    "commit": "da607da739fa6047df13e66a2af6b8bec7c2a498",
+    "file": "zlib-da607da739fa6047df13e66a2af6b8bec7c2a498.tar.gz",
+    "sha256": "b9258cf6254e7f7c37f1cd61dba943a1c5ea3cff5718c789834dac359094f5f7"
+  },
+  {
+    "repository": "https://github.com/facebook/zstd",
+    "commit": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+    "file": "zstd-f8745da6ff1ad1e7bab384bd1f9d742439278e99.tar.gz",
+    "sha256": "4b0bd1f0cfb25e61b9103c35f27395530ff5b4c0d2513a00fd745849e85ea52c"
+  },
+  {
+    "repository": "https://github.com/gorhill/uBlock",
+    "commit": "4a738e226f17ba8b854bc411871607704e46aad8",
+    "file": "uBlock-4a738e226f17ba8b854bc411871607704e46aad8.tar.gz",
+    "sha256": "79ef8080d510920248ded44a10d25b04fa4c551195fc9d1289af0a973b87549a"
+  },
+  {
+    "repository": "https://github.com/brave/adblock-resources",
+    "commit": "65cc707a78e25f3e203b6755f7289f01116db3e8",
+    "file": "adblock-resources-65cc707a78e25f3e203b6755f7289f01116db3e8.tar.gz",
+    "sha256": "f2a0c99506527be0ec64401a6f2c5dcb0962c935c9a8b28577b15f1dcc95cbad"
+  },
+  {
+    "repository": "https://github.com/journeyapps/zxing-android-embedded",
+    "commit": "24d02945fec5f2c5a65b24ea7848cb5ca18f9f81",
+    "file": "zxing-android-embedded-24d02945fec5f2c5a65b24ea7848cb5ca18f9f81.tar.gz",
+    "sha256": "7e68394b7da8344d6a1ffe3609439e6ae2d4269f41085e85f78a0e4263f77300"
+  }
+]

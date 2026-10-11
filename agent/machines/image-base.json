@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "release": "Debian 13 (trixie)",
+  "image": "docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f",
+  "indexDigest": "sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f",
+  "resolvedAt": "2026-10-11",
+  "platforms": {
+    "amd64": "sha256:918311b7b6c4c6f68b232ba516584925f6c78ad82b6fd534b98979df6438e483",
+    "arm64": "sha256:a2ca65377c251208de42e1a2722cb949211236c161b634f6f3663754e2d06850"
+  },
+  "source": "https://github.com/debuerreotype/docker-debian-artifacts",
+  "packageProvenance": "Retain dpkg-query package/source/version inventory and /usr/share/doc copyright files from each built image; BashKitten guest packages must match the candidate revision."
+}
