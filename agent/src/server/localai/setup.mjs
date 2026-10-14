@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { dataDir, readJson, writeJson, digest } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { loadPi, piAgentDir } from '../rpc/runtime.mjs';
@@ -9,6 +10,10 @@ import { localAIDir, runtimeInfo } from './runtimes.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const cancelled = message => Object.assign(Error(message), { code: 'CANCELLED' });
+const piSettingsRevision = () => fs.readFile(path.join(piAgentDir, 'settings.json'), 'utf8').then(digest).catch(error => {
+  if (error.code === 'ENOENT') return null;
+  throw error;
+});
 
 /** Setup checkpoints own downloads, never a second model/configuration store. */
 export class FirstRunLocalAI {
@@ -19,7 +24,7 @@ export class FirstRunLocalAI {
       if (this.state) return;
       const presets = firstRunModelPresets(platform === 'termux' ? 'android' : 'linux');
       this.state = { version: 1, status: 'pending', models: Object.values(presets).map(item => ({ title: item.title, bytes: item.bytes })),
-        baseline: { config: digest(JSON.stringify(initial.config)), ini: digest(initial.ini.content) }, initial, downloads: {} };
+        baseline: { config: digest(JSON.stringify(initial.config)), ini: digest(initial.ini.content), piSettings: await piSettingsRevision() }, initial, downloads: {} };
       await this.save();
     } });
     if (!this.state) return;
@@ -131,15 +136,25 @@ export class FirstRunLocalAI {
       }
       const { pi } = await loadPi();
       check(); await this.unchanged();
-      const settings = pi.SettingsManager.create(dataDir, piAgentDir, { projectTrusted: false });
-      const readErrors = settings.drainErrors();
-      if (readErrors.length) throw Error('Could not read the existing Pi settings; they were left unchanged.');
-      // Existing provider/model choices, including a half-configured selection,
-      // always win. Stock Pi owns persistence and new-session selection.
-      if (!settings.getDefaultProvider() && !settings.getDefaultModel()) {
-        settings.setDefaultModelAndProvider('bashkitten-llama', this.state.plan.model);
-        await settings.flush();
-        const errors = settings.drainErrors(); if (errors.length) throw Error('Could not save the default model: ' + errors.map(item => item.error?.message || item.message || String(item)).join('; '));
+      if (!this.state.defaultModelAttempted) {
+        // Decide once, before writing: after an interrupted save we cannot tell
+        // an intentionally cleared selection from one that was never written.
+        this.state.defaultModelAttempted = true; await this.save();
+        // An existing Pi settings file can represent an intentional unset.
+        // Older setup checkpoints have no proof of a fresh Pi profile either.
+        if (this.state.baseline.piSettings === null && await piSettingsRevision() === null) {
+          check();
+          const settings = pi.SettingsManager.create(dataDir, piAgentDir, { projectTrusted: false });
+          const readErrors = settings.drainErrors();
+          if (readErrors.length) throw Error('Could not read the existing Pi settings; they were left unchanged.');
+          // No asynchronous boundary between the current stock-Pi snapshot and
+          // its setter. Explicit empty/null and half-configured choices win.
+          if (settings.getDefaultProvider() === undefined && settings.getDefaultModel() === undefined) {
+            settings.setDefaultModelAndProvider('bashkitten-llama', this.state.plan.model);
+            await settings.flush();
+            const errors = settings.drainErrors(); if (errors.length) throw Error('Could not save the default model: ' + errors.map(item => item.error?.message || item.message || String(item)).join('; '));
+          }
+        }
       }
       check(); await this.unchanged();
       this.state.status = 'complete'; delete this.state.plan; await this.save();
