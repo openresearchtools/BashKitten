@@ -241,6 +241,7 @@ export class NativeSidecar {
   remoteActions(remote) {
     const { dialog, content } = this.host.dialog(remote.name);
     content.append(this.button("Rename", "Rename remote", () => { dialog.close(); this.textDialog("Rename remote", remote.name, async name => { await AgentRemotes.rename(remote.id, name); await this.refresh(); }); }),
+      this.button("Connect to phone", "Connect to phone", async () => { dialog.close(); await this.host.connectToPhone(remote.id); }),
       this.button("Delete remote", "Delete saved remote", async () => { if (!Services.prompt.confirm(this.host.win, "Delete remote?", `Forget “${remote.name}” and its login? Its machine and chats are kept.`)) return; await AgentRemotes.remove(remote.id); if (this.selected() === remote.id) await this.host.disconnectSelected(); dialog.close(); await this.refresh(); }));
   }
   createMachine() {

@@ -2487,7 +2487,7 @@
       $('#usage').classList.remove('hidden');
       $('#title').classList.add('hidden');
       $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
-      $('#folderBtn').disabled = Boolean(current);
+      $('#folderBtn').disabled = !fileManagerAllowed || Boolean(current || pendingProjectId);
       setRunButton(queueState.busy || Boolean(current?.running));
       if (current) renderUsage();
       else $('#usageSummary').textContent = '';
@@ -2673,7 +2673,7 @@
       $('#title').textContent = 'New chat';
       $('#composerHint').textContent = '';
       $('#folderLabel').textContent = displayFolder(pendingCwd) || 'Set folder';
-      $('#folderBtn').disabled = Boolean(current || pendingProjectId);
+      $('#folderBtn').disabled = !fileManagerAllowed || Boolean(current || pendingProjectId);
       $('#folderBtn').title = 'Set working folder';
       setRunButton(false);
       $('#usageSummary').textContent = '';
@@ -2890,7 +2890,7 @@
     };
 
     window.addEventListener('focus',()=>{if(current)refreshQueue().catch(()=>{});});
-    $('#newBtn').onclick = beginNewSession;
+    $('#newBtn').onclick = () => beginNewSession();
     async function loadFolder(path, nearest = false) {
       const generation = ++folderGeneration;
       $('#folderUse').disabled = true;
@@ -2952,7 +2952,7 @@
       catch (error) { $('#folderPath').value = path || ''; $('#folderList').textContent = error.message; }
     }
     $('#folderDialog').addEventListener('close', () => { ++folderGeneration; folderSelection = null; });
-    $('#folderBtn').onclick = () => !current && openFolderPicker('Working folder', pendingCwd, path => {
+    $('#folderBtn').onclick = () => !current && !pendingProjectId && openFolderPicker('Working folder', pendingCwd, path => {
       pendingCwd = path;
       draftChanged();
       $('#folderLabel').textContent = displayFolder(path) || 'Set folder';
@@ -3404,7 +3404,8 @@
       $('#filesToggle').classList.toggle('hidden', !allowed);
       for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
       for (const link of document.querySelectorAll('.file-reference')) link.setAttribute('aria-disabled', String(!allowed));
-      for (const id of ['folderBtn', 'defaultCwdBrowse']) $('#'+id).disabled = !allowed;
+      $('#folderBtn').disabled = !allowed || Boolean(current || pendingProjectId);
+      $('#defaultCwdBrowse').disabled = !allowed;
       if (allowed) return;
       closeFiles(); closeFileDiff();
       if (fileManagerImage) closeImageViewer();
