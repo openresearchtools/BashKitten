@@ -2,6 +2,7 @@
 # Search/pin/entry actions adapted from Gnozzard 59ca6d56 (GPL-3.0-or-later).
 import subprocess
 from .common import *
+from gi.repository import Pango
 
 class Launcher(Gtk.ApplicationWindow):
     def __init__(self, application):
@@ -17,29 +18,41 @@ class Launcher(Gtk.ApplicationWindow):
         self.previous = None; self.icon_jobs=Gio.Cancellable()
         self.connect('delete-event', lambda *_: (self.close_menu(), True)[1])
         self.connect('key-press-event', self.key)
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=20)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=12)
         self.add(outer)
         self.search = Gtk.SearchEntry(placeholder_text='Search applications')
         self.search.connect('search-changed', self.query_changed)
-        outer.pack_start(self.search, False, False, 0)
         scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER)
         outer.pack_start(scroll, True, True, 0)
-        self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        scroll.add(self.content)
+        self.rest = self.application_list(); scroll.add(self.rest)
+        self.pinsection = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        outer.pack_start(self.pinsection, False, False, 0)
+        self.divider = Gtk.Separator(); self.pinsection.pack_start(self.divider, False, False, 0)
         self.pinlabel = Gtk.Label(label='Pinned', xalign=0)
-        self.content.pack_start(self.pinlabel, False, False, 0)
-        self.pinned = self.grid(); self.content.pack_start(self.pinned, False, False, 0)
-        self.divider = Gtk.Separator(); self.content.pack_start(self.divider, False, False, 0)
-        self.rest = self.grid(); self.content.pack_start(self.rest, False, False, 0)
+        self.pinsection.pack_start(self.pinlabel, False, False, 0)
+        self.pinscroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                          propagate_natural_height=True, max_content_height=1)
+        self.pinsection.pack_start(self.pinscroll, False, False, 0)
+        self.pinned = self.application_list(); self.pinscroll.add(self.pinned)
+        outer.pack_start(self.search, False, False, 0)
+        outer.connect('size-allocate', self.size_pins)
         self.monitor = Gio.AppInfoMonitor.get()
         self.monitor.connect('changed', lambda *_: setattr(self, 'dirty', True))
         self.prefs.connect('changed::pins', lambda *_: self.render())
 
-    def grid(self):
-        grid = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE, homogeneous=True,
-                           min_children_per_line=1, max_children_per_line=10000,
-                           row_spacing=6, column_spacing=6)
-        return grid
+    def size_pins(self, outer, allocation):
+        # GTK owns both scroll areas. Small pin lists keep their natural height;
+        # only a long list reaches 60% of the space left above the fixed search.
+        available=max(1,allocation.height-self.search.get_allocated_height()-2*outer.get_spacing())
+        caption=self.pinlabel.get_allocated_height()+self.divider.get_allocated_height()+2*self.pinsection.get_spacing()
+        limit=max(1,int(available*0.6)-caption)
+        if self.pinscroll.get_max_content_height()!=limit:self.pinscroll.set_max_content_height(limit)
+
+    def application_list(self):
+        listing = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE, activate_on_single_click=False)
+        listing.get_style_context().add_class('application-list')
+        listing.connect('row-activated', lambda _, row: row.get_child().clicked())
+        return listing
 
     def toggle(self):
         if self.get_visible(): self.close_menu(); return
@@ -84,40 +97,45 @@ class Launcher(Gtk.ApplicationWindow):
     def render(self):
         if not self.get_visible(): return
         self.generation += 1; self.icon_jobs.cancel(); self.icon_jobs=Gio.Cancellable(); generation = self.generation
-        for grid in (self.pinned, self.rest):
-            for child in grid.get_children(): child.destroy()
+        for listing in (self.pinned, self.rest):
+            for child in listing.get_children(): child.destroy()
         query = self.search.get_text().casefold()
         pins = self.prefs.get_strv('pins'); by_id = {a.get_id(): a for a in self.catalogue}
         matches = lambda a: query in (a.get_display_name() + ' ' + (a.get_description() or '')).casefold()
         pinned = [by_id[p] for p in pins if p in by_id and matches(by_id[p])]
         rest = [a for a in self.catalogue if a.get_id() not in pins and matches(a)]
-        for w in (self.pinlabel, self.pinned, self.divider): w.set_visible(bool(pinned))
+        self.pinsection.set_visible(bool(pinned))
         pending = iter([(self.pinned, a) for a in pinned] + [(self.rest, a) for a in rest])
         def batch():
             if generation != self.generation or not self.get_visible(): return False
             for _ in range(8):
-                try: grid, app = next(pending)
+                try: listing, app = next(pending)
                 except StopIteration: return False
-                grid.add(self.tile(app)); grid.show_all()
+                listing.add(self.application_row(app)); listing.show_all()
             return True
         GLib.idle_add(batch)
 
-    def tile(self, app):
-        button = Gtk.Button(); button.set_size_request(130, 114)
+    def application_row(self, app):
+        button = Gtk.Button(); button.set_size_request(-1, 42)
+        button.get_style_context().add_class('application-row')
         button.set_tooltip_text(app.get_display_name())
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=8)
-        icon = Gtk.Image(); icon.set_size_request(48,48); box.pack_start(icon, False, False, 0)
-        info=Gtk.IconTheme.get_default().lookup_by_gicon_for_scale(app.get_icon() or Gio.ThemedIcon.new('application-x-executable'),48,self.get_scale_factor(),Gtk.IconLookupFlags.FORCE_SIZE)
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        icon = Gtk.Image(); icon.set_size_request(24,24); box.pack_start(icon, False, False, 0)
+        scale=self.get_scale_factor()
+        info=Gtk.IconTheme.get_default().lookup_by_gicon_for_scale(app.get_icon() or Gio.ThemedIcon.new('application-x-executable'),24,scale,Gtk.IconLookupFlags.FORCE_SIZE)
         generation=self.generation
         if info:
             def loaded(source,result):
                 try:
                     pixbuf=source.load_icon_finish(result)
-                    if generation==self.generation and self.get_visible():icon.set_from_pixbuf(pixbuf)
+                    if generation==self.generation and self.get_visible():
+                        # The loaded pixels already include the requested scale.
+                        # Keep their device scale so GTK does not multiply twice.
+                        icon.set_from_surface(Gdk.cairo_surface_create_from_pixbuf(pixbuf,scale,None))
                 except GLib.Error:pass
             info.load_icon_async(self.icon_jobs,loaded)
-        label = Gtk.Label(label=app.get_display_name(), wrap=True, max_width_chars=16)
-        box.pack_start(label, False, False, 0); button.add(box)
+        label = Gtk.Label(label=app.get_display_name(), xalign=0, ellipsize=Pango.EllipsizeMode.END)
+        box.pack_start(label, True, True, 0); button.add(box)
         button.connect('clicked', lambda *_: self.launch(app))
         button.connect('button-press-event', lambda _, event: self.menu(app, event) if event.button == 3 else False)
         return button

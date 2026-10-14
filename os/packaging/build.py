@@ -128,8 +128,9 @@ def build_panel(args,prefix,stage):
     return identity
 
 def theme(stage,prefix):
-    for factor in (1,2,3):
-        name='BashKitten' if factor==1 else f'BashKitten-{factor}x'
+    for factor,touch in ((factor,touch) for factor in (1,2,3) for touch in (False,True)):
+        family='BashKitten-Touch' if touch else 'BashKitten'
+        name=family if factor==1 else f'{family}-{factor}x'
         theme_root=stage/prefix.lstrip('/')/'share/themes'/name/'xfwm4';theme_root.mkdir(parents=True)
         for source in (ROOT/'upstream/xfwm4-theme/themes/default').glob('*.xpm'):
             value=source.read_text()
@@ -141,14 +142,28 @@ def theme(stage,prefix):
                 else:replacement='#282828'
                 return match.group(1)+replacement
             value=re.sub(r'(\bc )#[A-Fa-f0-9]+ s ([A-Za-z0-9_]+)',color,value)
-            if factor!=1:
+            if factor!=1 or touch:
                 records=re.findall(r'"([^"\n]*)"',value)
                 width,height,colors,cpp=map(int,records[0].split())
+                rows=records[colors+1:colors+height+1]
+                if touch:
+                    if source.stem.split('-')[0] in ('close','hide','maximize','menu','shade','stick'):
+                        # Expand the hit surface, not the glyph. Edge pixels are
+                        # the existing themed background; keep the icon centered.
+                        left=max(0,42-width)//2;right=max(0,42-width)-left
+                        rows=[row[:cpp]*left+row+row[-cpp:]*right for row in rows]
+                        top=max(0,42-height)//2;bottom=max(0,42-height)-top
+                        rows=[rows[0]]*top+rows+[rows[-1]]*bottom
+                        width+=left+right;height+=top+bottom
+                    elif source.stem.startswith(('title-','top-left-','top-right-')):
+                        extra=max(0,42-height);middle=height//2
+                        rows=rows[:middle]+[rows[middle]]*extra+rows[middle:];height+=extra
                 pixels=[]
-                for row in records[colors+1:colors+height+1]:
+                for row in rows:
                     pixels.extend([''.join(row[i:i+cpp]*factor for i in range(0,len(row),cpp))]*factor)
                 records=[f'{width*factor} {height*factor} {colors} {cpp}',*records[1:colors+1],*pixels]
-                value='/* Derived from the pinned Xfwm default; integer pixel scaling. GPL-2.0-or-later. */\nstatic char *image[] = {\n'+',\n'.join(json.dumps(row) for row in records)+'};\n'
+                changes='integer pixel scaling and touch padding' if touch else 'integer pixel scaling'
+                value=f'/* XPM */\n/* Derived from the pinned Xfwm default; {changes}. GPL-2.0-or-later. */\nstatic char *image[] = {{\n'+',\n'.join(json.dumps(row) for row in records)+'};\n'
             (theme_root/source.name).write_text(value)
         value=(ROOT/'upstream/xfwm4-theme/themes/default/themerc').read_text()
         value=re.sub(r'^active_text_color=.*','active_text_color=#ffffff',value,flags=re.M)

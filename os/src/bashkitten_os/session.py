@@ -14,6 +14,8 @@ class Session:
         owned_session(); self.application=application; self.prefs=settings()
         self.color_epoch=0; self.appearance_running=False
         self.bus=None;self.registration=None;self.bus_name=None;self.context_generation=None
+        from .defaults import finish_initial_scale
+        async_work(finish_initial_scale,lambda _,e:error_dialog(None,e) if e else None)
         async_work(self.publish_context,lambda _,e:error_dialog(None,e) if e else None)
         Gio.bus_get(Gio.BusType.SESSION,None,self.bus_ready)
         self.prefs.connect('changed::color-scheme',self.appearance)
