@@ -4,11 +4,18 @@
 FROM docker.io/library/debian:trixie-slim@sha256:a29215f6a35e51e22adffa17f89e9d2ef06214e64a2bad10d765c46aea49f11f
 ENV DEBIAN_FRONTEND=noninteractive
 COPY packages/ /tmp/bashkitten-packages/
-RUN apt-get update && apt-get install --yes --no-install-recommends \
+# AT-SPI 2.62 releases disconnected accessibility clients; stable's GTK bridge
+# leaks their descriptors. Select only this stack from official backports.
+RUN printf '%s\n' 'Types: deb' 'URIs: http://deb.debian.org/debian' \
+    'Suites: trixie-backports' 'Components: main' \
+    'Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg' \
+    > /etc/apt/sources.list.d/bashkitten-backports.sources && \
+    apt-get update && apt-get install --yes --no-install-recommends \
     ca-certificates systemd systemd-sysv dbus-user-session sudo passwd \
     xfce4-session xfwm4 xfdesktop4 xfce4-settings thunar xfce4-terminal \
     xwayland xauth xclip x11-utils x11-xserver-utils xdotool scrot python3 python3-gi \
-    gir1.2-atspi-2.0 at-spi2-core pipewire pipewire-pulse wireplumber \
+    gir1.2-atspi-2.0/trixie-backports at-spi2-core/trixie-backports \
+    libatk-bridge2.0-0t64/trixie-backports pipewire pipewire-pulse wireplumber \
     gstreamer1.0-tools gstreamer1.0-pipewire gstreamer1.0-pulseaudio \
     gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
     libgl1-mesa-dri mesa-vulkan-drivers fuse3 libfuse2t64 \
