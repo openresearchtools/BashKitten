@@ -3626,3 +3626,10 @@ Keep the bottom taskbar's Applications button, currently opened applications and
 the previously requested right-hand application tray. Do not copy the reference's
 Desktop/workspace tabs or workspace-add button. This is a layout correction to the
 shared launcher, not a new desktop shell or separate mobile implementation.
+
+Further clarification: keep search fixed at the bottom, with Pinned immediately
+above it. The alphabetical list and Pinned list scroll independently. Pinned
+takes its natural height up to 60% of the available list area, then scrolls;
+the main list uses the remaining space and therefore starts scrolling sooner as
+pins grow. Do not reserve an empty 60% area for a few pins. Recalculate available
+space when the viewport changes, without moving search off-screen or blocking UI.
