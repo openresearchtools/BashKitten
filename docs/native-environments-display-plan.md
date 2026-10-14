@@ -3612,3 +3612,17 @@ Cuttlefish for actual menu, taskbar and window-button usability, including narro
 portrait and landscape views. Verify desktop sizing and saved-choice preservation
 in the same acceptance cycle. All initialization and scaling work remains
 nonblocking; do not add a new display architecture to implement these defaults.
+
+### Applications list reference — 15 October 2026
+
+The user's subsequent screenshot replaces the grid requested above with one
+shared vertical Applications list: application icon beside its name, scrollable
+alphabetical entries, a separated Pinned list toward the bottom, and search at
+the bottom. Retain existing launch, pin/unpin and supported application actions,
+the dark/orange styling, and suitable backend percentage defaults. Rows and
+controls must be readable and easy to activate on a phone, without giant cards.
+
+Keep the bottom taskbar's Applications button, currently opened applications and
+the previously requested right-hand application tray. Do not copy the reference's
+Desktop/workspace tabs or workspace-add button. This is a layout correction to the
+shared launcher, not a new desktop shell or separate mobile implementation.
