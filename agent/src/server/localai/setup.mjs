@@ -7,6 +7,7 @@ import { loadPi, piAgentDir } from '../rpc/runtime.mjs';
 import { downloadsStatus, controlDownload } from '../models/downloads.mjs';
 import { firstRunModelPresets, downloadPreset } from './models.mjs';
 import { localAIDir, runtimeInfo } from './runtimes.mjs';
+import { routerModelId } from './router-models.mjs';
 
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const cancelled = message => Object.assign(Error(message), { code: 'CANCELLED' });
@@ -32,8 +33,30 @@ export class FirstRunLocalAI {
     else if (this.state.status === 'running') this.state.status = 'interrupted';
     if (this.state.initial) delete this.state.initial;
     await this.save();
+    if (this.state.status === 'pending') await this.initializeDefaultModel();
   }
   async save() { await writeJson(this.file, this.state); }
+  async initializeDefaultModel() {
+    if (this.state.defaultModelAttempted) return;
+    // Seed before normal Pi package registration creates settings.json. Waiting
+    // for downloads would confuse that automatic write with a user's choice.
+    // Decide once, before writing: a later unset must survive every retry.
+    this.state.defaultModelAttempted = true; await this.save();
+    if (this.state.baseline.piSettings !== null) return;
+    const { pi } = await loadPi();
+    if (await piSettingsRevision() !== null) return;
+    const settings = pi.SettingsManager.create(dataDir, piAgentDir, { projectTrusted: false });
+    if (settings.drainErrors().length) throw Error('Could not read the existing Pi settings; they were left unchanged.');
+    // No asynchronous boundary between this snapshot and the stock Pi setter.
+    // Explicit empty/null and half-configured selections always win.
+    if (settings.getDefaultProvider() !== undefined || settings.getDefaultModel() !== undefined) return;
+    const preset = firstRunModelPresets(platform === 'termux' ? 'android' : 'linux').llama;
+    const name = path.basename(preset.files.find(file => !/mmproj/i.test(file))).replace(/\.gguf$/i, '');
+    settings.setDefaultModelAndProvider('bashkitten-llama', routerModelId(name));
+    await settings.flush();
+    const errors = settings.drainErrors();
+    if (errors.length) throw Error('Could not save the default model: ' + errors.map(item => item.error?.message || item.message || String(item)).join('; '));
+  }
   status() {
     if (!this.state) return null;
     return { status: this.state.status, error: this.state.error || '', models: this.state.models,
@@ -133,28 +156,6 @@ export class FirstRunLocalAI {
         check(); await this.unchanged();
         if (Date.now() > deadline) throw Error(this.localAI.importState.error || 'The local model router did not become ready. Retry setup.');
         await pause(500); await this.localAI.importProvider();
-      }
-      const { pi } = await loadPi();
-      check(); await this.unchanged();
-      if (!this.state.defaultModelAttempted) {
-        // Decide once, before writing: after an interrupted save we cannot tell
-        // an intentionally cleared selection from one that was never written.
-        this.state.defaultModelAttempted = true; await this.save();
-        // An existing Pi settings file can represent an intentional unset.
-        // Older setup checkpoints have no proof of a fresh Pi profile either.
-        if (this.state.baseline.piSettings === null && await piSettingsRevision() === null) {
-          check();
-          const settings = pi.SettingsManager.create(dataDir, piAgentDir, { projectTrusted: false });
-          const readErrors = settings.drainErrors();
-          if (readErrors.length) throw Error('Could not read the existing Pi settings; they were left unchanged.');
-          // No asynchronous boundary between the current stock-Pi snapshot and
-          // its setter. Explicit empty/null and half-configured choices win.
-          if (settings.getDefaultProvider() === undefined && settings.getDefaultModel() === undefined) {
-            settings.setDefaultModelAndProvider('bashkitten-llama', this.state.plan.model);
-            await settings.flush();
-            const errors = settings.drainErrors(); if (errors.length) throw Error('Could not save the default model: ' + errors.map(item => item.error?.message || item.message || String(item)).join('; '));
-          }
-        }
       }
       check(); await this.unchanged();
       this.state.status = 'complete'; delete this.state.plan; await this.save();
