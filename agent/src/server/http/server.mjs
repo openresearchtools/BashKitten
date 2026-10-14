@@ -478,12 +478,12 @@ async function handler(req, res) {
       if (input.confirm !== true) throw Error('Confirm removing the project grouping; its chats are kept');
       return json(res, await removeProject(projectMatch[1]));
     }
-    if (route === '/api/projects/delete' || route === '/api/sessions/project' || route === '/api/session-groups') {
+    if (route === '/api/session-groups') {
       requireMethod(req, ['GET', 'POST', 'DELETE']);
       if (!mutation) return json(res, { sessionIds: (await allMeta()).filter(m => m.cwd === url.searchParams.get('cwd')).map(m => m.id) });
       const input = await jsonBody(req);
       const selected = (await allMeta()).filter(m => m.cwd === input.cwd);
-      if (route === '/api/session-groups' && (!input.confirm || selected.some(m => !input.sessionIds?.includes(m.id)) || input.sessionIds?.length !== selected.length)) throw Error('Project chats changed. Review the deletion again.');
+      if (!input.confirm || selected.some(m => !input.sessionIds?.includes(m.id)) || input.sessionIds?.length !== selected.length) throw Error('Project chats changed. Review the deletion again.');
       for (const meta of selected) await deleteSession(meta.id);
       return json(res, { deletedIds: selected.map(m => m.id) });
     }
