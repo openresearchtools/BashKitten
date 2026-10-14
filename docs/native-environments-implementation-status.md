@@ -85,6 +85,15 @@ Both native Configuration menus already inherit Firefox's bounded scrolling;
 no menu styling was changed. Installed narrow-window menu scrolling remains an
 acceptance check, distinct from this source inspection and composer fixture.
 
+Configuration now omits desktop Callback and Notifications, which only showed
+phone registration status rather than desktop controls, and desktop-only phone
+connection shortcuts are removed. Android retains its phone controls. Local AI,
+Display setup and Performance entries are shown only where their selected backend
+supports those controls. The desktop Configuration popup now opens after the
+button's starting edge and uses Firefox's native constraint rectangle to stay
+inside its owning window. Installed popup placement and small-window scrolling
+still need verification in the next candidate.
+
 ## Installed combined candidate and acceptance repairs — 14 October 2026
 
 Combined source `e31a4c30ac5df7d226c32d4b915c5923b7e7acfa` was built and

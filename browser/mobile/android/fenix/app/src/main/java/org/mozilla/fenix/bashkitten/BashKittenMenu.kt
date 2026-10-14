@@ -17,6 +17,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment
 import com.bashkitten.AgentSettingsActivity
+import com.bashkitten.BrowserApp
 import org.mozilla.fenix.components.menu.compose.MenuDialogBottomSheet
 import org.mozilla.fenix.components.menu.compose.MenuFrame
 import org.mozilla.fenix.components.menu.compose.MenuGroup
@@ -55,6 +56,9 @@ class BashKittenMenuDialog : BottomSheetDialogFragment() {
                                     Triple("general", "General", iconsR.drawable.mozac_ic_settings_24),
                                 )
                                 for ((section, title, icon) in rows) {
+                                    if (section in setOf("display", "localai", "performance") &&
+                                        BrowserApp.get(requireContext()).agent.selected != "local"
+                                    ) continue
                                     MenuItem(label = title, beforeIconPainter = painterResource(icon), onClick = {
                                         val host = requireActivity()
                                         dismiss()
