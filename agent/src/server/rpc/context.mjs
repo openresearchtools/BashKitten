@@ -16,8 +16,8 @@ export async function syncContext({ agentDir, target = platform, home = os.homed
   if (!['linux', 'termux'].includes(target)) throw Error('Unknown environment');
   await privateDir(agentDir);
   const template = await fs.readFile(new URL(`../platform/${target}/pi-context/AGENTS.md`, import.meta.url), 'utf8');
-  const values = { HOME: home, PREFIX: prefix, PI_AGENT_DIR: agentDir, DISPLAY_COMMAND: path.join(dataDir, 'display/launch.sh') };
-  const content = template.replace(/\{\{(HOME|PREFIX|PI_AGENT_DIR|DISPLAY_COMMAND)\}\}/g, (_, key) => values[key]).trim();
+  const values = { HOME: home, PREFIX: prefix, PI_AGENT_DIR: agentDir, DISPLAY_COMMAND: path.join(dataDir, 'display/launch.sh'), AUTOSTART_CONFIG: path.join(dataDir, 'autostart.json') };
+  const content = template.replace(/\{\{(HOME|PREFIX|PI_AGENT_DIR|DISPLAY_COMMAND|AUTOSTART_CONFIG)\}\}/g, (_, key) => values[key]).trim();
   const block = `${begin}\n${content}\n${end}`;
   const primary = path.join(agentDir, 'AGENTS.md');
   const files = [primary];
