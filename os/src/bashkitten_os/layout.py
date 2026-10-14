@@ -60,7 +60,10 @@ class Layout:
             and window.get_xid() in self.hints and not self.hints[window.get_xid()]["modal"]
             and (self.hints[window.get_xid()]["minw"] < self.hints[window.get_xid()]["maxw"] or self.hints[window.get_xid()]["minh"] < self.hints[window.get_xid()]["maxh"])
             and (window.get_actions() & Wnck.WindowActions.RESIZE
-                 or window.is_maximized() and window.get_actions() & Wnck.WindowActions.UNMAXIMIZE))
+                 or window.is_maximized() and window.get_actions() & Wnck.WindowActions.UNMAXIMIZE
+                 # Xfwm withdraws resize/maximize actions while hidden. This
+                 # permits restoration only; pairing rechecks the visible window.
+                 or allow_minimized and window.is_minimized() and window.get_actions() & Wnck.WindowActions.UNMINIMIZE))
 
     def refresh_hints(self,window):
         xid=window.get_xid()
@@ -144,18 +147,23 @@ class Layout:
             # current one. Wait for the WM before revalidating/committing a pair.
             target=pair[1]
             def cancel():
-                target.disconnect(handler);GLib.source_remove(timeout)
+                for handler in handlers:target.disconnect(handler)
+                GLib.source_remove(timeout)
             def restored(window,*_):
-                if window.is_minimized():return
+                # State and allowed-action notifications need not arrive together.
+                # Never commit while Xfwm still withholds normal sizing actions.
+                if not self.eligible(window):return
                 self.cancel_restore()
                 if epoch==self.epoch and self.managed():
                     try:self.split(first,second,epoch)
                     except Exception as error:error_dialog(None,error)
             def expired():
                 self.cancel_restore()
-                if epoch==self.epoch and self.managed():error_dialog(None,'The selected window could not be restored')
+                if epoch==self.epoch and self.managed():
+                    error_dialog(None,'The selected window could not be restored' if target.is_minimized()
+                                 else 'Choose two different resizable main windows')
                 return False
-            handler=target.connect('state-changed',restored)
+            handlers=[target.connect(event,restored) for event in ('state-changed','actions-changed')]
             timeout=GLib.timeout_add(3000,expired)
             self.restoring=({first,second},cancel)
             target.unminimize(Gtk.get_current_event_time())
