@@ -813,6 +813,7 @@
     });
     let models = [];
     let modelDefaults = { model: '', thinking: '' };
+    let newModelSelectionEdited = false, visibleModelsRefresh = null;
     let current = null;
     let source = null;
     let config = null;
@@ -1903,15 +1904,16 @@
 
     async function loadModels() {
       const generation = ++modelsGeneration, view = sessionView, sessionId = current?.id;
-      const selected = $('#model').value;
-      const thinking = $('#thinking').value;
       const value = await api('/api/models' + (current ? '?session=' + current.id : ''));
       if (generation !== modelsGeneration || view !== sessionView || sessionId !== current?.id) return;
+      // A catalogue request must not replace choices made while it was in flight.
+      const selected = $('#model').value, thinking = $('#thinking').value;
       models = value.models;
       modelDefaults = { model: value.defaultModel || '', thinking: value.defaultThinking || '' };
-      fillSelect($('#model'), models, current ? current.model || '' : selected || modelDefaults.model);
-      const nextThinking = current ? current.thinking || thinking : thinking || modelDefaults.thinking;
-      if ([...$('#thinking').options].some(option => option.value === nextThinking)) $('#thinking').value = nextThinking;
+      fillSelect($('#model'), models, current ? current.model || '' : selected || (newModelSelectionEdited ? '' : modelDefaults.model));
+      const nextThinking = current ? current.thinking || thinking : thinking || (newModelSelectionEdited ? '' : modelDefaults.thinking);
+      if (current) applyModelSelection({ model: current.model || '', thinking: nextThinking });
+      else if ([...$('#thinking').options].some(option => option.value === nextThinking)) $('#thinking').value = nextThinking;
       if (!settingsDirty) {
         fillSelect($('#defaultModel'), models, value.defaultModel);
         setThinking($('#defaultModel'), $('#defaultThinking'));
@@ -1919,6 +1921,15 @@
         fillAgentForm('defaultAgents', config?.default_subagents || agentDefaults);
       }
     }
+
+    function refreshVisibleNewModels() {
+      if (!initialized || !csrf || authRequired || bootPending || booting || current || draftRestoring || document.hidden || visibleModelsRefresh) return;
+      // New chats have no Pi worker to emit models_changed. Returning from
+      // native Local AI/provider setup must discover the newly saved default.
+      visibleModelsRefresh = loadModels().catch(() => {}).finally(() => { visibleModelsRefresh = null; });
+    }
+    window.addEventListener('focus', refreshVisibleNewModels);
+    document.addEventListener('visibilitychange', refreshVisibleNewModels);
 
     function showAgentChoice() { $('#subagents').value = chatAgents.enabled ? 'on' : 'off'; $('#phoneMode').value = current?.phone?.mode || 'off'; $('#phoneMode').disabled = !current; }
     $('#phoneMode').onchange = async () => {
@@ -2624,6 +2635,7 @@
       liveToolCalls.clear();
       closeImageViewer();
       current = null;
+      newModelSelectionEdited = false;
       pendingProjectId = projectId;
       renderQuestions([]);
       chatAgents = { ...agentDefaults, ...config?.default_subagents }; showAgentChoice();
@@ -3007,8 +3019,8 @@
       else if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('#composer').requestSubmit(); }
     });
 
-    $('#model').onchange = async () => { setThinking($('#model')); draftChanged(); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
-    $('#thinking').onchange = async () => { draftChanged(); try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
+    $('#model').onchange = async () => { if (!current) newModelSelectionEdited = true; setThinking($('#model')); draftChanged(); try { await applyCurrentModel(false); } catch (error) { alert(error.message); } };
+    $('#thinking').onchange = async () => { if (!current) newModelSelectionEdited = true; draftChanged(); try { await applyCurrentModel(); } catch (error) { alert(error.message); } };
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
     function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|login|providers|settings|attach)$/.test(text); }
@@ -3326,6 +3338,7 @@
       if (!current && !pendingProjectId && pendingCwd === previousCwd) {
         pendingCwd = config.default_cwd;
         chatAgents = { ...config.default_subagents }; showAgentChoice();
+        newModelSelectionEdited = false;
         $('#model').value = modelDefaults.model;
         setThinking($('#model'));
         $('#thinking').value = modelDefaults.thinking;
@@ -3903,7 +3916,7 @@
     window.bashkittenDraft = {
       capture(includeStored = true) {
         if (!initialized || draftRestoring) return null;
-        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
+        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,modelSelectionEdited:newModelSelectionEdited,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
       },
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
@@ -3931,6 +3944,7 @@
           pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
           goalDraft = Boolean(value.goal);
           if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
+          if (!current) newModelSelectionEdited = value.modelSelectionEdited === true;
           if (!current && value.subagents) { chatAgents = { ...agentDefaults, ...value.subagents }; showAgentChoice(); }
           for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
           if (value.edit && current?.id === value.sessionId) {

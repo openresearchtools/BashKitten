@@ -12,7 +12,8 @@ export async function renderSection({ root: parent, call: control, info, signal 
   const doc = parent.ownerDocument;
   const node = (tag, text = '') => { const result = doc.createElementNS(HTML, tag); result.textContent = text; return result; };
   const message = node('p'), body = node('div'); message.setAttribute('role', 'status'); parent.append(message, body);
-  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus, routerPresetNode, feedbackJob;
+  let state, busy = false, progressNode, outputNode, importNode, refreshVisibleModels, synthesisStatus, routerPresetNode, feedbackJob, setupView, formEdited = false, lastSetupStatus;
+  for (const event of ['input', 'change']) parent.addEventListener(event, () => { formEdited = true; }, { signal });
   const engineStatus = {}, runtimeViews = {};
   const jobMessage = job => job ? [({ complete: 'Complete', failed: 'Failed', interrupted: 'Interrupted', cancelled: 'Cancelled' })[job.status] || job.phase,
     job.progress?.downloaded ? `${(job.progress.downloaded / 1048576).toFixed(1)} MiB downloaded` : '', job.error].filter(Boolean).join(' · ') : '';
@@ -54,6 +55,27 @@ export async function renderSection({ root: parent, call: control, info, signal 
     close.type = 'button'; close.onclick = dispose;
     dialog.addEventListener('cancel', event => { event.preventDefault(); dispose(); });
     signal.addEventListener('abort', dispose, { once: true }); dialog.showModal(); close.focus();
+  };
+  const openModelNotices = async id => {
+    const value = await call('native-models-catalogue', { notice: id });
+    if (!active()) return;
+    const dialog = node('dialog'), close = node('button', 'Close');
+    dialog.append(node('h2', value.title));
+    const files = select(dialog, 'Document', value.files.map(file => [String(file.index), file.name]), '0');
+    const content = node('pre'); dialog.append(content);
+    const show = async () => {
+      files.disabled = true; content.textContent = 'Loading…';
+      try {
+        const result = await call('native-models-catalogue', { notice: id, file: Number(files.value) });
+        if (dialog.isConnected) content.textContent = result.content;
+      } catch (error) { if (dialog.isConnected) content.textContent = error.message; }
+      finally { if (dialog.isConnected) files.disabled = false; }
+    };
+    files.onchange = () => void show();
+    close.type = 'button'; dialog.append(close); parent.append(dialog);
+    const dispose = () => { signal.removeEventListener('abort', dispose); dialog.remove(); };
+    close.onclick = dispose; dialog.addEventListener('cancel', event => { event.preventDefault(); dispose(); });
+    signal.addEventListener('abort', dispose, { once: true }); dialog.showModal(); close.focus(); await show();
   };
   const pick = async (title, kind = 'file', initial = '') => {
     const chooser = node('section'); chooser.className = 'connection-card';
@@ -111,15 +133,33 @@ export async function renderSection({ root: parent, call: control, info, signal 
   };
   const pickerField = (parent, title, value, kind = 'file') => {
     const input = field(parent, title, value);
-    parent.append(button('Choose…', async () => { const filename = await pick(title, kind, input.value); if (filename) input.value = filename; }));
+    parent.append(button('Choose…', async () => { const filename = await pick(title, kind, input.value); if (filename) { input.value = filename; formEdited = true; } }));
     return input;
   };
   const draw = value => {
     if (!active()) return;
-    state = value; refreshVisibleModels = null; routerPresetNode = null; body.replaceChildren();
+    state = value; formEdited = false; lastSetupStatus = value.firstRun?.status; setupView = null; refreshVisibleModels = null; routerPresetNode = null; body.replaceChildren();
     if (state.needsSetup) {
       body.append(node('p', 'Set up Termux Local before configuring local models.'), button('Set up Local', () => call('localai-setup')));
       return;
+    }
+    if (state.firstRun) {
+      const setup = node('section'); setup.className = 'connection-card';
+      setup.append(node('h3', 'Get started with local AI'), node('p', 'Downloads a local chat and vision model, speech recognition and a voice. Starts on CPU; you can change the models and device below. Downloads continue with this page closed.'));
+      const names = node('p', state.firstRun.models.map(item => `${item.title} · ${(item.bytes / 1e9).toFixed(2)} GB`).join(' · '));
+      const status = node('p'); status.setAttribute('role', 'status');
+      const resume = button('Resume setup', async () => { followJob(await call('localai-first-run')); });
+      const cancel = button('Stop setup', async () => { followJob(await call('localai-cancel')); });
+      const update = value => {
+        if (!setup.isConnected) return;
+        const setupState = value.firstRun;
+        if (!setupState) return;
+        status.textContent = setupState.status === 'complete' ? 'Ready. Local chat, vision and voice are set up.' :
+          [setupState.status === 'pending' ? 'Preparing downloads…' : setupState.status === 'running' ? jobMessage(value.job) : setupState.status, setupState.error].filter(Boolean).join(' · ');
+        resume.hidden = !setupState.canResume; cancel.hidden = setupState.status !== 'running';
+      };
+      setup.append(names, node('p', 'The starter voice speaks English. Parakeet supports 25 European languages; choose another speech model for other languages.'), status, resume, cancel, node('p', 'Models and runtimes are downloaded separately. Their licenses and source records are saved with the downloads. Stop setup to choose your own models below.'));
+      body.append(setup); setupView = update; update(state);
     }
     for (const engine of ['llama', 'whisper']) {
       const current = state[engine], config = current.config;
@@ -196,6 +236,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
       if (engine === 'llama') {
         preset = pickerField(section, 'Router INI', config.preset, 'save');
         routerPresetNode = preset;
+        const devices = node('div'); section.append(devices); void drawModelDevices(devices, config.preset);
         section.append(button('Add / edit router models', () => editRouterModels(preset.value, path => { preset.value = path; })));
         section.append(button('Edit router INI', () => editINI(preset.value, path => { preset.value = path; })));
         keyFile = pickerField(section, 'Optional application API-key file', config.keyFile);
@@ -243,6 +284,31 @@ export async function renderSection({ root: parent, call: control, info, signal 
     const progress = node('p', jobMessage(state.job)); progressNode = progress; body.append(progress);
     body.append(button('Refresh status', async () => draw(await call('localai-status'))), button('Cancel LocalAI operation', async () => { const value = await call('localai-cancel'); if (active()) { followJob(value); progress.textContent = jobMessage(value); } }));
     const output = node('details'); output.append(node('summary', 'LocalAI operation output')); const text = node('pre', operationOutput(state)); outputNode = text; text.style.cssText = 'max-height:12rem;overflow:auto;white-space:pre-wrap'; output.append(text); body.append(output);
+  };
+  const drawModelDevices = async (root, file) => {
+    try {
+      let catalogue = await call('localai-router-models', { file });
+      if (!active() || !root.isConnected) return;
+      const render = () => {
+        root.replaceChildren();
+        for (const model of catalogue.models) {
+          const choices = [['none', 'CPU'], ...catalogue.devices.map(item => [item.id, 'GPU · ' + (item.label || item.id)])];
+          const saved = model.config.device ?? '';
+          if (!choices.some(([id]) => id === saved)) choices.push([saved, saved ? saved + ' (saved selection)' : 'Engine default']);
+          const device = select(root, model.name, choices, saved);
+          device.onchange = () => {
+            if (busy || !active()) { device.value = saved; return; }
+            void run(async () => {
+              try { catalogue = await call('localai-model-device', { file: catalogue.file, revision: catalogue.revision, name: model.name, device: device.value }); }
+              catch (error) { device.value = saved; throw error; }
+              render(); message.textContent = 'Device saved. Reload a running router to apply it, or Start if stopped. Other model and launcher settings are unchanged.';
+            });
+          };
+        }
+        if (catalogue.models.length && catalogue.deviceError) root.append(node('p', catalogue.deviceError));
+      };
+      render();
+    } catch (error) { if (root.isConnected) root.textContent = error.message; }
   };
   const drawTTS = () => {
     if (!state.tts) return;
@@ -410,13 +476,14 @@ export async function renderSection({ root: parent, call: control, info, signal 
     const tokenPanel = node('details'); tokenPanel.append(node('summary', 'Hugging Face token'));
     const token = field(tokenPanel, status.hasToken ? 'Saved privately on this host' : 'Optional token for gated models'); token.type = 'password';
     tokenPanel.append(button('Save token', async () => { const value = token.value; token.value = ''; await call('native-models-settings', { token: value }); message.textContent = 'Token saved privately'; }), button('Remove token', async () => { token.value = ''; await call('native-models-settings', { token: '' }); })); root.append(tokenPanel);
-    const catalogue = await call('native-models-catalogue');
+    let catalogue = await call('native-models-catalogue');
     const type = select(root, 'Model type', [['llama', 'llama.cpp GGUF'], ['whisper', 'Whisper / Parakeet'], ['tts', 'Pocket / Qwen3-TTS']], 'llama');
     const curated = node('div'); root.append(curated);
     const drawPresets = () => {
       curated.replaceChildren();
       const presets = catalogue.presets.filter(item => item.engine === type.value);
       const preset = select(curated, 'Downloads — smallest first', presets.map(item => [item.id, `${item.title} · ${(item.bytes / 1e9).toFixed(2)} GB`]), presets[0]?.id);
+      curated.append(button('Downloaded licenses and source', () => openModelNotices(preset.value)));
       curated.append(button('Download selected model', async () => { await call('native-models-preset', { id: preset.value }); message.textContent = 'Download started; it continues with this panel closed'; await refreshJobs(); }));
     };
     drawPresets();
@@ -440,13 +507,16 @@ export async function renderSection({ root: parent, call: control, info, signal 
     const jobs = node('div'); root.append(jobs);
     const refreshJobs = async () => {
       const value = await call('native-models-status'); if (!root.isConnected) return;
-      const revision = JSON.stringify(value.jobs); if (revision === renderedJobs) return; renderedJobs = revision; jobs.replaceChildren();
+      const revision = JSON.stringify(value.jobs); if (revision === renderedJobs) return;
+      catalogue = await call('native-models-catalogue'); if (!root.isConnected) return;
+      renderedJobs = revision; jobs.replaceChildren();
       for (const job of value.jobs) {
         const card = node('section'); card.className = 'connection-card'; card.append(node('strong', job.repository), node('p', [job.status, job.error].filter(Boolean).join(' · ')));
         const presets = catalogue.presets.filter(item => item.repository === job.repository && item.revision === job.revision && item.files.every(name => job.files.some(file => file.path === name && file.status === 'complete')));
+        for (const preset of presets) card.append(button('Licenses and source · ' + preset.title, () => openModelNotices(preset.id)));
         for (const preset of presets) card.append(button('Use ' + preset.title, async () => {
           const files = preset.files.map(name => job.directory + '/' + job.files.find(file => file.path === name).outputPath);
-          const result = await call('localai-model-use', { engine: preset.engine, kind: preset.kind, file: files[0], projector: files[1] || '' }); draw(result);
+          const result = await call('localai-model-use', { engine: preset.engine, kind: preset.kind, file: files[0], projector: files[1] || '', voice: preset.referenceVoicePath || '' }); draw(result);
           if (preset.engine === 'llama' && result.selectedModel) await editRouterModels(result.llama.config.preset, path => { if (routerPresetNode?.isConnected) routerPresetNode.value = path; }, result.selectedModel);
           message.textContent = preset.engine === 'llama' ? 'Model added. Review its settings, then reload the router.' : 'Model selected.';
         }));
@@ -490,6 +560,11 @@ export async function renderSection({ root: parent, call: control, info, signal 
         if (!active() || doc.hidden || busy) return;
         if (latest.needsSetup) return;
         if (!state) { draw(latest); return; }
+        if (latest.firstRun?.status === 'complete' && lastSetupStatus !== 'complete') {
+          lastSetupStatus = 'complete';
+          if (!formEdited) { draw(latest); return; }
+          message.textContent = 'Local AI is ready. Your edits are still here; Refresh status shows the new saved settings.';
+        }
         for (const engine of ['llama', 'whisper']) {
           const current = latest[engine];
           if (engineStatus[engine]?.isConnected) engineStatus[engine].textContent = [current.service?.state || 'Not configured', current.url, current.service?.error, current.error, current.savedForNextStart ? 'Saved changes apply on Reload' : '', current.runtime?.version, engine === 'llama' ? current.runtime?.backend && current.runtime.backend + ' runtime (per-model device)' : current.runtime?.selectedBackend].filter(Boolean).join(' · ');
@@ -497,6 +572,7 @@ export async function renderSection({ root: parent, call: control, info, signal 
         }
         if (importNode?.isConnected) importNode.textContent = ['Pi import: ' + latest.import.state, latest.import.provider, latest.import.endpoint, latest.import.error].filter(Boolean).join(' · ');
         if (progressNode?.isConnected) progressNode.textContent = jobMessage(latest.job);
+        setupView?.(latest);
         if (feedbackJob && latest.job?.id === feedbackJob) {
           message.textContent = jobMessage(latest.job);
           if (['complete', 'failed', 'interrupted', 'cancelled'].includes(latest.job.status)) feedbackJob = null;

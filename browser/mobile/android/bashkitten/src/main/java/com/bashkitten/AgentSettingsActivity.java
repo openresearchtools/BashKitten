@@ -28,7 +28,7 @@ import org.mozilla.geckoview.*;
 public final class AgentSettingsActivity extends ProductActivity {
     private static final String URI = "about:bashkitten-settings";
     private static final Set<String> SECTIONS = new HashSet<>(Arrays.asList("localai", "notifications", "phone-use", "remotes", "telephone", "performance", "display", "share-local", "autostart", "updates"));
-    private static final Set<String> LOCAL_AI = new HashSet<>(Arrays.asList(("localai-status localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action").split(" ")));
+    private static final Set<String> LOCAL_AI = new HashSet<>(Arrays.asList(("localai-status localai-first-run localai-model-device localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action").split(" ")));
     private BrowserApp app;
     private GeckoSession session;
     private GeckoView view;
@@ -49,6 +49,7 @@ public final class AgentSettingsActivity extends ProductActivity {
     private String modelTestOwner;
 
     public static void open(Activity activity, String section) {
+        BrowserApp.get(activity).agent.settingsOpened();
         if (section.equals("providers") || section.equals("general")) {
             BrowserApp.get(activity).agent.navigation(section.equals("providers") ? "providers" : "settings", new JSONObject(),
                 ignored -> {}, error -> android.widget.Toast.makeText(activity, error, android.widget.Toast.LENGTH_LONG).show());
@@ -58,10 +59,14 @@ public final class AgentSettingsActivity extends ProductActivity {
         activity.startActivity(new Intent(activity, AgentSettingsActivity.class).putExtra("section", section));
     }
     @Override public void onCreate(Bundle saved) {
+        app = BrowserApp.get(this);
+        // Private browser chrome stays dark. Apply that same activity-local
+        // choice before native prompts and Gecko settings obtain their theme.
+        if (app.host.privateBrowsing())
+            getDelegate().setLocalNightMode(androidx.appcompat.app.AppCompatDelegate.MODE_NIGHT_YES);
         super.onCreate(saved);
         section = getIntent().getStringExtra("section");
         if (!SECTIONS.contains(section)) { finish(); return; }
-        app = BrowserApp.get(this);
         view = new GeckoView(this);
         // GeckoView's touch origin and its SurfaceView must stay identical.
         // Inset the container, not GeckoView's internal rendering surface.
@@ -112,8 +117,7 @@ public final class AgentSettingsActivity extends ProductActivity {
     private String theme() {
         // This activity's AppCompat configuration already honors Firefox's
         // Light/Dark/System choice. A paused HomeActivity may still have its old resources.
-        boolean dark = app.host.privateBrowsing() ||
-            (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         return dark ? "dark" : "light";
     }
     private CompletableFuture<JSONObject> request(String method, JSONObject params) {

@@ -722,7 +722,7 @@ async function action(name,value={},requestSignal) {
   if(name==='guest-control') {
     if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-startup','share-files','localai-share','service-status','service-save','service-remove','service-action','local-session','status','start','stop',
       'provider-login-describe','provider-login-status','provider-login-callback','provider-login-cancel',
-      'performance-sample','performance-close','localai-status','localai-record','localai-browse','localai-router-models','localai-router-model-save',
+      'performance-sample','performance-close','localai-first-run','localai-model-device','localai-status','localai-record','localai-browse','localai-router-models','localai-router-model-save',
       'localai-router-model-test','localai-router-model-test-status','localai-router-model-test-cancel','localai-save','localai-model-use',
       'localai-synthesize','localai-synthesis-cancel','localai-ini','localai-check','localai-install','localai-quantize','localai-cancel',
       'localai-action','localai-refresh','native-models-catalogue','native-models-preset','native-models-status','native-models-settings',

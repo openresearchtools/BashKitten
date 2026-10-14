@@ -25,6 +25,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
 });
 const contexts = new Map();
 const ownedViews = new WeakMap();
+const shownLocalAISetups = new Set();
 let actorRegistered = false;
 let browserOwner;
 let closingLocal = false;
@@ -141,7 +142,7 @@ function control(command, data = {}) {
 }
 async function localControl(command, data = {}, timeoutMs) {
   const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.display-start", "machines.display-stop", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown", "machines.autostart-status", "machines.autostart-save"];
-  if (![...machineCommands, "autostart-status", "autostart-save", "autostart-startup", "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-record", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
+  if (![...machineCommands, "autostart-status", "autostart-save", "autostart-startup", "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-first-run", "localai-record", "localai-save", "localai-model-use", "localai-model-device", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
   // Native requests can start owners without turning Local on (for example,
@@ -207,7 +208,10 @@ export const BashKittenAgent = {
       actorRegistered = true;
     }
     win.BashKittenAgent = new AgentView(win);
-    win.BashKittenAgent.init().catch(error => win.BashKittenAgent.failure(error));
+    win.BashKittenAgent.init().catch(error => {
+      win.BashKittenAgent.machineStartupResult.reject(error);
+      win.BashKittenAgent.failure(error);
+    });
   },
 };
 
@@ -219,6 +223,9 @@ class AgentView {
     this.documentTransfers = new Set();
     this.providerLogins = new Set();
     this.drafts = new Map();
+    this.settingsVisited = new Set();
+    this.machineStartupReady = new Promise((resolve, reject) => { this.machineStartupResult = { resolve, reject }; });
+    this.machineStartupReady.catch(() => {});
     this.off = false;
     this.busy = false;
     this.remote = null;
@@ -268,7 +275,7 @@ class AgentView {
       if (display) lazy.BashKittenDisplay.close(this.win, display.id);
     });
     doc.getElementById("bashkitten-settings-button").before(this.displayToggle);
-    this.displayControls = xul(doc, "hbox", { id: "bashkitten-display-controls", align: "center", flex: "1", hidden: "true" });
+    this.displayControls = xul(doc, "hbox", { id: "bashkitten-display-controls", align: "center", flex: "1", hidden: "true", overflows: "false" });
     const displaySwitch = (title, id) => {
       const label = html(doc, "label", { class: "native-display-switch" });
       const input = html(doc, "input", { type: "checkbox", id, "aria-label": title });
@@ -332,9 +339,10 @@ class AgentView {
       .catch(error => { this.sidecar.notice.textContent = `Connection startup: ${error.message}`; });
     void (async () => {
       const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
-      await control("machines.startup", { displayCapabilities: BashKittenDisplay.capabilities() });
+      const result = await control("machines.startup", { displayCapabilities: BashKittenDisplay.capabilities() });
+      this.machineStartupResult.resolve(result);
       await this.sidecar.refresh();
-    })().catch(error => { this.sidecar.notice.textContent = `Container startup: ${error.message}`; });
+    })().catch(error => { this.machineStartupResult.reject(error); this.sidecar.notice.textContent = `Container startup: ${error.message}`; });
     void this.watchMachineActivations();
     const selected = Services.prefs.getStringPref("bashkitten.agent.selectedRemote", "");
     await this.run(async () => {
@@ -639,6 +647,9 @@ class AgentView {
     }, () => epoch === this.selectionEpoch && this.selection === id && !this.off && !this.win.closed);
     if (epoch !== this.selectionEpoch || this.selection !== id || this.off) { await disconnectMachine(id, connection.transportGeneration); return; }
     await this.connect(connection, true, { reload: true });
+    void this.machineLocalControl(id, "status").then(status => {
+      if (epoch === this.selectionEpoch) this.showLocalAISetup(status, id);
+    }).catch(console.error);
   }
 
   machineLocalControl(id, command, value = {}) {
@@ -883,6 +894,19 @@ class AgentView {
       reload = true;
     }
     await this.connect(connection, true, { reload });
+    if (current()) this.showLocalAISetup(status);
+  }
+
+  showLocalAISetup(status, backendId = "local") {
+    if (this.off || (this.selection || "local") !== backendId || this.win.closed || DesktopLifetime.quitting ||
+        !["pending", "running", "interrupted"].includes(status.localAISetup?.status) || !status.web?.identity?.instanceId) return;
+    const key = `${backendId}:${status.web.identity.instanceId}`;
+    if (shownLocalAISetups.has(key)) return;
+    shownLocalAISetups.add(key);
+    // Show the existing nonblocking setup page once. Closing it or choosing
+    // another settings page must not make status polling reopen it.
+    if (!this.connectionsPanel && !this.settingsVisited.has(backendId) && this.layout === "full")
+      void this.openSettings("localai", { backendId }).catch(console.error);
   }
 
   async connect(connection, local, { reload = false, navigateTo = null } = {}) {
@@ -1064,6 +1088,7 @@ class AgentView {
   }
 
   async openSettings(section, options = {}) {
+    this.settingsVisited.add(options.backendId || this.selection || "local");
     this.show();
     if (["general", "providers"].includes(section)) {
       await this.sidecar.select(this.selection || "local");
@@ -1202,13 +1227,20 @@ class AgentView {
 
   async toggleMachineDisplay(id) {
     if (lazy.BashKittenDisplay.close(this.win, id)) return;
-    const endpoint = await control("machines.display", { id });
+    const { environment, controls } = await this.machineDisplayDescriptor(id);
     if (this.win.closed || DesktopLifetime.quitting) return;
-    return lazy.BashKittenDisplay.open(this.win, { kind: "container", id, name: endpoint.name,
-      presenterSocket: endpoint.presenterSocket, running: endpoint.running, state: endpoint.state, error: endpoint.error }, {
+    return lazy.BashKittenDisplay.open(this.win, environment, controls);
+  }
+
+  machineDisplayOperation(id, cursor) { return control("machines.operation", { id, cursor }); }
+
+  async machineDisplayDescriptor(id) {
+    const endpoint = await control("machines.display", { id });
+    return { environment: { kind: "container", id, name: endpoint.name,
+      presenterSocket: endpoint.presenterSocket, running: endpoint.running, state: endpoint.state, error: endpoint.error }, controls: {
       clipboard: payload => control("machines.clipboard", { ...payload, id }),
       service: action => control(action === "status" ? "machines.display" : `machines.display-${action}`, { id }),
-    });
+    } };
   }
 
   async shareLocal() { return this.openSettings("share-local", { backendId: "local" }); }

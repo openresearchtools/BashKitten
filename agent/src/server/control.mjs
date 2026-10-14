@@ -22,7 +22,8 @@ import { RemoteAccess } from './access/remote.mjs';
 import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake, wakeHeld } from './access/wake.mjs';
 import { LocalAI } from './localai/localai.mjs';
-import { curatedModels, downloadPreset } from './localai/models.mjs';
+import { FirstRunLocalAI } from './localai/setup.mjs';
+import { curatedModels, downloadPreset, readPresetNotices } from './localai/models.mjs';
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
 import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
@@ -153,13 +154,15 @@ async function serve() {
   const display = platform === 'termux' ? new (await import('./platform/termux/display.mjs')).TermuxDisplay() : null;
   const customStartup = new AutostartCommands();
   const localAI = new LocalAI(stack.services);
-  if (localAI) await localAI.initialize();
+  const phoneSpeech = new PhoneSpeech(localAI);
+  const firstRunAI = new FirstRunLocalAI(localAI, phoneSpeech);
+  await firstRunAI.initialize();
   const phoneDispatch = async (action, value, identity) => {
     if (!stack.ready || !/^[a-f0-9]{64}$/.test(stack.phoneOwnerToken || '')) throw Error('The owning Agent backend is off');
     const response = await unixRequest(paths.backend, '/api/instance/phone', { method: 'POST', headers: { host: new URL(stack.origin).host, authorization: 'Bearer ' + stack.phoneOwnerToken, 'content-type': 'application/json' }, body: JSON.stringify({ action, value, identity }), timeout: 120000 });
     const result = JSON.parse(response.body); if (response.status !== 200) throw Error(result.error || 'Phone backend request failed'); return result;
   };
-  const phoneGateway = new PhoneGateway({ dispatch: phoneDispatch, speech: new PhoneSpeech(localAI) });
+  const phoneGateway = new PhoneGateway({ dispatch: phoneDispatch, speech: phoneSpeech });
   const providerLogin = async (action, value) => {
     if (!stack.ready || !/^[a-f0-9]{64}$/.test(stack.providerOwnerToken || '')) throw Error('The owning Agent backend is off');
     const response = await unixRequest(paths.backend, '/api/instance/provider-login', { method: 'POST',
@@ -172,7 +175,7 @@ async function serve() {
   setDownloadCompleteHandler(() => localAI?.importProvider());
   stack.remote = remote; remote.stack = stack;
   const jobs = new Jobs({ 'reload-services': reloadServices,
-    ...(localAI ? { 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
+    ...(localAI ? { 'localai-first-run': job => firstRunAI.run(job), 'localai-runtime': (job, input) => localAI.install(job, input), 'localai-quantize': (job, input) => localAI.quantize(job, input) } : {}),
   });
   await jobs.init();
   await ensureIntegration();
@@ -259,11 +262,17 @@ async function serve() {
       await stack.start();
       await startConfiguredServices();
       await localAI.importProvider();
+      await startFirstRunAI();
     } catch (error) {
       lastError = error.message; state.web = false;
       await stopGroup().catch(failure => { lastError += '; ' + failure.message; });
       await persist(); throw error;
     } finally { starting = false; }
+  }
+  async function startFirstRunAI() {
+    if (firstRunAI.state?.status !== 'pending' || jobs.busy || stopping || !stack.ready) return;
+    try { await jobs.start('localai-first-run'); }
+    catch (error) { firstRunAI.state.status = 'failed'; firstRunAI.state.error = error.message; await firstRunAI.save(); }
   }
   async function stopWorkers() {
     const workers = await Promise.allSettled((await allMeta()).map(meta => stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false))));
@@ -308,6 +317,7 @@ async function serve() {
     }));
     return { version: 2, platform, manager: { pid: process.pid, revision, exiting, browserOwner, backgroundActive: backgroundActive(), attached: process.env.BASHKITTEN_ATTACHED_MANAGER === '1' },
       packages: { ...await updateStatus(), job: await jobs.status() },
+      localAISetup: firstRunAI.status(),
       web: { status: stopping ? 'stopping' : starting || stack.reconfiguring ? 'starting' : stack.ready ? 'running' : lastError ? 'error' : 'stopped',
         desired: state.web, url: stack.ready || stack.reconfiguring ? stack.origin : undefined, error: lastError, ...await stack.status() },
       sessions };
@@ -360,7 +370,9 @@ async function serve() {
       finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
     }
     if (command.startsWith('localai-')) {
-      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), job: ['localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
+      if (command === 'localai-status') { const job = await jobs.status(); return { ...await localAI.status(), firstRun: firstRunAI.status(), job: ['localai-first-run', 'localai-runtime', 'localai-quantize'].includes(job?.kind) ? job : null }; }
+      if (command === 'localai-first-run') { if (!stack.ready || stopping) throw Error('Turn on Local before setting up models'); return jobs.start('localai-first-run'); }
+      if (command === 'localai-model-device') return localAI.modelDevice(value);
       if (command === 'localai-record') return localAI.record(value);
       if (command === 'localai-browse') return localAI.browse(value);
       if (command === 'localai-router-models') return localAI.routerModels(value);
@@ -376,7 +388,7 @@ async function serve() {
       if (command === 'localai-check') return localAI.check(value.engine);
       if (command === 'localai-install') { if (stopping) throw Error('Agent is stopping'); return jobs.start('localai-runtime', { engine: value.engine }); }
       if (command === 'localai-quantize') { if (!stack.ready || stopping) throw Error('Turn on Local before quantizing a model'); return jobs.start('localai-quantize', value); }
-      if (command === 'localai-cancel') { if (!['localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
+      if (command === 'localai-cancel') { if (!['localai-first-run', 'localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
       if (command === 'localai-share') return localAI.share(value.enabled);
       if (command === 'localai-action') {
         if (!stack.ready || stopping) throw Error('Turn on Local before starting an engine');
@@ -386,7 +398,7 @@ async function serve() {
       throw Error('Unknown LocalAI action');
     }
     if (command.startsWith('native-models-')) {
-      if (command === 'native-models-catalogue') return curatedModels();
+      if (command === 'native-models-catalogue') return value.notice ? readPresetNotices(value.notice, value.file) : curatedModels();
       if (command === 'native-models-preset') return downloadPreset(value.id);
       if (command === 'native-models-status') return downloadsStatus();
       if (command === 'native-models-settings') return saveModelSettings(value);
@@ -544,6 +556,8 @@ async function serve() {
         restartPending = false;
       }
       if (localAI && stack.ready && localAI.importState.state === 'pending') await localAI.importProvider();
+      await startFirstRunAI();
+      if (jobs.busy) return;
       const next = (await readJson(packageFile, null))?.revision;
       if ((next && next !== revision) || initialNode !== (await fs.stat(process.execPath)).ino) {
         // The next explicit launch loads the updated controller too; reload children now.

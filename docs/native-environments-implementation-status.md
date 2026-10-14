@@ -5,6 +5,78 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Installed repair candidate and remaining blockers — 14 October 2026
+
+Candidate `a947f076b18e5c7f89869f8bd29c8997867167b6` is installed on the
+Wayland host, real Xorg test VM and Android 16/17. Its immutable package/source receipts are
+`verification/desktop-a947/handoff.json` and
+`verification/android-termux-handoff-a947.json` in the Build workspace.
+The Android release build completed in 7m27s. Unchanged native components retain
+their actual producer identities, verified against their source and bytes.
+
+Actual desktop testing now passes the Tor notice's visibility, ordinary-tab
+isolation and dismissal. Android's compact project picker fits with its keyboard
+open. The desktop picker still stretched vertically and compressed folder rows:
+the next repair restores intrinsic dialog height and content-height list rows.
+An initial desktop Display toolbar disappearance was traced to Firefox moving
+the native control into its overflow list. The next repair keeps that control
+in the toolbar; its initial installed appearance still requires verification.
+Neither result is accepted from source checks alone.
+
+Android 16's real subagent test produced one attributed child report. Stopping
+the parent while its child was working held the later child result as a draft
+without resuming the parent. That held state survived the matched update, and
+explicit Send delivered the child report exactly once. A separate 120-second
+question expiry delivered one timeout and one later attributed user follow-up.
+Android 17's clipboard copied before Display
+reattachment still requires repair and installed verification; Observe and the
+clipboard preference must continue to gate both directions.
+
+The same repair batch now includes cold-model reasoning preservation, Android's
+private-settings native theme, extracted AppImage launch environment and explicit
+restoration of a minimized second split-window target. Actual contact-editor
+testing also exposed a synthesized Phone row that Android reduced to cellular
+digits; the next candidate keeps only the authorized SIP address row. These have focused source
+checks; installed retests remain pending. The settled Xorg wallpaper shows its
+complete logo, so an earlier resize screenshot is not proof of persistent clipping.
+
+The user's first-run Local AI amendment is integrated for the next combined
+build: published runtime downloads, curated pinned Qwen vision and small speech
+models, CPU defaults with a quick GPU choice, retained advanced settings and
+offline notices for fetched weights. Existing and concurrently edited settings
+must be preserved. GGML/llama.cpp and Unsloth are preferred model sources where
+available. The user selected Parakeet TDT v3 0.6B Q4_0 as the default transcription model;
+Whisper remains an optional smaller download. A genuinely fresh setup and existing-configuration preservation are
+additional installed gates, not replacements for the complete register below.
+
+A scoped native Xorg browser-crash check stopped all 136 recorded owned process
+identities within 10.8 seconds. This does not cover unrelated workloads or every
+other lifecycle case. The initial independent Observe/Pi test was inconclusive
+after model tool-use errors and a confirmed global OOM in the 8 GiB test VM.
+Only that owned Xorg VM was increased to 16 GiB, retaining its identity, disks,
+four CPUs and existing profiles; the user's private llama VM was not touched.
+The subsequent real Pi input test passed: the agent typed into the guest terminal
+while Observe was enabled, and local viewer typing remained blocked. Guest tray
+Stop also left its container and Display running while stopping that guest Agent.
+
+The next batch additionally restores Display tab ownership using stock Firefox
+session metadata containing only a stable container ID and its input mode. It
+waits for an already-authorized startup, obtains fresh private connection details,
+and never starts an Off container or Display itself. A new-chat composer refreshes
+its model choices on return from setup without polling or replacing an explicit
+user selection. Both changes have focused source checks; installed verification
+remains required.
+
+Android 17's normal calling-account setup and SIP contact connection passed.
+Speech readback, transcription, confirmation and delivery remain unverified.
+Android 16 additionally passed stopped-peer message holding and explicit follow-up
+without releasing the older held message; the final held-message Send still
+requires verification before another send is attempted.
+
+The complete feature register below remains mandatory. These are scoped
+installed results, not completion of the broader call/audio, permissions,
+startup, rendering, remote, lifecycle or release acceptance obligations.
+
 ## Installed combined candidate and acceptance repairs — 14 October 2026
 
 Combined source `e31a4c30ac5df7d226c32d4b915c5923b7e7acfa` was built and

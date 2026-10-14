@@ -6,7 +6,8 @@ import { readMeta, writeMeta, readJson, writeJson, sessionDir, socketPath, priva
 import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { providerRevision } from './services.mjs';
-import { selectedRuntime, allowRuntimeWork } from './runtime.mjs';
+import { selectedRuntime, allowRuntimeWork, loadPi } from './runtime.mjs';
+import { managedThinkingUnknown } from './managed-provider.mjs';
 import { notifyTurn, notifyQuestion, resolvedQuestion, notifyAssistantMessage } from './notifications.mjs';
 import { QuestionOwner } from './questions.mjs';
 import { createPhoneWorker } from '../phone/worker.mjs';
@@ -26,8 +27,8 @@ let meta = await readMeta(id);
 meta.workerOwner = id;
 meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
 let phoneWorker, phoneSession;
-let rpc, providersVersion, busy = false, compacting = false, stopping = false, changing = false;
-let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false;
+let rpc, providersVersion, projectNativeSession, busy = false, compacting = false, stopping = false, changing = false;
+let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false, contextUpdates = 0;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
 // Recover every remaining item as a held draft; only an explicit user send releases it.
@@ -100,7 +101,7 @@ async function reportCompleted(entryId, chatId = id, session = meta.piSessionId)
 }
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
 function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questionOwner.state.records) } : e); }
-function status() { return { stopGeneration: questionOwner.state.generation, questions: questionOwner.list(), runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
+function status() { return { stopGeneration: questionOwner.state.generation, questions: questionOwner.list(), runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext: pendingContext || contextUpdates > 0, modelSelection: { model: meta.model, thinking: meta.thinking },
   steeringMessages: queue.filter(q => q.kind === 'steer').map(item => queueItem(item, questionOwner.state.records)), queuedMessages: queue.filter(q => q.kind !== 'steer').map(item => queueItem(item, questionOwner.state.records)) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
 function emit(event, remember = true) {
@@ -122,6 +123,12 @@ async function readState(follow) {
   entries = activeBranch(history.entries, history.leafId);
   meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
   meta.thinking = state.thinkingLevel;
+  if (await managedThinkingUnknown(meta.model)) {
+    // Stock Pi clamps against its startup catalogue without changing the saved
+    // native choice. Unknown cold capabilities must not replace that choice.
+    const saved = projectNativeSession(history.entries, history.leafId);
+    if (`${saved.model?.provider}/${saved.model?.modelId}` === meta.model && entries.some(entry => entry.type === 'thinking_level_change')) meta.thinking = saved.thinkingLevel;
+  }
   if (state.sessionName) meta.title = state.sessionName;
   meta.piSessionId = state.sessionId;
   meta.piFile = state.sessionFile || meta.piFile;
@@ -181,6 +188,7 @@ async function launch() {
   const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
   providersVersion = await providerRevision();
+  projectNativeSession = (await loadPi()).pi.buildSessionContext;
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   rpc = new PiRpc(meta, { ...phoneWorker.environment, BASHKITTEN_WORKER_SOCKET: privateSocket, BASHKITTEN_WORKER_KEY: workerKey });
   let lastAssistantMessage;
@@ -279,6 +287,10 @@ async function applyPending() {
     if (model?.provider !== provider || model?.id !== modelId) {
       await prepareManagedModel(selection.model);
       await rpc.command('set_model', { provider, modelId });
+    } else if (selection.thinking && await managedThinkingUnknown(selection.model)) {
+      // Resolve capabilities before an explicit choice, so Pi can record it
+      // against the actual model instead of an interim startup clamp.
+      await prepareManagedModel(selection.model);
     }
     if (selection.thinking) await rpc.command('set_thinking_level', { level: selection.thinking });
     await refresh(); emit({ type: 'model_change', model: meta.model, thinking: meta.thinking }, false);
@@ -291,9 +303,10 @@ async function prepareManagedModel(model = meta.model) {
   const ready = await socketRequest(path.join(dataDir, 'run/control.sock'), '/llama-wait', { model: modelId }, 16 * 60 * 1000);
   if (stopping) throw Error('Pi instance is stopping');
   if (ready.state !== 'ready' || !ready.url || ready.model !== modelId) throw Error('The selected local llama.cpp model is not ready');
+  if (await managedThinkingUnknown(model)) throw Error('The local model loaded, but its reasoning capabilities could not be checked. Retry after checking the llama.cpp service.');
   const { models } = await rpc.command('get_available_models');
   const current = models.find(item => item.provider === 'bashkitten-llama' && item.id === ready.model);
-  if (current?.baseUrl === ready.url + '/v1') return;
+  if (current?.baseUrl === ready.url + '/v1' && await providerRevision() === providersVersion) return;
   const state = await rpc.command('get_state');
   if (state.isStreaming || state.isCompacting || state.pendingMessageCount) throw Error('Local llama.cpp changed while Pi was active. Retry after the current turn ends.');
   // Stock RPC has no model-registry reload command. Reopen its own saved
@@ -303,7 +316,8 @@ async function prepareManagedModel(model = meta.model) {
   try { await launch(); } finally { changing = false; }
   const updated = await rpc.command('get_available_models');
   if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === ready.model && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
-  await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.model });
+  const resumed = await rpc.command('get_state');
+  if (resumed.model?.provider !== 'bashkitten-llama' || resumed.model?.id !== ready.model) await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.model });
   await refresh();
 }
 async function canSend(item) {
@@ -388,6 +402,24 @@ async function handle(req, res) {
     if (req.url === '/fork-messages') return json(res, await rpc.command('get_fork_messages'));
     if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
     const value = await jsonBody(req), requestGeneration = questionOwner.state.generation;
+    if (req.url === '/context') {
+      if (stopping) throw Error('Pi instance is stopping');
+      // Model readiness can import a provider while this worker's current
+      // operation awaits it. Acknowledge the queued refresh without making
+      // that importer wait on its own blocked operation.
+      contextUpdates++;
+      void serial(async () => {
+        if (stopping) return;
+        if (await providerRevision() !== providersVersion) {
+          for (const statusKey of ['chatgpt-usage', 'chatgpt-usage:data']) { extensionStatuses.delete(statusKey); emit({ type: 'extension_ui_request', method: 'setStatus', statusKey }, false); }
+          void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'bashkitten-usage-refresh')) return rpc.command('prompt', { message: '/bashkitten-usage-refresh invalidate' }); }).catch(() => {});
+        }
+        pendingContext ||= Boolean(value.reload) || (await syncContext()) !== meta.contextVersion;
+        await applyPending();
+      }).catch(error => emit({ type: 'notice', message: 'Could not refresh Pi settings: ' + error.message }, false))
+        .finally(() => { contextUpdates--; });
+      return json(res, { data: status() });
+    }
     if (req.url === '/questions/answer') return json(res, await questionOwner.answer(value));
     if (req.url === '/questions/dismiss') return json(res, await questionOwner.dismiss(value));
     if (req.url === '/sidebar-changed') { emit({ type: 'sessions_changed' }, false); return json(res, { ok: true }); }
@@ -427,15 +459,7 @@ async function handle(req, res) {
     const result = await serial(async () => {
       if (stopping) throw Error('Pi instance is stopping');
       if (req.url === '/barrier') { const state = await rpc.command('get_state'); return { idle: !state.isStreaming && !state.isCompacting && !dialogs.size && !queue.some(q => !q.held && !q.editToken) }; }
-      if (!['/context', '/barrier'].includes(req.url)) allowRuntimeWork();
-      if (req.url === '/context') {
-        if (await providerRevision() !== providersVersion) {
-          for (const statusKey of ['chatgpt-usage', 'chatgpt-usage:data']) { extensionStatuses.delete(statusKey); emit({ type: 'extension_ui_request', method: 'setStatus', statusKey }, false); }
-          void rpc.command('get_commands').then(({ commands }) => { if (commands.some(command => command.source === 'extension' && command.name === 'bashkitten-usage-refresh')) return rpc.command('prompt', { message: '/bashkitten-usage-refresh invalidate' }); }).catch(() => {});
-        }
-        pendingContext ||= Boolean(value.reload) || (await syncContext()) !== meta.contextVersion;
-        await applyPending(); return { data: status() };
-      }
+      allowRuntimeWork();
       if (req.url === '/message') {
         const authorizedPhone = !value.phoneDelivery || await validatePhoneDelivery(id, value.phoneAuthorization);
         const stalePhone = !authorizedPhone || requestGeneration !== questionOwner.state.generation || (value.phoneDelivery && value.stopGeneration !== questionOwner.state.generation);

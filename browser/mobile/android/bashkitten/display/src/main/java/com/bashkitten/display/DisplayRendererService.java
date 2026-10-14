@@ -41,10 +41,13 @@ public final class DisplayRendererService extends Service {
                         try { if (client != null) client.close(generation); } catch (RemoteException ignored) {}
                     }, connected -> state(connected, connected ? "" : "Desktop connection closed. Reopen Display to attach again."));
                     host.interactive(interactive);
+                    host.getLorieView().connect(connection.detachFd());
+                    // Constructor preferences ran before the native socket existed.
+                    // Replay the current mode before attachment can announce clipboard focus.
+                    host.getLorieView().reloadPreferences(host.prefs);
                     surface = new SurfaceControlViewHost(window, display, token);
                     surface.setView(host.content(), width, height);
                     host.getLorieView().setContentInsets(0, 0, 0, 0);
-                    host.getLorieView().connect(connection.detachFd());
                     death = () -> work.post(DisplayRendererService.this::release);
                     callback.asBinder().linkToDeath(death, 0);
                     SurfaceControlViewHost.SurfacePackage parcel = surface.getSurfacePackage();

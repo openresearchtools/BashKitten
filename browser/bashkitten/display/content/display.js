@@ -2,9 +2,10 @@
 "use strict";
 const { BashKittenDisplay } = ChromeUtils.importESModule("resource:///modules/BashKittenDisplay.sys.mjs");
 const surface = document.getElementById("surface"), status = document.getElementById("status");
+async function initialize() {
 let receiver, generation = 1, resizeFrame = 0, lastSize = "", closed = false;
-const initial = BashKittenDisplay.record(document);
-let state = initial.state, serviceRunning = initial.running, interactive = true, attachment = 0, clipboardEpoch = 0;
+const initial = await BashKittenDisplay.prepare(document);
+let state = initial.state, serviceRunning = initial.running, interactive = initial.interactive, attachment = 0, clipboardEpoch = 0;
 let changing = false, rendererClosed = Promise.resolve(), resolveRendererClosed;
 const pointerIds = new Set();
 // DOM code maps to the kernel evdev codes used by wl_keyboard. Layout and
@@ -187,3 +188,10 @@ async function clipboard(action) {
 }
 document.getElementById("copy").addEventListener("click",event=>{if(event.isTrusted)clipboard("read");});
 document.getElementById("paste").addEventListener("click",event=>{if(event.isTrusted)clipboard("write");});
+
+}
+void initialize().catch(error => {
+  status.textContent = error.message; status.hidden = false;
+  surface.tabIndex = -1;
+  for (const id of ["copy", "paste"]) document.getElementById(id).disabled = true;
+});

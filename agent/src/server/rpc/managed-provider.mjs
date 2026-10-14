@@ -34,6 +34,17 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
     if (!previous && id === 'bashkitten-llama') previous = await readJson(path.join(dataDir, 'llama/pi-provider.json'), null);
     const existing = value.providers[id];
     if (existing && !same(existing, previous?.provider) && !same(existing, previous?.pending)) throw Error(`Pi provider ${id} was edited independently; preserve or rename it before importing`);
+    // An unloaded router model has not supplied its template yet. Keep only
+    // this owned provider/model's last observed capabilities until it does.
+    const unknownThinking = models.filter(model => model.reasoning === undefined).map(model => model.id);
+    models = models.map(model => {
+      if (model.reasoning !== undefined) return model;
+      const known = existing?.models?.find(item => item.id === model.id);
+      if (typeof known?.reasoning !== 'boolean') return model;
+      return { ...model, reasoning: known.reasoning,
+        ...(known.thinkingLevelMap ? { thinkingLevelMap: known.thinkingLevelMap } : {}),
+        compat: { ...model.compat, ...(known.compat?.thinkingFormat ? { thinkingFormat: known.compat.thinkingFormat } : {}) } };
+    });
     const keyPath = apiKey ? path.join(accessDir, 'managed-providers', id + '.key') : null;
     const provider = { name, baseUrl, api: 'openai-completions', authHeader: Boolean(keyPath),
       // Stock Pi's llama provider uses this sentinel for a token-free server.
@@ -41,19 +52,19 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
       apiKey: keyPath ? '!cat ' + quote(keyPath) : 'local', models };
     const keyChanged = Boolean(apiKey && await fs.readFile(keyPath, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; }) !== apiKey);
     const keyDigest = keyPath ? digest(apiKey) : null;
-    const changed = !same(existing, provider) || keyChanged || previous?.keyDigest !== keyDigest || Boolean(previous?.pending);
+    const changed = !same(existing, provider) || !same(previous?.unknownThinking || [], unknownThinking) || keyChanged || previous?.keyDigest !== keyDigest || Boolean(previous?.pending);
     if (changed) {
       if (await fs.readFile(file, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; }) !== before) throw Error('Pi model configuration changed; save again');
-      await writeJson(ownerFile, { provider: previous?.provider || null, pending: provider });
+      await writeJson(ownerFile, { provider: previous?.provider || null, pending: provider, unknownThinking });
       if (apiKey) await writePrivate(keyPath, apiKey);
       value.providers[id] = provider; await writeJson(file, value);
       await providersChanged();
-      await writeJson(ownerFile, { provider, keyDigest });
+      await writeJson(ownerFile, { provider, keyDigest, unknownThinking });
     }
     let waiting = false;
     await Promise.all((await allMeta()).map(async meta => {
       try {
-        const result = await socketRequest(socketPath(meta.id), '/context', {}, 20000);
+        const result = await socketRequest(socketPath(meta.id), changed ? '/context' : '/status', {}, 20000);
         waiting ||= Boolean(result.data?.pendingContext || result.data?.busy || result.data?.compacting);
       } catch (error) { if (!['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
     }));
@@ -61,6 +72,16 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
       message: waiting ? 'Saved; active chats will refresh at their next idle boundary.' : 'Imported into local Pi.' };
   });
   pending = work.catch(() => {}); return work;
+}
+
+/** Private discovery state, never an extra field in Pi's model schema. */
+export async function managedThinkingUnknown(model) {
+  if (!model?.startsWith('bashkitten-llama/')) return false;
+  const owner = await readJson(path.join(accessDir, 'managed-providers/bashkitten-llama.json'), null);
+  if (!owner?.unknownThinking?.includes(model.slice('bashkitten-llama/'.length))) return false;
+  const { pi: { getAgentDir } } = await loadPi();
+  const config = await readJson(path.join(getAgentDir(), 'models.json'), {});
+  return same(config.providers?.['bashkitten-llama'], owner.pending || owner.provider);
 }
 
 /** Called only by native local control for an already authenticated mapping. */
@@ -88,11 +109,13 @@ export async function discoverManagedModels(baseUrl, apiKey = '', name = 'llama.
   const needsAutoload = catalogue.data.some(model => model.status?.value === 'unloaded' && model.source === 'preset');
   const autoload = needsAutoload && (await read('/props')).models_autoload === true;
   const models = await Promise.all(catalogue.data.filter(model => !model.status || ['loaded', 'sleeping'].includes(model.status.value) || autoload && model.status.value === 'unloaded' && !model.status.failed && model.source === 'preset').map(async model => {
-    const props = model.status?.value === 'loaded' ? await read('/props?' + new URLSearchParams({ model: model.id, autoload: 'false' })) : {};
+    // Upstream serves a sleeping child's cached props without waking it when
+    // autoload=false; an unloaded child has no template to inspect yet.
+    const props = ['loaded', 'sleeping'].includes(model.status?.value) ? await read('/props?' + new URLSearchParams({ model: model.id, autoload: 'false' })) : {};
     const args = model.status?.args || [], index = args.findIndex(arg => ['--ctx-size', '-c', '-ctx'].includes(arg));
     const context = [model.meta?.n_ctx, index >= 0 ? Number(args[index + 1]) : null, model.meta?.n_ctx_train].find(value => Number.isSafeInteger(value) && value > 0);
-    const reasoning = props.chat_template?.includes('enable_thinking') === true;
-    return { id: model.id, name: `${model.id} (${name})`, reasoning, input: model.architecture?.input_modalities?.includes('image') ? ['text', 'image'] : ['text'],
+    const reasoning = typeof props.chat_template === 'string' ? props.chat_template.includes('enable_thinking') : undefined;
+    return { id: model.id, name: `${model.id} (${name})`, ...(reasoning !== undefined ? { reasoning } : {}), input: model.architecture?.input_modalities?.includes('image') ? ['text', 'image'] : ['text'],
       ...(context ? { contextWindow: context, maxTokens: context } : {}),
       ...(reasoning ? { thinkingLevelMap: { off: 'off', minimal: null, low: null, medium: 'medium', high: null, xhigh: null } } : {}),
       compat: { supportsStore: false, supportsDeveloperRole: false, supportsReasoningEffort: false, supportsUsageInStreaming: true, supportsStrictMode: false, maxTokensField: 'max_tokens', ...(reasoning ? { thinkingFormat: 'qwen-chat-template' } : {}) } };

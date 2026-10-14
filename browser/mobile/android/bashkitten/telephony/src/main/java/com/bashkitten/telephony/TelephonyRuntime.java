@@ -208,9 +208,8 @@ public final class TelephonyRuntime {
     public CompletableFuture<Intent> contact(String backendId) {
         return job(() -> {
             String address = address(backendId).getSchemeSpecificPart(); ArrayList<ContentValues> rows = new ArrayList<>();
-            ContentValues phone = new ContentValues(); phone.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.Phone.CONTENT_ITEM_TYPE);
-            phone.put(ContactsContract.CommonDataKinds.Phone.NUMBER, address); phone.put(ContactsContract.CommonDataKinds.Phone.TYPE, ContactsContract.CommonDataKinds.Phone.TYPE_CUSTOM);
-            phone.put(ContactsContract.CommonDataKinds.Phone.LABEL, "BashKitten"); rows.add(phone);
+            // A telephone-number field can strip a SIP address to digits and offer a cellular call.
+            // Keep the managed calling address only in Android's SIP contact field.
             ContentValues sip = new ContentValues(); sip.put(ContactsContract.Data.MIMETYPE, ContactsContract.CommonDataKinds.SipAddress.CONTENT_ITEM_TYPE);
             sip.put(ContactsContract.CommonDataKinds.SipAddress.SIP_ADDRESS, address); rows.add(sip);
             return new Intent(Intent.ACTION_INSERT).setType(ContactsContract.RawContacts.CONTENT_TYPE)

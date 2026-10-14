@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "verifiedAt": "2026-10-08",
+  "version": 2,
+  "verifiedAt": "2026-10-14",
   "models": [
     {
       "repository": "unsloth/Qwen3.5-0.8B-GGUF",
@@ -24,6 +24,36 @@
           "bytes": 811843840,
           "sha256": "0ad885ffd4bb022fc4f0d33a3308fa108ef8613159d3b3a67e23abca056b7a6c",
           "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/Qwen3.5-0.8B-Q8_0.gguf"
+        }
+      ],
+      "attribution": "Qwen3.5-0.8B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "Qwen/Qwen3.5-0.8B",
+          "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+          "file": "LICENSE",
+          "bytes": 11544,
+          "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/LICENSE",
+          "title": "Apache 2.0 license"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-0.8B",
+          "revision": "2fc06364715b967f1860aea9cf38778875588b17",
+          "file": "README.md",
+          "bytes": 61705,
+          "sha256": "87a163af54f32fa608a0f8d3ac67945c53dd2b4a7c96740b3d7fdc28e8458864",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-0.8B/resolve/2fc06364715b967f1860aea9cf38778875588b17/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "unsloth/Qwen3.5-0.8B-GGUF",
+          "revision": "6ab461498e2023f6e3c1baea90a8f0fe38ab64d0",
+          "file": "README.md",
+          "bytes": 62950,
+          "sha256": "962978aa8e3c564c5aca3f8fc3b9a21b4d42a2a045475df38e8a570285047ea5",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/6ab461498e2023f6e3c1baea90a8f0fe38ab64d0/README.md",
+          "title": "Model card"
         }
       ]
     },
@@ -49,6 +79,43 @@
           "bytes": 2012012800,
           "sha256": "1b04acba824817554f4ce23639bc8495ff70453b8fcb047900c731521021f2c1",
           "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/Qwen3.5-2B-Q8_0.gguf"
+        },
+        {
+          "name": "mmproj-F16.gguf",
+          "bytes": 668227264,
+          "sha256": "7035e9cb8d7c6a9681d07eef9a364783e86ea4cd73faab2eabb4f43a101830c7",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/mmproj-F16.gguf"
+        }
+      ],
+      "projector": "mmproj-F16.gguf",
+      "attribution": "Qwen3.5-2B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "Qwen/Qwen3.5-2B",
+          "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+          "file": "README.md",
+          "bytes": 62814,
+          "sha256": "c0e83a849c776e6fa843d011f023132d942a0f0140d903205bf1c363adad2275",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-2B/resolve/15852e8c16360a2fea060d615a32b45270f8a8fc/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-2B",
+          "revision": "15852e8c16360a2fea060d615a32b45270f8a8fc",
+          "file": "LICENSE",
+          "bytes": 11544,
+          "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-2B/resolve/15852e8c16360a2fea060d615a32b45270f8a8fc/LICENSE",
+          "title": "Apache 2.0 license"
+        },
+        {
+          "repository": "unsloth/Qwen3.5-2B-GGUF",
+          "revision": "f6d5376be1edb4d416d56da11e5397a961aca8ae",
+          "file": "README.md",
+          "bytes": 64059,
+          "sha256": "d6507c9243588d5526ceb08840ebd759b0d05aeb96c8aeb42e59f4727df0143a",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/README.md",
+          "title": "Model card"
         }
       ]
     },
@@ -74,13 +141,56 @@
           "bytes": 4482403488,
           "sha256": "10cc391b403021dd11c614679d2fd92f611c3681d29e29651b717316965d61e1",
           "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q8_0.gguf"
+        },
+        {
+          "name": "mmproj-F16.gguf",
+          "bytes": 672423616,
+          "sha256": "cd88edcf8d031894960bb0c9c5b9b7e1fea6ebee02b9f7ce925a00d12891f864",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/mmproj-F16.gguf"
+        },
+        {
+          "name": "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+          "bytes": 2912109728,
+          "sha256": "b252c5610a42ca82d20fe2a12813e9d069eed89292907e26c783eeb0bc961bc7",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-UD-Q4_K_XL.gguf"
+        }
+      ],
+      "projector": "mmproj-F16.gguf",
+      "attribution": "Qwen3.5-4B by the Qwen team; GGUF conversion and quantization by Unsloth. Separately downloaded model weights, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "Qwen/Qwen3.5-4B",
+          "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "file": "README.md",
+          "bytes": 77661,
+          "sha256": "1406be1b6b8fd8a6545870da516912804756593628a1d0fb0a7965211e82a7bb",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-4B/resolve/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/README.md",
+          "title": "Model card"
+        },
+        {
+          "repository": "Qwen/Qwen3.5-4B",
+          "revision": "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a",
+          "file": "LICENSE",
+          "bytes": 11544,
+          "sha256": "bbedc3fda3305820b977265f01b8619d87570a6739de3a5582c3464840f1e57a",
+          "url": "https://huggingface.co/Qwen/Qwen3.5-4B/resolve/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/LICENSE",
+          "title": "Apache 2.0 license"
+        },
+        {
+          "repository": "unsloth/Qwen3.5-4B-GGUF",
+          "revision": "e87f176479d0855a907a41277aca2f8ee7a09523",
+          "file": "README.md",
+          "bytes": 78906,
+          "sha256": "28546f5fc4f22ee1b3f17b908957f17fcfa66174032136265bdb27f404bc1e6c",
+          "url": "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/README.md",
+          "title": "Model card"
         }
       ]
     },
     {
       "repository": "ggml-org/parakeet-GGUF",
       "revision": "35156454d1a39de06863303dd209fd2bed6ee079",
-      "license": "mit",
+      "license": "cc-by-4.0",
       "files": [
         {
           "name": "ggml-parakeet-tdt-0.6b-v3-f16.bin",
@@ -112,12 +222,58 @@
           "sha256": "4d64e9e96c2792186d072fde0034df0ad670cf680a2f53069052ead827fd600e",
           "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/ggml-parakeet-tdt-0.6b-v3-q8_0.bin"
         }
+      ],
+      "attribution": "Original Parakeet TDT0.6Bv3 model by NVIDIA; converted and quantized for whisper.cpp by ggml-org. Preserve original model attribution and CC-BY-4.0; conversion MIT metadata is not a replacement for the original weights license. Model weights are downloaded separately, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "ggml-org/parakeet-GGUF",
+          "revision": "35156454d1a39de06863303dd209fd2bed6ee079",
+          "file": "README.md",
+          "bytes": 1064,
+          "sha256": "c66c5bc7439dc6b5f6283e411357557dfa3b18e25d7a326890e6564b76431401",
+          "title": "Parakeet converted model attribution and MIT declaration",
+          "url": "https://huggingface.co/ggml-org/parakeet-GGUF/resolve/35156454d1a39de06863303dd209fd2bed6ee079/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "nvidia/parakeet-tdt-0.6b-v3",
+          "revision": "541d1f99c6b0c3cd0b11a95167540bb8edefd82b",
+          "file": "README.md",
+          "bytes": 42888,
+          "sha256": "7a4306a43f395e3a716e77f1d81c03db18a0a355d7b566bb1d6307213ba0302b",
+          "title": "NVIDIA Parakeet original model attribution and CC-BY-4.0 declaration",
+          "url": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "creativecommons/cc-legal-tools-data",
+          "revision": "a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030",
+          "file": "legacy/legalcode/by_4.0.txt",
+          "bytes": 18657,
+          "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+          "title": "Creative Commons Attribution 4.0 International full legal code",
+          "url": "https://raw.githubusercontent.com/creativecommons/cc-legal-tools-data/a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030/legacy/legalcode/by_4.0.txt",
+          "role": "full official model-weight license"
+        },
+        {
+          "repository": "ggml-org/whisper.cpp",
+          "revision": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+          "file": "LICENSE",
+          "bytes": 1078,
+          "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+          "title": "whisper.cpp v1.9.5 MIT license and ggml notice",
+          "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/d1be6fde11ac6e0407606b4e42fe72d34add8037/LICENSE",
+          "role": "full license; converter/runtime code attribution, does not replace original model weights license"
+        }
+      ],
+      "provenanceNotes": [
+        "Conversion repository declares MIT but contains no standalone MIT license/copyright text. Included whisper.cpp release MIT notice covers that code/converter; do not claim it independently establishes MIT-only licensing of model weights."
       ]
     },
     {
       "repository": "ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF",
       "revision": "ca27d74bc954b73dadab5b71ca265d87fc861a7c",
-      "license": null,
+      "license": "apache-2.0",
       "files": [
         {
           "name": "Qwen3-TTS-12Hz-1.7B-Base-Q4_K_M.gguf",
@@ -149,7 +305,54 @@
           "sha256": "b9503e95e44705739cf82c15ce909b040b96a31ad79d02cf4dc5e1484399265d",
           "url": "https://huggingface.co/ggml-org/Qwen3-TTS-12Hz-1.7B-Base-GGUF/resolve/ca27d74bc954b73dadab5b71ca265d87fc861a7c/mmproj-Qwen3-TTS-12Hz-1.7B-Base-bf16.gguf"
         }
-      ]
+      ],
+      "attribution": "Original Qwen3-TTS1.7B Base by the Qwen team; GGUF conversion distributed by ggml-org. Preserve original model source and Apache-2.0 notice. Model weights are downloaded separately, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-Base",
+          "revision": "fd4b254389122332181a7c3db7f27e918eec64e3",
+          "file": "README.md",
+          "bytes": 57817,
+          "sha256": "621b7e88f1867bc03d817176fc1f7f55f4b5a70654b2a07fdcda1e169efb024b",
+          "title": "Qwen3-TTS original model attribution and Apache-2.0 declaration",
+          "url": "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-Base/resolve/fd4b254389122332181a7c3db7f27e918eec64e3/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "QwenLM/Qwen3-TTS",
+          "revision": "d8146d5305c4291ec5b0b6533c0c1718fb276899",
+          "file": "LICENSE",
+          "bytes": 11343,
+          "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655",
+          "title": "Qwen3-TTS official Apache-2.0 license",
+          "url": "https://raw.githubusercontent.com/QwenLM/Qwen3-TTS/d8146d5305c4291ec5b0b6533c0c1718fb276899/LICENSE",
+          "role": "full license"
+        },
+        {
+          "repository": "kyutai/tts-voices",
+          "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+          "file": "README.md",
+          "bytes": 5444,
+          "sha256": "47c610f38e0e0bfb4b353a2afa84a5277b748b1b808d5f77fb8ef74fb836689b",
+          "title": "Kyutai reference voices per-directory/per-file licensing",
+          "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "creativecommons/cc-legal-tools-data",
+          "revision": "a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030",
+          "file": "legacy/legalcode/zero_1.0.txt",
+          "bytes": 7048,
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+          "title": "Creative Commons CC0 1.0 Universal full legal code",
+          "url": "https://raw.githubusercontent.com/creativecommons/cc-legal-tools-data/a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030/legacy/legalcode/zero_1.0.txt",
+          "role": "full official reference-voice dedication"
+        }
+      ],
+      "provenanceNotes": [
+        "Pinned GGUF conversion repository contains no README, LICENSE or NOTICE. Cannot supply a nonexistent conversion README or independently establish exact original checkpoint revision from its metadata. Original model card revision is a pinned licensing/attribution source, not a claim of the conversion input commit."
+      ],
+      "referenceVoice": "kyutai-default-voice"
     },
     {
       "repository": "EryriLabs/pocket-tts-GGUF",
@@ -168,7 +371,61 @@
           "sha256": "9cca37ab8f3da366a1864919214fbd545f45609d8f1167d1fb302cebea515d63",
           "url": "https://huggingface.co/EryriLabs/pocket-tts-GGUF/resolve/701bad4152d97b3755686a6c7a4cec8b752a3e6e/pocket-tts-en.gguf"
         }
-      ]
+      ],
+      "attribution": "Original Pocket TTS by Kyutai; English GGUF model and Mimi codec/speaker projector conversion by EryriLabs. State conversion, and mark any user-created quantization separately. Model weights are downloaded separately, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "EryriLabs/pocket-tts-GGUF",
+          "revision": "701bad4152d97b3755686a6c7a4cec8b752a3e6e",
+          "file": "README.md",
+          "bytes": 5839,
+          "sha256": "240b87a4937cee732716bf7cc268b6a1bd6bb59ebb015545f6eb3c59f53d6bd7",
+          "title": "Pocket GGUF conversion attribution and CC-BY-4.0 declaration",
+          "url": "https://huggingface.co/EryriLabs/pocket-tts-GGUF/resolve/701bad4152d97b3755686a6c7a4cec8b752a3e6e/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "kyutai/pocket-tts",
+          "revision": "7f364c05d1be3faf2b234cdbe4cbb68a026d4218",
+          "file": "README.md",
+          "bytes": 26699,
+          "sha256": "c01f4a60dca73aa844473181096618fe9b3bf6a148986c8c368190ba03627054",
+          "title": "Kyutai Pocket original model attribution and CC-BY-4.0 declaration",
+          "url": "https://huggingface.co/kyutai/pocket-tts/resolve/7f364c05d1be3faf2b234cdbe4cbb68a026d4218/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "creativecommons/cc-legal-tools-data",
+          "revision": "a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030",
+          "file": "legacy/legalcode/by_4.0.txt",
+          "bytes": 18657,
+          "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+          "title": "Creative Commons Attribution 4.0 International full legal code",
+          "url": "https://raw.githubusercontent.com/creativecommons/cc-legal-tools-data/a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030/legacy/legalcode/by_4.0.txt",
+          "role": "full official model-weight license"
+        },
+        {
+          "repository": "kyutai/tts-voices",
+          "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+          "file": "README.md",
+          "bytes": 5444,
+          "sha256": "47c610f38e0e0bfb4b353a2afa84a5277b748b1b808d5f77fb8ef74fb836689b",
+          "title": "Kyutai reference voices per-directory/per-file licensing",
+          "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "creativecommons/cc-legal-tools-data",
+          "revision": "a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030",
+          "file": "legacy/legalcode/zero_1.0.txt",
+          "bytes": 7048,
+          "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+          "title": "Creative Commons CC0 1.0 Universal full legal code",
+          "url": "https://raw.githubusercontent.com/creativecommons/cc-legal-tools-data/a0dac18d1a773b4cdb7d8dd5d9bf4efab7901030/legacy/legalcode/zero_1.0.txt",
+          "role": "full official reference-voice dedication"
+        }
+      ],
+      "referenceVoice": "kyutai-default-voice"
     },
     {
       "repository": "ggerganov/whisper.cpp",
@@ -295,7 +552,65 @@
           "sha256": "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69",
           "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-large-v3-turbo.bin"
         }
+      ],
+      "attribution": "Original Whisper models by OpenAI; GGML conversion for whisper.cpp by its authors. Converted/quantized distributions; preserve original MIT and conversion notices. Model weights are downloaded separately, not bundled with BashKitten.",
+      "notices": [
+        {
+          "repository": "ggerganov/whisper.cpp",
+          "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+          "file": "README.md",
+          "bytes": 3196,
+          "sha256": "21fd967098804f33fc84e803fb0e5ab7666d71801f4027cf28a65e7af09c1758",
+          "title": "Whisper.cpp converted model attribution",
+          "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/README.md",
+          "role": "model/source attribution"
+        },
+        {
+          "repository": "openai/whisper",
+          "revision": "6e3be77e1a105e59086e3e21ff5f609fd6fa89a5",
+          "file": "LICENSE",
+          "bytes": 1063,
+          "sha256": "b5d65a59060e68c4ff940e1eddfa6f94b2d68fdf58ed7f4dd57721c997e35e9d",
+          "title": "Whisper original model/code MIT license and OpenAI notice",
+          "url": "https://raw.githubusercontent.com/openai/whisper/6e3be77e1a105e59086e3e21ff5f609fd6fa89a5/LICENSE",
+          "role": "full license"
+        },
+        {
+          "repository": "ggml-org/whisper.cpp",
+          "revision": "d1be6fde11ac6e0407606b4e42fe72d34add8037",
+          "file": "LICENSE",
+          "bytes": 1078,
+          "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+          "title": "whisper.cpp v1.9.5 MIT license and ggml notice",
+          "url": "https://raw.githubusercontent.com/ggml-org/whisper.cpp/d1be6fde11ac6e0407606b4e42fe72d34add8037/LICENSE",
+          "role": "full license; converter/runtime code attribution, does not replace original model weights license"
+        }
       ]
     }
-  ]
+  ],
+  "distribution": "Catalogue metadata is bundled. Model weights, projectors, reference audio, model cards and full model licenses are fetched separately when a preset is downloaded.",
+  "defaults": {
+    "linux": {
+      "llama": "unsloth/Qwen3.5-4B-GGUF/Qwen3.5-4B-UD-Q4_K_XL.gguf",
+      "whisper": "ggml-org/parakeet-GGUF/ggml-parakeet-tdt-0.6b-v3-q4_0.bin",
+      "tts": "EryriLabs/pocket-tts-GGUF/pocket-tts-en.gguf"
+    },
+    "android": {
+      "llama": "unsloth/Qwen3.5-2B-GGUF/Qwen3.5-2B-Q4_0.gguf",
+      "whisper": "ggml-org/parakeet-GGUF/ggml-parakeet-tdt-0.6b-v3-q4_0.bin",
+      "tts": "EryriLabs/pocket-tts-GGUF/pocket-tts-en.gguf"
+    }
+  },
+  "supportingAssets": {
+    "kyutai-default-voice": {
+      "repository": "kyutai/tts-voices",
+      "revision": "323332d33f997de8394f24a193e1a76df720e01a",
+      "file": "unmute-prod-website/default_voice.wav",
+      "bytes": 480044,
+      "sha256": "27157be84054d6ce8af7a1ebca827c73d1d8fc38842f979d3fae207c92b1a9ae",
+      "url": "https://huggingface.co/kyutai/tts-voices/resolve/323332d33f997de8394f24a193e1a76df720e01a/unmute-prod-website/default_voice.wav",
+      "license": "CC0-1.0",
+      "attribution": "Kyutai original reference recording, unmute-prod-website/default_voice.wav. Pinned README grants CC0 to its own recordings except three explicitly named files; this file is not one of the exceptions. This is per-file licensing, not a blanket license for the repository."
+    }
+  }
 }
