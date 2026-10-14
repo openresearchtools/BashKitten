@@ -5,16 +5,37 @@ const records = new WeakMap(), restoring = new WeakMap();
 const TAB_KEY = "bashkitten-display";
 const validId = id => typeof id === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
 const URI = "chrome://browser/content/bashkitten/display.xhtml";
+function savedDisplay(tab, uri = tab?.linkedBrowser.currentURI?.spec) {
+  if (!tab || tab.closing || uri !== URI) return null;
+  try {
+    const saved = JSON.parse(SessionStore.getCustomTabValue(tab, TAB_KEY));
+    if (validId(saved?.id) && typeof saved.interactive === "boolean")
+      return { id: saved.id, interactive: saved.interactive };
+  } catch {}
+  return null;
+}
 
 /** Native-only adapter: the sidecar supplies a descriptor from its private owner. */
 export const BashKittenDisplay = {
+  hasSavedDisplaySelected(window) {
+    const tab = window.gBrowser.selectedTab;
+    try {
+      const state = JSON.parse(SessionStore.getTabState(tab));
+      return Boolean(savedDisplay(tab, state.entries?.[(state.index || state.entries.length) - 1]?.url));
+    } catch { return false; }
+  },
   tab(window, id) {
-    return [...window.gBrowser.tabs].find(tab => !tab.closing && records.get(tab.linkedBrowser)?.id === id);
+    return [...window.gBrowser.tabs].find(tab => !tab.closing &&
+      (records.get(tab.linkedBrowser)?.id === id || savedDisplay(tab)?.id === id));
   },
   selected(window) {
     const tab = window.gBrowser.selectedTab;
-    return tab && !tab.closing && tab.linkedBrowser.currentURI?.spec === URI
-      ? records.get(tab.linkedBrowser) : null;
+    if (!tab || tab.closing || tab.linkedBrowser.currentURI?.spec !== URI) return null;
+    const saved = savedDisplay(tab);
+    // Session metadata identifies presentation only, never a renderer endpoint.
+    return records.get(tab.linkedBrowser) || (saved && {
+      ...saved, name: tab.label, state: "starting", running: false,
+    });
   },
   close(window, id) {
     const tab = this.tab(window, id);
@@ -33,6 +54,21 @@ export const BashKittenDisplay = {
     }
     const existing = this.tab(window, environment.id);
     if (existing) {
+      const browser = existing.linkedBrowser, record = records.get(browser);
+      if (!record?.socket) {
+        // A saved unavailable tab can reconnect after its container starts.
+        // Fence its old restore before adopting this freshly verified endpoint.
+        restoring.get(browser)?.cancel(); restoring.delete(browser);
+        if (record) {
+          Object.assign(record, {
+            name: environment.name, socket: environment.presenterSocket, state: environment.state,
+            running: environment.running, error: environment.error,
+            clipboard: controls.clipboard, service: controls.service, pending: false,
+          });
+          existing.label = environment.name;
+        } else this.own(window, existing, environment, controls, savedDisplay(existing).interactive);
+        browser.loadURI(Services.io.newURI(URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      }
       window.gBrowser.selectedTab = existing;
       window.BashKittenAgent?.browse();
       return existing;
@@ -91,12 +127,15 @@ export const BashKittenDisplay = {
     if (!document.nodePrincipal.isSystemPrincipal || document.documentURI !== URI) throw new Error("Native display owner required.");
     const browser = document.defaultView.docShell.chromeEventHandler;
     if (browser.contentDocument !== document) throw new Error("This Display document was replaced.");
-    if (records.has(browser)) return this.record(document);
+    if (records.get(browser)?.socket && !records.get(browser).pending) return this.record(document);
     const window = browser.ownerDocument.defaultView, tab = window.gBrowser.getTabForBrowser(browser);
-    let saved;
-    try { saved = JSON.parse(SessionStore.getCustomTabValue(tab, TAB_KEY)); } catch {}
-    if (!saved || !validId(saved.id) || typeof saved.interactive !== "boolean")
+    const saved = savedDisplay(tab);
+    if (!saved)
       throw new Error("This saved Display tab has no container identity. Close it and open Display from its container.");
+    if (!records.has(browser)) this.own(window, tab, {
+      id: saved.id, name: tab.label, state: "starting", running: false,
+    }, {}, saved.interactive);
+    Object.assign(this.record(document), { pending: true, state: "starting", running: false, error: null });
     const token = {};
     restoring.get(browser)?.cancel();
     restoring.set(browser, token);
@@ -135,7 +174,20 @@ export const BashKittenDisplay = {
         throw new Error("The restored Display owner did not match its container.");
       const existing = this.tab(window, saved.id);
       if (existing && existing !== tab) throw new Error("This container’s Display is already open in another tab.");
-      this.own(window, tab, environment, controls, saved.interactive);
+      Object.assign(this.record(document), {
+        name: environment.name, socket: environment.presenterSocket, state: environment.state,
+        running: environment.running, error: environment.error,
+        clipboard: controls.clipboard, service: controls.service, pending: false,
+      });
+      tab.label = environment.name;
+      window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
+      return this.record(document);
+    } catch (error) {
+      check();
+      // A stopped/deleted backend still has an owned native tab with its saved
+      // input mode and truthful error, but no endpoint or service authority.
+      Object.assign(this.record(document), { state: "error", running: false, error: error.message, pending: false });
+      window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
       return this.record(document);
     } finally {
       clearTimeout(timer); clearTimeout(pauseTimer);
@@ -188,6 +240,7 @@ export const BashKittenDisplay = {
   },
   attach(document, surface, observer) {
     const record = this.record(document);
+    if (!record.socket?.startsWith("/")) throw new Error("Display has no live container connection.");
     const receiver = Cc["@bashkitten.org/native-display;1"].createInstance(Ci.nsIBashKittenDisplay);
     receiver.attach(surface, record.socket, record.executable, observer);
     return receiver;

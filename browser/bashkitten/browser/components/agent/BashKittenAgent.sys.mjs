@@ -22,6 +22,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
   ContextualIdentityService: "resource://gre/modules/ContextualIdentityService.sys.mjs",
+  SessionStore: "resource:///modules/sessionstore/SessionStore.sys.mjs",
 });
 const contexts = new Map();
 const ownedViews = new WeakMap();
@@ -328,6 +329,11 @@ class AgentView {
     this.win.addEventListener("keydown", this.tabKey, true);
     DesktopLifetime.attach(this, shutdown);
     this.show();
+    const startupLayout = this.layoutEpoch;
+    void lazy.SessionStore.promiseAllWindowsRestored.then(() => {
+      if (!this.win.closed && !DesktopLifetime.quitting && this.layoutEpoch === startupLayout &&
+          lazy.BashKittenDisplay.hasSavedDisplaySelected(this.win)) this.browse();
+    }).catch(console.error);
     await this.refreshRemotes();
     void control("autostart-startup").then(result => this.updateStartupNotice(result))
       .catch(error => this.updateStartupNotice({ error: error.message }));
@@ -415,6 +421,7 @@ class AgentView {
   }
 
   show() {
+    this.layoutEpoch = (this.layoutEpoch || 0) + 1;
     this.closeConnections();
     this.layout = "full";
     this.pane.hidden = false;
@@ -424,6 +431,7 @@ class AgentView {
     this.activeBrowser?.focus();
   }
   browse() {
+    this.layoutEpoch = (this.layoutEpoch || 0) + 1;
     const split = this.browseWithAgent;
     this.layout = split ? "split" : "browser";
     this.pane.hidden = !split;
@@ -440,10 +448,11 @@ class AgentView {
       this.displayControls.hidden = !display;
       if (display) {
         this.displayPower.input.checked = display.running || display.state === "starting";
-        this.displayPower.input.disabled = ["starting", "stopping"].includes(display.state);
+        this.displayPower.input.disabled = !display.service || ["starting", "stopping"].includes(display.state);
         this.displayPower.text.textContent = ({ starting: "Starting…", running: "Display on", stopping: "Stopping…", off: "Display off", error: "Display unavailable" })[display.state];
         this.displayPower.input.title = display.running ? "Turn off Display and close desktop apps. The agent keeps running." : "Start this container’s desktop";
         this.displayInteraction.input.checked = display.interactive;
+        this.displayInteraction.input.disabled = !display.controller;
         this.displayInteraction.text.textContent = display.interactive ? "Interact" : "Observe only";
         this.displayInteraction.input.title = display.interactive ? "Send keyboard and pointer input to the desktop" : "Watch the desktop without sending input";
       }
