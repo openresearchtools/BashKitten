@@ -3511,3 +3511,52 @@ settings title, Autostart and guidance linking to those settings. **Phone use**
 remains the separate device-control feature. This is a presentation change only:
 keep the existing `telephone`/`telephony` routes, service identities, saved
 settings and calling behavior, without a migration.
+
+### Recovery and additional controls — 14 October 2026
+
+Resume the whole agreed implementation and all subsequent user corrections after
+host maintenance. Preserve interrupted work and continue integrated builds and
+installed testing. The user's separate virt-manager `debian-llama-private` VM
+and its services are unrelated and must not be used, altered or stopped. Restart
+only the existing BashKitten Cuttlefish and Xorg acceptance environments.
+
+The embedded Android X11 implementation must coexist with the standalone
+Termux:X11 application, including simultaneous use. Keep their owned X displays,
+sockets, discovery, process groups and runtime/session state separate. Starting,
+stopping or attaching BashKitten Display must never capture or terminate the
+standalone Termux:X11 session. Use the existing paired embedded implementation;
+a separate X11 APK is still not required by BashKitten.
+
+In Termux and container Display tabs, use the address-bar space for matching
+compact controls: Display service On/Off, a shortcut to that backend's Display
+launch-command settings, and Interact/Observe. This replaces the earlier
+viewport-only power interpretation. Explicit service Off stops the owned display
+path, while Termux/the container and their Pi/backend services remain available.
+Ordinary tab close still only detaches its viewport. Show the actual service
+state and errors; do not disguise closing a view as stopping a service.
+
+Observe keeps frames and viewport resizing active but suppresses the viewer's
+pointer, touch, scrolling, keyboard, IME, paste, drag and other input injection.
+Release already held input when switching modes so no key/button sticks. Agent
+input remains available. Interact restores ordinary direct control. Browser tab
+navigation, chat access and native menus remain usable in either mode. Match the
+existing fonts, colors, icons and rounded controls in both themes, including
+narrow mobile layouts; keep all lifecycle and rendering work nonblocking.
+
+Add a concise, visually matching notice at Tor selection and in Tor browsing
+surfaces explaining that BashKitten's Tor integration is intended for `.onion`
+access and does not provide Tor Browser's full privacy protections. Recommend a
+dedicated Tor browser for privacy-sensitive general browsing. This is information,
+not permission to weaken Tor routing, bypass authentication or modify website
+content. Existing remote service transports remain unchanged.
+
+Verify that container chats expose their backend's Files sidebar through the
+existing local Unix connection and file authorization. Agents should be able
+to cite backend files with normal clickable Markdown links in their replies.
+Reuse Pi's supported Markdown and add only concise guidance where needed. A
+supported file link opens the existing View flow and retains Download; other
+files retain their download action. Resolve paths on the owning backend against
+the native session's working directory, never against the browser host. Reuse
+existing preview/conversion and access checks, preserve the original click's
+native authorization, and show actual missing-file or denied-access errors.
+No separate viewer, transcript store or broad file-access exception is needed.
