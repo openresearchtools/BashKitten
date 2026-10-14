@@ -7,6 +7,13 @@ import { fileURLToPath } from 'node:url';
 
 export const dataDir = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
 export const piAgentDir = path.join(dataDir, 'pi');
+// Pi and its tools resolve the live desktop through its existing owner record,
+// even when the desktop started after this worker. Never cache DISPLAY or D-Bus.
+if (process.env.BASHKITTEN_EXECUTION_ROLE === 'termux') {
+  process.env.BASHKITTEN_DESKTOP_CONTEXT = path.join(dataDir, 'display/context.json');
+} else if (process.env.BASHKITTEN_EXECUTION_ROLE !== 'container') {
+  delete process.env.BASHKITTEN_DESKTOP_CONTEXT;
+}
 const app = fileURLToPath(new URL('../../', import.meta.url));
 const packaged = fs.existsSync(path.join(app, 'build-platform.json')) || fs.existsSync(path.join(app, 'runtime-default.json'));
 const bundledNode = path.join(app, 'node/bin/node');
