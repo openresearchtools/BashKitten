@@ -335,7 +335,7 @@ public final class TelephonyRuntime {
     void replied(String id) { JSONObject item = state.optJSONObject("mailbox").optJSONObject(id); if (item != null) { put(item,"replied",true); save(); changed(); } }
     void played(String id) { JSONObject item = state.optJSONObject("mailbox").optJSONObject(id); if (item != null) { put(item,"played",true); save(); } }
     public void clearMailbox(String backendId) { execute(() -> { JSONObject box = state.optJSONObject("mailbox"); for (String id : new ArrayList<>(keys(box))) if (backendId.equals(box.optJSONObject(id).optString("backendId"))) box.remove(id); save(); changed(); }); }
-    public void divert(String backendId, boolean divert) { execute(() -> { JSONObject value = backend(backendId); if (value == null || value.optBoolean("revoked")) throw new IllegalArgumentException("Backend unavailable"); put(value,"divert",divert); save(); changed(); }); }
+    public CompletableFuture<Void> divert(String backendId, boolean divert) { return job(() -> { JSONObject value = backend(backendId); if (value == null || value.optBoolean("revoked")) throw new IllegalArgumentException("Backend unavailable"); put(value,"divert",divert); save(); changed(); return null; }); }
     public void withdraw(String backendId, String sessionId) {
         execute(() -> {
             JSONObject events = state.optJSONObject("events");

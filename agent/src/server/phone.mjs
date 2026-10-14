@@ -149,15 +149,22 @@ export class PhoneBackend {
       await writeJson(registrationPath(registration.phoneId),{...registration,enabled:{telephony:defaults.telephony===true,messages:defaults.messages===true},defaults:{ordinaryDefault:defaults.ordinaryDefault,callDefault:defaults.callDefault}});return {ok:true};
     }
     if (action === 'phone.new') return this.serial(async()=>{
+      let current=await requirePhoneIdentity(identity);
+      if(!current.enabled?.telephony)throw Error('Telephony is off');
       const id=String(value.creationId||'');if(!id)throw Error('Call creation identity is missing');
       const file=path.join(root,'created',digest(registration.phoneId+':'+id)+'.json'), existing=await readJson(file,null);
       if(existing)return existing;
-      const mode=registration.defaults.callDefault; if(!['call-in','messages','calls'].includes(mode))throw Error('Invalid call chat default');
       const creation = digest(registration.phoneId + ':' + id);
       let meta;
       for (const item of await this.listSessions()) { const saved = await readMeta(item.id); if (saved.phoneCreation === creation) { meta = saved; break; } }
+      // Session discovery can await disk I/O while the native owner is disabled.
+      current=await requirePhoneIdentity(identity);
+      if(!current.enabled?.telephony)throw Error('Telephony is off');
+      const mode=current.defaults.callDefault; if(!['call-in','messages','calls'].includes(mode))throw Error('Invalid call chat default');
       meta ||= await this.createSession({}, { phoneCreation: creation });
-      await savePhonePolicy(meta.id,{mode},registration);
+      current=await requirePhoneIdentity(identity);
+      if(!current.enabled?.telephony)throw Error('Telephony is off');
+      await savePhonePolicy(meta.id,{mode},current);
       const result={sessionId:meta.id};await writeJson(file,result);return result;
     });
     const sessionId=String(value.sessionId||''),meta=await readMeta(sessionId),policy=await phonePolicy(sessionId);
