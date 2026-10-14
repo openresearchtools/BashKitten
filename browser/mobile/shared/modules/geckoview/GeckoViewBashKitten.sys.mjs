@@ -208,7 +208,14 @@ export class GeckoViewBashKitten extends GeckoViewModule {
     }
     if (localSession) {
       const expectedName = "__Host-bashkitten_local_" + String(identity.instanceId).replaceAll("-", "");
-      const expectedContext = "bashkitten-agent-ui-local-" + identity.caSha256 + "-" + identity.instanceId;
+      // Match AgentRuntime.localContext: keep the full identity bound to the
+      // jar without exceeding Gecko's on-disk quota directory filename limit.
+      const key = new TextEncoder().encode(identity.caSha256 + "-" + identity.instanceId);
+      const hash = Cc["@mozilla.org/security/hash;1"].createInstance(Ci.nsICryptoHash);
+      hash.init(hash.SHA256);
+      hash.update(key, key.length);
+      const expectedContext = "bashkitten-agent-ui-local-" + Array.from(hash.finish(false),
+        byte => byte.charCodeAt(0).toString(16).padStart(2, "0")).join("");
       // Native retains the legacy jar only when its saved identity is unchanged.
       const localContext = this.context === contextPrefix(expectedContext) || this.context === contextPrefix("bashkitten-agent-ui-local");
       if (!localContext || onion ||
