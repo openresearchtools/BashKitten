@@ -3593,3 +3593,22 @@ models' full license/attribution records available offline in Notices and clearl
 distinguish runtime-fetched weights from code or assets bundled with the app.
 Verify a genuinely fresh installation as well as preservation of existing custom
 settings in the combined installed acceptance pass.
+
+### Usable initial desktop scaling per backend — 15 October 2026
+
+Choose suitable first-use desktop scaling for each backend. Termux's embedded
+phone desktop needs a readable bottom taskbar and Applications menu, with title
+bars and window buttons large enough to operate by touch. Container desktops
+retain a suitable mouse-and-keyboard default. Apply these defaults within the
+owned XFCE profile, keeping the standalone Termux:X11 profile independent.
+Use one shared, compact Applications grid with icon and label sizes comparable
+to a normal Android app menu, rather than oversized cards. Mobile and desktop
+use their appropriate percentage defaults for that same layout; do not maintain
+separate launchers. Keep the existing search, pinned apps and alphabetical grid.
+
+Retain the existing scaling controls and preserve every saved user choice across
+restarts, viewport resizing and updates. Check the installed Termux desktop on
+Cuttlefish for actual menu, taskbar and window-button usability, including narrow
+portrait and landscape views. Verify desktop sizing and saved-choice preservation
+in the same acceptance cycle. All initialization and scaling work remains
+nonblocking; do not add a new display architecture to implement these defaults.
