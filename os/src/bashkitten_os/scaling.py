@@ -203,11 +203,8 @@ def gtk_icon_sizes(profile: ScaleProfile) -> str:
     return ":".join(f"{name}={value},{value}" for name, value in sizes.items())
 
 
-def apply_scale(label):
-    owned_session()
-    label = normalize_scale(label)
+def scale_plan(label, panels):
     profile = scale_profile(label)
-    env = os.environ.copy()
     plan = [
         ("xsettings", "/Xft/DPI", "int", profile.dpi),
         ("xsettings", "/Gdk/WindowScalingFactor", "int", profile.gtk_scale),
@@ -216,17 +213,26 @@ def apply_scale(label):
         ("xfwm4", "/general/title_font", "string", f"Sans Bold {profile.title_points}"),
         ("xfce4-desktop", "/desktop-icons/icon-size", "uint", profile.desktop_icon),
     ]
+    plan.extend(("xfce4-panel", f"/panels/panel-{panel}/size", "uint", profile.panel) for panel in panels)
+    return plan
+
+
+def apply_scale(label):
+    owned_session()
+    label = normalize_scale(label)
+    profile = scale_profile(label)
+    env = os.environ.copy()
     result = run_command(["xfconf-query", "-c", "xfce4-panel", "-p", "/panels"], env, check=True)
-    for panel in result.stdout.splitlines():
-        if panel.strip().isdigit():
-            plan.append(("xfce4-panel", f"/panels/panel-{int(panel)}/size", "uint", profile.panel))
+    plan = scale_plan(label, [int(panel) for panel in result.stdout.splitlines() if panel.strip().isdigit()])
     with scale_transaction():
         # Match the packaged decoration to the GDK integer factor, preserving a
         # deliberately selected third-party Xfwm theme. No WM replacement.
         theme=XfconfSetting('xfwm4','/general/theme','string')
         current=xfconf_get(theme,env)
-        if current in ('BashKitten','BashKitten-2x','BashKitten-3x'):
-            xfconf_set_if_needed(theme,'BashKitten' if profile.gtk_scale==1 else f'BashKitten-{profile.gtk_scale}x',env)
+        for family in ('BashKitten','BashKitten-Touch'):
+            if current in (family,f'{family}-2x',f'{family}-3x'):
+                xfconf_set_if_needed(theme,family if profile.gtk_scale==1 else f'{family}-{profile.gtk_scale}x',env)
+                break
         for channel, path, kind, value in plan:
             xfconf_set_if_needed(XfconfSetting(channel, path, kind), str(value), env)
         apply_xcursor_size(profile.cursor, env)

@@ -3,7 +3,7 @@
 import os, shutil, subprocess, tempfile
 from pathlib import Path
 import xml.etree.ElementTree as ET
-from .common import PREFIX,SHARE,linux_guest
+from .common import PREFIX,SHARE,linux_guest,settings,Gio
 
 
 def atomic(path,text):
@@ -29,6 +29,36 @@ def new_default(path,text):
         except FileNotFoundError:pass
         raise
 
+def scaled_default(source,label):
+    from .scaling import scale_plan,scale_profile
+    root=ET.fromstring(source.read_text().replace('@PREFIX@',str(PREFIX)))
+    factor=scale_profile(label).gtk_scale
+    family='BashKitten-Touch' if os.environ.get('BASHKITTEN_EXECUTION_ROLE')=='termux' else 'BashKitten'
+    plan=scale_plan(label,[1])+[('xfwm4','/general/theme','string',family if factor==1 else f'{family}-{factor}x')]
+    for channel,path,kind,value in plan:
+        if channel!=root.get('name'):continue
+        parent=root;parts=path.strip('/').split('/')
+        for name in parts:
+            child=parent.find(f"property[@name='{name}']")
+            if child is None:child=ET.SubElement(parent,'property',name=name,type='empty')
+            parent=child
+        parent.set('type',kind);parent.set('value',str(value))
+    return ET.tostring(root,encoding='unicode')+'\n'
+
+def finish_initial_scale():
+    # Initialization runs before Termux's session bus exists. Commit only its
+    # provisioning choice once the owned session can persist normal GSettings.
+    from .scaling import normalize_scale,scale_transaction
+    pending=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'bashkitten-os/initial-scale'
+    try:label=normalize_scale(pending.read_text().strip())
+    except FileNotFoundError:return
+    with scale_transaction():
+        prefs=settings()
+        if prefs.get_user_value('scale') is None:
+            if not prefs.set_string('scale',label):raise RuntimeError('Could not save initial desktop scaling')
+            Gio.Settings.sync()
+        pending.unlink(missing_ok=True)
+
 def initialize():
     config=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))
     portals=config/'xdg-desktop-portal'
@@ -37,15 +67,23 @@ def initialize():
     if not any(os.path.lexists(portals/name) for name in ('portals.conf','xfce-portals.conf')):
         new_default(portals/'xfce-portals.conf',(SHARE/'xfce-portals.conf').read_text())
     channel_dir=config/'xfce4/xfconf/xfce-perchannel-xml'
-    for source in (SHARE/'defaults').glob('*.xml'):
+    sources=list((SHARE/'defaults').glob('*.xml'))
+    initialized=config/'bashkitten-os/initialized'
+    pending=config/'bashkitten-os/initial-scale'
+    if not initialized.exists() and not pending.exists() and not any((channel_dir/source.name).exists() for source in sources):
+        # Touchscreen Termux starts at 3x; mouse-driven container desktops retain
+        # 1x. Never infer scaling from viewport resize or replace a saved choice.
+        chosen=settings().get_user_value('scale')
+        new_default(pending,(chosen.get_string() if chosen is not None else '3' if os.environ.get('BASHKITTEN_EXECUTION_ROLE')=='termux' else '1')+'\n')
+    label=pending.read_text().strip() if pending.exists() else None
+    for source in sources:
         target=channel_dir/source.name
         if not target.exists():
-            atomic(target,source.read_text().replace('@PREFIX@',str(PREFIX)))
+            new_default(target,scaled_default(source,label) if label else source.read_text().replace('@PREFIX@',str(PREFIX)))
             if source.name=='xfce4-desktop.xml':atomic(config/'bashkitten-os/initial-wallpaper','pending\n')
     css=config/'gtk-3.0/gtk.css'
     line=f'@import url("{SHARE}/desktop.css");'
     content=css.read_text() if css.exists() else ''
-    initialized=config/'bashkitten-os/initialized'
     if not initialized.exists():
         if line not in content:atomic(css,line+'\n'+content)
         atomic(initialized,'1\n')
