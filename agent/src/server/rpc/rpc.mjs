@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { selectedRuntime, loadPi } from './runtime.mjs';
 import { browserSocketPath } from '../access/browser-channel.mjs';
 import { nativeSession } from '../chats.mjs';
+import { questionPresentation } from './question-presentation.mjs';
 
 // Read native history without opening a second writable session manager.
 export async function savedSession(meta) {
@@ -13,14 +14,20 @@ export async function savedSession(meta) {
   return nativeSession((await loadPi()).pi, meta);
 }
 
-export function displayMessage(meta, message) {
+export function displayMessage(meta, message, questions = []) {
   if (message.role !== 'user') return message;
   const text = typeof message.content === 'string' ? message.content : (message.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
   const upload = (meta.messages || []).find(m => m.wire === text);
-  return upload ? { ...message, agentSource: upload.agentSource, content: [...upload.attachments, { type: 'text', text: upload.text }] } : message;
+  if (!upload) return message;
+  // Identical text can also have been typed by the user. Without a unique
+  // owned delivery match, leave it visible rather than infer its attribution.
+  const question = (meta.messages || []).some(item => item.wire === text && item.agentDelivery !== upload.agentDelivery)
+    ? null : questionPresentation(upload, questions);
+  return { ...message, agentSource: question?.agentSource || upload.agentSource, content: [...upload.attachments, { type: 'text', text: question?.text ?? upload.text }] };
 }
-export function queueItem(item) {
-  return { id: item.id, content: item.text, attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken), recovered: Boolean(item.recovered) };
+export function queueItem(item, questions = []) {
+  const question = questionPresentation(item, questions);
+  return { id: item.id, content: item.text, ...(question ? { displayContent: question.text, agentSource: question.agentSource } : {}), attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken), recovered: Boolean(item.recovered) };
 }
 
 /** Strict LF framing: a JSON string may contain U+2028/U+2029. */

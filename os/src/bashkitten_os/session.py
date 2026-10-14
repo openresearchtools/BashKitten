@@ -31,7 +31,8 @@ class Session:
         self.context_generation=str(uuid.uuid4());target=Path(path)
         data={'generation':self.context_generation,'ownerPid':os.getpid(),
               'ownerStartTime':Path('/proc/self/stat').read_text().rsplit(') ',1)[1].split()[19],
-              'environment':{key:os.environ[key] for key in ('DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS','AT_SPI_BUS_ADDRESS','SESSION_MANAGER') if os.environ.get(key)}}
+              'environment':{key:os.environ[key] for key in ('DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS','AT_SPI_BUS_ADDRESS','SESSION_MANAGER',
+                  'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_RUNTIME_DIR') if os.environ.get(key)}}
         from .defaults import atomic
         atomic(target,json.dumps(data)+'\n');target.chmod(0o600)
         atexit.register(self.clear_context)

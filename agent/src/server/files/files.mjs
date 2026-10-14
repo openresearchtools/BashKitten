@@ -42,6 +42,25 @@ export async function filePath(root, relative = '') {
   if (!containsPath(directory.scopeRoot, target)) throw Object.assign(Error('Path leaves the available files'), { status: 403 });
   return target;
 }
+// A transcript destination is a path on the selected Pi backend. Resolve it
+// against Pi's native cwd, then use the same scope and policy as Files.
+export async function referencedFile(cwd, reference) {
+  if (typeof reference !== 'string' || !reference || /[\x00-\x1f\x7f]/.test(reference) ||
+      reference.startsWith('//') || reference.startsWith('#') ||
+      (/^[a-z][a-z0-9+.-]*:/i.test(reference) && !reference.startsWith('file:'))) {
+    throw Object.assign(Error('Choose a file path on this chat’s backend'), { status: 400 });
+  }
+  let requested;
+  if (reference.startsWith('file:')) requested = fileURLToPath(reference);
+  else { try { requested = decodeURIComponent(reference); } catch { requested = reference; } }
+  if (requested.startsWith('~/')) requested = path.join(os.homedir(), requested.slice(2));
+  if (typeof cwd !== 'string' || !path.isAbsolute(cwd)) throw Error('This chat has no working folder');
+  if (!requested || /[\x00-\x1f\x7f]/.test(requested)) throw Object.assign(Error('Invalid file path'), { status: 400 });
+  const absolute = path.resolve(cwd, requested);
+  const file = await filePath(path.dirname(absolute), path.basename(absolute));
+  if (!(await fs.stat(file)).isFile()) throw Error('Choose a regular file');
+  return { root: path.dirname(file), path: path.basename(file) };
+}
 export async function sessionImage(meta, reference, view) {
   if (typeof reference !== 'string' || !reference || reference.includes('\0')) throw Object.assign(Error('Choose an image path'), { status: 400 });
   // The chat route is not a second arbitrary-path file manager. Authorize only

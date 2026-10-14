@@ -17,7 +17,7 @@ public final class DisplayViewport extends FrameLayout {
     public interface ConnectionProvider {
         void request(Consumer<ParcelFileDescriptor> ready, Consumer<String> failure);
     }
-    private static final ExecutorService IO = Executors.newCachedThreadPool(r -> new Thread(r, "Display-IPC"));
+    private static final ExecutorService IO = Executors.newSingleThreadExecutor(r -> new Thread(r, "Display-IPC"));
     private static final AtomicLong IDS = new AtomicLong();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final SurfaceView slot;
@@ -29,7 +29,8 @@ public final class DisplayViewport extends FrameLayout {
     private SurfaceControlViewHost.SurfacePackage child;
     private volatile long generation;
     private volatile boolean active;
-    private boolean bound, resized;
+    private volatile boolean interactive = true, running;
+    private boolean bound, resized, failed;
     private int lastWidth, lastHeight;
 
     public DisplayViewport(Context context, ConnectionProvider provider, Runnable closeTab) {
@@ -56,11 +57,32 @@ public final class DisplayViewport extends FrameLayout {
         if (selected) { setVisibility(VISIBLE); maybeAttach(); }
         else { detach(); setVisibility(GONE); }
     }
+    public void service(boolean running, boolean changing, boolean starting, String error) {
+        if (this.running != running) failed = false;
+        this.running = running;
+        if (running) { if (!failed) slot.setVisibility(VISIBLE); if (active) maybeAttach(); }
+        else {
+            slot.setVisibility(INVISIBLE);
+            if (bound) detach();
+            message.setText(error != null && !error.isEmpty() ? error : changing
+                ? starting ? "Starting Display…" : "Stopping Display…" : "Display is off.");
+            message.setVisibility(VISIBLE);
+        }
+    }
+    public void interactive(boolean enabled) {
+        interactive = enabled;
+        IDisplayRenderer target = renderer; long id = generation;
+        if (target != null) IO.execute(() -> {
+            if (id != generation || enabled != interactive) return;
+            try { target.interactive(id, enabled); }
+            catch (RemoteException error) { fail(id, "Display input mode could not change."); }
+        });
+    }
     // Android transfers focus from the host window to its embedded window. That
     // host focus loss is not a tab blur; the child's own window tracks real focus.
     @Override protected void onDetachedFromWindow() { active = false; detach(); super.onDetachedFromWindow(); }
     private void maybeAttach() {
-        if (!active || bound || !isAttachedToWindow() || slot.getHostToken() == null || slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
+        if (!active || !running || failed || bound || !isAttachedToWindow() || slot.getHostToken() == null || slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
         long id = generation = IDS.incrementAndGet(); bound = true;
         message.setText("Connecting to desktop…"); message.setVisibility(VISIBLE);
         binding = new ServiceConnection() {
@@ -71,12 +93,12 @@ public final class DisplayViewport extends FrameLayout {
                 final IBinder token = slot.getHostToken();
                 final int display = slot.getDisplay().getDisplayId(), width = slot.getWidth(), height = slot.getHeight();
                 final Configuration configuration = new Configuration(getResources().getConfiguration());
-                IO.execute(() -> provider.request(connection -> {
+                IO.execute(() -> provider.request(connection -> IO.execute(() -> {
                     if (id != generation || !active) { close(connection); return; }
-                    try { target.attach(id, token, display, width, height, configuration, connection, callback); }
+                    try { target.attach(id, token, display, width, height, configuration, connection, interactive, callback); }
                     catch (RemoteException | RuntimeException error) { fail(id, "Renderer connection failed. Close and reopen Display."); }
                     finally { close(connection); }
-                }, error -> fail(id, error)));
+                }), error -> fail(id, error)));
             }
             public void onServiceDisconnected(ComponentName name) { fail(id, "Display renderer stopped. Close and reopen Display; desktop apps remain running."); }
             public void onBindingDied(ComponentName name) { fail(id, "Display renderer changed. Close and reopen Display."); }
@@ -100,7 +122,10 @@ public final class DisplayViewport extends FrameLayout {
                 if (id != generation || !active) { value.release(); return; }
                 if (child != null) child.release(); child = value;
                 lastWidth = lastHeight = 0;
-                slot.setChildSurfacePackage(value); slot.requestFocus(); message.setVisibility(GONE); resize();
+                slot.setChildSurfacePackage(value);
+                interactive(interactive);
+                if (interactive) slot.requestFocus();
+                message.setVisibility(GONE); resize();
             });
         }
         public void state(long id, boolean connected, String error) {
@@ -127,7 +152,8 @@ public final class DisplayViewport extends FrameLayout {
         main.post(() -> { if (id == generation) {
             // Release the top-level embedded surface so a failure cannot cover its
             // browser-owned explanation or retain input over another tab.
-            active = false; detach(); message.setText(error); message.setVisibility(VISIBLE);
+            failed = true; detach(); message.setText(error); message.setVisibility(VISIBLE);
+            slot.setVisibility(INVISIBLE);
         } });
     }
     public void detach() {

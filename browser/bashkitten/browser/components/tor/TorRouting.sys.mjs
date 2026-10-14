@@ -60,6 +60,7 @@ export const TorRouting = {
   _initTask: null,
   _restoredContextIds: new Set(),
   _windows: new WeakSet(),
+  _noticeTabs: new WeakSet(),
   _isolationKeys: new WeakMap(),
   _pendingOnionNavigations: new WeakMap(),
   _navigationReplacements: new WeakMap(),
@@ -288,6 +289,28 @@ export const TorRouting = {
     }
     tab.toggleAttribute("bashkitten-tor", true);
     lazy.PrivateTab.markPrivateTab(tab);
+    this._showPrivacyNotice(tab).catch(console.error);
+  },
+
+  async _showPrivacyNotice(tab) {
+    // Browser chrome owns this notice; never insert it into site content or
+    // protected Agent tabs which share the Tor transport.
+    if (this._noticeTabs.has(tab) || this._agentContexts.has(tab.userContextId)) {
+      return;
+    }
+    this._noticeTabs.add(tab);
+    const win = tab.ownerGlobal;
+    const label = await win.document.l10n.formatValue("bashkitten-tor-privacy-notice");
+    if (win.closed || tab.closing || !tab.isConnected || !this.isTorTab(tab)) {
+      return;
+    }
+    const box = win.gBrowser.getNotificationBox(tab.linkedBrowser);
+    const notice = await box.appendNotification("bashkitten-tor-privacy", {
+      label,
+      priority: box.PRIORITY_INFO_LOW,
+    });
+    // Keep it available across this tab's navigations until the user closes it.
+    notice.persistence = Infinity;
   },
 
   manageOnionAuthorizations(win) {

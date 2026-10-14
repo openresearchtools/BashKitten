@@ -1,6 +1,6 @@
 --- a/plugins/tasklist/tasklist-widget.c
 +++ b/plugins/tasklist/tasklist-widget.c
-@@ -3276,6 +3276,66 @@
+@@ -3276,6 +3276,69 @@
  
  
  
@@ -33,7 +33,10 @@
 +{
 +  GtkWidget *menu = xfw_window_action_menu_new (child->window);
 +#ifdef ENABLE_X11
-+  if (xfw_windowing_get () == XFW_WINDOWING_X11)
++  const gchar *role = g_getenv ("BASHKITTEN_EXECUTION_ROLE");
++  if (xfw_windowing_get () == XFW_WINDOWING_X11
++      && (g_strcmp0 (role, "container") == 0
++          || g_strcmp0 (role, "termux") == 0))
 +    {
 +      GSettingsSchemaSource *source = g_settings_schema_source_get_default ();
 +      GSettingsSchema *schema = source ? g_settings_schema_source_lookup (source, "org.bashkitten.OS", TRUE) : NULL;
@@ -67,7 +70,7 @@
  static gboolean
  xfce_tasklist_button_button_press_event (GtkWidget *button,
                                           GdkEventButton *event,
-@@ -3304,7 +3364,7 @@
+@@ -3304,7 +3367,7 @@
  
    if (event->button == 3)
      {
@@ -76,7 +79,7 @@
        xfce_tasklist_button_add_launch_new_instance_item (child, menu, FALSE);
        g_signal_connect (G_OBJECT (menu), "deactivate",
                          G_CALLBACK (xfce_tasklist_button_menu_destroy), child);
-@@ -3972,7 +4032,7 @@
+@@ -3972,7 +4035,7 @@
  
            if (action_menu_entries)
              gtk_menu_item_set_submenu (GTK_MENU_ITEM (mi),

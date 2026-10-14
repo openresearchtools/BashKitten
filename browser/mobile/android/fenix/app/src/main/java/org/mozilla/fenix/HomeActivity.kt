@@ -780,6 +780,9 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
     @CallSuper
     override fun onResume() {
         super.onResume()
+        // The protected Agent/settings sessions outlive BaseBrowserFragment.
+        // Resolve Follow device here too when returning after a system theme change.
+        components.core.engine.settings.preferredColorScheme = components.core.getPreferredColorScheme()
         bashKittenAgentPanel?.resume()
 
         // Diagnostic breadcrumb for "Display already aquired" crash:
@@ -987,6 +990,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         components.settings.browserWindowWidthDp = newConfig.screenWidthDp
         val showTabStrip = components.settings.isTabStripEnabled
         super.onConfigurationChanged(newConfig)
+        components.core.engine.settings.preferredColorScheme = components.core.getPreferredColorScheme()
         if (showTabStrip != tabStripShownForWindow) {
             tabStripShownForWindow = showTabStrip
             // Rebind both toolbar placement and Gecko viewport insets; sessions remain in the application store.

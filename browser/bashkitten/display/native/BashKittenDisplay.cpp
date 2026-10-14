@@ -135,14 +135,16 @@ NS_IMETHODIMP BashKittenDisplay::Close() {
   MOZ_ASSERT(NS_IsMainThread());
   mClosed = true;
   if (mFrames) mFrames->GetImageContainer()->ClearImagesFromImageBridge();
-  mObserver = nullptr;
   if (mThread) { mThread->AsyncShutdown(); mThread = nullptr; }
   return NS_OK;
 }
 void BashKittenDisplay::Status(const nsCString& status) {
   RefPtr<BashKittenDisplay> self = this;
   NS_DispatchToMainThread(NS_NewRunnableFunction("BashKittenDisplay::Status", [self, status] {
-    if (!self->mClosed && self->mObserver) self->mObserver->Observe(self, "bashkitten-display", NS_ConvertUTF8toUTF16(status).get());
+    const bool stopped = status.EqualsLiteral("{\"type\":\"closed\"}");
+    if (stopped && self->mThread) { self->mThread->AsyncShutdown(); self->mThread = nullptr; }
+    if ((!self->mClosed || stopped) && self->mObserver) self->mObserver->Observe(self, "bashkitten-display", NS_ConvertUTF8toUTF16(status).get());
+    if (stopped) self->mObserver = nullptr;
   }));
 }
 void BashKittenDisplay::Invalidate() {
@@ -154,6 +156,9 @@ void BashKittenDisplay::Invalidate() {
   }));
 }
 void BashKittenDisplay::Run(nsCString socket, nsCString executable) {
+  // The toolbar enables a new renderer only after the old child and channel
+  // have actually closed. Teardown and waiting remain on this worker thread.
+  auto stopped = MakeScopeExit([&] { Status("{\"type\":\"closed\"}"_ns); });
   int channels[2];
   if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, channels)) {
     Status("{\"type\":\"error\",\"message\":\"Cannot create native display channel\"}"_ns); return;
@@ -188,8 +193,10 @@ void BashKittenDisplay::Run(nsCString socket, nsCString executable) {
   bool firstFrame = true;
   const auto started = TimeStamp::Now();
   auto lastReply=started, lastPing=started;
+  auto waitingSince=started;
   while (!mClosed) {
-    if (firstFrame && (TimeStamp::Now() - started).ToSeconds() > 15) {
+    if (!mVisible) waitingSince=TimeStamp::Now();
+    if (mVisible && firstFrame && (TimeStamp::Now() - waitingSince).ToSeconds() > 15) {
       Status("{\"type\":\"error\",\"message\":\"The desktop has not produced a frame. Check its display status, then reopen Display.\"}"_ns); break;
     }
     if (mVisible && (TimeStamp::Now()-lastPing).ToSeconds()>2) {

@@ -15,15 +15,29 @@ chrome viewport checks its exact document, system principal and current browser
 ownership on every native attachment/clipboard call. The existing protected-tab
 marker excludes the viewport from browser-use automation.
 
-The 11 October address-less Display presentation uses the existing Agent chrome
-adapter and Firefox `TabSelect`/top-level location hooks. Only an enrolled,
-selected `display.xhtml` hides the address row; the tab strip, logo,
-Configuration and the real Firefox menu remain available. The active monitor
-controls remove only the presenter tab. Navigating that tab elsewhere retires
+The address-less Display presentation uses the existing Agent chrome adapter
+and Firefox `TabSelect`/top-level location hooks. Only an enrolled, selected
+`display.xhtml` replaces the address area with Display On/Off, Interact/Observe
+and a shortcut to its saved Display command. The tab strip, logo, Configuration
+and the real Firefox menu remain available. The active monitor controls still
+remove only the presenter tab. Navigating that tab elsewhere retires
 its native record and protected marker and restores ordinary browser chrome.
 Focused guest applications receive Ctrl-L; Ctrl-T, Ctrl-W and Ctrl-Tab remain
-browser tab shortcuts. These product hooks do not modify the pristine Buzzard
-donor or the container/gateway lifetime owner.
+browser tab shortcuts. Observe keeps rendering and resizing but rejects local
+pointer, keyboard, scroll, IME, clipboard and drag input. Changing to Observe
+releases the presenter's held buttons/keys; guest-side agent input is unchanged.
+These product hooks do not modify the pristine Buzzard donor.
+
+Display On/Off calls the private machine owner. Off stops the guest's fixed
+`bashkitten-display.service` (Xwayland, XFCE, ordinary guest browser and desktop
+media) and its host gateway. The existing guest owner keeps its independent
+Agent/Pi/proxy running. Closing a tab only detaches its renderer. Display start
+copies the current `display.command` from the existing machine `launch.json`
+into the private runtime configuration, then starts that same display unit;
+changing this command does not require container recreation. Each display has
+its own D-Bus and freshly verified desktop context. Explicit Off is honored if
+the independent Agent owner restarts. Failed starts report their error and
+do not start a replacement renderer or desktop automatically.
 
 The small Gecko adapter is the XPCOM component in `native/`, its module/jar
 registration and the product `moz.build` entry. Its native `VideoFrameContainer`
@@ -44,6 +58,8 @@ coalesced invalidation. Socket backpressure and frame/cursor leases are bounded;
 key/button transitions retain order. Hidden views suspend frames, resize uses
 actual drawable pixels and stale geometry is discarded. A failed or stalled
 renderer reports a view error. Closing it never sends desktop shutdown.
+The native adapter reports `closed` only after the renderer process/channel
+teardown finishes, allowing asynchronous Off/On without racing the old child.
 
 The persistent `gateway` process is owned by the machine lifecycle controller.
 It adapts Buzzard's private Wayland server to rootful Xwayland and accepts both

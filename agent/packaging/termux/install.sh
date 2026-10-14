@@ -45,9 +45,8 @@ printf '%s  %s\n' "$nightly_sha" "$setup_dir/nightly.deb" | sha256sum -c -
 pkg install -y -o Dpkg::Options::=--force-confold "$setup_dir/nightly.deb"
 apt-get -o APT::Update::Error-Mode=any update
 pkg install -y -o Dpkg::Options::=--force-confold bashkitten
-# Provision desktop defaults during explicit setup, before its first XFCE launch.
-# The initializer seeds missing values and preserves existing user choices.
-BASHKITTEN_EXECUTION_ROLE=termux bashkitten-os initialize
+# The Display owner provisions its private desktop profile on first use;
+# installing BashKitten must not change an independent Termux:X11 profile.
 
 mkdir -p ~/.termux
 if grep -q '^[[:space:]]*allow-external-apps[[:space:]]*=' ~/.termux/termux.properties 2>/dev/null; then

@@ -2,10 +2,66 @@
 
 Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 `bashkitten/plan/native-environments-2026-10-11`. The original remains unchanged;
-the current plan also records the user's explicit 11 October presentation
-amendments. This record tracks evidence and does not reduce that combined scope.
+the current plan also records the user's subsequent presentation, lifecycle and
+14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
-## Current checkpoint — 11 October 2026
+## Restart and integrated candidate — 14 October 2026
+
+The Data drive and existing Android 16/17 Cuttlefish environments are restored.
+Both retain the exact installed `656abcd94b` APK/backend; native KVM, 16 GiB RAM,
+128 GiB userdata and the 1080 × 2400 viewport were verified. The separate real
+Xorg test VM is available. The user's private llama VM is excluded from all
+implementation and test operations. The host browser currently uses its existing
+profile for ordinary Cuttlefish tabs; a second-profile launch was refused by the
+product's single-profile launcher and is not claimed as a separate test instance.
+
+The next combined candidate adds actual Display service controls and Interact /
+Observe on both platforms, isolated embedded Termux X11 configuration, independent
+Linux guest Agent and Display lifetimes, the editable guest Display command,
+ordinary Markdown file citations using the existing View/Download route, cleaner
+question delivery attribution, the Tor privacy notice, and Follow device theme
+synchronization. It also includes the interrupted call-menu/speech readiness fixes
+(`bff3c1b126`), complete guest notice placement (`1833a422ca`) and the official
+fixed AT-SPI dependency (`6e4c022512`). These changes require source integration,
+matching packages and installed acceptance; they are not accepted merely because
+focused compilers or source checks passed. The earlier expired-question dismissal
+and authorized settings-handoff fixes remain part of this same candidate.
+
+The retained Xorg candidate passed actual Display close/reopen, two-app layout,
+normal child-dialog behavior and window-management Off/On checks. Its container
+Files view opened guest code and downloaded the exact original 39 bytes; a path
+that exists only on the test VM host returned ENOENT from the guest. This confirms
+that particular container Files route, not new file citations or the full format
+matrix. An official standalone Termux:X11 APK and exact matching companion DEB
+were installed on Android 17 for simultaneous-session testing; they have not yet
+been launched together with the new embedded implementation.
+
+Evidence lives outside the product repository in the Build workspace:
+`verification/test-environments-restart-20261014.json`,
+`verification/termux-x11-coexistence-setup-20261014/setup.json`,
+`acceptance/xorg-vm-control/resume-20261014-656.json`, and the dated Display,
+file-citation, question-presentation, phone-repair and Tor source-check directories.
+The broader pre-build review also identified a live-worker Stop issue: automatic
+peer/subagent results could resume a stopped chat. The repair retains those
+messages as held drafts, preserves arrivals during Stop itself, and still permits
+explicit follow-up or user Send. Focused checks cover delivery/retry/race cases.
+Android's Glean initializer now uses a terminal no-network uploader: disabled
+collection alone still allowed an inherited deletion-request ping. Compilation
+and source review confirm the uploader cannot send or retry; this is not a full
+installed traffic-audit pass.
+
+The preview audit repaired original-byte downloads (including BOM, UTF-16 and
+line endings) inside the existing authorized snapshot transfer. Large top-level
+Markdown tables now arrive as separate 32-row render chunks; byte fixtures and
+2,000-row chunk checks pass. Installed responsiveness, including large nested
+Markdown structures, remains a separate acceptance requirement. Standalone XFCE
+must also skip BashKitten OS autostart/layout controls when outside an owned
+Termux or container role; the changed panel patch requires a real component build.
+
+The complete feature and acceptance register below remains mandatory. No feature
+has been removed or deferred by narrowing the current build to one regression.
+
+## Previous installed checkpoint — 11 October 2026
 
 The original feature implementations were integrated across the nine workstreams.
 The first whole-scope Android/Linux candidates have been built and installed; actual app

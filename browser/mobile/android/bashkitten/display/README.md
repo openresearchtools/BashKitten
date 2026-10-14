@@ -5,7 +5,7 @@ This module adapts the pristine Termux:X11 official nightly at
 `browser/bashkitten/vendor/termux-x11/source.json` records the donor archive
 and all sixteen materialized native dependency pins/checksums. Original full
 licenses and per-file notices remain in that pristine source. `prepare.py`
-applies the named patch only in build output, selects the native/input/extra-key
+applies the named patches only in build output, selects the native/input/extra-key
 library and generates its typed preferences; no donor Application, launcher,
 accessibility interceptor or external X11 APK participates in the main manifest.
 The adapted GPL files retain attribution; new BashKitten integration is AGPL.
@@ -13,8 +13,10 @@ The adapted GPL files retain attribution; new BashKitten integration is AGPL.
 ## Browser host contract
 
 `DisplayTabs.open(Activity, "local")` opens/selects the one Android native tab
-and requests the existing local Display owner to start. Explicit Stop remains
-in Display setup. `DisplayTabs.toggle` closes an existing viewport tab without
+and requests the existing local Display owner to start. The Display tab's power
+control and Display setup share the same asynchronous Start/Stop owner. Stop
+ends only the owned X11 desktop group, leaving Termux/Pi and the tab available
+for another start. `DisplayTabs.toggle` closes an existing viewport tab without
 sending Stop or revoking its backend, and opens it when absent. The native
 toolbar marks that actual tab state, including while the Agent is selected.
 Fenix changes are limited to:
@@ -23,7 +25,8 @@ Fenix changes are limited to:
   exclusion from ordinary browser automation. Any browser navigation opens an
   ordinary tab without inheriting a native capability.
 - `DisplayToolbar` and the existing toolbar wrappers: an address-free native
-  Display row with the logo, active Display toggle, Configuration and Firefox's
+  Display row with the logo, service On/Off, Display command shortcut,
+  Interact/Observe, Configuration and Firefox's
   existing tab/menu action objects. Ordinary and custom-tab address bars are
   unchanged; the native tab strip and menu retain their existing handlers.
 - `FenixDisplayViewport`: selected-tab lifecycle and the measured content bounds,
@@ -41,6 +44,10 @@ extra keys, separately from XFCE scaling. Typed one-way IPC and generation check
 keep native/IPC work off the browser UI thread and discard stale completions.
 Unbinding terminates only the disposable renderer process, including a blocked
 GPU worker. Closing/switching tabs never sends Display Stop to Termux.
+Observe keeps rendering and resize active while gating user input at the
+LorieView native boundary, including hardware keys, retained IME connections,
+pointer/touch/stylus events and clipboard. Switching releases the viewport's
+held inputs and cancels pending gestures. It does not disable agent X11 input.
 
 ## Termux server and private handoff
 
@@ -76,7 +83,14 @@ process group and readiness. Only its exact old generated default migrates;
 custom commands are retained with an actionable note when they still invoke
 independent Termux:X11. The owned environment supplies `DISPLAY`, the `termux`
 execution role and `BASHKITTEN_DESKTOP_CONTEXT`. BashKitten OS autostart publishes
-actual X11/D-Bus context after provisioning; startup does not reinstall defaults.
+actual X11/D-Bus context after provisioning. The backend provisions a new private
+desktop profile before its first launch; the initializer's existing marker
+prevents repeating initialization on subsequent starts.
+The embedded desktop has private XDG config/data/cache/runtime directories under
+`$BASHKITTEN_DATA_DIR/display/desktop` and a fresh session bus. It never inherits
+the standalone Termux:X11 session or changes that app's files, lock/socket or
+processes. Both use standard Termux X client paths with distinct unused display
+numbers; the owned desktop context supplies those exact XDG paths to agents.
 
 Component probes and product acceptance records belong outside this repository.
 An isolated compile/probe does not establish integrated Fenix, ARM64, physical

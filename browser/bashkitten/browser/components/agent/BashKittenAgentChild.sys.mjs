@@ -61,10 +61,12 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     if (command === "provider-login-open" && entry.providerLogin === true && typeof data.attemptId === "string" && typeof data.url === "string") return this.sendQuery("ProviderLogin", { attemptId: data.attemptId, url: data.url });
     if (command === "view-file" && typeof data.url === "string") {
       const url = new URL(data.url, this.document.location.href);
+      const query = url.searchParams, path = query.get("path");
+      const selected = query.size === 2 && query.getAll("path").length === 1 && path &&
+        (query.getAll("root").length === 1 && query.get("root").startsWith("/") && !path.startsWith("/") ||
+         query.getAll("session").length === 1 && /^[a-f0-9-]{36}$/.test(query.get("session")));
       if (url.origin !== entry.origin || url.username || url.password || url.hash ||
-          url.pathname !== "/api/files/previews/content" || url.searchParams.size !== 2 ||
-          url.searchParams.getAll("root").length !== 1 || !url.searchParams.get("root").startsWith("/") ||
-          url.searchParams.getAll("path").length !== 1 || !url.searchParams.get("path") || url.searchParams.get("path").startsWith("/")) throw new Error("Invalid prepared document.");
+          url.pathname !== "/api/files/previews/content" || !selected) throw new Error("Invalid prepared document.");
       return this.sendQuery("ViewFile", { url: url.href });
     }
     if (!entry.local) throw new Error("Files on a remote Agent use browser downloads.");

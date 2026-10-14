@@ -67,9 +67,14 @@ public final class DisplaySettingsAdapter {
                         input.put("startup", args.getBoolean("startup"));
                     } else input.put("revision", args.getString("revision")).put("command", args.getString("command")).put("reset", args.optBoolean("reset"));
                 }
-                if (method.equals("display-start")) BrowserApp.get(activity).display.prepareStart();
+                if (method.equals("display-start") || method.equals("display-stop")) {
+                    BrowserApp.get(activity).display.setEnabled(method.equals("display-start"), value -> {
+                        try { authorize(); last = value; result.complete(value); }
+                        catch (Exception error) { result.completeExceptionally(error); }
+                    }, error -> result.completeExceptionally(new IllegalStateException(error)));
+                    return;
+                }
                 runtime.command(method, input, value -> {
-                    if (method.equals("display-stop")) BrowserApp.get(activity).display.revoke();
                     try { authorize(); last = value; result.complete(value); }
                     catch (Exception error) { result.completeExceptionally(error); }
                 }, error -> result.completeExceptionally(new IllegalStateException(error)));

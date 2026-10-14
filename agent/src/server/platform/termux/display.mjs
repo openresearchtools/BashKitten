@@ -30,7 +30,7 @@ function requireTermux() {
 
 async function desktopReady(environment) {
   return exec('xprop', ['-root', '_NET_SUPPORTING_WM_CHECK'], {
-    env: { ...process.env, ...environment }, timeout: 1000,
+    env: { ...process.env, ...environment, XAUTHORITY: environment.XAUTHORITY }, timeout: 1000,
   }).then(result => /window id # 0x[1-9a-f][0-9a-f]*/i.test(result.stdout), () => false);
 }
 
@@ -68,6 +68,8 @@ export class TermuxDisplay {
   output = '';
   activeCommand = '';
   environment = {};
+  starting = null;
+  launchGeneration = 0;
 
   async startup() {
     if ((await readJson(configFile, {})).startup !== true) return;
@@ -111,6 +113,13 @@ export class TermuxDisplay {
   }
 
   async start() {
+    if (this.starting) return this.starting;
+    this.starting = this.startOwned(++this.launchGeneration);
+    try { return await this.starting; }
+    finally { this.starting = null; }
+  }
+
+  async startOwned(generation) {
     requireTermux();
     if (this.child) return this.status();
     const text = await command();
@@ -122,10 +131,25 @@ export class TermuxDisplay {
     }) || await fs.lstat(path.join(temporary, '.X11-unix', `X${number}`)).then(() => true, error => {
       if (error.code === 'ENOENT') return false; throw error;
     })) number++;
+    // The standalone Termux:X11 app may run simultaneously. Keep the shared X
+    // socket directory for standard clients, but own our desktop/session state.
+    const desktop = path.join(directory, 'desktop');
+    const desktopEnvironment = Object.fromEntries(['CONFIG', 'DATA', 'CACHE', 'RUNTIME'].map(name =>
+      [`XDG_${name}_${name === 'RUNTIME' ? 'DIR' : 'HOME'}`, path.join(desktop, name.toLowerCase())]));
+    await Promise.all(Object.values(desktopEnvironment).map(privateDir));
     this.environment = { DISPLAY: `:${number}`, BASHKITTEN_EXECUTION_ROLE: 'termux',
+      ...desktopEnvironment,
       BASHKITTEN_DATA_DIR: dataDir, BASHKITTEN_DESKTOP_CONTEXT: path.join(directory, 'context.json') };
     const env = { ...process.env, ...this.environment };
+    for (const key of ['DBUS_SESSION_BUS_ADDRESS', 'DBUS_SESSION_BUS_PID', 'AT_SPI_BUS_ADDRESS', 'SESSION_MANAGER', 'XAUTHORITY'])
+      delete env[key];
+    const initialized = await fs.access(path.join(env.XDG_CONFIG_HOME, 'bashkitten-os/initialized')).then(() => true, error => {
+      if (error.code === 'ENOENT') return false; throw error;
+    });
+    if (generation !== this.launchGeneration) throw Error('Display start was cancelled.');
+    if (!initialized) await exec('bashkitten-os', ['initialize'], { env });
     await writePrivate(runningCommand, text);
+    if (generation !== this.launchGeneration) throw Error('Display start was cancelled.');
     this.activeCommand = text; this.error = ''; this.output = ''; this.state = 'starting';
     const child = spawn(binary('runtime-guard'), [process.execPath, script, 'serve'], {
       cwd: os.homedir(), env, stdio: ['ignore', 'pipe', 'pipe'],
@@ -164,6 +188,7 @@ export class TermuxDisplay {
 
   async stop() {
     requireTermux();
+    ++this.launchGeneration;
     if (this.child) {
       this.stopping = true; this.state = 'stopping';
       this.child.kill('SIGTERM');

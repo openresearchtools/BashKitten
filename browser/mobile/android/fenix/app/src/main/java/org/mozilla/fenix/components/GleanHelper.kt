@@ -6,10 +6,13 @@ package org.mozilla.fenix.components
 
 import android.content.Context
 import mozilla.components.concept.fetch.Client
-import mozilla.components.service.glean.net.ConceptFetchHttpUploader
 import mozilla.components.support.base.log.logger.Logger
 import mozilla.telemetry.glean.Glean
 import mozilla.telemetry.glean.config.Configuration
+import mozilla.telemetry.glean.net.CapablePingUploadRequest
+import mozilla.telemetry.glean.net.PingUploader
+import mozilla.telemetry.glean.net.UnrecoverableFailure
+import mozilla.telemetry.glean.net.UploadResult
 import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.Config
 import org.mozilla.fenix.GleanMetrics.GleanBuildInfo
@@ -24,9 +27,14 @@ import org.mozilla.fenix.nimbus.FxNimbus
  * [applicationContext] the application context required for glean initialization.
  * [logger] the logger to send logs about initializing Glean.
  * [isTelemetryUploadEnabled] indicate if telemetry should be enabled to be uploaded.
- * [client] an instance of [Client] used to upload metrics.
+ * [client] retained for caller compatibility; BashKitten never uploads metrics.
  */
-fun initializeGlean(applicationContext: Context, logger: Logger, isTelemetryUploadEnabled: Boolean, client: Client) {
+fun initializeGlean(
+    applicationContext: Context,
+    logger: Logger,
+    isTelemetryUploadEnabled: Boolean,
+    @Suppress("UNUSED_PARAMETER") client: Client,
+) {
     logger.debug("Initializing Glean (uploadEnabled=$isTelemetryUploadEnabled})")
 
     // for performance reasons, this is only available in Nightly or Debug builds
@@ -39,10 +47,13 @@ fun initializeGlean(applicationContext: Context, logger: Logger, isTelemetryUplo
 
     val configuration = Configuration(
         channel = BuildConfig.BUILD_TYPE,
-        httpClient = ConceptFetchHttpUploader(
-            lazy(LazyThreadSafetyMode.NONE) { client },
-            supportsOhttp = true,
-        ),
+        // Collection remains disabled by product policy. Glean can nevertheless
+        // queue an inherited deletion-request ping while disabled. Never give
+        // this SDK a network client: discard every ping without reading its
+        // contents, reporting success, or scheduling a retry.
+        httpClient = object : PingUploader {
+            override fun upload(request: CapablePingUploadRequest): UploadResult = UnrecoverableFailure(0)
+        },
         enableEventTimestamps = FxNimbus.features.glean.value().enableEventTimestamps,
         delayPingLifetimeIo = FxNimbus.features.glean.value().delayPingLifetimeIo,
         pingLifetimeThreshold = FxNimbus.features.glean.value().pingLifetimeThreshold,

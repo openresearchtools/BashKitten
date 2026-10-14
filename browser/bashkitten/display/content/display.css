@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 html, body { margin:0; width:100%; height:100%; overflow:hidden; background:#202225; }
 #surface { display:block; width:100%; height:calc(100% - 36px); object-fit:contain; outline:none; }
+#surface.observe { cursor: default !important; }
 #status { position:fixed; inset:0; display:grid; place-content:center; padding:24px; color:#f2f2f2; background:#202225; font:15px system-ui; }
 #status[hidden] { display:none; }
 

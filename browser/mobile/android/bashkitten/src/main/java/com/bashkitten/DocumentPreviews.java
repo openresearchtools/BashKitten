@@ -50,13 +50,15 @@ final class DocumentPreviews {
         URI own = URI.create(app.agent.url), target = own.resolve(value);
         Uri query = Uri.parse(target.toASCIIString());
         Set<String> names = query.getQueryParameterNames();
+        String path = query.getQueryParameter("path"), folder = query.getQueryParameter("root"), session = query.getQueryParameter("session");
+        boolean selected = names.size() == 2 && query.getQueryParameters("path").size() == 1 && path != null && !path.isEmpty() &&
+            ((names.contains("root") && query.getQueryParameters("root").size() == 1 && folder != null && folder.startsWith("/") && !path.startsWith("/")) ||
+             (names.contains("session") && query.getQueryParameters("session").size() == 1 && session != null && session.matches("[a-f0-9-]{36}")));
         if (!current.getAsBoolean() || !"https".equals(target.getScheme()) ||
                 !Objects.equals(own.getScheme(), target.getScheme()) || !Objects.equals(own.getHost(), target.getHost()) || own.getPort() != target.getPort() ||
                 target.getRawUserInfo() != null || target.getRawFragment() != null ||
                 !target.getRawPath().equals("/api/files/previews/content") ||
-                names.size() != 2 || !names.contains("root") || !names.contains("path") ||
-                query.getQueryParameters("root").size() != 1 || !query.getQueryParameter("root").startsWith("/") ||
-                query.getQueryParameters("path").size() != 1 || query.getQueryParameter("path").isEmpty() || query.getQueryParameter("path").startsWith("/")) throw new SecurityException("Invalid prepared document");
+                !selected) throw new SecurityException("Invalid prepared document");
         Transfer transfer = new Transfer(current); pending.add(transfer);
         WebRequest request = new WebRequest.Builder(target.toASCIIString())
             .contextId(source.getSettings().getContextId()).cacheMode(WebRequest.CACHE_MODE_NO_STORE)
@@ -71,6 +73,7 @@ final class DocumentPreviews {
             app.transfers.execute(() -> {
                 File file = null; Exception failure = null;
                 try (InputStream input = response.body) {
+                    if (!transfer.cancelled && response.statusCode == 415) throw new IOException("No preview is available for this file. Download the original instead.");
                     if (transfer.cancelled || response.statusCode != 200 || response.redirected || !target.toASCIIString().equals(response.uri) || input == null) throw new IOException("The document request was cancelled or refused");
                     String mime = Objects.toString(response.headers.get("Content-Type"), "").split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
                     if (!mime.equals("application/pdf") && !mime.equals("text/html")) throw new IOException("The server did not return a prepared PDF or document");

@@ -1,10 +1,9 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: AGPL-3.0-only
-"""One persistent guest session; browser view/renderer lifetime is independent."""
+"""Persistent guest Agent/proxy; Display has its own independently stoppable unit."""
 import asyncio
 import json
 import os
-import secrets
 import signal
 import uuid
 from pathlib import Path
@@ -16,23 +15,19 @@ DATA = Path.home() / '.local/share/bashkitten-pi'
 CONTEXT = RUN / 'bashkitten-desktop.json'
 STATUS = RUN / 'bashkitten-guest-status.json'
 
+
 def write_json(path, value):
     temporary = path.with_name(path.name + '.tmp')
     temporary.write_text(json.dumps(value) + '\n')
     temporary.chmod(0o600)
     temporary.replace(path)
 
-async def command(*args, env=None):
-    child = await asyncio.create_subprocess_exec(*map(str,args), env=env, stdout=asyncio.subprocess.DEVNULL)
-    code = await child.wait()
-    if code:
-        raise RuntimeError(f'{args[0]} exited {code}')
 
 async def run():
     os.umask(0o077)
-    DATA.mkdir(parents=True,exist_ok=True)
+    DATA.mkdir(parents=True, exist_ok=True)
     agent_run = EXCHANGE / 'agent'
-    agent_run.mkdir(exist_ok=True,mode=0o700)
+    agent_run.mkdir(exist_ok=True, mode=0o700)
     link = DATA / 'run'
     if link.is_symlink():
         if link.readlink() != agent_run:
@@ -42,98 +37,37 @@ async def run():
     else:
         link.symlink_to(agent_run, target_is_directory=True)
     display = json.loads(Path('/run/bashkitten-settings/display.json').read_text())
-    machine_id=str(uuid.UUID(display['machineId']))
-    authority = RUN / 'bashkitten-Xauthority'
-    authority.touch(mode=0o600,exist_ok=True)
-    await command('/usr/bin/xauth','-f',authority,'add',':0','.',secrets.token_hex(16))
-    env = {**os.environ,'DISPLAY':':0','WAYLAND_DISPLAY':'/run/bashkitten-display/wayland-0',
-           'XAUTHORITY':str(authority),'BASHKITTEN_EXECUTION_ROLE':'container','BASHKITTEN_MACHINE_ID':machine_id,
-           'BASHKITTEN_DATA_DIR':str(DATA),'BASHKITTEN_DESKTOP_CONTEXT':str(CONTEXT),
-           'BASHKITTEN_GUEST_STATUS_FILE':str(STATUS),'BASHKITTEN_GUEST_BROWSER':'1','BASHKITTEN_CONTROL_SOCKET':str(agent_run/'guest-browser.sock'),'XDG_SESSION_TYPE':'x11','XDG_CURRENT_DESKTOP':'XFCE'}
-    if display.get('software'):
-        env['LIBGL_ALWAYS_SOFTWARE']='1'
-    generation = str(uuid.uuid4())
-    owner_start = Path('/proc/self/stat').read_text().rsplit(') ',1)[1].split()[19]
-    write_json(CONTEXT,{'generation':generation,'ownerPid':os.getpid(),
-               'ownerStartTime':owner_start,
-               'environment':{key:env[key] for key in ['DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS']}})
-    stopped=asyncio.Event()
-    for sig in [signal.SIGTERM,signal.SIGINT]:
-        asyncio.get_running_loop().add_signal_handler(sig,stopped.set)
-    children=[]
-    browser_task=None
-    async def browser_runtime():
-        while not stopped.is_set():
-            # The guest HOME already isolates the product's single profile.
-            # BashKitten deliberately rejects Firefox's profile/instance flags.
-            # Gecko's unattended-start setting prevents previous startup crashes
-            # from opening a modal Troubleshoot Mode prompt before guest control
-            # is ready. Keep the profile and its crash records unchanged.
-            child=await launch('/usr/bin/bashkitten',child_env={**env,'MOZ_DISABLE_AUTO_SAFE_MODE':'1'})
-            code=await child.wait()
-            children.remove(child)
-            if not stopped.is_set():
-                write_json(agent_run/'guest-browser-status.json',{'connected':False,'pid':child.pid,'error':f'Browser exited ({code})'})
-                try: await asyncio.wait_for(stopped.wait(),2)
-                except asyncio.TimeoutError: pass
-    async def launch(*args,child_env=env):
-        child=await asyncio.create_subprocess_exec(*map(str,args),env=child_env)
-        children.append(child)
-        return child
+    env = {**os.environ, 'BASHKITTEN_EXECUTION_ROLE': 'container',
+           'BASHKITTEN_MACHINE_ID': str(uuid.UUID(display['machineId'])),
+           'BASHKITTEN_DATA_DIR': str(DATA), 'BASHKITTEN_DESKTOP_CONTEXT': str(CONTEXT),
+           'BASHKITTEN_GUEST_STATUS_FILE': str(STATUS)}
+    stopped = asyncio.Event()
+    for sig in [signal.SIGTERM, signal.SIGINT]:
+        asyncio.get_running_loop().add_signal_handler(sig, stopped.set)
+    proxy = await asyncio.create_subprocess_exec('/usr/lib/bashkitten/node/bin/node', BIN / 'bashkitten-agent-proxy.mjs', env=env)
     try:
-        args=['/usr/bin/Xwayland',':0','-geometry',f"{display['width']}x{display['height']}",'-nolisten','tcp','-noreset','-auth',str(authority)]
-        if display.get('software'):
-            args.append('-shm')
-        x=await launch(*args)
-        for _ in range(200):
-            if x.returncode is not None:
-                raise RuntimeError('Guest Xwayland exited during startup')
-            check=await asyncio.create_subprocess_exec('/usr/bin/xdpyinfo',env=env,stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
-            if await check.wait()==0:
-                break
-            await asyncio.sleep(.05)
-        else:
-            raise RuntimeError('Guest Xwayland did not become ready')
-        # dbus-run-session started before the owned X11 context existed. Publish
-        # only this guest's display/session values for portal/toolkit activation.
-        activation = ['DISPLAY','XAUTHORITY','XDG_CURRENT_DESKTOP','XDG_SESSION_TYPE',
-                      'BASHKITTEN_EXECUTION_ROLE','BASHKITTEN_MACHINE_ID','BASHKITTEN_DATA_DIR',
-                      'BASHKITTEN_DESKTOP_CONTEXT','BASHKITTEN_GUEST_STATUS_FILE']
-        await command('/usr/bin/dbus-update-activation-environment',*activation,env=env)
-        for binary in ['/usr/bin/pipewire','/usr/bin/pipewire-pulse','/usr/bin/wireplumber']:
-            await launch(binary)
-        integration=json.loads(Path('/run/bashkitten-settings/integration.json').read_text())
-        if any(integration.get('media',{}).values()):
-            await launch(BIN/'bashkitten-integration-agent')
-        await launch('/usr/lib/bashkitten/node/bin/node',BIN/'bashkitten-agent-proxy.mjs')
-        await command('/usr/bin/bashkittenctl','start',env=env)
-        write_json(STATUS,{'generation':generation,'running':True,'error':None})
-        desktop=await launch('/usr/bin/xfce4-session')
-        browser_task=asyncio.create_task(browser_runtime())
-        stop_task=asyncio.create_task(stopped.wait())
-        desktop_task=asyncio.create_task(desktop.wait())
-        x_task=asyncio.create_task(x.wait())
-        # Closing the XFCE session does not stop the container or its Agent.
-        done,_=await asyncio.wait([stop_task,x_task,desktop_task],return_when=asyncio.FIRST_COMPLETED)
-        if x_task in done:
-            raise RuntimeError('Guest Xwayland stopped')
-        if desktop_task in done and stop_task not in done:
-            await stopped.wait()
+        start = await asyncio.create_subprocess_exec('/usr/bin/bashkittenctl', 'start', env=env, stdout=asyncio.subprocess.DEVNULL)
+        if await start.wait():
+            raise RuntimeError('Guest Agent did not start')
+        write_json(STATUS, {'running': True, 'error': None})
+        ready = await asyncio.create_subprocess_exec('/usr/bin/systemd-notify', '--ready', env=env)
+        if await ready.wait():
+            raise RuntimeError('Guest Agent readiness could not be published')
+        stop_task = asyncio.create_task(stopped.wait())
+        proxy_task = asyncio.create_task(proxy.wait())
+        done, _ = await asyncio.wait([stop_task, proxy_task], return_when=asyncio.FIRST_COMPLETED)
+        if proxy_task in done and stop_task not in done:
+            raise RuntimeError('Guest Agent proxy stopped')
     finally:
-        stopped.set()
-        if browser_task is not None:
-            browser_task.cancel()
-            await asyncio.gather(browser_task,return_exceptions=True)
-        for child in reversed(children):
-            if child.returncode is None:
-                child.terminate()
-        for child in children:
+        if proxy.returncode is None:
+            proxy.terminate()
             try:
-                await asyncio.wait_for(child.wait(),5)
+                await asyncio.wait_for(proxy.wait(), 5)
             except asyncio.TimeoutError:
-                child.kill()
-        CONTEXT.unlink(missing_ok=True)
-        write_json(STATUS,{'generation':generation,'running':False,'error':None})
+                proxy.kill()
+                await proxy.wait()
+        write_json(STATUS, {'running': False, 'error': None})
 
-if __name__=='__main__':
+
+if __name__ == '__main__':
     asyncio.run(run())

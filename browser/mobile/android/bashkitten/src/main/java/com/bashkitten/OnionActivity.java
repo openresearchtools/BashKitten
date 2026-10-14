@@ -22,6 +22,9 @@ public final class OnionActivity extends ProductActivity {
         setTitle("Private Tor sites");
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(24, 60, 24, 24);
         TextView description = new TextView(this); description.setText("Onion addresses open through Tor automatically. To add a private site, scan its credential QR or choose its .auth_private file. Both include the address and key."); root.addView(description);
+        TextView privacy = new TextView(this); privacy.setText(R.string.bashkitten_tor_privacy_notice);
+        int noticePadding = Math.round(12 * getResources().getDisplayMetrics().density);
+        privacy.setPadding(0, noticePadding, 0, noticePadding); root.addView(privacy);
         add(root, "Scan QR code", () -> new IntentIntegrator(this).setCaptureActivity(OnionCaptureActivity.class)
             .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setPrompt("Scan the private onion key QR")
             .setBeepEnabled(false).setOrientationLocked(false).initiateScan());

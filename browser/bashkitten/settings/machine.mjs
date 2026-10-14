@@ -80,7 +80,7 @@ export async function renderSection({ root, call, info, signal }) {
     if (active()) await call('settings-close', {});
   });
 
-  let name, startup, config, containerfile, helperFields, helperError;
+  let name, startup, config, containerfile, helperFields, helperError, displayCommand;
   const apply = change => {
     const value = JSON.parse(config.value); change(value); config.value = JSON.stringify(value, null, 2);
     helperError.textContent = '';
@@ -149,11 +149,14 @@ export async function renderSection({ root, call, info, signal }) {
     const advanced = node(root, 'details'); advanced.append(node(root, 'summary', 'Launch configuration and Containerfile'));
     config = field(advanced, 'Podman launch command, environment, ports, media and rendering settings', JSON.stringify(state.config, null, 2), { multiline: true, rows: 14 });
     containerfile = field(advanced, 'Containerfile', state.containerfileText, { multiline: true, rows: 12 });
+    displayCommand = field(editor, 'Display launch command', state.config.display.command ?? 'exec /usr/bin/xfce4-session', { multiline: true, rows: 3, spellcheck: 'false' });
+    displayCommand.oninput = () => { try { apply(value => { value.display.command = displayCommand.value; }); } catch (error) { helperError.textContent = error.message; } };
+    editor.append(node(root, 'p', 'Save changes, then turn Display off and on to use this command. Turning Display off closes desktop apps; the container and agent keep running.'));
     const helperSection = node(root, 'details'); helperSection.append(node(root, 'summary', 'Display, ports and media'));
     helperFields = node(root, 'div'); helperError = node(root, 'p'); helperError.setAttribute('role', 'alert'); helperSection.append(helperFields, helperError);
     action(helperSection, 'Refresh devices', loadDevices);
     helperSection.append(node(root, 'p', 'These helpers edit the configuration below. Save changes, then stop/start or restart to apply changed launch settings.'));
-    config.onchange = () => { try { helpers(); } catch (error) { helperError.textContent = error.message; } };
+    config.onchange = () => { try { displayCommand.value = JSON.parse(config.value).display.command ?? 'exec /usr/bin/xfce4-session'; helpers(); } catch (error) { helperError.textContent = error.message; } };
     editor.append(helperSection, advanced);
     controls.set('save', action(editor, 'Save changes', async () => {
       const value = JSON.parse(config.value); value.name = name.value; value.autostart = startup.checked;
@@ -167,5 +170,8 @@ export async function renderSection({ root, call, info, signal }) {
   operation.ontoggle = () => { if (operation.open) schedule(0); else stopReading(); };
   doc.addEventListener('visibilitychange', () => { if (doc.hidden) stopReading(); else if (operation.open) schedule(0); }, { signal });
   signal.addEventListener('abort', stopReading, { once: true });
-  if (active()) { availability(); operation.open = !!info.operation; if (operation.open) schedule(0); }
+  if (active()) {
+    availability(); operation.open = !!info.operation; if (operation.open) schedule(0);
+    if (info.displayCommand && displayCommand) { displayCommand.scrollIntoView({ block: 'center' }); displayCommand.focus(); }
+  }
 }

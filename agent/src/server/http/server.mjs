@@ -18,7 +18,7 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { fileDirectory, filePath, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments, editFile } from '../files/files.mjs';
+import { fileDirectory, filePath, referencedFile, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments, editFile } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
 import { prepareAndSendFile, closeFilePreviews, revokeRemotePreviews } from '../files/previews.mjs';
 import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
@@ -126,9 +126,10 @@ async function savedView(meta) {
   if (native && native.getCwd() !== meta.cwd) { meta.cwd = native.getCwd(); await writeMeta(meta); }
   const entries = native?.getBranch() || [];
   const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
-  return { questions: (await readJson(path.join(sessionDir(meta.id), 'questions.json'), { records: [] })).records, cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
-    entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e), events: [],
-    steeringMessages: drafts.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(queueItem) };
+  const questions = (await readJson(path.join(sessionDir(meta.id), 'questions.json'), { records: [] })).records;
+  return { questions, cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
+    entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questions) } : e), events: [],
+    steeringMessages: drafts.filter(q => q.kind === 'steer').map(item => queueItem(item, questions)), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(item => queueItem(item, questions)) };
 }
 const hiddenSessionsFile = path.join(dataDir, 'hidden-pi-sessions.json');
 let discovery, discoveredAt = 0;
@@ -207,16 +208,26 @@ const html = (await fs.readFile(path.join(here, '../../web/web_ui.html'), 'utf8'
   .replaceAll('/__bashkitten_license__', `${sourceRoot}/blob/${sourceRef}/LICENSE`);
 const loginHtml = await fs.readFile(path.join(here, '../../web/pi_login.html'));
 const css = html.toString().match(/<style>([\s\S]*?)<\/style>/)[1];
+async function selectedFile(url) {
+  if (!url.searchParams.has('session')) return { root: url.searchParams.get('root'), path: url.searchParams.get('path') };
+  const id = url.searchParams.get('session');
+  if (!/^[a-f0-9-]{36}$/.test(id || '') || url.searchParams.getAll('session').length !== 1 ||
+      url.searchParams.has('root') || url.searchParams.getAll('path').length !== 1) {
+    throw Object.assign(Error('Choose a file from this chat'), { status: 400 });
+  }
+  const meta = await readMeta(id), cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
+  return referencedFile(cwd, url.searchParams.get('path'));
+}
 async function fileRequest(req, res, url, record) {
   const route = url.pathname, mutation = !['GET', 'HEAD'].includes(req.method);
   if (route === '/api/files/previews/content') {
     requireMethod(req, ['GET']);
-    if (url.searchParams.size !== 2 || url.searchParams.getAll('root').length !== 1 || url.searchParams.getAll('path').length !== 1) {
+    if (url.searchParams.size !== 2 ||
+        (url.searchParams.getAll('root').length !== 1 && url.searchParams.getAll('session').length !== 1) ||
+        url.searchParams.getAll('path').length !== 1) {
       throw Object.assign(Error('Choose a file to view'), { status: 400 });
     }
-    return await prepareAndSendFile(req, res, {
-      root: url.searchParams.get('root'), path: url.searchParams.get('path'),
-    }, close => auth.watch(record, close));
+    return await prepareAndSendFile(req, res, await selectedFile(url), close => auth.watch(record, close));
   }
   if (route === '/api/files/edit') {
     requireMethod(req, ['GET', 'POST']);
@@ -245,6 +256,10 @@ async function fileRequest(req, res, url, record) {
   }
   if (route === '/api/files' || route === '/api/files/content' || route === '/api/files/archive') {
     requireMethod(req, route === '/api/files' ? ['GET', 'POST'] : ['GET', 'HEAD']);
+    if (route === '/api/files/content' && url.searchParams.has('session')) {
+      const selection = await selectedFile(url);
+      return await sendFile(req, res, await filePath(selection.root, selection.path), url.searchParams.get('download') === 'true');
+    }
     const root = (await fileDirectory(url.searchParams.get('root'))).path;
     const relative = url.searchParams.get('path') || '';
     if (route.endsWith('/content')) return await sendFile(req, res, await filePath(root, relative), url.searchParams.get('download') === 'true');
