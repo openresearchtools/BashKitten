@@ -364,19 +364,27 @@ class AgentView {
     const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "menu" });
     const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
     const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "Configuration", "aria-label": "Configuration", "aria-haspopup": "menu" });
-    gear.addEventListener("command", event => popup.openPopup(gear, "after_end", 0, 0, false, false, event));
+    gear.addEventListener("command", event => {
+      popup.setConstraintRect(new this.win.DOMRect(this.win.mozInnerScreenX,
+        this.win.mozInnerScreenY, this.win.innerWidth, this.win.innerHeight));
+      popup.openPopup(gear, "after_start", 0, 0, false, false, event);
+    });
     this.chatsToggle.after(gear);
     for (const [section, title, image] of [
       ["localai", "Local AI", "chrome://global/skin/icons/lightbulb.svg"],
-      ["notifications", "Notifications", "chrome://browser/skin/notification-fill-12.svg"],
       ["remotes", "Remote Connections", "chrome://global/skin/icons/link.svg"],
-      ["telephone", "Callback", "chrome://browser/skin/device-phone.svg"],
       ["performance", "Performance", "chrome://global/skin/icons/performance.svg"],
       ["autostart", "Autostart", "chrome://global/skin/icons/settings.svg"],
       ["providers", "Providers", "chrome://browser/skin/login.svg"],
       ["general", "General settings", "chrome://global/skin/icons/settings.svg"],
     ]) {
       const item = xul(this.doc, "toolbarbutton", { label: title, image, class: "subviewbutton subviewbutton-iconic", role: "menuitem" });
+      if (["localai", "performance"].includes(section)) {
+        popup.addEventListener("popupshowing", () => {
+          const backend = this.sidecar.backends?.find(value => value.id === (this.selection || "local"));
+          item.hidden = !["local", "machine"].includes(backend?.kind);
+        });
+      }
       item.addEventListener("command", () => {
         popup.hidePopup();
         this.openSettings(section).catch(error => this.dialog(title).content.append(html(this.doc, "p", { role: "alert" }, error.message)));

@@ -70,7 +70,6 @@ export async function renderSection({ root, call, info, signal }) {
     controls.set(name, action(lifecycle, label, async () => follow(await call(`machines.${name}`, {}))));
   }
   action(lifecycle, 'Share Local', () => call('machines.share-local', {}));
-  action(lifecycle, 'Connect to phone', () => call('machines.connect-phone', {}));
   const cancel = action(operation, 'Cancel operation', async () => { await call('machines.cancel', {}); schedule(0); });
   action(operation, 'Refresh output', async () => { await readOutput(); });
   action(root, 'Delete container', async () => {
