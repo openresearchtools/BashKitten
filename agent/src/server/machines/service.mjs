@@ -394,7 +394,12 @@ async function changeDisplay(id, enabled) {
             const browser = await readJson(path.join(files.exchange, 'agent/guest-browser-status.json'), null);
             if (status?.generation === generation) {
               if (status.error) throw Error(status.error);
-              if (status.running && browser?.connected) { ready = true; break; }
+              if (status.running) {
+                const agent = await guestCall(id, 'status');
+                if (agent.web?.error) throw Error(agent.web.error);
+                const agentOff = agent.web?.desired === false && agent.web?.status === 'stopped';
+                if (!agent.manager?.exiting && (agentOff || agent.web?.status === 'running' && browser?.connected)) { ready = true; break; }
+              }
             }
             await sleep(250);
           }
@@ -436,7 +441,7 @@ async function start(config, job) {
     job.check();
     if (startDisplay) gateway=await startGateway(config,job);
     else { await stopMedia(id); await stopGateway(id); job.check(); }
-    await writeDisplayConfig(config,gateway);
+    const displayConfig=await writeDisplayConfig(config,gateway);
     await writeJson(path.join(p.settings,'integration.json'),{schema:1,media:Object.fromEntries(Object.entries(config.integrations.media).map(([k,v])=>[k,v.enabled]))});
     if (!info) {
       await podmanLaunch(config.launch.executable,config.launch.arguments,{cwd:config.launch.cwd,env:config.launch.environment,output:job.output,signal:job.signal});
@@ -457,12 +462,20 @@ async function start(config, job) {
       try {
         const status=await guestCall(id,'status');
         const browser=startDisplay ? await readJson(path.join(p.exchange,'agent/guest-browser-status.json'),null) : null;
-        browserError=browser?.error;
-        if (status.web?.status==='running' && (!startDisplay || browser?.connected)) {
+        const display=startDisplay ? await readJson(path.join(p.exchange,'display-status.json'),null) : null;
+        const currentDisplay=display?.generation===displayConfig.generation ? display : null;
+        if (status.web?.error) throw Error(status.web.error);
+        if (currentDisplay?.error) throw Error(currentDisplay.error);
+        // Agent Off is an intentional ready state for its private controller.
+        // Its browser channel cannot connect until Agent is On; Display has
+        // its own generation-bound readiness and must not depend on that channel.
+        const agentOff=status.web?.desired===false && status.web?.status==='stopped';
+        const agentReady=!status.manager?.exiting && (agentOff || status.web?.status==='running');
+        browserError=agentOff ? null : browser?.error;
+        if (agentReady && (!startDisplay || currentDisplay?.running && (agentOff || browser?.connected))) {
           if (startDisplay) await startMedia(config, await inspect(id),job);
           await saveState(id,{state:'running',lastError:null,display:gateway?.mode ?? null,displayFallbackReason:gateway?.fallbackReason||null}); return;
         }
-        if (status.web?.error) throw Error(status.web.error);
       } catch (error) { if (!['ENOENT','ECONNREFUSED','ECONNRESET'].includes(error.code)) throw error; }
       const live=await inspect(id); if (!live?.State?.Running) throw Error('Guest stopped during startup; inspect the guest service log');
       await sleep(250);
