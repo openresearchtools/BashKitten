@@ -94,6 +94,15 @@ button's starting edge and uses Firefox's native constraint rectangle to stay
 inside its owning window. Installed popup placement and small-window scrolling
 still need verification in the next candidate.
 
+The desktop chat's Phone selector is hidden unless its backend reports a recent
+phone connection with Calls or Messages enabled. The existing session refresh
+updates that capability; hiding the selector never clears saved chat delivery
+choices. Android retains its phone selector. Fresh Local AI enrollment also
+records whether Pi settings existed and makes its default-model decision only
+once. Existing, explicitly unset and subsequently changed Pi choices are kept
+across setup resume and app updates. Installed fresh-setup and upgrade tests
+remain required for these guards.
+
 ## Installed combined candidate and acceptance repairs — 14 October 2026
 
 Combined source `e31a4c30ac5df7d226c32d4b915c5923b7e7acfa` was built and

@@ -459,7 +459,9 @@ async function handler(req, res) {
         const parent = byId.get(session.subagentParent);
         if (parent && !included.has(parent.id)) { included.add(parent.id); page.push(parent); }
       }
-      return json(res, { sessions: page, projects: (await projects()).projects, nextOffset: offset + limit < sessions.length ? offset + limit : null });
+      const phoneAvailable = await phoneStatus().then(status => status.registrations.some(phone =>
+        phone.connected && (phone.telephony || phone.messages)), () => false);
+      return json(res, { sessions: page, projects: (await projects()).projects, phoneAvailable, nextOffset: offset + limit < sessions.length ? offset + limit : null });
     }
     if (route === '/api/projects') {
       requireMethod(req, ['GET', 'POST']);

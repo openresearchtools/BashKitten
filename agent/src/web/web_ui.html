@@ -697,7 +697,7 @@
               <select id="model" title="Model" aria-label="Model"></select>
               <select id="thinking" title="Reasoning" aria-label="Reasoning"></select>
               <select id="subagents" title="Subagents" aria-label="Subagents"><option value="off">Agents off</option><option value="on">Agents on</option><option value="settings">Settings…</option></select>
-              <select id="phoneMode" title="Phone" aria-label="Phone"><option value="off">Phone off</option><option value="call-in">Call-in only</option><option value="messages">Messages</option><option value="calls">Calls</option></select>
+              <select id="phoneMode" class="hidden" title="Phone" aria-label="Phone"><option value="off">Phone off</option><option value="call-in">Call-in only</option><option value="messages">Messages</option><option value="calls">Calls</option></select>
               <span class="toolbar-spacer"></span>
               <button id="dictationButton" class="primary hidden" type="button" title="Dictate a message" aria-label="Dictate a message" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button>
               <button id="sendBtn" class="primary" type="button" data-mode="play" title="Send" aria-label="Send">▶</button>
@@ -850,6 +850,7 @@
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
     let nativeHost = window.bashkittenHost || null;
     let nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
+    let phoneAvailable = false;
     const visibilityClient = crypto.randomUUID();
     let serverPlatform = '';
     let fileManagerAllowed = false, filePolicyEvents = null;
@@ -869,6 +870,7 @@
       $('#filesToggle').setAttribute('aria-label', 'Browse project files and changes');
       $('#filesTab').classList.remove('hidden');
       $('#openProjectFolder').classList.toggle('hidden', !nativeLinux);
+      showAgentChoice();
       if (initialized && !$('#filePanel').classList.contains('hidden')) setFileTab(fileTab);
     }
     window.addEventListener('bashkitten-host-ready', configureNativeHost);
@@ -890,6 +892,8 @@
     function requireLogin() {
       authRequired = true;
       csrf = '';
+      phoneAvailable = false;
+      showAgentChoice();
       void cancelDictation();
       source?.close(); source = null;
       filePolicyEvents?.close(); filePolicyEvents = null;
@@ -1931,7 +1935,13 @@
     window.addEventListener('focus', refreshVisibleNewModels);
     document.addEventListener('visibilitychange', refreshVisibleNewModels);
 
-    function showAgentChoice() { $('#subagents').value = chatAgents.enabled ? 'on' : 'off'; $('#phoneMode').value = current?.phone?.mode || 'off'; $('#phoneMode').disabled = !current; }
+    function showAgentChoice() {
+      $('#subagents').value = chatAgents.enabled ? 'on' : 'off';
+      const available = nativeHost?.platform === 'android' || phoneAvailable;
+      $('#phoneMode').classList.toggle('hidden', !available);
+      $('#phoneMode').value = current?.phone?.mode || 'off';
+      $('#phoneMode').disabled = !current || !available;
+    }
     $('#phoneMode').onchange = async () => {
       if (!current) return; const id = current.id, mode = $('#phoneMode').value; $('#phoneMode').disabled = true;
       try { const value = await api(`/api/sessions/${id}/phone`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) }); if (current?.id === id) current.phone = value.phone; const item = sessionCache.find(s => s.id === id); if (item) item.phone = value.phone; }
@@ -2396,6 +2406,7 @@
       if (append && nextSessionOffset === null) return sessionCache;
       loadingSessions = (async () => {
         const value = await api(`/api/sessions?limit=100&offset=${append ? nextSessionOffset : 0}`);
+        phoneAvailable = value.phoneAvailable === true;
         projectCache = value.projects || [];
         const byId = new Map(sessionCache.map(session => [session.id, session]));
         for (const session of value.sessions) byId.set(session.id, session);
@@ -2404,6 +2415,7 @@
         const updated = current && value.sessions.find(session => session.id === current.id);
         if (updated) {
           current.current_segment = updated.current_segment;
+          current.phone = updated.phone;
           current.subagents = updated.subagents; chatAgents = { ...agentDefaults, ...updated.subagents }; showAgentChoice();
           if (updated.cwd !== current.cwd) {
             current.cwd = updated.cwd;
@@ -2411,6 +2423,7 @@
             $('#folderBtn').title = `Saved working folder: ${displayFolder(current.cwd)}. Start a new chat to choose another.`;
           }
         }
+        showAgentChoice();
         renderSessionSidebar(sessionCache);
         if (nextSessionOffset !== null && !nativeHost?.navigation) {
           const more = document.createElement('button');
