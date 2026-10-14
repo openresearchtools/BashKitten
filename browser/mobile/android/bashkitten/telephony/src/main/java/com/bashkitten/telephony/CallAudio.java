@@ -46,7 +46,8 @@ final class CallAudio implements AutoCloseable {
         AudioRecord input = recorder; if (input != null) try { input.stop(); } catch (RuntimeException ignored) { }
         AudioTrack output = player; if (output != null) try { output.pause(); output.flush(); } catch (RuntimeException ignored) { }
     }
-    void hash() { finish = true; AudioRecord input = recorder; if (input != null) try { input.stop(); } catch (RuntimeException ignored) { } }
+    synchronized void hash() { finish = true; AudioRecord input = recorder; if (input != null) try { input.stop(); } catch (RuntimeException ignored) { } }
+    private synchronized void finishCapture(int ticket) { if(current(ticket))hash(); }
     synchronized int ticket() { return generation; }
     boolean current(int ticket) { return !closed.get() && generation == ticket; }
     void speak(String text, Runnable done, Consumer<Throwable> failure) {
@@ -93,14 +94,21 @@ final class CallAudio implements AutoCloseable {
             BlockingQueue<byte[]> frames=new LinkedBlockingQueue<>(); AtomicBoolean captured=new AtomicBoolean();
             CompletableFuture<Boolean> detection=null;
             try {
-                audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                ToneGenerator beep=new ToneGenerator(AudioManager.STREAM_VOICE_CALL,25);
-                try { beep.startTone(ToneGenerator.TONE_PROP_BEEP,120); Thread.sleep(160); } finally { beep.release(); }
                 if(!current(ticket))return;
+                audio.setMode(AudioManager.MODE_IN_COMMUNICATION);
                 owner.gateway.request("phone.speech.vad.open",TelephonyRuntime.json("captureId",id)).get();
+                if(!current(ticket))return;
                 int min=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
                 input=new AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,Math.max(4096,min)); recorder=input;
                 if(input.getState()!=AudioRecord.STATE_INITIALIZED)throw new IOException("Call microphone is unavailable");
+                if(!current(ticket))return;
+                if(finish)throw new IOException("No speech detected. Try again after the beep.");
+                // Signal readiness only after the helper and microphone are ready.
+                // Recording starts after this cue so the cue cannot enter STT.
+                ToneGenerator beep=new ToneGenerator(AudioManager.STREAM_VOICE_CALL,25);
+                try { beep.startTone(ToneGenerator.TONE_PROP_BEEP,120); Thread.sleep(160); } finally { beep.release(); }
+                if(!current(ticket))return;
+                if(finish)throw new IOException("No speech detected. Try again after the beep.");
                 detection=CompletableFuture.supplyAsync(()->{
                     boolean speech=false; long sequence=0,lastSpeechFrame=0;
                     try {
@@ -109,14 +117,15 @@ final class CallAudio implements AutoCloseable {
                             byte[] result=null;
                             try {
                                 result=owner.gateway.audio("phone.speech.vad.frame",samples,TelephonyRuntime.json("captureId",id,"sequence",++sequence)).get();
+                                if(!current(ticket))return false;
                                 JSONObject vad=new JSONObject(new String(result,java.nio.charset.StandardCharsets.UTF_8));
                                 if(vad.getDouble("probability")>=0.5){speech=true;lastSpeechFrame=sequence;}
                                 // Measure captured audio time, not slow-model or scheduler wall time.
-                                if(speech&&!settings.optString("finish","either").equals("hash")&&(sequence-lastSpeechFrame)*512.0/16000>=settings.optDouble("silenceSeconds",4))hash();
+                                if(speech&&!settings.optString("finish","either").equals("hash")&&(sequence-lastSpeechFrame)*512.0/16000>=settings.optDouble("silenceSeconds",4))finishCapture(ticket);
                             } finally { Arrays.fill(samples,(byte)0);if(result!=null)Arrays.fill(result,(byte)0); }
                         }
                         return speech;
-                    } catch(Exception error) { hash();throw new CompletionException(error); }
+                    } catch(Exception error) { finishCapture(ticket);throw new CompletionException(error); }
                 },vadWork);
                 input.startRecording();int offset=0;
                 while(current(ticket) && !finish) {
