@@ -5,6 +5,70 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Installed ea7c candidate and remaining repairs — 15 October 2026
+
+Matched `ea7cf13ac4df05aeb277c1d4dce412da9092286c` development packages are
+installed on the Wayland host, real Xorg test VM and Android 16/17, including the
+separate fresh Android 17 instance. Matching build/source/license receipts are
+`verification/desktop-ea7c/handoff.json`,
+`verification/android-termux-handoff-ea7c.json`,
+`verification/source-release-ea7c.json` and
+`verification/source-release-android-ea7c.json` in the external Build workspace.
+The Android release build took 6m15s; unchanged native producer identities and
+bytes remain recorded separately. Both existing Android profiles retain identical
+Local AI config, router INI and Pi settings hashes after the package upgrade.
+These are development-signed packages, not a completed production release.
+
+Installed Wayland Autostart now passes the reported stale-notice case: a missing
+executable added through the UI produces a nonblocking error, and both disabling
+it and removing it clear that notice immediately without restarting the browser.
+A separate custom program added using the documented installed
+`bashkittenctl autostart-status` / `autostart-save --stdin` interface appears in
+the same settings UI and starts with the exact configured folder/environment.
+Normal native Quit removes all 25 captured process identities, including its
+parent and child; abruptly killing the test browser removes all 30 identities in
+that run. Removing the live command through the UI also ends its parent/child.
+All fixture entries were removed, the saved command list is empty, and no fixture
+process remains. Evidence: `verification/autostart-ea7c/installed-result.json`.
+This closes these targeted desktop cases, not the full cross-platform lifecycle
+matrix or unrelated service tests.
+
+The installed Android Display icons are visible in light and dark mode, including
+the unchecked Observe icon. Evidence is under `verification/android17-ea7c/`.
+The fresh Android profile selects `bashkitten-llama` / `Qwen3.5-2B-Q4_0` without a
+manual model choice, but its protected UI exposed a missed counterpart in the
+draft-path repair: Java generated the bounded identity hash while Gecko still
+validated the old raw fingerprint/UUID name. Commit `a7f714b996` uses the same
+SHA-256 derivation in Gecko. Eleven checks using the extracted actual Java and
+Gecko methods verify acceptance and rejection boundaries; installed acceptance
+is still pending. No identity/cookie checks or transport requirements were relaxed.
+Fresh setup and model cancellation/resume must be repeated after that repair.
+
+Real Xorg testing confirms saved guest Agent Off survives container restart while
+Display reaches generation-verified readiness without a browser channel. The
+minimized ordinary-window target now restores directly through Two app mode;
+settled geometry and the complete application-action matrix are still being
+checked. Actual Thunar package installation reaches guest APT normally; installing
+a development package with the same version correctly reports no version upgrade,
+so actual new guest bytes were subsequently installed through normal APT reinstall
+before testing. Exact receipts remain under `acceptance/xorg-vm-control/`.
+
+Xorg restart exposed saved Display tabs appearing beneath Agent or as raw chrome
+pages when their container stayed stopped. Commit `a662d27d4a` preserves native
+tab presentation through asynchronous restore and unavailable backends, respects
+subsequent user navigation, and reconnects only from a current verified descriptor.
+Observe mode and close/open semantics stay unchanged. Fourteen focused check
+groups pass; installed restoration/recovery remains pending.
+
+The earlier remote PAR error was a Tor SOCKS reply `TTL expired`, emitted before
+successful PAR issuance. Pinned source maps it to connection timeout; existing
+evidence cannot distinguish circuit trouble from publisher availability. It is
+not evidence that OAuth PAR lifetime should be changed. No speculative retry,
+authentication change or transport fallback was introduced. The normal encrypted
+route needs a fresh UI run with time-correlated availability evidence; see
+`verification/remote-route-20261014/ttl-source-diagnosis-20261015.json`.
+All other incomplete requirements in the registers below remain mandatory.
+
 ## Installed efe9 candidate and acceptance follow-ups — 14 October 2026
 
 Matched `efe9f7444a1a96ea841922016f9db147e799a469` packages are now installed
