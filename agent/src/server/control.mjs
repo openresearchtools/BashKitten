@@ -29,7 +29,7 @@ import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
 import { WorkloadPerformance, performanceUnavailable } from './performance.mjs';
 import { initializePhoneOwner, configurePhoneOwner, disconnectPhoneOwner, closePhoneOwner } from './phone/owner.mjs';
-import { guestBrowserBootstrap } from './access/guest-browser.mjs';
+import { guestBrowserBootstrap, guestBrowserRole } from './access/guest-browser.mjs';
 import { PhoneGateway } from './phone-gateway.mjs';
 import { PhoneSpeech } from './localai/phone-speech.mjs';
 import { unixRequest } from './access/io.mjs';
@@ -445,7 +445,10 @@ async function serve() {
       if (command === 'stop' || command === 'shutdown') {
         if (command === 'shutdown') shutdownRequested = true;
         await turnOff();
-        if (!stopping && (command === 'shutdown' || !browserOwner && !customStartup.active)) scheduleExit();
+        // A managed guest's existing session owns this controller independently
+        // of Agent power, so Display and private settings remain controllable.
+        // Explicit shutdown and container/host lifetime cleanup still exit it.
+        if (!stopping && (command === 'shutdown' || !browserOwner && !customStartup.active && !guestBrowserRole())) scheduleExit();
       }
       else {
         if (browserClosing || stopping) throw Object.assign(Error('Agent is completing shutdown'), { code: 'AGENT_SHUTTING_DOWN' });
@@ -544,7 +547,7 @@ async function serve() {
   let failedHealth = 0;
   monitor = setInterval(() => {
     serial = serial.then(async () => {
-      if (stopping && !jobs.busy) { await turnOff(); if (!stopping && (shutdownRequested || browserClosing || !browserOwner && !customStartup.active)) scheduleExit(); return; }
+      if (stopping && !jobs.busy) { await turnOff(); if (!stopping && (shutdownRequested || browserClosing || !browserOwner && !customStartup.active && !guestBrowserRole())) scheduleExit(); return; }
       if (!stopping && stack.ready) {
         failedHealth = await stack.healthy() ? 0 : failedHealth + 1;
         if (failedHealth >= 2) { await turnOff('Agent service health check failed'); return; }

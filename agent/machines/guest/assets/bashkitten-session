@@ -46,9 +46,13 @@ async def run():
         asyncio.get_running_loop().add_signal_handler(sig, stopped.set)
     proxy = await asyncio.create_subprocess_exec('/usr/lib/bashkitten/node/bin/node', BIN / 'bashkitten-agent-proxy.mjs', env=env)
     try:
-        start = await asyncio.create_subprocess_exec('/usr/bin/bashkittenctl', 'start', env=env, stdout=asyncio.subprocess.DEVNULL)
+        # New guests start Agent by default. On later starts the controller
+        # restores its own saved power choice, including an explicit Agent Off,
+        # while still starting independently configured background services.
+        action = 'autostart-startup' if (DATA / 'control.json').exists() else 'start'
+        start = await asyncio.create_subprocess_exec('/usr/bin/bashkittenctl', action, env=env, stdout=asyncio.subprocess.DEVNULL)
         if await start.wait():
-            raise RuntimeError('Guest Agent did not start')
+            raise RuntimeError('Guest services did not start')
         write_json(STATUS, {'running': True, 'error': None})
         ready = await asyncio.create_subprocess_exec('/usr/bin/systemd-notify', '--ready', env=env)
         if await ready.wait():
