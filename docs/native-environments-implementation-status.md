@@ -5,6 +5,121 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Installed efe9 candidate and acceptance follow-ups — 14 October 2026
+
+Matched `efe9f7444a1a96ea841922016f9db147e799a469` packages are now installed
+on the Wayland host, the real Xorg test VM and Android 16/17. Build and matching
+source receipts are `verification/desktop-efe9/handoff.json`,
+`verification/android-termux-handoff-efe9.json`, `verification/source-release-efe9.json`
+and `verification/source-release-android-efe9.json` in the separate Build workspace.
+The Android build took 5m38s; unchanged native inputs retain their actual producer
+identities. These are local development candidates, not publisher-signed releases.
+
+Installed desktop Configuration omits phone-only controls, opens within the
+window, and scrolls to General settings in the Xorg test's 640 × 180 window.
+The compact desktop project picker and initial Display toolbar now pass after
+purging the reused development browser's startup cache. The release packaging
+already requires increasing application versions; no native build identity was
+forged to refresh development chrome. An actual 500-pixel desktop composer keeps
+its controls visible; Android's portrait composer wraps and its landscape
+Configuration scrolls to the final General entry, which opens successfully.
+Existing Local AI, router and Pi settings remain byte-identical after normal
+upgrades/startup on both Android versions and the Wayland host. Genuine first-run
+Local AI setup is a separate pending test on a fresh Android 17 instance.
+
+The earlier single UI Send of Android 16's held sibling message was checked in
+stock Pi history after settling: exactly one matching user entry exists, with a
+later assistant completion. No resend was performed. Android 17's repaired
+clipboard now accepts the native launch-command text copied before Display
+reattachment. A repeated Observe → Interact cycle also passes: Observe retains
+the desktop clipboard, then actual viewport Clear/Paste imports the distinct native
+Copy prompt after Interact. Clipboard preference-Off and in-flight races remain
+separate gates. The installed Android Display toolbar exposed black pencil/gear
+icons in dark mode; `e9f27eca18` applies the existing native theme color to those
+and unchecked toggles, pending installed retest.
+
+Actual host Autostart testing ran an enabled command once with its saved working
+folder/environment, kept its child alive across window Close, left a disabled
+command unstarted, and reported a deliberately missing executable without
+blocking the UI. All three fixtures were removed through Autostart. The missing
+executable's old sidebar error nevertheless remained: commit `aaaab242b2` retires
+obsolete command errors and refreshes only that owned notice. It also supplies
+agents concise guidance for the existing config/controller interface. This repair
+has focused checks; its installed retest is pending, and the fixture's natural
+exit does not establish custom-command Quit/crash cleanup.
+
+Xorg testing exposed another startup issue: a saved guest Agent Off was overridden
+by session startup, and readiness always required an Agent browser channel.
+Commit `2f9c9e5803` preserves the saved choice, permits generation-verified Display
+readiness with Agent Off, and keeps the managed guest's existing private controller
+available after Agent Stop. Explicit shutdown/container lifetime cleanup remains.
+Focused readiness/lifetime checks pass; installed retests are pending. The observed
+Agent On/browser-readiness timeout is still unresolved and must not be declared
+fixed by the Agent Off changes. An old retained guest lacked its expected Thunar
+package action; upgrading that guest through its package manager is maintenance,
+not acceptance of the missing action.
+
+The same Xorg test isolated a minimized target whose window manager temporarily
+removes resize/maximize actions. Manual restoration followed by Two app mode
+passes. Commit `cb862d879e` restores before checking those actions and preserves
+normal size/type exclusions; 17 focused checks pass, installed retest pending.
+A retained guest predating the corrected image recipe has root-owned `.local`
+parents, blocking AppImage registration. The fresh guest has correct ownership.
+Official extract-and-run from an original filename containing spaces and `%`
+opens the real application, but the complete Thunar/Start registration flow remains
+open. No global ownership repair or compatibility fallback was added.
+
+The live Termux Pi worker also lacked its current owned desktop-context path.
+Commit `79ee5a8503` supplies that path for Termux workers, preserves the managed
+container context and strips it for ordinary hosts. Existing helper validation
+still checks generation and process identity on each use; installed worker
+verification remains pending.
+
+A separate fresh Android 17 test launcher initially used generated userdata as
+its own input and lost a synthetic marker on restart. The launcher now uses a
+stable input image outside assembler output; a new marker survived two scoped
+stop/start cycles with native KVM, 16 GiB RAM and 128 GiB storage. No application
+profiles existed during this repair. This is test-environment evidence, not a
+BashKitten feature pass. The user's private llama VM remains untouched.
+
+Fresh Android 17 first-run setup now downloaded the published Vulkan-capable
+runtimes and all pinned Qwen 2B vision, Parakeet and Pocket TTS weights. The UI
+reported Ready, the CPU router ran, and all five installed weight/projector files
+matched their pinned hashes with offline notices/source records present. This
+does not establish inference, cancellation/resume or the full published installer
+flow: exact candidate packages and the installer’s final Termux bridge setup were
+prepared with authorized ADB; native permission/enrollment and setup were exercised
+through the desktop BashKitten Cuttlefish UI. Stop setup was not accepted as tested
+because the moving progress layout and quick completion prevented a confirmed stop.
+
+The first fresh composer nevertheless had no default model: normal Pi package
+registration created settings.json between enrollment and download completion.
+Commit `cb741e34a9` seeds the pinned default once before that registration, keeping
+existing-file, explicit-value and durable once-only guards. Later downloads and
+updates never reseed a cleared selection. Focused actual-Pi checks pass; a fresh
+installed retest remains required. A separate generic draft database error was
+traced to the local context being hex-encoded into a 316-byte quota directory
+component. The app-level identity hash now bounds it to 242 bytes, retaining full
+identity separation and scoped cleanup without Gecko core changes. Source and
+filesystem checks pass; installed draft persistence remains pending. See
+`verification/android17-fresh-efe9` and
+`verification/android17-draft-context-20261015`.
+
+Detailed current observations are under `verification/desktop-efe9`,
+`verification/android17-efe9`, `verification/android16-efe9`,
+`verification/autostart-status-20261014`,
+`verification/container-display-only-20261014` and `acceptance/xorg-vm-control`.
+The container desktop also exposed its single-client private Wayland gateway to
+ordinary XFCE/Firefox children. Actual historical guest logs show Firefox trying
+that endpoint and falling back to X11. The guest session now passes that endpoint
+only to Xwayland and removes inherited Wayland endpoint variables from GUI/activation
+environments. Isolated production-coroutine checks pass. This corrects the X11
+launch environment but does not prove the separate Agent On timeout resolved.
+
+The complete register below, immutable original and all authorized amendments
+remain required; the unresolved remote, call/audio, permissions, rendering,
+lifecycle, first-run and release gates remain open.
+
 ## Installed repair candidate and remaining blockers — 14 October 2026
 
 Candidate `a947f076b18e5c7f89869f8bd29c8997867167b6` is installed on the
