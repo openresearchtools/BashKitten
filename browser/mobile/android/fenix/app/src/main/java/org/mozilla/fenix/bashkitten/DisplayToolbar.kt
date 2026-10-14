@@ -79,6 +79,7 @@ fun DisplayToolbar(activity: HomeActivity, store: BrowserToolbarStore) {
                 stateDescription = if (changing) "Changing" else if (running) "On" else "Off"
             },
             colors = IconButtonDefaults.iconToggleButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurface,
                 checkedContainerColor = colorResource(agentR.color.bashkitten_button),
                 checkedContentColor = MaterialTheme.colorScheme.onSurface,
             ),
@@ -88,6 +89,7 @@ fun DisplayToolbar(activity: HomeActivity, store: BrowserToolbarStore) {
         IconButton(
             onClick = { AgentSettingsActivity.open(activity, "display") },
             modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
         ) {
             Icon(painterResource(iconsR.drawable.mozac_ic_edit_24), contentDescription = "Display command")
         }
@@ -98,6 +100,7 @@ fun DisplayToolbar(activity: HomeActivity, store: BrowserToolbarStore) {
                 stateDescription = if (interactive) "Interact" else "Observe only"
             },
             colors = IconButtonDefaults.iconToggleButtonColors(
+                contentColor = MaterialTheme.colorScheme.onSurface,
                 checkedContainerColor = colorResource(agentR.color.bashkitten_button),
                 checkedContentColor = MaterialTheme.colorScheme.onSurface,
             ),
@@ -110,6 +113,7 @@ fun DisplayToolbar(activity: HomeActivity, store: BrowserToolbarStore) {
         IconButton(
             onClick = { BashKittenMenuDialog().show(activity.supportFragmentManager, "bashkitten-settings-menu") },
             modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
         ) {
             Icon(painterResource(agentR.drawable.ic_agent_gear), contentDescription = "Configuration")
         }
