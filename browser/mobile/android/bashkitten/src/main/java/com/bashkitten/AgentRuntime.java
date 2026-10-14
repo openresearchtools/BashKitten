@@ -584,8 +584,14 @@ public final class AgentRuntime {
             && identity.optString("caSha256").equals(actual.optString("caSha256"))
             && identity.optString("instanceId").equals(actual.optString("instanceId"));
     }
-    private static String localContext(JSONObject identity) throws JSONException {
-        return LOCAL_CONTEXT + "-" + identity.getString("caSha256") + "-" + identity.getString("instanceId");
+    private static String localContext(JSONObject identity) throws Exception {
+        // GeckoView hex-encodes context IDs into quota origin directory names.
+        // Bound that filename while retaining the full validated backend identity.
+        String identityKey = identity.getString("caSha256") + "-" + identity.getString("instanceId");
+        StringBuilder context = new StringBuilder(LOCAL_CONTEXT).append("-");
+        for (byte b : MessageDigest.getInstance("SHA-256").digest(identityKey.getBytes(java.nio.charset.StandardCharsets.UTF_8)))
+            context.append(String.format(Locale.ROOT, "%02x", b & 255));
+        return context.toString();
     }
     boolean isLocalSession(GeckoSession target) {
         return target != null && target == sessions.get("local") && localSession != null && localSessionContext != null
@@ -604,7 +610,7 @@ public final class AgentRuntime {
                 if (local.isOpen()) { local.stop(); local.close(); }
             }
             if (engine != null && (LOCAL_CONTEXT.equals(previous) || previous != null
-                    && previous.matches(LOCAL_CONTEXT + "-[a-f0-9]{64}-" + UUID_PATTERN)))
+                    && previous.matches(LOCAL_CONTEXT + "-[a-f0-9]{64}(-" + UUID_PATTERN + ")?")))
                 engine.getStorageController().clearDataForSessionContext(previous);
         }
         if (replacement == null) app.policies.edit().remove("agent.localContext").apply();
@@ -641,8 +647,8 @@ public final class AgentRuntime {
                                 JSONObject original = identities.read(), remembered = new JSONObject(original.toString()), previous = remembered.optJSONObject("local");
                                 boolean unchanged = previous != null && previous.optString("caSha256").equals(identity.optString("caSha256"))
                                     && previous.optString("instanceId").equals(identity.optString("instanceId"));
-                                // Preserve the old jar/draft on an ordinary APK upgrade.
-                                // Only a changed/new identity moves into a fresh context.
+                                // Preserve the original unsuffixed jar/draft on an APK upgrade.
+                                // Identity-scoped contexts use the bounded identity hash.
                                 String context = unchanged && LOCAL_CONTEXT.equals(remembered.optString("localContext", LOCAL_CONTEXT)) ? LOCAL_CONTEXT : localContext(identity);
                                 remembered.put("local", identity).put("localContext", context);
                                 if (localSessionRequest != request || !currentLocal(requestedOperation, installation)) throw new java.util.concurrent.CancellationException();
