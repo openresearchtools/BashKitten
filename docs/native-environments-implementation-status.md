@@ -5,7 +5,65 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
-## Restart and integrated candidate — 14 October 2026
+## Installed combined candidate and acceptance repairs — 14 October 2026
+
+Combined source `e31a4c30ac5df7d226c32d4b915c5923b7e7acfa` was built and
+installed on the Wayland host, real Xorg test VM and Android 16/17. The Linux
+native build took 6m30s and the Android release build 6m27s. Package identities,
+matching Termux backend/OS, actual native producers, private loader permissions
+and full source/notices were checked. Installation is not full acceptance.
+
+Actual Android 17 checks now cover simultaneous embedded and standalone
+Termux:X11, independent service stops, tab close/reopen, held-key release on
+Observe, blocked viewer input with continued rendering, viewport resize on
+rotation and Follow device appearance. Independent agent input and the remaining
+IME/clipboard cases are separate checks. Android 16's saved question answer and
+dismissal now display readable attribution without rewriting native Pi history.
+Real question delivery and agent-tool tests continue. Small-model instruction
+failures are recorded separately from product failures.
+
+In the Xorg container, real Pi final-message file citations opened Python and
+Markdown previews, including names with spaces, Unicode and punctuation.
+UTF-16/BOM/raw Markdown and unsupported-file downloads matched their originals;
+the 2,000-row Markdown table retained its last row and horizontal scrolling while
+ordinary tabs remained responsive. Guest Files still denied a host-only path.
+These cases do not stand in for the remaining formats, nested content or remotes.
+
+Installed testing and the full-plan review found defects for the next combined
+candidate: the native Display and Tor notices used unsupported owner-window
+references; Android protected settings lacked the existing native select handler;
+the complete fresh guest package list also needs the matching official ATK
+introspection backport. The normal retained guest upgrade with that dependency
+succeeded, while fresh creation reproduced the uncorrected recipe failure.
+Container Display now has its own saved startup choice in both container settings
+and unified Autostart; starting the Agent with that choice Off does not require
+a guest browser. Toolbar On/Off remains the current service control.
+
+The same repair batch covers correct chat targeting and scoped withdrawal for
+queued call events, bounded spoken choices with invalid-option clarification,
+and preserves the primary startup error while attempting all
+owned cleanup steps. The first retained-container autostart timeout's exact cause
+is still unconfirmed; a second normal Start succeeded in three seconds. Source
+diagnostic improvements are not proof that this intermittent cause is resolved.
+
+The user's additional project-dialog requirement is part of this implementation:
+compact, content-sized Project name and folder selection, Create underneath,
+header close button, existing styling, and bounded scrolling on small screens.
+No large empty folder panel or fixed modal height. Both platform changes require
+installed visual verification in the next combined build.
+
+Bounded payload-free observations on the installed candidate found local
+inference connections on Android 16 and no decoded external destination on
+Android 17. Desktop observations included DNS/WebRTC route-related events whose
+complete attribution remains unverified. Startup gaps and unconnected UDP mean
+these checks do not close the full no-telemetry gate. Detailed evidence is in
+`verification/desktop-e31a`, `verification/android16-e31a`,
+`verification/android17-e31a`, `verification/android17-display-next`,
+`verification/network-observer/installed-e31-observation-20261014.json` and
+`acceptance/xorg-vm-control`, outside the repository. The complete register below
+continues to apply; the immutable requirements baseline remains untouched.
+
+## Restart and pre-build checkpoint — 14 October 2026
 
 The Data drive and existing Android 16/17 Cuttlefish environments are restored.
 Both retain the exact installed `656abcd94b` APK/backend; native KVM, 16 GiB RAM,

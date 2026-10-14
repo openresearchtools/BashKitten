@@ -286,29 +286,66 @@ public final class AgentSidecar {
     }
     private void projectPicker(String backend) {
         final org.mozilla.geckoview.GeckoSession session = runtime.session;
-        LinearLayout content = column(); EditText name = input(); name.setHint("Project name"); name.setSingleLine(); content.addView(name);
-        TextView path = text("Loading folders…"), failure = text(""); content.addView(path);
-        ScrollView folders = new ScrollView(activity); LinearLayout choices = column(); folders.addView(choices); content.addView(folders, new LinearLayout.LayoutParams(-1, dp(320))); content.addView(failure);
-        androidx.appcompat.app.AlertDialog dialog = dialog().setTitle("Create project").setView(content).setNegativeButton("Cancel", null).setPositiveButton("Create", null).create();
+        LinearLayout content = column(); content.setPadding(dp(20), 0, dp(20), 0);
+        EditText name = input(); name.setHint("Project name"); name.setContentDescription("Project name"); name.setSingleLine(); content.addView(name);
+        ScrollView folders = new ScrollView(activity) {
+            @Override protected void onMeasure(int width, int height) {
+                android.graphics.Rect visible = new android.graphics.Rect(); getWindowVisibleDisplayFrame(visible);
+                int limit = Math.min(dp(220), Math.round(visible.height() * .35f));
+                if (MeasureSpec.getMode(height) != MeasureSpec.UNSPECIFIED) limit = Math.min(limit, MeasureSpec.getSize(height));
+                super.onMeasure(width, MeasureSpec.makeMeasureSpec(Math.max(0, limit), MeasureSpec.AT_MOST));
+            }
+        };
+        folders.setVisibility(View.GONE); folders.setContentDescription("Folders");
+        Button folderPicker = button("Loading folder…", () -> {});
+        androidx.core.view.ViewCompat.setStateDescription(folderPicker, "Collapsed");
+        folderPicker.setOnClickListener(ignored -> {
+            boolean expanded = folders.getVisibility() != View.VISIBLE; folders.setVisibility(expanded ? View.VISIBLE : View.GONE);
+            androidx.core.view.ViewCompat.setStateDescription(folderPicker, expanded ? "Expanded" : "Collapsed");
+        });
+        folderPicker.setContentDescription("Choose project folder");
+        android.graphics.drawable.Drawable folderIcon = activity.getDrawable(R.drawable.ic_agent_folder).mutate();
+        folderIcon.setTint(muted); folderIcon.setBounds(0, 0, dp(18), dp(18));
+        folderPicker.setCompoundDrawablesRelative(folderIcon, null, null, null); folderPicker.setCompoundDrawablePadding(dp(9));
+        LinearLayout.LayoutParams folderParams = new LinearLayout.LayoutParams(-1, dp(41)); folderParams.setMargins(0, dp(12), 0, dp(8)); content.addView(folderPicker, folderParams);
+        LinearLayout choices = column(); folders.addView(choices); content.addView(folders, new LinearLayout.LayoutParams(-1, -2));
+        TextView failure = text(""); failure.setVisibility(View.GONE); failure.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE); content.addView(failure);
+        Consumer<String> showFailure = message -> { failure.setText(message); failure.setVisibility(message == null || message.isEmpty() ? View.GONE : View.VISIBLE); };
+        ScrollView form = new ScrollView(activity) {
+            @Override protected void onMeasure(int width, int height) {
+                android.graphics.Rect visible = new android.graphics.Rect(); getWindowVisibleDisplayFrame(visible);
+                int limit = Math.round(visible.height() * .65f);
+                if (MeasureSpec.getMode(height) != MeasureSpec.UNSPECIFIED) limit = Math.min(limit, MeasureSpec.getSize(height));
+                super.onMeasure(width, MeasureSpec.makeMeasureSpec(Math.max(0, limit), MeasureSpec.AT_MOST));
+            }
+        };
+        form.addView(content);
+        LinearLayout header = row(); header.setPadding(dp(20), dp(12), dp(12), dp(8));
+        TextView title = text("Create project"); title.setTextColor(foreground); title.setTextSize(18); title.setPadding(0, 0, 0, 0); title.setAccessibilityHeading(true); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        androidx.appcompat.app.AlertDialog dialog = dialog().setTitle("Create project").setCustomTitle(header).setView(form).setPositiveButton("Create", null).create();
+        Button close = button("×", dialog::dismiss); close.setContentDescription("Close Create project"); close.setTooltipText("Close"); close.setTextSize(24); close.setGravity(Gravity.CENTER); close.setPadding(0, 0, 0, 0); header.addView(close, new LinearLayout.LayoutParams(dp(40), dp(40)));
         final String requestId = UUID.randomUUID().toString();
         dialog.setOnDismissListener(ignored -> { if (backend.equals(runtime.selected) && session == runtime.session) runtime.navigation("folders-cancel", value("requestId", requestId), result -> {}, message -> {}); });
         final String[] selected = {null}; final int[] request = {0};
         Consumer<String> load = new Consumer<>() {
             @Override public void accept(String directory) {
-                if (!dialog.isShowing() || !backend.equals(runtime.selected) || session != runtime.session) { failure.setText("The selected backend changed."); return; }
+                if (!dialog.isShowing() || !backend.equals(runtime.selected) || session != runtime.session) { showFailure.accept("The selected backend changed."); return; }
                 int epoch = ++request[0];
                 runtime.navigation("folders", value("path", directory, "requestId", requestId), result -> {
                     if (!dialog.isShowing() || epoch != request[0] || !backend.equals(runtime.selected) || session != runtime.session) return;
-                    selected[0] = result.optString("path"); path.setText(result.optString("displayPath")); choices.removeAllViews();
+                    selected[0] = result.optString("path"); folderPicker.setText(result.optString("displayPath")); folderPicker.setContentDescription("Project folder: " + result.optString("displayPath")); folderPicker.setTooltipText(result.optString("displayPath")); choices.removeAllViews();
                     if (!result.isNull("parent")) choices.addView(button("↑ Parent", () -> accept(result.optString("parent"))));
                     JSONArray list = result.optJSONArray("folders"); if (list != null) for (int i = 0; i < list.length(); i++) { JSONObject folder = list.optJSONObject(i); choices.addView(button(folder.optString("name"), () -> accept(folder.optString("path")))); }
-                }, failure::setText);
+                }, showFailure);
             }
         };
         dialog.setOnShowListener(ignored -> dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            if (selected[0] == null || !backend.equals(runtime.selected) || session != runtime.session) { failure.setText("Choose a folder on this backend."); return; }
-            runtime.navigation("project-create", value("name", name.getText().toString(), "cwd", selected[0]), result -> { snapshots.put(backend, result); dialog.dismiss(); render(); }, failure::setText);
-        })); dialog.show(); load.accept("~");
+            if (selected[0] == null || !backend.equals(runtime.selected) || session != runtime.session) { showFailure.accept("Choose a folder on this backend."); return; }
+            runtime.navigation("project-create", value("name", name.getText().toString(), "cwd", selected[0]), result -> { snapshots.put(backend, result); dialog.dismiss(); render(); }, showFailure);
+        })); dialog.show();
+        dialog.getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        dialog.getWindow().setLayout(Math.min(dp(420), activity.getResources().getDisplayMetrics().widthPixels - dp(32)), android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        name.requestFocus(); load.accept("~");
     }
     private void remoteActions(String id, String name) {
         dialog().setTitle(name).setItems(new String[]{"Rename", "Connect to phone", "Delete remote"}, (dialog, which) -> {

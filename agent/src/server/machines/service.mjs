@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { privateDir, readJson, writeJson, json, jsonBody, socketRequest } from '../common.mjs';
 import { claimInstance, processStart } from '../instance.mjs';
 import { defaults, validate, prepareRuntime, prepareStorage, machineRoot, packageRoot, daemonSocket, locations,
-  load, containerName, machineLabel, definition, displayCommand, helper, userNamespace, mount } from './config.mjs';
+  load, containerName, machineLabel, definition, displayCommand, displayAutostart, helper, userNamespace, mount } from './config.mjs';
 import { podman, podmanLaunch, installed } from './process.mjs';
 import { startMedia, stopMedia, mediaDevices, mediaStatus, integrationArguments } from './media.mjs';
 import { duringUpdate, mutations, runtimeVersion, updateMessage, updateError } from './update.mjs';
@@ -126,6 +126,7 @@ async function records() {
 }
 function brief(record) {
   return { id: record.config.id, name: record.config.name, autostart: Boolean(record.config.autostart), ...record.state,
+    displayAutostart: displayAutostart(record.config),
     pendingChanges: !!record.state.definition && record.state.definition !== definition(record.config),
     configRevision: definition(record.config), operation: active.get(record.config.id)?.id || record.state.operation || null };
 }
@@ -323,10 +324,21 @@ async function startGateway(config, job) {
   throw Error('The private display gateway did not become ready');
 }
 async function writeDisplayConfig(config, gateway) {
-  const value = { machineId: config.id, generation: randomUUID(), enabled: true, command: displayCommand(config),
-    mode: gateway.mode, software: gateway.mode === 'software', width: 1280, height: 720 };
+  const value = { machineId: config.id, generation: randomUUID(), enabled: Boolean(gateway), command: displayCommand(config),
+    mode: gateway?.mode ?? config.display.mode, software: gateway?.mode === 'software', width: 1280, height: 720 };
   await writeJson(path.join(locations(config.id).settings, 'display.json'), value);
   return value;
+}
+async function failAfterCleanup(error, steps) {
+  const failures = [];
+  for (const [name, cleanup] of steps) {
+    try { await cleanup(); }
+    catch (failure) { failures.push(`${name}: ${failure.message}`); }
+  }
+  // Keep the operation's original failure first, and still attempt every owned
+  // cleanup when an earlier step fails. Cleanup never turns a failed Start On.
+  if (failures.length) throw Object.assign(new Error(`${error.message}; cleanup failed (${failures.join('; ')})`, { cause: error }), { name: error.name, code: error.code });
+  throw error;
 }
 async function displayStatus(id, info) {
   const p = locations(id), gateway = await readJson(path.join(p.runtime, 'gateway.json'), null);
@@ -391,9 +403,10 @@ async function changeDisplay(id, enabled) {
         } catch (error) {
           // No unattended retry and no software/headless substitute after a
           // failed explicit start. Keep the actual error and the Pi backend.
-          await podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'stop', 'bashkitten-display.service'], { allowFailure: true });
-          await stopMedia(id); await stopGateway(id);
-          throw error;
+          await failAfterCleanup(error, [
+            ['Display service', () => podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'stop', 'bashkitten-display.service'])],
+            ['media', () => stopMedia(id)], ['display gateway', () => stopGateway(id)],
+          ]);
         }
       }
     }
@@ -416,11 +429,13 @@ async function start(config, job) {
   await installPendingAutostart(await load(id));
   if (info && state.definition !== definition(config)) { await podman(['rm',containerName(id)],{output:job.output,signal:job.signal}); info=null; }
   await saveState(id,{state:'starting',lastError:null});
-  await job.phase('Starting the private display and guest services');
+  const startDisplay = displayAutostart(config);
+  await job.phase(startDisplay ? 'Starting the private display and guest services' : 'Starting the guest Agent');
   let gateway;
   try {
     job.check();
-    gateway=await startGateway(config,job);
+    if (startDisplay) gateway=await startGateway(config,job);
+    else { await stopMedia(id); await stopGateway(id); job.check(); }
     await writeDisplayConfig(config,gateway);
     await writeJson(path.join(p.settings,'integration.json'),{schema:1,media:Object.fromEntries(Object.entries(config.integrations.media).map(([k,v])=>[k,v.enabled]))});
     if (!info) {
@@ -441,24 +456,25 @@ async function start(config, job) {
       job.check();
       try {
         const status=await guestCall(id,'status');
-        const browser=await readJson(path.join(p.exchange,'agent/guest-browser-status.json'),null);
+        const browser=startDisplay ? await readJson(path.join(p.exchange,'agent/guest-browser-status.json'),null) : null;
         browserError=browser?.error;
-        if (status.web?.status==='running' && browser?.connected) {
-          await startMedia(config, await inspect(id),job);
-          await saveState(id,{state:'running',lastError:null,display:gateway.mode,displayFallbackReason:gateway.fallbackReason||null}); return;
+        if (status.web?.status==='running' && (!startDisplay || browser?.connected)) {
+          if (startDisplay) await startMedia(config, await inspect(id),job);
+          await saveState(id,{state:'running',lastError:null,display:gateway?.mode ?? null,displayFallbackReason:gateway?.fallbackReason||null}); return;
         }
         if (status.web?.error) throw Error(status.web.error);
       } catch (error) { if (!['ENOENT','ECONNREFUSED','ECONNRESET'].includes(error.code)) throw error; }
       const live=await inspect(id); if (!live?.State?.Running) throw Error('Guest stopped during startup; inspect the guest service log');
       await sleep(250);
     }
-    throw Error(browserError || 'Guest BashKitten backend and browser controls did not become ready within 60 seconds');
+    throw Error(browserError || (startDisplay ? 'Guest BashKitten backend and browser controls did not become ready within 60 seconds' : 'Guest BashKitten Agent did not become ready within 60 seconds'));
   } catch (error) {
     // A failed Start cannot leave a partially ready desktop appearing On.
-    await stopMedia(id);
-    await podman(['stop','--ignore',containerName(id)],{allowFailure:true});
-    await stopGateway(id);
-    throw error;
+    await failAfterCleanup(error, [
+      ['media', () => stopMedia(id)],
+      ['container', () => podman(['stop','--ignore',containerName(id)])],
+      ['display gateway', () => stopGateway(id)],
+    ]);
   }
 }
 async function stop(id,job,{deleting=false}={}) {

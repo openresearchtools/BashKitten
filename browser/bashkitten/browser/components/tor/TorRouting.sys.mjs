@@ -299,7 +299,7 @@ export const TorRouting = {
       return;
     }
     this._noticeTabs.add(tab);
-    const win = tab.ownerGlobal;
+    const win = tab.ownerDocument.defaultView;
     const label = await win.document.l10n.formatValue("bashkitten-tor-privacy-notice");
     if (win.closed || tab.closing || !tab.isConnected || !this.isTorTab(tab)) {
       return;

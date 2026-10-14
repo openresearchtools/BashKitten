@@ -80,7 +80,7 @@ export async function renderSection({ root, call, info, signal }) {
     if (active()) await call('settings-close', {});
   });
 
-  let name, startup, config, containerfile, helperFields, helperError, displayCommand;
+  let name, startup, config, containerfile, helperFields, helperError, displayCommand, displayStartup;
   const apply = change => {
     const value = JSON.parse(config.value); change(value); config.value = JSON.stringify(value, null, 2);
     helperError.textContent = '';
@@ -151,12 +151,15 @@ export async function renderSection({ root, call, info, signal }) {
     containerfile = field(advanced, 'Containerfile', state.containerfileText, { multiline: true, rows: 12 });
     displayCommand = field(editor, 'Display launch command', state.config.display.command ?? 'exec /usr/bin/xfce4-session', { multiline: true, rows: 3, spellcheck: 'false' });
     displayCommand.oninput = () => { try { apply(value => { value.display.command = displayCommand.value; }); } catch (error) { helperError.textContent = error.message; } };
+    displayStartup = check(editor, 'Start Display with this container', state.config.display.startup === true);
+    displayStartup.onchange = () => { try { apply(value => { value.display.startup = displayStartup.checked; }); } catch (error) { helperError.textContent = error.message; } };
+    editor.append(node(root, 'p', 'This choice applies the next time the container starts. With it off, the Agent starts without a desktop; you can turn Display on from its tab.'));
     editor.append(node(root, 'p', 'Save changes, then turn Display off and on to use this command. Turning Display off closes desktop apps; the container and agent keep running.'));
     const helperSection = node(root, 'details'); helperSection.append(node(root, 'summary', 'Display, ports and media'));
     helperFields = node(root, 'div'); helperError = node(root, 'p'); helperError.setAttribute('role', 'alert'); helperSection.append(helperFields, helperError);
     action(helperSection, 'Refresh devices', loadDevices);
     helperSection.append(node(root, 'p', 'These helpers edit the configuration below. Save changes, then stop/start or restart to apply changed launch settings.'));
-    config.onchange = () => { try { displayCommand.value = JSON.parse(config.value).display.command ?? 'exec /usr/bin/xfce4-session'; helpers(); } catch (error) { helperError.textContent = error.message; } };
+    config.onchange = () => { try { const value = JSON.parse(config.value); displayCommand.value = value.display.command ?? 'exec /usr/bin/xfce4-session'; displayStartup.checked = value.display.startup === true; helpers(); } catch (error) { helperError.textContent = error.message; } };
     editor.append(helperSection, advanced);
     controls.set('save', action(editor, 'Save changes', async () => {
       const value = JSON.parse(config.value); value.name = name.value; value.autostart = startup.checked;

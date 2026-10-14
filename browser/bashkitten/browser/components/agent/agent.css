@@ -83,6 +83,20 @@
 .bashkitten-agent-dialog pre, .bashkitten-agent-dialog textarea { white-space: pre-wrap; overflow-wrap: anywhere; width: 100%; box-sizing: border-box; }
 .bashkitten-agent-dialog a { color: LinkText; }
 .bashkitten-agent-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+.bashkitten-agent-dialog.native-project-dialog { box-sizing: border-box; width: min(420px, calc(100vw - 32px)); height: auto; min-height: 0; max-height: calc(100dvh - 32px); padding: 20px; }
+.native-project-dialog .native-project-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.native-project-dialog .native-project-header h2 { flex: 1; margin: 0; }
+.native-project-dialog .native-project-close { width: 32px; height: 32px; padding: 0; border-color: transparent; background: transparent; font-size: 24px; line-height: 1; }
+.native-project-dialog .native-project-form { display: grid; min-width: 0; gap: 12px; }
+.native-project-dialog .native-project-form > input { width: 100%; min-width: 0; box-sizing: border-box; }
+.native-project-dialog .native-project-form > [role="alert"] { margin: 0; overflow-wrap: anywhere; }
+.native-project-dialog .native-project-form > [role="alert"]:empty { display: none; }
+.native-project-dialog .native-project-folder { display: flex; align-items: center; gap: 9px; min-width: 0; text-align: start; }
+.native-project-dialog .native-project-folder > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.native-project-dialog .native-project-folder svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.native-project-dialog .native-project-folders { display: grid; max-height: min(220px, 35dvh); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--dialog-line); border-radius: 12px; padding: 4px; }
+.native-project-dialog .native-project-folders > button { min-width: 0; border-color: transparent; border-radius: 8px; background: transparent; text-align: start; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.native-project-dialog .native-project-folders > button:hover { background: var(--dialog-button); }
 @media (forced-colors: active) { .bashkitten-agent-dialog input[type="checkbox"] { appearance: auto; width: 18px; } }
 #browser { position: relative; }
 :root[bashkitten-agent-layout="full"] #bashkitten-agent-pane { position: absolute; inset: 0; z-index: 5; width: 100%; max-width: none; border: 0; }

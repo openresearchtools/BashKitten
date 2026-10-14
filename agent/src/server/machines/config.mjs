@@ -20,6 +20,7 @@ export const daemonSocket = path.join(dataDir, 'run', 'machines.sock');
 export const containerName = id => 'bashkitten-' + validId(id).replaceAll('-', '');
 export const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const displayCommand = config => config.display.command ?? 'exec /usr/bin/xfce4-session';
+export const displayAutostart = config => config.display?.startup === true;
 export const userNamespace = '--userns=keep-id:uid=1000,gid=1000';
 export const machineLabel = 'org.openresearchtools.bashkitten.machine-id';
 export function validId(id) {
@@ -93,7 +94,7 @@ export async function defaults(id, name) {
       '--mount', mount(p.guestDisplay, '/run/bashkitten-display'),
       '--rootfs', p.anchor, '/usr/lib/bashkitten/machines/bin/bashkitten-init',
     ] },
-    display: { mode: 'auto', renderNode: null, formats: [], command: 'exec /usr/bin/xfce4-session' },
+    display: { mode: 'auto', renderNode: null, formats: [], command: 'exec /usr/bin/xfce4-session', startup: true },
     integrations: { ports: [], gpus: [], media: Object.fromEntries(['guest_audio_output', 'host_microphone', 'host_camera'].map(name => [name, { enabled: false, node: null }])) },
   };
 }
@@ -117,6 +118,7 @@ export function validate(config, id) {
   }
   if (!['auto', 'software'].includes(config.display?.mode) || config.display.renderNode !== null && !/^\/dev\/dri\/renderD[0-9]+$/.test(config.display.renderNode || '')) throw Error('Choose auto/software display and an actual DRM render node');
   if (typeof displayCommand(config) !== 'string' || !displayCommand(config).trim() || displayCommand(config).includes('\0')) throw Error('Enter a valid Display launch command');
+  if (config.display.startup !== undefined && typeof config.display.startup !== 'boolean') throw Error('Choose whether Display starts with this container');
   if (!Array.isArray(config.display.formats) || config.display.formats.some(f => !Number.isInteger(f.fourcc) || f.fourcc < 0 || f.fourcc > 0xffffffff || !/^[0-9]+$/.test(String(f.modifier)))) throw Error('Invalid native display format list');
   if (!Array.isArray(config.integrations?.ports) || typeof config.integrations.media !== 'object') throw Error('Invalid integration settings');
   if (!Array.isArray(config.integrations.gpus) || config.integrations.gpus.some(gpu => typeof gpu !== 'string' || !/^(all|[0-9]+|GPU-[A-Za-z0-9-]+)$/.test(gpu))) throw Error('NVIDIA GPU choices must be all, a numeric index or GPU UUID');
@@ -130,7 +132,7 @@ export function validate(config, id) {
   return config;
 }
 export function definition(config) {
-  const { command, ...display } = config.display || {};
+  const { command, startup, ...display } = config.display || {};
   return digest({ launch: config.launch, display, integrations: config.integrations });
 }
 export async function prepareRuntime(id) {

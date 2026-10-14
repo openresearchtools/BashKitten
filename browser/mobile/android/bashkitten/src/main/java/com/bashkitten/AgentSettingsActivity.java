@@ -83,6 +83,12 @@ public final class AgentSettingsActivity extends ProductActivity {
             @Override public void onCrash(GeckoSession source) { finish(); }
             @Override public void onKill(GeckoSession source) { finish(); }
         });
+        session.setPromptDelegate(new GeckoSession.PromptDelegate() {
+            @Override public GeckoResult<PromptResponse> onChoicePrompt(GeckoSession source, ChoicePrompt prompt) {
+                if (source != session || !active || closed) return GeckoResult.fromValue(prompt.dismiss());
+                return AgentChoicePrompt.show(AgentSettingsActivity.this, prompt);
+            }
+        });
         if (section.equals("telephone") || section.equals("notifications") || section.equals("phone-use")) {
             phone = new PhoneSettingsAdapter(this, this::event);
             phone.setOpenVoiceSettings(() -> open(this, "localai"));

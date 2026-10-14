@@ -215,17 +215,27 @@ export class NativeSidecar {
       this.button("Remove grouping", "Remove project; keep chats", async () => { if (!Services.prompt.confirm(this.host.win, "Remove project?", "Keep its chats directly under this backend?")) return; await request("project-remove", { id: project.id }); dialog.close(); await this.refreshChats(); }));
   }
   async projectPicker() {
-    const backend = this.selected(), { dialog, content } = this.host.dialog("Create project"), name = this.node("input", { placeholder: "Project name", "aria-label": "Project name" }), location = this.node("p"), folders = this.node("div"), error = this.node("p", { role: "alert" });
+    const backend = this.selected(), { dialog, content, actions } = this.host.dialog("Create project"), name = this.node("input", { placeholder: "Project name", "aria-label": "Project name" }), location = this.node("span", {}, "Loading folder…"), folders = this.node("div", { class: "native-project-folders", hidden: "", "aria-label": "Folders" }), error = this.node("p", { role: "alert" });
     const requestId = Services.uuid.generateUUID().toString(), browser = this.host.activeBrowser, global = browser?.browsingContext.currentWindowGlobal;
+    dialog.classList.add("native-project-dialog"); content.className = "native-project-form";
+    const header = this.node("div", { class: "native-project-header" }), heading = dialog.querySelector("h2"), close = actions.querySelector("button");
+    heading.id = "project-title-" + requestId; dialog.setAttribute("aria-labelledby", heading.id);
+    close.textContent = "×"; close.className = "native-project-close"; close.setAttribute("aria-label", "Close Create project"); close.title = "Close";
+    header.append(heading, close); dialog.prepend(header); actions.remove();
+    folders.id = "project-folders-" + requestId;
+    const folderPicker = this.button("", "Choose project folder", () => { folders.hidden = !folders.hidden; folderPicker.setAttribute("aria-expanded", String(!folders.hidden)); });
+    folderPicker.className = "native-project-folder"; folderPicker.setAttribute("aria-expanded", "false"); folderPicker.setAttribute("aria-controls", folders.id);
+    folderPicker.append(this.icon("folder"), location);
     const current = () => dialog.open && backend === this.selected() && browser === this.host.activeBrowser && global === browser?.browsingContext.currentWindowGlobal;
     dialog.addEventListener("close", () => { global?.getActor("BashKittenAgent").sendQuery("Navigation", { action: "folders-cancel", value: { requestId } }).catch(() => {}); }, { once: true });
-    let selected, generation = 0; content.append(name, location, folders, error);
+    let selected, generation = 0; content.append(name, folderPicker, folders, error);
     const load = async path => { if (!current()) throw new Error("The selected backend changed."); const epoch = ++generation; const result = await this.navigation("folders", { path, requestId }); if (!current() || epoch !== generation) return;
-      selected = result.path; location.textContent = result.displayPath; folders.replaceChildren();
+      selected = result.path; location.textContent = result.displayPath; folderPicker.title = result.displayPath; folderPicker.setAttribute("aria-label", "Project folder: " + result.displayPath); folders.replaceChildren();
       if (result.parent) folders.append(this.button("↑ Parent", "Parent folder", () => load(result.parent)));
       for (const folder of result.folders) folders.append(this.button(folder.name, folder.name, () => load(folder.path)));
     };
     content.append(this.button("Create", "Create project in selected folder", async () => { try { if (!selected || !current()) throw new Error("Choose a folder on this backend."); await this.navigation("project-create", { name: name.value, cwd: selected }); dialog.close(); await this.refreshChats(); } catch (e) { error.textContent = e.message; } }));
+    name.focus();
     try { await load("~"); } catch (e) { error.textContent = e.message; }
   }
   remoteActions(remote) {

@@ -54,7 +54,10 @@ export function autostartController({ control, request, backend, current }) {
     let catalogue = [];
     await add("machines", "Containers", "Containers", async () => {
       catalogue = await machines();
-      return catalogue.map(machine => entry(`machine:${machine.id}`, machine.name, "Containers", machine.autostart === true, "Start this container and its Agent and desktop in the background."));
+      return catalogue.flatMap(machine => [
+        entry(`machine:${machine.id}`, machine.name, "Containers", machine.autostart === true, "Start this container and its Agent in the background."),
+        entry(`display:${machine.id}`, `Display — ${machine.name}`, "Containers", machine.displayAutostart === true, "Start its desktop when this container starts, without opening a Display tab."),
+      ]);
     });
     await add("remotes", "Saved connections", "Remote connections", async () => (await AgentRemotes.list()).map(remote =>
       entry(`remote:${remote.id}`, remote.name, "Remote connections", remote.autostart, "Connect through its saved encrypted route. Sign-in may still be required.")));
@@ -101,10 +104,13 @@ export function autostartController({ control, request, backend, current }) {
     if (id === "login") { await setLoginAutostart(enabled); return { enabled }; }
     if (id === "local") return setLocalAutostart(enabled);
     if (id.startsWith("remote:")) return AgentRemotes.setAutostart(id.slice(7), enabled);
-    if (id.startsWith("machine:")) {
+    if (id.startsWith("machine:") || id.startsWith("display:")) {
       const target = await environment(id.slice(8));
       const saved = await control("machines.get", { id: target.id }); check();
-      return control("machines.save", { id: target.id, config: { ...saved.config, autostart: enabled } });
+      const config = id.startsWith("display:")
+        ? { ...saved.config, display: { ...saved.config.display, startup: enabled } }
+        : { ...saved.config, autostart: enabled };
+      return control("machines.save", { id: target.id, config });
     }
     if (!["local", "machine"].includes(backend.kind)) throw new Error("Configure services on their owning device.");
     if (id.startsWith("engine:")) {
