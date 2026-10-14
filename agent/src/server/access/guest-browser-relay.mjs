@@ -63,7 +63,9 @@ async function run(){
       const current=active?.link||candidate;
       if(current?.credential===next.credential&&current.socket===next.socket)return;
       candidate=next;revision++;active?.abort.abort();wake?.();
-    }).catch(()=>{});
+    }).catch(async error=>{
+      if(!active&&!shutdown.signal.aborted)await writeJson(file,{connected:false,pid:registration.browserPid,error:error.message||'Guest browser authorization failed'});
+    });
     return refreshTask;
   }
   watcher=fs.watch(dataDir,(_event,name)=>{

@@ -39,6 +39,16 @@ its own D-Bus and freshly verified desktop context. Explicit Off is honored if
 the independent Agent owner restarts. Failed starts report their error and
 do not start a replacement renderer or desktop automatically.
 
+The independent `display.startup` choice in each machine's `launch.json` is
+shared by its container settings and the unified Autostart page. It decides
+whether the desktop starts in the background on the next container start;
+saving it never starts or stops the current Display. With the choice Off,
+container readiness depends only on its Agent, with no gateway, guest browser
+or desktop media required. The Display tab can start those later. New machines
+write `startup: true`; an absent choice is Off and is not silently rewritten.
+Toolbar On/Off changes the current service state without changing this policy.
+Neither the command nor the startup choice changes the OCI container definition.
+
 The small Gecko adapter is the XPCOM component in `native/`, its module/jar
 registration and the product `moz.build` entry. Its native `VideoFrameContainer`
 feeds Gecko's existing asynchronous ImageContainer/compositor. The HTML video

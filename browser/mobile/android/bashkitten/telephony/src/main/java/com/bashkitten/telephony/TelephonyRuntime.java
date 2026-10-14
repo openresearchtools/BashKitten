@@ -342,6 +342,7 @@ public final class TelephonyRuntime {
             for (String id : new ArrayList<>(keys(events))) { JSONObject item = events.optJSONObject(id); if (backendId.equals(item.optString("backendId")) && (sessionId == null || sessionId.equals(item.optString("sessionId")))) { finishEvent(id,"withdrawn"); PhoneNotifications.cancel(context,id); } }
             for (KittenConnection call : new ArrayList<>(calls.values())) {
                 if (!Objects.equals(call.backend, backendId)) continue;
+                call.waitingEvents.removeIf(item -> sessionId == null || sessionId.equals(item.optString("sessionId")));
                 if (!call.answered && call.eventId != null && event(call.eventId) == null) end(call, DisconnectCause.CANCELED);
                 else if (call.flow != null) call.flow.withdraw(backendId, sessionId);
             }
@@ -356,6 +357,7 @@ public final class TelephonyRuntime {
             if (stored != null) { put(stored,"questionStatus",status); save(); }
             PhoneNotifications.cancel(context,eventId);
             for (KittenConnection call : new ArrayList<>(calls.values())) {
+                call.waitingEvents.removeIf(event -> eventId.equals(event.optString("eventId")));
                 if (!call.answered && eventId.equals(call.eventId)) end(call,DisconnectCause.CANCELED);
                 else if (call.flow != null) call.flow.resolved(eventId,status);
             }

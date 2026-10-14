@@ -42,7 +42,7 @@ export const BashKittenDisplay = {
     const browser = tab.linkedBrowser;
     browser.setAttribute("bashkitten-native-display", environment.id);
     browser.setAttribute("bashkitten-protected", "true");
-    records.set(browser, { id: environment.id, name: environment.name,
+    records.set(browser, { window, id: environment.id, name: environment.name,
       socket: environment.presenterSocket, executable: executable.path, clipboard: controls.clipboard,
       state: environment.state, running: environment.running, error: environment.error,
       service: controls.service, interactive: true, controller: null });
@@ -90,7 +90,7 @@ export const BashKittenDisplay = {
     record.state = state;
     record.interactive = interactive;
     record.running = running;
-    const window = document.defaultView.docShell.chromeEventHandler.ownerGlobal;
+    const { window } = record;
     window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
   },
   async service(document, action) {
