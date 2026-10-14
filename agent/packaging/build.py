@@ -154,7 +154,7 @@ def install_machines(args, app, revision, version):
             with tempfile.TemporaryDirectory(prefix='guest-notices-', dir=app.parent) as extracted:
                 run(['dpkg-deb', '-x', str(deb), extracted])
                 notice_root = Path(extracted) / ('usr/share/bashkitten-os' if name == 'bashkitten-os'
-                                                else 'usr/share/doc/bashkitten-machines-guest')
+                                                else 'usr/share/bashkitten-machines-guest')
                 notices = sorted(p for p in notice_root.rglob('*') if p.is_file() and
                                  (re.search(r'license|licence|copying|copyright|notice', p.name, re.I)))
                 require(notices, 'Missing full guest package license texts: ' + name)

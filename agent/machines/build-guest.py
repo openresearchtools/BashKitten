@@ -46,12 +46,15 @@ def main():
         destination.chmod(0o644 if file.suffix in ['.service','.socket','.mjs'] else 0o755)
     aliases=stage/'usr/local/bin';aliases.mkdir(parents=True)
     for name in ['sudo','sudoedit']:(aliases/name).symlink_to('/usr/lib/bashkitten/machines/bin/bashkitten-sudo')
-    docs=stage/'usr/share/doc/bashkitten-machines-guest';docs.mkdir(parents=True)
+    # Debian slim drops most /usr/share/doc files during installation.
+    docs=stage/'usr/share/bashkitten-machines-guest';docs.mkdir(parents=True)
     shutil.copy2(ROOT/'upstream/buzzard-runtime/LICENSE',docs/'COPYING')
     shutil.copy2(ROOT/'NOTICE',docs/'copyright')
     libc=ROOT/'guest/sudo-bridge/vendor/libc'
     for license in libc.glob('LICENSE*'):shutil.copy2(license,docs/('libc-'+license.name))
     (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/BashKitten','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.189','checksum':'3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2'}},indent=2)+'\n')
+    copyright_dir=stage/'usr/share/doc/bashkitten-machines-guest';copyright_dir.mkdir(parents=True)
+    (copyright_dir/'copyright').symlink_to('../../bashkitten-machines-guest/copyright')
     debian=stage/'DEBIAN';debian.mkdir()
     (debian/'control').write_text(f'''Package: bashkitten-machines-guest
 Version: {args.version}
