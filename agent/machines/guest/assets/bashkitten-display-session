@@ -42,10 +42,14 @@ async def run():
     authority = RUN / 'bashkitten-Xauthority'
     authority.touch(mode=0o600,exist_ok=True)
     await command('/usr/bin/xauth','-f',authority,'add',':0','.',secrets.token_hex(16))
-    env = {**os.environ,'DISPLAY':':0','WAYLAND_DISPLAY':'/run/bashkitten-display/wayland-0',
+    env = {**os.environ,'DISPLAY':':0',
            'XAUTHORITY':str(authority),'BASHKITTEN_EXECUTION_ROLE':'container','BASHKITTEN_MACHINE_ID':machine_id,
            'BASHKITTEN_DATA_DIR':str(DATA),'BASHKITTEN_DESKTOP_CONTEXT':str(CONTEXT),
            'BASHKITTEN_GUEST_STATUS_FILE':str(STATUS),'BASHKITTEN_GUEST_BROWSER':'1','BASHKITTEN_CONTROL_SOCKET':str(agent_run/'guest-browser.sock'),'XDG_SESSION_TYPE':'x11','XDG_CURRENT_DESKTOP':'XFCE'}
+    # This is an X11 desktop. Only its Xwayland server may connect to the
+    # single-client native gateway; applications and activation helpers use :0.
+    for key in ('WAYLAND_DISPLAY','WAYLAND_SOCKET','WAYLAND_DISPLAY_COMPOSITOR'):
+        env.pop(key,None)
     if display.get('software'):
         env['LIBGL_ALWAYS_SOFTWARE']='1'
     generation = display['generation']
@@ -78,7 +82,7 @@ async def run():
         args=['/usr/bin/Xwayland',':0','-geometry',f"{display['width']}x{display['height']}",'-nolisten','tcp','-noreset','-auth',str(authority)]
         if display.get('software'):
             args.append('-shm')
-        x=await launch(*args)
+        x=await launch(*args,child_env={**env,'WAYLAND_DISPLAY':'/run/bashkitten-display/wayland-0'})
         for _ in range(200):
             if x.returncode is not None:
                 raise RuntimeError('Guest Xwayland exited during startup')
