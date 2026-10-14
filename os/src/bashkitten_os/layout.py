@@ -14,7 +14,7 @@ def native_hints(xids):
 class Layout:
     def __init__(self, application):
         self.app=application; self.prefs=settings(); self.screen=Wnck.Screen.get_default()
-        self.pair=None; self.hints={}; self.ratio=.5
+        self.pair=None; self.hints={}; self.ratio=.5; self.restoring=None
         self.loading=set(); self.epoch=0; self.pending=0; self.divider=None; self.targets={}; self.dragging=False
         self.workarea_watch=None;self.workarea_cancel=None
         self.screen.connect('window-opened', self.opened)
@@ -34,7 +34,6 @@ class Layout:
     def watch_workarea(self):
         if self.workarea_cancel:self.workarea_cancel.cancel();self.workarea_cancel=None
         if self.workarea_watch:self.workarea_watch.force_exit();self.workarea_watch=None
-        if not self.managed():return
         # xprop is the stock X11 event client: no polling or X round-trip on GTK.
         self.workarea_watch=Gio.Subprocess.new(['xprop','-spy','-root','_NET_WORKAREA'],Gio.SubprocessFlags.STDOUT_PIPE)
         stream=Gio.DataInputStream.new(self.workarea_watch.get_stdout_pipe())
@@ -43,6 +42,7 @@ class Layout:
             try:line,_=source.read_line_finish(result)
             except GLib.Error:return
             if line is None or cancel.is_cancelled():return
+            self.app.session.wallpaper_workarea(line)
             self.queue()
             source.read_line_async(GLib.PRIORITY_DEFAULT,cancel,changed)
         stream.read_line_async(GLib.PRIORITY_DEFAULT,cancel,changed)
@@ -53,10 +53,10 @@ class Layout:
         self.release(False)
 
     def managed(self): return self.prefs.get_boolean('manage-window-size')
-    def eligible(self, window):
+    def eligible(self, window, allow_minimized=False):
         return bool(window and window.get_window_type()==Wnck.WindowType.NORMAL
             and not window.get_transient() and not window.is_skip_tasklist()
-            and not window.is_pinned() and not window.is_minimized() and not window.is_fullscreen()
+            and not window.is_pinned() and (allow_minimized or not window.is_minimized()) and not window.is_fullscreen()
             and window.get_xid() in self.hints and not self.hints[window.get_xid()]["modal"]
             and (self.hints[window.get_xid()]["minw"] < self.hints[window.get_xid()]["maxw"] or self.hints[window.get_xid()]["minh"] < self.hints[window.get_xid()]["maxh"])
             and (window.get_actions() & Wnck.WindowActions.RESIZE
@@ -86,6 +86,8 @@ class Layout:
         if self.pair and window in self.pair and not self.eligible(window): self.release(self.managed())
         elif self.managed() and self.eligible(window): self.queue()
     def closed(self, _, window):
+        if self.restoring and window.get_xid() in self.restoring[0]:
+            self.epoch+=1;self.cancel_restore()
         if self.pair and window in self.pair:
             survivor=next((w for w in self.pair if w!=window),None)
             self.release(False)
@@ -107,6 +109,7 @@ class Layout:
             self.queue()
 
     def release(self, maximize):
+        self.cancel_restore()
         pair=self.pair; self.pair=None; self.targets={}; self.epoch+=1
         if self.pending:GLib.source_remove(self.pending);self.pending=0
         if self.divider: self.divider.destroy(); self.divider=None
@@ -116,7 +119,12 @@ class Layout:
             survivor=current if current in pair else next((w for w in pair if self.eligible(w)),None)
             if self.eligible(survivor): survivor.maximize()
 
-    def split(self, first, second):
+    def cancel_restore(self):
+        if self.restoring:
+            _,cancel=self.restoring;self.restoring=None;cancel()
+
+    def split(self, first, second, epoch=None):
+        if epoch is not None and epoch!=self.epoch:return
         if not self.managed() or not self.prefs.get_boolean('two-app-mode'):
             raise RuntimeError('Enable Manage window size and Two app mode first')
         by_id={w.get_xid():w for w in self.screen.get_windows()}
@@ -125,11 +133,33 @@ class Layout:
         while pair[0] and pair[0].get_transient() and pair[0].get_xid() not in seen:
             seen.add(pair[0].get_xid());pair[0]=pair[0].get_transient()
         if pair[0]:first=pair[0].get_xid()
-        if first==second or not all(self.eligible(w) for w in pair):
+        if first==second or not self.eligible(pair[0]) or not self.eligible(pair[1],allow_minimized=True):
             raise RuntimeError('Choose two different resizable main windows')
         if pair[0].get_workspace()!=pair[1].get_workspace():
             raise RuntimeError('Both windows must be on the same workplace')
-        epoch=self.epoch
+        if epoch is None:
+            self.cancel_restore();self.epoch+=1;epoch=self.epoch
+        if pair[1].is_minimized():
+            # Taskbar selection asks to open this main window alongside the
+            # current one. Wait for the WM before revalidating/committing a pair.
+            target=pair[1]
+            def cancel():
+                target.disconnect(handler);GLib.source_remove(timeout)
+            def restored(window,*_):
+                if window.is_minimized():return
+                self.cancel_restore()
+                if epoch==self.epoch and self.managed():
+                    try:self.split(first,second,epoch)
+                    except Exception as error:error_dialog(None,error)
+            def expired():
+                self.cancel_restore()
+                if epoch==self.epoch and self.managed():error_dialog(None,'The selected window could not be restored')
+                return False
+            handler=target.connect('state-changed',restored)
+            timeout=GLib.timeout_add(3000,expired)
+            self.restoring=({first,second},cancel)
+            target.unminimize(Gtk.get_current_event_time())
+            return
         def ready(hints,error):
             if epoch!=self.epoch or not self.managed(): return
             if error: error_dialog(None,error); return

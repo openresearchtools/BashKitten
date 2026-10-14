@@ -103,13 +103,32 @@ function validateINI(content) {
 export class LocalAI {
   constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); this.routerTest = new RouterModelTest(); }
   exclusive(action) { const result = this.serial.then(action); this.serial = result.catch(() => {}); return result; }
-  async initialize() {
+  async initialize({ initial, beforeCreate } = {}) {
     requireLocalRuntime(); await privateDir(localAIDir);
-    const config = await readConfiguration();
-    if (!await fs.stat(config.llama.preset).catch(() => null) && config.llama.preset === defaults('llama').preset) {
-      await fs.writeFile(config.llama.preset, `# llama.cpp router presets. Model sections use their real paths.\n[*]\nctx-size = ${defaultContextSize}\n`, { mode: 0o600, flag: 'wx' });
+    const existing = await Promise.all([configFile, path.join(dataDir, 'llama/config.json'), defaults('llama').preset, runtimeDirectory].map(file => fs.stat(file).catch(error => { if (error.code !== 'ENOENT') throw error; return null; })));
+    const fresh = !existing.some(Boolean);
+    const readConfigText = () => fs.readFile(configFile, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+    let before = await readConfigText();
+    let config = await readConfiguration(), conflict = false;
+    const defaultINI = `# llama.cpp router presets. Model sections use their real paths.\n[*]\nctx-size = ${defaultContextSize}\n`;
+    if (initial) {
+      const content = await fs.readFile(initial.ini.file, 'utf8').catch(error => { if (error.code !== 'ENOENT') throw error; return null; });
+      conflict = Boolean(existing[0] && JSON.stringify(config) !== JSON.stringify(initial.config) || content !== null && content !== initial.ini.content || existing[1]);
+      if (!conflict) config = initial.config;
+    } else if (fresh) {
+      for (const engine of ['llama', 'whisper', 'tts']) config[engine].backend = 'cpu';
+      // Enroll before creating either default file, so a crash between these
+      // writes still belongs to this genuinely new setup on the next launch.
+      await beforeCreate?.({ config, ini: { file: config.llama.preset, content: defaultINI } });
     }
+    const prepared = await readConfigText();
+    if (prepared !== before) { config = await readConfiguration(); before = prepared; conflict = true; }
+    if (!await fs.stat(config.llama.preset).catch(() => null) && config.llama.preset === defaults('llama').preset) {
+      await fs.writeFile(config.llama.preset, initial && !conflict ? initial.ini.content : defaultINI, { mode: 0o600, flag: 'wx' });
+    }
+    if (await readConfigText() !== before) { config = await readConfiguration(); conflict = true; }
     await writeJson(configFile, config);
+    return { fresh, conflict };
   }
   async config() { requireLocalRuntime(); return readConfiguration(); }
   async record({ engine, record }) {
@@ -334,6 +353,40 @@ export class LocalAI {
     await this.ini({ file: ini.file, content, revision: ini.revision });
     return this.routerModels({ file: ini.file });
   }); }
+  async modelDevice({ file, revision, name, device }) { return this.exclusive(async () => {
+    const catalogue = await this.routerModels({ file });
+    if (catalogue.revision !== revision) throw Error('The router INI changed. Refresh the model list.');
+    const model = catalogue.models.find(item => item.name === name);
+    if (!model) throw Error('Choose a saved router model');
+    if (device !== 'none' && !catalogue.devices.some(item => item.id === device)) throw Error(catalogue.deviceError || 'This GPU is not available to the selected runtime');
+    const ini = await this.ini({ file: catalogue.file });
+    const content = await updateRouterModel(ini.content, { name, originalName: name, config: { ...model.config,
+      device, gpuLayers: device === 'none' ? 0 : 'all', cacheGpu: device !== 'none' } });
+    await this.ini({ file: ini.file, revision, content });
+    return this.routerModels({ file: ini.file });
+  }); }
+  // A persisted first-run plan can finish an interrupted two-file save only
+  // when each file still matches either its original or its intended content.
+  async firstRunPlan(files) {
+    const config = await this.config(), ini = await this.ini({ file: config.llama.preset });
+    await this.model(files.whisper.model, files.whisper.kind);
+    for (const file of [files.llama.model, files.llama.projector, files.tts.model, files.tts.projector, files.tts.voice]) await fs.access(file);
+    const name = path.basename(files.llama.model).replace(/\.gguf$/i, '');
+    const content = await updateRouterModel(ini.content, { name, config: { model: files.llama.model, projector: files.llama.projector,
+      contextSize: defaultContextSize, device: 'none', gpuLayers: 0, fit: true, idleMinutes: 5, cacheGpu: false, flashAttention: 'auto', extra: '' } });
+    config.llama = configuration('llama', { ...config.llama, backend: 'cpu', startup: true, importToPi: true });
+    config.whisper = configuration('whisper', { ...config.whisper, backend: 'cpu', model: files.whisper.model, modelKind: files.whisper.kind, startup: false, keepRunning: false });
+    config.tts = configuration('tts', { ...config.tts, backend: 'cpu', model: files.tts.model, projector: files.tts.projector, voice: files.tts.voice, modelKind: files.tts.kind });
+    return { config, ini: { file: ini.file, content }, model: routerModelId(name) };
+  }
+  async applyFirstRun(baseline, plan) { return this.exclusive(async () => {
+    const config = await this.config(), ini = await this.ini({ file: plan.ini.file });
+    if (![baseline.config, digest(JSON.stringify(plan.config))].includes(digest(JSON.stringify(config))) ||
+        ![baseline.ini, digest(plan.ini.content)].includes(ini.revision)) throw Error('Local AI settings changed. Your choices were kept; finish setup in Local AI.');
+    if (ini.content !== plan.ini.content) await this.ini({ file: ini.file, revision: ini.revision, content: plan.ini.content });
+    if (JSON.stringify(await this.config()) !== JSON.stringify(config)) throw Error('Local AI settings changed during setup. Your choices were kept.');
+    if (JSON.stringify(config) !== JSON.stringify(plan.config)) await writeJson(configFile, plan.config);
+  }); }
   async testRouterModel({ file, revision, name, owner }) {
     if (this.stopping || this.routerTest.busy) throw Error('Agent is stopping or a model check is still unloading');
     // Register the owner before any I/O so a closing native view can cancel
@@ -380,7 +433,7 @@ export class LocalAI {
     finally { await handle.close(); }
   }
   async check(engine) { return checkRuntime(engine, (await this.config())[engine]); }
-  async useModel({ engine, file, kind, projector = '' }) { return this.exclusive(async () => {
+  async useModel({ engine, file, kind, projector = '', voice = '' }) { return this.exclusive(async () => {
     if (!['llama', 'whisper', 'tts'].includes(engine) || !cleanText(file) || !path.isAbsolute(file)) throw Error('Choose a downloaded model');
     await fs.access(file);
     const saved = await this.config();
@@ -394,7 +447,10 @@ export class LocalAI {
       return { ...await this.status(), selectedModel: name };
     }
     const next = { ...saved[engine], model: file, modelKind: kind };
-    if (engine === 'tts') next.projector = projector;
+    if (engine === 'tts') {
+      next.projector = projector;
+      if (voice) { if (!path.isAbsolute(voice) || !(await fs.stat(voice)).isFile()) throw Error('Choose downloaded reference audio'); await fs.access(voice, fs.constants.R_OK); next.voice = voice; }
+    }
     if (kind === 'parakeet') { next.argv = []; next.keepRunning = false; }
     return this.saveConfiguration({ engine, config: next, revision: digest(JSON.stringify(saved)) });
   }); }

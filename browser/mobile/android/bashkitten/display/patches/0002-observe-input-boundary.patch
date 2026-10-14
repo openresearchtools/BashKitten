@@ -1,7 +1,8 @@
 --- a/lorie/src/main/java/com/termux/x11/LorieView.java
 +++ b/lorie/src/main/java/com/termux/x11/LorieView.java
 @@ -64,6 +64,12 @@
-     private long lastClipboardTimestamp = System.currentTimeMillis();
+-    private long lastClipboardTimestamp = System.currentTimeMillis();
++    private long lastClipboardTimestamp = 0;
      private long mNativeContext;
      private boolean clipboardSyncEnabled = false;
 +    private volatile boolean inputEnabled = true;
@@ -41,7 +42,7 @@
  
      // It is used in native code
      void setClipboardText(String text) {
-+        if (!inputEnabled) return;
++        if (!inputEnabled || !clipboardSyncEnabled) return;
          clipboard.setPrimaryClip(ClipData.newPlainText("X11 clipboard", text));
  
          // Android does not send PrimaryClipChanged event to the window which posted event
@@ -54,7 +55,7 @@
          boolean isText = desc != null && (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) || desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML));
          CharSequence clip = isText ? clipboard.getText() : null;
          String text = clip != null ? clip.toString() : "";
-@@ -624,6 +633,7 @@
+@@ -624,12 +633,12 @@
      }
  
      public void checkForClipboardChange() {
@@ -62,6 +63,12 @@
          ClipDescription desc = clipboard.getPrimaryClipDescription();
          // Below API 26 the clipboard carries no timestamp, so every change looks like a new one.
          long timestamp = desc == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? lastClipboardTimestamp + 1 : desc.getTimestamp();
+         if (clipboardSyncEnabled && desc != null &&
+                 lastClipboardTimestamp < timestamp &&
+-                desc.getMimeTypeCount() == 1 &&
+                 (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
+                         desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML))) {
+             lastClipboardTimestamp = timestamp;
 @@ -642,7 +652,7 @@
      public void onWindowFocusChanged(boolean hasFocus) {
          super.onWindowFocusChanged(hasFocus);

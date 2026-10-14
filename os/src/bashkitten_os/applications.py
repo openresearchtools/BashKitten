@@ -619,6 +619,10 @@ def exec_extracted_appimage(path: Path, directory: Path, apprun: Path, arguments
     environment["APPIMAGE"] = str(path)
     environment["APPDIR"] = str(directory)
     environment["OWD"] = str(path.parent)
+    # AppDir launchers resolve bundled programs by name. Supply the exact path
+    # here as well: some upstream wrappers split their own $0 at spaces.
+    bundled_bin = str(directory / "usr/bin")
+    environment["PATH"] = bundled_bin + (os.pathsep + environment["PATH"] if environment.get("PATH") else "")
     desktop_arguments = extracted_desktop_arguments(directory)
     launch_arguments = [
         argument for argument in desktop_arguments if argument != "--no-sandbox"

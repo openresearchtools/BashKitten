@@ -3560,3 +3560,36 @@ the native session's working directory, never against the browser host. Reuse
 existing preview/conversion and access checks, preserve the original click's
 native authorization, and show actual missing-file or denied-access errors.
 No separate viewer, transcript store or broad file-access exception is needed.
+
+### Usable first-run local models — 14 October 2026
+
+Fresh setup must download the published runtime packages and usable starter
+models, then wire them into the existing Local AI configuration so a nontechnical
+user can use local chat, transcription and speech without assembling commands.
+Use a current supported Qwen vision model around 4B on desktop with a high-quality
+Q4 K quant, and around 2B with plain Q4 on mobile. Include the matching vision
+projector. Prefer GGML/llama.cpp, Unsloth and similarly well-maintained model
+sources, pin exact releases/revisions, and verify artifact identity and upstream
+license terms. After comparing sizes, the user selected **Parakeet 0.6B Q4_0**
+(approximately 356 MB) as the default transcription model on desktop and mobile;
+retain Whisper as a smaller optional choice. Include all required TTS assets,
+including any projector or licensed reference voice. State language coverage
+honestly and retain Parakeet's upstream NVIDIA weight attribution as well as the
+conversion notices.
+
+Start on CPU. Local AI must offer a simple CPU/GPU choice using the existing
+model configuration and supported enumerated runtime devices. Use the same
+CPU-capable GPU runtime where applicable, rather than adding a separate CPU
+package. Preserve the existing model browser, INI editor, context length, device
+selection, launch environment, custom binary and other advanced settings. Users
+can replace all defaults. Report unavailable hardware truthfully.
+
+Downloads and configuration remain nonblocking, with visible progress, failure,
+cancellation and explicit retry/resume. Reuse published runtime packages and the
+existing verified model downloader; do not compile engines on the user's device.
+First-run automation must not overwrite an existing or concurrently edited
+configuration, and cancelled setup must not silently restart. Keep downloaded
+models' full license/attribution records available offline in Notices and clearly
+distinguish runtime-fetched weights from code or assets bundled with the app.
+Verify a genuinely fresh installation as well as preservation of existing custom
+settings in the combined installed acceptance pass.

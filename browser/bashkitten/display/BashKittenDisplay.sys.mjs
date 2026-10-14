@@ -1,5 +1,9 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-const records = new WeakMap();
+import { SessionStore } from "resource:///modules/sessionstore/SessionStore.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
+const records = new WeakMap(), restoring = new WeakMap();
+const TAB_KEY = "bashkitten-display";
+const validId = id => typeof id === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id);
 const URI = "chrome://browser/content/bashkitten/display.xhtml";
 
 /** Native-only adapter: the sidecar supplies a descriptor from its private owner. */
@@ -23,7 +27,7 @@ export const BashKittenDisplay = {
     return JSON.parse(Cc["@bashkitten.org/native-display;1"].createInstance(Ci.nsIBashKittenDisplay).capabilities);
   },
   open(window, environment, controls = {}) {
-    if (!environment || environment.kind !== "container" || !environment.id ||
+    if (!environment || environment.kind !== "container" || !validId(environment.id) ||
         !environment.presenterSocket?.startsWith("/")) {
       throw new Error("Display requires a running local container.");
     }
@@ -33,19 +37,28 @@ export const BashKittenDisplay = {
       window.BashKittenAgent?.browse();
       return existing;
     }
-    const executable = Services.dirsvc.get("GreD", Ci.nsIFile);
-    executable.append("runtime"); executable.append("display"); executable.append("bashkitten-display");
     const tab = window.gBrowser.addTab("about:blank", {
       triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal(),
       forceNotRemote: true, skipAnimation: true,
     });
+    this.own(window, tab, environment, controls);
+    tab.linkedBrowser.loadURI(Services.io.newURI(URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+    window.gBrowser.selectedTab = tab;
+    window.BashKittenAgent?.browse();
+    window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
+    return tab;
+  },
+  own(window, tab, environment, controls, interactive = true) {
+    const executable = Services.dirsvc.get("GreD", Ci.nsIFile);
+    executable.append("runtime"); executable.append("display"); executable.append("bashkitten-display");
     const browser = tab.linkedBrowser;
     browser.setAttribute("bashkitten-native-display", environment.id);
     browser.setAttribute("bashkitten-protected", "true");
-    records.set(browser, { window, id: environment.id, name: environment.name,
+    records.set(browser, { window, tab, id: environment.id, name: environment.name,
       socket: environment.presenterSocket, executable: executable.path, clipboard: controls.clipboard,
       state: environment.state, running: environment.running, error: environment.error,
-      service: controls.service, interactive: true, controller: null });
+      service: controls.service, interactive, controller: null });
+    SessionStore.setCustomTabValue(tab, TAB_KEY, JSON.stringify({ id: environment.id, interactive }));
     tab.label = environment.name;
     const close = () => {
       if (!records.delete(browser)) return;
@@ -63,17 +76,74 @@ export const BashKittenDisplay = {
       if (changedBrowser !== browser || !progress.isTopLevel) return;
       // Home/bookmarks or other native navigation turn this into an ordinary
       // tab. Retire the presenter, its authority and its toolbar state together.
-      if (location.spec !== URI) close();
+      if (location.spec !== URI) {
+        SessionStore.deleteCustomTabValue(tab, TAB_KEY);
+        close();
+      }
       else window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
     } };
     window.gBrowser.addTabsProgressListener(navigation);
     tab.addEventListener("TabClose", close, { once: true });
     window.addEventListener("unload", close, { once: true });
-    browser.loadURI(Services.io.newURI(URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
-    window.gBrowser.selectedTab = tab;
-    window.BashKittenAgent?.browse();
     window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
-    return tab;
+  },
+  async prepare(document) {
+    if (!document.nodePrincipal.isSystemPrincipal || document.documentURI !== URI) throw new Error("Native display owner required.");
+    const browser = document.defaultView.docShell.chromeEventHandler;
+    if (browser.contentDocument !== document) throw new Error("This Display document was replaced.");
+    if (records.has(browser)) return this.record(document);
+    const window = browser.ownerDocument.defaultView, tab = window.gBrowser.getTabForBrowser(browser);
+    let saved;
+    try { saved = JSON.parse(SessionStore.getCustomTabValue(tab, TAB_KEY)); } catch {}
+    if (!saved || !validId(saved.id) || typeof saved.interactive !== "boolean")
+      throw new Error("This saved Display tab has no container identity. Close it and open Display from its container.");
+    const token = {};
+    restoring.get(browser)?.cancel();
+    restoring.set(browser, token);
+    let cancel, timer, pauseTimer;
+    const cancelled = new Promise((_, reject) => { cancel = message => reject(new Error(message)); });
+    token.cancel = () => cancel("This Display restoration was replaced.");
+    const closed = () => cancel("This Display tab was closed.");
+    const check = () => {
+      if (restoring.get(browser) !== token || window.closed || window.BashKittenLifetime?.quitting || tab.closing ||
+          browser.contentDocument !== document || browser.currentURI?.spec !== URI ||
+          !window.gBrowser.tabs.includes(tab)) throw new Error("This Display tab is no longer attached.");
+    };
+    const wait = async task => { const value = await Promise.race([task, cancelled]); check(); return value; };
+    tab.addEventListener("TabClose", closed);
+    document.defaultView.addEventListener("unload", closed);
+    window.addEventListener("unload", closed);
+    timer = setTimeout(() => cancel("Container startup is still in progress. Close and reopen Display when it finishes."), 180000);
+    try {
+      await wait(window.delayedStartupPromise);
+      const host = window.BashKittenAgent;
+      if (!host) throw new Error("Display is unavailable in this browser window.");
+      await wait(host.machineStartupReady);
+      let operation = await wait(host.machineDisplayOperation(saved.id, 0));
+      if (operation.state === "running") {
+        if (!["create", "start", "restart", "retry"].includes(operation.kind)) throw new Error(operation.phase || "The container is stopping.");
+        const id = operation.id;
+        while (operation.state === "running") {
+          await wait(new Promise(resolve => { pauseTimer = setTimeout(resolve, 500); }));
+          operation = await wait(host.machineDisplayOperation(saved.id, operation.cursor));
+          if (operation.id !== id) throw new Error("The container operation changed. Reopen Display to connect again.");
+        }
+        if (operation.state !== "complete") throw new Error(operation.error || "The container did not start.");
+      }
+      const { environment, controls } = await wait(host.machineDisplayDescriptor(saved.id));
+      if (environment.id !== saved.id || environment.kind !== "container" || !environment.presenterSocket?.startsWith("/"))
+        throw new Error("The restored Display owner did not match its container.");
+      const existing = this.tab(window, saved.id);
+      if (existing && existing !== tab) throw new Error("This container’s Display is already open in another tab.");
+      this.own(window, tab, environment, controls, saved.interactive);
+      return this.record(document);
+    } finally {
+      clearTimeout(timer); clearTimeout(pauseTimer);
+      tab.removeEventListener("TabClose", closed);
+      document.defaultView.removeEventListener("unload", closed);
+      window.removeEventListener("unload", closed);
+      if (restoring.get(browser) === token) restoring.delete(browser);
+    }
   },
   async clipboard(document, request) {
     const record = this.record(document);
@@ -88,7 +158,10 @@ export const BashKittenDisplay = {
   update(document, state, interactive, running) {
     const record = this.record(document);
     record.state = state;
-    record.interactive = interactive;
+    if (record.interactive !== interactive) {
+      record.interactive = interactive;
+      SessionStore.setCustomTabValue(record.tab, TAB_KEY, JSON.stringify({ id: record.id, interactive }));
+    }
     record.running = running;
     const { window } = record;
     window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));

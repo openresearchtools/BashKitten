@@ -67,6 +67,7 @@ public final class AgentRuntime {
     private final Map<String, String> remoteLoginAddresses = new HashMap<>();
     private int backgroundOperation;
     private boolean backgroundStartupPending;
+    private final Set<String> firstRunAIPresented = new HashSet<>();
 
     AgentRuntime(BrowserApp app) {
         this.app = app; termux = new TermuxConnection(app); identities = new SecretStore(app, "agent-identities");
@@ -254,6 +255,7 @@ public final class AgentRuntime {
     }
     /** Native hierarchy only: execute in the current enrolled protected document. */
     public void navigation(String action, JSONObject value, Consumer<JSONObject> done, Consumer<String> failure) {
+        if (action.equals("providers") || action.equals("settings")) settingsOpened();
         final GeckoSession target = session; final String backend = selected;
         if (target == null || !state.equals("on")) { failure.accept("Connect to this backend first."); return; }
         try {
@@ -675,7 +677,21 @@ public final class AgentRuntime {
             }
             configure(endpoint, identity, false, 0);
             busy = false; changed();
+            presentFirstRunAI();
         } catch (Exception exception) { fail(exception.getMessage() == null ? "The service identity could not be verified." : exception.getMessage()); }
+    }
+    void settingsOpened() {
+        if (selected.equals("local") && localSessionContext != null) firstRunAIPresented.add(localSessionContext);
+    }
+    private void presentFirstRunAI() {
+        JSONObject setup = status.optJSONObject("localAISetup");
+        Activity current = activity.get();
+        if (!desired || !visible || !selected.equals("local") || localSessionContext == null || firstRunAIPresented.contains(localSessionContext)
+                || setup == null || !Set.of("pending", "running").contains(setup.optString("status"))
+                || current == null || current.isFinishing() || current.isDestroyed() || !current.hasWindowFocus()) return;
+        // The existing settings page owns progress/cancel. No status poll may
+        // reopen it after the user dismisses it or while another page is open.
+        settingsOpened(); AgentSettingsActivity.open(current, "localai");
     }
     private static String verifiedCertificateHash(JSONObject identity) throws Exception {
         String pem = identity.getString("caPem");

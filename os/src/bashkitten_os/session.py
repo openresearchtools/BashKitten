@@ -17,7 +17,7 @@ class Session:
         async_work(self.publish_context,lambda _,e:error_dialog(None,e) if e else None)
         Gio.bus_get(Gio.BusType.SESSION,None,self.bus_ready)
         self.prefs.connect('changed::color-scheme',self.appearance)
-        self.wallpaper_pending=False;self.wallpaper_again=False
+        self.wallpaper_pending=False;self.wallpaper_again=False;self.wallpaper_area=None
         self.wallpaper()
         Gdk.Screen.get_default().connect('size-changed',lambda *_:self.wallpaper())
         Gdk.Screen.get_default().connect('monitors-changed',lambda *_:self.wallpaper())
@@ -94,18 +94,29 @@ class Session:
             if error:error_dialog(None,error)
         async_work(apply,done)
 
+    def wallpaper_workarea(self,line):
+        # The existing X11 property watcher supplies physical pixels without a
+        # synchronous X request on GTK. Our default belongs to workspace zero.
+        try:area=tuple(map(int,bytes(line).partition(b'=')[2].split(b',')))[:4]
+        except ValueError:return
+        if len(area)!=4 or area[2]<=0 or area[3]<=0 or area==self.wallpaper_area:return
+        self.wallpaper_area=area;self.wallpaper()
+
     def wallpaper(self):
+        if self.wallpaper_area is None:return
         if self.wallpaper_pending:self.wallpaper_again=True;return
         self.wallpaper_pending=True
         monitor=Gdk.Display.get_default().get_monitor(0); rect=monitor.get_geometry(); scale=monitor.get_scale_factor()
         size=rect.width*scale,rect.height*scale
+        x,y,width,height=self.wallpaper_area
+        workarea=x-rect.x*scale,y-rect.y*scale,width,height
         def done(_,error):
             self.wallpaper_pending=False
             if error: print('BashKitten default wallpaper:',error, file=__import__('sys').stderr)
             if self.wallpaper_again:
                 self.wallpaper_again=False;self.wallpaper()
         from .defaults import update_wallpaper
-        async_work(lambda:update_wallpaper(size),done)
+        async_work(lambda:update_wallpaper(size,workarea),done)
 
 class GuestIndicator:
     def __init__(self):

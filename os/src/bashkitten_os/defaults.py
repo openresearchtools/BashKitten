@@ -64,7 +64,7 @@ def merge_thunar(config):
             root.append(action)
     ET.indent(tree);atomic(target,ET.tostring(root,encoding='unicode')+'\n')
 
-def update_wallpaper(size):
+def update_wallpaper(size,workarea):
     from gi.repository import GdkPixbuf
     from .scaling import XfconfSetting,xfconf_get,xfconf_set_if_needed
     env=os.environ.copy()
@@ -85,12 +85,17 @@ def update_wallpaper(size):
         selected.append((image,placement,path,mode))
     if not selected:return
     width,height=size
+    x,y,area_width,area_height=workarea
+    left,top=max(0,x),max(0,y)
+    right,bottom=min(width,x+area_width),min(height,y+area_height)
+    if right<=left or bottom<=top:return
     logo=GdkPixbuf.Pixbuf.new_from_file(str(SHARE/'logo.png'))
-    ratio=min(1,width/logo.get_width(),height/logo.get_height())
+    ratio=min(1,(right-left)/logo.get_width(),(bottom-top)/logo.get_height())
     lw,lh=max(1,int(logo.get_width()*ratio)),max(1,int(logo.get_height()*ratio))
     if ratio<1:logo=logo.scale_simple(lw,lh,GdkPixbuf.InterpType.BILINEAR)
     output=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,False,8,width,height);output.fill(0x202225ff)
-    logo.composite(output,(width-lw)//2,(height-lh)//2,lw,lh,(width-lw)//2,(height-lh)//2,1,1,GdkPixbuf.InterpType.BILINEAR,255)
+    offset_x,offset_y=left+(right-left-lw)//2,top+(bottom-top-lh)//2
+    logo.composite(output,offset_x,offset_y,lw,lh,offset_x,offset_y,1,1,GdkPixbuf.InterpType.BILINEAR,255)
     # A user can change image/placement while the off-thread render is running.
     # Revalidate ownership before replacing the managed file or XFConf values.
     selected=[entry for entry in selected if xfconf_get(entry[0],env)==entry[2] and xfconf_get(entry[1],env)==entry[3]]
