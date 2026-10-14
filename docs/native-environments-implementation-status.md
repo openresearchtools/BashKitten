@@ -77,6 +77,14 @@ The complete feature register below remains mandatory. These are scoped
 installed results, not completion of the broader call/audio, permissions,
 startup, rendering, remote, lifecycle or release acceptance obligations.
 
+The composer now allows its controls to wrap instead of compressing every
+dropdown onto one row. Exact production markup and styles rendered in installed
+BashKitten passed 280, 320, 360, 420, 780 and 1280 px viewport checks: two rows on
+the narrow cases, one on the wider cases, and no control outside the viewport.
+Both native Configuration menus already inherit Firefox's bounded scrolling;
+no menu styling was changed. Installed narrow-window menu scrolling remains an
+acceptance check, distinct from this source inspection and composer fixture.
+
 ## Installed combined candidate and acceptance repairs — 14 October 2026
 
 Combined source `e31a4c30ac5df7d226c32d4b915c5923b7e7acfa` was built and
