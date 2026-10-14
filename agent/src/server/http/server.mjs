@@ -447,8 +447,9 @@ async function handler(req, res) {
         const form = await formBody(req);
         try {
           const input = Object.fromEntries(form);
-          const create = async () => { const meta = await createSession(input); await ensureWorker(meta.id); return json(res, { id: meta.id }); };
-          return input.projectId ? await runManagerRequest(req, res, record, create) : await create();
+          const meta = await createSession(input);
+          await ensureWorker(meta.id);
+          return json(res, { id: meta.id });
         }
         finally { await form.cleanup(); }
       }
