@@ -5,6 +5,35 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Phone desktop sizing and Applications list — 15 October 2026
+
+Source `1e9dd194ad` implements the latest layout amendments: a shared vertical
+icon/name list, independent alphabetical and pinned scrolling, fixed bottom
+search, and natural pinned height capped at 60% of list space. Taskbar button
+frames are removed. First-use Termux selects 300% with touch-sized window
+controls; container desktops retain 100%. Existing saved choices and the separate
+Termux:X11 profile are preserved.
+
+Installed ea7c diagnosis exposed two concrete defects: loaded launcher icons
+were scaled twice, and generated 2x/3x XPM themes lacked their format header and
+failed the actual Termux image decoder. Both are repaired in the source above.
+Thirteen preservation checks, six real GTK geometry/filter/activation cases,
+all generated XPM decoding, and an isolated Xfwm rendering check pass. The latter
+reports positive 126-pixel title height and 126-pixel touch-button surfaces at 3x.
+Evidence: `verification/os-first-use-scale-20261015.json` and
+`verification/termux-scale-20261015/`. These component checks do not establish
+installed mobile/desktop acceptance; the next matched package batch is required.
+
+The real Android17 ea7c encrypted remote retry now passes QR import, connection
+password, Authelia username/password/TOTP and consent, and displays the retained
+Xorg guest's actual Agent history through the connected remote. The prior SOCKS
+TTL timeout did not recur. Publisher identity/account remain unchanged and remote
+file-manager permission remains Off. Evidence:
+`verification/remote-route-20261014/android17-ea7c-authenticated-route.json` and
+`xorg-ea7c-publisher-readiness.json` in the same directory. New requests, file
+permission/revocation, phone registration and remaining route cases are still
+open; the retained guest is an older candidate and needs later matched coverage.
+
 ## Installed ea7c candidate and remaining repairs — 15 October 2026
 
 Matched `ea7cf13ac4df05aeb277c1d4dce412da9092286c` development packages are
