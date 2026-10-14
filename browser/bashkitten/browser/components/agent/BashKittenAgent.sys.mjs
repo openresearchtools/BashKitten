@@ -140,7 +140,7 @@ function control(command, data = {}) {
   return localControl(command, data);
 }
 async function localControl(command, data = {}, timeoutMs) {
-  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown", "machines.autostart-status", "machines.autostart-save"];
+  const machineCommands = ["machines.list", "machines.create", "machines.get", "machines.save", "machines.start", "machines.stop", "machines.restart", "machines.retry", "machines.delete", "machines.operation", "machines.cancel", "machines.endpoint", "machines.guest-control", "machines.startup", "machines.display", "machines.display-start", "machines.display-stop", "machines.clipboard", "machines.activations", "machines.media-devices", "machines.browser-shutdown", "machines.autostart-status", "machines.autostart-save"];
   if (![...machineCommands, "autostart-status", "autostart-save", "autostart-startup", "performance-sample", "performance-close", "phone-status", "start", "status", "stop", "browser-shutdown", "remote-pi-import", "share-status", "share-setup", "share-reissue", "share-confirm", "share-cancel", "share-publish", "share-startup", "share-files", "service-status", "service-save", "service-remove", "service-action", "local-session", "project-root", "native-file", "localai-status", "localai-record", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-share", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"].includes(command)) {
     throw new Error("Unknown local Agent operation.");
   }
@@ -268,6 +268,25 @@ class AgentView {
       if (display) lazy.BashKittenDisplay.close(this.win, display.id);
     });
     doc.getElementById("bashkitten-settings-button").before(this.displayToggle);
+    this.displayControls = xul(doc, "hbox", { id: "bashkitten-display-controls", align: "center", flex: "1", hidden: "true" });
+    const displaySwitch = (title, id) => {
+      const label = html(doc, "label", { class: "native-display-switch" });
+      const input = html(doc, "input", { type: "checkbox", id, "aria-label": title });
+      const text = html(doc, "span", {}, title);
+      label.append(input, text); this.displayControls.append(label);
+      return { input, text };
+    };
+    this.displayPower = displaySwitch("Display", "bashkitten-display-power");
+    this.displayPower.input.addEventListener("change", () => this.run(() => lazy.BashKittenDisplay.control(this.win, "enabled", this.displayPower.input.checked)));
+    this.displayInteraction = displaySwitch("Interact", "bashkitten-display-interaction");
+    this.displayInteraction.input.addEventListener("change", () => this.run(() => lazy.BashKittenDisplay.control(this.win, "interactive", this.displayInteraction.input.checked)));
+    const command = html(doc, "button", { type: "button", class: "native-display-command", title: "Edit the desktop launch command" }, "Display command");
+    command.addEventListener("click", () => {
+      const display = lazy.BashKittenDisplay.selected(this.win);
+      if (display) this.run(() => this.openSettings("machine", { backendId: display.id, displayCommand: true }));
+    });
+    this.displayControls.append(command);
+    doc.getElementById("urlbar-container").before(this.displayControls);
     // Move the real Firefox control while its navigation toolbar is collapsed.
     // Keep its original node/listeners/anchor and exact browser-mode placement.
     this.browserMenuControl = doc.getElementById("PanelUI-button");
@@ -394,6 +413,18 @@ class AgentView {
   updateDisplayChrome() {
     const display = this.layout !== "full" && lazy.BashKittenDisplay.selected(this.win);
     this.doc.documentElement.toggleAttribute("bashkitten-display-visible", Boolean(display));
+    if (this.displayControls) {
+      this.displayControls.hidden = !display;
+      if (display) {
+        this.displayPower.input.checked = display.running || display.state === "starting";
+        this.displayPower.input.disabled = ["starting", "stopping"].includes(display.state);
+        this.displayPower.text.textContent = ({ starting: "Starting…", running: "Display on", stopping: "Stopping…", off: "Display off", error: "Display unavailable" })[display.state];
+        this.displayPower.input.title = display.running ? "Turn off Display and close desktop apps. The agent keeps running." : "Start this container’s desktop";
+        this.displayInteraction.input.checked = display.interactive;
+        this.displayInteraction.text.textContent = display.interactive ? "Interact" : "Observe only";
+        this.displayInteraction.input.title = display.interactive ? "Send keyboard and pointer input to the desktop" : "Watch the desktop without sending input";
+      }
+    }
     if (this.displayToggle) {
       this.displayToggle.hidden = !display;
       const label = display ? `Close ${display.name} Display` : "Display";
@@ -469,16 +500,18 @@ class AgentView {
     let revoked = false;
     const current = () => !revoked && !this.off && this.activeBrowser === browser && ownedViews.get(browser) === entry &&
       browser.browsingContext.currentWindowGlobal === global;
+    const query = target.searchParams, filePath = query.get("path");
+    const selected = query.size === 2 && query.getAll("path").length === 1 && filePath &&
+      (query.getAll("root").length === 1 && query.get("root").startsWith("/") && !filePath.startsWith("/") ||
+       query.getAll("session").length === 1 && /^[a-f0-9-]{36}$/.test(query.get("session")));
     if (!entry || !current() || !principal?.isContentPrincipal ||
         principal.originNoSuffix !== target.origin || target.origin !== new URL(entry.connection.url).origin ||
         principal.originAttributes.userContextId !== entry.connection.userContextId ||
         target.username || target.password || target.hash || target.pathname !== "/api/files/previews/content" ||
-        target.searchParams.size !== 2 || target.searchParams.getAll("root").length !== 1 ||
-        !target.searchParams.get("root").startsWith("/") || target.searchParams.getAll("path").length !== 1 ||
-        !target.searchParams.get("path") || target.searchParams.get("path").startsWith("/")) throw new Error("The prepared document is not in the selected Agent.");
+        !selected) throw new Error("The prepared document is not in the selected Agent.");
     const directory = Services.dirsvc.get("TmpD", Ci.nsIFile);
     directory.append("bashkitten-preview"); directory.createUnique(Ci.nsIFile.DIRECTORY_TYPE, 0o700);
-    let identity, tab, download, responseChannel, cleaned = false;
+    let identity, tab, download, responseChannel, cleaned = false, unsupportedPreview = false;
     const cleanup = async () => {
       if (cleaned) return; cleaned = true; revoked = true; documentCleanups.delete(cleanup);
       if (download && !download.stopped) await download.cancel();
@@ -501,7 +534,7 @@ class AgentView {
             channel.setRequestHeader("Origin", target.origin, false);
             channel.setRequestHeader("Accept-Encoding", "identity", false);
             responseChannel = channel;
-          }, allowHttpStatus: (_download, status) => current() && status === 200 },
+          }, allowHttpStatus: (_download, status) => { unsupportedPreview = status === 415; return current() && status === 200; } },
         target: pending,
       });
       // This is a temporary preview transfer, not a user download. Firefox's
@@ -532,6 +565,7 @@ class AgentView {
     } catch (error) {
       try { if (tab && !tab.closing) this.win.gBrowser.removeTab(tab, { animate: false }); }
       finally { await cleanup(); }
+      if (unsupportedPreview) throw new Error("No preview is available for this file. Download the original instead.");
       throw error;
     }
     finally { this.documentTransfers.delete(transfer); Services.obs.removeObserver(revoke, "bashkitten-agent-control-revoke"); }
@@ -1156,7 +1190,7 @@ class AgentView {
       return result;
     };
     const revoke = BashKittenSettings.enroll(browser, {
-      info: { platform: "linux", section, backendName: section === "performance" && backend.kind === "local" ? "This Linux device" : backend.name, local: backend.kind === "local", backendKind: backend.kind, machineId: backend.kind === "machine" ? backend.id : null, operation: Boolean(options.operation), theme: theme(), connectOnly: Boolean(options.connectOnly) },
+      info: { platform: "linux", section, backendName: section === "performance" && backend.kind === "local" ? "This Linux device" : backend.name, local: backend.kind === "local", backendKind: backend.kind, machineId: backend.kind === "machine" ? backend.id : null, operation: Boolean(options.operation), displayCommand: Boolean(options.displayCommand), theme: theme(), connectOnly: Boolean(options.connectOnly) },
       current, call, cleanup, pause, close: () => this.closeConnections(),
     });
     panel.addEventListener("close", () => { revoke(); if (this.settingsBrowser === browser) this.settingsBrowser = null; }, { once: true });
@@ -1171,7 +1205,10 @@ class AgentView {
     const endpoint = await control("machines.display", { id });
     if (this.win.closed || DesktopLifetime.quitting) return;
     return lazy.BashKittenDisplay.open(this.win, { kind: "container", id, name: endpoint.name,
-      presenterSocket: endpoint.presenterSocket }, { clipboard: payload => control("machines.clipboard", { ...payload, id }) });
+      presenterSocket: endpoint.presenterSocket, running: endpoint.running, state: endpoint.state, error: endpoint.error }, {
+      clipboard: payload => control("machines.clipboard", { ...payload, id }),
+      service: action => control(action === "status" ? "machines.display" : `machines.display-${action}`, { id }),
+    });
   }
 
   async shareLocal() { return this.openSettings("share-local", { backendId: "local" }); }

@@ -35,6 +35,7 @@ import org.mozilla.fenix.tabstray.controller.TabInteractionHandler
 import org.mozilla.fenix.tabstray.data.TabsTrayItem
 import org.mozilla.fenix.tabstray.redux.state.TabsTrayState
 import org.mozilla.fenix.theme.FirefoxTheme
+import org.mozilla.fenix.bashkitten.TorPrivacyNotice
 import com.bashkitten.BrowserApp
 import com.bashkitten.OnionActivity
 
@@ -87,6 +88,7 @@ internal fun TorTabsPage(
                 modifier = Modifier.padding(top = 8.dp),
                 style = FirefoxTheme.typography.caption,
             )
+            TorPrivacyNotice(Modifier.padding(top = 8.dp))
             if (sites.isNotEmpty()) {
                 Text("Quick access", modifier = Modifier.padding(top = 12.dp), style = FirefoxTheme.typography.subtitle2)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

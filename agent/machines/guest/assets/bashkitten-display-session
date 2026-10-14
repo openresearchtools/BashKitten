@@ -1,0 +1,145 @@
+#!/usr/bin/python3
+# SPDX-License-Identifier: AGPL-3.0-only
+"""Owned X11 desktop; stopping this unit never stops the independent Pi backend."""
+import asyncio
+import json
+import os
+import secrets
+import signal
+import uuid
+from pathlib import Path
+
+BIN = Path('/usr/lib/bashkitten/machines/bin')
+RUN = Path('/run/user/1000')
+EXCHANGE = Path('/run/bashkitten-host')
+DATA = Path.home() / '.local/share/bashkitten-pi'
+CONTEXT = RUN / 'bashkitten-desktop.json'
+STATUS = RUN / 'bashkitten-guest-status.json'
+DISPLAY_STATUS = EXCHANGE / 'display-status.json'
+
+def write_json(path, value):
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(json.dumps(value) + '\n')
+    temporary.chmod(0o600)
+    temporary.replace(path)
+
+async def command(*args, env=None):
+    child = await asyncio.create_subprocess_exec(*map(str,args), env=env, stdout=asyncio.subprocess.DEVNULL)
+    code = await child.wait()
+    if code:
+        raise RuntimeError(f'{args[0]} exited {code}')
+
+async def run():
+    os.umask(0o077)
+    DATA.mkdir(parents=True,exist_ok=True)
+    agent_run = EXCHANGE / 'agent'
+    display = json.loads(Path('/run/bashkitten-settings/display.json').read_text())
+    # Restarting the independent Agent owner must never revive a Display that
+    # the user explicitly turned off.
+    if not display['enabled']:
+        return
+    machine_id=str(uuid.UUID(display['machineId']))
+    authority = RUN / 'bashkitten-Xauthority'
+    authority.touch(mode=0o600,exist_ok=True)
+    await command('/usr/bin/xauth','-f',authority,'add',':0','.',secrets.token_hex(16))
+    env = {**os.environ,'DISPLAY':':0','WAYLAND_DISPLAY':'/run/bashkitten-display/wayland-0',
+           'XAUTHORITY':str(authority),'BASHKITTEN_EXECUTION_ROLE':'container','BASHKITTEN_MACHINE_ID':machine_id,
+           'BASHKITTEN_DATA_DIR':str(DATA),'BASHKITTEN_DESKTOP_CONTEXT':str(CONTEXT),
+           'BASHKITTEN_GUEST_STATUS_FILE':str(STATUS),'BASHKITTEN_GUEST_BROWSER':'1','BASHKITTEN_CONTROL_SOCKET':str(agent_run/'guest-browser.sock'),'XDG_SESSION_TYPE':'x11','XDG_CURRENT_DESKTOP':'XFCE'}
+    if display.get('software'):
+        env['LIBGL_ALWAYS_SOFTWARE']='1'
+    generation = display['generation']
+    owner_start = Path('/proc/self/stat').read_text().rsplit(') ',1)[1].split()[19]
+    stopped=asyncio.Event()
+    for sig in [signal.SIGTERM,signal.SIGINT]:
+        asyncio.get_running_loop().add_signal_handler(sig,stopped.set)
+    children=[]
+    browser_task=None
+    async def browser_runtime():
+        while not stopped.is_set():
+            # The guest HOME already isolates the product's single profile.
+            # BashKitten deliberately rejects Firefox's profile/instance flags.
+            # Gecko's unattended-start setting prevents previous startup crashes
+            # from opening a modal Troubleshoot Mode prompt before guest control
+            # is ready. Keep the profile and its crash records unchanged.
+            child=await launch('/usr/bin/bashkitten',child_env={**env,'MOZ_DISABLE_AUTO_SAFE_MODE':'1'})
+            code=await child.wait()
+            children.remove(child)
+            if not stopped.is_set():
+                write_json(agent_run/'guest-browser-status.json',{'connected':False,'pid':child.pid,'error':f'Browser exited ({code})'})
+                try: await asyncio.wait_for(stopped.wait(),2)
+                except asyncio.TimeoutError: pass
+    async def launch(*args,child_env=env):
+        child=await asyncio.create_subprocess_exec(*map(str,args),env=child_env)
+        children.append(child)
+        return child
+    failure=None
+    try:
+        args=['/usr/bin/Xwayland',':0','-geometry',f"{display['width']}x{display['height']}",'-nolisten','tcp','-noreset','-auth',str(authority)]
+        if display.get('software'):
+            args.append('-shm')
+        x=await launch(*args)
+        for _ in range(200):
+            if x.returncode is not None:
+                raise RuntimeError('Guest Xwayland exited during startup')
+            check=await asyncio.create_subprocess_exec('/usr/bin/xdpyinfo',env=env,stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
+            if await check.wait()==0:
+                break
+            await asyncio.sleep(.05)
+        else:
+            raise RuntimeError('Guest Xwayland did not become ready')
+        # dbus-run-session started before the owned X11 context existed. Publish
+        # only this guest's display/session values for portal/toolkit activation.
+        activation = ['DISPLAY','XAUTHORITY','XDG_CURRENT_DESKTOP','XDG_SESSION_TYPE',
+                      'BASHKITTEN_EXECUTION_ROLE','BASHKITTEN_MACHINE_ID','BASHKITTEN_DATA_DIR',
+                      'BASHKITTEN_DESKTOP_CONTEXT','BASHKITTEN_GUEST_STATUS_FILE']
+        await command('/usr/bin/dbus-update-activation-environment',*activation,env=env)
+        write_json(CONTEXT,{'generation':generation,'ownerPid':os.getpid(),
+                   'ownerStartTime':owner_start,
+                   'environment':{key:env[key] for key in ['DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS',
+                       'XDG_RUNTIME_DIR','XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME'] if env.get(key)}})
+        for binary in ['/usr/bin/pipewire','/usr/bin/pipewire-pulse','/usr/bin/wireplumber']:
+            await launch(binary)
+        integration=json.loads(Path('/run/bashkitten-settings/integration.json').read_text())
+        if any(integration.get('media',{}).values()):
+            await launch(BIN/'bashkitten-integration-agent')
+        desktop=await launch('/bin/sh','-lc',display['command'])
+        write_json(DISPLAY_STATUS,{'generation':generation,'running':True,'error':None})
+        browser_task=asyncio.create_task(browser_runtime())
+        stop_task=asyncio.create_task(stopped.wait())
+        desktop_task=asyncio.create_task(desktop.wait())
+        x_task=asyncio.create_task(x.wait())
+        # Ending a desktop session leaves the container and its Agent alone.
+        done,_=await asyncio.wait([stop_task,x_task,desktop_task],return_when=asyncio.FIRST_COMPLETED)
+        if x_task in done and stop_task not in done:
+            raise RuntimeError('Guest Xwayland stopped')
+        if desktop_task in done and stop_task not in done:
+            raise RuntimeError(f'Desktop command exited ({desktop.returncode})')
+    except Exception as error:
+        failure=str(error)
+        raise
+    finally:
+        stopped.set()
+        if browser_task is not None:
+            browser_task.cancel()
+            await asyncio.gather(browser_task,return_exceptions=True)
+        for child in reversed(children):
+            if child.returncode is None:
+                child.terminate()
+        for child in children:
+            try:
+                await asyncio.wait_for(child.wait(),5)
+            except asyncio.TimeoutError:
+                child.kill()
+                await child.wait()
+        try:
+            context=json.loads(CONTEXT.read_text())
+            if context.get('generation') == generation and context.get('ownerPid') == os.getpid():
+                CONTEXT.unlink()
+        except FileNotFoundError:
+            pass
+        write_json(DISPLAY_STATUS,{'generation':generation,'running':False,'error':failure})
+        write_json(agent_run/'guest-browser-status.json',{'connected':False,'error':'Display is off'})
+
+if __name__=='__main__':
+    asyncio.run(run())

@@ -104,9 +104,9 @@ async function run(job) {
       abort.signal.throwIfAborted();
       await renderPreview({ kind, name: job.name, workbook }, job.output);
     } else {
-      const text = decodePreviewText(await fs.readFile(input));
+      const original = await fs.readFile(input), text = decodePreviewText(original);
       if (text === null) throw Error('This file is not supported text; use Download');
-      await renderPreview({ kind, name: job.name, text }, job.output);
+      await renderPreview({ kind, name: job.name, text, original }, job.output);
     }
     abort.signal.throwIfAborted();
   } finally {

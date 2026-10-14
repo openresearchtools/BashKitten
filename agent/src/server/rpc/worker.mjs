@@ -99,9 +99,9 @@ async function reportCompleted(entryId, chatId = id, session = meta.piSessionId)
   return reportWork;
 }
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
-function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message) } : e); }
+function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questionOwner.state.records) } : e); }
 function status() { return { stopGeneration: questionOwner.state.generation, questions: questionOwner.list(), runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext, modelSelection: { model: meta.model, thinking: meta.thinking },
-  steeringMessages: queue.filter(q => q.kind === 'steer').map(queueItem), queuedMessages: queue.filter(q => q.kind !== 'steer').map(queueItem) }; }
+  steeringMessages: queue.filter(q => q.kind === 'steer').map(item => queueItem(item, questionOwner.state.records)), queuedMessages: queue.filter(q => q.kind !== 'steer').map(item => queueItem(item, questionOwner.state.records)) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
 function emit(event, remember = true) {
   if (remember) events.push(event);
@@ -238,7 +238,7 @@ async function launch() {
       return;
     }
     const translated = translateEvent(event);
-    if (translated?.type === 'message') translated.message = displayMessage(meta, translated.message);
+    if (translated?.type === 'message') translated.message = displayMessage(meta, translated.message, questionOwner.state.records);
     if (translated) emit(translated);
   });
   rpc.on('exit', () => {
@@ -400,9 +400,12 @@ async function handle(req, res) {
     }
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
-      const pending = status();
+      const pending = status(), stoppedItems = new Set(queue.map(item => item.id));
       await questionOwner.stop();
-      await rpc.command('clear_queue'); queue = []; await checkpoint();
+      await rpc.command('clear_queue');
+      // A peer/result arriving while Stop saves its barrier belongs to the
+      // next held queue, not the earlier drafts returned to this caller.
+      queue = queue.filter(item => !stoppedItems.has(item.id)); await checkpoint();
       await rpc.command('abort'); busy = compacting = false;
       await refresh(); events = []; emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
       return json(res, { data: pending });
@@ -436,13 +439,14 @@ async function handle(req, res) {
       if (req.url === '/message') {
         const authorizedPhone = !value.phoneDelivery || await validatePhoneDelivery(id, value.phoneAuthorization);
         const stalePhone = !authorizedPhone || requestGeneration !== questionOwner.state.generation || (value.phoneDelivery && value.stopGeneration !== questionOwner.state.generation);
-        if (!stalePhone) { await questionOwner.resume(requestGeneration); await applyPending(); }
+        const stoppedAgent = value.agentSource?.id && questionOwner.state.stopped && !value.agentResume;
+        if (!stalePhone && !stoppedAgent) { await questionOwner.resume(requestGeneration); await applyPending(); }
         meta.messages ||= [];
         if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { held: Boolean(queue.find(item => item.agentDelivery === value.agentDelivery)?.held), data: status() };
         meta.messages.push({ text: value.text, wire: value.wire, attachments: value.attachments, agentSource: value.agentSource, agentDelivery: value.agentDelivery });
         const item = { ...value, ownerGeneration: requestGeneration, id: randomUUID(), kind: value.kind || 'queue' };
         queue.push(item);
-        if (stalePhone) { item.held = item.recovered = true; await checkpoint(); await writeMeta(meta); queueChanged(); return { held: true, data: status() }; }
+        if (stalePhone || stoppedAgent) { item.held = item.recovered = true; await checkpoint(); await writeMeta(meta); queueChanged(); return { held: true, data: status() }; }
         try { await checkpoint(); await writeMeta(meta); await send(item); } catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
         return { held: Boolean(item.held), data: status() };
       }

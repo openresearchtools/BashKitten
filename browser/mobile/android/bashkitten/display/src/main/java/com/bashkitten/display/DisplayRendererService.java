@@ -25,7 +25,7 @@ public final class DisplayRendererService extends Service {
     }
     private final IDisplayRenderer.Stub binder = new IDisplayRenderer.Stub() {
         public void attach(long id, IBinder token, int displayId, int width, int height,
-                           Configuration configuration, ParcelFileDescriptor connection, IDisplayClient callback) {
+                           Configuration configuration, ParcelFileDescriptor connection, boolean interactive, IDisplayClient callback) {
             requireOwner();
             work.post(() -> {
                 release(); generation = id; client = callback;
@@ -40,6 +40,7 @@ public final class DisplayRendererService extends Service {
                     host = new LorieHost(window, prefs, () -> {
                         try { if (client != null) client.close(generation); } catch (RemoteException ignored) {}
                     }, connected -> state(connected, connected ? "" : "Desktop connection closed. Reopen Display to attach again."));
+                    host.interactive(interactive);
                     surface = new SurfaceControlViewHost(window, display, token);
                     surface.setView(host.content(), width, height);
                     host.getLorieView().setContentInsets(0, 0, 0, 0);
@@ -64,6 +65,9 @@ public final class DisplayRendererService extends Service {
         }
         public void focus(long id, boolean focused) {
             requireOwner(); work.post(() -> { if (id == generation && host != null) host.focus(focused); });
+        }
+        public void interactive(long id, boolean enabled) {
+            requireOwner(); work.post(() -> { if (id == generation && host != null) host.interactive(enabled); });
         }
         public void detach(long id) { requireOwner(); work.post(() -> { if (id == generation) release(); }); }
     };

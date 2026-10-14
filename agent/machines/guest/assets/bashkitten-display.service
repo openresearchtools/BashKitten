@@ -1,0 +1,16 @@
+[Unit]
+Description=BashKitten container Display
+After=bashkitten-desktop.service
+Requires=bashkitten-desktop.service
+PartOf=bashkitten-desktop.service
+
+[Service]
+Type=simple
+User=user
+Group=user
+Environment=HOME=/home/user
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=BASHKITTEN_EXECUTION_ROLE=container
+ExecStart=/usr/bin/dbus-run-session -- /usr/lib/bashkitten/machines/bin/bashkitten-display-session
+KillMode=mixed
+TimeoutStopSec=30

@@ -77,6 +77,21 @@ fn release(commands: &mut Commands, id: u64) {
         released_monotonic_us: wire::monotonic_us(),
     });
 }
+fn release_input(
+    commands: &mut Commands,
+    buttons: &mut HashSet<u32>,
+    generation: u64,
+) -> Result<()> {
+    for button in buttons.drain() {
+        commands.send(GatewayCommand::PointerButton {
+            button,
+            pressed: false,
+            geometry_generation: generation,
+        })?;
+    }
+    commands.send(GatewayCommand::KeyboardLeave)?;
+    commands.send(GatewayCommand::PointerLeave)
+}
 fn run_gateway(
     directory: &Path,
     width: u32,
@@ -175,6 +190,7 @@ fn run_gateway(
     let mut latest: Option<DmabufFrame> = None;
     let mut client: Option<OwnedFd> = None;
     let mut held = HashSet::new();
+    let mut buttons = HashSet::new();
     let mut cursors = HashSet::new();
     let mut generation = 1;
     let mut visible = true;
@@ -280,8 +296,7 @@ fn run_gateway(
                                 Message::Visible { visible: value } => {
                                     visible = value;
                                     if !visible {
-                                        commands.send(GatewayCommand::KeyboardLeave)?;
-                                        commands.send(GatewayCommand::PointerLeave)?;
+                                        release_input(&mut commands, &mut buttons, generation)?;
                                     } else if let Some(frame) = latest
                                         .as_ref()
                                         .filter(|f| f.geometry_generation == generation)
@@ -295,8 +310,7 @@ fn run_gateway(
                                     commands.send(GatewayCommand::KeyboardEnter)
                                 }
                                 Message::Focus { focused: false } => {
-                                    commands.send(GatewayCommand::PointerLeave)?;
-                                    commands.send(GatewayCommand::KeyboardLeave)
+                                    release_input(&mut commands, &mut buttons, generation)
                                 }
                                 Message::Pointer { x, y, generation } => {
                                     commands.send(GatewayCommand::PointerMotion {
@@ -309,11 +323,18 @@ fn run_gateway(
                                     button,
                                     pressed,
                                     generation,
-                                } => commands.send(GatewayCommand::PointerButton {
-                                    button,
-                                    pressed,
-                                    geometry_generation: generation,
-                                }),
+                                } => {
+                                    if pressed {
+                                        buttons.insert(button);
+                                    } else {
+                                        buttons.remove(&button);
+                                    }
+                                    commands.send(GatewayCommand::PointerButton {
+                                        button,
+                                        pressed,
+                                        geometry_generation: generation,
+                                    })
+                                }
                                 Message::Wheel {
                                     horizontal,
                                     vertical,
@@ -387,8 +408,7 @@ fn run_gateway(
                     release(&mut commands, id)
                 }
             }
-            commands.send(GatewayCommand::KeyboardLeave)?;
-            commands.send(GatewayCommand::PointerLeave)?;
+            release_input(&mut commands, &mut buttons, generation)?;
         }
         for event in rx.try_iter() {
             match event {

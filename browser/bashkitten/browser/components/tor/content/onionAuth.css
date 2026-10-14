@@ -31,3 +31,11 @@
 #feedback {
   min-height: 1.5em;
 }
+.tor-privacy-notice {
+  padding: var(--space-medium);
+  border: 1px solid var(--border-color-deemphasized);
+  border-radius: var(--border-radius-medium);
+  color: var(--text-color-deemphasized);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+}

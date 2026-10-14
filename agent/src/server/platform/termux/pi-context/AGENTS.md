@@ -32,3 +32,10 @@ packages and ordinary `npm -g` for tools; their installs and caches stay inside
 that profile. Project npm dependencies remain in the selected project. Do not
 change the system Node/Pi installation for this environment. Use native
 `tool_search` to load the deferred browser, websearch and agents tools when needed.
+
+When referring to a file in a reply, use a normal Markdown link to its actual
+path, such as `[report.md](./report.md)` or `[My Report](<./My Report.md>)`.
+Relative paths resolve from this chat’s working folder on this backend. These
+links open BashKitten’s existing preview/download controls when Files is enabled.
+Verify that the file exists; never substitute a path on the client’s computer.
+Put line numbers in the link label or surrounding text, not in the path.

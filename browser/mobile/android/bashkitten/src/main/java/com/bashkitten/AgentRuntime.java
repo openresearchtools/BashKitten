@@ -499,7 +499,7 @@ public final class AgentRuntime {
         };
         // Stopping remains available during maintenance. All starts/settings use
         // the installed APK's matched native Termux package, never an older pair.
-        if (name.equals("stop") || name.equals("shutdown") || !localSetupReady()) { send.run(); return; }
+        if (name.equals("stop") || name.equals("shutdown") || name.equals("display-stop") || !localSetupReady()) { send.run(); return; }
         final int generation = operation, background = backgroundOperation;
         final String installation = termux.installationId();
         updates.ensureMatching().whenComplete((ignored, error) -> app.main.post(() -> {

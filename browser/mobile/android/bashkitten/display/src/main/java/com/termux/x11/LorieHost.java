@@ -19,8 +19,6 @@ import com.termux.x11.input.InputStub;
 import com.termux.x11.input.TouchInputHandler;
 import com.termux.x11.extrakeys.ExtraKeysView;
 import com.termux.x11.utils.TermuxX11ExtraKeys;
-import java.util.HashSet;
-import java.util.Set;
 
 public final class LorieHost extends ContextThemeWrapper {
     public static Handler handler;
@@ -33,11 +31,10 @@ public final class LorieHost extends ContextThemeWrapper {
     private final LorieView view;
     private final LinearLayout root;
     private final ExtraKeysView keys;
-    private final Set<Integer> held = new HashSet<>();
     private final Runnable close;
     private final java.util.function.Consumer<Boolean> connectionChanged;
     private PopupWindow preferences;
-    private boolean focused = true;
+    private boolean focused = true, interactive = true;
 
     public LorieHost(Context window, SharedPreferences values, Runnable close,
                      java.util.function.Consumer<Boolean> connectionChanged) {
@@ -54,10 +51,10 @@ public final class LorieHost extends ContextThemeWrapper {
         root.addView(view, new LinearLayout.LayoutParams(-1, 0, 1));
         mInputHandler = new TouchInputHandler(this, new InputEventSender(this, view));
         view.setCallback(mInputHandler::handleInputTransformChanged);
-        view.setOnTouchListener((v, e) -> focused && mInputHandler.handleTouchEvent(view, view, e));
-        view.setOnHoverListener((v, e) -> focused && mInputHandler.handleTouchEvent(view, view, e));
-        view.setOnGenericMotionListener((v, e) -> focused && mInputHandler.handleTouchEvent(view, view, e));
-        view.setOnCapturedPointerListener((v, e) -> focused && mInputHandler.handleTouchEvent(view, view, e));
+        view.setOnTouchListener((v, e) -> !acceptsInput() || mInputHandler.handleTouchEvent(view, view, e));
+        view.setOnHoverListener((v, e) -> !acceptsInput() || mInputHandler.handleTouchEvent(view, view, e));
+        view.setOnGenericMotionListener((v, e) -> !acceptsInput() || mInputHandler.handleTouchEvent(view, view, e));
+        view.setOnCapturedPointerListener((v, e) -> !acceptsInput() || mInputHandler.handleTouchEvent(view, view, e));
         view.setOnKeyListener((v, k, event) -> handleKey(event));
         keys = new ExtraKeysView(this, null);
         mExtraKeys = new TermuxX11ExtraKeys((v, k, e) -> handleKey(e), this, keys);
@@ -80,15 +77,15 @@ public final class LorieHost extends ContextThemeWrapper {
     public void getRealMetrics(DisplayMetrics metrics) { metrics.setTo(getResources().getDisplayMetrics()); }
     public void setExternalKeyboardConnected(boolean connected) { /* Standard Android input/IME owns visibility. */ }
     public void setMetaKeyCapture(boolean enabled) { /* No privileged vendor system-key capture in a tab. */ }
+    private boolean acceptsInput() { return focused && interactive; }
     public boolean handleKey(KeyEvent event) {
-        if (!focused) return false;
-        if (event.getAction() == KeyEvent.ACTION_DOWN) held.add(event.getKeyCode());
-        else if (event.getAction() == KeyEvent.ACTION_UP) held.remove(event.getKeyCode());
+        if (!acceptsInput()) return true;
         return mInputHandler.sendKeyEvent(event);
     }
-    public void setCapturingEnabled(boolean enabled) { mInputHandler.setCapturingEnabled(enabled && focused); }
-    public void toggleKeyboardVisibility() { view.toggleKeyboardVisible(); }
+    public void setCapturingEnabled(boolean enabled) { mInputHandler.setCapturingEnabled(enabled && acceptsInput()); }
+    public void toggleKeyboardVisibility() { if (acceptsInput()) view.toggleKeyboardVisible(); }
     public void toggleExtraKeys() {
+        if (!acceptsInput()) return;
         boolean visible = keys.getVisibility() != View.VISIBLE;
         prefs.additionalKbdVisible.put(visible);
         keys.setVisibility(visible ? View.VISIBLE : View.GONE);
@@ -96,6 +93,7 @@ public final class LorieHost extends ContextThemeWrapper {
     public void toggleMouseAuxButtons() { showPointerButtons(false); }
     public void toggleStylusAuxButtons() { showPointerButtons(true); }
     private void showPointerButtons(boolean stylus) {
+        if (!acceptsInput()) return;
         PopupWindow popup = new PopupWindow(this);
         LinearLayout row = new LinearLayout(this);
         String[] labels = {"Left", "Middle", "Right"};
@@ -112,6 +110,7 @@ public final class LorieHost extends ContextThemeWrapper {
         popup.showAtLocation(root, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL, 0, dp(80));
     }
     public void openPreferences() {
+        if (!acceptsInput()) return;
         if (preferences != null && preferences.isShowing()) { preferences.dismiss(); return; }
         LinearLayout controls = new LinearLayout(this); controls.setOrientation(LinearLayout.VERTICAL);
         controls.setPadding(dp(16), dp(12), dp(16), dp(12)); controls.setBackgroundColor(0xff202225);
@@ -129,16 +128,22 @@ public final class LorieHost extends ContextThemeWrapper {
     public void clientConnectedStateChanged() { connectionChanged.accept(view.connected()); }
     public void focus(boolean focused) {
         this.focused = focused;
-        if (focused) view.requestFocus();
+        applyInputMode();
+    }
+    public void interactive(boolean enabled) {
+        interactive = enabled; applyInputMode();
+        keys.setVisibility(enabled && prefs.additionalKbdVisible.get() ? View.VISIBLE : View.GONE);
+        if (!enabled && preferences != null) preferences.dismiss();
+    }
+    private void applyInputMode() {
+        if (acceptsInput()) { view.setInputEnabled(true); view.requestFocus(); }
         else { releaseInput(); view.clearFocus(); }
     }
     private void releaseInput() {
         mInputHandler.setCapturingEnabled(false);
-        for (int key : held) view.sendKeyEvent(0, key, false);
-        held.clear();
+        view.setInputEnabled(false);
+        mInputHandler.cancelInput();
         if (mExtraKeys != null) mExtraKeys.unsetSpecialKeys();
-        for (int button : new int[]{InputStub.BUTTON_LEFT, InputStub.BUTTON_MIDDLE, InputStub.BUTTON_RIGHT})
-            view.sendMouseEvent(-1, -1, button, false, true);
         keys.stopScheduledExecutors(); keys.dismissPopup();
     }
     public void destroy() {

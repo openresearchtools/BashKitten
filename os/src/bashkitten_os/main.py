@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-import sys, signal
+import os, sys, signal
 from .common import *
 
 class Desktop(Gtk.Application):
@@ -54,6 +54,9 @@ class Desktop(Gtk.Application):
         return 0
 
 def main():
+    # XFCE discovers the package's autostart entry in standalone sessions too.
+    if sys.argv[1:]==['session'] and os.environ.get('BASHKITTEN_EXECUTION_ROLE') not in {'container','termux'}:
+        return 0
     if sys.argv[1:]==['initialize']:
         from .defaults import initialize
         initialize();return 0

@@ -24,11 +24,11 @@ export class SubagentChats {
       return start();
     });
   }
-  async deliver(source, target, text, deliveryId, report = false) {
+  async deliver(source, target, text, deliveryId, report = false, resume = false) {
     const agentSource = { id: source.id, name: source.title, report };
     const label = `${report ? 'Completed turn' : 'Message'} from agent ${JSON.stringify(source.title)} (${source.id})`;
     const value = { text, wire: `${label}\n\n${text}`, attachments: [], kind: 'queue', agentSource,
-      agentDelivery: `${source.id}:${deliveryId}` };
+      agentDelivery: `${source.id}:${deliveryId}`, ...(resume ? { agentResume: true } : {}) };
     // Use the ordinary worker queue, including held drafts for an explicitly
     // stopped chat. Taking its startup lock prevents two owners of drafts.json.
     const held = await this.serial('worker:' + target.id, async () => {
@@ -47,7 +47,8 @@ export class SubagentChats {
     });
     if (held) return { id: target.id, delivery: 'held', message: 'Pi is stopped; the message is kept as a draft in that chat.' };
     await this.ensureWorker(target.id);
-    await workerRequest(target.id, '/message', value);
+    const result = await workerRequest(target.id, '/message', value);
+    if (result.held) return { id: target.id, delivery: 'held', message: 'Pi is stopped; the message is kept as a draft in that chat.' };
     return { id: target.id, delivery: 'accepted' };
   }
   async handle(piSessionId, value) {
@@ -107,7 +108,7 @@ export class SubagentChats {
     if (value.action === 'send' || value.action === 'follow_up') {
       if (typeof value.message !== 'string' || !value.message.trim()) throw Error('Write a message');
       if (value.action === 'follow_up') await this.ensureWorker(target.id, true);
-      return this.deliver(source, target, value.message, value.deliveryId);
+      return this.deliver(source, target, value.message, value.deliveryId, false, value.action === 'follow_up');
     }
     if (value.action === 'stop') {
       if (target.subagentParent !== source.id) throw Error('Only the direct parent can stop this subagent');

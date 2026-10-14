@@ -21,11 +21,30 @@ function documentRuntime() {
   const metadata = JSON.parse(byId('metadata').textContent);
   const raw = byId('raw'), article = byId('rendered');
   const download = byId('downloadRaw');
-  if (download) download.onclick = () => {
-    const url = URL.createObjectURL(new Blob([raw.textContent], { type: 'text/plain;charset=utf-8' }));
-    const anchor = document.createElement('a'); anchor.href = url; anchor.download = metadata.name; anchor.click();
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  };
+  if (download) {
+    // Keep the original snapshot bytes. Text decoding and HTML parsing can
+    // otherwise change its encoding, BOM and line endings. Prepare bounded
+    // pieces before enabling the button so the download keeps its user gesture.
+    const chunks = document.querySelectorAll('script[data-original]');
+    let index = 0, parts = [], original;
+    download.onclick = () => {
+      const url = URL.createObjectURL(original);
+      const anchor = document.createElement('a'); anchor.href = url; anchor.download = metadata.name; anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    };
+    function prepareDownload() {
+      try {
+        if (index < chunks.length) {
+          const chunk = chunks[index++], bytes = atob(JSON.parse(chunk.textContent));
+          parts.push(new Blob([Uint8Array.from(bytes, character => character.charCodeAt(0))])); chunk.remove();
+          requestAnimationFrame(prepareDownload); return;
+        }
+        original = new Blob(parts, { type: 'application/octet-stream' }); parts = [];
+        download.disabled = false; download.textContent = 'Download raw';
+      } catch { download.textContent = 'Download unavailable'; }
+    }
+    requestAnimationFrame(prepareDownload);
+  }
   if (metadata.kind !== 'markdown') return;
   const toggle = byId('toggleRaw');
   toggle.onclick = () => {
@@ -159,8 +178,9 @@ function sheetCell(cell) {
   return [cell.v instanceof Date ? cell.v.toISOString() : String(cell.v), false];
 }
 
-export async function renderPreview({ kind, name, text = '', workbook }, outputPath) {
+export async function renderPreview({ kind, name, text = '', original, workbook }, outputPath) {
   if (!['text', 'markdown', 'sheet'].includes(kind)) throw new Error('Unsupported HTML preview kind');
+  if (kind !== 'sheet' && !(original instanceof Uint8Array)) throw new Error('Original document bytes required');
   const nonce = randomBytes(24).toString('base64');
   // Gecko checks an iframe's <a download> against frame-src before handling
   // the attachment. Permit its own Blob; the sandbox keeps an opaque origin.
@@ -201,7 +221,7 @@ export async function renderPreview({ kind, name, text = '', workbook }, outputP
       await data('metadata', { kind, name, sheets });
       await inner(`<script nonce="${nonce}">(${sheetRuntime.toString()})();</script>`);
     } else {
-      await inner(`${kind === 'markdown' ? '<button id="toggleRaw" aria-pressed="false">Raw</button>' : ''}<button id="downloadRaw">Download raw</button><span id="renderStatus" class="muted" role="status">${kind === 'markdown' ? 'Rendering…' : ''}</span></header><pre id="raw"${kind === 'markdown' ? ' hidden' : ''}><code>`);
+      await inner(`${kind === 'markdown' ? '<button id="toggleRaw" aria-pressed="false">Raw</button>' : ''}<button id="downloadRaw" disabled>Preparing download…</button><span id="renderStatus" class="muted" role="status">${kind === 'markdown' ? 'Rendering…' : ''}</span></header><pre id="raw"${kind === 'markdown' ? ' hidden' : ''}><code>`);
       for (let offset = 0; offset < text.length;) {
         let end = Math.min(text.length, offset + 65536);
         if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
@@ -209,12 +229,20 @@ export async function renderPreview({ kind, name, text = '', workbook }, outputP
       }
       await inner('</code></pre><main id="rendered"></main>');
       await data('metadata', { kind, name });
+      for (let offset = 0; offset < original.length; offset += 65536) {
+        await data('original-' + offset, Buffer.from(original.subarray(offset, offset + 65536)).toString('base64'), 'data-original');
+      }
       if (kind === 'markdown') {
         const tokens = marked.lexer(text, { gfm: true }), renderer = markdownRenderer();
         let index = 0;
         for (const token of tokens) {
-          const part = [token]; part.links = tokens.links;
-          await data('markdown-' + index++, marked.parser(part, { gfm: true, renderer }), 'data-markdown');
+          // Separate data blocks, not one concatenated HTML string, make each
+          // 32-row table a separate sanitizer/DOM insertion on the next frame.
+          const count = token.type === 'table' ? Math.max(1, Math.ceil(token.rows.length / 32)) : 1;
+          for (let block = 0; block < count; block++) {
+            const part = [token.type === 'table' ? { ...token, rows: token.rows.slice(block * 32, (block + 1) * 32) } : token]; part.links = tokens.links;
+            await data('markdown-' + index++, marked.parser(part, { gfm: true, renderer }), 'data-markdown');
+          }
         }
         const sanitizer = await fs.readFile(path.join(path.dirname(require.resolve('dompurify')), 'purify.min.js'), 'utf8');
         if (/<\/script/i.test(sanitizer)) throw new Error('Sanitizer bundle cannot be embedded safely');

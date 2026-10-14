@@ -39,6 +39,11 @@ class FenixDisplayViewport(
     private var topToolbar = 0
     private var bottomToolbar = 0
     private var oldWebVisibility = View.VISIBLE
+    private val display = BrowserApp.get(parent.context).display
+    private val displayChanged = Runnable {
+        viewport?.interactive(display.isInteractive)
+        viewport?.service(display.hasSource(), display.isChanging, display.isStarting, display.error())
+    }
     private val layout = ViewTreeObserver.OnGlobalLayoutListener { bounds() }
     private val collection = owner.lifecycleScope.launch {
         store.flow().map { it.selectedTab?.let { tab -> Triple(tab.id, tab.contextId, tab.content.url) } }
@@ -56,6 +61,7 @@ class FenixDisplayViewport(
                         selectedId = selected.first
                         val app = BrowserApp.get(parent.context)
                         viewport = DisplayViewport(parent.context, app.display::request) { tabs.removeTab(selected.first) }
+                        displayChanged.run()
                         oldWebVisibility = web.visibility
                         web.visibility = View.INVISIBLE
                         // Browser chrome remains above this native slot.
@@ -72,6 +78,7 @@ class FenixDisplayViewport(
     }
     init {
         owner.lifecycle.addObserver(this)
+        display.observe(displayChanged)
         parent.viewTreeObserver.addOnGlobalLayoutListener(layout)
     }
     fun toolbarInsets(top: Int, bottom: Int) {
@@ -125,6 +132,7 @@ class FenixDisplayViewport(
     }
     fun destroy() {
         collection.cancel()
+        display.unobserve(displayChanged)
         owner.lifecycle.removeObserver(this)
         if (parent.viewTreeObserver.isAlive) parent.viewTreeObserver.removeOnGlobalLayoutListener(layout)
         removeViewport()

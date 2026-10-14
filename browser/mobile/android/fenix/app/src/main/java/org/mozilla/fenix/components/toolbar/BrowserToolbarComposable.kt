@@ -49,6 +49,7 @@ import mozilla.components.ui.widgets.behavior.DependencyGravity
 import mozilla.components.ui.widgets.behavior.EngineViewScrollingBehavior
 import mozilla.components.ui.widgets.behavior.EngineViewScrollingBehaviorFactory
 import org.mozilla.fenix.browser.store.BrowserScreenStore
+import org.mozilla.fenix.bashkitten.TorTabPrivacyNotice
 import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.appstate.AppAction.SearchAction.SearchEnded
 import org.mozilla.fenix.components.toolbar.ToolbarPosition.BOTTOM
@@ -155,6 +156,7 @@ class BrowserToolbarComposable(
                             .wrapContentHeight(),
                     ) {
                         tabStripContent()
+                        if (customTabSession == null) TorTabPrivacyNotice(browserStore)
                         AgentBrowserToolbar(
                             store = toolbarStore,
                             cfr = toolbarCFR,
@@ -171,6 +173,7 @@ class BrowserToolbarComposable(
                             .fillMaxWidth()
                             .wrapContentHeight(),
                     ) {
+                        if (customTabSession == null) TorTabPrivacyNotice(browserStore)
                         if (shouldUseBottomToolbar) {
                             if (customTabSession == null) {
                                 searchSuggestionsContent(Modifier.weight(1f))

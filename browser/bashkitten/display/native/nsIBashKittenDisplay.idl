@@ -10,5 +10,6 @@ interface nsIBashKittenDisplay : nsISupports {
   /** Typed, validated input/viewport packets; no commands, paths or descriptors. */
   void input(in AUTF8String message);
   readonly attribute AUTF8String capabilities;
+  /** Asynchronous teardown; observer receives {"type":"closed"} when reaped. */
   void close();
 };

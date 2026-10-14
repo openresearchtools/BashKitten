@@ -4,7 +4,7 @@
 
 bashkitten-tor-toolbar-button =
     .label = Tor
-    .tooltiptext = Route this tab through Tor
+    .tooltiptext = Route this tab through Tor for .onion access. For Tor Browser’s full privacy protections, use Tor Browser.
 
 bashkitten-tor-toolbar-button-starting =
     .label = Tor
@@ -12,7 +12,9 @@ bashkitten-tor-toolbar-button-starting =
 
 bashkitten-tor-toolbar-button-on =
     .label = Tor
-    .tooltiptext = Tor is on for this tab
+    .tooltiptext = Tor is on for this tab. For Tor Browser’s full privacy protections, use Tor Browser.
+
+bashkitten-tor-privacy-notice = Tor in BashKitten is for accessing .onion sites. It does not provide all of Tor Browser’s privacy protections. For privacy-sensitive browsing on other websites, use Tor Browser.
 
 bashkitten-tor-toolbar-button-error =
     .label = Tor unavailable

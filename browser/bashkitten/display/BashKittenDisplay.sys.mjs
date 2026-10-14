@@ -42,8 +42,10 @@ export const BashKittenDisplay = {
     const browser = tab.linkedBrowser;
     browser.setAttribute("bashkitten-native-display", environment.id);
     browser.setAttribute("bashkitten-protected", "true");
-    records.set(browser, Object.freeze({ id: environment.id, name: environment.name,
-      socket: environment.presenterSocket, executable: executable.path, clipboard: controls.clipboard }));
+    records.set(browser, { id: environment.id, name: environment.name,
+      socket: environment.presenterSocket, executable: executable.path, clipboard: controls.clipboard,
+      state: environment.state, running: environment.running, error: environment.error,
+      service: controls.service, interactive: true, controller: null });
     tab.label = environment.name;
     const close = () => {
       if (!records.delete(browser)) return;
@@ -75,9 +77,34 @@ export const BashKittenDisplay = {
   },
   async clipboard(document, request) {
     const record = this.record(document);
+    if (!record.interactive || record.state !== "running") throw new Error("Turn on interaction to use the desktop clipboard.");
     if (typeof record.clipboard !== "function") throw new Error("Clipboard is unavailable for this desktop.");
     if (!["read", "write"].includes(request.action)) throw new Error("Invalid clipboard action.");
     return record.clipboard(request);
+  },
+  bind(document, controller) {
+    this.record(document).controller = controller;
+  },
+  update(document, state, interactive, running) {
+    const record = this.record(document);
+    record.state = state;
+    record.interactive = interactive;
+    record.running = running;
+    const window = document.defaultView.docShell.chromeEventHandler.ownerGlobal;
+    window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
+  },
+  async service(document, action) {
+    const record = this.record(document);
+    if (!["status", "start", "stop"].includes(action) || typeof record.service !== "function") throw new Error("Display service is unavailable.");
+    return record.service(action);
+  },
+  control(window, action, value) {
+    const browser = window.gBrowser.selectedBrowser;
+    const record = this.selected(window);
+    if (!record || this.record(browser.contentDocument) !== record || !record.controller) return;
+    if (action === "enabled") return record.controller.enabled(value);
+    else if (action === "interactive") return record.controller.interactive(value);
+    else throw new Error("Unknown Display control.");
   },
   record(document) {
     if (!document.nodePrincipal.isSystemPrincipal || document.documentURI !== URI) throw new Error("Native display owner required.");

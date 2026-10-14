@@ -17,6 +17,9 @@ public final class DisplayBroker {
     private IBinder.DeathRecipient death;
     private int owner = -1;
     private long generation;
+    private final java.util.Set<Runnable> observers = new java.util.HashSet<>();
+    private boolean changing, starting, interactive = true;
+    private String error = "";
     private static final class Pending {
         final Consumer<ParcelFileDescriptor> ready; final Consumer<String> fail;
         boolean delivered;
@@ -29,6 +32,32 @@ public final class DisplayBroker {
         requestedInstallation = app.agent.termux.installationId();
     }
     public boolean hasSource() { return source != null; }
+    public boolean isChanging() { return changing; }
+    public boolean isStarting() { return starting; }
+    public boolean isInteractive() { return interactive; }
+    public String error() { return error; }
+    public void observe(Runnable observer) { observers.add(observer); observer.run(); }
+    public void unobserve(Runnable observer) { observers.remove(observer); }
+    private void changed() {
+        app.main.post(() -> { for (Runnable observer : new java.util.ArrayList<>(observers)) observer.run(); });
+    }
+    public void interactive(boolean enabled) { interactive = enabled; changed(); }
+    /** One async owner for toolbar and settings; stopping Display never closes its tab or Local Pi. */
+    public void setEnabled(boolean enabled, Consumer<org.json.JSONObject> done, Consumer<String> failure) {
+        if (changing) { failure.accept("Display is already changing. Please wait."); return; }
+        try { if (enabled) prepareStart(); }
+        catch (Exception problem) { failure.accept(problem.getMessage()); return; }
+        changing = true; starting = enabled; error = ""; changed();
+        app.agent.command(enabled ? "display-start" : "display-stop", new org.json.JSONObject(), value -> {
+            changing = false;
+            if (!enabled) stopped();
+            changed(); done.accept(value);
+        }, message -> { changing = false; error = message; changed(); failure.accept(message); });
+    }
+    private void stopped() {
+        requestedInstallation = "";
+        work.execute(() -> { clearSource(); failWaiting("Display is off."); });
+    }
     private void require(int uid) throws Exception {
         app.grants.require(uid);
         int installed = app.getPackageManager().getApplicationInfo(TermuxConnection.PACKAGE, 0).uid;
@@ -47,6 +76,7 @@ public final class DisplayBroker {
                 death = () -> work.execute(() -> { if (id == generation) clearSource(); });
                 value.asBinder().linkToDeath(death, 0);
                 app.main.post(app.agent::displayConnectionChanged);
+                changed();
                 for (Pending pending : new java.util.ArrayList<>(waiting)) connect(pending);
                 waiting.clear();
             } catch (Exception error) {
@@ -111,6 +141,7 @@ public final class DisplayBroker {
         if (source != null && death != null) source.asBinder().unlinkToDeath(death, 0);
         source = null; death = null; owner = -1; generation++;
         if (connected) app.main.post(app.agent::displayConnectionChanged);
+        changed();
     }
     private static void close(ParcelFileDescriptor fd) { if (fd != null) try { fd.close(); } catch (java.io.IOException ignored) {} }
 }

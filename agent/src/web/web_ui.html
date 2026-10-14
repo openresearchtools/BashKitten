@@ -875,7 +875,7 @@
     document.addEventListener('click', event => {
         if (!nativeLinux) return;
         const link = event.target.closest('a');
-        if (!link || link.hasAttribute('download')) return;
+        if (!link || link.hasAttribute('download') || link.classList.contains('file-reference')) return;
         const url = new URL(link.href, location.href);
         if (url.origin === location.origin && /^\/api\/(files\/content|sessions\/[^/]+\/attachments\/)/.test(url.pathname)) {
           event.preventDefault();
@@ -953,6 +953,14 @@
       return `<span class="inline-image"><img src="${escapeHtml(source)}" alt="${escapeHtml(title)}" tabindex="0" role="button"><a class="image-download" href="${escapeHtml(download)}" download="${escapeHtml(filename)}" title="Download image" aria-label="Download image">↓</a><span class="image-error" role="status">${escapeHtml(title)} — image unavailable. The file may have moved or you may need to sign in again.</span></span>`;
     }
 
+    function fileReferenceUrls(session, reference) {
+      if (!/^[a-f0-9-]{36}$/.test(session || '') || typeof reference !== 'string' || !reference ||
+          /[\x00-\x1f\x7f]/.test(reference) || reference.startsWith('//') || reference.startsWith('#') ||
+          (/^[a-z][a-z0-9+.-]*:/i.test(reference) && !reference.startsWith('file:'))) return null;
+      const query = '?session=' + encodeURIComponent(session) + '&path=' + encodeURIComponent(reference);
+      return { content: '/api/files/content' + query, preview: '/api/files/previews/content' + query };
+    }
+
     function inlineMarkdown(value) {
       // Tokenize before escaping so code stays literal and labels/URLs cannot inject HTML.
       // Destinations support angle brackets for spaces and parentheses in filenames.
@@ -976,7 +984,11 @@
           }
         }
         if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noreferrer">${escapeHtml(label || target)}</a>`;
-        else html += escapeHtml(match[0]);
+        else {
+          const urls = !image && fileReferenceUrls(current?.id, target);
+          if (urls) html += `<a class="file-reference" href="${escapeHtml(urls.content + '&download=true')}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="Open file · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
+          else html += escapeHtml(match[0]);
+        }
       }
       return html + escapeHtml(text.slice(end));
     }
@@ -1117,6 +1129,22 @@
     }
 
     $('#chatInner').addEventListener('click', event => {
+      const reference = event.target.closest('a.file-reference');
+      if (reference) {
+        event.preventDefault();
+        if (!fileManagerAllowed) { $('#composerHint').textContent = 'The host has not enabled Files for this connection.'; return; }
+        if (reference.dataset.fileSession !== current?.id) return;
+        const target = reference.dataset.fileReference, urls = fileReferenceUrls(current.id, target);
+        if (!urls) return;
+        let name = target;
+        try { name = decodeURIComponent(target.startsWith('file:') ? new URL(target).pathname : target); } catch {}
+        name = name.split('/').pop() || 'File';
+        // This extension hint only selects the existing image overlay. Every
+        // file is resolved and authorized by its own backend before any bytes.
+        const previewKind = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(name) ? 'image' : null;
+        openFilePreview(null, { name, previewKind }, urls);
+        return;
+      }
       const image = event.target.closest('.inline-image img');
       if (image) { openImageViewer(image.src, image.alt); return; }
       const button = event.target.closest('.code-copy');
@@ -1336,6 +1364,12 @@
         link.onclick = () => openSessionById(id).catch(error => { $('#composerHint').textContent = error.message; });
       }
       return link;
+    }
+
+    function questionSourceLabel(source) {
+      const action = { expiry: 'Question expired', dismissal: 'Question dismissed', answer: 'Question reply', late: 'Question follow-up' }[source.action];
+      const channel = { call: 'Phone call', notification: 'Notification reply', voicemail: 'Voicemail reply' }[source.source];
+      return channel ? `${action} · ${channel}` : action;
     }
 
     function toolPresentation(block) {
@@ -1635,9 +1669,13 @@
       if (message.role === 'toolResult') return renderToolResult(message);
       if (message.role === 'user') {
         beginRenderedTurn(message.timestamp);
-        const fromAgent = message.agentSource && message.agentSource.kind !== 'phone';
+        const source = message.agentSource;
+        const fromAgent = source && source.kind !== 'phone' && (source.kind !== 'question' || ['expiry', 'dismissal'].includes(source.action));
         const body = messageRow(fromAgent ? 'agent' : 'user');
-        if (message.agentSource?.kind === 'phone') {
+        if (source?.kind === 'question') {
+          const attribution = agentSourceLink(null, questionSourceLabel(source));
+          attribution.title = source.question; body.append(attribution);
+        } else if (message.agentSource?.kind === 'phone') {
           const attribution = document.createElement('span'); attribution.className = 'agent-source';
           attribution.textContent = { notification: 'Notification reply', call: 'Phone call', voicemail: 'Voicemail reply' }[message.agentSource.source];
           body.append(attribution);
@@ -2040,8 +2078,9 @@
         if (item.recovered) kind.title = 'Recovered after Pi stopped. Review history before sending again.';
         const text = document.createElement('span');
         text.className = 'queue-text';
-        text.textContent = item.content || (item.attachments?.length ? `${item.attachments.length} attachment(s)` : '(empty message)');
-        text.title = item.content || '';
+        const displayText = item.displayContent ?? item.content;
+        text.textContent = item.agentSource?.kind === 'question' ? `${questionSourceLabel(item.agentSource)} · ${displayText}` : displayText || (item.attachments?.length ? `${item.attachments.length} attachment(s)` : '(empty message)');
+        text.title = text.textContent;
         row.append(kind, text);
         if (item.kind !== 'steer' || item.recovered) {
           const steer = document.createElement('button');
@@ -3338,6 +3377,7 @@
       fileManagerAllowed = allowed;
       $('#filesToggle').classList.toggle('hidden', !allowed);
       for (const button of document.querySelectorAll('.file-manager-action')) button.classList.toggle('hidden', !allowed);
+      for (const link of document.querySelectorAll('.file-reference')) link.setAttribute('aria-disabled', String(!allowed));
       for (const id of ['folderBtn', 'defaultCwdBrowse']) $('#'+id).disabled = !allowed;
       if (allowed) return;
       closeFiles(); closeFileDiff();
@@ -3480,14 +3520,15 @@
       if(filePreview && !filePreview.handedOff) nativeHost?.call('cancel-file-view').catch(()=>{});
       filePreview=null;
     }
-    function openFilePreview(root, entry) {
+    function openFilePreview(root, entry, urls = {}) {
       if(!fileManagerAllowed)return;
-      if(entry.previewKind==='image') { openImageViewer(fileUrl('/content',entry.path,root),entry.name,{manager:true,download:fileUrl('/content',entry.path,root)+'&download=true'});return; }
-      const url=new URL(fileUrl('/previews/content',entry.path,root),location.href);
+      const content=urls.content || fileUrl('/content',entry.path,root);
+      if(entry.previewKind==='image') { openImageViewer(content,entry.name,{manager:true,download:content+'&download=true'});return; }
+      const url=new URL(urls.preview || fileUrl('/previews/content',entry.path,root),location.href);
       if(!nativeHost) { window.open(url.href,'_blank','noopener,noreferrer');return; }
       if($('#filePreview').open)return;
       const generation=++filePreviewGeneration,job={handedOff:false};filePreview=job;
-      $('#filePreviewTitle').textContent=entry.name;$('#filePreviewDownload').href=fileUrl('/content',entry.path,root)+'&download=true';$('#filePreviewDownload').download=entry.name;
+      $('#filePreviewTitle').textContent=entry.name;$('#filePreviewDownload').href=content+'&download=true';$('#filePreviewDownload').download=entry.name;
       $('#filePreviewStatus').textContent='Preparing and opening preview…';$('#filePreviewError').textContent='';
       $('#filePreviewProgress').classList.remove('hidden');$('#filePreviewClose').textContent='Cancel';$('#filePreview').showModal();
       // This call starts during the original View gesture. Native streaming waits

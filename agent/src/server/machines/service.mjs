@@ -10,7 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { privateDir, readJson, writeJson, json, jsonBody, socketRequest } from '../common.mjs';
 import { claimInstance, processStart } from '../instance.mjs';
 import { defaults, validate, prepareRuntime, prepareStorage, machineRoot, packageRoot, daemonSocket, locations,
-  load, containerName, machineLabel, definition, helper, userNamespace, mount } from './config.mjs';
+  load, containerName, machineLabel, definition, displayCommand, helper, userNamespace, mount } from './config.mjs';
 import { podman, podmanLaunch, installed } from './process.mjs';
 import { startMedia, stopMedia, mediaDevices, mediaStatus, integrationArguments } from './media.mjs';
 import { duringUpdate, mutations, runtimeVersion, updateMessage, updateError } from './update.mjs';
@@ -167,7 +167,7 @@ async function clearStoppedBrowserSocket(files, signal) {
   const original = await stat(socketPath);
   if (!original) return;
   if (!original.isSocket() || original.uid !== process.getuid()) throw Error('Guest browser control path is not an owned socket');
-  // The serialized machine operation has verified its guest is stopped. Still
+  // The serialized operation has verified its guest browser/display is stopped. Still
   // refuse a live listener, including one outside that guest, instead of taking
   // over its endpoint. A refused connection alone establishes a stale socket.
   const probe = AbortSignal.any([signal, AbortSignal.timeout(2000)]);
@@ -322,6 +322,84 @@ async function startGateway(config, job) {
   }
   throw Error('The private display gateway did not become ready');
 }
+async function writeDisplayConfig(config, gateway) {
+  const value = { machineId: config.id, generation: randomUUID(), enabled: true, command: displayCommand(config),
+    mode: gateway.mode, software: gateway.mode === 'software', width: 1280, height: 720 };
+  await writeJson(path.join(locations(config.id).settings, 'display.json'), value);
+  return value;
+}
+async function displayStatus(id, info) {
+  const p = locations(id), gateway = await readJson(path.join(p.runtime, 'gateway.json'), null);
+  const configured = await readJson(path.join(p.settings, 'display.json'), null);
+  const status = await readJson(path.join(p.exchange, 'display-status.json'), null);
+  const live = gateway && await processStart(gateway.pid) === gateway.started;
+  const result = info?.State?.Running ? await podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'show', 'bashkitten-display.service', '--property=ActiveState', '--value']) : null;
+  const unit = result?.stdout.trim();
+  const current = status?.generation === configured?.generation ? status : null;
+  const error = configured?.enabled !== false && (current?.error || (unit === 'failed' ? 'The Display service stopped. Check its launch command and service log.' : null));
+  return { running: Boolean(live && unit === 'active' && current?.running),
+    state: ['activating', 'deactivating'].includes(unit) ? (unit === 'activating' ? 'starting' : 'stopping') :
+      live && unit === 'active' && current?.running ? 'running' : error ? 'error' : 'off',
+    error: error || null,
+    mode: gateway?.mode, fallbackReason: gateway?.fallbackReason || null };
+}
+async function changeDisplay(id, enabled) {
+  if (closing) throw Error('The container service is stopping');
+  if (active.has(id)) throw Error('Wait for the current container operation');
+  const cancel = new AbortController();
+  let completed;
+  const completion = new Promise(resolve => { completed = resolve; });
+  active.set(id, { cancel, completion, kind: enabled ? 'display-start' : 'display-stop' });
+  try {
+    const { config, files } = await load(id), info = await inspect(id, { signal: cancel.signal });
+    validate(config,id);
+    if (!info?.State?.Running) throw Error('Start this container before changing Display');
+    const job = { signal: cancel.signal, check: () => cancel.signal.throwIfAborted(),
+      output: data => fs.appendFile(path.join(files.directory, 'display.log'), data, { mode: 0o600 }) };
+    const unit = action => podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', action, 'bashkitten-display.service'], { signal: cancel.signal, output: job.output });
+    if (!enabled) {
+      const file = path.join(files.settings, 'display.json');
+      await writeJson(file, { ...await readJson(file), enabled: false });
+      await unit('stop'); job.check();
+      await stopMedia(id); await stopGateway(id);
+    } else {
+      const previous = await displayStatus(id, info);
+      if (!previous.running) {
+        // A failed/stopped display is explicitly restarted; this never restarts
+        // the independent guest Agent, its Pi workers or the whole container.
+        await unit('stop'); job.check();
+        await stopMedia(id); await stopGateway(id);
+        await clearStoppedBrowserSocket(files, cancel.signal);
+        await fs.rm(path.join(files.exchange, 'agent/guest-browser-status.json'), { force: true });
+        try {
+          const gateway = await startGateway(config, job);
+          const generation = (await writeDisplayConfig(config, gateway)).generation;
+          await unit('start');
+          let ready = false;
+          for (const until = Date.now() + 60000; Date.now() < until;) {
+            job.check();
+            const status = await readJson(path.join(files.exchange, 'display-status.json'), null);
+            const browser = await readJson(path.join(files.exchange, 'agent/guest-browser-status.json'), null);
+            if (status?.generation === generation) {
+              if (status.error) throw Error(status.error);
+              if (status.running && browser?.connected) { ready = true; break; }
+            }
+            await sleep(250);
+          }
+          if (!ready) throw Error('The Display command did not become ready; check its service log');
+          await startMedia(config, info, job);
+        } catch (error) {
+          // No unattended retry and no software/headless substitute after a
+          // failed explicit start. Keep the actual error and the Pi backend.
+          await podman(['exec', '--user', '0', info.Id, '/usr/bin/systemctl', 'stop', 'bashkitten-display.service'], { allowFailure: true });
+          await stopMedia(id); await stopGateway(id);
+          throw error;
+        }
+      }
+    }
+    return displayStatus(id, info);
+  } finally { active.delete(id); completed(); }
+}
 async function start(config, job) {
   job.check();
   const id=config.id, p=await prepareRuntime(id), state=await readJson(p.state,{});
@@ -333,8 +411,6 @@ async function start(config, job) {
   let info=await inspect(id);
   if (info?.State?.Running) {
     if (state.definition !== definition(config)) throw Error('Saved creation settings changed. Stop this machine before applying them');
-    const gateway=await readJson(path.join(p.runtime,'gateway.json'),null);
-    if(!gateway || await processStart(gateway.pid)!==gateway.started) throw Error('The container is running but its display gateway stopped. Explicitly restart the machine to restore Display');
     await saveState(id,{state:'running'}); return;
   }
   await installPendingAutostart(await load(id));
@@ -345,7 +421,7 @@ async function start(config, job) {
   try {
     job.check();
     gateway=await startGateway(config,job);
-    await writeJson(path.join(p.settings,'display.json'),{machineId:id,mode:gateway.mode,software:gateway.mode==='software',width:1280,height:720});
+    await writeDisplayConfig(config,gateway);
     await writeJson(path.join(p.settings,'integration.json'),{schema:1,media:Object.fromEntries(Object.entries(config.integrations.media).map(([k,v])=>[k,v.enabled]))});
     if (!info) {
       await podmanLaunch(config.launch.executable,config.launch.arguments,{cwd:config.launch.cwd,env:config.launch.environment,output:job.output,signal:job.signal});
@@ -583,10 +659,11 @@ async function action(name,value={},requestSignal) {
     return {...session,socketPath:path.join(r.files.exchange,'agent-https.sock'),controlSocket:path.join(r.files.exchange,'agent/control.sock'),machineId:value.id};
   }
   if(name==='display') {
-    const ready=await readJson(path.join(r.files.runtime,'gateway.json'));
-    if(await processStart(ready.pid)!==ready.started)throw Error('Start this machine before opening Display');
-    return {kind:'container',id:value.id,name:r.config.name,machineId:value.id,presenterSocket:path.join(r.files.display,'presenter.sock'),mode:ready.mode,fallbackReason:ready.fallbackReason||null};
+    const info=await inspect(value.id);
+    if(!info?.State?.Running)throw Error('Start this container before opening Display');
+    return {kind:'container',id:value.id,name:r.config.name,machineId:value.id,presenterSocket:path.join(r.files.display,'presenter.sock'),...await displayStatus(value.id,info)};
   }
+  if(name==='display-start'||name==='display-stop') return changeDisplay(value.id,name==='display-start');
   if(name==='clipboard') {
     const info=await inspect(value.id);if(!info?.State?.Running)throw Error('Start this machine before using its clipboard');
     let type=value.type || 'text/plain';

@@ -21,7 +21,8 @@ def context():
         raise RuntimeError('The owning desktop or accessibility bus is unavailable')
     current=os.environ.copy()
     # Never retain a prior desktop's authentication or session bus.
-    for key in ('DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS','AT_SPI_BUS_ADDRESS','SESSION_MANAGER'):
+    for key in ('DISPLAY','XAUTHORITY','DBUS_SESSION_BUS_ADDRESS','AT_SPI_BUS_ADDRESS','SESSION_MANAGER',
+                'XDG_CONFIG_HOME','XDG_DATA_HOME','XDG_CACHE_HOME','XDG_RUNTIME_DIR'):
         current.pop(key,None)
         if key in env:
             if not isinstance(env[key],str) or '\0' in env[key]:raise RuntimeError('Invalid desktop environment')

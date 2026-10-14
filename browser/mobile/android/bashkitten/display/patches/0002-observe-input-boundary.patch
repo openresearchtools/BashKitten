@@ -1,0 +1,205 @@
+--- a/lorie/src/main/java/com/termux/x11/LorieView.java
++++ b/lorie/src/main/java/com/termux/x11/LorieView.java
+@@ -64,6 +64,12 @@
+     private long lastClipboardTimestamp = System.currentTimeMillis();
+     private long mNativeContext;
+     private boolean clipboardSyncEnabled = false;
++    private volatile boolean inputEnabled = true;
++    private final java.util.Map<Long, int[]> pressedKeys = new java.util.HashMap<>();
++    private final java.util.Set<Integer> pressedButtons = new java.util.HashSet<>();
++    private final java.util.Set<Integer> activeTouches = new java.util.HashSet<>();
++    private float stylusX, stylusY;
++    private boolean stylusActive, stylusEraser, stylusMouse;
+     private boolean hardwareKbdScancodesWorkaround = false;
+     private final InputMethodManager mIMM = (InputMethodManager)getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+     private final LorieHost activity = LorieHost.find(getContext());
+@@ -556,6 +562,7 @@
+ 
+     @Override
+     public boolean dispatchKeyEventPreIme(KeyEvent event) {
++        if (!inputEnabled) return true;
+         if (imeBuggyKeys.contains(event.getKeyCode())) {
+             // IME does not handle/send events for some keys correctly correctly.
+             // So we should send key release manually in the case if IME will not send it...
+@@ -573,6 +580,7 @@
+ 
+     @Override
+     public boolean dispatchKeyEvent(KeyEvent event) {
++        if (!inputEnabled) return true;
+         if (imeBuggyKeys.contains(event.getKeyCode())) {
+             // remove messages we posted in dispatchKeyEventPreIme
+             int action = event.getAction();
+@@ -590,13 +598,14 @@
+         setFiltering(mNativeContext, "nearest".equals(filtering) ? GLES20.GL_NEAREST : GLES20.GL_LINEAR);
+         setFollowCursorPan(mNativeContext, p.zoomFollowsCursor.get());
+         hardwareKbdScancodesWorkaround = p.hardwareKbdScancodesWorkaround.get();
+-        clipboardSyncEnabled = p.clipboardEnable.get();
++        clipboardSyncEnabled = inputEnabled && p.clipboardEnable.get();
+         setClipboardSyncEnabled(mNativeContext, clipboardSyncEnabled, clipboardSyncEnabled);
+         activity.mInputHandler.refreshInputDevices();
+     }
+ 
+     // It is used in native code
+     void setClipboardText(String text) {
++        if (!inputEnabled) return;
+         clipboard.setPrimaryClip(ClipData.newPlainText("X11 clipboard", text));
+ 
+         // Android does not send PrimaryClipChanged event to the window which posted event
+@@ -607,7 +616,7 @@
+ 
+     /** @noinspection unused*/ // It is used in native code
+     void requestClipboard() {
+-        ClipDescription desc = clipboardSyncEnabled ? clipboard.getPrimaryClipDescription() : null;
++        ClipDescription desc = inputEnabled && clipboardSyncEnabled ? clipboard.getPrimaryClipDescription() : null;
+         boolean isText = desc != null && (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) || desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML));
+         CharSequence clip = isText ? clipboard.getText() : null;
+         String text = clip != null ? clip.toString() : "";
+@@ -624,6 +633,7 @@
+     }
+ 
+     public void checkForClipboardChange() {
++        if (!inputEnabled) return;
+         ClipDescription desc = clipboard.getPrimaryClipDescription();
+         // Below API 26 the clipboard carries no timestamp, so every change looks like a new one.
+         long timestamp = desc == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? lastClipboardTimestamp + 1 : desc.getTimestamp();
+@@ -642,7 +652,7 @@
+     public void onWindowFocusChanged(boolean hasFocus) {
+         super.onWindowFocusChanged(hasFocus);
+         activity.focus(hasFocus);
+-        if (!hasFocus) return;
++        if (!hasFocus || !inputEnabled) { clipboard.removePrimaryClipChangedListener(clipboardListener); return; }
+ 
+         requestFocus();
+ 
+@@ -657,6 +667,7 @@
+ 
+     @Override
+     public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
++        if (!inputEnabled) return null;
+         if (activity.prefs.enforceCharBasedInput.get())
+             outAttrs.inputType = InputType.TYPE_NULL;
+         else
+@@ -686,6 +697,31 @@
+             else
+                 mIMM.restartInput(this);
+         }, 10);
++    }
++
++    /** The gate is at the native input boundary, including retained IME connections. */
++    public void setInputEnabled(boolean enabled) {
++        if (enabled == inputEnabled) return;
++        if (!enabled) {
++            keyReleaseHandler.removeCallbacksAndMessages(null);
++            for (int[] key : pressedKeys.values()) sendKeyEvent(mNativeContext, key[0], key[1], false);
++            pressedKeys.clear();
++            for (int button : pressedButtons) sendMouseEvent(mNativeContext, -1, -1, button, false, true);
++            pressedButtons.clear();
++            for (int id : activeTouches) sendTouchEvent(mNativeContext, 20, id, 0, 0);
++            activeTouches.clear();
++            if (stylusActive) sendStylusEvent(mNativeContext, stylusX, stylusY, 0, 0, 0, 0, 0, stylusEraser, stylusMouse);
++            stylusActive = false;
++            clipboard.removePrimaryClipChangedListener(clipboardListener);
++            mIMM.hideSoftInputFromWindow(getWindowToken(), 0);
++        }
++        inputEnabled = enabled;
++        setFocusable(enabled); setFocusableInTouchMode(enabled);
++        reloadPreferences(activity.prefs);
++        mIMM.restartInput(this);
++        if (enabled && hasWindowFocus() && clipboardSyncEnabled) {
++            clipboard.addPrimaryClipChangedListener(clipboardListener); checkForClipboardChange();
++        }
+     }
+ 
+     @FastNative private native long nativeInit();
+@@ -783,25 +819,45 @@
+         setRendererZoom(mNativeContext, isInPictureInPictureMode ? 100 : Math.round(rendererZoom));
+     }
+ 
+-    public void sendMouseEvent(float x, float y, int whichButton, boolean buttonDown, boolean relative) { sendMouseEvent(mNativeContext, x, y, whichButton, buttonDown, relative); }
++    public void sendMouseEvent(float x, float y, int whichButton, boolean buttonDown, boolean relative) {
++        if (!inputEnabled) return;
++        if (whichButton > BUTTON_UNDEFINED && whichButton != BUTTON_SCROLL) {
++            if (buttonDown) pressedButtons.add(whichButton); else pressedButtons.remove(whichButton);
++        }
++        sendMouseEvent(mNativeContext, x, y, whichButton, buttonDown, relative);
++    }
+     @FastNative private native void sendMouseEvent(long ptr, float x, float y, int whichButton, boolean buttonDown, boolean relative);
+ 
+-    public void sendTouchEvent(int action, int id, int x, int y) { sendTouchEvent(mNativeContext, action, id, x, y); }
++    public void sendTouchEvent(int action, int id, int x, int y) {
++        if (!inputEnabled) return;
++        if (action == 18) activeTouches.add(id); else if (action == 20) activeTouches.remove(id);
++        sendTouchEvent(mNativeContext, action, id, x, y);
++    }
+     @FastNative private native void sendTouchEvent(long ptr, int action, int id, int x, int y);
+ 
+-    public void sendStylusEvent(float x, float y, int pressure, int tiltX, int tiltY, int orientation, int buttons, boolean eraser, boolean mouseMode) { sendStylusEvent(mNativeContext, x, y, pressure, tiltX, tiltY, orientation, buttons, eraser, mouseMode); }
++    public void sendStylusEvent(float x, float y, int pressure, int tiltX, int tiltY, int orientation, int buttons, boolean eraser, boolean mouseMode) {
++        if (!inputEnabled) return;
++        stylusX = x; stylusY = y; stylusActive = pressure != 0 || buttons != 0; stylusEraser = eraser; stylusMouse = mouseMode;
++        sendStylusEvent(mNativeContext, x, y, pressure, tiltX, tiltY, orientation, buttons, eraser, mouseMode);
++    }
+     @FastNative private native void sendStylusEvent(long ptr, float x, float y, int pressure, int tiltX, int tiltY, int orientation, int buttons, boolean eraser, boolean mouseMode);
+ 
+-    public void requestStylusEnabled(boolean enabled) { requestStylusEnabled(mNativeContext, enabled); }
++    public void requestStylusEnabled(boolean enabled) { if (inputEnabled) requestStylusEnabled(mNativeContext, enabled); }
+     @FastNative private native void requestStylusEnabled(long ptr, boolean enabled);
+ 
+-    public void sendLockKeysState(int state) { sendLockKeysState(mNativeContext, state); }
++    public void sendLockKeysState(int state) { if (inputEnabled) sendLockKeysState(mNativeContext, state); }
+     @FastNative private native void sendLockKeysState(long ptr, int state);
+ 
+-    public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) { return sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown); }
++    public boolean sendKeyEvent(int scanCode, int keyCode, boolean keyDown) {
++        if (!inputEnabled) return false;
++        boolean sent = sendKeyEvent(mNativeContext, scanCode, keyCode, keyDown);
++        long key = ((long) scanCode << 32) | (keyCode & 0xffffffffL);
++        if (sent && keyDown) pressedKeys.put(key, new int[]{scanCode, keyCode}); else if (!keyDown) pressedKeys.remove(key);
++        return sent;
++    }
+     @FastNative private native boolean sendKeyEvent(long ptr, int scanCode, int keyCode, boolean keyDown);
+ 
+-    public void sendTextEvent(byte[] text) { sendTextEvent(mNativeContext, text); }
++    public void sendTextEvent(byte[] text) { if (inputEnabled) sendTextEvent(mNativeContext, text); }
+     @FastNative private native void sendTextEvent(long ptr, byte[] text);
+ 
+     public boolean requestConnection() { return requestConnection(mNativeContext); }
+--- a/lorie/src/main/java/com/termux/x11/input/TouchInputHandler.java
++++ b/lorie/src/main/java/com/termux/x11/input/TouchInputHandler.java
+@@ -88,6 +88,7 @@
+ 
+     private final RenderData mRenderData;
+     private final GestureDetector mScroller;
++    private GestureListener mGestureListener;
+     private final ScaleGestureDetector mZoomer;
+     private final TapGestureDetector mTapDetector;
+     private final StylusListener mStylusListener = new StylusListener();
+@@ -194,7 +195,7 @@
+             mDisplayManager.registerDisplayListener(mDisplayListener, null);
+         }
+ 
+-        GestureListener listener = new GestureListener();
++        GestureListener listener = mGestureListener = new GestureListener();
+         if (!isTouchpad)
+             activity.getLorieView().setSyncListener(listener::onCursorMoveSynced);
+         mScroller = new GestureDetector(/*desktop*/ activity, listener, null, false);
+@@ -255,7 +256,19 @@
+         this(activity, null, injector, false);
+     }
+ 
++    public void cancelInput() {
++        long now = android.os.SystemClock.uptimeMillis();
++        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0, 0, 0);
++        mScroller.onTouchEvent(cancel); mZoomer.onTouchEvent(cancel); mTapDetector.onTouchEvent(cancel);
++        mDexListener.onTouch(mActivity.getLorieView(), cancel); cancel.recycle();
++        mGestureListener.mGestureListenerHandler.removeCallbacksAndMessages(null);
++        mGestureListener.mPendingCursorSyncSerial = -1;
++        mDexListener.handler.removeCallbacksAndMessages(null);
++        if (mTouchpadHandler != null) mTouchpadHandler.cancelInput();
++    }
++
+     public void onDestroy() {
++        cancelInput();
+         ((InputManager) mActivity.getSystemService(Context.INPUT_SERVICE)).unregisterInputDeviceListener(mInputDeviceListener);
+         if (mTouchpadHandler != null)
+             mTouchpadHandler.onDestroy();
