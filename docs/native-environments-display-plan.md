@@ -3633,3 +3633,7 @@ takes its natural height up to 60% of the available list area, then scrolls;
 the main list uses the remaining space and therefore starts scrolling sooner as
 pins grow. Do not reserve an empty 60% area for a few pins. Recalculate available
 space when the viewport changes, without moving search off-screen or blocking UI.
+
+Remove the visible frame/outline around taskbar buttons, as the user clarified
+after asking to remove highlighting. Keep this scoped to taskbar button frames;
+do not remove application styling or change the taskbar's functions.
