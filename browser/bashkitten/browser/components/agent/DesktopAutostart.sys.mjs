@@ -29,10 +29,16 @@ export async function setLoginAutostart(enabled) {
 }
 
 /** The view's immutable owner selects services; app startup lists owned machines. */
-export function autostartController({ control, request, backend, current }) {
+export function autostartController({ control, request, backend, current, startupStatus }) {
   const check = () => { if (!current()) throw new Error("The Autostart view is closed."); };
   const machines = async () => (await control("machines.list")).machines;
-  const environmentCall = (id, name, value = {}) => id === "local" ? control(name, value) : control(`machines.${name}`, { ...value, id });
+  const environmentCall = async (id, name, value = {}) => {
+    let result;
+    try { result = await (id === "local" ? control(name, value) : control(`machines.${name}`, { ...value, id })); }
+    catch (error) { if (id === "local" && name === "autostart-status") startupStatus?.({ error: error.message }); throw error; }
+    if (id === "local") startupStatus?.(result);
+    return result;
+  };
   const environment = async id => {
     if (id === "local") return { id, name: "Local", call: (name, value) => environmentCall(id, name, value) };
     const machine = (await machines()).find(item => item.id === id);

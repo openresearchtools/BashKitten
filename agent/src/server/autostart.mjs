@@ -46,6 +46,14 @@ export class AutostartCommands {
   get active() { return [...this.running.values()].some(owner => owner.child); }
   async status() {
     const config = await autostartConfig();
+    // A valid reread supersedes an earlier configuration-read failure. Failed
+    // attempts belong to their saved command, not a later edit of the same ID.
+    this.error = null;
+    const entries = new Map(config.commands.map(entry => [entry.id, entry]));
+    for (const [id, owner] of this.running) {
+      const entry = entries.get(id);
+      if (!owner.child && (!entry?.enabled || owner.revision !== digest(JSON.stringify(entry)))) this.running.delete(id);
+    }
     return { ...config, error: this.error, status: config.commands.map(entry => {
       const owner = this.running.get(entry.id);
       return { id: entry.id, state: owner?.state || 'stopped', error: owner?.error || '',
@@ -69,7 +77,7 @@ export class AutostartCommands {
     catch (error) { this.error = error.message; return; }
     await Promise.all(config.commands.filter(entry => entry.enabled).map(async entry => {
       try { await this.start(entry); }
-      catch (error) { this.running.set(entry.id, { state: 'failed', error: error.message }); }
+      catch (error) { this.running.set(entry.id, { state: 'failed', error: error.message, revision: digest(JSON.stringify(entry)) }); }
     }));
   }
   async start(entry) {

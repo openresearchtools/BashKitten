@@ -329,12 +329,8 @@ class AgentView {
     DesktopLifetime.attach(this, shutdown);
     this.show();
     await this.refreshRemotes();
-    void control("autostart-startup").then(result => {
-      const errors = Object.entries(result.startupErrors || {}).map(([name, message]) => `${name}: ${message}`);
-      if (result.error) errors.push(result.error);
-      for (const item of result.status || []) if (item.error) errors.push(item.error);
-      if (errors.length && !this.win.closed) this.sidecar.notice.textContent = `Service startup: ${errors.join("; ")}`;
-    }).catch(error => { this.sidecar.notice.textContent = `Service startup: ${error.message}`; });
+    void control("autostart-startup").then(result => this.updateStartupNotice(result))
+      .catch(error => this.updateStartupNotice({ error: error.message }));
     void AgentRemotes.startup(() => !this.win.closed && !DesktopLifetime.quitting && !closingLocal)
       .catch(error => { this.sidecar.notice.textContent = `Connection startup: ${error.message}`; });
     void (async () => {
@@ -358,6 +354,17 @@ class AgentView {
       else { this.off = true; this.localOn = false; this.stopped(); await this.sidecar.render(); }
     });
     DesktopLifetime.started();
+  }
+
+  updateStartupNotice(result) {
+    if (this.win.closed) return;
+    const errors = Object.entries(result.startupErrors || {}).map(([name, message]) => `${name}: ${message}`);
+    if (result.error) errors.push(result.error);
+    for (const item of result.status || []) if (item.error) errors.push(item.error);
+    const previous = this.startupNotice || "";
+    this.startupNotice = errors.length ? `Service startup: ${errors.join("; ")}` : "";
+    // Other sidebar operations own their own errors. Refresh only our notice.
+    if (!this.sidecar.notice.textContent || this.sidecar.notice.textContent === previous) this.sidecar.notice.textContent = this.startupNotice;
   }
 
   installSettingsMenu() {
@@ -1117,7 +1124,7 @@ class AgentView {
     let closed = false;
     const current = () => !closed && this.connectionsPanel === panel && this.selectionEpoch === epoch && !DesktopLifetime.quitting;
     const request = (name, value = {}) => backend.kind === "machine" ? this.machineLocalControl(backend.id, name, value) : control(name, value);
-    const startupCall = autostartController({ control, request, backend, current });
+    const startupCall = autostartController({ control, request, backend, current, startupStatus: result => this.updateStartupNotice(result) });
     const tests = new Set(), setups = new Map(), monitor = new LinuxPerformanceMonitor();
     let performanceSession = null, performanceTask = null;
     const pause = () => {
