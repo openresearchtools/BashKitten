@@ -1103,8 +1103,17 @@ class AgentView {
     if (backend.kind === "machine") result = await this.machineLocalControl(backend.id, "phone-status");
     else if (backend.kind === "local") result = await control("phone-status");
     else {
-      const connection = await AgentRemotes.connection(backend.id);
+      const browser = this.activeBrowser, view = ownedViews.get(browser), connection = view?.connection;
+      const context = browser?.browsingContext, global = context?.currentWindowGlobal, epoch = this.selectionEpoch;
+      const current = () => !this.off && !this.win.closed && !DesktopLifetime.quitting && this.selectionEpoch === epoch &&
+        this.selection === backend.id && this.remote === connection && view?.host === this && !view.local &&
+        connection?.id === backend.id && connection.requestContext === context && this.activeBrowser === browser &&
+        browser.isConnected && ownedViews.get(browser) === view && global?.isCurrentGlobal && context.currentWindowGlobal === global;
+      if (!current()) throw new Error("The selected remote Agent changed.");
+      const { entry, owner } = AgentRemotes.serviceOwner(backend.id);
       const response = await AgentRemotes.request(connection, "/api/phone/status");
+      AgentRemotes.current(entry, owner);
+      if (!current()) throw new Error("The selected remote Agent changed.");
       if (response.status !== 200) throw new Error(response.data?.error || "Sign in to this backend before checking its phone registration.");
       result = response.data;
     }
@@ -1124,6 +1133,13 @@ class AgentView {
     if (section === "share-local" && backend.kind === "remote") throw new Error("Sharing is configured on the owning device.");
     if (section === "performance" && backend.kind === "remote") throw new Error("Performance is available for Local and owned containers.");
     if (section === "machine" && backend.kind !== "machine") throw new Error("Choose a managed container.");
+    if (backend.kind === "remote" && ["telephone", "notifications"].includes(section)) {
+      const layout = this.layoutEpoch;
+      // Remote status uses that backend's authenticated protected chat, not
+      // connection metadata or the previously selected backend's document.
+      await this.sidecar.select(backend.id);
+      if (layout !== this.layoutEpoch || this.selection !== backend.id || this.off || this.win.closed || DesktopLifetime.quitting) throw new Error("The settings owner changed.");
+    }
     let epoch = this.selectionEpoch;
     const panel = xul(this.doc, "vbox", { id: "bashkitten-settings-view", flex: "1" });
     const browser = xul(this.doc, "browser", { type: "content", remote: "true", remoteType: "web", maychangeremoteness: "true", messagemanagergroup: "bashkitten-settings", flex: "1", disableglobalhistory: "true", "bashkitten-protected": "true" });
