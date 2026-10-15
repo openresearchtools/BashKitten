@@ -30,10 +30,12 @@ export const BrowserControlChannel = {
 
   startGuest() {
     if (!this.guestRequested) return Promise.reject(new Error("Not a managed guest browser"));
+    if (this.guestQuitting) return Promise.reject(new Error("Guest browser is quitting"));
     if (this.guestStartup) return this.guestStartup;
     if (!this.guestLifetime) {
       this.guestLifetime = true;
       Services.startup.enterLastWindowClosingSurvivalArea();
+      Services.obs.addObserver(this, "quit-application-granted");
       lazy.AsyncShutdown.profileBeforeChange.addBlocker("Guest browser control", () => this.closeGuest());
     }
     this.guestStartup = this.openGuest().catch(() => {
@@ -134,6 +136,16 @@ export const BrowserControlChannel = {
   },
 
   observe(_subject, topic, connectionId) {
+    if (topic === "quit-application-granted" && this.guestLifetime) {
+      // Preserve ordinary last-window Close, but let Gecko finish an explicit
+      // Quit after asynchronous window destruction. Release only our own hold,
+      // after quit cancellation checks, and never reacquire it during shutdown.
+      this.guestQuitting = true;
+      this.guestLifetime = false;
+      Services.obs.removeObserver(this, "quit-application-granted");
+      Services.startup.exitLastWindowClosingSurvivalArea();
+      return;
+    }
     if (topic === "bashkitten-agent-control-revoke" &&
         (this.current?.connection.id === connectionId || this.pending?.id === connectionId)) {
       void this.close("authentication or selection changed");
