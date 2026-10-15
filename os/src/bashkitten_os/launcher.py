@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Search/pin/entry actions adapted from Gnozzard 59ca6d56 (GPL-3.0-or-later).
-import subprocess
 from .common import *
 from gi.repository import Pango
 
@@ -14,7 +13,7 @@ class Launcher(Gtk.ApplicationWindow):
         style(self)
         self.prefs = settings(); self.generation = 0; self.catalogue = []; self.dirty = True
         self.open_generation=0
-        self.search_source = 0
+        self.search_source = 0; self.render_source = 0
         self.previous = None; self.icon_jobs=Gio.Cancellable()
         self.connect('delete-event', lambda *_: (self.close_menu(), True)[1])
         self.connect('key-press-event', self.key)
@@ -78,6 +77,7 @@ class Launcher(Gtk.ApplicationWindow):
         self.open_generation+=1
         self.generation += 1; self.icon_jobs.cancel(); self.icon_jobs=Gio.Cancellable(); self.hide(); self.search.set_text('')
         if self.search_source: GLib.source_remove(self.search_source); self.search_source = 0
+        if self.render_source: GLib.source_remove(self.render_source); self.render_source = 0
         from .layout import Wnck
         if self.previous in Wnck.Screen.get_default().get_windows():
             self.previous.activate(Gtk.get_current_event_time())
@@ -97,23 +97,46 @@ class Launcher(Gtk.ApplicationWindow):
     def render(self):
         if not self.get_visible(): return
         self.generation += 1; self.icon_jobs.cancel(); self.icon_jobs=Gio.Cancellable(); generation = self.generation
-        for listing in (self.pinned, self.rest):
-            for child in listing.get_children(): child.destroy()
+        if self.render_source: GLib.source_remove(self.render_source)
         query = self.search.get_text().casefold()
-        pins = self.prefs.get_strv('pins'); by_id = {a.get_id(): a for a in self.catalogue}
+        pins = self.prefs.get_strv('pins'); catalogue = self.catalogue
         matches = lambda a: query in (a.get_display_name() + ' ' + (a.get_description() or '')).casefold()
-        pinned = [by_id[p] for p in pins if p in by_id and matches(by_id[p])]
-        rest = [a for a in self.catalogue if a.get_id() not in pins and matches(a)]
-        self.pinsection.set_visible(bool(pinned))
-        pending = iter([(self.pinned, a) for a in pinned] + [(self.rest, a) for a in rest])
+        self.pinsection.hide()
+        def insert(listing, app):
+            button = self.application_row(app); listing.add(button)
+            button.get_parent().show_all()
+        def rebuild():
+            # Teardown and filtering must yield too: a search can replace a large
+            # list. Keep all GTK work on the main context, bounded per idle turn.
+            for listing in (self.pinned, self.rest):
+                while True:
+                    row = listing.get_row_at_index(0)
+                    if row is None: break
+                    row.destroy(); yield
+            by_id = {}
+            for app in catalogue:
+                by_id[app.get_id()] = app; yield
+            pinned_ids = set()
+            for identity in pins:
+                pinned_ids.add(identity); app = by_id.get(identity)
+                if app and matches(app):
+                    insert(self.pinned, app); self.pinsection.show()
+                yield
+            for app in catalogue:
+                if app.get_id() not in pinned_ids and matches(app): insert(self.rest, app)
+                yield
+        pending = rebuild()
         def batch():
-            if generation != self.generation or not self.get_visible(): return False
+            if generation != self.generation or not self.get_visible():
+                self.render_source = 0; return False
+            deadline = GLib.get_monotonic_time() + 4000
             for _ in range(8):
-                try: listing, app = next(pending)
-                except StopIteration: return False
-                listing.add(self.application_row(app)); listing.show_all()
+                try: next(pending)
+                except StopIteration:
+                    self.render_source = 0; return False
+                if GLib.get_monotonic_time() >= deadline: break
             return True
-        GLib.idle_add(batch)
+        self.render_source = GLib.idle_add(batch)
 
     def application_row(self, app):
         button = Gtk.Button(); button.set_size_request(-1, 42)
@@ -144,13 +167,22 @@ class Launcher(Gtk.ApplicationWindow):
         self.close_menu()
         async_work(lambda: app.launch([], None), lambda _, e: error_dialog(self, e) if e else None)
 
-    def helper(self, *args):
-        def done(_,error):
-            if error:error_dialog(self,error);return
+    def helper(self, *args, on_success=None):
+        def completed(process,result):
+            try: process.wait_check_finish(result)
+            except GLib.Error as error:
+                error_dialog(self,error);return
+            if on_success: on_success()
             self.dirty=True
             if self.get_visible():self.load_catalogue()
-        async_work(lambda: subprocess.run([str(PREFIX / 'bin/bashkitten-app'), *args], check=True),
-                   done)
+        def started(process,error):
+            if error:error_dialog(self,error);return
+            # Extraction helpers retain the launched app for truthful errors.
+            # Their lifetime must not occupy a desktop worker. Inherit the owned
+            # session/process group; hiding the menu never cancels the app.
+            process.wait_check_async(None,completed)
+        async_work(lambda: Gio.Subprocess.new([str(PREFIX / 'bin/bashkitten-app'), *args],
+                                              Gio.SubprocessFlags.STDIN_INHERIT), started)
 
     def menu(self, app, event):
         menu = Gtk.Menu(); identity = app.get_id(); pins = self.prefs.get_strv('pins')
@@ -178,12 +210,9 @@ class Launcher(Gtk.ApplicationWindow):
                 kind = 'appimage' if appimage else 'desktop'
                 item('Rename…', lambda: self.rename(app, kind))
                 def remove():
-                    def done(_, error):
-                        if error: error_dialog(self, error); return
+                    def unpin():
                         self.prefs.set_strv('pins', [p for p in self.prefs.get_strv('pins') if p != identity])
-                        self.dirty = True
-                        if self.get_visible():self.load_catalogue()
-                    async_work(lambda: subprocess.run([str(PREFIX / 'bin/bashkitten-app'), 'remove-'+kind, identity], check=True), done)
+                    self.helper('remove-'+kind, identity, on_success=unpin)
                 item('Delete from Applications', remove)
         menu.show_all(); menu.popup_at_pointer(event); return True
 
