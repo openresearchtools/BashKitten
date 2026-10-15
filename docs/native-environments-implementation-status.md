@@ -5,6 +5,68 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Cross-feature corrections and full-scope review — 15 October 2026
+
+The subsequent integration-fix batch includes `65500cd704` (independent Display
+readiness and complete owned-container cleanup), `ddeecebf0c` (background service
+Stop while Local is Off), `7e993117d4` (nonblocking launcher helpers and bounded
+search rendering), `df19cde51d` (speech cancellation ownership and unrestricted
+model/projector selections), `a58b765838` (queued browser command delivery,
+cancelled-copy cleanup and Parakeet startup), `03fc2d075b` (bounded native Display
+teardown), `990daffb18` (authenticated remote phone settings), `46e45380a6`
+(user-owned Pi providers and durable Stop/question semantics), `5d902a22ac`
+(embedded Display cache invalidation), and `5c8c950062` (phone lifecycle,
+delivery acknowledgements, ringing deduplication and grant/share revocation).
+Focused source/component checks pass and remain in the external verification
+workspace. These commits require a combined build and installed acceptance;
+the changed native Display module must actually be recompiled and linked.
+
+Fresh Android 17 CVD03 completed first-use setup on the earlier `e7f74f5fa8`
+candidate through the installed desktop BashKitten Cuttlefish UI. Qwen3.5-2B-Q4_0
+was selected automatically, reasoning was Off, and a first chat requesting
+`READY` returned `READY`. Saved llama, speech-recognition and synthesis backend
+preferences are all CPU. Evidence: `verification/android17-fresh-e7f7/first-use-result.json`.
+This establishes starter downloads/default selection/first chat, not speech,
+vision, cancel/resume, or acceptance of the later corrections above.
+
+The bounded review reports preserve exact scopes and uncovered areas under
+`verification/whole-spec-audit-20261015/`. Broad review work has ended; confirmed
+repairs, combined builds and installed cases are the current work. The legacy
+pre-ownership container service's restart message and stale current-architecture
+documentation remain recorded follow-ups; they are not silently marked fixed.
+
+The authenticated Android remote Send attempt under a saved project failed with
+Files Off: the session-creation route incorrectly required file-manager permission
+when `projectId` was present. The draft was retained and no Pi turn was accepted.
+Commit `3540cfb3d9` removes that unrelated gate; ordinary remote authentication,
+saved project directory validation and file-manager authorization remain intact.
+The publisher's Files permission is Off for the required installed retest. Source
+checks reproduce the old failure and verify project/standalone chat creation,
+attachments, image responses, metadata operations and message handling separately
+from the file-manager policy. These checks do not establish installed acceptance.
+Evidence: `verification/remote-chat-files-off-20261015/` in the Build workspace.
+
+Commit `58bc423622` fixes the shared New chat button passing its DOM event as a
+project ID, keeps saved/project working-folder controls consistent when Files
+policy events arrive, and restores the desktop remote heading's requested Connect
+to phone action through its existing settings owner. Commit `9b28ec63e7` removes
+two unused development deletion aliases while retaining the used session-group
+route and its confirmation checks. No new permission, transport or compatibility
+path was introduced. Installed verification remains required.
+
+Both frozen `e7f74f5fa8` builds passed package/source checks: Linux in 7m56s and
+Android in 10m39s (Gradle 6m34s). They include the preceding sizing/Display repairs,
+but predate the three corrections above. Their exact handoffs are
+`verification/desktop-e7f7/handoff.json` and
+`verification/android-termux-handoff-e7f7.json`; they are development candidates.
+
+The user's full-code/full-plan review request is being tracked separately under
+`verification/whole-spec-audit-20261015/`. A path inventory or search hit is not
+read coverage; truncated output does not count as a completed read. Findings
+must map to the immutable baseline plus authorized amendments, actual code paths,
+and installed verification. The app is not yet verified against the whole scope;
+all unfinished mandatory requirements below remain open.
+
 ## Phone desktop sizing and Applications list — 15 October 2026
 
 Source `1e9dd194ad` implements the latest layout amendments: a shared vertical
