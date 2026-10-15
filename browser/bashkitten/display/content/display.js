@@ -58,8 +58,9 @@ function startRenderer() {
     try {
       const v=JSON.parse(data);
       if (v.type==="closed") {
-        receiver=null; resolveRendererClosed();
-        if (!changing && state !== "error") fail("The Display connection stopped. Turn Display off and on to reconnect.");
+        receiver=null; resolveRendererClosed(v.error || null);
+        if (v.error) fail(v.error);
+        else if (!changing && state !== "error") fail("The Display connection stopped. Turn Display off and on to reconnect.");
         else update();
         return;
       }
@@ -89,7 +90,8 @@ async function enabled(value) {
   receiver?.close(); update();
   try {
     const result=await BashKittenDisplay.service(document,value?"start":"stop");
-    await rendererClosed;
+    const closeError=await rendererClosed;
+    if (closeError) throw new Error(closeError);
     if (closed) return;
     serviceRunning=result.running;
     if (value) {

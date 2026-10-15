@@ -19,7 +19,7 @@ class BashKittenDisplay final : public nsIBashKittenDisplay {
  private:
   ~BashKittenDisplay();
   void Run(nsCString socket, nsCString executable);
-  void Status(const nsCString& status);
+  void Status(const nsCString& status, bool stopped = false);
   void Invalidate();
   mozilla::Mutex mMutex{"BashKittenDisplay"};
   nsTArray<nsCString> mInputs MOZ_GUARDED_BY(mMutex);

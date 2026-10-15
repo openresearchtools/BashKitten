@@ -18,6 +18,7 @@
 #include "mozilla/Base64.h"
 #include "nsXULAppAPI.h"
 #include "base/linux_memfd_defs.h"
+#include "chrome/common/process_watcher.h"
 #include "json/json.h"
 #include <sys/socket.h>
 #include <sys/mman.h>
@@ -30,6 +31,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <array>
+#include <chrono>
 #include <vector>
 
 using namespace mozilla;
@@ -37,6 +39,29 @@ using namespace mozilla::layers;
 using namespace mozilla::gfx;
 
 namespace {
+// Only this worker waits for its direct posix_spawn child. Until waitpid reaps
+// it, that PID cannot be reused. Never signal after ownership is lost (ECHILD).
+enum class RendererExit { Reaped, Pending, Unowned };
+RendererExit WaitRenderer(pid_t child, int milliseconds) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+  do {
+    const pid_t result = waitpid(child, nullptr, WNOHANG);
+    if (result == child) return RendererExit::Reaped;
+    if (result < 0 && errno != EINTR) return RendererExit::Unowned;
+    if (std::chrono::steady_clock::now() >= deadline) break;
+    poll(nullptr, 0, 20);
+  } while (true);
+  return RendererExit::Pending;
+}
+RendererExit StopRenderer(pid_t child) {
+  auto result = WaitRenderer(child, 0);
+  if (result != RendererExit::Pending) return result;
+  kill(child, SIGTERM);
+  result = WaitRenderer(child, 2000);
+  if (result != RendererExit::Pending) return result;
+  kill(child, SIGKILL);
+  return WaitRenderer(child, 1000);
+}
 constexpr size_t kMaxPacket = 65536;
 constexpr uint32_t kARGB = 0x34325241, kXRGB = 0x34325258;
 nsCString Encode(const Json::Value& v) {
@@ -138,10 +163,9 @@ NS_IMETHODIMP BashKittenDisplay::Close() {
   if (mThread) { mThread->AsyncShutdown(); mThread = nullptr; }
   return NS_OK;
 }
-void BashKittenDisplay::Status(const nsCString& status) {
+void BashKittenDisplay::Status(const nsCString& status, bool stopped) {
   RefPtr<BashKittenDisplay> self = this;
-  NS_DispatchToMainThread(NS_NewRunnableFunction("BashKittenDisplay::Status", [self, status] {
-    const bool stopped = status.EqualsLiteral("{\"type\":\"closed\"}");
+  NS_DispatchToMainThread(NS_NewRunnableFunction("BashKittenDisplay::Status", [self, status, stopped] {
     if (stopped && self->mThread) { self->mThread->AsyncShutdown(); self->mThread = nullptr; }
     if ((!self->mClosed || stopped) && self->mObserver) self->mObserver->Observe(self, "bashkitten-display", NS_ConvertUTF8toUTF16(status).get());
     if (stopped) self->mObserver = nullptr;
@@ -156,9 +180,10 @@ void BashKittenDisplay::Invalidate() {
   }));
 }
 void BashKittenDisplay::Run(nsCString socket, nsCString executable) {
-  // The toolbar enables a new renderer only after the old child and channel
-  // have actually closed. Teardown and waiting remain on this worker thread.
-  auto stopped = MakeScopeExit([&] { Status("{\"type\":\"closed\"}"_ns); });
+  // Teardown and bounded child waiting stay on this worker. A failed reap is
+  // reported distinctly from a successfully closed renderer.
+  Json::Value closed; closed["type"] = "closed";
+  auto stopped = MakeScopeExit([&] { Status(Encode(closed), true); });
   int channels[2];
   if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_CLOEXEC, 0, channels)) {
     Status("{\"type\":\"error\",\"message\":\"Cannot create native display channel\"}"_ns); return;
@@ -182,7 +207,16 @@ void BashKittenDisplay::Run(nsCString socket, nsCString executable) {
   posix_spawn_file_actions_destroy(&actions);
   close(channels[1]); channels[1] = -1;
   if (error) { Status("{\"type\":\"error\",\"message\":\"Cannot launch packaged native display renderer\"}"_ns); return; }
-  auto reap = MakeScopeExit([&] { kill(child, SIGTERM); while (waitpid(child, nullptr, 0) < 0 && errno == EINTR) {} });
+  auto reap = MakeScopeExit([&] {
+    const auto result = StopRenderer(child);
+    if (result != RendererExit::Reaped) {
+      closed["error"] = "The Display renderer could not finish closing. Its viewport is disconnected; reopen Display to retry.";
+      // A kernel-stalled child may outlive SIGKILL. Transfer its final reap to
+      // Gecko's existing asynchronous owner; do not strand this viewport thread
+      // or pretend its exit was observed. An unowned PID must never be signalled.
+      if (result == RendererExit::Pending) ProcessWatcher::EnsureProcessTerminated(child, true);
+    }
+  });
   nsCString capabilities; GetCapabilities(capabilities);
   Json::Value attach; Json::Reader reader;
   reader.parse(capabilities.get(), attach);
