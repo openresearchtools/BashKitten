@@ -31,7 +31,9 @@ function touch(channel) {
 function deliver(channel) {
   if (!channel.poll || !channel.queue.length) return;
   // Never replay a command after uncertain delivery. Pi receives an error instead.
-  channel.poll.finish({ commands: channel.queue.splice(0) });
+  // Both native clients consume up to 64 commands per poll. Leave the rest
+  // queued for the next poll, without imposing a total command limit.
+  channel.poll.finish({ commands: channel.queue.splice(0, 64) });
 }
 function targetFor(sessionId) {
   if (process.env.BASHKITTEN_EXECUTION_ROLE === 'container') {

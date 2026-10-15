@@ -521,6 +521,9 @@ export class LocalAI {
     this.stopping = false;
     const config = await this.config();
     for (const engine of Object.keys(ids)) if (config[engine].startup) {
+      // Parakeet runs per transcription; retain the user's Whisper startup
+      // preference for when they switch back to its persistent server.
+      if (engine === 'whisper' && config.whisper.modelKind === 'parakeet') { this.errors.delete(engine); continue; }
       try { await this.action(engine, 'start'); this.errors.delete(engine); }
       catch (error) { this.errors.set(engine, error.message); }
     }
