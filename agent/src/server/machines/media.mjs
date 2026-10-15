@@ -38,7 +38,8 @@ export function integrationArguments(config) {
 export async function mediaDevices() {
   const data=await pipewireGraph(),defaults={};
   for(const obj of data)if(obj.type==='PipeWire:Interface:Metadata'&&obj.props?.['metadata.name']==='default')for(const m of obj.metadata||[]) {
-    try {defaults[m.key]=(typeof m.value==='string'?JSON.parse(m.value):m.value)?.name;}catch{}
+    if(m.subject!==0)continue;
+    try {const name=(typeof m.value==='string'?JSON.parse(m.value):m.value)?.name;if(typeof name==='string'&&name)defaults[m.key]=name;}catch{}
   }
   return data.filter(obj=>obj.type==='PipeWire:Interface:Node'&&Object.values(classes).includes(obj.info?.props?.['media.class'])).map(obj=>{
     const p=obj.info.props,kind=Object.keys(classes).find(k=>classes[k]===p['media.class']);
@@ -48,12 +49,36 @@ export async function mediaDevices() {
   });
 }
 export async function stopMedia(id) {
-  const channels=running.get(id)||[];running.delete(id);
-  for(const channel of channels)if(channel.child.exitCode===null&&channel.child.signalCode===null) {
+  const channels=running.get(id)||[];
+  const alive=child=>Boolean(child.pid)&&child.exitCode===null&&child.signalCode===null;
+  const wait=async (child, milliseconds) => {
+    if(!alive(child))return;
+    await new Promise(resolve=>{
+      const done=()=>{clearTimeout(timer);child.off('exit',done);resolve();};
+      const timer=setTimeout(done,milliseconds);
+      child.once('exit',done);
+      if(!alive(child))done();
+    });
+  };
+  const results=await Promise.allSettled(channels.map(async channel=>{
+    // Keep the original ChildProcess handle until exit is observed; never
+    // signal a PID rediscovered from an unverified status file.
+    if(!alive(channel.child))return;
     channel.child.kill('SIGTERM');
-    await Promise.race([new Promise(resolve=>channel.child.once('exit',resolve)),new Promise(resolve=>setTimeout(resolve,2000))]);
-    if(channel.child.exitCode===null&&channel.child.signalCode===null)channel.child.kill('SIGKILL');
+    await wait(channel.child,2000);
+    if(alive(channel.child)) {
+      channel.child.kill('SIGKILL');
+      await wait(channel.child,1000);
+    }
+    if(alive(channel.child))throw Error(`The owned ${channel.name} media bridge has not stopped`);
+  }));
+  const retained=channels.filter(channel=>alive(channel.child));
+  if(running.get(id)===channels) {
+    if(retained.length)running.set(id,retained);
+    else running.delete(id);
   }
+  const failures=results.filter(result=>result.status==='rejected');
+  if(failures.length)throw Error(failures.map(result=>result.reason.message).join('; '));
 }
 export const mediaStatus=id=>(running.get(id)||[]).map(c=>({name:c.name,running:c.child.exitCode===null&&c.child.signalCode===null,error:c.error}));
 export async function startMedia(config,info,job) {
@@ -75,10 +100,10 @@ export async function startMedia(config,info,job) {
       const mapped=info.NetworkSettings?.Ports?.[`${ports[name]}/tcp`];
       const port=mapped?.find(p=>p.HostIp==='127.0.0.1')?.HostPort;
       if(!/^[0-9]+$/.test(port||''))throw Error(`The ${name} loopback endpoint is unavailable`);
-      const candidates=devices.filter(d=>d.kind===name),device=settings.node?candidates.find(d=>d.node===settings.node):(candidates.find(d=>d.default)||candidates[0]);
-      if(!device&&!(name==='guest_audio_output'&&!settings.node))throw Error(`Selected ${name} device is unavailable`);
+      const candidates=devices.filter(d=>d.kind===name),device=settings.node?candidates.find(d=>d.node===settings.node):candidates.find(d=>d.default);
+      if(!device)throw Error(`${settings.node?'Selected':'System default'} ${name} device is unavailable`);
       let args;
-      if(name==='guest_audio_output') args=['tcpclientsrc','host=127.0.0.1',`port=${port}`,'!','gdpdepay','!','queue','max-size-buffers=8','leaky=downstream','!','pipewiresink','client-name=BashKitten Guest Audio',...(device?[`target-object=${device.serial}`]:[]),'sync=true'];
+      if(name==='guest_audio_output') args=['tcpclientsrc','host=127.0.0.1',`port=${port}`,'!','gdpdepay','!','queue','max-size-buffers=8','leaky=downstream','!','pipewiresink','client-name=BashKitten Guest Audio',`target-object=${device.serial}`,'sync=true'];
       else if(name==='host_microphone')args=['pulsesrc','client-name=BashKitten Microphone',`device=${device.node}`,'do-timestamp=true','buffer-time=40000','latency-time=10000','stream-properties=props,application.id=com.bashkitten.browser,application.name=BashKitten,media.role=communication','!','audioconvert','!','audioresample','!','audio/x-raw,format=S16LE,rate=48000,channels=2','!','tee','name=bk_microphone','bk_microphone.','!','queue','max-size-buffers=8','max-size-bytes=0','max-size-time=0','leaky=downstream','!','fakesink','sync=false','async=false','bk_microphone.','!','queue','max-size-buffers=32','max-size-bytes=0','max-size-time=0','leaky=downstream','!','gdppay','!','tcpclientsink','host=127.0.0.1',`port=${port}`,'sync=false','async=false'];
       else args=[...(device.videoDevice?['v4l2src',`device=${device.videoDevice}`,'do-timestamp=true','!','decodebin']:['pipewiresrc','client-name=BashKitten Host Camera','do-timestamp=true',`target-object=${device.serial}`]),'!','videoconvert','!','videoscale','!','video/x-raw,format=BGRA,width=640,height=480','!','gdppay','!','tcpclientsink','host=127.0.0.1',`port=${port}`,'sync=false','async=false'];
       const file=await fs.open(path.join(locations(config.id).directory,'media.log'),'a',0o600);
