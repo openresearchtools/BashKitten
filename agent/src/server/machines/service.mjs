@@ -282,8 +282,8 @@ async function prepareImage(config, job) {
   }
   await saveState(config.id, { provisioned: true, packageRevision: manifest.revision, state: 'stopped', lastError: null });
 }
-async function guestCall(id, command, value = {}) {
-  return socketRequest(path.join(locations(id).exchange,'agent/control.sock'), '/' + command, value, 30000);
+async function guestCall(id, command, value = {}, timeout = 30000) {
+  return socketRequest(path.join(locations(id).exchange,'agent/control.sock'), '/' + command, value, timeout);
 }
 async function startGateway(config, job) {
   const p = locations(config.id);
@@ -391,15 +391,11 @@ async function changeDisplay(id, enabled) {
           for (const until = Date.now() + 60000; Date.now() < until;) {
             job.check();
             const status = await readJson(path.join(files.exchange, 'display-status.json'), null);
-            const browser = await readJson(path.join(files.exchange, 'agent/guest-browser-status.json'), null);
             if (status?.generation === generation) {
               if (status.error) throw Error(status.error);
-              if (status.running) {
-                const agent = await guestCall(id, 'status');
-                if (agent.web?.error) throw Error(agent.web.error);
-                const agentOff = agent.web?.desired === false && agent.web?.status === 'stopped';
-                if (!agent.manager?.exiting && (agentOff || agent.web?.status === 'running' && browser?.connected)) { ready = true; break; }
-              }
+              // The guest browser/control channel is independent of this
+              // generation's desktop. Agent failure must not tear Display down.
+              if (status.running && (await displayStatus(id, info)).running) { ready = true; break; }
             }
             await sleep(250);
           }
@@ -456,12 +452,10 @@ async function start(config, job) {
     await fs.rm(path.join(p.exchange,'integration-status.json'),{force:true});
     job.check();
     await podman(['start',containerName(id)],{output:job.output,signal:job.signal});
-    let browserError;
     for (const until=Date.now()+60000;Date.now()<until;) {
       job.check();
       try {
         const status=await guestCall(id,'status');
-        const browser=startDisplay ? await readJson(path.join(p.exchange,'agent/guest-browser-status.json'),null) : null;
         const display=startDisplay ? await readJson(path.join(p.exchange,'display-status.json'),null) : null;
         const currentDisplay=display?.generation===displayConfig.generation ? display : null;
         if (status.web?.error) throw Error(status.web.error);
@@ -471,8 +465,7 @@ async function start(config, job) {
         // its own generation-bound readiness and must not depend on that channel.
         const agentOff=status.web?.desired===false && status.web?.status==='stopped';
         const agentReady=!status.manager?.exiting && (agentOff || status.web?.status==='running');
-        browserError=agentOff ? null : browser?.error;
-        if (agentReady && (!startDisplay || currentDisplay?.running && (agentOff || browser?.connected))) {
+        if (agentReady && (!startDisplay || currentDisplay?.running && (await displayStatus(id, await inspect(id,{signal:job.signal}))).running)) {
           if (startDisplay) await startMedia(config, await inspect(id),job);
           await saveState(id,{state:'running',lastError:null,display:gateway?.mode ?? null,displayFallbackReason:gateway?.fallbackReason||null}); return;
         }
@@ -480,7 +473,7 @@ async function start(config, job) {
       const live=await inspect(id); if (!live?.State?.Running) throw Error('Guest stopped during startup; inspect the guest service log');
       await sleep(250);
     }
-    throw Error(browserError || (startDisplay ? 'Guest BashKitten backend and browser controls did not become ready within 60 seconds' : 'Guest BashKitten Agent did not become ready within 60 seconds'));
+    throw Error(startDisplay ? 'Guest BashKitten Agent and Display did not become ready within 60 seconds' : 'Guest BashKitten Agent did not become ready within 60 seconds');
   } catch (error) {
     // A failed Start cannot leave a partially ready desktop appearing On.
     await failAfterCleanup(error, [
@@ -492,17 +485,39 @@ async function start(config, job) {
 }
 async function stop(id,job,{deleting=false}={}) {
   await job.phase(deleting?'Stopping publishing, workers and machine services':'Stopping machine services');
-  if (deleting) {
-    try { await guestCall(id,'share-publish',{enabled:false}); }
+  const failures = [];
+  const attempt = async (name, work) => {
+    try { await work(); }
+    catch (error) { failures.push({ name, error }); }
+  };
+  if (deleting) await attempt('publishing', async () => {
+    try { await guestCall(id,'share-publish',{enabled:false},2000); }
     catch (error) { if (!['ENOENT','ECONNREFUSED'].includes(error.code)) throw error; }
+  });
+  // A stalled guest cannot veto an explicit Stop. Keep every failure visible,
+  // but finish the bounded, ownership-checked cleanup before returning it.
+  await attempt('container', async () => {
+    const info=await inspect(id,{signal:AbortSignal.timeout(2000)});
+    if (info?.State?.Running || info?.State?.Paused) {
+      await attempt('guest services', async () => {
+        try { await guestCall(id,'shutdown',{},2000); }
+        catch (error) { if (!['ENOENT','ECONNREFUSED','ECONNRESET'].includes(error.code)) throw error; }
+      });
+      await attempt('container stop', () => podman(['stop','--ignore','--time=6',containerName(id)],{output:job.output,signal:AbortSignal.timeout(8000)}));
+      const remaining=await inspect(id,{signal:AbortSignal.timeout(2000)});
+      if (remaining?.State?.Running || remaining?.State?.Paused) {
+        await podman(['kill','--signal=KILL',containerName(id)],{output:job.output,signal:AbortSignal.timeout(3000)});
+      }
+      const final=await inspect(id,{signal:AbortSignal.timeout(2000)});
+      if (final?.State?.Running || final?.State?.Paused) throw Error('The owned container has not stopped');
+    }
+  });
+  await attempt('media', () => stopMedia(id));
+  await attempt('display gateway', () => stopGateway(id));
+  if (failures.length) {
+    const first=failures[0].error;
+    throw Object.assign(new Error(failures.map(({name,error}) => `${name}: ${error.message}`).join('; '), {cause:first}), {name:first.name,code:first.code});
   }
-  const info=await inspect(id);
-  if (info?.State?.Running) {
-    try { await guestCall(id,'shutdown'); }
-    catch (error) { if (!['ENOENT','ECONNREFUSED','ECONNRESET'].includes(error.code)) throw error; }
-    await podman(['stop',containerName(id)],{output:job.output,signal:job.signal});
-  }
-  await stopMedia(id); await stopGateway(id);
   await saveState(id,{state:'stopped',lastError:null});
 }
 async function remove(id,job) {

@@ -21,11 +21,26 @@ export async function run(file, args, { env = process.env, cwd, input, output, s
   });
   child.stderr.on('data', bytes => { stderr = (stderr + bytes).slice(-65536); if(output) deliver(child.stderr, bytes); });
   const result = await new Promise((resolve, reject) => {
-    let failure;
+    let failure, killTimer;
+    const escalate = () => {
+      if (killTimer || child.exitCode !== null || child.signalCode !== null) return;
+      // AbortSignal sends TERM first. Escalate only this still-owned child;
+      // Podman's persistent container descendants have separate lifecycle owners.
+      killTimer = setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      }, 1000);
+    };
+    const stopEscalation = () => { clearTimeout(killTimer); signal?.removeEventListener('abort', escalate); };
+    signal?.addEventListener('abort', escalate, { once: true });
+    if (signal?.aborted) escalate();
+    child.once('exit', stopEscalation);
     // Abort/error can precede process exit. Do not call a command drained until
     // its close event; the owner must not tear down a namespace still in use.
     child.once('error', error => { failure = error; });
-    child.once('close', (code, sig) => failure ? reject(failure) : resolve({ code, signal: sig, stdout: binary ? Buffer.concat(chunks) : stdout, stderr }));
+    child.once('close', (code, sig) => {
+      stopEscalation();
+      failure ? reject(failure) : resolve({ code, signal: sig, stdout: binary ? Buffer.concat(chunks) : stdout, stderr });
+    });
   });
   if (sizeError) throw sizeError;
   if (!allowFailure && result.code !== 0) throw Error(`${file.split('/').at(-1)} exited ${result.signal || result.code}: ${result.stderr.trim()}`);
