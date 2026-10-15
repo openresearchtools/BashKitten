@@ -64,8 +64,8 @@ async function copyNode(source, name, destination, display, scope, destinationSc
     let output;
     try {
       await fs.mkdir(to, { mode: (stat.mode & 0o777) | 0o700 });
+      created(await fs.lstat(to));
       output = await openDirectory(to, destinationScope);
-      created(await output.stat());
       for (const child of await entries(dir)) await copyNode(dir, child, output, path.join(display, child), scope, destinationScope);
       await output.chmod(stat.mode & 0o777);
     } finally { await dir.close(); await output?.close(); }
@@ -76,8 +76,8 @@ async function copyNode(source, name, destination, display, scope, destinationSc
       await authorizeManagerPath(fdPath(input));
       if (!(await input.stat()).isFile()) throw Error('File changed while copying');
       output = await fs.open(to, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, stat.mode & 0o777);
-      await authorizeManagerPath(fdPath(output));
       created(await output.stat());
+      await authorizeManagerPath(fdPath(output));
       await pipeline(input.createReadStream(), output.createWriteStream(), { signal: abort.signal });
     } finally { await input.close(); await output?.close(); }
   } else throw Error(`Cannot copy a socket or device: ${display}`);
@@ -199,7 +199,10 @@ async function run(job) {
           let owned;
           try { await copyNode(parent, name, destination, relative, job.scopeRoot, job.destinationScope, stat => { owned = stat; }); }
           catch (error) {
-            await discardCopy(destination, name, owned, job.destinationScope).catch(() => {});
+            // Cancellation stops the copy, not rollback of its owned partial
+            // destination. Retain the remote path policy during cleanup.
+            await withManagerContext({ remote: job.remote === true, signal: new AbortController().signal },
+              () => discardCopy(destination, name, owned, job.destinationScope)).catch(() => {});
             throw error;
           }
         }
