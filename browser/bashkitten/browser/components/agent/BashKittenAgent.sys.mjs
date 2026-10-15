@@ -1244,6 +1244,13 @@ class AgentView {
       if (["share-setup", "share-reissue"].includes(name) || name === "share-publish" && value.enabled || name === "service-action" && ["start", "reload"].includes(value.action)) {
         const status = await request("start"); if (!current()) throw new Error("The settings owner changed.");
         if (backend.kind === "local" && !this.selection && !this.remote) { this.off = false; await this.update(status); this.schedule(); }
+        else if (backend.kind === "machine" && this.selection === backend.id && this.off) {
+          // Native startup may restore a guest whose protected chat is still
+          // disconnected. Refresh its private session without replacing the
+          // settings owner or changing the independent Display tab.
+          await this.selectMachine(backend.id, epoch);
+        }
+        if (!current()) throw new Error("The settings owner changed.");
       }
       const result = await request(name, value);
       if (name === "localai-router-model-test" && (!current() || closed)) await request("localai-router-model-test-cancel", { owner: value.owner });
