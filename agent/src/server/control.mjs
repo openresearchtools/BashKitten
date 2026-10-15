@@ -391,8 +391,10 @@ async function serve() {
       if (command === 'localai-cancel') { if (!['localai-first-run', 'localai-runtime', 'localai-quantize'].includes((await jobs.status())?.kind)) throw Error('No LocalAI operation is active'); await jobs.cancel(); return jobs.status(); }
       if (command === 'localai-share') return localAI.share(value.enabled);
       if (command === 'localai-action') {
-        if (!stack.ready || stopping) throw Error('Turn on Local before starting an engine');
-        return localAI.action(value.engine, value.action);
+        if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('BashKitten is stopping');
+        if (value.action !== 'stop' && !stack.ready) throw Error('Turn on Local before starting an engine');
+        try { return await localAI.action(value.engine, value.action); }
+        finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
       }
       if (command === 'localai-refresh') { await localAI.importProvider(); return localAI.status(); }
       throw Error('Unknown LocalAI action');
@@ -422,9 +424,12 @@ async function serve() {
     if (command === 'service-save') return stack.services.save(value);
     if (command === 'service-remove') return stack.services.remove(value);
     if (command === 'service-action') {
-      if (!stack.ready || stopping) throw Error('Turn on Local before controlling a service');
-      if (localAI && value.id === 'localai-llama') { await localAI.action('llama', value.action); return stack.services.status(); }
-      return stack.services.action(value);
+      if (value.action !== 'stop' && (stopping || browserClosing || shutdownRequested)) throw Error('BashKitten is stopping');
+      if (value.action !== 'stop' && !stack.ready) throw Error('Turn on Local before starting a service');
+      try {
+        if (localAI && value.id === 'localai-llama') { await localAI.action('llama', value.action); return await stack.services.status(); }
+        return await stack.services.action(value);
+      } finally { if (!stack.ready && !backgroundActive() && wakeHeld()) await releaseWake(); }
     }
     if (command === 'remote-services' || command === 'remote-service-action') {
       const published = await remote.state();
