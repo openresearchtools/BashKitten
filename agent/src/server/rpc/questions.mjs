@@ -2,11 +2,36 @@
 // One live worker owns a chat's optional questions. This is operational state,
 // never Pi history; all answer/expiry delivery goes through its existing queue.
 import path from 'node:path';
-import { digest, readJson, writeJson, sessionDir } from '../common.mjs';
+import { digest, readJson, writeJson, readMeta, sessionDir } from '../common.mjs';
+import { resolvedQuestion } from './notifications.mjs';
 
 export const QUESTION_TIMEOUT_MS = 120000;
 export async function savedQuestions(id) {
   return (await readJson(path.join(sessionDir(id), 'questions.json'), { records: [] })).records;
+}
+function cancelPending(state, reason) {
+  const cancelled = [];
+  for (const question of state.records) if (question.status === 'pending') {
+    question.status = 'cancelled'; question.reason = reason; question.resolvedAt = Date.now();
+    cancelled.push(question);
+  }
+  return cancelled;
+}
+/** Only after the live worker has exited, or under its startup lock. */
+export async function stopSavedQuestions(id, reason = 'Pi backend is Off') {
+  const file = path.join(sessionDir(id), 'questions.json'), state = await readJson(file, null);
+  if (!state) return;
+  if (!state.stopped) state.generation++;
+  state.stopped = true; cancelPending(state, reason);
+  for (const question of state.records) {
+    for (const delivery of question.deliveries || []) if (delivery.status === 'submitting') delivery.status = 'held';
+    if (question.deliveryStatus === 'submitting') question.deliveryStatus = 'held';
+  }
+  await writeJson(file, state);
+  // The existing outbox deduplicates these resolved controls by question ID.
+  // Reconcile on retry too, including a crash after saving cancellation.
+  const meta = await readMeta(id);
+  for (const question of state.records) if (question.status === 'cancelled') await resolvedQuestion(meta, question);
 }
 export class QuestionOwner {
   constructor({ owner, verify, authorize, deliver, changed, created, resolved, error }) {
@@ -19,6 +44,12 @@ export class QuestionOwner {
     clearTimeout(this.timer); this.epoch++; this.closed = false;
     this.id = id; this.file = path.join(sessionDir(id), 'questions.json');
     this.state = await readJson(this.file, { generation: 0, stopped: false, records: [] });
+    // A worker may be starting when Stop persists its intent. Do not schedule
+    // old questions even if the previous owner died before saving cancellation.
+    if (this.state.stopped || (await readJson(path.join(sessionDir(id), 'lifecycle.json'), {})).stopped) {
+      if (!this.state.stopped) this.state.generation++;
+      this.state.stopped = true; cancelPending(this.state, 'Pi backend is Off');
+    }
     // Submitted delivery at death is uncertain. Existing draft recovery holds it;
     // never replay from this operational record, even if no queue item survived.
     for (const question of this.state.records) {
@@ -96,6 +127,7 @@ export class QuestionOwner {
   }
   async expire() {
     for (const question of this.state.records) {
+      if (this.closed || this.state.stopped) break;
       if (question.status !== 'pending' || question.deadline > Date.now()) continue;
       question.status = 'expired'; question.resolvedAt = Date.now();
       await this.dispatch(question, `[Optional question ${question.questionId}: ${question.text}]\nBackend timeout notice: No response; proceed with the best long-term solution. This is not a user choice or permission approval.`, 'question:' + question.questionId + ':expiry', 'expiry');
@@ -177,10 +209,7 @@ export class QuestionOwner {
     // Synchronous generation invalidation wins against a send awaiting I/O.
     this.state.stopped = true; this.state.generation++; clearTimeout(this.timer);
     return this.serial(async () => {
-      for (const question of this.state.records) if (question.status === 'pending') {
-        question.status = 'cancelled'; question.reason = reason; question.resolvedAt = Date.now();
-        await this.publish(question);
-      }
+      for (const question of cancelPending(this.state, reason)) await this.publish(question);
       await this.save();
     });
   }

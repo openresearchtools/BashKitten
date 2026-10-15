@@ -299,7 +299,7 @@ async function bootstrap(request) {
       }
       return runtime.atIdle(job, async () => {
         await job.phase('Closing the idle backend for package replacement');
-        if (await controller()) await socketRequest(paths.control, '/shutdown', {}, 30000);
+        if (await controller()) await socketRequest(paths.control, '/shutdown', { restart: true }, 30000);
         // The same kernel lock used by the real controller prevents any old UI or
         // CLI from recreating it halfway through package replacement.
         while (!(controlOwner = await instance.claimInstance('control'))) {

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { allMeta, readMeta, readJson, writeMeta, writeJson, sessionDir, workerRequest } from '../common.mjs';
 import { savedSession } from './rpc.mjs';
 import { readSubagentSettings } from './subagents.mjs';
+import { stopSavedQuestions } from './questions.mjs';
 
 export class SubagentChats {
   locks = new Map();
@@ -116,7 +117,10 @@ export class SubagentChats {
         if (await this.running(target.id)) await workerRequest(target.id, '/shutdown', {});
         // A crashed/idle-exited worker still needs a durable Stop intent. A
         // later peer message must become a held draft instead of restarting it.
-        else await writeJson(path.join(sessionDir(target.id), 'lifecycle.json'), { stopped: true });
+        else {
+          await writeJson(path.join(sessionDir(target.id), 'lifecycle.json'), { stopped: true });
+          await stopSavedQuestions(target.id, 'User stopped this chat');
+        }
         return { id: target.id, state: 'stopped', message: 'Chat and history kept. The user can resume it.' };
       });
     }

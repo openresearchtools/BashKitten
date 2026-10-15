@@ -27,6 +27,7 @@ import { curatedModels, downloadPreset, readPresetNotices } from './localai/mode
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
 import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
+import { stopSavedQuestions } from './rpc/questions.mjs';
 import { WorkloadPerformance, performanceUnavailable } from './performance.mjs';
 import { initializePhoneOwner, configurePhoneOwner, disconnectPhoneOwner, closePhoneOwner } from './phone/owner.mjs';
 import { guestBrowserBootstrap, guestBrowserRole } from './access/guest-browser.mjs';
@@ -103,15 +104,21 @@ async function ownedWorker(id) {
   const owner = (await readMeta(id)).workerOwner || id;
   return args.includes(worker) && args.includes(owner) ? { pid, started } : null;
 }
-async function stopPi(id, force = false, markStopped = true) {
+async function stopPi(id, force = false, restart = false) {
   await readMeta(id);
-  if (markStopped) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
+  if (!restart) await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
   const owned = await ownedWorker(id);
-  try { await socketRequest(socketPath(id), '/shutdown', { restart: !markStopped }, force ? 1000 : 10000); }
+  try { await socketRequest(socketPath(id), '/shutdown', { restart }, force ? 1000 : 10000); }
   catch (error) { if (!force && !['ENOENT', 'ECONNREFUSED'].includes(error.code)) throw error; }
-  if (!owned) return;
-  for (let i = 0; i < 40 && await processStart(owned.pid) === owned.started; i++) await sleep(50);
-  if (await processStart(owned.pid) === owned.started) process.kill(-owned.pid, 'SIGKILL');
+  if (owned) {
+    for (let i = 0; i < 40 && await processStart(owned.pid) === owned.started; i++) await sleep(50);
+    if (await processStart(owned.pid) === owned.started) {
+      process.kill(-owned.pid, 'SIGKILL');
+      for (let i = 0; i < 40 && await processStart(owned.pid) === owned.started; i++) await sleep(50);
+      if (await processStart(owned.pid) === owned.started) throw Error('Pi worker has not stopped');
+    }
+  }
+  if (!restart) await stopSavedQuestions(id);
 }
 async function serve() {
   process.umask(0o077);
@@ -274,18 +281,18 @@ async function serve() {
     try { await jobs.start('localai-first-run'); }
     catch (error) { firstRunAI.state.status = 'failed'; firstRunAI.state.error = error.message; await firstRunAI.save(); }
   }
-  async function stopWorkers() {
-    const workers = await Promise.allSettled((await allMeta()).map(meta => stopPi(meta.id, false, false).catch(() => stopPi(meta.id, true, false))));
+  async function stopWorkers(restart = false) {
+    const workers = await Promise.allSettled((await allMeta()).map(meta => stopPi(meta.id, false, restart).catch(() => stopPi(meta.id, true, restart))));
     const failure = workers.find(result => result.status === 'rejected');
     if (failure) throw failure.reason;
   }
-  async function stopGroup() {
+  async function stopGroup(restart = false) {
     await phoneGateway.close();
     await disconnectPhoneOwner();
     await stack.stopIngress();
     // Complete the rest of group cleanup even if a worker needs the guard's
     // final descendant cleanup.
-    const workerError = await stopWorkers().then(() => null, error => error);
+    const workerError = await stopWorkers(restart).then(() => null, error => error);
     const displayError = display ? await display.stop().then(() => null, error => error) : null;
     const speechError = await localAI?.shutdown().then(() => null, error => error);
     const serviceError = await stack.services.stopAll().then(() => null, error => error);
@@ -297,7 +304,7 @@ async function serve() {
     if (speechError) throw speechError;
     if (serviceError) throw serviceError;
   }
-  async function turnOff(error = null) {
+  async function turnOff(error = null, restart = false) {
     state.web = false; stopping = true;
     if (error) lastError = error;
     await persist();
@@ -305,8 +312,8 @@ async function serve() {
     try {
       // Stop Pi now while an existing package transaction finishes safely.
       // Cancellation lets the current native package step finish.
-      if (jobs.busy) { await jobs.cancel(); await stopWorkers(); return; }
-      await stopGroup(); stopping = false; await persist();
+      if (jobs.busy) { await jobs.cancel(); await stopWorkers(restart); return; }
+      await stopGroup(restart); stopping = false; await persist();
     }
     catch (failure) { lastError = failure.message; await persist(); throw failure; }
   }
@@ -326,7 +333,7 @@ async function serve() {
     if (platform === 'termux') await apt(job, ['check']);
     await atIdle(job, async () => {
       await job.phase('Reloading updated BashKitten / Node');
-      await stopGroup(); restartPending = true;
+      await stopGroup(true); restartPending = true;
     });
   }
   async function action(command, value = {}) {
@@ -448,8 +455,10 @@ async function serve() {
     if (command === 'notifications-ack') { await acknowledgeNotifications(value.keys); return { ok: true }; }
     if (['start', 'stop', 'restart', 'shutdown'].includes(command)) {
       if (command === 'stop' || command === 'shutdown') {
+        const restart = command === 'shutdown' && value.restart === true;
+        if (restart && jobs.busy) throw Error('Wait for package maintenance to finish');
         if (command === 'shutdown') shutdownRequested = true;
-        await turnOff();
+        await turnOff(null, restart);
         // A managed guest's existing session owns this controller independently
         // of Agent power, so Display and private settings remain controllable.
         // Explicit shutdown and container/host lifetime cleanup still exit it.
@@ -459,7 +468,7 @@ async function serve() {
         if (browserClosing || stopping) throw Object.assign(Error('Agent is completing shutdown'), { code: 'AGENT_SHUTTING_DOWN' });
         if (jobs.busy && command === 'restart') throw Error('Wait for package maintenance to finish');
         if (value.browserOwner) await adoptBrowser(value.browserOwner);
-        if (command === 'restart') await stopGroup();
+        if (command === 'restart') await stopGroup(true);
         state.web = true; lastError = null; await persist(); await startWeb();
       }
     } else if (command === 'pi-abort') {
