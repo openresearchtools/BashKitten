@@ -39,7 +39,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     PhoneVoiceGateway(BrowserApp app,AgentRuntime agent){
         this.app=app;this.agent=agent;phone=TelephonyRuntime.get(app);
         phone.install(this,()->app.main.post(()->{android.app.Activity activity=agent.activity.get();if(activity!=null)AgentSettingsActivity.open(activity,"localai");}));
-        phone.setEnabledListener(enabled->{desired=enabled;requested=enabled;if(enabled){try{app.keepAlive();start();}catch(RuntimeException denied){phone.transportError(denied.getMessage());}}else close();});
+        phone.setEnabledListener(enabled->{desired=enabled;requested=enabled;if(enabled){try{app.keepAlive();start();if(connected()||registrationReady&&!localAvailable)synchronizeSettings();}catch(RuntimeException denied){phone.transportError(denied.getMessage());}}else close();});
         // Restoring a saved master is not itself a request to start transport.
         phone.settingsSnapshot().thenAccept(settings->app.main.post(()->desired=settings.optBoolean("telephony")||settings.optBoolean("messages")));
     }
@@ -61,7 +61,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
                 require(transport);saveRegistration();registrationReady=true;
                 }
                 if(!desired||token!=localEpoch)return;
-                if(!localAvailable){starting=false;phone.connectionChanged();phone.settingsSnapshot().thenAccept(settings->request("phone.settings",TelephonyRuntime.json("settings",settings)));return;}
+                if(!localAvailable){starting=false;phone.connectionChanged();synchronizeSettings();return;}
                 ServerSocket previous=server;if(previous!=null)previous.close();
                 byte[] fresh=new byte[32];new SecureRandom().nextBytes(fresh);
                 ServerSocket opened=new ServerSocket();opened.bind(new InetSocketAddress(InetAddress.getByName("127.0.0.1"),0));
@@ -72,10 +72,15 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
                     if(!localCurrent(token)||server!=opened)return;
                     port=result.optInt("port");starting=false;
                     phone.registerBackend("local","Local",generation);
-                    phone.settingsSnapshot().thenAccept(settings->request("phone.settings",TelephonyRuntime.json("settings",settings)));
+                    synchronizeSettings();
                 },message->{if(localCurrent(token)){starting=false;phone.transportError(message);}}));
             }catch(Exception failure){if(desired&&token==localEpoch){starting=false;phone.transportError(failure.getMessage());}}
         });
+    }
+    private void synchronizeSettings(){
+        final long token=epoch,localToken=localEpoch;
+        phone.settingsSnapshot().thenCompose(settings->{require(token);if(localToken!=localEpoch)throw new CancellationException("Local phone gateway changed");return request("phone.settings",TelephonyRuntime.json("settings",settings));})
+            .whenComplete((ignored,error)->{if(error!=null&&current(token)&&localToken==localEpoch)phone.transportError(error.getMessage());});
     }
     private void saveRegistration()throws Exception{JSONObject values=new JSONObject();for(Map.Entry<String,JSONObject> entry:remotes.entrySet())values.put(entry.getKey(),entry.getValue());new SecretStore(app,"phone-registration").write(TelephonyRuntime.json("phoneId",phoneId,"generation",generation,"remotes",values));}
     void connectRemote(String id,String name,Runnable done,java.util.function.Consumer<String> fail){
