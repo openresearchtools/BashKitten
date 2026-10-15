@@ -101,7 +101,7 @@ function validateINI(content) {
   }
 }
 export class LocalAI {
-  constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); this.routerTest = new RouterModelTest(); }
+  constructor(services) { this.services = services; this.importState = { state: 'pending' }; this.speech = null; this.stopping = false; this.synthesisGeneration = 0; this.serial = Promise.resolve(); this.runningConfig = new Map(); this.errors = new Map(); this.routerTest = new RouterModelTest(); }
   exclusive(action) { const result = this.serial.then(action); this.serial = result.catch(() => {}); return result; }
   async initialize({ initial, beforeCreate } = {}) {
     requireLocalRuntime(); await privateDir(localAIDir);
@@ -457,6 +457,7 @@ export class LocalAI {
   async synthesize({ text, output }) {
     if (this.stopping || this.synthesis) throw Error('Speech synthesis is busy or Agent is stopping');
     if (!cleanText(text) || !text.trim() || !cleanText(output) || !path.isAbsolute(output) || !/\.wav$/i.test(output)) throw Error('Enter text and an absolute output WAV path');
+    const generation = this.synthesisGeneration;
     const config = (await this.config()).tts;
     const runtime = await this.binary('llama', config);
     for (const file of [config.model, config.projector, config.voice]) { if (!file) throw Error('Choose a TTS model, its matching projector and reference voice'); await fs.access(file); }
@@ -468,9 +469,12 @@ export class LocalAI {
       '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
       ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
       ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])];
+    if (generation !== this.synthesisGeneration) throw Error('Speech synthesis was cancelled');
+    if (this.stopping || this.synthesis) throw Error('Speech synthesis is busy or Agent is stopping');
     const child = launchInference({ argv, cwd: config.cwd, env: runtime.env }, { capture: false });
     this.synthesis = child; this.synthesisState = { state: 'generating' };
-    const ended = new Promise((resolve, reject) => { child.once('error', reject); child.once('close', code => code === 0 ? resolve() : reject(Error('Speech synthesis failed; check the runtime, matching model/projector and reference voice'))); });
+    let processError;
+    const ended = new Promise((resolve, reject) => { child.once('error', error => { processError = error; }); child.once('close', code => processError ? reject(processError) : code === 0 ? resolve() : reject(Error('Speech synthesis failed; check the runtime, matching model/projector and reference voice'))); });
     this.synthesisFinished = (async () => {
       try {
         await ended;
@@ -480,11 +484,15 @@ export class LocalAI {
         // Do not replace an output created by another operation while generating.
         await publishNewFile(temporary, output); this.synthesisState = { state: 'complete', output };
       } catch (error) { this.synthesisState = { state: 'failed', error: error.message }; }
-      finally { await fs.rm(temporary, { force: true }); this.synthesis = null; }
+      finally {
+        try { await fs.rm(temporary, { force: true }); }
+        catch (error) { this.synthesisState = { state: 'failed', error: error.message }; }
+        finally { if (this.synthesis === child) this.synthesis = null; }
+      }
     })();
     return this.status();
   }
-  async cancelSynthesis() { if (this.synthesis) { this.synthesis.kill('SIGTERM'); await this.synthesisFinished; } return this.status(); }
+  async cancelSynthesis() { ++this.synthesisGeneration; if (this.synthesis) { this.synthesis.kill('SIGTERM'); await this.synthesisFinished; } return this.status(); }
   async quantize(job, input) {
     if (this.stopping || this.quantization) throw Error('Quantization is busy or Agent is stopping');
     this.quantizationJob = job;

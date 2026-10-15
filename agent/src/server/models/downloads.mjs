@@ -264,8 +264,6 @@ function selectedFiles(repository, files, entries) {
     const label = (repository.replace('/', '--') + '--' + path.basename(key)).replace(/[^a-zA-Z0-9_.-]/g, '-').slice(0, 160);
     return label + '--' + createHash('sha256').update(repository + '/' + key).digest('hex').slice(0, 12);
   };
-  const projectors = files.filter(file => /\.gguf$/i.test(file) && projector(file));
-  if (projectors.length && (families.length !== 1 || projectors.length > 1)) throw modelError('Download one model family together with one selected mmproj file at a time');
   for (const file of models) {
     const split = file.match(/-(\d{5})-of-(\d{5})\.gguf$/i);
     if (!split) continue;
@@ -280,7 +278,7 @@ function selectedFiles(repository, files, entries) {
     const entry = entries.get(file);
     if (!entry) throw modelError('A selected file is not part of this repository revision');
     const outputPath = /\.gguf$/i.test(file)
-      ? folder(projector(file) ? families[0] : family(file)) + '/' + path.basename(file)
+      ? folder(projector(file) && families.length === 1 ? families[0] : family(file)) + '/' + path.basename(file)
       : folder('repository-files') + '/' + file;
     return { path: entry.path, outputPath, size: entry.size, hash: entry.hash, downloaded: 0, checkpoint: 0, status: 'pending' };
   // Publish the first shard after its remaining selected parts/projector. Native
