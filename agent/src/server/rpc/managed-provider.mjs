@@ -74,14 +74,20 @@ export function syncManagedProvider({ id, name, baseUrl, apiKey, apiKeyFile, mod
   pending = work.catch(() => {}); return work;
 }
 
+/** Ownership follows the complete saved definition, never its provider name. */
+export async function managedLocalProvider() {
+  const owner = await readJson(path.join(accessDir, 'managed-providers/bashkitten-llama.json'), null);
+  const { pi: { getAgentDir } } = await loadPi();
+  const config = await readJson(path.join(getAgentDir(), 'models.json'), {});
+  const provider = config.providers?.['bashkitten-llama'], expected = owner?.pending || owner?.provider;
+  const owned = Boolean(expected && same(provider, expected));
+  return { owned, revision: digest(JSON.stringify(provider ?? null)), unknownThinking: owned ? owner.unknownThinking || [] : [] };
+}
+
 /** Private discovery state, never an extra field in Pi's model schema. */
 export async function managedThinkingUnknown(model) {
   if (!model?.startsWith('bashkitten-llama/')) return false;
-  const owner = await readJson(path.join(accessDir, 'managed-providers/bashkitten-llama.json'), null);
-  if (!owner?.unknownThinking?.includes(model.slice('bashkitten-llama/'.length))) return false;
-  const { pi: { getAgentDir } } = await loadPi();
-  const config = await readJson(path.join(getAgentDir(), 'models.json'), {});
-  return same(config.providers?.['bashkitten-llama'], owner.pending || owner.provider);
+  return (await managedLocalProvider()).unknownThinking.includes(model.slice('bashkitten-llama/'.length));
 }
 
 /** Called only by native local control for an already authenticated mapping. */

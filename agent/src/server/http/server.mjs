@@ -32,6 +32,7 @@ import { handleBrowserChannel, closeBrowserChannels, ensureBrowserSocket, closeB
 import { transcribe } from '../localai/dictation.mjs';
 import { subagentSettings, readSubagentSettings, saveSubagentSettings } from '../rpc/subagents.mjs';
 import { SubagentChats } from '../rpc/subagent-chats.mjs';
+import { stopSavedQuestions } from '../rpc/questions.mjs';
 import { projects, createProject, renameProject, removeProject, moveChat, forgetChat, projectDirectory } from '../projects.mjs';
 
 process.umask(0o077);
@@ -98,7 +99,12 @@ async function startWorker(id, explicit) {
       throw error;
     }
     return subagents.admit(meta, async () => {
-      if (explicit) await writeJson(lifecycle, { stopped: false });
+      if (explicit) {
+        // Recover a Stop interrupted after its durable marker but before the
+        // offline question state was saved. No worker owns it under this lock.
+        if ((await readJson(lifecycle, {})).stopped) await stopSavedQuestions(id);
+        await writeJson(lifecycle, { stopped: false });
+      }
       await closeBrowserSocket(id, { keepBinding: true });
       const browserOwner = randomUUID(), browserSocket = await ensureBrowserSocket(browserOwner, id);
       const log = openSync(path.join(sessionDir(id), 'worker.log'), 'a', 0o600);
@@ -552,6 +558,15 @@ async function handler(req, res) {
       if ((await readJson(path.join(sessionDir(id), 'lifecycle.json'), {})).stopped && !value.start) return json(res, { stopped: true, snapshot: await savedView(meta) });
       await ensureWorker(id, Boolean(value.start)); return json(res, { ok: true });
     }
+    if (action === 'stop') {
+      const input = await jsonBody(req);
+      return json(res, await subagents.serial('worker:' + id, async () => {
+        if (await running(id)) return workerRequest(id, '/stop', input);
+        await writeJson(path.join(sessionDir(id), 'lifecycle.json'), { stopped: true });
+        await stopSavedQuestions(id, 'User stopped this chat');
+        return { data: await savedView(meta) };
+      }));
+    }
     await ensureWorker(id, ['messages', 'fork', 'clone', 'compact'].includes(action));
     if (action === 'messages') {
       const form = await formBody(req);
@@ -572,7 +587,7 @@ async function handler(req, res) {
       const title = String(input.title || input.name || '').trim(); if (!title) throw Error('Choose a name');
       return json(res, await workerRequest(id, '/rename', { title }));
     }
-    if (!['stop', 'queue', 'model', 'compact', 'reply'].includes(action)) throw Error('Unknown session action');
+    if (!['queue', 'model', 'compact', 'reply'].includes(action)) throw Error('Unknown session action');
     return json(res, await workerRequest(id, '/' + action, input));
   } catch (error) {
     if (res.headersSent) { res.destroy(); return; }

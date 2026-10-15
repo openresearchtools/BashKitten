@@ -7,7 +7,7 @@ import path from 'node:path';
 import { syncContext } from './context.mjs';
 import { providerRevision } from './services.mjs';
 import { selectedRuntime, allowRuntimeWork, loadPi } from './runtime.mjs';
-import { managedThinkingUnknown } from './managed-provider.mjs';
+import { managedLocalProvider, managedThinkingUnknown } from './managed-provider.mjs';
 import { notifyTurn, notifyQuestion, resolvedQuestion, notifyAssistantMessage } from './notifications.mjs';
 import { QuestionOwner } from './questions.mjs';
 import { createPhoneWorker } from '../phone/worker.mjs';
@@ -27,7 +27,7 @@ let meta = await readMeta(id);
 meta.workerOwner = id;
 meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
 let phoneWorker, phoneSession;
-let rpc, providersVersion, projectNativeSession, busy = false, compacting = false, stopping = false, changing = false;
+let rpc, providersVersion, localProviderRevision, projectNativeSession, busy = false, compacting = false, stopping = false, changing = false;
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false, contextUpdates = 0;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
@@ -188,6 +188,7 @@ async function launch() {
   const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
   providersVersion = await providerRevision();
+  localProviderRevision = (await managedLocalProvider()).revision;
   projectNativeSession = (await loadPi()).pi.buildSessionContext;
   meta.cwd = (await savedSession(meta))?.getCwd() || meta.cwd;
   rpc = new PiRpc(meta, { ...phoneWorker.environment, BASHKITTEN_WORKER_SOCKET: privateSocket, BASHKITTEN_WORKER_KEY: workerKey });
@@ -266,7 +267,8 @@ async function launch() {
 async function applyPending() {
   if (stopping || busy || compacting || dialogs.size || queue.some(q => !q.editToken && !q.held)) return;
   const version = await syncContext();
-  if (pendingContext || version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root || await providerRevision() !== providersVersion) {
+  if (pendingContext || version !== meta.contextVersion || selectedRuntime().root !== rpc.runtime.root || await providerRevision() !== providersVersion ||
+      (await managedLocalProvider()).revision !== localProviderRevision) {
     // Stock Pi snapshots its providers at startup. Reopen its own saved session
     // only at an idle boundary after login/logout/catalog changes; never replay a turn.
     const state = await rpc.command('get_state');
@@ -298,27 +300,51 @@ async function applyPending() {
 }
 async function prepareManagedModel(model = meta.model) {
   if (!model?.startsWith('bashkitten-llama/')) return;
-  emit({ type: 'notice', message: 'Checking local llama.cpp readiness' }, false);
   const modelId = model.slice('bashkitten-llama/'.length);
-  const ready = await socketRequest(path.join(dataDir, 'run/control.sock'), '/llama-wait', { model: modelId }, 16 * 60 * 1000);
+  let managed = await managedLocalProvider(), ready, readinessError;
+  if (managed.owned) {
+    emit({ type: 'notice', message: 'Checking local llama.cpp readiness' }, false);
+    try { ready = await socketRequest(path.join(dataDir, 'run/control.sock'), '/llama-wait', { model: modelId }, 16 * 60 * 1000); }
+    catch (error) { readinessError = error; }
+    // A user can take over this definition while readiness is awaiting I/O.
+    // Its old local service's outcome must not constrain the user's provider.
+    managed = await managedLocalProvider();
+  }
   if (stopping) throw Error('Pi instance is stopping');
-  if (ready.state !== 'ready' || !ready.url || ready.model !== modelId) throw Error('The selected local llama.cpp model is not ready');
-  if (await managedThinkingUnknown(model)) throw Error('The local model loaded, but its reasoning capabilities could not be checked. Retry after checking the llama.cpp service.');
-  const { models } = await rpc.command('get_available_models');
-  const current = models.find(item => item.provider === 'bashkitten-llama' && item.id === ready.model);
-  if (current?.baseUrl === ready.url + '/v1' && await providerRevision() === providersVersion) return;
+  if (managed.owned) {
+    if (readinessError) throw readinessError;
+    if (ready?.state !== 'ready' || !ready.url || ready.model !== modelId) throw Error('The selected local llama.cpp model is not ready');
+    if (managed.unknownThinking.includes(modelId)) throw Error('The local model loaded, but its reasoning capabilities could not be checked. Retry after checking the llama.cpp service.');
+  }
+  const available = managed.owned ? (await rpc.command('get_available_models')).models : [];
+  const loaded = available.find(item => item.provider === 'bashkitten-llama' && item.id === modelId);
+  const version = await providerRevision();
+  managed = await managedLocalProvider();
+  if (stopping) throw Error('Pi instance is stopping');
+  if (managed.revision === localProviderRevision && (!managed.owned || loaded?.baseUrl === ready?.url + '/v1') &&
+      version === providersVersion) return;
   const state = await rpc.command('get_state');
-  if (state.isStreaming || state.isCompacting || state.pendingMessageCount) throw Error('Local llama.cpp changed while Pi was active. Retry after the current turn ends.');
+  if (state.isStreaming || state.isCompacting || state.pendingMessageCount) throw Error('Pi model configuration changed while Pi was active. Retry after the current turn ends.');
+  if (stopping) throw Error('Pi instance is stopping');
   // Stock RPC has no model-registry reload command. Reopen its own saved
   // session at this idle boundary, exactly as for a native runtime update.
   changing = true;
   await rpc.close();
   try { await launch(); } finally { changing = false; }
+  managed = await managedLocalProvider();
+  if (stopping) throw Error('Pi instance is stopping');
+  if (managed.revision !== localProviderRevision) throw Error('Pi model configuration changed while reloading. Retry the operation.');
+  if (!managed.owned) return;
+  if (!ready) throw Error('Pi model ownership changed while reloading. Retry the operation.');
   const updated = await rpc.command('get_available_models');
-  if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === ready.model && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
+  if (!updated.models.some(item => item.provider === 'bashkitten-llama' && item.id === modelId && item.baseUrl === ready.url + '/v1')) throw Error('Pi could not load the ready local llama.cpp model');
   const resumed = await rpc.command('get_state');
-  if (resumed.model?.provider !== 'bashkitten-llama' || resumed.model?.id !== ready.model) await rpc.command('set_model', { provider: 'bashkitten-llama', modelId: ready.model });
+  const current = await managedLocalProvider();
+  if (stopping || !current.owned || current.revision !== localProviderRevision) throw Error('Pi model configuration changed while reloading. Retry the operation.');
+  if (resumed.model?.provider !== 'bashkitten-llama' || resumed.model?.id !== modelId) await rpc.command('set_model', { provider: 'bashkitten-llama', modelId });
   await refresh();
+  const refreshed = await managedLocalProvider();
+  if (stopping || !refreshed.owned || refreshed.revision !== localProviderRevision) throw Error('Pi model configuration changed while reloading. Retry the operation.');
 }
 async function canSend(item) {
   if ((item.phoneDelivery || item.phoneAuthorization) && !await validatePhoneDelivery(id, item.phoneAuthorization)) return false;
