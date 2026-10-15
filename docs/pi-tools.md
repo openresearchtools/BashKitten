@@ -1,48 +1,49 @@
 # Packaged Pi tools and skills
 
-Planned addition, 10 October: the
+The current package follows the
 [native environments plan](native-environments-display-plan.md#small-pi-skill-for-finding-and-reading-other-chats)
-adds a concise `chats` skill and one stock-deferred read-only list/search/read
+with a concise `chats` skill and one stock-deferred read-only list/search/read
 adapter. It resolves backend/project/chat names to existing native Pi sessions
 using the same metadata as the sidecar, without copying history, loading it
-eagerly, starting workers or sending messages. This is planned work; the
-installed-tool inventory below is not a claim that `chats` is already shipped.
+eagerly, starting workers or sending messages. Installed acceptance is tracked
+separately; source inclusion alone does not establish a passing flow.
 
 The same plan's [Phone module section](native-environments-display-plan.md#12-android-phone-control-and-the-mcp-port)
-adds the Termux `phoneuse` CLI and a concise normally discovered Pi skill.
+is implemented as the Termux `phoneuse` CLI and a concise normally discovered
+Pi skill.
 Only live local BashKitten-owned Pi workers receive scoped Phone authorization;
 the native Android module enforces master/feature/grant policy on every request.
 The guide directs agents to current enabled-capability help instead of loading
 an MCP catalog or describing disabled commands. Accessibility stays optional;
-the Phone CLI has no camera/microphone control. This is planned work, bundled
-into the main APK with the CLI in Termux, not an installed capability yet.
+the Phone CLI has no camera/microphone control. The backend module is bundled
+into the main APK with the CLI in Termux; disabled controls remain unavailable.
 The port retains device tools/controls only. It has no donor provider connections
 or MCP server/client/protocol underneath the CLI; existing Pi continues to own
 model/provider configuration and agent execution.
 
 The [desktop-use skill plan](native-environments-display-plan.md#one-shared-skill-with-backend-specific-names)
-adds one shared XFCE guide named `termux-use` in the owned Termux backend and
+provides one shared XFCE guide named `termux-use` in the owned Termux backend and
 `computer-use` in managed containers. Role-specific package registration and
 stock skill filters select only that backend's guide; ordinary Linux
 host/unmanaged Pi gets neither, and user exclusions/`--no-skills` are respected.
 It teaches
 xdotool input, scrot screenshots and available AT-SPI trees through stock shell
 and image/file tools. Keep the actual desktop X11/D-Bus context current, with
-no new CUA/MCP server. This is planned work; the installed inventory below is
-unchanged. `termux-display` remains setup/launch guidance, and Android device
+no new CUA/MCP server. The package includes both role-filtered references.
+`termux-display` remains setup/launch guidance, and Android device
 control remains the separately authorized `phoneuse` feature.
 
-Planned additions, 11 October: the main plan's
+The main plan's
 [usage section](native-environments-display-plan.md#14-chatgpt-usage-and-reset-status)
-adds a narrow MIT-licensed `pi-codex-usage` adaptation using Pi's selected
+uses a narrow MIT-licensed `pi-codex-usage` adaptation with Pi's selected
 subscription OAuth and existing terminal/RPC status APIs. It shows actual
 weekly/short limits and reset times in Pi and the web UI, independently of
 Pillama's status, without a Codex process, credential scraping or Pi/provider
 patches. Usage status is replaceable metadata, not a transcript message.
 
 The [question section](native-environments-display-plan.md#15-nonblocking-agent-questions)
-adds a deferred `ask_user` tool and concise `ask-user` guide. The tool returns a
-pending ID immediately; choices and custom reply appear inline while Pi keeps
+uses a deferred `ask_user` tool and concise `ask-user` guide. The tool returns
+a pending ID immediately; choices and custom reply appear inline while Pi keeps
 working. One backend owner resolves answers or the initial 120-second deadline,
 then delivers an attributed answer or no-response instruction through the stock
 Pi queue/RPC path. Silence means proceed with the best long-term solution for
@@ -63,12 +64,13 @@ Android Auto owns its notification voice review; ordinary RemoteInput replies
 need no second confirmation. Late question replies are attributed follow-ups,
 not reopened questions. Preserve native Pi history/queues and the existing
 encrypted remote route. This adds no camera/microphone commands or telephony
-authority to `phoneuse`. These are planned capabilities, not changes to the
-installed inventory below.
+authority to `phoneuse`. These integrations are included in current package
+assembly; installed calling, notification and voice acceptance remains recorded
+separately.
 
 The installed integration exposes `browser`, `browser_screenshot`,
-`browser_downloads`, `websearch` and `agents`. These use stock Pi 1.0.2's
-`deferred` exposure. Its built-in `tool_search` is activated without replacing
+`browser_downloads`, `websearch`, `agents`, `chats` and `ask_user`. These use
+stock Pi 1.1.0's `deferred` exposure. Its built-in `tool_search` is activated without replacing
 the existing active tool set. Pi owns discovery, schema activation and transcript
 recording; no custom tool loader or Pi patch is involved. Once a tool is loaded,
 its declaration remains subject to Pi's ordinary session/history behavior.
@@ -86,9 +88,10 @@ query-or-URL helper. Input validation, extraction, saved full Markdown and error
 remain owned by that helper. No second search implementation or service is added.
 
 `agent/packaging/pi-skills.py` builds the shipped guides from the source references.
-Both targets discover `browser`, `websearch` and `subagents`; only Termux includes
-`termux-display`. Curation uses reviewed, exact prose replacements and fails if
-those source passages change. Command contracts, working examples, permission
+Both targets include `browser`, `websearch`, `subagents`, `chats` and `ask-user`;
+only Termux includes `termux-display` and `phoneuse`. Desktop-use references are
+selected by the backend role as described above. Curation uses reviewed, exact
+prose replacements and fails if those source passages change. Command contracts, working examples, permission
 boundaries and attribution are retained. Pi's native skill discovery adds only
 the short name/description/path until the agent reads a guide.
 
