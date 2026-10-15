@@ -14,6 +14,11 @@ const slots = new Map();
 const token = () => randomBytes(32).toString('base64url');
 let registrar, server, nativeLink, socket, nativeWatch;
 const equal = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && timingSafeEqual(Buffer.from(a), Buffer.from(b));
+function ownedOperation(slot, action) {
+  const operation = (slot.operation || Promise.resolve()).then(action);
+  slot.operation = operation.catch(() => {});
+  return operation;
+}
 export async function initializePhoneOwner() {
   if (platform !== 'termux') return {};
   if (server) return phoneOwnerEnvironment();
@@ -40,18 +45,34 @@ export async function initializePhoneOwner() {
         if (value.action === 'revoke') { await revoke(value.secret); return json(res, { revoked: true }); }
         throw Error('Unknown owner operation');
       }
-      if (value.action === 'adopt') {
+      if (value.action === 'adopt') return await ownedOperation(slot, async () => {
+        if (slots.get(key) !== slot) throw Error('Phone worker revoked');
         if (!/^[a-f0-9-]{36}$/.test(value.session)) throw Error('Invalid Pi session');
-        if (nativeLink) await phoneRequest(nativeLink, `Owner ${nativeLink.owner}`, 'owner.revoke', { worker: slot.incarnation }).catch(() => {});
-        slot.session = value.session; slot.ready = true; return json(res, { adopted: true });
-      }
+        slot.ready = false;
+        const link = nativeLink;
+        if (slot.revocationPending && !link) throw Error('Reconnect Phone controls before adopting this session');
+        if (link) {
+          try {
+            const result = await phoneRequest(link, `Owner ${link.owner}`, 'owner.revoke', { worker: slot.incarnation });
+            if (result.revoked !== true || nativeLink !== link || slots.get(key) !== slot) throw Error('Phone authority changed during session adoption');
+          } catch (error) {
+            slot.revocationPending = true;
+            if (nativeLink === link) await disconnectPhoneOwner();
+            throw Error('Phone session adoption failed: ' + error.message);
+          }
+        }
+        slot.revocationPending = false; slot.session = value.session; slot.ready = true; return json(res, { adopted: true });
+      });
       if (value.action === 'close') { await revoke(key); return json(res, { revoked: true }); }
-      if (!slot.alive || !slot.ready) throw Error('Owned native Pi session is not ready');
-      if (await processStart(slot.pid) !== slot.started) { await revoke(key); throw Error('Owned Pi worker stopped or was replaced'); }
-      if (value.action !== 'lease' || !nativeLink) throw Error('Phone controls unavailable; enable them in native Phone settings');
-      const result = await phoneRequest(nativeLink, `Owner ${nativeLink.owner}`, 'owner.issue', { worker: slot.incarnation, session: slot.session, incarnation: slot.incarnation });
-      if (!slot.alive || slots.get(key) !== slot) throw Error('Phone worker revoked');
-      return json(res, { endpoint: nativeLink.endpoint, ...result });
+      return await ownedOperation(slot, async () => {
+        if (!slot.alive || !slot.ready) throw Error('Owned native Pi session is not ready');
+        if (await processStart(slot.pid) !== slot.started) { slot.alive = false; slots.delete(key); await revokeNative(slot); throw Error('Owned Pi worker stopped or was replaced'); }
+        if (value.action !== 'lease' || !nativeLink) throw Error('Phone controls unavailable; enable them in native Phone settings');
+        const link = nativeLink;
+        const result = await phoneRequest(link, `Owner ${link.owner}`, 'owner.issue', { worker: slot.incarnation, session: slot.session, incarnation: slot.incarnation });
+        if (!slot.alive || slots.get(key) !== slot || nativeLink !== link) throw Error('Phone worker revoked');
+        return json(res, { endpoint: link.endpoint, ...result });
+      });
     } catch (error) { json(res, { error: error.message }, 403); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(socket, resolve); }); await fs.chmod(socket, 0o600);
@@ -78,7 +99,14 @@ export async function configurePhoneOwner(link) {
 }
 async function revoke(secret) {
   const slot = slots.get(secret); if (!slot) return; slot.alive = false; slots.delete(secret);
-  if (nativeLink) await phoneRequest(nativeLink, `Owner ${nativeLink.owner}`, 'owner.revoke', { worker: slot.incarnation }).catch(() => {});
+  await ownedOperation(slot, () => revokeNative(slot));
+}
+async function revokeNative(slot) {
+  const link = nativeLink;
+  if (link) try {
+    const result = await phoneRequest(link, `Owner ${link.owner}`, 'owner.revoke', { worker: slot.incarnation });
+    if (result.revoked !== true) throw Error('Phone worker revocation was not confirmed');
+  } catch { if (nativeLink === link) await disconnectPhoneOwner(); }
 }
 export async function disconnectPhoneOwner() {
   const old = nativeLink; nativeLink = null; nativeWatch?.destroy(); nativeWatch = null;

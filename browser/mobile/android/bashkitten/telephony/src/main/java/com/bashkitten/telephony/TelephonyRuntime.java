@@ -30,6 +30,7 @@ public final class TelephonyRuntime {
         boolean connected();
         String connectionState();
         CompletableFuture<Void> prepare();
+        CompletableFuture<Void> prepare(String backendId);
     }
     private static TelephonyRuntime instance;
     public static synchronized TelephonyRuntime get(Context context) {
@@ -64,7 +65,10 @@ public final class TelephonyRuntime {
         this.context = context; telecom = new TelecomHelper(context);
         file = new AtomicFile(new File(context.getFilesDir(), "phone-delivery.json"));
     }
-    void execute(Runnable action) { serial.execute(() -> { try { load(); action.run(); } catch (Exception failure) { failed(failure); } }); }
+    void execute(Runnable action) { execute(action, failure -> {}); }
+    private void execute(Runnable action, Consumer<Exception> rejected) {
+        serial.execute(() -> { try { load(); action.run(); } catch (Exception failure) { rejected.accept(failure); failed(failure); } });
+    }
     private void load() throws Exception {
         if (state != null) return;
         try (InputStream input = file.openRead()) { state = new JSONObject(new String(input.readAllBytes(), StandardCharsets.UTF_8)); }
@@ -98,8 +102,8 @@ public final class TelephonyRuntime {
         return json("settings", copy.optJSONObject("settings"), "backends", copy.optJSONObject("backends"), "mailbox", copy.optJSONObject("mailbox"),
             "connected", gateway != null && gateway.connected(), "error", error, "activeCalls", calls.size());
     }
-    public void observe(Consumer<JSONObject> listener) { execute(() -> { observers.add(listener); changed(); }); }
-    public void unobserve(Consumer<JSONObject> listener) { execute(() -> observers.remove(listener)); }
+    public void observe(Consumer<JSONObject> listener) { serial.execute(() -> observers.add(listener)); execute(this::changed); }
+    public void unobserve(Consumer<JSONObject> listener) { serial.execute(() -> observers.remove(listener)); }
     public void install(Backend backend, Runnable openLocalAI) {
         execute(() -> { this.gateway = backend; this.openLocalAI = openLocalAI; clearError(); changed(); });
     }
@@ -134,10 +138,10 @@ public final class TelephonyRuntime {
                 if (!enabled("messages")) { invalidateRoute("messages"); PhoneNotifications.clear(context); }
                 clearError(); changed();
                 // Failure to synchronize is visible; saved choices never silently revert.
-                if (gateway != null && gateway.connected()) gateway.request("phone.settings", json("settings", next)).whenComplete((v,e) -> { if (e != null) execute(() -> failed(e)); });
+                if (gateway != null && (enabled("telephony") || enabled("messages"))) gateway.request("phone.settings", json("settings", next)).whenComplete((v,e) -> { if (e != null) execute(() -> failed(e)); });
                 done.complete(snapshot());
-            } catch (Exception failure) { failed(failure); done.completeExceptionally(failure); }
-        });
+            } catch (Exception failure) { done.completeExceptionally(failure); failed(failure); }
+        }, done::completeExceptionally);
         return done;
     }
     private void invalidateRoute(String route) {
@@ -166,7 +170,7 @@ public final class TelephonyRuntime {
     }
     private <T> CompletableFuture<T> job(Callable<T> work) {
         CompletableFuture<T> result = new CompletableFuture<>();
-        execute(() -> { try { result.complete(work.call()); } catch (Exception error) { result.completeExceptionally(error); failed(error); } }); return result;
+        execute(() -> { try { result.complete(work.call()); } catch (Exception error) { result.completeExceptionally(error); failed(error); } }, result::completeExceptionally); return result;
     }
     /** Called by authenticated owner registration; identity is never taken from a display name. */
     public CompletableFuture<JSONObject> registerBackend(String id, String name, String generation) {
@@ -228,16 +232,19 @@ public final class TelephonyRuntime {
                 call.eventId = details == null ? null : details.getString("eventId");
                 if (incoming) {
                     JSONObject event = event(call.eventId); requireEvent(event, "calls", true);
+                    if (state.optJSONObject("tombstones").has(call.eventId)) throw new SecurityException("Phone invitation was resolved");
+                    for (KittenConnection owned : calls.values()) if (!owned.ended && Objects.equals(owned.backend, call.backend)) throw new SecurityException("Call is already presented");
                     if (!Objects.equals(call.backend, event.optString("backendId"))) throw new SecurityException("Caller identity does not match the invitation");
                     if(event.optLong("expiresAt",Long.MAX_VALUE)<System.currentTimeMillis()){
                         if(!event.optString("kind").equals("question"))mailbox(call.eventId);else finishEvent(call.eventId,"expired");
-                        call.ended=true;call.disconnect(DisconnectCause.CANCELED,"Invitation expired");return;
+                        missedIncoming(call.eventId);call.ended=true;call.disconnect(DisconnectCause.CANCELED,"Invitation expired");return;
                     }
                 }
                 call.setAddress(request.getAddress(), TelecomManager.PRESENTATION_ALLOWED);
                 call.setCallerDisplayName(call.backend == null ? "Kitten" : label(call.backend), TelecomManager.PRESENTATION_ALLOWED);
                 calls.put(call.id, call);
                 if (incoming) {
+                    for (String id : keys(state.optJSONObject("events"))) { JSONObject waiting = event(id); if (!id.equals(call.eventId) && call.eventId.equals(waiting.optString("ringId"))) call.waitingEvents.add(waiting); }
                     call.setRinging(); serial.schedule(() -> { if (!call.answered && !call.ended) end(call, DisconnectCause.MISSED); }, 45, TimeUnit.SECONDS);
                 } else { call.setDialing(); answer(call); }
             } catch (Exception failure) { call.ended = true; callErrorRevisions.remove(call.id); call.disconnect(DisconnectCause.ERROR, failure.getMessage()); callFailed(call.id, failure); }
@@ -282,6 +289,11 @@ public final class TelephonyRuntime {
         if (call.ended) return; call.ended = true;
         callErrorRevisions.remove(call.id);
         if (call.flow != null) call.flow.close();
+        for (JSONObject waiting : new ArrayList<>(call.waitingEvents)) {
+            String id = waiting.optString("eventId");
+            if (cause == DisconnectCause.REJECTED || cause == DisconnectCause.MISSED) mailbox(id); else finishEvent(id, "call-ended");
+        }
+        call.waitingEvents.clear();
         if (call.incoming && !call.answered && (cause == DisconnectCause.REJECTED || cause == DisconnectCause.MISSED)) mailbox(call.eventId);
         else if (call.eventId != null) finishEvent(call.eventId, "call-ended");
         calls.remove(call.id); call.disconnect(cause, "");
@@ -289,7 +301,11 @@ public final class TelephonyRuntime {
         changed();
     }
     void incomingFailed(ConnectionRequest request) {
-        execute(() -> { Bundle details = request.getExtras() == null ? null : request.getExtras().getBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS); if (details != null) finishEvent(details.getString("eventId"), "failed"); });
+        execute(() -> { Bundle details = request.getExtras() == null ? null : request.getExtras().getBundle(TelecomManager.EXTRA_INCOMING_CALL_EXTRAS); if (details != null) missedIncoming(details.getString("eventId")); });
+    }
+    private void missedIncoming(String ringId) {
+        if (ringId == null) return;
+        for (String id : new ArrayList<>(keys(state.optJSONObject("events")))) if (ringId.equals(event(id).optString("ringId"))) mailbox(id);
     }
     JSONObject event(String id) { return id == null ? null : state.optJSONObject("events").optJSONObject(id); }
     void requireEvent(JSONObject event, String route) { requireEvent(event, route, false); }
@@ -307,14 +323,24 @@ public final class TelephonyRuntime {
             requireEvent(event, route, !event.optString("kind").equals("question"));
             if (event.optLong("createdAt") < state.optJSONObject("acceptAfter").optLong(route.equals("calls") ? "telephony" : "messages")) return json("state", "withdrawn");
             if (state.optJSONObject("tombstones").has(id) || state.optJSONObject("events").has(id)) return json("state", "duplicate");
-            put(state.optJSONObject("events"), id, new JSONObject(event.toString())); save();
+            JSONObject stored = new JSONObject(event.toString()); stored.remove("ringId");
+            put(state.optJSONObject("events"), id, stored); save();
             if (route.equals("messages")) { PhoneNotifications.post(this, event); for (KittenConnection call : calls.values()) if (call.flow != null && Objects.equals(call.backend,event.optString("backendId"))) call.flow.enqueue(event); return json("state", "notified"); }
-            for (KittenConnection call : calls.values()) if (!call.ended && call.answered && Objects.equals(call.backend, event.optString("backendId"))) {
+            for (KittenConnection call : calls.values()) if (!call.ended && Objects.equals(call.backend, event.optString("backendId"))) {
                 if(call.flow == null)call.waitingEvents.add(event);else call.flow.enqueue(event); return json("state", "attached");
             }
             if ((!event.optString("kind").equals("question") && event.optLong("expiresAt",Long.MAX_VALUE)<System.currentTimeMillis()) || backend(event.optString("backendId")).optBoolean("divert")) { mailbox(id); return json("state", "voicemail"); }
+            for (String pendingId : keys(state.optJSONObject("events"))) {
+                JSONObject pending = event(pendingId);
+                String ringId = pending.optString("ringId");
+                if (!ringId.isEmpty() && event(ringId) != null && Objects.equals(pending.optString("backendId"), event.optString("backendId"))) {
+                    put(event(id), "ringId", ringId); save(); return json("state", "attached");
+                }
+            }
+            put(event(id), "ringId", id); save();
             try { telecom.incoming(address(event.optString("backendId")), id); }
-            catch (RuntimeException failed) { finishEvent(id, "failed"); throw failed; }
+            catch (RuntimeException failed) { missedIncoming(id); throw failed; }
+            serial.schedule(() -> { if (calls.values().stream().noneMatch(call -> id.equals(call.eventId))) missedIncoming(id); }, 45, TimeUnit.SECONDS);
             return json("state", "ringing");
         });
     }
@@ -335,8 +361,8 @@ public final class TelephonyRuntime {
     void played(String id) { JSONObject item = state.optJSONObject("mailbox").optJSONObject(id); if (item != null) { put(item,"played",true); save(); } }
     public void clearMailbox(String backendId) { execute(() -> { JSONObject box = state.optJSONObject("mailbox"); for (String id : new ArrayList<>(keys(box))) if (backendId.equals(box.optJSONObject(id).optString("backendId"))) box.remove(id); save(); changed(); }); }
     public CompletableFuture<Void> divert(String backendId, boolean divert) { return job(() -> { JSONObject value = backend(backendId); if (value == null || value.optBoolean("revoked")) throw new IllegalArgumentException("Backend unavailable"); put(value,"divert",divert); save(); changed(); return null; }); }
-    public void withdraw(String backendId, String sessionId) {
-        execute(() -> {
+    public CompletableFuture<Void> withdraw(String backendId, String sessionId) {
+        return job(() -> {
             JSONObject events = state.optJSONObject("events");
             for (String id : new ArrayList<>(keys(events))) { JSONObject item = events.optJSONObject(id); if (backendId.equals(item.optString("backendId")) && (sessionId == null || sessionId.equals(item.optString("sessionId")))) { finishEvent(id,"withdrawn"); PhoneNotifications.cancel(context,id); } }
             for (KittenConnection call : new ArrayList<>(calls.values())) {
@@ -345,10 +371,11 @@ public final class TelephonyRuntime {
                 if (!call.answered && call.eventId != null && event(call.eventId) == null) end(call, DisconnectCause.CANCELED);
                 else if (call.flow != null) call.flow.withdraw(backendId, sessionId);
             }
+            save(); return null;
         });
     }
-    public void resolveEvent(String eventId, String status) {
-        execute(() -> {
+    public CompletableFuture<Void> resolveEvent(String eventId, String status) {
+        return job(() -> {
             put(state.optJSONObject("tombstones"),eventId,"resolved");save();
             JSONObject item = event(eventId);
             if (item != null) { put(item,"questionStatus",status); save(); }
@@ -360,7 +387,7 @@ public final class TelephonyRuntime {
                 if (!call.answered && eventId.equals(call.eventId)) end(call,DisconnectCause.CANCELED);
                 else if (call.flow != null) call.flow.resolved(eventId,status);
             }
-            changed();
+            changed(); return null;
         });
     }
     public CompletableFuture<JSONObject> registeredBackends() { return job(() -> { JSONArray result = new JSONArray(); for (String id : keys(state.optJSONObject("backends"))) { JSONObject value = backend(id); if (!value.optBoolean("revoked")) result.put(json("id", id, "name", value.optString("name"), "generation", value.optString("generation"))); } return json("backends", result); }); }
@@ -373,12 +400,12 @@ public final class TelephonyRuntime {
             if (text == null || text.isBlank()) throw new IllegalArgumentException("Reply is empty");
             if (gateway == null) throw new IllegalStateException("Original backend is unavailable; reply has not been sent");
             JSONObject request = json("eventId",eventId,"sessionId",event.optString("sessionId"),"nativeSessionId",event.optString("nativeSessionId",""),"backendId",event.optString("backendId"),"generation",event.optString("generation"),"questionId",event.optString("questionId"),"revision",event.optInt("revision"),"text",text,"source","notification","deliveryId","notification:"+eventId);
-            gateway.prepare().thenCompose(ignored -> job(() -> { requireEvent(event(eventId),"messages",true); return gateway.request("phone.reply",request); }).thenCompose(result -> result)).whenComplete((result,failure) -> execute(() -> {
-                if (failure != null) { failed(failure); done.completeExceptionally(failure); return; }
-                if (!List.of("accepted","submitting").contains(result.optString("deliveryStatus"))) { IllegalStateException held=new IllegalStateException("Reply is held; open the chat to review its delivery"); failed(held); done.completeExceptionally(held); return; }
+            gateway.prepare(event.optString("backendId")).thenCompose(ignored -> job(() -> { requireEvent(event(eventId),"messages",true); return gateway.request("phone.reply",request); }).thenCompose(result -> result)).whenComplete((result,failure) -> execute(() -> {
+                if (failure != null) { done.completeExceptionally(failure); failed(failure); return; }
+                if (!List.of("accepted","submitting").contains(result.optString("deliveryStatus"))) { IllegalStateException held=new IllegalStateException("Reply is held; open the chat to review its delivery"); done.completeExceptionally(held); failed(held); return; }
                 finishEvent(eventId,"replied"); PhoneNotifications.cancel(context,eventId); done.complete(null);
-            }));
-        } catch(Exception failure) { failed(failure); done.completeExceptionally(failure); } });
+            }, done::completeExceptionally));
+        } catch(Exception failure) { done.completeExceptionally(failure); failed(failure); } }, done::completeExceptionally);
         return done;
     }
 }

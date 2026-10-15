@@ -48,7 +48,7 @@ final class PhoneFiles {
             try {for(Uri uri:received){if(!"content".equals(uri.getScheme()))throw new SecurityException("Only deliberately shared content is accepted");Runnable check=()->policy.require(PhonePolicy.Feature.FILES,generation);check.run();
                 android.content.pm.ProviderInfo source=context.getPackageManager().resolveContentProvider(uri.getAuthority(),0);if(source==null)throw new SecurityException("Shared provider unavailable");PhoneProviders.allowPackage(context,source.packageName);
                 File file=temporary(context,"share-",".data");boolean kept=false;
-                try {String name=new PhoneFiles(context,policy,scope).name(uri,check);try(InputStream in=scope.own(context.getContentResolver().openInputStream(uri));OutputStream out=scope.own(new FileOutputStream(file))){copy(in,out,check);}check.run();shares.add(new SharedFile(file,name));kept=true;}finally{if(!kept)file.delete();}
+                try {String name=new PhoneFiles(context,policy,scope).name(uri,check);try(InputStream in=scope.own(context.getContentResolver().openInputStream(uri));OutputStream out=scope.own(new FileOutputStream(file))){copy(in,out,check);}synchronized(shares){check.run();shares.add(new SharedFile(file,name));kept=true;}}finally{if(!kept)file.delete();}
             }}catch(Exception failure){error="Shared file unavailable or access was revoked";}finally{scope.close();sharing.remove(scope);}
             done.accept(error);
         });

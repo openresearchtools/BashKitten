@@ -35,6 +35,12 @@ public final class PhoneAccessibilityService extends AccessibilityService {
         if(protectedPackage(root.getPackageName()))throw new SecurityException("Protected Agent/browser/settings window");return root;
     }
     private void boundary(Runnable check){AccessibilityNodeInfo root=root(check);root.recycle();}
+    private void navigationBoundary(String command,Runnable check){
+        if(!command.equals("navigation.back")&&!command.equals("navigation.home")){boundary(check);return;}
+        check.run();AccessibilityNodeInfo root=getRootInActiveWindow();if(root==null)throw new IllegalStateException("No accessible active window");
+        try{if(protectedPackage(root.getPackageName())&&!"com.android.systemui".contentEquals(root.getPackageName()))throw new SecurityException("Protected Agent/browser/settings window");}
+        finally{root.recycle();}
+    }
     private AccessibilityNodeInfo node(String path,Runnable check){
         AccessibilityNodeInfo node=root(check);if(path==null||path.isEmpty()||path.equals("0"))return node;
         if(!path.matches("0(?:/[0-9]+)*"))throw new IllegalArgumentException("Use current tree node path");
@@ -42,13 +48,13 @@ public final class PhoneAccessibilityService extends AccessibilityService {
         if(protectedPackage(node.getPackageName())){node.recycle();throw new SecurityException("Protected node");}return node;
     }
     PhoneCommand.Result execute(String command,JSONObject a,Runnable check)throws Exception{
-        boundary(check);
+        if(command.startsWith("navigation."))navigationBoundary(command,check);else boundary(check);
         if(command.equals("screen.screenshot"))return screenshot(check);
         JSONObject result;
         if(command.startsWith("screen."))result=screen(command,a,check);
         else if(command.startsWith("navigation.")){
             Map<String,Integer> actions=Map.of("back",GLOBAL_ACTION_BACK,"home",GLOBAL_ACTION_HOME,"recents",GLOBAL_ACTION_RECENTS,"notifications",GLOBAL_ACTION_NOTIFICATIONS,"quicksettings",GLOBAL_ACTION_QUICK_SETTINGS,"keyboard",GLOBAL_ACTION_BACK);
-            int action=actions.get(command.substring(11));boolean success=onMain(()->{boundary(check);
+            int action=actions.get(command.substring(11));boolean success=onMain(()->{navigationBoundary(command,check);
                 if(command.equals("navigation.keyboard")&&getWindows().stream().noneMatch(window->window.getType()==AccessibilityWindowInfo.TYPE_INPUT_METHOD))return false;
                 return performGlobalAction(action);},check);result=new JSONObject().put("accepted",success);
         }else if(command.startsWith("text."))result=text(command,a,check);

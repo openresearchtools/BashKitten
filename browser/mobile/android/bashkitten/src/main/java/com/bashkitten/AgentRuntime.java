@@ -359,6 +359,7 @@ public final class AgentRuntime {
     }
     private void resetLocalConnection(Runnable done) {
         PhoneControlsRuntime.get(app).disconnectOwner();
+        phoneVoice.localStopped();
         final int generation = operation;
         stored(() -> {
             JSONObject remembered = identities.read(); remembered.remove("local"); remembered.remove("localContext"); identities.write(remembered);
@@ -411,6 +412,7 @@ public final class AgentRuntime {
         if (!selected.equals("local")) { disconnectRemote(selected); return; }
         backgroundOperation++;
         PhoneControlsRuntime.get(app).disconnectOwner();
+        phoneVoice.localStopped();
         if (state.equals("stopping")) return;
         boolean termuxInstalled = termux.installed();
         if (!termuxInstalled) recordLocalControl(false);
@@ -466,6 +468,7 @@ public final class AgentRuntime {
     }
     private void stopBackgroundLocal(Consumer<String> failure) {
         PhoneControlsRuntime.get(app).disconnectOwner();
+        phoneVoice.localStopped();
         command("stop", new JSONObject(), value -> {
             JSONObject web = value.optJSONObject("web");
             String current = web == null ? "" : web.optString("status");
@@ -478,6 +481,7 @@ public final class AgentRuntime {
     private void setup(String step, String message) { busy = false; state = "setup"; setupStep = step; error = message; changed(); }
     private void fail(String message) {
         app.remoteControl.disconnect();
+        if (selected.equals("local")) phoneVoice.localStopped();
         // A failed Local startup must not take away another enrollment's
         // service ports while Local Pi/setup is selected.
         if (selected.equals("local") && remoteConnections.values().stream().anyMatch(connection -> !connection.isClosed())) {
@@ -486,7 +490,7 @@ public final class AgentRuntime {
         busy = false; desired = false; state = "failed"; error = message; releaseWake(); changed();
     }
     public void connectToPhone(String id, Runnable done, Consumer<String> failure) {
-        if (id.equals("local")) { phoneVoice.ready(); phoneVoice.prepare().whenComplete((value,error) -> app.main.post(() -> { if(error == null)done.run();else failure.accept(error.getMessage()); })); return; }
+        if (id.equals("local")) { phoneVoice.prepare().whenComplete((value,error) -> app.main.post(() -> { if(error == null)done.run();else failure.accept(error.getMessage()); })); return; }
         remotes(saved -> { JSONObject record = saved.optJSONObject(id); if (record == null) { failure.accept("Remote no longer exists"); return; } phoneVoice.connectRemote(id, record.optString("name", id), done, failure); }, failure);
     }
     void phoneRemoteRequest(String id, String action, JSONObject value, JSONObject identity, Consumer<JSONObject> done, Consumer<String> failure) {
@@ -534,6 +538,7 @@ public final class AgentRuntime {
                 // Only the matching Local session handshake below can do that.
                 stored(() -> { verifyLocalStatus(result.getJSONObject("web")); return true; }, ignored -> {
                     if (generation != operation || !desired || !localSetupReady() || !installation.equals(termux.installationId())) { failure.accept("Agent changed while starting Share Local."); return; }
+                    connectPhoneControls(); phoneVoice.ready();
                     if (selected.equals("local")) { acceptStatus(result); poll(); }
                     done.run();
                 }, failure);
