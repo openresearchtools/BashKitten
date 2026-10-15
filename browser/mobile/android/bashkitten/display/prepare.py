@@ -26,6 +26,14 @@ def prepare(output):
         digest = hashlib.sha256(Path(__file__).read_bytes() + (SOURCE.parent / 'source.json').read_bytes())
         for patch in patches:
             digest.update(patch.read_bytes())
+        # Gradle observes donor-tree edits, so this inner cache must observe the
+        # same inputs rather than reusing output solely from unchanged metadata.
+        for source in sorted(SOURCE.rglob('*')):
+            digest.update(source.relative_to(SOURCE).as_posix().encode() + b'\0')
+            digest.update(str(source.stat().st_mode).encode() + b'\0')
+            if source.is_file():
+                with source.open('rb') as stream:
+                    digest.update(hashlib.file_digest(stream, 'sha256').digest())
         identity = digest.hexdigest()
         stamp = output / '.prepared'
         if stamp.exists() and stamp.read_text() == identity:
