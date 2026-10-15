@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
 import { runtimeInfo, managedRuntimeEnvironment } from './runtimes.mjs';
-import { launchInference } from './launch.mjs';
+import { launchInference, ttsCpuArguments } from './launch.mjs';
 import { transcribeAudio } from './dictation.mjs';
 
 const uuid = value => typeof value === 'string' && /^[a-f0-9-]{36}$/.test(value);
@@ -75,6 +75,7 @@ export class PhoneSpeech {
       '--tts-speaker-file', config.voice, '--output', output,
       '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none',
       '-ngl', runtime.backend === 'cpu' ? '0' : '999', ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
+      ...ttsCpuArguments(config, runtime.backend),
       ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])], cwd: config.cwd, env: runtime.env };
   }
   async request(action, value = {}) {

@@ -318,7 +318,13 @@ export async function renderSection({ root: parent, call: control, info, signal 
     const family = select(section, 'Model family', [['pocket', 'Pocket TTS'], ['qwen3', 'Qwen3-TTS']], config.modelKind);
     const backend = select(section, 'Device', mobile ? [['cpu', 'CPU'], ['vulkan', 'GPU (Vulkan)']] : [['auto', 'Automatic'], ['cuda', 'CUDA'], ['vulkan', 'Vulkan'], ['cpu', 'CPU']], config.backend);
     const model = pickerField(section, 'Model GGUF', config.model), projector = pickerField(section, 'Matching mmproj GGUF', config.projector), voice = pickerField(section, 'Reference voice audio', config.voice), language = field(section, 'Language code', config.language);
-    section.append(button('Save changes', async () => { draw(await call('localai-save', { engine: 'tts', config: { ...config, backend: backend.value, modelKind: family.value, model: model.value, projector: projector.value, voice: voice.value, language: language.value }, revision: state.revision })); }));
+    const cpuThreads = field(section, 'CPU threads (0 = automatic)', config.cpuThreads ?? 0);
+    cpuThreads.type = 'number'; cpuThreads.min = '0'; cpuThreads.step = '1'; cpuThreads.required = true;
+    section.append(node('p', 'Used for CPU speech generation. Fewer threads can be faster; 0 keeps the runtime default.'));
+    section.append(button('Save changes', async () => {
+      if (!cpuThreads.reportValidity()) return;
+      draw(await call('localai-save', { engine: 'tts', config: { ...config, backend: backend.value, modelKind: family.value, model: model.value, projector: projector.value, voice: voice.value, language: language.value, cpuThreads: Number(cpuThreads.value) }, revision: state.revision }));
+    }));
     const prompt = field(section, 'Text to speak', '', true), output = field(section, 'New output WAV file', '');
     section.append(button('Choose output…', async () => { const file = await pick('Save generated speech', 'save', output.value); if (file) output.value = file; }));
     synthesisStatus = node('p'); section.append(synthesisStatus);

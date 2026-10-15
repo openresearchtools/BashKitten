@@ -10,7 +10,7 @@ import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs'
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
 import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
-import { launchInference } from './launch.mjs';
+import { launchInference, ttsCpuArguments } from './launch.mjs';
 import { parseRouterINI, updateRouterModel, isolatedPreset, routerModelId, browseBackend, verifyTestConfiguration } from './router-models.mjs';
 import { RouterModelTest } from './router-test.mjs';
 
@@ -20,7 +20,7 @@ const ids = { llama: 'localai-llama', whisper: 'localai-whisper' };
 const defaultContextSize = 32768;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const defaults = engine => ({ mode: 'managed', binary: '', backend: platform === 'termux' ? 'cpu' : 'auto', port: 0, argv: [], cwd: os.homedir(), env: {},
-  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket' } : { model: '', modelKind: 'whisper', startup: false, keepRunning: false, autoSend: true }) });
+  ...(engine === 'llama' ? { preset: path.join(localAIDir, 'router.ini'), startup: false, importToPi: true, keyFile: '' } : engine === 'tts' ? { model: '', projector: '', voice: '', language: 'en', modelKind: 'pocket', cpuThreads: 0 } : { model: '', modelKind: 'whisper', startup: false, keepRunning: false, autoSend: true }) });
 const cleanText = value => typeof value === 'string' && !value.includes('\0');
 // Pi import and voice-message sending do not change the inference command.
 const sameRuntimeConfig = (a, b) => JSON.stringify({ ...a, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined }) === JSON.stringify({ ...b, importToPi: undefined, autoSend: undefined, startup: undefined, keepRunning: undefined });
@@ -61,6 +61,7 @@ function configuration(engine, value) {
   if (engine === 'llama') {
     if (!cleanText(result.preset) || !path.isAbsolute(result.preset) || typeof result.startup !== 'boolean' || typeof result.importToPi !== 'boolean' || !cleanText(result.keyFile) || result.keyFile && !path.isAbsolute(result.keyFile)) throw Error('Choose a router INI, startup and coding-agent import options');
   } else if (engine === 'tts') {
+    ttsCpuArguments(result, 'cpu');
     if (result.mode !== 'managed' || !['pocket', 'qwen3'].includes(result.modelKind) || !/^[a-z]{2,3}$/.test(result.language)) throw Error('Choose Pocket TTS or Qwen3-TTS and a language code');
     for (const key of ['model', 'projector', 'voice']) if (!cleanText(result[key]) || result[key] && !path.isAbsolute(result[key])) throw Error('Choose absolute TTS model, projector and reference audio paths');
     if (result.argv.length || Object.keys(result.env).length) throw Error('TTS uses the verified llama-tts command');
@@ -468,6 +469,7 @@ export class LocalAI {
     const argv = [executable, '-m', config.model, '-mm', config.projector, '-p', text, '-n', '2147483647', '--tts-speaker-file', config.voice, '--output', temporary,
       '--device', runtime.devices.find(item => item.backend === runtime.backend)?.id || 'none', '-ngl', runtime.backend === 'cpu' ? '0' : '999',
       ...(runtime.backend === 'cpu' ? ['--no-mmproj-offload'] : []),
+      ...ttsCpuArguments(config, runtime.backend),
       ...(config.modelKind === 'qwen3' ? ['--tts-lang', config.language] : [])];
     if (generation !== this.synthesisGeneration) throw Error('Speech synthesis was cancelled');
     if (this.stopping || this.synthesis) throw Error('Speech synthesis is busy or Agent is stopping');
