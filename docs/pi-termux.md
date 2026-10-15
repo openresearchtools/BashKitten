@@ -5,8 +5,8 @@ processes. The old Rust implementation, build files, packages, differential
 fixtures and porting scripts are removed from the current tree. Git history and
 the separate [bashkitten-rust repository](https://github.com/openresearchtools/bashkitten-rust)
 retain the original Rust implementation and its complete main-branch history.
-Pi is pinned to npm `@earendil-works/pi-coding-agent@1.0.2`, upstream commit
-`cd32f7725fdbddbaecdff5b1e68491563394e0ca` (tag v1.0.2). The lockfile pins its
+Pi is pinned to npm `@earendil-works/pi-coding-agent@1.1.0`, upstream commit
+`abe508e1b89912adde45528136c3221eb69acdd7` (tag v1.1.0). The lockfile pins its
 runtime dependencies. Pi owns inference, tools, compaction, session JSONL, and
 credentials. The existing HTML/CSS transcript remains the presentation layer.
 
@@ -93,12 +93,14 @@ The native browser update check includes published stable and prerelease APKs,
 selects the device ABI from `release.json`, and offers only a higher Android
 `versionCode`. APK installation still uses Android's normal package installer.
 
-Termux:X11's official nightly APKs are universal, containing both ARM64 and
-x86_64 native libraries. Shared UID is offered only for the verified GitHub
-Termux signer; F-Droid/other signers use the official standalone X11 APK.
-The installed Termux package architecture chooses its X11 companion and other
-dependencies through APT. See [Termux:X11 setup](https://github.com/termux/termux-x11#setup-instructions)
-and [F-Droid's Termux architectures](https://f-droid.org/en/packages/com.termux/).
+Display embeds the pinned Termux:X11 engine and input handling in the BashKitten
+APK, with a matching architecture-specific Termux launcher. It does not require
+the standalone Termux:X11 APK or a shared Android UID. Its separate display
+endpoint allows the standalone Termux:X11 app to coexist. The native browser tab
+owns the viewport; Configuration > Display owns its launch command and settings.
+The donor source, release pin, patches and licenses remain tracked separately.
+Installed coexistence and device/input coverage are recorded in the implementation
+status rather than inferred from the source integration.
 
 ## Transport and UI contract
 
@@ -142,15 +144,17 @@ All browse/upload/download/ZIP routes require authentication. Native Android/Lin
 Local uses an ephemeral credential from the private controller, installed by
 Gecko as a Secure/HttpOnly/SameSite=Strict cookie in the protected Agent context.
 No local account or factor is required. State changes check Origin and a CSRF
-token. Linux remote publishing has a separate Caddy listener with mandatory
-Authelia two-factor authentication; its durable Valkey sessions and account store
-survive restarts. Termux never publishes. Files/directories use 0600/0700.
+token. Linux and Termux remote publishing use a separate Caddy listener with
+mandatory Authelia two-factor authentication over the existing Tor/Chisel route;
+durable Valkey sessions and account storage survive restarts. Local container
+control uses its private Unix socket and does not bypass or replace remote
+authentication. Private files/directories use 0600/0700.
 
 Repository navigation resolves real paths within the selected root. Upload names
 must be single filenames and are created exclusively (`wx`), never overwritten.
-Multipart uploads are capped at 32 MiB per request. ZIP creation streams from the
-backend, includes hidden files and `.git`, preserves safe relative symlinks, and
-omits symlinks escaping the root. Opening repository HTML/SVG returns a sandboxed
+Multipart uploads stream to the backend without the former 32 MiB request cap.
+ZIP creation streams from the backend, includes hidden files and `.git`,
+preserves safe relative symlinks, and omits symlinks escaping the root. Opening repository HTML/SVG returns a sandboxed
 Content-Security-Policy so uploaded scripts cannot act as the authenticated app.
 
 Upload controls are ordinary browser `<input type="file" multiple>` elements. The
@@ -188,12 +192,12 @@ only that configured HTTP service through Pi's model refresh API. Cached models
 remain available during offline startup. This is the same connection on Linux
 and Termux; the llama.cpp router runs wherever the user hosts it. Pi lists loaded
 models and eligible autoload presets. Its `/llama` management screen is currently
-TUI-only upstream. See [Pi's llama.cpp guide](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/llama-cpp.md).
+TUI-only upstream. See [Pi's llama.cpp guide](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/docs/llama-cpp.md).
 
 Upstream references at the pinned release:
-[RPC protocol](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/docs/rpc.md),
-[native login API](https://github.com/earendil-works/pi/blob/v1.0.2/packages/coding-agent/src/core/model-runtime.ts),
-[browser callback implementation](https://github.com/earendil-works/pi/blob/v1.0.2/packages/ai/src/auth/oauth/openai-codex.ts).
+[RPC protocol](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/docs/rpc.md),
+[native login API](https://github.com/earendil-works/pi/blob/v1.1.0/packages/coding-agent/src/core/model-runtime.ts),
+[browser callback implementation](https://github.com/earendil-works/pi/blob/v1.1.0/packages/ai/src/auth/oauth/openai-codex.ts).
 
 ## Native boundaries
 
