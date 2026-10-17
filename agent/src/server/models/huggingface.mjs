@@ -122,7 +122,7 @@ export async function repositoryFiles(id, requestedRevision, signal) {
       next = url.pathname + url.search;
     }
   }
-  return { id, revision, gated: metadata.value.gated || false, files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)) };
+  return { id, revision, license: metadata.value.cardData?.license ?? null, baseModels: metadata.value.cardData?.base_model ?? null, gated: metadata.value.gated || false, files: [...files.values()].sort((a, b) => a.path.localeCompare(b.path)) };
 }
 export async function modelRepository({ id } = {}) {
   const result = await repositoryFiles(id);
