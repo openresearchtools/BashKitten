@@ -226,6 +226,38 @@ async function downloadFile(job, file, signal) {
     } finally { await destination.parent.close(); }
   }
 }
+// Both curated and generic downloads publish through this one short disk-write
+// queue, separately from download control so cancelling a fetch cannot deadlock.
+export function saveModelNoticeManifest(value, { signal, curated = false } = {}) {
+  repositoryId(value.repository); revisionId(value.revision);
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const directory = path.join(modelDataDir, 'notices', digest(value.repository + '@' + value.revision));
+  const manifest = path.join(directory, 'NOTICE.json');
+  const update = noticeUpdates.then(async () => {
+    signal?.throwIfAborted();
+    const saved = await readJson(manifest, null);
+    const previous = saved?.repository === value.repository && saved.revision === value.revision ? saved : {};
+    // A generic fetch may have begun before curated information was saved.
+    // Read again here and retain its original-donor attribution and voice asset.
+    const preferred = curated ? value : previous;
+    const other = curated ? previous : value;
+    const notices = new Map();
+    for (const notice of [...(other.notices || []), ...(preferred.notices || [])]) notices.set(notice.savedFile, notice);
+    for (const notice of notices.values()) {
+      signal?.throwIfAborted();
+      if (!notice.savedFile || path.basename(notice.savedFile) !== notice.savedFile) throw modelError('The saved model notice path is invalid');
+      const bytes = await fs.readFile(path.join(directory, notice.savedFile));
+      if (bytes.length !== notice.bytes || digest(bytes) !== notice.sha256) throw modelError('The saved model notices changed; download the model information again');
+    }
+    const files = new Map();
+    for (const file of [...(previous.files || []), ...(value.files || [])]) files.set(file.name, { ...files.get(file.name), ...file });
+    signal?.throwIfAborted();
+    await writeJson(manifest, { ...other, ...preferred, files: [...files.values()], notices: [...notices.values()],
+      provenanceNotes: [...new Set([...(preferred.provenanceNotes || []), ...(other.provenanceNotes || [])])] });
+  });
+  noticeUpdates = update.catch(() => {});
+  return update;
+}
 // Save the upstream documents during the requested transfer. About reads these
 // immutable local bytes; opening it never starts a repository or license fetch.
 async function saveModelInformation(job, signal) {
@@ -236,32 +268,10 @@ async function saveModelInformation(job, signal) {
   const origins = job.files.map(file => ({ name: file.path, bytes: file.size,
     url: 'https://huggingface.co' + resolvePath(job.repository, job.revision, file.path),
     ...(file.hash.length === 64 ? { sha256: file.hash } : { gitBlobSha1: file.hash }) }));
-  const saveInformation = value => {
-    // Two selected assets from one revision can finish concurrently. Merge only
-    // their durable notice index here; never hold the download-control queue.
-    const update = noticeUpdates.then(async () => {
-      signal.throwIfAborted();
-      const previous = await readJson(manifest, null);
-      const files = new Map((previous?.repository === job.repository && previous.revision === job.revision ? previous.files || [] : []).map(file => [file.name, file]));
-      for (const file of [...(value.files || []), ...origins]) files.set(file.name, { ...files.get(file.name), ...file });
-      signal.throwIfAborted();
-      await writeJson(manifest, { ...value, files: [...files.values()] });
-    });
-    noticeUpdates = update.catch(() => {});
-    return update;
-  };
   if (existing?.repository === job.repository && existing.revision === job.revision
       && Array.isArray(existing.notices)) {
-    // Curated downloads already fetched their reviewed notices, including any
-    // notices from original model donors. Preserve those rather than replacing
-    // them with the redistribution repository's license declarations.
-    for (const notice of existing.notices) {
-      signal.throwIfAborted();
-      if (!notice.savedFile || path.basename(notice.savedFile) !== notice.savedFile) throw modelError('The saved model notice path is invalid');
-      const bytes = await fs.readFile(path.join(directory, notice.savedFile));
-      if (bytes.length !== notice.bytes || digest(bytes) !== notice.sha256) throw modelError('The saved model notices changed; download the model information again');
-    }
-    await saveInformation(existing);
+    // The shared final writer verifies and preserves already saved curated data.
+    await saveModelNoticeManifest({ ...existing, files: origins }, { signal });
     return;
   }
   const information = job.noticeInformation || await repositoryFiles(job.repository, job.revision, signal);
@@ -303,12 +313,12 @@ async function saveModelInformation(job, signal) {
     provenanceNotes.push('No nonempty standalone LICENSE or COPYING file was supplied at this revision. Any available model card and notices are retained; license availability is unverified.');
   }
   signal.throwIfAborted();
-  await saveInformation({
+  await saveModelNoticeManifest({
     repository: job.repository, revision: job.revision, license: license || 'Not declared by the repository',
     attribution: 'Downloaded from https://huggingface.co/' + job.repository + '/tree/' + job.revision,
     distribution: 'These user-selected model assets and upstream notices are downloaded separately; they are not bundled with BashKitten.',
     provenanceNotes, files: origins, notices,
-  });
+  }, { signal });
 }
 async function run(job, controller) {
   try {
