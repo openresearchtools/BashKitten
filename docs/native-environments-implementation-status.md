@@ -63,6 +63,49 @@ the call-notice fix. Publication, signed nightly APT verification and installed
 normal update/pairing/recovery flows remain required; dispatch and component
 passes are not release or full-feature acceptance.
 
+Follow-up checks installed the matched development APK/backend/OS at `07ee98d8c4`
+on Android 17. Stable and Nightly checks completed through Updates, retained the
+exact installed package pair and allowed closing/reopening settings during package
+work. A normal package update installed ten dependencies successfully, but left
+the old available-update count visible. `1c0ef98b3c` clears that stale result before
+maintenance and recomputes it afterwards without another network refresh; syntax
+and actual-function success/failure/cancellation checks pass. Its installed retest
+remains pending. Existing model/router/Pi configuration hashes were unchanged by
+the APK/backend upgrade. Public-release download/install and interrupted-update
+recovery remain separate pending acceptance cases.
+
+Replyable notifications on `c1826669d1` passed background final delivery, native
+RemoteInput reply to the same session exactly once, and a further reply/final
+with Calls Off and Messages On. The small local model's final wording in the last
+case differed from the exact-output request; this is retained in the receipt.
+Tapping a notification body did not open its chat. `94def3bd8a` adds an immutable
+event-specific Activity intent and reuses the protected sidecar's exact saved
+backend/chat navigation, with registration/revocation and delayed-selection
+checks. Java/Kotlin compilation and 26 focused checks pass; installed tap tests
+are pending. Evidence: `verification/callback-c182-20261017/notification-installed-result.json`
+and `verification/notification-open-20261017/verification.json`.
+
+The user's further mobile composer correction is in `c2c873a131`: compact closed
+model selection with full native dropdown labels, grouped responsive rows and
+visible send controls. Forty-four Chromium/Firefox layout cases and selection
+checks pass; installed mobile visual acceptance remains pending. No model IDs,
+provider choices or settings were changed. Evidence:
+`verification/composer-polish-20261017/verification.json`.
+
+A separate clean Android 17 instance now has the production-signed public
+153.4.4 APK and its public signed Termux backend, installed using the app's exact
+onboarding command. An initial ADB run-as Perl execution-context failure was
+corrected by running the same command through Termux's own documented service;
+that setup-method failure is preserved, not counted as a product failure. The
+normal bootstrap completed successfully and returned to BashKitten. Its old
+backend has the new APK updater's required installed APIs. This is the baseline
+for the real published upgrade, not an update acceptance claim. Evidence:
+`acceptance/production-update-20261017/public15344-bootstrap-installation.json`.
+The final prerelease must include both signed Android ABIs, their matching native
+packages and signed APT catalogues, all Linux packages and corresponding sources.
+Superseded queued/redundant builds were cancelled while useful native producers
+were retained; a successful partial job is not publication.
+
 ## Cross-feature corrections and full-scope review — 15 October 2026
 
 The subsequent integration-fix batch includes `65500cd704` (independent Display
