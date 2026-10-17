@@ -227,7 +227,7 @@ public final class AgentSettingsActivity extends ProductActivity {
                     !current.matches("[a-f0-9]{64}") || revision != null && !revision.equals(current)) throw new IllegalStateException("Invalid runtime record chunk");
                 content.write(bytes, 0, bytes.length);
                 if (next == total) result.complete(object("name", value.getString("name"), "mimeType", value.getString("mimeType"),
-                    "content", content.toString(StandardCharsets.UTF_8)));
+                    "content", content.toString(StandardCharsets.UTF_8), "attribution", value.getJSONObject("attribution")));
                 else app.main.post(() -> readRecord(engine, record, content, current, result));
             } catch (Exception failure) { result.completeExceptionally(failure); }
         });

@@ -8,7 +8,7 @@ import net from 'node:net';
 import { randomUUID } from 'node:crypto';
 import { dataDir, readJson, writeJson, privateDir, digest } from '../common.mjs';
 import { syncManagedProvider, discoverManagedModels } from '../rpc/managed-provider.mjs';
-import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
+import { localAIDir, runtimeDirectory, requireLocalRuntime, runtimeInfo, describeRuntime, runtimeRecordAttribution, formatRuntimeLicenses, checkRuntime, installRuntime, validateBinary, managedRuntimeEnvironment, listRuntimeDevices } from './runtimes.mjs';
 import { platform } from '../platform/index.mjs';
 import { launchInference, ttsCpuArguments } from './launch.mjs';
 import { parseRouterINI, updateRouterModel, isolatedPreset, routerModelId, browseBackend, verifyTestConfiguration } from './router-models.mjs';
@@ -148,21 +148,24 @@ export class LocalAI {
       return fs.readFile(resolved, 'utf8');
     };
     let content = await readRecord(name);
+    const source = JSON.parse(record === 'source' ? content : await readRecord('SOURCE.json'));
+    const attribution = runtimeRecordAttribution(runtime, source);
     if (record === 'license') {
       // Android runtime archives retain their bundled libc++ notice separately.
       const notice = await readRecord('ANDROID-NDK-NOTICE.txt').catch(error => { if (error.code !== 'ENOENT') throw error; return ''; });
       if (notice) content += '\n\n===== ANDROID-NDK-NOTICE.txt =====\n' + notice;
+      content = formatRuntimeLicenses(content, attribution.name);
     }
     const mimeType = record === 'source' ? 'application/json' : 'text/plain';
     if (offset !== undefined) {
       // Termux command results have a per-response stdout limit. Keep the
       // complete record available, with a stable revision across byte chunks.
-      const bytes = Buffer.from(content, 'utf8'), current = digest(bytes);
+      const bytes = Buffer.from(content, 'utf8'), current = digest(JSON.stringify(attribution) + '\0' + content);
       if (revision !== undefined && revision !== current) throw Error('Runtime record changed. Open it again.');
       if (offset > bytes.length) throw Error('Runtime record offset is outside the document');
-      return { name, mimeType, offset, total: bytes.length, revision: current, data: bytes.subarray(offset, offset + 48 * 1024).toString('base64') };
+      return { name, mimeType, attribution, offset, total: bytes.length, revision: current, data: bytes.subarray(offset, offset + 48 * 1024).toString('base64') };
     }
-    return { name, content, mimeType };
+    return { name, content, mimeType, attribution };
   }
   async status() {
     const config = await this.config(), host = await this.services.status();
