@@ -30,7 +30,7 @@ import org.mozilla.geckoview.*;
 /** Browser-owned Gecko settings document, never registered as an ordinary tab. */
 public final class AgentSettingsActivity extends ProductActivity {
     private static final String URI = "about:bashkitten-settings";
-    private static final Set<String> SECTIONS = new HashSet<>(Arrays.asList("localai", "notifications", "phone-use", "remotes", "telephone", "performance", "display", "share-local", "autostart", "updates"));
+    private static final Set<String> SECTIONS = new HashSet<>(Arrays.asList("licenses", "localai", "notifications", "phone-use", "remotes", "telephone", "performance", "display", "share-local", "autostart", "updates"));
     private static final Set<String> LOCAL_AI = new HashSet<>(Arrays.asList(("localai-status localai-first-run localai-model-device localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action").split(" ")));
     private BrowserApp app;
     private GeckoSession session;
@@ -148,6 +148,11 @@ public final class AgentSettingsActivity extends ProductActivity {
             else if (share != null) operation = share.dispatch(method, args);
             else if (autostart != null) operation = autostart.dispatch(method, args);
             else if (updates != null) operation = updates.dispatch(method, args);
+            else if (section.equals("licenses")) {
+                if (method.equals("localai-open-record")) operation = openRecord(args);
+                else if (method.equals("localai-status") || method.equals("native-models-catalogue")) operation = command(method, args);
+                else throw new SecurityException("Unsupported license operation");
+            }
             else if (section.equals("localai")) operation = localAI(method, args);
             else if (section.equals("performance") && method.equals("performance-sample")) operation = sample();
             else if (section.equals("performance") && method.equals("performance-close")) { stopCounters(); operation = CompletableFuture.completedFuture(new JSONObject()); }
@@ -194,14 +199,30 @@ public final class AgentSettingsActivity extends ProductActivity {
             ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("BashKitten", args.optString("text")));
             return CompletableFuture.completedFuture(new JSONObject());
         }
-        if (method.equals("localai-open-record")) return openRecord(args);
         if (!LOCAL_AI.contains(method)) throw new SecurityException("Unsupported LocalAI operation");
         return command(method, args);
     }
     private CompletableFuture<JSONObject> command(String name, JSONObject args) {
         CompletableFuture<JSONObject> result = new CompletableFuture<>();
+        if (section.equals("licenses")) {
+            if (!app.agent.localSetupReady()) return CompletableFuture.failedFuture(new IllegalStateException("Downloaded notices are unavailable until this device’s Termux connection is set up."));
+            if (!Set.of("localai-status", "localai-record", "native-models-catalogue").contains(name))
+                return CompletableFuture.failedFuture(new SecurityException("Unsupported license read"));
+            String installation = app.agent.termux.installationId();
+            // Read saved files through the existing private bridge, without updates or starting an owner.
+            app.agent.termux.run(object("command", name, "args", objectWithReadOnly(args)), value -> {
+                if (!app.agent.localSetupReady() || !installation.equals(app.agent.termux.installationId()))
+                    result.completeExceptionally(new IllegalStateException("The Termux connection changed."));
+                else result.complete(value);
+            }, error -> result.completeExceptionally(new IllegalStateException(error)));
+            return result;
+        }
         app.agent.command(name, args, result::complete, error -> result.completeExceptionally(new IllegalStateException(error)));
         return result;
+    }
+    private static JSONObject objectWithReadOnly(JSONObject args) {
+        try { return new JSONObject(args.toString()).put("readOnly", true); }
+        catch (org.json.JSONException error) { throw new IllegalArgumentException(error); }
     }
     private CompletableFuture<JSONObject> openRecord(JSONObject args) {
         cancelRecordRead();

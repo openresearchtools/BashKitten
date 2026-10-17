@@ -124,10 +124,10 @@ public final class TermuxConnection {
         } catch (org.json.JSONException error) { fail.accept("Invalid service command arguments."); return; }
         // Secrets remain on stdin: no password, factor or connection key enters argv or logs.
         String script = "if [ -x '" + PREFIX + "/bin/bashkittenctl' ]; then "
-                + "exec '" + PREFIX + "/bin/bashkittenctl' \"$1\" --stdin; else "
+                + "exec '" + PREFIX + "/bin/bashkittenctl' \"$1\" --stdin \"$2\"; else "
                 + "printf '{\"error\":\"BashKitten packages are not installed yet.\"}' >&2; exit 1; fi";
         long timeout = command.equals("start") || command.equals("restart") || command.equals("autostart-startup") || command.startsWith("share-") ? 180000 : command.equals("status") ? 120000 : 60000;
-        execute(script, new String[] { command }, input, timeout, done, fail);
+        execute(script, new String[] { command, args != null && args.optBoolean("readOnly") ? "--read-only" : "" }, input, timeout, done, fail);
     }
 
     /** Runs only the fixed updater shipped by this APK, never caller-provided UI code. */

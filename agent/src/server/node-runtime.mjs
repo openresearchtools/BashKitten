@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 export const dataDir = path.resolve(process.env.BASHKITTEN_DATA_DIR || path.join(os.homedir(), '.local/share/bashkitten-pi'));
 export const piAgentDir = path.join(dataDir, 'pi');
+// Native About uses the installed CLI only to read saved license records.
+const readOnly = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(new URL('./control.mjs', import.meta.url)) && process.argv[4] === '--read-only';
 // Pi and its tools resolve the live desktop through its existing owner record,
 // even when the desktop started after this worker. Never cache DISPLAY or D-Bus.
 if (process.env.BASHKITTEN_EXECUTION_ROLE === 'termux') {
@@ -34,13 +36,13 @@ if (packaged) {
 export const npmPrefix = path.join(piAgentDir, 'npm');
 const config = path.join(piAgentDir, 'npm-config');
 const cache = path.join(piAgentDir, 'npm-cache');
-for (const directory of [piAgentDir, npmPrefix, config, cache]) {
+for (const directory of readOnly ? [] : [piAgentDir, npmPrefix, config, cache]) {
   fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
   fs.chmodSync(directory, 0o700);
 }
 const userconfig = path.join(config, 'user.npmrc');
 const globalconfig = path.join(config, 'global.npmrc');
-for (const file of [userconfig, globalconfig]) {
+for (const file of readOnly ? [] : [userconfig, globalconfig]) {
   try { fs.writeFileSync(file, '', { flag: 'wx', mode: 0o600 }); }
   catch (error) { if (error.code !== 'EEXIST') throw error; }
 }
@@ -69,7 +71,7 @@ const runtimeBin = packaged ? path.dirname(bundledNode) : path.dirname(process.e
 // Installed builds ship an immutable pi launcher beside Node. Checkouts need
 // their own shim before the developer Node's bin, which may contain another Pi.
 let developmentBin;
-if (!packaged) {
+if (!packaged && !readOnly) {
   developmentBin = path.join(piAgentDir, 'bin');
   fs.mkdirSync(developmentBin, { recursive: true, mode: 0o700 });
   const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";

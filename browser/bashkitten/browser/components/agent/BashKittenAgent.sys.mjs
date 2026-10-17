@@ -155,7 +155,7 @@ async function localControl(command, data = {}, timeoutMs) {
     if (closingLocal || DesktopLifetime.quitting) throw new Error("BashKitten is quitting.");
   }
   const process = await Subprocess.call({
-    command: CONTROLLER, arguments: [command, "--stdin"], stderr: "pipe",
+    command: CONTROLLER, arguments: [command, "--stdin", ...(data.readOnly === true ? ["--read-only"] : [])], stderr: "pipe",
   });
   if (!stopping && (closingLocal || DesktopLifetime.quitting)) {
     void process.kill(0).catch(console.error);
@@ -1205,7 +1205,6 @@ class AgentView {
         if (typeof value.text !== "string") throw new Error("Expected text to copy.");
         Cc["@mozilla.org/widget/clipboardhelper;1"].getService(Ci.nsIClipboardHelper).copyString(value.text); return { ok: true };
       }
-      if (name === "localai-open-record") return request("localai-record", value);
       if (name === "performance-close") { pause(); return { ok: true }; }
       if (name === "performance-sample") {
         if (this.pane.hidden || this.doc.hidden || !this.doc.hasFocus() || this.win.windowState === this.win.STATE_MINIMIZED) { pause(); throw new Error("Performance sampling is paused while the view is hidden."); }
@@ -1459,10 +1458,32 @@ class AgentView {
     return this.selectRemote(entry.connection, true);
   }
 
+  aiLicenses() {
+    const { dialog, content, actions } = this.dialog("AI runtimes and models");
+    dialog.firstElementChild.hidden = true; actions.hidden = true;
+    content.style.cssText = "display:flex;width:100%;height:70vh";
+    const browser = xul(this.doc, "browser", { type: "content", remote: "true", remoteType: "web", maychangeremoteness: "true", messagemanagergroup: "bashkitten-settings", flex: "1", disableglobalhistory: "true", "bashkitten-protected": "true" });
+    content.append(browser);
+    const current = () => dialog.open && dialog.isConnected && !this.win.closed && !DesktopLifetime.quitting;
+    const scheme = this.win.getComputedStyle(this.pane || this.doc.documentElement).colorScheme;
+    const revoke = BashKittenSettings.enroll(browser, {
+      info: { platform: "linux", section: "licenses", backendName: "This device", local: true,
+        theme: ["light", "dark"].includes(scheme) ? scheme : this.win.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light" },
+      current, close: () => dialog.close(),
+      call: (name, value) => control(name === "localai-open-record" ? "localai-record" : name, { ...value, readOnly: true }),
+    });
+    dialog.addEventListener("close", revoke, { once: true });
+    try { browser.loadURI(Services.io.newURI(SETTINGS_URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); }
+    catch (error) { revoke(); dialog.close(); throw error; }
+  }
+
   async licenses() {
-    const { content } = this.dialog("Bundled component licenses");
+    const { dialog, content } = this.dialog("Licenses and source");
+    const downloaded = html(this.doc, "button", { type: "button" }, "AI runtimes and models");
+    downloaded.addEventListener("click", () => { dialog.close(); this.aiLicenses(); }); content.append(downloaded);
     try {
       const records = await IOUtils.readJSON("/usr/lib/bashkitten/licenses.json");
+      content.append(html(this.doc, "h3", {}, "Bundled components"));
       content.append(html(this.doc, "p", {}, "Full notices for the bundled browser, Agent, private Node/npm, Pi, search and authentication components. Python and Linux system libraries retain their separately installed package licenses."));
       for (const record of records) {
         const detail = html(this.doc, "details");
@@ -1475,7 +1496,7 @@ class AgentView {
         content.append(detail);
       }
     } catch (error) {
-      content.textContent = `Offline license files could not be opened: ${error.message || error}`;
+      content.append(html(this.doc, "p", {}, `Offline license files could not be opened: ${error.message || error}`));
     }
   }
 

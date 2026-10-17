@@ -6,9 +6,10 @@ const prefix = "gvctx" + Array.from(new TextEncoder().encode("bashkitten-setting
 export const SETTINGS_URI = "about:bashkitten-settings";
 const names = value => new Set(value.split(" "));
 const sections = {
+  licenses: names("localai-status localai-open-record native-models-catalogue"),
   autostart: names("autostart.get autostart.set autostart.commands.save"),
   updates: names("updates.snapshot updates.check updates.channel updates.download updates.packages updates.cancel updates.inventory"),
-  localai: names("localai-setup localai-status localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action clipboard-copy localai-open-record"),
+  localai: names("localai-setup localai-status localai-save localai-model-use localai-synthesize localai-synthesis-cancel localai-quantize localai-ini localai-browse localai-router-models localai-router-model-save localai-router-model-test localai-router-model-test-status localai-router-model-test-cancel localai-check localai-install localai-cancel localai-action native-models-status native-models-catalogue native-models-preset native-models-settings native-models-search native-models-repository native-models-download native-models-action clipboard-copy"),
   notifications: names("turn-notification-settings snapshot configure notification-permission android-auto android-auto-settings"),
   telephone: names("snapshot configure setup-account readiness call contact divert clear-voicemail microphone-permission open-voice-settings"),
   "phone-use": names("snapshot set-master set-feature accessibility-settings notification-settings location-permission add-location set-location remove-location"),

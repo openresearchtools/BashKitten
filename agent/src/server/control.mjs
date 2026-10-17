@@ -23,7 +23,8 @@ import { paths, binary } from './access/paths.mjs';
 import { acquireWake, releaseWake, wakeHeld } from './access/wake.mjs';
 import { LocalAI } from './localai/localai.mjs';
 import { FirstRunLocalAI } from './localai/setup.mjs';
-import { curatedModels, downloadPreset, readPresetNotices } from './localai/models.mjs';
+import { curatedModels, downloadPreset, downloadedModelNotices, readPresetNotices } from './localai/models.mjs';
+import { runtimeInfo, describeRuntime } from './localai/runtimes.mjs';
 import { downloadsStatus, searchModels, modelRepository, startDownload, controlDownload, shutdownDownloads, resumeDownloads, setDownloadCompleteHandler } from './models/downloads.mjs';
 import { saveModelSettings } from './models/settings.mjs';
 import { importRemoteProvider } from './rpc/managed-provider.mjs';
@@ -407,7 +408,7 @@ async function serve() {
       throw Error('Unknown LocalAI action');
     }
     if (command.startsWith('native-models-')) {
-      if (command === 'native-models-catalogue') return value.notice ? readPresetNotices(value.notice, value.file) : curatedModels();
+      if (command === 'native-models-catalogue') return value.notice ? readPresetNotices(value.notice, value.file, value) : curatedModels();
       if (command === 'native-models-preset') return downloadPreset(value.id);
       if (command === 'native-models-status') return downloadsStatus();
       if (command === 'native-models-settings') return saveModelSettings(value);
@@ -588,7 +589,9 @@ async function serve() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === script) {
   const command = process.argv[2] || 'status';
-  if (command === 'machine-transport') {
+  if (process.argv[4] === '--read-only' && !['localai-status', 'localai-record', 'native-models-catalogue'].includes(command)) {
+    console.error(JSON.stringify({ error: 'Unsupported read-only license operation' })); process.exitCode = 1;
+  } else if (command === 'machine-transport') {
     try { await (await import('./machines/browser-transport.mjs')).browserTransport(process.argv[3]); }
     catch (error) { console.error(JSON.stringify({error:error.message})); process.exitCode = 1; }
   } else if (command === 'serve') {
@@ -603,15 +606,26 @@ if (process.argv[1] && path.resolve(process.argv[1]) === script) {
     try {
       const input = process.argv[3];
       const value = input === '-' || input === '--stdin' ? JSON.parse((await body(process.stdin)).toString() || '{}') : input ? JSON.parse(input) : {};
-      const performanceCommand = ['performance-sample', 'performance-close'].includes(command);
-      if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager({ browserOwner: value.browserOwner, initialWeb: value.initialWeb });
-      delete value.initialWeb;
-      const result = await controlRequest(command, command === 'status' && !value.browserOwner ? undefined : value).catch(error => {
-        if (performanceCommand && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return command === 'performance-close' ? { ok: true } : performanceUnavailable('The local Agent is off');
-        if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };
-        throw error;
-      });
-      console.log(JSON.stringify(result));
+      // About reads installed files through the same private CLI, even with Local off.
+      // Do not initialize a manager, migrate settings, resume downloads or start engines.
+      if (process.argv[4] === '--read-only') {
+        let result;
+        if (command === 'localai-record') result = await new LocalAI().record(value);
+        else if (command === 'localai-status') result = Object.fromEntries(await Promise.all(['llama', 'whisper'].map(async engine => [engine, { runtime: describeRuntime(await runtimeInfo(engine)) }])));
+        else if (command === 'native-models-catalogue') result = value.notice ? await readPresetNotices(value.notice, value.file, value) : await downloadedModelNotices();
+        else throw Error('Unsupported read-only license operation');
+        console.log(JSON.stringify(result));
+      } else {
+        const performanceCommand = ['performance-sample', 'performance-close'].includes(command);
+        if (command !== 'browser-shutdown' && !['phone-gateway-disconnect','phone-status'].includes(command) && !performanceCommand && !command.startsWith('machines.') && !command.startsWith('phone-control-') && command !== 'guest-browser-connect') await ensureManager({ browserOwner: value.browserOwner, initialWeb: value.initialWeb });
+        delete value.initialWeb;
+        const result = await controlRequest(command, command === 'status' && !value.browserOwner ? undefined : value).catch(error => {
+          if (performanceCommand && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return command === 'performance-close' ? { ok: true } : performanceUnavailable('The local Agent is off');
+          if (command === 'browser-shutdown' && ['ENOENT', 'ECONNREFUSED'].includes(error.code)) return { web: { status: 'stopped' } };
+          throw error;
+        });
+        console.log(JSON.stringify(result));
+      }
     } catch (error) { console.error(JSON.stringify({ error: error.message })); process.exitCode = 1; }
   }
 }

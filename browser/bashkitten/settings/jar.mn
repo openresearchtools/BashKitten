@@ -6,6 +6,7 @@ toolkit.jar:
   content/bashkitten-settings/display-settings.mjs (display-settings.mjs)
   content/bashkitten-settings/index.html (index.html)
   content/bashkitten-settings/localai.mjs (localai.mjs)
+  content/bashkitten-settings/licenses.mjs (licenses.mjs)
   content/bashkitten-settings/machine.mjs (machine.mjs)
   content/bashkitten-settings/main.mjs (main.mjs)
   content/bashkitten-settings/performance.mjs (performance.mjs)
