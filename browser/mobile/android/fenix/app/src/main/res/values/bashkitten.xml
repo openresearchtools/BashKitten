@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <resources>
-    <string name="bashkitten_about_content" translatable="false">BashKitten is an agentic browser built on Mozilla Firefox. Copyright and license notices are provided below.</string>
+    <string name="bashkitten_about_content" translatable="false">BashKitten is an agentic browser built as a fork of Mozilla Firefox.* Copyright and license notices are provided below.</string>
+    <string name="bashkitten_about_fork_notice" translatable="false">* BashKitten is not affiliated with or endorsed by Mozilla.</string>
     <string name="bashkitten_engine_licenses" translatable="false">Firefox and Gecko licenses</string>
     <string name="bashkitten_licenses_and_source" translatable="false">Licenses and source</string>
     <string name="bashkitten_saved_passwords_description">Passwords saved in %s are encrypted and stored on this device.</string>

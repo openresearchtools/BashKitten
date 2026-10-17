@@ -48,6 +48,19 @@
             tools:text="@string/about_content" />
 
         <TextView
+            android:id="@+id/about_fork_notice"
+            style="@style/Body14TextStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/bashkitten_about_fork_notice"
+            android:textAlignment="center"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/about_content"
+            app:layout_constraintWidth_percent="0.8" />
+
+        <TextView
             android:id="@+id/about_text"
             style="@style/AboutHeaderContentText"
             android:layout_width="0dp"
@@ -57,7 +70,7 @@
             android:textIsSelectable="true"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/about_content"
+            app:layout_constraintTop_toBottomOf="@id/about_fork_notice"
             app:layout_constraintWidth_percent="0.8"
             tools:text="1.0.x (Build #x), 0d7383fd2\nAC: 1.0.0, 96ae23b628\nGV: 69.x-x\nAS: 1.0.0\nOS: Android 15" />
 
