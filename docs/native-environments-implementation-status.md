@@ -5,6 +5,48 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## First-run defaults and isolated desktop testing — 17 October 2026
+
+The empty desktop AI inventory came from the preserved 11 October acceptance
+profile, which already contained Local AI configuration and was correctly excluded
+from fresh enrollment. That was not valid fresh-install acceptance. A genuinely
+new browser/backend profile on the installed `bab3f4eba8` candidate automatically
+downloaded both runtimes and the Qwen3.5 4B vision, Parakeet and Pocket TTS presets
+in 40.944 seconds, including projector/reference-voice assets. All three engines
+were configured for CPU and stock Pi's saved default selected Qwen. Evidence:
+`verification/desktop-first-run-20261017/automatic-download-complete.json` in the
+separate Build workspace. This establishes automatic setup, not completed chat,
+vision or speech acceptance.
+
+The installed test exposed two UI regressions: stale removed license-control
+references stopped the Local AI form from rendering, and closing setup left the
+new-chat model selector stale until a later focus refresh. `430cdb8167` removes
+the obsolete references; `f6fae59cc3` refreshes through the existing protected
+navigation path while preserving explicit choices. The full renderer's 159 cases
+and 14 default-refresh groups pass. The normal Linux `f6fae59cc3` package was
+installed with the completed model/router/Pi configuration hashes unchanged;
+installed repaired-flow acceptance remains pending.
+
+A second fresh backend under the same home exposed a separate collision in the
+old implicit `~/models` destination. `d39ae27680` initializes the existing model
+settings store to that fresh backend's own `models/files` directory. Existing
+settings, custom destinations, previous jobs and failed/cancelled setup are not
+retrospectively changed. Nine filesystem scenarios, five enrollment cases and
+twelve configuration checks pass, including independent data directories, save
+races and the owned destination outside home. The actual failed setup is retained
+and a new installed fresh-profile run is required after packaging this fix.
+
+At the user's request, desktop UI automation is moving to an isolated Intel
+Wayland screen with a view-only browser viewer; no host keyboard, pointer or focus
+injection is permitted for these tests. Cuttlefish interaction remains through
+the desktop BashKitten browser. Weston and the private test browser were verified
+against Intel `renderD128`, with no NVIDIA device/library use. The first private
+session lacked the systemd user manager needed for containers; that is an
+unresolved test-environment limitation, not a container acceptance pass. Its
+viewer also exposed an inherited handshake timeout causing idle disconnects;
+the external test helper was corrected and automatic reconnection added. These
+environment records do not replace real-Xorg or full container acceptance.
+
 ## Compact phone layout and installed follow-up — 17 October 2026
 
 The normal Android upgrade to local candidate `e226372894` installed its matching
