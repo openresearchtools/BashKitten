@@ -140,9 +140,18 @@ export class LocalAI {
     if (!runtime?.root) throw Error('Download this runtime first');
     const directory = await fs.realpath(runtimeDirectory), root = await fs.realpath(runtime.root);
     if (!root.startsWith(directory + path.sep)) throw Error('Runtime record is outside the installed runtime directory');
-    const filename = await fs.realpath(path.join(root, name));
-    if (filename !== path.join(root, name) || !(await fs.stat(filename)).isFile()) throw Error('Runtime record is not a regular installed file');
-    return { name, content: await fs.readFile(filename, 'utf8'), mimeType: record === 'source' ? 'application/json' : 'text/plain' };
+    const readRecord = async filename => {
+      const resolved = await fs.realpath(path.join(root, filename));
+      if (resolved !== path.join(root, filename) || !(await fs.stat(resolved)).isFile()) throw Error('Runtime record is not a regular installed file');
+      return fs.readFile(resolved, 'utf8');
+    };
+    let content = await readRecord(name);
+    if (record === 'license') {
+      // Android runtime archives retain their bundled libc++ notice separately.
+      const notice = await readRecord('ANDROID-NDK-NOTICE.txt').catch(error => { if (error.code !== 'ENOENT') throw error; return ''; });
+      if (notice) content += '\n\n===== ANDROID-NDK-NOTICE.txt =====\n' + notice;
+    }
+    return { name, content, mimeType: record === 'source' ? 'application/json' : 'text/plain' };
   }
   async status() {
     const config = await this.config(), host = await this.services.status();
