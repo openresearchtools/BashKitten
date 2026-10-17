@@ -20,6 +20,21 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     const principal = this.document.nodePrincipal;
     const entry = new Map(Services.cpmm.sharedData.get("BashKittenAgentContexts") || []).get(principal.originAttributes.userContextId);
     if (!entry || principal.originNoSuffix !== entry.origin || this.browsingContext !== this.browsingContext.top) return;
+    if (event.type === "click") {
+      if (!event.isTrusted || event.defaultPrevented || event.button !== 0 ||
+          event.altKey || event.ctrlKey || event.metaKey || event.shiftKey ||
+          !this.document.hasValidTransientUserGestureActivation) return;
+      const link = event.target.closest?.("a[download]");
+      if (!link || link.ownerDocument !== this.document) return;
+      const url = new URL(link.href);
+      if (url.origin !== entry.origin || url.username || url.password || url.hash ||
+          !/^\/api\/(?:files\/(?:content|archive|jobs\/[a-f0-9-]{36}\/download)|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(url.pathname)) return;
+      // An explicit download must use Gecko's forced-save path. Letting a PDF
+      // navigate first can create a viewer popup carrying the Agent's context.
+      event.preventDefault();
+      this.sendQuery("DownloadFile", { url: url.href }).catch(error => this.contentWindow?.alert(error.message));
+      return;
+    }
     const win = this.contentWindow;
     const host = Cu.cloneInto({ platform: "linux", local: entry.local, navigation: true, providerLogin: entry.providerLogin === true }, win);
     Cu.exportFunction((command, data = {}) => new win.Promise((resolve, reject) => {
