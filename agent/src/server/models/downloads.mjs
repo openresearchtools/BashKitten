@@ -6,8 +6,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { modelDataDir, modelSettings, getModelsDirectory } from './settings.mjs';
-import { pickerDirectory } from '../files/folders.mjs';
+import { modelDataDir, modelSettings, getModelsDirectory, resolveModelsDirectory } from './settings.mjs';
 import { privateDir, readJson, writeJson, writePrivate } from '../common.mjs';
 import { repositoryId, revisionId, repositoryPath, repositoryFiles, hfRequest, resolvePath, modelError, publicModelError } from './huggingface.mjs';
 export { searchModels, modelRepository } from './huggingface.mjs';
@@ -71,7 +70,7 @@ async function load() {
 // the leaf alone would still allow a replaced parent to redirect a later write.
 // /proc/self/fd is available on native Linux and Android/Termux.
 async function outputDirectory(job, file, create = true) {
-  const canonical = (await pickerDirectory(job.directory)).path;
+  const canonical = await resolveModelsDirectory(job.directory);
   if (canonical !== job.directory) throw modelError('The models folder has moved; choose its current location');
   let parent = await fs.open('/', directoryPathFlags);
   const pieces = file.outputPath.split('/');
