@@ -170,18 +170,45 @@ public final class AgentSidecar {
         });
     }
     private void select(String backend, Runnable ready) {
-        if (backend.equals(runtime.selected) && runtime.state.equals("on")) { awaitReady(backend, ready, generation, android.os.SystemClock.elapsedRealtime() + 30000); return; }
+        cancelSelection();
+        Runnable selected = () -> { ready.run(); refresh(); };
+        if (backend.equals(runtime.selected) && runtime.state.equals("on")) { awaitReady(backend, selected, generation, android.os.SystemClock.elapsedRealtime() + 30000); return; }
         if (backend.equals(runtime.selected) && !runtime.isOnRequested()) runtime.turnOn();
         else runtime.select(backend);
         final int epoch = generation;
         AgentRuntime.Listener observer = new AgentRuntime.Listener() {
             @Override public void changed() {
                 if (epoch != generation || !backend.equals(runtime.selected)) { runtime.detach(this); pendingSelections.remove(this); return; }
-                if (runtime.state.equals("on")) { runtime.detach(this); pendingSelections.remove(this); awaitReady(backend, ready, epoch, android.os.SystemClock.elapsedRealtime() + 30000); }
+                if (runtime.state.equals("on")) { runtime.detach(this); pendingSelections.remove(this); awaitReady(backend, selected, epoch, android.os.SystemClock.elapsedRealtime() + 30000); }
                 else if (Arrays.asList("failed", "off", "stop-failed", "setup").contains(runtime.state)) { runtime.detach(this); pendingSelections.remove(this); error(runtime.error); }
             }
         };
         pendingSelections.add(observer); runtime.observe(observer); observer.changed();
+    }
+    void openMessage(String eventId) {
+        cancelSelection();
+        if (!isOpen()) toggle();
+        final int opening = generation;
+        final String previousBackend = runtime.selected;
+        runtime.phoneVoice.messageTarget(eventId).whenComplete((target, failure) -> app.main.post(() -> {
+            if (opening != generation || !previousBackend.equals(runtime.selected)) return;
+            if (failure != null) { error(failure.getCause() == null ? failure.getMessage() : failure.getCause().getMessage()); return; }
+            String backend = target.optString("backend");
+            select(backend, () -> {
+                final int epoch = generation;
+                // Connecting/signing in can take time. Recheck the saved event
+                // and registration, and never override a later user selection.
+                runtime.phoneVoice.messageTarget(eventId).whenComplete((current, rejected) -> app.main.post(() -> {
+                    if (epoch != generation || !backend.equals(runtime.selected)) return;
+                    if (rejected != null) { error(rejected.getCause() == null ? rejected.getMessage() : rejected.getCause().getMessage()); return; }
+                    if (!backend.equals(current.optString("backend")) || !target.optString("id").equals(current.optString("id"))) { error("The message's original chat is unavailable"); return; }
+                    runtime.navigation("open", value("id", current.optString("id")), snapshot -> {
+                        if (epoch != generation) return;
+                        snapshots.put(backend, snapshot); close();
+                    }, this::error);
+                }));
+            });
+        }));
     }
     private void navigate(String backend, String action, JSONObject value, boolean dismiss) {
         select(backend, () -> runtime.navigation(action, value, snapshot -> {

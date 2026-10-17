@@ -31,6 +31,7 @@ public final class TelephonyRuntime {
         String connectionState();
         CompletableFuture<Void> prepare();
         CompletableFuture<Void> prepare(String backendId);
+        PendingIntent messageIntent(String eventId);
     }
     private static TelephonyRuntime instance;
     public static synchronized TelephonyRuntime get(Context context) {
@@ -399,6 +400,13 @@ public final class TelephonyRuntime {
     }
     public CompletableFuture<JSONObject> registeredBackends() { return job(() -> { JSONArray result = new JSONArray(); for (String id : keys(state.optJSONObject("backends"))) { JSONObject value = backend(id); if (!value.optBoolean("revoked")) result.put(json("id", id, "name", value.optString("name"), "generation", value.optString("generation"))); } return json("backends", result); }); }
     public void completedMessage(JSONObject message) { execute(() -> { for (KittenConnection call : calls.values()) if (call.flow != null) call.flow.live(message); }); }
+    public CompletableFuture<JSONObject> messageTarget(String eventId) {
+        return job(() -> {
+            JSONObject event = event(eventId); requireEvent(event, "messages", true);
+            if (!"messages".equals(event.optString("route"))) throw new SecurityException("This message is unavailable");
+            return json("backendId", event.getString("backendId"), "generation", event.getString("generation"), "sessionId", event.getString("sessionId"));
+        });
+    }
     public CompletableFuture<Void> reply(String eventId, String text, boolean markRead) {
         CompletableFuture<Void> done = new CompletableFuture<>();
         execute(() -> { try {
