@@ -102,47 +102,63 @@ def merge_thunar(config):
             root.append(action)
     ET.indent(tree);atomic(target,ET.tostring(root,encoding='unicode')+'\n')
 
-def update_wallpaper(size,workarea):
+def update_wallpaper(size):
     from gi.repository import GdkPixbuf
     from .scaling import XfconfSetting,xfconf_get,xfconf_set_if_needed
     env=os.environ.copy()
     result=subprocess.run(['xrandr','--listmonitors'],capture_output=True,text=True,check=True,timeout=10)
     monitors=[line.split()[-1] for line in result.stdout.splitlines()[1:] if line.split()]
     if not monitors:return
-    # This is only the existing managed default. User path or placement always wins.
-    destination=Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))/'bashkitten-os/default-wallpaper.png'
+    cache=Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))/'bashkitten-os'
+    previous=cache/'default-wallpaper.png'
+    images=(cache/'default-logo.png',cache/'default-logo-next.png')
     initial=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'bashkitten-os/initial-wallpaper'
     selected=[]
     for monitor in monitors:
         base=f'/backdrop/screen0/monitor{monitor}/workspace0'
         image=XfconfSetting('xfce4-desktop',base+'/last-image','string')
         placement=XfconfSetting('xfce4-desktop',base+'/image-style','int')
-        path=xfconf_get(image,env);mode=xfconf_get(placement,env)
-        if not initial.exists() and path not in (None,'',str(destination),str(SHARE/'logo.png')):continue
-        if path==str(destination) and mode not in (None,'1'):continue
-        selected.append((image,placement,path,mode))
-    if not selected:return
-    width,height=size
-    x,y,area_width,area_height=workarea
-    left,top=max(0,x),max(0,y)
-    right,bottom=min(width,x+area_width),min(height,y+area_height)
-    if right<=left or bottom<=top:return
-    logo=GdkPixbuf.Pixbuf.new_from_file(str(SHARE/'logo.png'))
-    ratio=min(1,(right-left)/logo.get_width(),(bottom-top)/logo.get_height())
-    lw,lh=max(1,int(logo.get_width()*ratio)),max(1,int(logo.get_height()*ratio))
-    if ratio<1:logo=logo.scale_simple(lw,lh,GdkPixbuf.InterpType.BILINEAR)
-    output=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,False,8,width,height);output.fill(0x202225ff)
-    offset_x,offset_y=left+(right-left-lw)//2,top+(bottom-top-lh)//2
-    logo.composite(output,offset_x,offset_y,lw,lh,offset_x,offset_y,1,1,GdkPixbuf.InterpType.BILINEAR,255)
-    # A user can change image/placement while the off-thread render is running.
-    # Revalidate ownership before replacing the managed file or XFConf values.
-    selected=[entry for entry in selected if xfconf_get(entry[0],env)==entry[2] and xfconf_get(entry[1],env)==entry[3]]
+        color=XfconfSetting('xfce4-desktop',base+'/color-style','int')
+        rgba=XfconfSetting('xfce4-desktop',base+'/rgba1','double')
+        choices=(image,placement,color,rgba)
+        values=tuple(xfconf_get(setting,env) for setting in choices)
+        path,mode,_,_=values
+        # The first-use marker never authorizes replacing a user's wallpaper.
+        if path not in (str(previous),*map(str,images),str(SHARE/'logo.png')):
+            if not initial.exists() or path not in (None,''):continue
+        if mode not in (None,'1'):continue
+        selected.append((choices,values))
     if not selected:
         initial.unlink(missing_ok=True);return
-    destination.parent.mkdir(parents=True,exist_ok=True)
-    temporary=destination.with_suffix('.new.png');output.savev(str(temporary),'png',[],[]);os.replace(temporary,destination)
-    for image,placement,path,mode in selected:
-        if xfconf_get(image,env)==path and xfconf_get(placement,env)==mode:
-            xfconf_set_if_needed(image,str(destination),env);xfconf_set_if_needed(placement,'1',env)
+    width,height=size
+    if width<=0 or height<=0:return
+    logo=GdkPixbuf.Pixbuf.new_from_file(str(SHARE/'logo.png'))
+    ratio=min(1,width/logo.get_width(),height/logo.get_height())
+    if ratio<1:
+        logo=logo.scale_simple(max(1,int(logo.get_width()*ratio)),max(1,int(logo.get_height()*ratio)),GdkPixbuf.InterpType.BILINEAR)
+    # Only the transparent logo is fitted. XFCE owns the full-monitor solid
+    # canvas and centers the image on every native resize (4.20 image-style 1).
+    # Never bake a viewport or workarea rectangle into this image.
+    selected=[entry for entry in selected if tuple(xfconf_get(s,env) for s in entry[0])==entry[1]]
+    if not selected:
+        initial.unlink(missing_ok=True);return
+    cache.mkdir(parents=True,exist_ok=True)
+    for choices,values in selected:
+        # XFCE can miss atomic replacement of its currently watched inode.
+        # Keep two bounded files and switch last-image after the new PNG exists.
+        destination=images[1] if values[0]==str(images[0]) else images[0]
+        temporary=destination.with_suffix('.new.png')
+        logo.savev(str(temporary),'png',[],[]);os.replace(temporary,destination)
+        if tuple(xfconf_get(s,env) for s in choices)!=values:continue
+        image,placement,color,rgba=choices
+        # Provision/migrate only absent fill settings. Subsequent user color,
+        # gradient and placement choices remain authoritative across resizes.
+        if values[3] is None:
+            subprocess.run(['xfconf-query','-c',rgba.channel,'-p',rgba.path,'-n','-a',
+                            '-t','double','-t','double','-t','double','-t','double',
+                            '-s',str(32/255),'-s',str(34/255),'-s',str(37/255),'-s','1'],
+                           env=env,capture_output=True,text=True,check=True,timeout=10)
+        if values[2] is None:xfconf_set_if_needed(color,'0',env)
+        xfconf_set_if_needed(placement,'1',env)
+        xfconf_set_if_needed(image,str(destination),env)
     initial.unlink(missing_ok=True)
-    # Changing the same file is observed by xfdesktop's normal file monitor.

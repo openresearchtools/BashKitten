@@ -44,3 +44,11 @@ responsiveness under load.
 The named panel resize patch publishes X11 reservations after the window manager
 acknowledges the panel's latest geometry. It preserves first-map reservations,
 user panel placement and autohide, without a hardcoded margin or UI-thread wait.
+
+The owned default wallpaper uses XFCE's solid `#202225` background and native
+centered-image mode. The session fits only the transparent logo asynchronously,
+capped at its original 1254 × 1254 pixels. Two bounded image files let each
+completed fit change XFCE's selected path, avoiding missed file-monitor events
+from atomic replacements. Native XFCE fills and recenters on viewport resize;
+there is no old-size opaque wallpaper canvas. Custom wallpaper, placement and
+saved background colors/gradients remain authoritative.

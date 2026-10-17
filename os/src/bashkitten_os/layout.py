@@ -42,7 +42,6 @@ class Layout:
             try:line,_=source.read_line_finish(result)
             except GLib.Error:return
             if line is None or cancel.is_cancelled():return
-            self.app.session.wallpaper_workarea(line)
             self.queue()
             source.read_line_async(GLib.PRIORITY_DEFAULT,cancel,changed)
         stream.read_line_async(GLib.PRIORITY_DEFAULT,cancel,changed)
