@@ -1266,7 +1266,7 @@ class AgentView {
         this.closeConnections();
         // The chat browser can retain focus beneath this settings panel, so
         // closing it need not produce the window focus event used by the web UI.
-        if (section === "localai" && this.selection === backend.id)
+        if (section === "localai" && (this.selection || "local") === backend.id)
           void this.sidecar.navigation("refresh").catch(console.error);
       },
     });
