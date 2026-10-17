@@ -3,11 +3,13 @@ import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { dataDir, readJson, writeJson } from '../common.mjs';
+import { dataDir, readJson, writeJson, createJson } from '../common.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
+import { authorizeManagerPath } from '../files/access.mjs';
 
 export const modelDataDir = path.join(dataDir, 'models');
 const settingsFile = path.join(modelDataDir, 'settings.json');
+const ownedModelsDirectory = path.join(modelDataDir, 'files');
 const defaults = () => ({ directory: path.join(os.homedir(), 'models'), token: '' });
 let saving = Promise.resolve();
 
@@ -17,12 +19,43 @@ export async function modelSettings() {
   const { directory, token } = await settings();
   return { directory, hasToken: Boolean(token) };
 }
+export async function initializeModelsDirectory() {
+  const operation = saving.then(async () => {
+    if (await readJson(settingsFile, null) !== null) return;
+    // Older downloads may have used the implicit HOME/models destination.
+    // Only a new profile gets the private default; saved choices stay intact.
+    const jobs = await fs.readdir(path.join(modelDataDir, 'downloads')).catch(error => {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    });
+    if (jobs.length) return;
+    const directory = ownedModelsDirectory;
+    await fs.mkdir(directory, { mode: 0o700, recursive: true });
+    await createJson(settingsFile, { directory, token: '' });
+  });
+  saving = operation.catch(() => {});
+  return operation;
+}
+export async function resolveModelsDirectory(directory) {
+  const owned = await fs.realpath(ownedModelsDirectory).catch(error => {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  });
+  if (owned && owned === path.join(await fs.realpath(modelDataDir), 'files') &&
+      (directory === ownedModelsDirectory || directory === owned)) {
+    // The configured data directory can be outside the user's folder picker.
+    // This exception names only our owned models root, with the same authority.
+    await authorizeManagerPath(owned);
+    return owned;
+  }
+  return (await pickerDirectory(directory)).path;
+}
 export async function getModelsDirectory({ create = false } = {}) {
   const { directory } = await settings();
   if (create && directory === defaults().directory) await fs.mkdir(directory, { mode: 0o700, recursive: true });
-  const result = await pickerDirectory(directory);
-  await fs.access(result.path, constants.W_OK | constants.X_OK);
-  return result.path;
+  const result = await resolveModelsDirectory(directory);
+  await fs.access(result, constants.W_OK | constants.X_OK);
+  return result;
 }
 export async function saveModelSettings(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Invalid model settings');
@@ -30,9 +63,9 @@ export async function saveModelSettings(value) {
     const saved = await settings();
     if (Object.hasOwn(value, 'directory')) {
       if (typeof value.directory !== 'string' || !value.directory.trim()) throw Error('Choose a models folder');
-      const directory = await pickerDirectory(value.directory);
-      await fs.access(directory.path, constants.W_OK | constants.X_OK);
-      saved.directory = directory.path;
+      const directory = await resolveModelsDirectory(value.directory);
+      await fs.access(directory, constants.W_OK | constants.X_OK);
+      saved.directory = directory;
     }
     if (Object.hasOwn(value, 'token')) {
       if (typeof value.token !== 'string' || /[\x00-\x20\x7f]/.test(value.token)) throw Error('Use a valid Hugging Face token without spaces');

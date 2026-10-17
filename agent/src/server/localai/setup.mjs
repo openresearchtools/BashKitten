@@ -5,6 +5,7 @@ import { dataDir, readJson, writeJson, digest } from '../common.mjs';
 import { platform } from '../platform/index.mjs';
 import { loadPi, piAgentDir } from '../rpc/runtime.mjs';
 import { downloadsStatus, controlDownload } from '../models/downloads.mjs';
+import { initializeModelsDirectory } from '../models/settings.mjs';
 import { firstRunModelPresets, downloadPreset } from './models.mjs';
 import { localAIDir, runtimeInfo } from './runtimes.mjs';
 import { routerModelId } from './router-models.mjs';
@@ -23,6 +24,7 @@ export class FirstRunLocalAI {
     this.state = await readJson(this.file, null);
     const result = await this.localAI.initialize({ initial: this.state?.initial, beforeCreate: async initial => {
       if (this.state) return;
+      await initializeModelsDirectory();
       const presets = firstRunModelPresets(platform === 'termux' ? 'android' : 'linux');
       this.state = { version: 1, status: 'pending', models: Object.values(presets).map(item => ({ title: item.title, bytes: item.bytes })),
         baseline: { config: digest(JSON.stringify(initial.config)), ini: digest(initial.ini.content), piSettings: await piSettingsRevision() }, initial, downloads: {} };
