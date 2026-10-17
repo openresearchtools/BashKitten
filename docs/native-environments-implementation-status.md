@@ -71,6 +71,34 @@ and x86_64 plus both Linux architectures. Publication and signed device upgrade
 remain pending artifact verification and installed acceptance. All earlier
 unresolved acceptance rows remain required.
 
+Follow-up in the same isolated session: the `26ba` Configuration row still
+dismissed without opening settings on a real pointer click. Captured trusted
+events stopped before any row event reached the DOM. `65f30efd8f` now uses
+Firefox's existing PanelMultiView owner for popup focus and keyboard navigation;
+its focused checks pass, but actual pointer/keyboard acceptance remains pending.
+`a7a3735571` independently fixes the Display-stop race: a packaged gateway probe
+reproduced Unix endpoint rows briefly surviving the owned process's stopped
+state. Bounded asynchronous release verification retains live-endpoint and
+inode/owner checks; persistent or replaced endpoints still fail. Installed
+Off/On and black-viewport recovery remain pending the combined candidate.
+
+The fresh Android CPU chat returned exactly `READY`, and actual Dictate captured
+the public JFK WAV through a Cuttlefish WebRTC fixture, transcribed it correctly
+with the default Parakeet and used the configured automatic-send behavior.
+Native Pi history contains exactly one original prompt and one transcribed
+message, using Qwen3.5-2B-Q4_0. No physical microphone was opened by the test
+fixture. Evidence: `verification/android17-fresh-cab1/model-and-dictation.json`
+and `native-session-proof.json`. Vision and Pocket TTS remain pending.
+
+A separate `26ba` native Quit returned exit 0 with the container already stopped
+and no Display opened during that launch. Diagnostic logging shows all four
+quit-application blockers and the later BashKitten cleanup blockers completed.
+The earlier `cab` crash is specifically Gecko's AppShutdownConfirmed watchdog
+inside the quit-application async shutdown phase. Its exact pending blocker was
+not recoverable from that core. This narrower successful repeat does not close
+the failure after active Display Off/On; that sequence must be repeated on the
+combined candidate. Raw logs and core data remain private.
+
 ## First-run defaults and isolated desktop testing — 17 October 2026
 
 The empty desktop AI inventory came from the preserved 11 October acceptance
