@@ -155,6 +155,10 @@ jobs:
         persist-credentials: false
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:
+        # Auth/search carry matching sources; Node sources are already in the
+        # corresponding-source artifact. Other runtimes are inside the DEBs,
+        # with their tracked source retained in the complete product archive.
+        pattern: '{bashkitten-{android*,linux-*,termux-*}-candidate,bashkitten-corresponding-source,auth-linux-*,auth-termux-*,search-runtime-*,guest-packages-linux-*,os-termux-*}'
         path: candidates
     - name: Verify six primary binaries and source inventory
       run: python3 agent/packaging/release.py candidates release --candidate-only
