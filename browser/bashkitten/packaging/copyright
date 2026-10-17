@@ -700,6 +700,34 @@ same release set.
 
 ==============================================================================
 
+SHA-256: 68227c6c1c058d991d19625c21df6bf8870c0560ee66c35019386ac64cfa2b80
+Packages: BashKitten browser licences and source notices
+Upstream paths: bashkitten/SOURCE-NOTICE
+
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+BashKitten corresponding source and build material is published with each release:
+https://github.com/openresearchtools/bashkitten
+
+The browser derives from Mozilla Firefox ESR, Waterfox and WildBuzzard. Their
+original licenses and attribution remain with the source. Exact retained donor
+revisions are recorded in browser/bashkitten/upstreams.toml and ports.toml;
+WildBuzzard's original source is https://github.com/openresearchtools/WildBuzzard.
+The release metadata identifies the exact BashKitten and Firefox revisions.
+
+The native command entry is browser/browser/app/BashKittenCommandLine.cpp;
+commands execute in Gecko using its in-tree JsonCpp library. Tor, blocker assets
+and other bundled components retain full licenses and corresponding build/source
+material. Agent, Pi, search and authentication components carry their own notices.
+The desktop package and paired Termux backend bundle private Node/npm and Pi
+runtimes with their own full notices. Python, the Termux host application and
+external operating-system libraries retain their separately installed package
+licenses. Downloaded AI runtimes and models retain their original upstream
+licenses; their source and download records are available under About > Licenses
+> AI runtimes and models.
+
+==============================================================================
+
 SHA-256: 861f33956a7ef8566ba36159c40f126c5ad9fbfe351f673545e0cc6f53fb7dde
 Packages: BashKitten browser licences and source notices
 Upstream paths: bashkitten/components/bashkitten-cli/MOZILLA-MCP-LICENSE
@@ -791,29 +819,6 @@ Retained WildBuzzard branding and wordmark material is distributed under
 AGPL-3.0-or-later. Historical WildBuzzard artwork remains credited to the
 WildBuzzard project; rebuilding replaces its old raster logo with BashKitten's
 cat icon. Inherited Mozilla document artwork retains its own MPL-2.0 headers.
-
-==============================================================================
-
-SHA-256: c3fec90e965fda75de086e5179910c19e70f09964c10ab1bbe258b88e4134eaf
-Packages: BashKitten browser licences and source notices
-Upstream paths: bashkitten/SOURCE-NOTICE
-
-SPDX-License-Identifier: AGPL-3.0-or-later
-
-BashKitten corresponding source and build material is published with each release:
-https://github.com/openresearchtools/bashkitten
-
-The browser derives from Mozilla Firefox ESR, Waterfox and WildBuzzard. Their
-original licenses and attribution remain with the source. Exact retained donor
-revisions are recorded in browser/bashkitten/upstreams.toml and ports.toml;
-WildBuzzard's original source is https://github.com/openresearchtools/WildBuzzard.
-The release metadata identifies the exact BashKitten and Firefox revisions.
-
-The native command entry is browser/browser/app/BashKittenCommandLine.cpp;
-commands execute in Gecko using its in-tree JsonCpp library. Tor, blocker assets
-and other bundled components retain full licenses and corresponding build/source
-material. Agent, Pi, search and authentication components carry their own notices.
-Node, Python, Termux and system libraries remain separately installed packages.
 
 ==============================================================================
 

@@ -13,4 +13,9 @@ The native command entry is browser/browser/app/BashKittenCommandLine.cpp;
 commands execute in Gecko using its in-tree JsonCpp library. Tor, blocker assets
 and other bundled components retain full licenses and corresponding build/source
 material. Agent, Pi, search and authentication components carry their own notices.
-Node, Python, Termux and system libraries remain separately installed packages.
+The desktop package and paired Termux backend bundle private Node/npm and Pi
+runtimes with their own full notices. Python, the Termux host application and
+external operating-system libraries retain their separately installed package
+licenses. Downloaded AI runtimes and models retain their original upstream
+licenses; their source and download records are available under About > Licenses
+> AI runtimes and models.

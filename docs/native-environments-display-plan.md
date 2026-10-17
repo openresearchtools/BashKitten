@@ -3677,3 +3677,24 @@ still show the full model names. Preserve the actual model IDs and choices,
 existing visual style, and conditional availability of controls. Do not reserve
 blank group space or impose a second row merely because the view is a phone.
 Verify the result in the installed mobile app, including with the keyboard open.
+
+### Central AI runtime and model licenses — 17 October 2026
+
+The user requires one **AI runtimes and models** item inside the existing
+Firefox **About → Licenses** destination on both platforms. Remove separate
+license/source buttons from Local AI. Preserve the existing offline engine and
+bundled-component notices, including access before backend setup or login.
+
+Identify downloaded runtimes and models by their original upstream names,
+versions/revisions and sources, and distinguish those sources from the actual
+download/build repository and artifact. Show the original upstream license first;
+retain all dependency, Android NDK, model-weight, conversion and packaging notices
+with their own attribution. BashKitten's build repository is not the original
+llama.cpp or Whisper source, and its license must not label those engines or
+their dependencies. Preserve historical notices rather than relabeling old files.
+
+Read retained download metadata and full notices asynchronously, without starting
+Pi or AI services or fetching models/catalogues merely to open licenses. Preserve
+the existing protected native access path. Record unavailable source/license
+information truthfully; never invent attribution. Runtime and model downloads
+retain their source revision and available full notices for later offline access.
