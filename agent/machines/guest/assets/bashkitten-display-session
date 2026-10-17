@@ -59,6 +59,7 @@ async def run():
         asyncio.get_running_loop().add_signal_handler(sig,stopped.set)
     children=[]
     browser_task=None
+    waits=[]
     async def browser_runtime():
         while not stopped.is_set():
             # The guest HOME already isolates the product's single profile.
@@ -73,10 +74,30 @@ async def run():
                 write_json(agent_run/'guest-browser-status.json',{'connected':False,'pid':child.pid,'error':f'Browser exited ({code})'})
                 try: await asyncio.wait_for(stopped.wait(),2)
                 except asyncio.TimeoutError: pass
-    async def launch(*args,child_env=env):
-        child=await asyncio.create_subprocess_exec(*map(str,args),env=child_env)
+    async def launch(*args,child_env=env,**kwargs):
+        child=await asyncio.create_subprocess_exec(*map(str,args),env=child_env,**kwargs)
         children.append(child)
         return child
+    async def desktop_ready():
+        # XFCE reaches IDLE after its ordered session clients have registered.
+        # Xfwm initializes compositing before registering; starting Gecko earlier
+        # can reset its compositor while the first browser surface is being made.
+        # See xfce4-session 4.20.1 xfsm-manager.c / xfsm-startup.c and
+        # xfwm4 4.20.0 main.c (sessionStart after compositor initialization).
+        try:
+            async with asyncio.timeout(20):
+                while True:
+                    probe=await launch('/usr/bin/busctl','--user','--timeout=1','call',
+                        'org.xfce.SessionManager','/org/xfce/SessionManager',
+                        'org.xfce.Session.Manager','GetState',
+                        stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.DEVNULL)
+                    output,_=await probe.communicate()
+                    children.remove(probe)
+                    if probe.returncode==0 and output.strip()==b'u 1':
+                        return
+                    await asyncio.sleep(.05)
+        except TimeoutError:
+            raise RuntimeError('XFCE desktop did not finish startup') from None
     failure=None
     try:
         args=['/usr/bin/Xwayland',':0','-geometry',f"{display['width']}x{display['height']}",'-nolisten','tcp','-noreset','-auth',str(authority)]
@@ -108,11 +129,26 @@ async def run():
         if any(integration.get('media',{}).values()):
             await launch(BIN/'bashkitten-integration-agent')
         desktop=await launch('/bin/sh','-lc',display['command'])
-        write_json(DISPLAY_STATUS,{'generation':generation,'running':True,'error':None})
-        browser_task=asyncio.create_task(browser_runtime())
         stop_task=asyncio.create_task(stopped.wait())
         desktop_task=asyncio.create_task(desktop.wait())
         x_task=asyncio.create_task(x.wait())
+        waits=[stop_task,x_task,desktop_task]
+        # Only the shipped default has an owned XFCE startup contract. Execute
+        # customized desktop commands with their existing browser timing; do not
+        # infer their session manager or require them to provide XFCE's bus API.
+        if display['command']=='exec /usr/bin/xfce4-session':
+            ready_task=asyncio.create_task(desktop_ready())
+            waits.append(ready_task)
+            done,_=await asyncio.wait(waits,return_when=asyncio.FIRST_COMPLETED)
+            if stop_task in done:
+                return
+            if x_task in done:
+                raise RuntimeError('Guest Xwayland stopped during desktop startup')
+            if desktop_task in done:
+                raise RuntimeError(f'Desktop command exited ({desktop.returncode})')
+            await ready_task
+        write_json(DISPLAY_STATUS,{'generation':generation,'running':True,'error':None})
+        browser_task=asyncio.create_task(browser_runtime())
         # Ending a desktop session leaves the container and its Agent alone.
         done,_=await asyncio.wait([stop_task,x_task,desktop_task],return_when=asyncio.FIRST_COMPLETED)
         if x_task in done and stop_task not in done:
@@ -124,6 +160,9 @@ async def run():
         raise
     finally:
         stopped.set()
+        for task in waits:
+            task.cancel()
+        await asyncio.gather(*waits,return_exceptions=True)
         if browser_task is not None:
             browser_task.cancel()
             await asyncio.gather(browser_task,return_exceptions=True)
