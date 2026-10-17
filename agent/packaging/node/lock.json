@@ -43,7 +43,7 @@
           {
             "name": "npm",
             "version": "11.20.0",
-            "url": "https://packages.termux.dev/apt/termux-main/pool/main/n/npm/npm_11.20.0_all.deb",
+            "url": "https://mirror.nyist.edu.cn/termux/apt/termux-main/pool/main/n/npm/npm_11.20.0_all.deb",
             "sha256": "a2775653a0626749138ccd6e37a7b63239f36a9e3c62a9e6740818ca4b2d088b",
             "depends": "nodejs | nodejs-lts",
             "homepage": "https://docs.npmjs.com/cli/"
@@ -83,7 +83,7 @@
           {
             "name": "libsqlite",
             "version": "3.53.4",
-            "url": "https://packages.termux.dev/apt/termux-main/pool/main/libs/libsqlite/libsqlite_3.53.4_x86_64.deb",
+            "url": "https://mirror.nyist.edu.cn/termux/apt/termux-main/pool/main/libs/libsqlite/libsqlite_3.53.4_x86_64.deb",
             "sha256": "c2801581e7c656aec11153e5ef42179b9f8db8b9739fb6706899b93fa2655e6e",
             "depends": "zlib",
             "homepage": "https://www.sqlite.org"
@@ -112,7 +112,7 @@
           {
             "name": "npm",
             "version": "11.20.0",
-            "url": "https://packages.termux.dev/apt/termux-main/pool/main/n/npm/npm_11.20.0_all.deb",
+            "url": "https://mirror.nyist.edu.cn/termux/apt/termux-main/pool/main/n/npm/npm_11.20.0_all.deb",
             "sha256": "a2775653a0626749138ccd6e37a7b63239f36a9e3c62a9e6740818ca4b2d088b",
             "depends": "nodejs | nodejs-lts",
             "homepage": "https://docs.npmjs.com/cli/"
@@ -152,7 +152,7 @@
           {
             "name": "libsqlite",
             "version": "3.53.4",
-            "url": "https://packages.termux.dev/apt/termux-main/pool/main/libs/libsqlite/libsqlite_3.53.4_aarch64.deb",
+            "url": "https://mirror.nyist.edu.cn/termux/apt/termux-main/pool/main/libs/libsqlite/libsqlite_3.53.4_aarch64.deb",
             "sha256": "0e909ce0d50fe123305446cd22e0c5edf535d40344b9b065fbdcdee52f53198d",
             "depends": "zlib",
             "homepage": "https://www.sqlite.org"
