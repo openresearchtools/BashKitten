@@ -132,10 +132,12 @@ export class LocalAI {
     return { fresh, conflict };
   }
   async config() { requireLocalRuntime(); return readConfiguration(); }
-  async record({ engine, record }) {
+  async record({ engine, record, offset, revision }) {
     requireLocalRuntime();
     const name = record === 'license' ? 'LICENSES.txt' : record === 'source' ? 'SOURCE.json' : null;
     if (!name) throw Error('Choose runtime licenses or its source record');
+    if (offset !== undefined && (!Number.isSafeInteger(offset) || offset < 0) ||
+        revision !== undefined && (offset === undefined || typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision))) throw Error('Invalid runtime record chunk');
     const runtime = await runtimeInfo(engine);
     if (!runtime?.root) throw Error('Download this runtime first');
     const directory = await fs.realpath(runtimeDirectory), root = await fs.realpath(runtime.root);
@@ -151,7 +153,16 @@ export class LocalAI {
       const notice = await readRecord('ANDROID-NDK-NOTICE.txt').catch(error => { if (error.code !== 'ENOENT') throw error; return ''; });
       if (notice) content += '\n\n===== ANDROID-NDK-NOTICE.txt =====\n' + notice;
     }
-    return { name, content, mimeType: record === 'source' ? 'application/json' : 'text/plain' };
+    const mimeType = record === 'source' ? 'application/json' : 'text/plain';
+    if (offset !== undefined) {
+      // Termux command results have a per-response stdout limit. Keep the
+      // complete record available, with a stable revision across byte chunks.
+      const bytes = Buffer.from(content, 'utf8'), current = digest(bytes);
+      if (revision !== undefined && revision !== current) throw Error('Runtime record changed. Open it again.');
+      if (offset > bytes.length) throw Error('Runtime record offset is outside the document');
+      return { name, mimeType, offset, total: bytes.length, revision: current, data: bytes.subarray(offset, offset + 48 * 1024).toString('base64') };
+    }
+    return { name, content, mimeType };
   }
   async status() {
     const config = await this.config(), host = await this.services.status();
