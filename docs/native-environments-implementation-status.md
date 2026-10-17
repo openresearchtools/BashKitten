@@ -39,8 +39,12 @@ Native Quit removed all 76 captured owned process identities. PDF row Download
 failed because Gecko's internal PDF handler attempted a protected Agent popup.
 `f537f6cb02` routes explicit trusted file downloads through the existing native
 forced-save helper while preserving the popup guard and document/URL checks.
-Its installed repair check remains separate from the preceding passing previews.
-Evidence: `Bashkitten-Acceptance/xorg-files-project-20261018/acceptance-final.json`.
+An installed three-module diagnostic overlay then passed PDF Download and text
+Download with the original bytes, plus the ordinary 19-page PDF View. The fresh
+log contains no protected-popup abort. This is an overlay check, not a rebuilt
+combined-package pass; Android regression remains separate. Evidence:
+`Bashkitten-Acceptance/xorg-files-project-20261018/acceptance-final.json` and Build
+`verification/files-native-download-20261018/acceptance.json`.
 
 The signed Android upgrade failure was a missing bootstrap runtime: the old
 153.4.4 backend has no bundled Node at the new updater's expected path.
