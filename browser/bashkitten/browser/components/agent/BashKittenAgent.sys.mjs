@@ -18,6 +18,7 @@ const HTML = "http://www.w3.org/1999/xhtml";
 const CONTROLLER = "/usr/bin/bashkittenctl";
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  PanelMultiView: "moz-src:///browser/components/customizableui/PanelMultiView.sys.mjs",
   BashKittenDisplay: "resource:///modules/BashKittenDisplay.sys.mjs",
   BrowserControlChannel: "resource:///modules/BrowserControlChannel.sys.mjs",
   Downloads: "resource://gre/modules/Downloads.sys.mjs",
@@ -374,15 +375,17 @@ class AgentView {
   }
 
   installSettingsMenu() {
-    const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "menu" });
+    const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "group", noautofocus: "true" });
+    const views = xul(this.doc, "panelmultiview", { mainViewId: "bashkitten-settings-mainView" });
+    const view = xul(this.doc, "panelview", { id: "bashkitten-settings-mainView", class: "PanelUI-subView" });
     const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
     const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "Configuration", "aria-label": "Configuration", "aria-haspopup": "menu" });
     const toggle = event => {
-      if (popup.state === "open") { popup.hidePopup(); return; }
+      if (popup.state === "open") { lazy.PanelMultiView.hidePopup(popup); return; }
       if (popup.state !== "closed") return;
       popup.setConstraintRect(new this.win.DOMRect(this.win.mozInnerScreenX,
         this.win.mozInnerScreenY, this.win.innerWidth, this.win.innerHeight));
-      popup.openPopup(gear, "after_start", 0, 0, false, false, event);
+      void lazy.PanelMultiView.openPopup(popup, gear, { position: "after_start", triggerEvent: event }).catch(console.error);
     };
     // Match Firefox's PanelUI trigger: open during the pointer press with its
     // actual input event, not a later command without pointer coordinates.
@@ -412,12 +415,13 @@ class AgentView {
         });
       }
       item.addEventListener("command", () => {
-        popup.hidePopup();
+        lazy.PanelMultiView.hidePopup(popup);
         this.openSettings(section).catch(error => this.dialog(title).content.append(html(this.doc, "p", { role: "alert" }, error.message)));
       });
       body.append(item);
     }
-    popup.append(body); this.doc.getElementById("mainPopupSet").append(popup);
+    view.append(body); views.append(view); popup.append(views);
+    this.doc.getElementById("mainPopupSet").append(popup);
   }
 
   async run(operation, { replace = false } = {}) {
