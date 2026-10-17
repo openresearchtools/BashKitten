@@ -26,12 +26,19 @@ export async function stopOwnedGateway(id) {
   }
   // The gateway deliberately delegates pathname cleanup to its lifecycle owner.
   // This also repairs old stopped gateways whose record was already removed.
+  // A stopped process can still have Unix socket references being released by
+  // the kernel. Wait for their disappearance; never unlink a live endpoint.
+  const endpointsUntil = Date.now() + 1000;
   for (const endpoint of [path.join(p.guestDisplay, 'wayland-0'), path.join(p.display, 'presenter.sock')]) {
     const previous = await fs.lstat(endpoint).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     if (!previous) continue;
     if (!previous.isSocket() || previous.uid !== process.getuid()) throw Error('Display endpoint ownership changed');
-    const sockets = await fs.readFile('/proc/net/unix', 'utf8');
-    if (sockets.split('\n').some(line => line.trim().match(/^(?:\S+\s+){7}(.*)$/)?.[1] === endpoint)) throw Error('A display endpoint is still in use');
+    for (;;) {
+      const sockets = await fs.readFile('/proc/net/unix', 'utf8');
+      if (!sockets.split('\n').some(line => line.trim().match(/^(?:\S+\s+){7}(.*)$/)?.[1] === endpoint)) break;
+      if (Date.now() >= endpointsUntil) throw Error('A display endpoint is still in use');
+      await pause(25);
+    }
     const current = await fs.lstat(endpoint);
     if (!current.isSocket() || current.uid !== previous.uid || current.dev !== previous.dev || current.ino !== previous.ino) throw Error('Display endpoint changed during cleanup');
     await fs.unlink(endpoint);
