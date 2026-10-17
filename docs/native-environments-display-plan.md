@@ -3725,3 +3725,27 @@ console screenshots and syntax checks alone are not request-traffic evidence.
 Record actual candidate revisions, remaining errors and missing coverage in
 separate status/evidence records. This amendment records the clarified boundary,
 not a claim that these installed checks have passed.
+
+### Display clipboard controls and resize-safe wallpaper — 17 October 2026
+
+The user moved **Copy from desktop** and **Paste to desktop** into the Display
+tab's former address-bar area, alongside the existing service, command and
+Interact/Observe controls. Remove the extra clipboard bar inside the container
+viewport. Keep ordinary browser tabs unchanged, preserve native styling and
+accessible labels, and retain explicit user activation, clipboard text/image
+support, cancellation and Observe-mode restrictions. Use the existing private
+Display owner; do not add public management routes or synthetic trusted events.
+Place any necessary rendering/clipboard status within the existing controls or
+status presentation, without reserving another full-width inner bar.
+
+The default BashKitten OS wallpaper must use one solid **#202225** desktop
+background filling the entire viewport and a proportionally centered transparent
+BashKitten logo. The logo shrinks when needed and never exceeds its original
+1254 × 1254 size. Window/sidebar resizing, rotation and keyboard insets must not
+leave an old-size gray image rectangle over a different black background. Prefer
+XFCE's native background fill and centered-image behavior, with asynchronous
+image fitting only where required. Apply corrections only while the environment
+still uses its BashKitten-owned default; preserve user-selected wallpapers and
+appearance choices. Verify both Termux and Linux container desktops across
+larger, smaller, portrait and landscape viewports. These are user-authorized
+presentation corrections, not installed acceptance claims.
