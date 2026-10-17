@@ -106,6 +106,57 @@ packages and signed APT catalogues, all Linux packages and corresponding sources
 Superseded queued/redundant builds were cancelled while useful native producers
 were retained; a successful partial job is not publication.
 
+The subsequent matched development candidate `f727109a91` passed the installed
+Updates refresh/recheck: both operations completed, the obsolete ten-update count
+became zero, Nightly remained selected and the page retained the exact-package
+match. Normal production-signed APK upgrade and interruption recovery remain
+pending on the separate 153.4.4 baseline. Evidence:
+`verification/update-channels-f727-20261017/installed-result.json`.
+
+Notification body tapping on that candidate passed with an existing Activity:
+the original chat opened, its stopped Pi stayed stopped and its five user messages
+remained five. A cold-process test exposed a startup race: the original six-message
+history was restored without a duplicate turn, but navigation checked its target
+before the initial chat catalogue loaded and left a false unavailable error.
+This is a failed cold-tap case, not acceptance. Evidence:
+`verification/notification-open-f727-20261017/installed-result.json`.
+`2f1711a1c1` separately prevents saved Callback configuration from trying to
+synchronize through a transport that has never been requested to start; requested
+connection failures remain visible. Its installed check is still required.
+
+The user rejected `c2c873a131`'s forced two-row composer and reserved spacing.
+`bba43be57d` supersedes it with one compact row on normal phone widths, shortening
+the closed model label while preserving full native dropdown options. The exact
+markup/style passed 162 Firefox and 162 Chromium cases, including all delivery
+modes, short views and unchanged selection behavior. These are component checks;
+the installed `f727109a91` still has the rejected layout. Evidence:
+`verification/composer-single-row-20261017/verification.json`.
+
+An independent actual-artifact license audit identified seven concrete gaps:
+URL-only Android notices, omitted X11 legal preambles, an invalid ICU notice,
+missing PeGPU text, incomplete libfuse and siphasher grants, and missing exact
+AppServices native source. `79b9b8df28`, `2c1a392ead`, `e42d5c91c1` and
+`7cded0d31b` repair those source/collector paths. Independent recheck preserved
+all 2,014 original Android entries, resolved all 447 URL-only notices, verified
+the missing full grants and all selected Pixman assembly/XKB grammar notices,
+and verified 666 committed native-source inputs with the actual APK libraries.
+The native source closure retains 617 registry packages and four Git sources;
+that inventory also includes build/test/other-target inputs, not a claim that
+all are linked. Existing APKs remain historical and must not be published as
+repaired. The final artifacts must regenerate the inventories and corresponding
+sources, then pass actual-package and offline-view checks. Evidence:
+`verification/license-recheck-e42d-20261017/verification.json`.
+
+`12930558ff` includes downloaded runtimes' separate Android NDK notices.
+`101504de71` transfers complete runtime records through the existing private
+Termux command using bounded responses and revision checks, with asynchronous
+assembly and cancellation when settings close. This addresses the measured
+runtime notice exceeding Termux's individual-result limit; it imposes no document
+size quota and leaves desktop records complete. Seven backend check groups,
+209 Java assertions and complete Activity compilation pass. Actual installed
+notice viewing remains required. Evidence:
+`verification/runtime-record-chunks-20261017/`.
+
 ## Cross-feature corrections and full-scope review — 15 October 2026
 
 The subsequent integration-fix batch includes `65500cd704` (independent Display

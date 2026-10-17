@@ -3665,3 +3665,15 @@ Verify stable and nightly discovery, saved-choice persistence, channel switching
 exact APK/backend/OS pairing and interrupted-update recovery through the normal
 installed mobile workflow and published signed packages. A successful workflow
 dispatch or an APK download alone does not establish this acceptance.
+
+### Compact mobile composer correction — 17 October 2026
+
+The user rejected the forced two-row model/reasoning and Agents/Phone layout,
+including the empty space reserved between controls. On normal small and
+midrange phone widths, keep the attachment, model, reasoning, Agents, applicable
+Phone and send controls together on one compact row. Shorten the closed model
+label to the available width before wrapping; opening the native dropdown must
+still show the full model names. Preserve the actual model IDs and choices,
+existing visual style, and conditional availability of controls. Do not reserve
+blank group space or impose a second row merely because the view is a phone.
+Verify the result in the installed mobile app, including with the keyboard open.
