@@ -11,6 +11,8 @@ from pathlib import Path
 import shutil
 import subprocess
 
+from license_texts import MavenNotices, native_source_notices, validate_text
+
 p = argparse.ArgumentParser()
 p.add_argument('--native-notices', type=Path, required=True)
 p.add_argument('--output', type=Path, required=True)
@@ -34,13 +36,14 @@ records = json.loads(companion.read_text())
 if not isinstance(records, list) or not records:
     raise SystemExit('The companion package license inventory is empty')
 # Native in-APK adaptations do not appear in Maven's dependency inventory.
-def source_notice(name, directory, metadata, extra=()):
+def source_notice(name, directory, metadata, extra=(), source_headers=False):
     paths = sorted(p for p in directory.rglob('*') if p.is_file() and
                    re.match(r'^(licen[cs]e|copying|notice|copyright|ftl|gpl)([._-]|$)', p.name, re.I))
     paths.extend(extra)
     if not paths:
         raise SystemExit('Missing full native module license: ' + name)
-    text = '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)
+    text = (native_source_notices(directory) if source_headers else
+            '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths))
     records.append({'name': name, 'license': 'See individual component licenses',
                     'text': json.dumps(metadata, indent=2) + '\n\n' + text})
 
@@ -53,11 +56,11 @@ source_notice('BashKitten Telephony — adapted Phony', phony,
               [root / 'browser/mobile/android/bashkitten/telephony/NOTICE'])
 x11 = root / 'browser/bashkitten/vendor/termux-x11'
 x11_pin = json.loads((x11 / 'source.json').read_text())
-records.append({'name': 'Termux:X11 — embedded native Display adaptation', 'license': 'GPL-3.0-only',
-                'text': json.dumps(x11_pin, indent=2) + '\n\n' + (x11 / 'source/LICENSE').read_text()})
+records.append({'name': 'Termux:X11 — embedded native Display adaptation', 'license': 'GPL-3.0-only and individual subcomponent licenses',
+                'text': json.dumps(x11_pin, indent=2) + '\n\n' + native_source_notices(x11 / 'source/lorie') + '\n\n' + (x11 / 'source/LICENSE').read_text()})
 for dependency in x11_pin['dependencies']:
     source_notice('Embedded Display: ' + dependency['path'].rsplit('/', 1)[-1],
-                  x11 / 'source' / dependency['path'], dependency)
+                  x11 / 'source' / dependency['path'], dependency, source_headers=True)
 remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
 remote_licenses = remote / 'share/licenses/remote-client'
 remote_modules = json.loads((remote / 'share/metadata/remote-client-go-modules.json').read_text())
@@ -78,6 +81,9 @@ apk_licenses = Path(os.environ['BASHKITTEN_APK_LICENSES'])
 metadata = sorted(apk_licenses.rglob('third_party_license_metadata'))
 if not metadata:
     raise SystemExit(f'The resolved Android dependency license inventory is missing: {apk_licenses}')
+obj = Path(os.environ['BASHKITTEN_ANDROID_OBJDIR'])
+maven = MavenNotices(root / 'browser/bashkitten/android/notices/maven',
+                     obj / 'gradle/build/mobile/android/fenix/app/generated/third_party_licenses/release/dependencies.json')
 seen = set()
 full_licenses = {'Java Native Access': (a.native_notices / 'JNA-NOTICES.txt').read_text().strip()}
 for table in metadata:
@@ -85,13 +91,14 @@ for table in metadata:
     for line in table.read_text().splitlines():
         position, name = line.split(' ', 1)
         start, count = map(int, position.split(':'))
+        if start < 0 or count <= 0 or start + count > len(blob):
+            raise SystemExit(f'Invalid Maven license metadata: {name}')
         text = blob[start:start + count].decode('utf-8').strip()
         # Maven's JNA POM contains only license URLs; show its retained complete
         # release notices, including the JNI library's bundled libffi grant.
         if name in full_licenses:
             text = full_licenses[name]
-        if not text:
-            raise SystemExit(f'Missing license text: {name}')
+        text = maven.resolve(name, text)
         if (name, text) in seen:
             continue
         seen.add((name, text))
@@ -108,7 +115,6 @@ source = root / 'browser/bashkitten/scripts/generate-third-party-notices.py'
 spec = importlib.util.spec_from_file_location('browser_notices', source)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
-obj = Path(os.environ['BASHKITTEN_ANDROID_OBJDIR'])
 archives = list((obj / 'dist').rglob('omni.ja'))
 for archive in archives:
     try:
@@ -122,5 +128,7 @@ a.output.mkdir(parents=True, exist_ok=True)
 shutil.copy2(pairing_path, a.output / 'termux-update.json')
 (a.output / 'updates-bootstrap.mjs').write_bytes(bootstrap)
 licenses = a.output / 'licenses.json'
+for record in records:
+    validate_text(record['name'], record.get('text', ''))
 licenses.write_text(json.dumps(records, ensure_ascii=False))
 subprocess.run(['python3', str(root / 'agent/packaging/about.py'), 'android', str(licenses), str(a.output / 'about.html'), '--version', a.version], check=True)

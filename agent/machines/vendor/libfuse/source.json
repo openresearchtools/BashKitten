@@ -13,7 +13,9 @@
     }
   ],
   "license_paths": [
-    "source/LICENSE"
+    "source/LICENSE",
+    "source/GPL2.txt",
+    "source/LGPL2.txt"
   ],
   "modified": false,
   "source_inventory_sha256": "def13ee379ce2b898582d88a93dddfe41876b1b13be24529fd3d997473cede2c"

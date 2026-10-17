@@ -1029,6 +1029,38 @@
         "commit": "cb7791f6814024d85aa6f9968e73051a4b295bf0",
         "path": "LICENSE"
       }
+    ],
+    "siphasher@1.0.3": [
+      {
+        "filename": "siphasher-1.0.3-LICENSE-APACHE.txt",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+        "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "size": 11358,
+        "license": "Apache-2.0",
+        "noticeKind": "canonical full grant referenced by COPYING",
+        "declaredBy": {
+          "repository": "https://github.com/jedisct1/rust-siphash",
+          "commit": "451f67d73a772cba325728109bbfa247750ed076",
+          "path": "COPYING",
+          "crateSha256": "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
+        },
+        "retainedTextSource": "agent/packaging/node/licenses/Apache-2.0.txt"
+      },
+      {
+        "filename": "siphasher-1.0.3-LICENSE-MIT.txt",
+        "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.27.0/text/MIT.txt",
+        "sha256": "b05785f9f18e6716bab63424b11454513b9943a222595b70411009202fc592b5",
+        "size": 1078,
+        "license": "MIT",
+        "noticeKind": "canonical full grant referenced by COPYING",
+        "declaredBy": {
+          "repository": "https://github.com/jedisct1/rust-siphash",
+          "commit": "451f67d73a772cba325728109bbfa247750ed076",
+          "path": "COPYING",
+          "crateSha256": "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
+        },
+        "canonicalRevision": "SPDX license-list-data v3.27.0"
+      }
     ]
   }
 }

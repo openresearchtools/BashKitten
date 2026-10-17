@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>info.guardianproject</groupId>
+  <artifactId>jtorctl</artifactId>
+  <version>0.4.5.7</version>
+  <name>jtorctl</name>
+  <description>A Java library for controlling a Tor instance via its control port.</description>
+  <url>https://gitweb.torproject.org/jtorctl</url>
+  <inceptionYear>2005</inceptionYear>
+  <licenses>
+    <license>
+      <name>BSD-3-clause</name>
+      <url>https://github.com/torproject/jtorctl/blob/master/LICENSE</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>torproject</id>
+      <name>Tor Project</name>
+      <email>torbrowser@torproject.org</email>
+    </developer>
+    <developer>
+      <id>freehaven</id>
+      <name>Free Haven Project</name>
+      <email>freehaven@freehaven.net</email>
+    </developer>
+    <developer>
+      <id>guardianproject</id>
+      <name>Guardian Project</name>
+      <email>support@guardianproject.info</email>
+    </developer>
+    <developer>
+      <id>briarproject</id>
+      <name>Briar Project</name>
+      <email>contact@briarproject.org</email>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://git.torproject.org/jtorctl.git</connection>
+    <url>https://gitweb.torproject.org/jtorctl</url>
+  </scm>
+  <issueManagement>
+    <url>https://trac.torproject.org</url>
+  </issueManagement>
+  <properties>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <maven.compiler.source>1.8</maven.compiler.source>
+  </properties>
+  <dependencies>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.6</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.json</groupId>
+      <artifactId>json</artifactId>
+      <version>20190722</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.12</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

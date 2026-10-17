@@ -1,0 +1,6 @@
+Crate: jexl-eval 0.4.0
+License expression: MPL-2.0
+Authors: Mike Cooper <mythmon@gmail.com>, The Sync Team <sync-team@mozilla.com>, The Glean Team <glean-team@mozilla.com>
+Source: https://static.crates.io/crates/jexl-eval/jexl-eval-0.4.0.crate
+
+Canonical full text supplied separately for the declared MPL-2.0.

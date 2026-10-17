@@ -35,3 +35,10 @@ DDGS is MIT licensed. PyMuPDF/PyMuPDF4LLM and MuPDF retain their own AGPL and
 third-party notices. The build records actual Python/native dependency versions,
 license texts and corresponding sources under `runtime/`; no historical
 PyInstaller or Python-interpreter bundle is claimed as this package's inventory.
+
+17 October 2026 packaging correction: siphasher 1.0.3's pristine `COPYING`
+contains its Rust Project Developers / Frank Denis copyrights and an Apache-2.0
+or MIT choice, but neither full grant. The pinned `cargoLicenseSources` entries
+supply the canonical full texts alongside that original notice. Their hashes and
+provenance are retained in `vendor/sources/sources.json` and copied into matching
+source archives. This changes notice delivery only, not the crate or its license.

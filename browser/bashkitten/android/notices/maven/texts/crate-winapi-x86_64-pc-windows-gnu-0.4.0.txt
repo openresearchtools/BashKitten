@@ -1,0 +1,6 @@
+Crate: winapi-x86_64-pc-windows-gnu 0.4.0
+License expression: MIT/Apache-2.0
+Authors: Peter Atashian <retep998@gmail.com>
+Source: https://static.crates.io/crates/winapi-x86_64-pc-windows-gnu/winapi-x86_64-pc-windows-gnu-0.4.0.crate
+
+Canonical full text supplied separately for the declared Apache-2.0 and MIT.
