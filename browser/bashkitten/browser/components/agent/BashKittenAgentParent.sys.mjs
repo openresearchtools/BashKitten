@@ -24,6 +24,12 @@ export class BashKittenAgentParent extends JSWindowActorParent {
     }
     if (name === "CancelFileView") { await entry.host.cancelDocumentTransfers(); return { ok: true }; }
     if (name === "ViewFile") return entry.host.viewFile(this.browsingContext.embedderElement, data.url);
+    if (name === "DownloadFile") {
+      if (this.manager !== this.browsingContext.currentWindowGlobal || typeof data.url !== "string" ||
+          !entry.host.saveFileFrom(this.browsingContext.embedderElement, data.url, null))
+        throw new Error("This file is no longer available from the selected Agent.");
+      return { ok: true };
+    }
     if (!entry.local || entry.connection.machineId) throw new Error("This action is available only in the host Agent view.");
     if (name === "ChooseFolder") return entry.host.chooseFolder(this.browsingContext.embedderElement, data);
     if (name === "OpenFolder") {

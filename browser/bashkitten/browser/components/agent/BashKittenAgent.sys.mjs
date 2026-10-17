@@ -202,7 +202,7 @@ export const BashKittenAgent = {
     if (!actorRegistered) {
       ChromeUtils.registerWindowActor("BashKittenAgent", {
         parent: { esModuleURI: "resource:///modules/BashKittenAgentParent.sys.mjs" },
-        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, BashKittenDraftReady: { capture: true, wantUntrusted: true }, BashKittenDraftChanged: { capture: true, wantUntrusted: true }, BashKittenNavigationChanged: { capture: true, wantUntrusted: true } } },
+        child: { esModuleURI: "resource:///modules/BashKittenAgentChild.sys.mjs", events: { DOMDocElementInserted: {}, DOMContentLoaded: {}, click: { capture: true }, BashKittenDraftReady: { capture: true, wantUntrusted: true }, BashKittenDraftChanged: { capture: true, wantUntrusted: true }, BashKittenNavigationChanged: { capture: true, wantUntrusted: true } } },
         allFrames: false,
         messageManagerGroups: ["bashkitten-agent"],
         matches: ["https://*/*"],
@@ -522,7 +522,7 @@ class AgentView {
     const entry = ownedViews.get(browser);
     if (!entry || this.off || this.activeBrowser !== browser) return false;
     const target = new URL(url);
-    if (target.origin !== new URL(entry.connection.url).origin ||
+    if (target.origin !== new URL(entry.connection.url).origin || target.username || target.password || target.hash ||
         !/^\/api\/(?:files\/(?:content|archive|jobs\/[a-f0-9-]{36}\/download)|sessions\/[^/]+\/attachments\/[^/]+\/[^/]+)$/.test(target.pathname)) return false;
     const principal = browser.browsingContext.currentWindowGlobal.documentPrincipal;
     if (principal.originNoSuffix !== target.origin || principal.originAttributes.userContextId !== entry.connection.userContextId) {
