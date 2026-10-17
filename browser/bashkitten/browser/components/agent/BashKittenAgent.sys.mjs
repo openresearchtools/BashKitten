@@ -1262,7 +1262,13 @@ class AgentView {
     };
     const revoke = BashKittenSettings.enroll(browser, {
       info: { platform: "linux", section, backendName: section === "performance" && backend.kind === "local" ? "This Linux device" : backend.name, local: backend.kind === "local", backendKind: backend.kind, machineId: backend.kind === "machine" ? backend.id : null, operation: Boolean(options.operation), displayCommand: Boolean(options.displayCommand), theme: theme(), connectOnly: Boolean(options.connectOnly) },
-      current, call, cleanup, pause, close: () => this.closeConnections(),
+      current, call, cleanup, pause, close: () => {
+        this.closeConnections();
+        // The chat browser can retain focus beneath this settings panel, so
+        // closing it need not produce the window focus event used by the web UI.
+        if (section === "localai" && this.selection === backend.id)
+          void this.sidecar.navigation("refresh").catch(console.error);
+      },
     });
     panel.addEventListener("close", () => { revoke(); if (this.settingsBrowser === browser) this.settingsBrowser = null; }, { once: true });
     try { browser.loadURI(Services.io.newURI(SETTINGS_URI), { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() }); }
