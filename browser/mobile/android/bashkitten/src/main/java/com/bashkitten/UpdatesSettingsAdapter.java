@@ -25,6 +25,7 @@ public final class UpdatesSettingsAdapter implements AutoCloseable {
             switch (method) {
                 case "updates.snapshot": return updates.snapshot();
                 case "updates.check": return updates.check();
+                case "updates.channel": return updates.channel(args.getString("channel"));
                 case "updates.download": return updates.download(activity);
                 case "updates.packages": return updates.packages(args.getString("kind"), args.optBoolean("retry"));
                 case "updates.cancel": return updates.cancel();

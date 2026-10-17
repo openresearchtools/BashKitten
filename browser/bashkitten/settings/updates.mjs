@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-import { node, button } from './ui.mjs';
+import { node, button, check as toggle } from './ui.mjs';
 
 /** Android-owned APK and Termux updates; ordinary Agent pages have no updater. */
 export async function renderSection({ root, call, signal, subscribe }) {
@@ -8,11 +8,17 @@ export async function renderSection({ root, call, signal, subscribe }) {
   const message = node(root, 'p'); message.setAttribute('role', 'status');
   root.append(browser, packages, message);
   browser.append(node(browser, 'h2', 'BashKitten'));
+  const channel = toggle(browser, 'Include pre-releases (nightly)', false);
+  channel.onchange = () => {
+    const value = channel.checked ? 'nightly' : 'stable';
+    void run(() => call('updates.channel', { channel: value }));
+  };
+  browser.append(node(browser, 'p', 'Applies to app checks and package updates here. Turning this off waits for newer stable releases without downgrading the app.'));
   const browserStatus = node(browser, 'p'); browser.append(browserStatus);
   const actions = node(browser, 'div'); actions.className = 'actions'; browser.append(actions);
   const check = button(actions, 'Check for updates', () => run(() => call('updates.check')));
   const download = button(actions, 'Download app update', () => run(() => call('updates.download')));
-  browser.append(node(browser, 'p', 'Android asks you to install the downloaded app. Its matching Termux packages update automatically after you open the new version.'));
+  browser.append(node(browser, 'p', 'Android asks you to install the downloaded app. Its matching Termux packages update automatically after you open the new version. Package repair restores the exact versions required by the installed app.'));
   packages.append(node(packages, 'h2', 'Termux packages'));
   const matching = node(packages, 'p'); packages.append(matching);
   const packageSummary = node(packages, 'p'); packages.append(packageSummary);
@@ -46,11 +52,12 @@ export async function renderSection({ root, call, signal, subscribe }) {
     if (!active()) return;
     const app = snapshot?.browser || {}, termux = snapshot?.termux || {}, state = snapshot?.packages || {};
     const job = state.job, busy = ['running', 'waiting'].includes(job?.status) || termux.updating;
-    browserStatus.textContent = [`Installed ${app.version || ''}`, app.available ? `${app.available.version} is available` : app.checked ? 'App is up to date' : '', app.error].filter(Boolean).join(' · ');
+    channel.checked = app.channel === 'nightly'; channel.disabled = pending || busy || Boolean(app.checking) || !snapshot;
+    browserStatus.textContent = [`Installed ${app.version || ''}`, app.available ? `${app.available.version} is available` : app.checked ? `No newer ${app.channel === 'nightly' ? 'stable or nightly' : 'stable'} app is available` : '', app.error].filter(Boolean).join(' · ');
     check.disabled = pending || Boolean(app.checking); download.hidden = !app.available; download.disabled = pending;
     matching.textContent = termux.needsSetup ? 'Complete Local setup to manage Termux packages.' :
       termux.error || (termux.matching ? 'BashKitten packages match this app.' : termux.updating ? 'Updating the packages required by this app…' : 'Checking the packages required by this app…');
-    const apt = state.sources?.apt, pi = state.sources?.pi;
+    const apt = state.sources?.apt?.channel === app.channel ? state.sources.apt : null, pi = state.sources?.pi;
     packageSummary.textContent = [state.runtime?.version ? `Pi ${state.runtime.version}` : '', apt?.error || (apt ? `${apt.available || 0} package updates available` : ''), pi?.error].filter(Boolean).join(' · ');
     const entries = apt?.packages || [], key = JSON.stringify(entries);
     availableBox.hidden = !entries.length;

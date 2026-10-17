@@ -96,6 +96,30 @@ async function command(job, executable, args, { cwd, captureAll = false } = {}) 
   });
 }
 const apt = (job, args, options) => command(job, 'apt-get', [...aptOptions, ...args], options);
+function validateChannel(value) {
+  if (!['stable', 'nightly'].includes(value)) throw Error('Unknown update channel');
+  return value;
+}
+async function packageOptions(job, target, channel) {
+  validateChannel(channel);
+  const directory = path.join(job.directory, 'archives', job.job.id);
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  let existing = '';
+  try { existing = await fs.readFile(path.join(prefix, 'etc/apt/preferences'), 'utf8'); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  // Both catalogues retain their installed key/source packages so an installed
+  // nightly APK remains repairable after selecting Stable. Only these managed
+  // transactions apply the channel choice; never rewrite the user's APT setup.
+  // Exact APK packages precede the channel rule. Repair can restore those exact
+  // versions after an external APT upgrade; changing channel never selects them.
+  let rules = target.packages.map(item => `Package: ${item.name}\nPin: version ${item.version}\nPin-Priority: 1001\n`).join('\n');
+  // A package regex makes this a specific pin, unlike a generic Package: *
+  // release priority that another user preference could silently override.
+  if (channel === 'stable') rules += '\nPackage: /./\nPin: release o=Open Research Tools,n=apt/releases/download/nightly/\nPin-Priority: -1\n';
+  const preferences = path.join(directory, 'preferences');
+  await fs.writeFile(preferences, rules + '\n' + existing, { mode: 0o600 });
+  return ['-o', 'Dir::Etc::preferences=' + preferences];
+}
 function checkRemoval(output) {
   if (/^Remv (?:bashkitten(?:-os)?|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(output))
     throw Error('APT would remove a required BashKitten package; the transaction was not applied');
@@ -159,8 +183,8 @@ async function archives(job, target) {
   }
   return files;
 }
-export async function applyPackages(job, { target }, { beforeApply = async fn => fn() } = {}) {
-  termux(); target = validateTarget(target);
+export async function applyPackages(job, { target, channel }, { beforeApply = async fn => fn() } = {}) {
+  termux(); target = validateTarget(target); channel = validateChannel(channel);
   const current = await installed();
   if (current.architecture !== target.architecture) throw Error('The APK and Termux architectures do not match');
   const matching = (await releaseStatus(target)).matched;
@@ -171,32 +195,22 @@ export async function applyPackages(job, { target }, { beforeApply = async fn =>
   const files = matching && job.job.kind !== 'recover-packages' ? null : await archives(job, target);
   const args = [...(files ? ['--reinstall'] : []), '--allow-downgrades', '-y', 'install',
     ...(files || target.packages.map(item => item.name + '=' + item.version))];
+  let options = await packageOptions(job, target, channel);
   await job.phase('Checking the complete package transaction');
-  checkPlan(await apt(job, ['-s', ...args], { captureAll: true }), target);
-  await job.phase('Downloading package dependencies'); await apt(job, ['--download-only', ...args]);
-  // A per-command standard APT preference holds only the two APK-owned package
-  // versions. Preserve the user's other preferences and automatic dependencies;
-  // no global hold, source/channel change or silent package skip is installed.
-  const preferences = path.join(job.directory, 'archives', job.job.id, 'preferences');
-  async function upgradeOptions() {
-    let existing = '';
-    try { existing = await fs.readFile(path.join(prefix, 'etc/apt/preferences'), 'utf8'); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await fs.writeFile(preferences, target.packages.map(item => `Package: ${item.name}\nPin: version ${item.version}\nPin-Priority: 1001\n`).join('\n') + '\n' + existing, { mode: 0o600 });
-    return ['-o', 'Dir::Etc::preferences=' + preferences];
-  }
+  checkPlan(await apt(job, [...options, '-s', ...args], { captureAll: true }), target);
+  await job.phase('Downloading package dependencies'); await apt(job, [...options, '--download-only', ...args]);
   if (job.job.kind === 'update-packages') {
-    const options = await upgradeOptions();
     checkPlan(await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true }), target);
     await apt(job, [...options, '--download-only', '-y', 'full-upgrade']);
   }
   await beforeApply(async () => {
     await job.phase('Installing the matching app packages and dependencies');
     // Recheck immediately before applying: external APT changes are not assumed away.
-    checkPlan(await apt(job, ['-s', ...args], { captureAll: true }), target);
-    await apt(job, args);
+    options = await packageOptions(job, target, channel);
+    checkPlan(await apt(job, [...options, '-s', ...args], { captureAll: true }), target);
+    await apt(job, [...options, ...args]);
     if (job.job.kind === 'update-packages') {
-      const options = await upgradeOptions();
+      options = await packageOptions(job, target, channel);
       checkPlan(await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true }), target);
       await apt(job, [...options, '-y', 'full-upgrade']);
     }
@@ -212,6 +226,7 @@ export async function applyPackages(job, { target }, { beforeApply = async fn =>
 async function bootstrap(request) {
   termux();
   const target = validateTarget(request.target);
+  const channel = validateChannel(request.channel);
   if (sha(await fs.readFile(fileURLToPath(import.meta.url))) !== target.bootstrapSha256) throw Error('The update program does not match this APK');
   // These APIs predate the Updates page. Missing/incomplete old installations
   // return a setup error rather than execute an unguarded package transaction.
@@ -241,7 +256,9 @@ async function bootstrap(request) {
     if (job) job.log = (await fs.readFile(path.join(directory, 'output.log'), 'utf8').catch(() => '')).slice(-32000);
     const selection = await readJson(path.join(dataDir, 'runtime.json'), null);
     const packaged = await readJson(path.join(app, 'runtime-default.json'), null);
-    return { ...result, job, sources: await readJson(path.join(dataDir, 'updates/sources.json'), {}),
+    const sources = await readJson(path.join(dataDir, 'updates/sources.json'), {});
+    if (sources.apt?.channel !== channel) delete sources.apt;
+    return { ...result, job, sources,
       runtime: { version: selection?.version || packaged?.version, previous: selection?.previous?.version } };
   }
   if (request.mode === 'status') return snapshot();
@@ -256,7 +273,7 @@ async function bootstrap(request) {
   if (process.argv[2] !== '--run') {
     if (await activeOwner()) {
       const active = await snapshot();
-      if (active.job?.kind !== request.kind || JSON.stringify(active.job?.input?.target) !== JSON.stringify(target)) throw Error('Another package operation is running');
+      if (active.job?.kind !== request.kind || active.job?.input?.channel !== channel || JSON.stringify(active.job?.input?.target) !== JSON.stringify(target)) throw Error('Another package operation is running');
       return active;
     }
     const file = fileURLToPath(import.meta.url);
@@ -320,13 +337,15 @@ async function bootstrap(request) {
         await command(job, 'dpkg', ['--force-confdef', '--force-confold', '--configure', '-a']);
         await applyPackages(job, input);
       }),
-      'check-packages': async job => {
-        await job.phase('Checking configured APT repositories');
+      'check-packages': async (job, input) => {
+        await job.phase('Checking ' + input.channel + ' package updates');
         const result = await runtime.sourceResult('apt', async () => {
-          await apt(job, ['update']); const output = await apt(job, ['-s', 'full-upgrade'], { captureAll: true });
+          await apt(job, ['update']);
+          const options = await packageOptions(job, input.target, input.channel);
+          const output = await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true });
           const packages = [...output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)].map(([, name, current, latest]) => ({ name, current: current || 'Not installed', latest,
             ...(target.packages.some(item => item.name === name.split(':')[0]) ? { managedByApk: true } : {}) }));
-          return { available: packages.filter(item => !item.managedByApk).length, packages };
+          return { channel: input.channel, available: packages.filter(item => !item.managedByApk).length, packages };
         });
         if (result.error) throw Error(result.error);
       },
@@ -335,9 +354,9 @@ async function bootstrap(request) {
     };
     const jobs = new UpdateJobs(handlers, directory);
     await jobs.init();
-    if (request.retry && jobs.job && (jobs.job.kind !== request.kind || JSON.stringify(jobs.job.input?.target) !== JSON.stringify(target))) throw Error('The previous job belongs to a different APK; start a new matching update');
+    if (request.retry && jobs.job && (jobs.job.kind !== request.kind || jobs.job.input?.channel !== channel || JSON.stringify(jobs.job.input?.target) !== JSON.stringify(target))) throw Error('The previous job belongs to a different app or channel; start a new update');
     await fs.rm(cancelFile, { force: true });
-    await jobs.start(request.kind, { target }, Boolean(request.retry));
+    await jobs.start(request.kind, { target, channel }, Boolean(request.retry));
     acknowledge({ ok: true });
     while (jobs.busy) await sleep(100);
   } finally {
