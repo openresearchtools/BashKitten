@@ -375,7 +375,7 @@ class AgentView {
   }
 
   installSettingsMenu() {
-    const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "group", noautofocus: "true" });
+    const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", flip: "slide", role: "group", noautofocus: "true" });
     const views = xul(this.doc, "panelmultiview", { mainViewId: "bashkitten-settings-mainView" });
     const view = xul(this.doc, "panelview", { id: "bashkitten-settings-mainView", class: "PanelUI-subView" });
     const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
@@ -383,8 +383,18 @@ class AgentView {
     const toggle = event => {
       if (popup.state === "open") { lazy.PanelMultiView.hidePopup(popup); return; }
       if (popup.state !== "closed") return;
-      popup.setConstraintRect(new this.win.DOMRect(this.win.mozInnerScreenX,
-        this.win.mozInnerScreenY, this.win.innerWidth, this.win.innerHeight));
+      if (popup.isWaylandPopup) {
+        // An explicit constraint rectangle disables Gecko's compositor popup
+        // positioning on Wayland. Fit the down-right popup by sizing instead.
+        const anchor = gear.getBoundingClientRect();
+        const width = Math.max(1, this.win.innerWidth - anchor.left);
+        popup.style.minWidth = `${Math.min(250, width)}px`;
+        popup.style.maxWidth = `${width}px`;
+        popup.style.maxHeight = `${Math.max(1, this.win.innerHeight - anchor.bottom)}px`;
+      } else {
+        popup.setConstraintRect(new this.win.DOMRect(this.win.mozInnerScreenX,
+          this.win.mozInnerScreenY, this.win.innerWidth, this.win.innerHeight));
+      }
       void lazy.PanelMultiView.openPopup(popup, gear, { position: "after_start", triggerEvent: event }).catch(console.error);
     };
     // Match Firefox's PanelUI trigger: open during the pointer press with its
