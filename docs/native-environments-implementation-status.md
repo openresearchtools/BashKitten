@@ -5,6 +5,64 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Reboot recovery, update channels and resumed acceptance — 17 October 2026
+
+The existing Wayland desktop, Android 17 Cuttlefish instances and owned real-Xorg
+test VM were restored after the host reboot. Installed acceptance below uses
+`c1826669d1`, including its matching Android/Termux packages and retained test
+profiles. The user's separate private llama VM was not used. Historical setup
+and candidate records remain historical; this recovery does not establish a
+whole-app acceptance pass.
+
+Android now has the persisted **Include pre-releases (nightly)** Updates control
+in `8b94712f24`. Stable excludes prerelease APKs; either choice only offers newer
+APK version codes. Managed APT transactions follow the selected signed channel
+while retaining the installed APK's exact backend/OS versions and repair path.
+The shared signing key, user APT configuration and model/Pi settings are retained.
+Java compilation, renderer behavior and signed isolated APT simulations passed,
+including switching channels, preserving exact nightly packages under Stable,
+repairing an incompatible external package upgrade and preserving unrelated
+preferences. Installed channel/update acceptance remains pending. Component
+evidence: `acceptance/update-channels-20261017/verification.json` in the separate
+Build workspace.
+
+On installed Android 17, the saved TTS CPU-thread control was set to two through
+Local AI. Actual native calls through the desktop BashKitten Cuttlefish UI passed
+dictation/read-back, Add more preserving both segments, Change replacing the
+draft, `#` completion, explicit Send and hangup preserving active Pi. The final
+native chat and Pi history contain exactly one revised user message. The test
+turn was then stopped normally. Input was the public JFK fixture through WebRTC;
+no physical-microphone, OEM or Android Auto acceptance is inferred. One attempt
+lost its synthetic input and is explicitly excluded. Successful recovery left
+an obsolete no-speech notice visible; `7eac3fe544` clears only the captured
+same-call error after successful transcription, preserving newer/other failures.
+Actual Java compilation and race/ownership checks pass; installed retest remains.
+Evidence: `verification/callback-c182-20261017/installed-result.json`.
+
+Installed Xorg passes the selected-container reconnect after publishing startup,
+guest-only browser Quit/relaunch, and Display tab close/reopen cases. Container
+text, ODT-to-native-PDF and XLSX-grid previews pass. Killing only the positively
+identified Display renderer preserved the other 87 captured owned process
+identities, Pi completed its requested final, and reopening created a new
+renderer against the same guest. The apparent disabled-download confirmation
+was caused by the screenshot helper activating the parent browser. With dialog
+focus preserved, both Files Download and preview Download raw saved the expected
+39-byte file with the correct hash; no product change or focus-protection bypass
+was needed. Receipts: `acceptance/xorg-vm-control/candidate-c182-xorg-resume.json`,
+`candidate-c182-xorg-files-renderer.json`, and
+`acceptance/c182-download-focus-20261017/verification.json`.
+
+The normal GitHub prerelease candidate at `8b94712f24` encountered two removed
+Termux dependency URLs before Node assembly. `75ee892b1c` replaces only those
+URLs with an officially listed mirror; all original package hashes, versions,
+source and license inputs remain unchanged and passed an empty-cache fetch.
+`fdaa823c46` splits oversized corresponding-source release archives into verified
+parts without dropping source, and `b6ad9dcdbb` avoids duplicate artifact download
+and staging bytes. The next complete candidate must include these repairs and
+the call-notice fix. Publication, signed nightly APT verification and installed
+normal update/pairing/recovery flows remain required; dispatch and component
+passes are not release or full-feature acceptance.
+
 ## Cross-feature corrections and full-scope review — 15 October 2026
 
 The subsequent integration-fix batch includes `65500cd704` (independent Display
