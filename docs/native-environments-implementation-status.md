@@ -162,6 +162,15 @@ size quota and leaves desktop records complete. Seven backend check groups,
 notice viewing remains required. Evidence:
 `verification/runtime-record-chunks-20261017/`.
 
+The full GitHub candidate at `e226372894` caught a stale retained Termux Search
+lock binding after the siphasher legal-source additions. Both Search architecture
+jobs rejected it before compilation. The repair updates only that inventory's
+lock digest; the framework commit/archive hash, runtime versions and strict
+verification remain unchanged. The exact workflow extraction passes locally;
+an independent check found the other ten retained lock bindings current. Keep
+useful completed producer outputs/caches, then run the corrected full matrix.
+The failed run is `39060987072`; it is not a publishable candidate.
+
 ## Cross-feature corrections and full-scope review — 15 October 2026
 
 The subsequent integration-fix batch includes `65500cd704` (independent Display
