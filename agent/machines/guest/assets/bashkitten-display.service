@@ -6,11 +6,11 @@ PartOf=bashkitten-desktop.service
 
 [Service]
 Type=simple
-User=user
-Group=user
-Environment=HOME=/home/user
+Environment=HOME=/home/user USER=user LOGNAME=user SHELL=/bin/bash
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=BASHKITTEN_EXECUTION_ROLE=container
-ExecStart=/usr/bin/dbus-run-session -- /usr/lib/bashkitten/machines/bin/bashkitten-display-session
+# systemd User= calls initgroups, dropping crun's keep-groups device access.
+# Drop all user/group IDs before the session while retaining inherited groups.
+ExecStart=/usr/bin/setpriv --reuid=user --regid=user --keep-groups --inh-caps=-all --ambient-caps=-all -- /usr/bin/dbus-run-session -- /usr/lib/bashkitten/machines/bin/bashkitten-display-session
 KillMode=mixed
 TimeoutStopSec=30
