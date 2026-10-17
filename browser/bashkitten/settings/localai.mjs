@@ -186,10 +186,8 @@ export async function renderSection({ root: parent, call: control, info, signal 
         }
         runtime = next;
         if (mode.value === 'managed') binary.value = runtime?.binary || '';
-        records.hidden = !runtime?.root;
         showVersion();
       };
-      records.hidden = !runtime?.root;
       showVersion();
       const launcher = node('details'); launcher.append(node('summary', 'Launcher and environment')); section.append(launcher);
       launcher.append(node('p', 'The default launcher supplies the executable, port and saved configuration. Override these settings only when needed.'));
