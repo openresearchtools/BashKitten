@@ -8,16 +8,17 @@ import { randomUUID, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { modelDataDir, modelSettings, getModelsDirectory } from './settings.mjs';
 import { pickerDirectory } from '../files/folders.mjs';
-import { privateDir } from '../common.mjs';
+import { privateDir, readJson, writeJson, writePrivate } from '../common.mjs';
 import { repositoryId, revisionId, repositoryPath, repositoryFiles, hfRequest, resolvePath, modelError, publicModelError } from './huggingface.mjs';
 export { searchModels, modelRepository } from './huggingface.mjs';
 
 const recordsDir = path.join(modelDataDir, 'downloads');
 const jobs = new Map(), running = new Map();
-let loaded, closing = false, mutations = Promise.resolve();
+let loaded, closing = false, mutations = Promise.resolve(), noticeUpdates = Promise.resolve();
 let downloadCompleteHandler;
 export function setDownloadCompleteHandler(handler) { downloadCompleteHandler = handler; }
 const terminal = new Set(['complete', 'cancelled']);
+const noticeFile = file => /^(?:licen[cs]es?|copying|notices?|copyright|authors|readme|model[-_]?card)(?:[._-].*)?$/i.test(path.basename(file.path));
 // Node does not expose O_PATH on every supported release. Linux and Android
 // share this flag: traversing /data requires search access, not directory reads.
 const directoryPathFlags = (constants.O_PATH ?? 0x200000) | constants.O_DIRECTORY | constants.O_NOFOLLOW;
@@ -225,9 +226,94 @@ async function downloadFile(job, file, signal) {
     } finally { await destination.parent.close(); }
   }
 }
+// Save the upstream documents during the requested transfer. About reads these
+// immutable local bytes; opening it never starts a repository or license fetch.
+async function saveModelInformation(job, signal) {
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  const directory = path.join(modelDataDir, 'notices', digest(job.repository + '@' + job.revision));
+  const manifest = path.join(directory, 'NOTICE.json');
+  const existing = await readJson(manifest, null);
+  const origins = job.files.map(file => ({ name: file.path, bytes: file.size,
+    url: 'https://huggingface.co' + resolvePath(job.repository, job.revision, file.path),
+    ...(file.hash.length === 64 ? { sha256: file.hash } : { gitBlobSha1: file.hash }) }));
+  const saveInformation = value => {
+    // Two selected assets from one revision can finish concurrently. Merge only
+    // their durable notice index here; never hold the download-control queue.
+    const update = noticeUpdates.then(async () => {
+      signal.throwIfAborted();
+      const previous = await readJson(manifest, null);
+      const files = new Map((previous?.repository === job.repository && previous.revision === job.revision ? previous.files || [] : []).map(file => [file.name, file]));
+      for (const file of [...(value.files || []), ...origins]) files.set(file.name, { ...files.get(file.name), ...file });
+      signal.throwIfAborted();
+      await writeJson(manifest, { ...value, files: [...files.values()] });
+    });
+    noticeUpdates = update.catch(() => {});
+    return update;
+  };
+  if (existing?.repository === job.repository && existing.revision === job.revision
+      && Array.isArray(existing.notices)) {
+    // Curated downloads already fetched their reviewed notices, including any
+    // notices from original model donors. Preserve those rather than replacing
+    // them with the redistribution repository's license declarations.
+    for (const notice of existing.notices) {
+      signal.throwIfAborted();
+      if (!notice.savedFile || path.basename(notice.savedFile) !== notice.savedFile) throw modelError('The saved model notice path is invalid');
+      const bytes = await fs.readFile(path.join(directory, notice.savedFile));
+      if (bytes.length !== notice.bytes || digest(bytes) !== notice.sha256) throw modelError('The saved model notices changed; download the model information again');
+    }
+    await saveInformation(existing);
+    return;
+  }
+  const information = job.noticeInformation || await repositoryFiles(job.repository, job.revision, signal);
+  const declared = information.license;
+  const license = typeof declared === 'string' ? declared : Array.isArray(declared) ? declared.join(', ') : '';
+  const notices = [], noticeWarnings = [];
+  for (const file of information.files.filter(noticeFile)) {
+    repositoryPath(file.path); signal.throwIfAborted();
+    const url = 'https://huggingface.co' + resolvePath(job.repository, job.revision, file.path);
+    const savedFile = digest(url).slice(0, 16) + '-' + path.basename(file.path);
+    const request = await hfRequest(url, { signal });
+    let bytes;
+    try {
+      const chunks = []; let size = 0;
+      for await (const chunk of request.response.body) {
+        request.resetTimeout(); signal.throwIfAborted(); size += chunk.length;
+        if (size > file.size) throw modelError('The model notice exceeded its pinned size');
+        chunks.push(chunk);
+      }
+      bytes = Buffer.concat(chunks);
+      const hash = createHash(file.hash.length === 64 ? 'sha256' : 'sha1');
+      if (file.hash.length === 40) hash.update(`blob ${file.size}\0`);
+      if (bytes.length !== file.size || hash.update(bytes).digest('hex') !== file.hash) throw modelError('The model notice did not match its pinned repository revision');
+      signal.throwIfAborted();
+      await writePrivate(path.join(directory, savedFile), bytes);
+    } finally { request.close(); }
+    if (!bytes.length || /^https?:\/\/\S+$/.test(bytes.toString('utf8').trim())) noticeWarnings.push(
+      'The upstream document ' + file.path + ' is empty or only a link; a full license text is not available in that document.');
+    notices.push({ title: file.path, file: file.path, url, bytes: bytes.length, sha256: digest(bytes), savedFile });
+  }
+  const provenanceNotes = [
+    'These files come from the selected Hugging Face repository at the recorded commit. The repository may redistribute or convert a model; its model card and notices retain upstream attribution.',
+    'A declared license label is repository metadata, not a replacement for the original license terms.',
+    ...noticeWarnings,
+  ];
+  if (information.baseModels) provenanceNotes.push('The repository model card declares these base models: ' + JSON.stringify(information.baseModels) + '. This attribution is supplied by that repository, not independently inferred.');
+  if (!license) provenanceNotes.push('The repository metadata does not declare a license. No license has been inferred.');
+  if (!notices.some(notice => /^(?:licen[cs]es?|copying)(?:[._-].*)?$/i.test(path.basename(notice.file)) && notice.bytes)) {
+    provenanceNotes.push('No nonempty standalone LICENSE or COPYING file was supplied at this revision. Any available model card and notices are retained; license availability is unverified.');
+  }
+  signal.throwIfAborted();
+  await saveInformation({
+    repository: job.repository, revision: job.revision, license: license || 'Not declared by the repository',
+    attribution: 'Downloaded from https://huggingface.co/' + job.repository + '/tree/' + job.revision,
+    distribution: 'These user-selected model assets and upstream notices are downloaded separately; they are not bundled with BashKitten.',
+    provenanceNotes, files: origins, notices,
+  });
+}
 async function run(job, controller) {
   try {
     job.status = 'downloading'; job.error = null; await persist(job);
+    await saveModelInformation(job, controller.signal);
     for (const file of job.files) { controller.signal.throwIfAborted(); await downloadFile(job, file, controller.signal); }
     job.status = 'complete';
   } catch (error) {
@@ -306,7 +392,8 @@ export async function startDownload({ id, revision, files } = {}) {
       if (job.files.some(file => selected.some(selection => selection.outputPath === file.outputPath))) throw modelError('A download already owns one of these files; resume or cancel it first');
     }
     const now = new Date().toISOString();
-    const job = { id: randomUUID(), repository: id, revision, directory, createdAt: now, updatedAt: now, status: 'queued', error: null, files: selected };
+    const job = { id: randomUUID(), repository: id, revision, directory, createdAt: now, updatedAt: now, status: 'queued', error: null, files: selected,
+      noticeInformation: { license: listing.license, baseModels: listing.baseModels, files: listing.files.filter(noticeFile) } };
     await persist(job); jobs.set(job.id, job); pump(); return publicJob(job);
   });
 }
