@@ -131,28 +131,38 @@ public final class TermuxConnection {
     }
 
     /** Runs only the fixed updater shipped by this APK, never caller-provided UI code. */
-    void updates(String module, JSONObject input, Consumer<JSONObject> done, Consumer<String> fail) {
+    void updates(String module, String preparer, JSONObject input, Consumer<JSONObject> done, Consumer<String> fail) {
         try {
-            byte[] bytes = java.security.MessageDigest.getInstance("SHA-256").digest(module.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder digest = new StringBuilder();
-            for (byte value : bytes) digest.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
             String node = PREFIX + "/lib/bashkitten/node/bin/node";
             // A real private file lets the job owner detach and survive this
             // Activity/process. Hash-addressed APK bytes are never hotpatched.
             String script = "set -eu; umask 077; "
-                + "test -x " + shellQuote(node) + "; "
                 + "directory=\"${BASHKITTEN_DATA_DIR:-$HOME/.local/share/bashkitten-pi}/updates/apk\"; "
-                + "mkdir -p -- \"$directory\"; chmod 700 -- \"$directory\"; file=\"$directory/$2.mjs\"; "
-                + "if ! printf '%s  %s\\n' \"$2\" \"$file\" | sha256sum -c - >/dev/null 2>&1; then "
+                + "mkdir -p -- \"$directory\"; chmod 700 -- \"$directory\"; "
+                + "module=\"$directory/$2.mjs\"; helper=\"$directory/$4.py\"; "
+                + "for extension in mjs py; do "
+                + "if [ \"$extension\" = mjs ]; then source=$1; digest=$2; file=$module; "
+                + "else source=$3; digest=$4; file=$helper; fi; "
+                + "if ! printf '%s  %s\\n' \"$digest\" \"$file\" | sha256sum -c - >/dev/null 2>&1; then "
                 + "temporary=$(mktemp \"$directory/.update.XXXXXXXX\"); trap 'rm -f -- \"$temporary\"' EXIT; "
-                + "printf '%s' \"$1\" >\"$temporary\"; chmod 600 -- \"$temporary\"; "
-                + "printf '%s  %s\\n' \"$2\" \"$temporary\" | sha256sum -c - >/dev/null; "
-                + "mv -f -- \"$temporary\" \"$file\"; trap - EXIT; fi; "
-                + "unset NODE_OPTIONS NODE_PATH; export BASHKITTEN_EXECUTION_ROLE=termux TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable "
-                + "OPENSSL_CONF=" + shellQuote(PREFIX + "/lib/bashkitten/node/etc/openssl.cnf") + "; "
-                + "exec /system/bin/sh -c 'exec \"$1\" \"$2\"' bashkitten-updates " + shellQuote(node) + " \"$file\"";
-            execute(script, new String[] { module, digest.toString() }, input.toString(), 60000, done, fail);
+                + "printf '%s' \"$source\" >\"$temporary\"; chmod 600 -- \"$temporary\"; "
+                + "printf '%s  %s\\n' \"$digest\" \"$temporary\" | sha256sum -c - >/dev/null; "
+                + "mv -f -- \"$temporary\" \"$file\"; trap - EXIT; fi; done; "
+                + "unset NODE_OPTIONS NODE_PATH; export BASHKITTEN_EXECUTION_ROLE=termux TERMUX_EXEC__SYSTEM_LINKER_EXEC__MODE=disable; "
+                + "if [ -x " + shellQuote(node) + " ] && [ ! -e \"$directory/../apk-bootstrap/state.json\" ]; then "
+                + "export OPENSSL_CONF=" + shellQuote(PREFIX + "/lib/bashkitten/node/etc/openssl.cnf") + "; "
+                + "exec /system/bin/sh -c 'exec \"$1\" \"$2\"' bashkitten-updates " + shellQuote(node) + " \"$module\"; fi; "
+                + "exec /system/bin/sh -c 'exec \"$1\" \"$2\" \"$3\"' bashkitten-updates "
+                + shellQuote(PREFIX + "/bin/python") + " \"$helper\" \"$module\"";
+            execute(script, new String[] { module, sha256(module), preparer, sha256(preparer) }, input.toString(), 60000, done, fail);
         } catch (Exception error) { fail.accept(message(error, "Unable to prepare the package updater.")); }
+    }
+
+    private static String sha256(String value) throws java.security.NoSuchAlgorithmException {
+        byte[] bytes = java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder digest = new StringBuilder();
+        for (byte item : bytes) digest.append(String.format(java.util.Locale.ROOT, "%02x", item & 255));
+        return digest.toString();
     }
 
     private void requirePermission() {

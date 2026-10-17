@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
 TERMUX_UPDATE_ASSET = 'assets/termux-update.json'
 TERMUX_BOOTSTRAP_ASSET = 'assets/updates-bootstrap.mjs'
+TERMUX_PREPARER_ASSET = 'assets/updates-prepare.py'
 # GitHub requires each release asset to be strictly smaller than 2 GiB.
 ASSET_SIZE_LIMIT = 2 * 1024 ** 3
 SOURCE_PART_SIZE = 1024 ** 3
@@ -252,11 +253,13 @@ def main():
         if manifest.get('apks', {}).get(apk.name) != sha(apk):
             raise ValueError('APK hash mismatch')
         with zipfile.ZipFile(apk) as archive:
-            if any(archive.namelist().count(name) != 1 for name in (TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET)):
+            if any(archive.namelist().count(name) != 1 for name in (TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET, TERMUX_PREPARER_ASSET)):
                 raise ValueError('APK must contain one immutable companion update manifest and bootstrap')
             pairing = validate_termux_update(json.loads(archive.read(TERMUX_UPDATE_ASSET)), version, abi)
             if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
                 raise ValueError('APK companion update bootstrap checksum mismatch')
+            if archive.read(TERMUX_PREPARER_ASSET) != (ROOT / 'agent/src/server/platform/termux/updates-prepare.py').read_bytes():
+                raise ValueError('APK bundled-runtime preparation does not match this source')
         if pairing['sourceCommit'] != manifest['source']:
             raise ValueError('APK companion update manifest has a different producing source')
         pairings.append(pairing)

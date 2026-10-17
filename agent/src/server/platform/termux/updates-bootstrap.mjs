@@ -270,7 +270,7 @@ async function bootstrap(request) {
   }
   const kinds = ['match-packages', 'check-packages', 'update-packages', 'refresh-lists', 'recover-packages', 'update-pi', 'rollback-pi'];
   if (request.mode !== 'start' || !kinds.includes(request.kind)) throw Error('Unknown update operation');
-  if (process.argv[2] !== '--run') {
+  if (process.argv[2] !== '--run' && process.argv[2] !== '--bootstrap-runtime') {
     if (await activeOwner()) {
       const active = await snapshot();
       if (active.job?.kind !== request.kind || active.job?.input?.channel !== channel || JSON.stringify(active.job?.input?.target) !== JSON.stringify(target)) throw Error('Another package operation is running');
