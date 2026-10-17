@@ -145,8 +145,8 @@ public final class TelephonyRuntime {
                 if (!enabled("messages")) { invalidateRoute("messages"); PhoneNotifications.clear(context); }
                 clearError(); changed();
                 // Master changes synchronize after the enabled listener starts transport.
-                // Other settings still report actual synchronization failures.
-                if (!mastersChanged && gateway != null && (enabled("telephony") || enabled("messages"))) gateway.request("phone.settings", json("settings", next)).whenComplete((v,e) -> { if (e != null) execute(() -> failed(e)); });
+                // Saved-only changes wait for explicit startup; started transports still report synchronization failures.
+                if (!mastersChanged && gateway != null && !"not-started".equals(gateway.connectionState()) && (enabled("telephony") || enabled("messages"))) gateway.request("phone.settings", json("settings", next)).whenComplete((v,e) -> { if (e != null) execute(() -> failed(e)); });
                 done.complete(snapshot());
             } catch (Exception failure) { done.completeExceptionally(failure); failed(failure); }
         }, done::completeExceptionally);
