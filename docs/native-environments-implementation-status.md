@@ -5,6 +5,75 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Resumed installed testing and signed publication — 18 October 2026
+
+The existing Android 17 instances, dedicated Intel Weston desktop and owned
+real-Xorg VM were restored after reboot. Desktop input remains confined to the
+isolated test user or the owned Xorg VM. The unrelated private llama VM was not
+used. Zero-length loose Git objects left by the interruption were recovered
+hash-exactly from the pushed history; full `git fsck` subsequently passed.
+No working-tree reset or history replacement was performed.
+
+The combined Linux development package at `31073761ca` passed payload/source
+checks and was installed through APT. Its actual native Gecko producer remains
+`05becb3ab6`; cached native bytes were not represented as a new Gecko compile.
+The matching guest browser/backend, guest service and OS were also installed in
+the two test containers. The Wayland Configuration menu now opens its target
+through a real pointer click. Actual Xorg checks passed Start icons, search,
+pin/unpin persistence, the native clipboard toolbar without an inner bar, text
+copy/paste in both directions, and Observe input/clipboard restrictions.
+Large, smaller and portrait Xorg viewports kept exposed background pixels at
+`#202225`, with a centered proportionally fitted logo and the saved scale/pins.
+These are scoped observations, not the complete Display/lifetime matrix.
+
+Retained Android `cab1310f182` with the independently updated `31073761ca` OS
+shows Start icons and the corrected wallpaper. Its first apparent rotation
+failure followed an Android phantom-process trim of the Termux runtime guard.
+After restoring the explicitly authorized emulator process settings, actual
+Local recovery and portrait/landscape/portrait testing preserved the same
+browser, backend, Pi and Display process identities. This is a modified CVD
+fixture, not unchanged-default Android or physical/OEM lifetime acceptance.
+Original rotation lock 0 was restored. Evidence is in the Build workspace's
+`verification/os-3107/installed-termux/rotation-readiness/`.
+
+Desktop default Qwen3.5 4B vision correctly identified the attached synthetic
+red square, green circle and blue triangle through the normal chat flow.
+The `3107` Local AI Generate speech UI produced the requested Pocket TTS phrase
+with unchanged CPU defaults. Diagnostic CPU Parakeet transcription of that WAV
+returned “Hello from Bash kitten.” Evidence includes the isolated desktop's
+`default-vision-result.json` and Build
+`verification/desktop-3107/wayland-generated-voice-asr.json`.
+
+Two installed desktop failures were retained and traced. A black inner browser
+was reproduced with the original guest launcher, while starting after the owned
+XFCE session reached IDLE painted correctly. `1e1a9648a0` waits asynchronously
+only for the canonical shipped XFCE command; custom commands keep their existing
+timing and ownership. A restored-original comparison reproduced the failure;
+the repaired default passed twice, and a custom non-XFCE command remained usable.
+Separately, closing a Display tab preserved guest processes but reopening could
+discard a retained frame after a geometry-generation change. `9d29e5ec77` keeps
+one outstanding lease per frame ID; `800e6fc078` also drains the retained static
+frame when receiver capacity returns. Focused native protocol/component checks
+and mixed-helper installed tests are distinct from a rebuilt combined candidate.
+Final combined acceptance remains required. Exact `3107` Xorg normal Quit before
+helper replacement did remove the captured browser, gateway and guest identities;
+active remote/publishing and force-kill/crash cases remain separate.
+
+The normal GitHub publication run `39076145026` published testing prerelease
+`v153.4.5` from exact `26ba97cd4a4f806e9457f9e2533a69fc7e045613`.
+All 43 published asset hashes match the audited collector: both signed APKs,
+ten DEBs and 23 source archives/parts, with complete matching source/notices.
+Normal APT run `39077323994` published the verified signed nightly catalogue
+using the existing signing key and the corrected case-sensitive asset selection.
+This release does not include later `3107` or 18 October development fixes.
+The separate signed `153.4.4` Android fixture found and downloaded the exact
+published x86_64 APK through its normal update UI, then Android's installer
+accepted the update. Automatic Termux reconciliation subsequently reported
+“Termux command failed. Check Termux setup and retry.” This is an outstanding
+installed-upgrade blocker; publication and APK installation are not a passing
+backend update. The original failure is preserved under Build
+`verification/android17-published-update-26ba/` for diagnosis and repaired retest.
+
 ## Isolated installed follow-up — 17 October 2026, evening
 
 Desktop input now uses only the dedicated `bashkitten-acceptance` user, its own
