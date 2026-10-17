@@ -69,8 +69,9 @@ def native_source_notices(directory):
             continue
         if re.match(r'^(licen[cs]e|copying|notice|copyright|ftl|gpl|patents)([._-]|$)', path.name, re.I):
             text = path.read_text(encoding='utf-8')
-        elif path.suffix.lower() in {'.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.java', '.kt'}:
+        elif path.suffix.lower() in {'.c', '.h', '.cpp', '.cc', '.cxx', '.hpp', '.s', '.y', '.java', '.kt'}:
             # Include consecutive leading comments only, never implementation.
+            # .S/.s assembly and Bison .y inputs carry grants just like C sources.
             data = path.read_bytes()
             try:
                 source = data.decode('utf-8')
