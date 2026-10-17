@@ -27,7 +27,7 @@ RUN printf '%s\n' 'Types: deb' 'URIs: http://deb.debian.org/debian' \
         /home/user/.local /home/user/.local/share /home/user/.local/share/bashkitten-pi && \
     /usr/lib/bashkitten/machines/bin/sudo-policy enable-passwordless && visudo -c && \
     runuser -u user -- env BASHKITTEN_EXECUTION_ROLE=container dbus-run-session -- /usr/bin/bashkitten-os initialize && \
-    systemctl enable bashkitten-desktop.service bashkitten-sudo.socket bashkitten-fusermount.socket && \
+    systemctl enable bashkitten-desktop.service bashkitten-sudo.socket && \
     mkdir -p /usr/share/bashkitten && \
     dpkg-query -W -f='${binary:Package}\t${Version}\t${Architecture}\t${source:Package}\t${source:Version}\n' > /usr/share/bashkitten/machine-packages.tsv && \
     cp /tmp/bashkitten-packages/manifest.json /usr/share/bashkitten/guest-components.json && \

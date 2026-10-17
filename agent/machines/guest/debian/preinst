@@ -1,0 +1,19 @@
+#!/bin/sh
+# SPDX-License-Identifier: AGPL-3.0-only
+set -eu
+
+case "$1" in
+    install|upgrade)
+        # Older guest init bound the AppImage-only Python client over this
+        # command. Release only that exact owned bind before dpkg diverts it.
+        if mountpoint -q /usr/bin/fusermount3; then
+            if ! cmp -s /usr/bin/fusermount3 /usr/lib/bashkitten/machines/bin/bashkitten-fusermount; then
+                echo 'Unexpected mount on /usr/bin/fusermount3; refusing to replace it' >&2
+                exit 1
+            fi
+            umount /usr/bin/fusermount3
+        fi
+        dpkg-divert --package bashkitten-machines-guest --add --rename \
+            --divert /usr/bin/fusermount3.distrib /usr/bin/fusermount3
+        ;;
+esac
