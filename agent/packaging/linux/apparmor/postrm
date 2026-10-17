@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Like dh_apparmor, retain loaded policy on removal; removing a profile from
+# running processes could otherwise drop confinement. dpkg owns the conffile.
+if [ "$1" = purge ] && [ ! -e /etc/apparmor.d/bashkitten-podman ]; then
+  rm -f /etc/apparmor.d/disable/bashkitten-podman /etc/apparmor.d/force-complain/bashkitten-podman
+  rm -f /etc/apparmor.d/local/bashkitten-podman /var/cache/apparmor/*/bashkitten-podman
+fi

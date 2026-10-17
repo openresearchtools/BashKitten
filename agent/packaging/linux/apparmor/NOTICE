@@ -1,0 +1,24 @@
+BashKitten private Podman AppArmor policy
+
+Adapted on 17 October 2026 from profiles/apparmor.d/podman in AppArmor
+v5.0.2, commit 909affc32a13d14ae3a7ccf44d325ae63ce11baf:
+https://gitlab.com/apparmor/apparmor/-/tree/909affc32a13d14ae3a7ccf44d325ae63ce11baf
+
+The pristine policy, upstream GPL license and checksummed source inventory are
+retained under upstream/. AppArmor's source-wide license applies to this policy;
+the source copyright holders include Novell/SuSE/Immunix and Canonical Ltd.
+License: GPL-2.0-or-later. The full upstream license accompanies this notice.
+
+Changes: name the profile/local override bashkitten-podman; attach only to
+/usr/lib/bashkitten/machines/bin/podman; use ABI 4.0 and the literal executable
+path instead of ABI 5.0's exec_path variable. This retains AppArmor 4/5 parser
+compatibility for the existing Ubuntu 24.04-based Linux runtime. No AppArmor
+parser, service, abstraction, kernel policy or distro Podman profile is bundled
+or replaced. This is upstream's named-unconfined namespace allowance for Podman,
+not a new container-confinement claim. Host namespace/subuid/device prerequisites
+and Podman's own container policies continue to apply.
+
+The independently written maintainer fragments follow dh_apparmor's documented
+configure reload and purge conventions, with explicit administrator-disable
+checks and visible reload failure. They remain BashKitten AGPL-3.0-only code:
+https://manpages.debian.org/unstable/dh-apparmor/dh_apparmor.1.en.html

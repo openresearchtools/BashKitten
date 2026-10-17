@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+if [ "$1" = configure ] && [ -f /etc/apparmor.d/bashkitten-podman ]; then
+  # Never replace administrator additions, deletions or disable/complain choices.
+  if [ ! -e /etc/apparmor.d/local/bashkitten-podman ] && [ ! -L /etc/apparmor.d/local/bashkitten-podman ]; then
+    mkdir -p /etc/apparmor.d/local
+    install -m 644 /dev/null /etc/apparmor.d/local/bashkitten-podman
+  fi
+  if [ ! -e /etc/apparmor.d/disable/bashkitten-podman ] && [ ! -L /etc/apparmor.d/disable/bashkitten-podman ] &&
+      command -v apparmor_parser >/dev/null 2>&1 && aa-enabled --quiet 2>/dev/null; then
+    apparmor_parser -r -T -W /etc/apparmor.d/bashkitten-podman ||
+      echo 'BashKitten: failed to load the private Podman AppArmor profile; container startup may be denied. Check the parser error above and local AppArmor policy.' >&2
+  fi
+fi

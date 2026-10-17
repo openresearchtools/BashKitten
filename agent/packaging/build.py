@@ -193,6 +193,28 @@ def install_display(args, app, revision):
     return {'archive': args.display_archive.name, 'sha256': digest, 'metadata': metadata}
 
 
+def install_machine_apparmor(stage, app):
+    source = ROOT / 'packaging/linux/apparmor'
+    upstream = read_json(source / 'upstream/source.json')
+    for item in upstream['files']:
+        require(Path(item['path']).name == item['path'] and
+                sha(source / 'upstream' / item['path']) == item['sha256'],
+                'Private Podman AppArmor source checksum mismatch')
+    profile = stage / 'etc/apparmor.d/bashkitten-podman'
+    profile.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source / 'bashkitten-podman', profile)
+    # Keep policy source/provenance and the full license available offline.
+    notices = app / 'machines/apparmor'
+    shutil.copytree(source, notices)
+    inventory = app / 'machines/licenses.json'
+    records = read_json(inventory)
+    records.append({'name': 'AppArmor — adapted private Podman profile',
+                    'version': upstream['release'], 'license': 'GPL-2.0-or-later',
+                    'source': upstream['repository'].removesuffix('.git') + '/-/tree/' + upstream['commit'],
+                    'text': (notices / 'NOTICE').read_text() + '\n' + (notices / 'upstream/LICENSE').read_text()})
+    write_json(inventory, records)
+
+
 def install_termux_display(args, app, revision, bin_dir):
     require(args.termux_display_dir is not None, 'Termux requires the paired --termux-display-dir component')
     source = args.termux_display_dir
@@ -464,6 +486,7 @@ def assemble(args):
             components['browser'] = package_browser(args, app, stage, version, auth)
         if not termux and not args.backend_only:
             components['machines'] = install_machines(args, app, revision, version)
+            install_machine_apparmor(stage, app)
             components['display'] = install_display(args, app, revision)
         collector = ['node', str(ROOT / 'packaging/licenses.mjs'), str(app), '--target', args.target, '--version', version]
         if args.backend_only:
@@ -518,10 +541,15 @@ def assemble(args):
         control.mkdir()
         managed = json.dumps({'owner': 'bashkitten', 'version': pi_version, 'lockSha256': lock_hash})
         display_postinst = f"chmod 400 '{installed_app}/display/bashkitten-x11-loader.jar'\n" if termux else ''
+        apparmor_postinst = apparmor_postrm = ''
+        if not termux and not args.backend_only:
+            (control / 'conffiles').write_text('/etc/apparmor.d/bashkitten-podman\n')
+            apparmor_postinst = (ROOT / 'packaging/linux/apparmor/postinst').read_text()
+            apparmor_postrm = (ROOT / 'packaging/linux/apparmor/postrm').read_text()
         executable(control / 'postinst', f'''#!{shell}
 set -e
 umask 022
-{display_postinst}runtime='{runtime}'
+{apparmor_postinst}{display_postinst}runtime='{runtime}'
 if [ ! -f "$runtime/ready" ]; then
   mkdir -p "$runtime"
   cp -a '{installed_app}/node_modules' "$runtime/"
@@ -538,7 +566,7 @@ chmod 644 '{installation}.tmp'
 mv '{installation}.tmp' '{installation}'
 ''')
         executable(control / 'postrm', f'''#!{shell}
-if [ "$1" = remove ] || [ "$1" = purge ]; then
+{apparmor_postrm}if [ "$1" = remove ] || [ "$1" = purge ]; then
   if [ "$(readlink '{prefix}/bin/pi')" = bashkitten-pi ]; then rm '{prefix}/bin/pi'; fi
 fi
 # Preserve user data, native Pi sessions/credentials and retained runtimes.
