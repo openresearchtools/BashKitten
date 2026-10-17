@@ -207,7 +207,7 @@ export const BashKittenDisplay = {
   bind(document, controller) {
     this.record(document).controller = controller;
   },
-  update(document, state, interactive, running) {
+  update(document, state, interactive, running, presentation = {}) {
     const record = this.record(document);
     record.state = state;
     if (record.interactive !== interactive) {
@@ -215,6 +215,8 @@ export const BashKittenDisplay = {
       SessionStore.setCustomTabValue(record.tab, TAB_KEY, JSON.stringify({ id: record.id, interactive }));
     }
     record.running = running;
+    const { clipboardBusy = false, clipboardStatus = "", renderMode = "", renderReason = "" } = presentation;
+    Object.assign(record, { clipboardBusy, clipboardStatus, renderMode, renderReason });
     const { window } = record;
     window.dispatchEvent(new window.Event("BashKittenDisplayChanged"));
   },
@@ -225,8 +227,17 @@ export const BashKittenDisplay = {
   },
   control(window, action, value) {
     const browser = window.gBrowser.selectedBrowser;
-    const record = this.selected(window);
-    if (!record || this.record(browser.contentDocument) !== record || !record.controller) return;
+    const record = this.selected(window), document = browser?.contentDocument;
+    if (!record || this.record(document) !== record || !record.controller) return;
+    if (action === "clipboard-read" || action === "clipboard-write") {
+      // Only a real activation in this browser window can request a snapshot.
+      // Call the owned controller directly; never manufacture a content event.
+      if (!value?.isTrusted || value.currentTarget?.ownerDocument !== window.document ||
+          !record.interactive || record.state !== "running" || record.clipboardBusy) return;
+      return record.controller.clipboard(action === "clipboard-read" ? "read" : "write",
+        () => this.selected(window) === record && browser.contentDocument === document &&
+          records.get(browser) === record && !record.tab.closing);
+    }
     if (action === "enabled") return record.controller.enabled(value);
     else if (action === "interactive") return record.controller.interactive(value);
     else throw new Error("Unknown Display control.");

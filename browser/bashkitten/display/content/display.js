@@ -6,6 +6,7 @@ async function initialize() {
 let receiver, generation = 1, resizeFrame = 0, lastSize = "", closed = false;
 const initial = await BashKittenDisplay.prepare(document);
 let state = initial.state, serviceRunning = initial.running, interactive = initial.interactive, attachment = 0, clipboardEpoch = 0;
+let clipboardBusy = false, clipboardStatus = "", renderMode = "", renderReason = "";
 let changing = false, rendererClosed = Promise.resolve(), resolveRendererClosed;
 const pointerIds = new Set();
 // DOM code maps to the kernel evdev codes used by wl_keyboard. Layout and
@@ -27,8 +28,10 @@ function send(value) {
 function update() {
   surface.tabIndex = interactive && state === "running" ? 0 : -1;
   surface.classList.toggle("observe", !interactive);
-  for (const button of ["copy", "paste"]) document.getElementById(button).disabled = !interactive || state !== "running";
-  if (!closed) BashKittenDisplay.update(document, state, interactive, serviceRunning);
+  if (!closed) BashKittenDisplay.update(document, state, interactive, serviceRunning, { clipboardBusy, clipboardStatus, renderMode, renderReason });
+}
+function cancelClipboard() {
+  clipboardEpoch++; clipboardBusy = false; clipboardStatus = "";
 }
 function releaseInput() {
   // The gateway releases this presenter's held keys/buttons. XTest/agent input
@@ -38,7 +41,7 @@ function releaseInput() {
   pointerIds.clear();
 }
 function fail(message) {
-  state = "error"; clipboardEpoch++;
+  state = "error"; cancelClipboard();
   status.textContent = message; status.hidden = false;
   receiver?.close(); update();
 }
@@ -66,7 +69,7 @@ function startRenderer() {
       }
       if (state==="stopping" || state==="error") return;
       if(v.type==="ready") {
-        const mode=document.getElementById("renderMode");mode.textContent=v.mode==="gpu"?"GPU":"Software";mode.title=v.fallbackReason||"";
+        renderMode=v.mode==="gpu"?"GPU":"Software"; renderReason=v.fallbackReason||"";
         state="running"; update();
         send({type:"visible",visible:!document.hidden});
         if (interactive && !document.hidden) surface.focus();
@@ -84,7 +87,8 @@ function startRenderer() {
 async function enabled(value) {
   if (closed || changing) return;
   changing=true;
-  releaseInput(); clipboardEpoch++;
+  releaseInput(); cancelClipboard();
+  renderMode=""; renderReason="";
   state=value?"starting":"stopping";
   status.textContent=value?"Starting Display…":"Turning off Display…"; status.hidden=false;
   receiver?.close(); update();
@@ -110,12 +114,11 @@ async function enabled(value) {
 }
 function interaction(value) {
   if (interactive === value) return;
-  releaseInput(); interactive=value; clipboardEpoch++;
-  document.getElementById("clipboardStatus").textContent="";
+  releaseInput(); interactive=value; cancelClipboard();
   if (!interactive) surface.blur();
   update();
 }
-BashKittenDisplay.bind(document,{enabled,interactive:interaction});
+BashKittenDisplay.bind(document,{enabled,interactive:interaction,clipboard});
 if (serviceRunning) startRenderer();
 else {
   status.textContent=initial.error || "Display is off. Turn it on to open desktop apps.";
@@ -140,20 +143,18 @@ for(const name of ["keydown","keyup"])surface.addEventListener(name,e=>{if(!inte
 for(const name of ["beforeinput","input","compositionstart","compositionupdate","compositionend","paste","cut","copy","dragstart","dragover","drop"])surface.addEventListener(name,e=>{if(!interactive)e.preventDefault();});
 surface.addEventListener("focus",()=>send({type:"focus",focused:true}));
 surface.addEventListener("blur",releaseInput);
-document.addEventListener("visibilitychange",()=>{send({type:"visible",visible:!document.hidden});if(document.hidden)releaseInput();else{send({type:"focus",focused:interactive&&document.activeElement===surface});resize();}});
-function detach(){if(closed)return;closed=true;clipboardEpoch++;cancelAnimationFrame(resizeFrame);receiver?.close();receiver=null;resolveRendererClosed?.();}
+document.addEventListener("visibilitychange",()=>{send({type:"visible",visible:!document.hidden});if(document.hidden){releaseInput();cancelClipboard();update();}else{send({type:"focus",focused:interactive&&document.activeElement===surface});resize();}});
+function detach(){if(closed)return;closed=true;cancelClipboard();cancelAnimationFrame(resizeFrame);receiver?.close();receiver=null;resolveRendererClosed?.();}
 window.addEventListener("unload",detach,{once:true});
 window.addEventListener("BashKittenDisplayDetach",detach,{once:true});
 
 // Explicit snapshots only. Merely attaching/focusing a tab never reads either
 // clipboard. Native owner validates its live machine before running guest work.
-async function clipboard(action) {
-  if (!interactive || state !== "running") return;
+async function clipboard(action, selected) {
+  if (closed || document.hidden || clipboardBusy || !interactive || state !== "running" || !selected()) return;
   const epoch=++clipboardEpoch;
-  const current=()=>!closed && interactive && state === "running" && epoch === clipboardEpoch;
-  const controls=[document.getElementById("copy"),document.getElementById("paste")];
-  const label=document.getElementById("clipboardStatus");
-  controls.forEach(button=>button.disabled=true);label.textContent="";
+  const current=()=>!closed && !document.hidden && interactive && state === "running" && epoch === clipboardEpoch && selected();
+  clipboardBusy=true; clipboardStatus=""; update();
   try {
     if(action==="read") {
       const result=await BashKittenDisplay.clipboard(document,{action});
@@ -184,16 +185,13 @@ async function clipboard(action) {
       if(!current()) return;
       await BashKittenDisplay.clipboard(document,request);
     }
-    if(current())label.textContent=action==="read"?"Copied from desktop":"Pasted to desktop";
-  } catch(error) {if(current())label.textContent=error.message;}
-  finally {if(!closed)update();}
+    if(current())clipboardStatus=action==="read"?"Copied from desktop":"Pasted to desktop";
+  } catch(error) {if(current())clipboardStatus=error.message;}
+  finally {if(!closed && epoch === clipboardEpoch){clipboardBusy=false;if(selected())update();}}
 }
-document.getElementById("copy").addEventListener("click",event=>{if(event.isTrusted)clipboard("read");});
-document.getElementById("paste").addEventListener("click",event=>{if(event.isTrusted)clipboard("write");});
 
 }
 void initialize().catch(error => {
   status.textContent = error.message; status.hidden = false;
   surface.tabIndex = -1;
-  for (const id of ["copy", "paste"]) document.getElementById(id).disabled = true;
 });
