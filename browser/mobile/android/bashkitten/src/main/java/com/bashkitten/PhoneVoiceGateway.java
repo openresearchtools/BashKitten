@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Native lifetime owner; no Gecko document, shared worker token or remote audio. */
 final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable {
+    static final String MESSAGE_EVENT = "bashkitten.phoneMessage";
     private final BrowserApp app;
     private final AgentRuntime agent;
     private final TelephonyRuntime phone;
@@ -109,6 +110,30 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     }catch(Exception denied){/* Unauthenticated or disconnected peers receive no native data. */}finally{accepted.remove(socket);}}
     @Override public CompletableFuture<Void> prepare(){return prepare(true,null);}
     @Override public CompletableFuture<Void> prepare(String backendId){return prepare("local".equals(backendId),backendId);}
+    @Override public android.app.PendingIntent messageIntent(String eventId) {
+        return android.app.PendingIntent.getActivity(app, 0, app.host.launchIntent()
+            .putExtra("bashkitten.openAgent", true).putExtra(MESSAGE_EVENT, eventId)
+            .setIdentifier("bashkitten-phone-message:" + eventId),
+            android.app.PendingIntent.FLAG_IMMUTABLE | android.app.PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+    CompletableFuture<JSONObject> messageTarget(String eventId) {
+        // Recheck revocation after reading the encrypted registration off-thread.
+        return phone.messageTarget(eventId).thenCompose(event -> CompletableFuture.supplyAsync(() -> {
+            try {
+                JSONObject saved = new SecretStore(app, "phone-registration").read();
+                String backend = event.getString("backendId"), generation = event.getString("generation");
+                if (backend.equals("local") && generation.equals(saved.optString("generation")))
+                    return TelephonyRuntime.json("backend", "local", "id", event.getString("sessionId"));
+                JSONObject bindings = saved.optJSONObject("remotes");
+                if (!backend.equals("local") && bindings != null) for (Iterator<String> ids = bindings.keys(); ids.hasNext();) {
+                    String id = ids.next(); JSONObject binding = bindings.optJSONObject(id);
+                    if (binding != null && backend.equals(binding.optString("backendId")) && generation.equals(binding.optString("generation")))
+                        return TelephonyRuntime.json("backend", id, "id", event.getString("sessionId"));
+                }
+                throw new SecurityException("The message's original backend is no longer registered");
+            } catch (Exception failure) { throw new CompletionException(failure); }
+        }, io).thenCompose(target -> phone.messageTarget(eventId).thenApply(current -> target)));
+    }
     private CompletableFuture<Void> prepare(boolean local,String backendId){
         CompletableFuture<Void> ready=new CompletableFuture<>();
         phone.settingsSnapshot().whenComplete((settings,error)->app.main.post(()->{

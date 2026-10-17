@@ -141,6 +141,12 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private Button button(Button b, String label, Runnable action) { b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
     public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
+    public boolean openMessage(Intent intent) {
+        String eventId = intent.getStringExtra(PhoneVoiceGateway.MESSAGE_EVENT);
+        if (eventId == null) return false;
+        intent.removeExtra(PhoneVoiceGateway.MESSAGE_EVENT);
+        showAgent(); sidecar.openMessage(eventId); return true;
+    }
     public void displayChanged() {
         boolean open = app.host.displayOpen();
         displayButton.setActivated(open);

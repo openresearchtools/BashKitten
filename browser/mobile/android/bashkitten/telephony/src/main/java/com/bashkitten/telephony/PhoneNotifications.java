@@ -33,6 +33,7 @@ final class PhoneNotifications {
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ).setShowsUserInterface(false).build();
         Notification notification = new NotificationCompat.Builder(context,CHANNEL).setSmallIcon(android.R.drawable.sym_action_chat)
             .setCategory(Notification.CATEGORY_MESSAGE).setStyle(style).setContentTitle(title)
+            .setContentIntent(owner.gateway.messageIntent(id)).setAutoCancel(true)
             .setGroup("bashkitten-chat:"+backend+":"+session).setOnlyAlertOnce(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE).addAction(replyAction).addAction(readAction).build();
         manager.notify(CHANNEL+":"+id,0,notification);

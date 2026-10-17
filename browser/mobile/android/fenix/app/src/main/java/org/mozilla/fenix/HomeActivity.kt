@@ -573,6 +573,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                     }
             }
             if (savedInstanceState == null && intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch(intent)
+            bashKittenAgentPanel?.openMessage(intent)
         } else {
             setContentView(binding.root)
         }
@@ -1028,8 +1029,10 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         super.onNewIntent(intent)
         handleNewIntent(intent)
         if (intent.action == Intent.ACTION_MAIN) com.bashkitten.BrowserApp.get(this).agent.freshLaunch(intent)
-        if (intent.getBooleanExtra("bashkitten.openAgent", false) || intent.action == Intent.ACTION_MAIN) bashKittenAgentPanel?.showAgent()
-        else if (intent.action == Intent.ACTION_VIEW || intent.getBooleanExtra(OPEN_TO_BROWSER, false)) bashKittenAgentPanel?.showBrowser()
+        if (bashKittenAgentPanel?.openMessage(intent) != true) {
+            if (intent.getBooleanExtra("bashkitten.openAgent", false) || intent.action == Intent.ACTION_MAIN) bashKittenAgentPanel?.showAgent()
+            else if (intent.action == Intent.ACTION_VIEW || intent.getBooleanExtra(OPEN_TO_BROWSER, false)) bashKittenAgentPanel?.showBrowser()
+        }
         startupPathProvider.onIntentReceived(intent)
     }
 
