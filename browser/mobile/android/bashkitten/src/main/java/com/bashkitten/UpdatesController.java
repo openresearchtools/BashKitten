@@ -24,7 +24,7 @@ public final class UpdatesController {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Set<Runnable> listeners = new HashSet<>();
     private final CompletableFuture<JSONObject> target = new CompletableFuture<>();
-    private String script, version = "", availableUrl, checkError = "", matchingError = "";
+    private String script, preparer, version = "", availableUrl, checkError = "", matchingError = "";
     private String channel;
     private long versionCode, statusUnavailableSince;
     private JSONObject available;
@@ -49,10 +49,12 @@ public final class UpdatesController {
                 for (byte item : MessageDigest.getInstance("SHA-256").digest(bootstrap)) hash.append(String.format(java.util.Locale.ROOT, "%02x", item & 255));
                 if (!hash.toString().equals(manifest.getString("bootstrapSha256"))) throw new IllegalStateException("This app’s update helper is invalid.");
                 String source = new String(bootstrap, StandardCharsets.UTF_8);
+                String preparation;
+                try (InputStream input = app.getAssets().open("updates-prepare.py")) { preparation = new String(input.readAllBytes(), StandardCharsets.UTF_8); }
                 if (manifest.getInt("schema") != 1 || !manifest.getString("productVersion").equals(info.versionName) ||
                     !manifest.getString("apkAbi").equals(TermuxConnection.downloadAbi()) || !manifest.getString("sourceCommit").matches("[a-f0-9]{40}"))
                     throw new IllegalStateException("This app's Termux update manifest is invalid.");
-                app.main.post(() -> { version = info.versionName; versionCode = info.getLongVersionCode(); script = source; target.complete(manifest); changed(); });
+                app.main.post(() -> { version = info.versionName; versionCode = info.getLongVersionCode(); script = source; preparer = preparation; target.complete(manifest); changed(); });
             } catch (Exception error) { app.main.post(() -> { target.completeExceptionally(error); changed(); }); }
         });
     }
@@ -79,7 +81,7 @@ public final class UpdatesController {
                 JSONObject input = object("mode", mode, "target", manifest, "channel", requestedChannel);
                 if (kind != null) input.put("kind", kind);
                 if (retry) input.put("retry", true);
-                runtime.termux.updates(script, input, value -> {
+                runtime.termux.updates(script, preparer, input, value -> {
                     try {
                         authorized(expected);
                         if (!mode.equals("inventory")) {

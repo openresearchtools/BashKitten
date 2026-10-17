@@ -9,7 +9,7 @@ import re
 import subprocess
 import zipfile
 
-from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET
+from release import validate_termux_update, TERMUX_UPDATE_ASSET, TERMUX_BOOTSTRAP_ASSET, TERMUX_PREPARER_ASSET
 
 ROOT = Path(__file__).resolve().parents[2]
 VERIFIER = 'agent/packaging/browser-component.py'
@@ -40,6 +40,7 @@ def fingerprint(target, legacy_verifier=None):
                   'agent/src/server/access/NOTICE', 'agent/src/server/access/TORKITTEN-LICENSE',
                   'agent/src/server/models/third_party', 'agent/src/server/updates/platform-packages.mjs',
                   'agent/src/server/platform/termux/updates-bootstrap.mjs',
+                  'agent/src/server/platform/termux/updates-prepare.py',
                   '.github/workflows/auth-native.yml', '.github/workflows/search-native.yml']
     else:
         paths += ['.github/builders/linux.yml', 'agent/packaging/linux/prepare-runner.sh',
@@ -107,6 +108,8 @@ def verify(directory, target, digest):
                                              abi=manifest['architecture'])
             if hashlib.sha256(archive.read(TERMUX_BOOTSTRAP_ASSET)).hexdigest() != pairing['bootstrapSha256']:
                 raise ValueError('APK update bootstrap does not match its paired manifest')
+            if archive.read(TERMUX_PREPARER_ASSET) != (ROOT / 'agent/src/server/platform/termux/updates-prepare.py').read_bytes():
+                raise ValueError('APK bundled-runtime preparation does not match this source')
         expected_source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
         if pairing['sourceCommit'] != expected_source or pairing['sourceCommit'] != manifest['source']:
             raise ValueError('APK resources must be reassembled for this revision’s Termux packages')

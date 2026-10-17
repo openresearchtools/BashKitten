@@ -127,6 +127,7 @@ else:
 a.output.mkdir(parents=True, exist_ok=True)
 shutil.copy2(pairing_path, a.output / 'termux-update.json')
 (a.output / 'updates-bootstrap.mjs').write_bytes(bootstrap)
+shutil.copy2(root / 'agent/src/server/platform/termux/updates-prepare.py', a.output / 'updates-prepare.py')
 licenses = a.output / 'licenses.json'
 for record in records:
     validate_text(record['name'], record.get('text', ''))
