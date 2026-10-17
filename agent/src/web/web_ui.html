@@ -373,20 +373,16 @@
     #oauthCode { width: 100%; margin-top: 8px; }
     #oauthUserCode { display: block; padding: 8px 0; font: 600 20px monospace; letter-spacing: 2px; }
     #prompt { display: block; width: 100%; min-height: 42px; max-height: 160px; padding: 10px 11px 2px; resize: none; border: 0; outline: 0; background: transparent; line-height: 1.4; }
-    .composer-toolbar { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: 4px; padding: 4px 8px 8px; }
-    .composer-model-options, .composer-chat-options, .composer-send { display: flex; min-width: 0; align-items: center; gap: 4px; }
-    .composer-model-options { flex: 0 1 auto; max-width: 100%; }
-    .composer-chat-options { flex-wrap: wrap; }
-    .composer-send { flex: 0 0 auto; margin-inline-start: auto; }
-    .composer-toolbar select { field-sizing: content; flex: 0 1 auto; height: 27px; min-width: 0; padding: 0 18px 0 4px; overflow: hidden; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; }
-    .composer-toolbar select:hover { border-color: var(--line); background: var(--surface-2); color: var(--text); }
+    .composer-toolbar { display: flex; flex-wrap: wrap; min-width: 0; align-items: center; gap: 2px; padding: 4px 6px 8px; }
+    .composer-send { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; margin-inline-start: auto; }
+    .composer-toolbar select { field-sizing: content; flex: 0 1 auto; height: 27px; min-width: 0; padding: 0 10px 0 0; overflow: hidden; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 11px; text-overflow: ellipsis; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='m1 1 3 3 3-3' stroke='%23888' fill='none'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 2px center; }
+    .composer-toolbar select:hover { border-color: var(--line); background-color: var(--surface-2); color: var(--text); }
     .composer-toolbar select:focus { border-color: var(--line); outline: 0; box-shadow: none; }
-    #model { width: 18ch; max-width: 150px; }
+    #model { flex: 1 1 32px; width: 8ch; min-width: 32px; }
     #thinking, #subagents, #phoneMode { flex-shrink: 0; }
     #attachBtn { flex: 0 0 27px; width: 27px; height: 27px; }
-    @container (max-width: 460px) {
-      .composer-model-options { flex-basis: 100%; }
-      .composer-chat-options { flex: 1 1 120px; }
+    @container (min-width: 461px) {
+      #model { max-width: 18ch; }
     }
     #folderBtn:not(:disabled) { border-color:var(--ok); box-shadow:0 0 0 1px var(--ok); }
     #composerActions { position:absolute; z-index:12; bottom:43px; left:8px; min-width:180px; padding:5px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius-control); box-shadow:0 4px 18px #0002; }
@@ -691,7 +687,6 @@
             <div id="goalChip" class="hidden"><span>Goal</span><button id="removeGoalChip" type="button" aria-label="Remove goal from message">×</button></div>
             <div class="composer-toolbar">
               <input id="files" class="hidden" type="file" multiple>
-              <div class="composer-model-options">
               <button id="attachBtn" class="icon-button" type="button" title="Add files or actions" aria-label="Add files or actions" aria-haspopup="menu" aria-expanded="false" aria-controls="composerActions">＋</button>
               <div id="composerActions" class="hidden" role="menu" aria-label="Composer actions">
                 <button id="menuAttach" data-command="attach" type="button" role="menuitem">Attach files</button>
@@ -704,11 +699,8 @@
               </div>
               <select id="model" title="Model" aria-label="Model"></select>
               <select id="thinking" title="Reasoning" aria-label="Reasoning"></select>
-              </div>
-              <div class="composer-chat-options">
               <select id="subagents" title="Subagents" aria-label="Subagents"><option value="off">Agents off</option><option value="on">Agents on</option><option value="settings">Settings…</option></select>
               <select id="phoneMode" class="hidden" title="Phone" aria-label="Phone"><option value="off">Phone off</option><option value="call-in">Call-in only</option><option value="messages">Messages</option><option value="calls">Calls</option></select>
-              </div>
               <div class="composer-send">
               <button id="dictationButton" class="primary hidden" type="button" title="Dictate a message" aria-label="Dictate a message" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg></button>
               <button id="sendBtn" class="primary" type="button" data-mode="play" title="Send" aria-label="Send">▶</button>
