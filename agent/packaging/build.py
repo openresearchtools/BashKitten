@@ -37,6 +37,16 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+def license_files(root):
+    """Include retained legal texts whose names identify their license, not just LICENSE."""
+    return sorted(path for path in root.rglob('*') if path.is_file() and
+        (path.suffix.lower() in {'', '.txt', '.md', '.rst', '.lib', '.lesser'} or
+         re.fullmatch(r'\.\d+', path.suffix)) and (
+        re.match(r'^(?:licen[cs]e|copying|copyright|notice|third[_-]party)(?:$|[-._])', path.name, re.I)
+        or any(part.lower() in {'licenses', 'licences', 'legal'}
+               for part in path.relative_to(root).parts[:-1])))
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)
@@ -155,8 +165,7 @@ def install_machines(args, app, revision, version):
                 run(['dpkg-deb', '-x', str(deb), extracted])
                 notice_root = Path(extracted) / ('usr/share/bashkitten-os' if name == 'bashkitten-os'
                                                 else 'usr/share/bashkitten-machines-guest')
-                notices = sorted(p for p in notice_root.rglob('*') if p.is_file() and
-                                 (re.search(r'license|licence|copying|copyright|notice', p.name, re.I)))
+                notices = license_files(notice_root)
                 require(notices, 'Missing full guest package license texts: ' + name)
                 guest_licenses.append({'name': name, 'version': version, 'source':
                     'https://github.com/openresearchtools/bashkitten/tree/' + revision,
@@ -226,8 +235,7 @@ def collect_termux_os(deb, app, revision, architecture, version):
     with tempfile.TemporaryDirectory(prefix='termux-os-notices-', dir=app.parent) as temporary:
         run(['dpkg-deb', '-x', str(deb), temporary])
         root = Path(temporary) / 'data/data/com.termux/files/usr/share/bashkitten-os'
-        paths = sorted(p for p in root.rglob('*') if p.is_file() and
-                       re.search(r'license|licence|copying|copyright|notice', p.name, re.I))
+        paths = license_files(root)
         require(paths, 'Termux OS package lacks full license texts')
         write_json(app / 'os-licenses.json', [{'name': 'BashKitten OS', 'version': version + '-1',
             'text': '\n\n'.join(str(p.relative_to(root)) + '\n' + p.read_text() for p in paths)}])
