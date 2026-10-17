@@ -3,6 +3,7 @@
 """Build the native Debian guest service package from its pinned offline source."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -39,6 +40,23 @@ def main():
     binary=args.work/'target/release/bashkitten-sudo'
     for name in ['bashkitten-sudo','bashkitten-sudo-exec','sudo-policy']:
         shutil.copy2(binary,bindir/name)
+    # Reuse the engine source verifier; only the unmodified native helper is
+    # needed in the guest, not another libfuse or a privileged mount service.
+    spec=importlib.util.spec_from_file_location('machine_build',repo/'agent/packaging/machines/build.py')
+    machine_build=importlib.util.module_from_spec(spec);spec.loader.exec_module(machine_build)
+    fuse_vendor=ROOT/'vendor/libfuse'
+    fuse_record=machine_build.verify_source(fuse_vendor)
+    fuse_source=args.work/'libfuse'
+    if fuse_source.exists():shutil.rmtree(fuse_source)
+    shutil.copytree(fuse_vendor/'source',fuse_source,symlinks=True)
+    run(['meson','setup','build','--prefix=/usr','--sysconfdir=/etc','--buildtype=release',
+         '-Dexamples=false','-Dtests=false','-Duseroot=false','-Dinitscriptdir=',
+         '-Denable-io-uring=false'],cwd=fuse_source)
+    run(['meson','compile','-C','build','-j','2','fusermount3'],cwd=fuse_source)
+    shutil.copy2(fuse_source/'build/util/fusermount3',bindir/'fusermount3')
+    (bindir/'fusermount3').chmod(0o4755)
+    commands=stage/'usr/bin';commands.mkdir(parents=True)
+    (commands/'fusermount3').symlink_to('/usr/lib/bashkitten/machines/bin/fusermount3')
     units=stage/'usr/lib/systemd/system';units.mkdir(parents=True)
     for file in (ROOT/'guest/assets').iterdir():
         destination=(units if file.suffix in ['.service','.socket'] else bindir)/file.name
@@ -52,10 +70,15 @@ def main():
     shutil.copy2(ROOT/'NOTICE',docs/'copyright')
     libc=ROOT/'guest/sudo-bridge/vendor/libc'
     for license in libc.glob('LICENSE*'):shutil.copy2(license,docs/('libc-'+license.name))
-    (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/BashKitten','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.189','checksum':'3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2'}},indent=2)+'\n')
+    for license in fuse_record['license_paths']:
+        shutil.copy2(fuse_vendor/license,docs/('libfuse-'+Path(license).name))
+    (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/BashKitten','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.189','checksum':'3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2'},'fusermount3':fuse_record},indent=2)+'\n')
     copyright_dir=stage/'usr/share/doc/bashkitten-machines-guest';copyright_dir.mkdir(parents=True)
     (copyright_dir/'copyright').symlink_to('../../bashkitten-machines-guest/copyright')
     debian=stage/'DEBIAN';debian.mkdir()
+    for script in (ROOT/'guest/debian').iterdir():
+        shutil.copy2(script,debian/script.name)
+        (debian/script.name).chmod(0o755)
     (debian/'control').write_text(f'''Package: bashkitten-machines-guest
 Version: {args.version}
 Architecture: {args.architecture}

@@ -24,6 +24,14 @@ installation. The named patch is retained under patches/libfuse; lib/mount.c
 and this adaptation retain that file's GNU LGPLv2 terms. Original libfuse source
 and full license texts remain in vendor/libfuse.
 
+Guest FUSE integration, 18 October 2026: replace the AppImage-only Python mount
+bridge with the unmodified native fusermount3 from the same pinned libfuse
+3.18.3 source. The guest package installs it at a private path with guest-root
+setuid ownership and diverts the distro command to a symlink, preserving normal
+libfuse/AppImage/document-portal semantics. No host setuid helper or policy
+change is installed. Its GPLv2 license and upstream notices are included in the
+guest package; the pristine Buzzard bridge remains in upstream/buzzard-runtime.
+
 Private Podman 6.1.3 modification, 11 October 2026: the rootless pause process
 requires the configured packaged catatonit executable. It never searches the
 host's catatonit paths or silently substitutes another pause implementation.

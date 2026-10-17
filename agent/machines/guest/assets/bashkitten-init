@@ -5,21 +5,6 @@ set -eu
 install -d -m 0700 -o 1000 -g 1000 /run/user/1000
 install -d -m 0755 /run/bashkitten
 
-# Restore the conventional FUSE mount service expected by native Type-2
-# AppImages. Podman remains the sole owner of container capabilities and mount
-# policy; this guest-side service does not change the container definition.
-if [ -c /dev/fuse ]; then
-    test -x /usr/bin/fusermount3
-    runtime=/usr/lib/bashkitten/machines
-    test -x "$runtime/bin/bashkitten-fusermount"
-    test -x "$runtime/bin/bashkitten-fusermount-exec"
-    install -d -o 0 -g 0 -m 0700 /run/bashkitten-appimage-helper
-    install -o 0 -g 0 -m 0755 \
-        /usr/bin/fusermount3 \
-        /run/bashkitten-appimage-helper/fusermount3.real
-    mount --bind "$runtime/bin/bashkitten-fusermount" /usr/bin/fusermount3
-fi
-
 if [ ! -s /etc/machine-id ]; then
     systemd-machine-id-setup
 fi

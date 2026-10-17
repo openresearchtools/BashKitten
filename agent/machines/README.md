@@ -81,7 +81,12 @@ The protected Agent remains in the host browser. Guest tray Quit/Stop stops only
 that guest's BashKitten group; closing a window/tray does not stop the environment.
 
 `build-guest.py` produces the native amd64/arm64 guest service `.deb` offline from
-the pinned sudo bridge/libc source. Main release composition stages matching
+the pinned sudo bridge/libc and libfuse sources. The guest-only native FUSE
+helper retains upstream mount validation and setuid credentials within the
+rootless guest user namespace. A package-owned diversion preserves the distro
+helper for removal/upgrades; ordinary libfuse and AppImages use the same native
+command semantics, without an AppImage-only mount broker or host policy changes.
+Main release composition stages matching
 BashKitten, BashKitten OS and guest service `.deb` artifacts into `image/packages`
 with `manifest.json` (revision, architecture, package file/checksum entries).
 Provisioning verifies this manifest before building the pinned Debian image. Its

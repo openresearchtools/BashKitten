@@ -72,7 +72,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/guest-cache
-          key: guest-native-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/machines/guest/**', 'agent/machines/build-guest.py') }}
+          key: guest-native-${{ matrix.architecture }}-${{ hashFiles('os/**', 'agent/machines/guest/**', 'agent/machines/build-guest.py', 'agent/machines/vendor/libfuse/**', 'agent/packaging/machines/build.py') }}
           restore-keys: guest-native-${{ matrix.architecture }}-
       - name: Build guest packages against the pinned Debian guest ABI
         env:

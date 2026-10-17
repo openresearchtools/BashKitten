@@ -86,9 +86,7 @@ export async function defaults(id, name) {
   return { schema: 1, id, name, autostart: false, rootfs: p.rootfs, containerfile: p.containerfile,
     launch: { executable: helper('podman'), cwd: p.directory, environment: {}, arguments: [
       'create', '--name', containerName(id), '--label', `${machineLabel}=${id}`, '--systemd=always', '--pids-limit=-1',
-      // The guest-root FUSE broker duplicates the UID1000 libfuse socket with
-      // pidfd_getfd, whose cross-UID check needs SYS_PTRACE in this user namespace.
-      userNamespace, '--group-add=keep-groups', '--user=0', '--device=/dev/fuse', '--cap-add=SYS_ADMIN', '--cap-add=SYS_PTRACE', '--env=container=podman', '--env=BASHKITTEN_MACHINE_ID=' + id,
+      userNamespace, '--group-add=keep-groups', '--user=0', '--device=/dev/fuse', '--cap-add=SYS_ADMIN', '--env=container=podman', '--env=BASHKITTEN_MACHINE_ID=' + id,
       '--mount', mount(p.rootfs, '/'), '--mount', mount(p.exchange, '/run/bashkitten-host'),
       '--mount', mount(p.settings, '/run/bashkitten-settings', true),
       '--mount', mount(p.guestDisplay, '/run/bashkitten-display'),
