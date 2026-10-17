@@ -80,6 +80,15 @@ def archive(root, output):
 def notice(name, version, license_name, text, source):
     if not text.strip():
         raise RuntimeError('Empty license notice: ' + name)
+    compact = ' '.join(text.split())
+    if (re.fullmatch(r'(?:[45]\d\d\s*[: -]?\s*)?(?:not found|forbidden|access denied|'
+                     r'bad gateway|service unavailable|internal server error)[.!]?', compact, re.I)
+            or re.search(r'<(?:title|h1|Code)>\s*(?:[45]\d\d\b|not found|forbidden|AccessDenied)', text, re.I)):
+        raise RuntimeError('Error response instead of license notice: ' + name)
+    if (compact == license_name or re.fullmatch(
+            r'https?://\S+|SPDX-License-Identifier:\s*[^\n]+|(?:see|refer to)\s+[^\n]+|'
+            r'(?:\.{1,2}/)?(?:[\w.-]+/)*(?:LICENSE|COPYING|NOTICE)[\w.-]*', text.strip(), re.I)):
+        raise RuntimeError('Full license text required, not a pointer: ' + name)
     return {'name': name, 'version': version, 'license': license_name, 'text': text, 'source': source}
 
 
@@ -277,11 +286,15 @@ def main():
                     continue
                 dependency = record['dependency_sources'][package['name']]
                 local_notice = {
-                    'c-ares': 'share/doc/c-ares/copyright', 'libicu': 'share/doc/libicu/LICENSE',
+                    'c-ares': 'share/doc/c-ares/copyright',
                     'zlib': 'share/doc/zlib/copyright',
                 }.get(package['name'])
                 if local_notice:
                     license_text = (prefixes[package['name']] / local_notice).read_text()
+                elif package['name'] == 'libicu':
+                    # The pinned Termux package's LICENSE is an HTTP error body.
+                    # Use the complete notices from its checksummed upstream source.
+                    license_text = read_license(fetch(dependency, cache), ['icu/LICENSE'])
                 elif package['name'] == 'libsqlite':
                     # The public-domain dedication is also retained in the complete source archive.
                     license_text = read_license(fetch(dependency, cache), ['/LICENSE.md'])
