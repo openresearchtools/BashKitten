@@ -56,6 +56,8 @@ jobs:
         from pathlib import Path
         release = json.loads(Path('release.json').read_text())
         notes = Path('release-notes.md').read_text()
+        if any(not path.is_file() or path.stat().st_size >= 2 * 1024 ** 3 for path in Path('.').iterdir()):
+            raise SystemExit('Release assets must be files smaller than 2 GiB; rebuild oversized source archives as checksummed parts')
         if release['sourceCommit'] != os.environ['CANDIDATE_REVISION']:
             raise SystemExit('Candidate source does not match the successful build')
         if not release.get('testingRelease') or 'testing-releases.svg' not in notes or 'Testing release only. Not ready for production.' not in notes:
