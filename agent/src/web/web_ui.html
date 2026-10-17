@@ -1933,10 +1933,12 @@
     }
 
     function refreshVisibleNewModels() {
-      if (!initialized || !csrf || authRequired || bootPending || booting || current || draftRestoring || document.hidden || visibleModelsRefresh) return;
+      if (!initialized || !csrf || authRequired || bootPending || booting || current || draftRestoring || document.hidden) return;
+      if (visibleModelsRefresh) return visibleModelsRefresh;
       // New chats have no Pi worker to emit models_changed. Returning from
       // native Local AI/provider setup must discover the newly saved default.
       visibleModelsRefresh = loadModels().catch(() => {}).finally(() => { visibleModelsRefresh = null; });
+      return visibleModelsRefresh;
     }
     window.addEventListener('focus', refreshVisibleNewModels);
     document.addEventListener('visibilitychange', refreshVisibleNewModels);
@@ -3994,7 +3996,10 @@
         }
         if (action === 'snapshot') return { sessions: sessionCache, projects: projectCache,
           selected: current?.id || null, nextOffset: nextSessionOffset, fileManager: fileManagerAllowed };
-        if (action === 'more' || action === 'refresh') { await loadSessions(action === 'more'); return this.call('snapshot'); }
+        if (action === 'more' || action === 'refresh') {
+          if (action === 'refresh') await refreshVisibleNewModels();
+          await loadSessions(action === 'more'); return this.call('snapshot');
+        }
         if (action === 'open' || action === 'new') {
           const key = current?.id || 'new:' + (pendingProjectId || '');
           const draft = window.bashkittenDraft.capture(false);
