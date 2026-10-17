@@ -9,7 +9,7 @@ mod wire;
 use anyhow::{Context, Result, ensure};
 use gateway::*;
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     env, fs,
     io::Write,
     os::{
@@ -189,7 +189,7 @@ fn run_gateway(
     )?;
     let mut latest: Option<DmabufFrame> = None;
     let mut client: Option<OwnedFd> = None;
-    let mut held = HashSet::new();
+    let mut held = HashMap::new();
     let mut buttons = HashSet::new();
     let mut cursors = HashSet::new();
     let mut generation = 1;
@@ -288,8 +288,10 @@ fn run_gateway(
                                         visible && f.width == width && f.height == height
                                     }) {
                                         frame.geometry_generation = g;
-                                        send_frame(fd.as_raw_fd(), frame)?;
-                                        held.insert(frame.id);
+                                        if !held.contains_key(&frame.id) {
+                                            send_frame(fd.as_raw_fd(), frame)?;
+                                            held.insert(frame.id, g);
+                                        }
                                     }
                                     Ok(())
                                 }
@@ -297,12 +299,12 @@ fn run_gateway(
                                     visible = value;
                                     if !visible {
                                         release_input(&mut commands, &mut buttons, generation)?;
-                                    } else if let Some(frame) = latest
-                                        .as_ref()
-                                        .filter(|f| f.geometry_generation == generation)
-                                    {
+                                    } else if let Some(frame) = latest.as_ref().filter(|f| {
+                                        f.geometry_generation == generation
+                                            && !held.contains_key(&f.id)
+                                    }) {
                                         send_frame(fd.as_raw_fd(), frame)?;
-                                        held.insert(frame.id);
+                                        held.insert(frame.id, frame.geometry_generation);
                                     }
                                     Ok(())
                                 }
@@ -360,10 +362,21 @@ fn run_gateway(
                                     Ok(())
                                 }
                                 Message::Release { id } => {
-                                    if held.remove(&id)
-                                        && latest.as_ref().is_none_or(|f| f.id != id)
-                                    {
-                                        release(&mut commands, id);
+                                    if let Some(sent_generation) = held.remove(&id) {
+                                        if let Some(frame) = latest.as_ref().filter(|f| f.id == id) {
+                                            // A resize can retag the retained frame while its
+                                            // previous generation is still in flight. Wait for
+                                            // that lease before sending it again: the renderer
+                                            // suppresses duplicate outstanding frame IDs.
+                                            if visible
+                                                && frame.geometry_generation != sent_generation
+                                            {
+                                                send_frame(fd.as_raw_fd(), frame)?;
+                                                held.insert(id, frame.geometry_generation);
+                                            }
+                                        } else {
+                                            release(&mut commands, id);
+                                        }
                                     }
                                     Ok(())
                                 }
@@ -403,7 +416,7 @@ fn run_gateway(
             for id in cursors.drain() {
                 commands.send(GatewayCommand::ReleaseCursor { id })?;
             }
-            for id in held.drain() {
+            for (id, _) in held.drain() {
                 if latest.as_ref().is_none_or(|f| f.id != id) {
                     release(&mut commands, id)
                 }
@@ -414,7 +427,7 @@ fn run_gateway(
             match event {
                 GatewayEvent::GuestFrame(frame) => {
                     if let Some(previous) = latest.replace(frame) {
-                        if !held.contains(&previous.id) {
+                        if !held.contains_key(&previous.id) {
                             release(&mut commands, previous.id);
                         }
                     }
@@ -423,7 +436,7 @@ fn run_gateway(
                         visible && held.len() < 3 && frame.geometry_generation == generation
                     }) {
                         if send_frame(fd.as_raw_fd(), frame).is_ok() {
-                            held.insert(frame.id);
+                            held.insert(frame.id, frame.geometry_generation);
                         }
                     }
                     // Keep one guest lease for an immediate, current reattachment.
@@ -679,7 +692,6 @@ fn run_renderer(path: &Path, host: i32) -> Result<()> {
                             }
                         }
                         if let Message::Frame {
-                            id,
                             width,
                             height,
                             fourcc,
@@ -776,7 +788,10 @@ fn run_renderer(path: &Path, host: i32) -> Result<()> {
                                 *strides = output_strides;
                                 *offsets = output_offsets;
                                 *modifier = output_modifier;
-                                wire::send(guest.as_raw_fd(), &Message::Release { id: *id }, &[])?;
+                                // Keep the guest lease until the host releases this
+                                // snapshot, as on the software path. Releasing it
+                                // here permits the gateway to resend the same ID
+                                // while snapshots still marks it as outstanding.
                             }
                         }
                     } else {
