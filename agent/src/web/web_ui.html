@@ -851,6 +851,7 @@
     const chatDrafts = new Map();
     let nextSessionOffset = null;
     let loadingSessions = null;
+    let sessionCatalogueReady = false;
     const $ = selector => selector === '#chatInner' && historyRenderTarget ? historyRenderTarget : document.querySelector(selector);
     let nativeHost = window.bashkittenHost || null;
     let nativeLinux = nativeHost?.platform === 'linux' && nativeHost?.local === true;
@@ -896,6 +897,7 @@
     function requireLogin() {
       authRequired = true;
       csrf = '';
+      sessionCatalogueReady = false;
       phoneAvailable = false;
       showAgentChoice();
       void cancelDictation();
@@ -2436,6 +2438,7 @@
           more.onclick = () => loadSessions(true).catch(error => { $('#composerHint').textContent = error.message; });
           $('#sessions').append(more);
         }
+        sessionCatalogueReady = true;
         return sessionCache;
       })();
       try { return await loadingSessions; } finally { loadingSessions = null; }
@@ -3984,6 +3987,11 @@
       async call(action, value = {}) {
         if (action === 'folders-cancel') { nativeFolderRequests.get(value.requestId)?.abort(); nativeFolderRequests.delete(value.requestId); return true; }
         if (!initialized || !csrf) throw Error('The chat is still connecting');
+        if (action === 'snapshot' && !sessionCatalogueReady) {
+          // Native readiness must include the first catalogue, not just login.
+          // Coalesce with boot; its restored chat still uses sessionView guards.
+          await loadSessions(); return this.call('snapshot');
+        }
         if (action === 'snapshot') return { sessions: sessionCache, projects: projectCache,
           selected: current?.id || null, nextOffset: nextSessionOffset, fileManager: fileManagerAllowed };
         if (action === 'more' || action === 'refresh') { await loadSessions(action === 'more'); return this.call('snapshot'); }
