@@ -36,6 +36,14 @@ source and recipe URLs, versions, index hashes and SHA256 hashes are in
 `lock.json`. A newer official Linux patch version is not represented as a
 Termux build before Termux publishes it.
 
+On 17 October 2026 the primary Termux pool had removed the pinned npm 11.20.0
+and SQLite 3.53.4 downloads. Their fixed URLs now use the NYIST mirror listed by
+[Termux's mirror inventory](https://github.com/termux/termux-tools/blob/05c857ee9af84fb762efba3042cc9383ad1bacab/mirrors/chinese_mainland/mirror.nyist.edu.cn).
+All three downloaded files (npm `all`, SQLite `aarch64` and `x86_64`) matched
+the original signed-index SHA256 pins and package identities. Versions, hashes,
+source archives, recipes and license inputs are unchanged. The builder uses
+only each committed URL and still fails on download or hash errors.
+
 The Android adaptation only selects Node's recursive ELF dependency closure
 and sets each object's relative RUNPATH with 16 KiB alignment. The Node ELF
 uses `$ORIGIN/../lib`; private libraries use `$ORIGIN`. Android's libc, libm,
