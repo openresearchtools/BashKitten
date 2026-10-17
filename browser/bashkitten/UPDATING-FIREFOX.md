@@ -170,6 +170,17 @@ to hide startup errors. Fresh installed-profile startup and request observation
 must distinguish authorized security traffic from prohibited service traffic;
 syntax/source checks do not establish that acceptance.
 
+The new-tab wallpaper feed also applies the attachment policy before resolving
+server metadata or broadcasting image URLs: its content CSS loads those URLs
+directly, outside the Remote Settings attachment downloader. For this offline
+collection, retain the packaged solid colors and local custom-image upload,
+rendering and removal controls, but omit remote catalog images/thumbnails.
+Keep saved choices and files, the packaged catalog and its attribution. Do not
+disable the entire wallpaper feed or master switch, or alter XFCE wallpaper.
+Installed acceptance must cover fresh and retained profiles, local customization
+and absence of wallpaper metadata/CDN requests separately from permitted
+security requests.
+
 Build and manual acceptance must cover both Android architectures and both Linux
 architectures. On Android check that changing tabs dismisses download prompts,
 immediate taps cannot approve fresh permission/download prompts, and ordinary

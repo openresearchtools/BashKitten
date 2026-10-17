@@ -4,6 +4,8 @@
 
 const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
+  BashKittenSettingsPolicy:
+    "resource://services-settings/BashKittenSettingsPolicy.sys.mjs",
   RemoteSettings: "resource://services-settings/remote-settings.sys.mjs",
   Utils: "resource://services-settings/Utils.sys.mjs",
 });
@@ -157,7 +159,23 @@ export class WallpaperFeed {
     }
 
     // retrieving all records in collection
-    const records = await this.wallpaperClient.get();
+    let records = await this.wallpaperClient.get();
+    const canDownload = lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+      this.wallpaperClient.bucketName,
+      this.wallpaperClient.collectionName
+    );
+    if (!canDownload) {
+      // BashKitten: catalog URLs load directly in content, bypassing the Remote
+      // Settings attachment downloader. Keep only local colors when this
+      // collection is offline; custom uploads use their own local URI above.
+      records = records?.filter(
+        record =>
+          record.solid_color &&
+          !record.attachment &&
+          !record.wallpaperUrl &&
+          !record.thumbnail
+      );
+    }
     if (!records?.length) {
       return;
     }
@@ -167,13 +185,15 @@ export class WallpaperFeed {
     );
 
     let baseAttachmentURL = RS_FALLBACK_BASE_URL;
-    try {
-      baseAttachmentURL = await lazy.Utils.baseAttachmentsURL();
-    } catch (error) {
-      console.error(
-        `Error fetching remote settings base url from CDN. Falling back to ${RS_FALLBACK_BASE_URL}`,
-        error
-      );
+    if (canDownload) {
+      try {
+        baseAttachmentURL = await lazy.Utils.baseAttachmentsURL();
+      } catch (error) {
+        console.error(
+          `Error fetching remote settings base url from CDN. Falling back to ${RS_FALLBACK_BASE_URL}`,
+          error
+        );
+      }
     }
 
     const wallpapers = [
