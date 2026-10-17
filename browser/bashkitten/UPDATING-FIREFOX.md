@@ -157,6 +157,19 @@ store remain disabled. CRLite enforces revocations with Gecko's platform channel
 unchanged. These background list requests disclose the client's IP to Mozilla's
 Remote Settings/attachment/signature servers, not visited URLs or file contents.
 
+The user's 17 October 2026 clarification retains this security-only boundary:
+certificate and blocking-data services are permitted, while Sync/accounts,
+profile backup, telemetry, studies and unrelated Mozilla product services are
+not. The shared preferences disable the backup service's startup, scheduler,
+archive and restore controls; disabling upload alone would still initialize its
+idle measurements. Direct Remote Settings sync and attachment entry points must
+apply the same collection policy as the normal polling path. Keep packaged and
+cached security data, signature verification and normal certificate checks.
+Do not clear security endpoints or replace missing records with invented data
+to hide startup errors. Fresh installed-profile startup and request observation
+must distinguish authorized security traffic from prohibited service traffic;
+syntax/source checks do not establish that acceptance.
+
 Build and manual acceptance must cover both Android architectures and both Linux
 architectures. On Android check that changing tabs dismisses download prompts,
 immediate taps cannot approve fresh permission/download prompts, and ordinary
