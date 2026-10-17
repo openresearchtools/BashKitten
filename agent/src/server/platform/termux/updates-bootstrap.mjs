@@ -307,6 +307,18 @@ async function bootstrap(request) {
       try { return await socketRequest(paths.control, '/status', undefined, 3000); }
       catch (error) { if (['ENOENT', 'ECONNREFUSED'].includes(error.code)) return null; throw error; }
     }
+    async function checkPackages(job, input, refresh = true) {
+      await job.phase('Checking ' + input.channel + ' package updates');
+      const result = await runtime.sourceResult('apt', async () => {
+        if (refresh) await apt(job, ['update']);
+        const options = await packageOptions(job, input.target, input.channel);
+        const output = await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true });
+        const packages = [...output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)].map(([, name, current, latest]) => ({ name, current: current || 'Not installed', latest,
+          ...(input.target.packages.some(item => item.name === name.split(':')[0]) ? { managedByApk: true } : {}) }));
+        return { channel: input.channel, available: packages.filter(item => !item.managedByApk).length, packages };
+      });
+      if (result.error) throw Error(result.error);
+    }
     async function beforeApply(job, fn) {
       // Do not retire a controller while its existing package/LocalAI job is active.
       while (true) {
@@ -325,7 +337,15 @@ async function bootstrap(request) {
         const { acquireWake, releaseWake } = await importInstalled('access/wake.mjs');
         await acquireWake();
         let failure;
-        try { return await fn(); } catch (error) { failure = error; throw error; }
+        try {
+          // Even a failed transaction can change installed packages. Drop the
+          // old count before applying, then recompute from the installed state.
+          const sourcesFile = path.join(dataDir, 'updates/sources.json');
+          const sources = await readJson(sourcesFile, {}); delete sources.apt; await writeJson(sourcesFile, sources);
+          const result = await fn();
+          await checkPackages(job, job.job.input, false);
+          return result;
+        } catch (error) { failure = error; throw error; }
         finally { try { await releaseWake(); } catch (error) { if (!failure) throw error; await job.log('Wake-lock release: ' + error.message + '\n'); } }
       });
     }
@@ -337,19 +357,8 @@ async function bootstrap(request) {
         await command(job, 'dpkg', ['--force-confdef', '--force-confold', '--configure', '-a']);
         await applyPackages(job, input);
       }),
-      'check-packages': async (job, input) => {
-        await job.phase('Checking ' + input.channel + ' package updates');
-        const result = await runtime.sourceResult('apt', async () => {
-          await apt(job, ['update']);
-          const options = await packageOptions(job, input.target, input.channel);
-          const output = await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true });
-          const packages = [...output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)].map(([, name, current, latest]) => ({ name, current: current || 'Not installed', latest,
-            ...(target.packages.some(item => item.name === name.split(':')[0]) ? { managedByApk: true } : {}) }));
-          return { channel: input.channel, available: packages.filter(item => !item.managedByApk).length, packages };
-        });
-        if (result.error) throw Error(result.error);
-      },
-      'refresh-lists': job => apt(job, ['update']),
+      'check-packages': checkPackages,
+      'refresh-lists': checkPackages,
       'update-pi': runtime.installPi, 'rollback-pi': runtime.rollbackPi,
     };
     const jobs = new UpdateJobs(handlers, directory);
