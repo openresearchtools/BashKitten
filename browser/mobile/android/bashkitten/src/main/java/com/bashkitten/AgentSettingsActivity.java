@@ -13,7 +13,10 @@ import android.widget.TextView;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import com.bashkitten.phone.PhoneSettingsAdapter;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -47,6 +50,7 @@ public final class AgentSettingsActivity extends ProductActivity {
     private volatile JSONObject workloadReading = object("cpuPercent", JSONObject.NULL, "pending", true);
     private boolean workloadInFlight;
     private String modelTestOwner;
+    private CompletableFuture<JSONObject> recordRead;
 
     public static void open(Activity activity, String section) {
         BrowserApp.get(activity).agent.settingsOpened();
@@ -148,7 +152,11 @@ public final class AgentSettingsActivity extends ProductActivity {
             else if (section.equals("performance") && method.equals("performance-sample")) operation = sample();
             else if (section.equals("performance") && method.equals("performance-close")) { stopCounters(); operation = CompletableFuture.completedFuture(new JSONObject()); }
             else throw new SecurityException("Unsupported settings operation");
-            operation.whenComplete((value, error) -> app.main.post(() -> reply.accept(object(error == null ? "result" : "error", error == null ? value : message(error)).toString())));
+            // Complete runtime notices can be large; serialize outside the UI thread.
+            operation.whenCompleteAsync((value, error) -> {
+                String response = object(error == null ? "result" : "error", error == null ? value : message(error)).toString();
+                app.main.post(() -> reply.accept(response));
+            });
         } catch (Exception error) { reply.accept(object("error", message(error)).toString()); }
     }
     private CompletableFuture<JSONObject> localAI(String method, JSONObject args) {
@@ -186,7 +194,7 @@ public final class AgentSettingsActivity extends ProductActivity {
             ((ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("BashKitten", args.optString("text")));
             return CompletableFuture.completedFuture(new JSONObject());
         }
-        if (method.equals("localai-open-record")) return command("localai-record", args);
+        if (method.equals("localai-open-record")) return openRecord(args);
         if (!LOCAL_AI.contains(method)) throw new SecurityException("Unsupported LocalAI operation");
         return command(method, args);
     }
@@ -194,6 +202,39 @@ public final class AgentSettingsActivity extends ProductActivity {
         CompletableFuture<JSONObject> result = new CompletableFuture<>();
         app.agent.command(name, args, result::complete, error -> result.completeExceptionally(new IllegalStateException(error)));
         return result;
+    }
+    private CompletableFuture<JSONObject> openRecord(JSONObject args) {
+        cancelRecordRead();
+        CompletableFuture<JSONObject> result = new CompletableFuture<>(); recordRead = result;
+        // One authorized gesture owns the native reads; decode UTF-8 only once complete.
+        readRecord(args.optString("engine"), args.optString("record"), new ByteArrayOutputStream(), null, result);
+        return result;
+    }
+    private void readRecord(String engine, String record, ByteArrayOutputStream content, String revision, CompletableFuture<JSONObject> result) {
+        if (result.isDone()) return;
+        if (!active || closed || recordRead != result) { result.cancel(false); return; }
+        int offset = content.size();
+        JSONObject args = object("engine", engine, "record", record, "offset", offset);
+        if (revision != null) args = object("engine", engine, "record", record, "offset", offset, "revision", revision);
+        command("localai-record", args).whenCompleteAsync((value, error) -> {
+            if (result.isDone()) return;
+            try {
+                if (error != null) throw new java.util.concurrent.CompletionException(error);
+                byte[] bytes = Base64.getDecoder().decode(value.getString("data"));
+                long total = value.getLong("total"), next = (long)offset + bytes.length;
+                String current = value.getString("revision");
+                if (value.getLong("offset") != offset || bytes.length > 48 * 1024 || next > total || bytes.length == 0 && next != total ||
+                    !current.matches("[a-f0-9]{64}") || revision != null && !revision.equals(current)) throw new IllegalStateException("Invalid runtime record chunk");
+                content.write(bytes, 0, bytes.length);
+                if (next == total) result.complete(object("name", value.getString("name"), "mimeType", value.getString("mimeType"),
+                    "content", content.toString(StandardCharsets.UTF_8)));
+                else app.main.post(() -> readRecord(engine, record, content, current, result));
+            } catch (Exception failure) { result.completeExceptionally(failure); }
+        });
+    }
+    private void cancelRecordRead() {
+        if (recordRead != null) recordRead.cancel(false);
+        recordRead = null;
     }
     private CompletableFuture<JSONObject> sample() {
         if (sampling != null && !sampling.isDone()) return sampling;
@@ -234,7 +275,7 @@ public final class AgentSettingsActivity extends ProductActivity {
         if (phone != null) phone.refresh();
     }
     @Override protected void onPause() {
-        active = false; stopCounters(); cancelModelCheck();
+        active = false; stopCounters(); cancelModelCheck(); cancelRecordRead();
         if (configured) request("settings.visibility", object("visible", false));
         if (session != null) session.setActive(false);
         super.onPause();
@@ -248,7 +289,7 @@ public final class AgentSettingsActivity extends ProductActivity {
         if (share != null) share.onActivityResult(requestCode, resultCode, data);
     }
     @Override protected void onDestroy() {
-        stopCounters(); cancelModelCheck(); closed = true;
+        stopCounters(); cancelModelCheck(); cancelRecordRead(); closed = true;
         if (phone != null) phone.close(); if (remotes != null) remotes.close(); if (display != null) display.close(); if (share != null) share.close();
         if (autostart != null) autostart.close();
         if (updates != null) updates.close();
