@@ -62,6 +62,20 @@ product version comes from `browser/bashkitten/config/version.txt`; internal npm
 metadata uses its three-component SemVer equivalent. Native architecture and
 Termux 16 KB ELF alignment are checked before creating the package.
 
+The full Linux package installs the `bashkitten-podman` AppArmor conffile for
+its private `/usr/lib/bashkitten/machines/bin/podman` executable. This adapts
+upstream's named-unconfined Podman `userns` policy for the existing Ubuntu
+24.04-based runtime, using ABI 4.0 for AppArmor 4/5. The configure script reloads
+only this profile when AppArmor is active; it preserves administrator edits,
+local overrides and disable/complain choices. AppArmor remains an optional host
+facility; no sysctl, host-wide policy or distro Podman profile is changed.
+Reload failures are reported, and existing kernel/uidmap/device prerequisites
+still apply. Termux and container backend-only packages do not install it.
+`linux/apparmor/` retains the exact upstream source pin, original policy, full
+license and adaptation notice; the offline component licenses and release source
+archive include them. Normal removal retains configuration and loaded policy;
+purge removes only this profile's configuration/cache, following `dh_apparmor`.
+
 `release.py` collects two signed `com.bashkitten` APKs and four complete
 native packages plus corresponding sources. A release must match the exact
 successful candidate run. Runtime/device validation happens outside the repository. Prereleases are published

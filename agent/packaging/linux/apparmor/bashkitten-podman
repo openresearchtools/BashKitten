@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Adapted by BashKitten, 17 October 2026, from AppArmor v5.0.2's podman
+# profile. Use the private executable/name and the Ubuntu 24.04-compatible
+# ABI; spell out its executable mapping instead of the ABI 5 exec_path variable.
+# This is the upstream named-unconfined userns policy, not container confinement.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bashkitten-podman /usr/lib/bashkitten/machines/bin/podman flags=(unconfined) {
+  userns,
+  /usr/lib/bashkitten/machines/bin/podman mr,
+
+  include if exists <local/bashkitten-podman>
+}

@@ -1,0 +1,18 @@
+{
+  "repository": "https://gitlab.com/apparmor/apparmor.git",
+  "release": "v5.0.2",
+  "tagObject": "7448fec192c68c6d68493a91ec66281d166483c6",
+  "commit": "909affc32a13d14ae3a7ccf44d325ae63ce11baf",
+  "files": [
+    {
+      "path": "podman",
+      "upstreamPath": "profiles/apparmor.d/podman",
+      "sha256": "4ac229ffa68568b21dcc3288e579b247ffcc8e946fccc07c1be8fe286bb37058"
+    },
+    {
+      "path": "LICENSE",
+      "upstreamPath": "LICENSE",
+      "sha256": "a7e0cdcbea5c14927cedfc600d46526bdcbb1eb0a4d951e2ea53c2a6de159cb4"
+    }
+  ]
+}
