@@ -5,6 +5,66 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Installed follow-up and remaining blockers — 18 October 2026
+
+The private Intel Weston desktop repeated real native resize, Display tab close,
+sidecar reopen and Applications input with helper `800e6fc078`. Ten captured
+guest process identities were unchanged. The centered transparent wallpaper
+remained proportional with uniform background across both viewport sizes.
+Image clipboard transfers passed in both directions through the native toolbar:
+an ordinary browser image pasted into guest Writer, then Writer's selected image
+copied into a host Local chat draft. That draft was removed without sending.
+These checks used main `31073761ca`, actual Gecko producer `05becb3ab6` and guest
+launcher candidate `1e1a9648a0`; they are not a rebuilt combined-package pass.
+Build receipt: `verification/desktop-800e-wayland/receipt.json`.
+
+The guest initially rendered through software despite the outer GPU label.
+The cause was systemd's guest-user switch dropping the supplementary device
+group retained by rootless crun. `cb0314b308` preserves those inherited groups
+while dropping all user/group IDs to the guest account and clearing inheritable
+and ambient capabilities before either existing session owner starts. Actual
+Display and whole-container Off/On checks passed with the two candidate units:
+XFCE, browser, backend and the existing llama process run as guest UID/GID 1000
+with zero effective/permitted/inheritable/ambient capabilities. GLX reports
+`Mesa Intel(R) Graphics (ARL)`. Only selected Intel `/dev/dri/renderD128` was used;
+host device permissions, ACLs and NVIDIA were untouched. Host BashKitten and
+Podman remain rootless. Evidence is in the private desktop's
+`diagnostics/gpu-groups/summary.json`. The separate document-portal FUSE
+permission error remains under investigation; this GPU result does not close it.
+
+Actual Xorg container testing passed code, rendered/raw Markdown and PDF previews,
+text Download, an existing assistant file citation with matching raw download,
+and compact project creation followed by a real Pi `pwd` in that project folder.
+Native Quit removed all 76 captured owned process identities. PDF row Download
+failed because Gecko's internal PDF handler attempted a protected Agent popup.
+`f537f6cb02` routes explicit trusted file downloads through the existing native
+forced-save helper while preserving the popup guard and document/URL checks.
+Its installed repair check remains separate from the preceding passing previews.
+Evidence: `Bashkitten-Acceptance/xorg-files-project-20261018/acceptance-final.json`.
+
+The signed Android upgrade failure was a missing bootstrap runtime: the old
+153.4.4 backend has no bundled Node at the new updater's expected path.
+`177b9185b4` adds a fixed APK helper that obtains the exact authenticated APT
+backend archive, validates its release/architecture, privately stages only its
+bundled Node and invokes the existing updater owner/idle/install path. Focused
+Java, source and lifecycle checks passed, as did inspection of actual old APIs
+and the published runtime's ELF dependencies. It neither uses system Node nor
+manually upgrades the old fixture. A rebuilt signed APK with matching signed APT
+packages is still required for installed acceptance; CVD 6523 preserves the
+original failure. Build receipt: `verification/signed-upgrade-bootstrap-20261018/`.
+
+An independent Android Callback test found another real blocker: an in-app call
+works, but a call from the saved Kitten contact reaches Telecom and is rejected
+when its microphone foreground service starts from the background. Recording
+permission is already granted. Supported Android call/service lifecycle repair
+and installed contact-call repetition remain required; no privileged workaround
+or claim of completed Callback acceptance is made.
+
+The external `verification/remaining-installed-acceptance-20261018/matrix.md`
+reconciles 17 remaining groups against the frozen plan, amendments and existing
+scoped evidence. In particular, repaired remote Send with Files Off still needs
+the actual encrypted-route repeat. Full feature acceptance remains open.
+
 ## Resumed installed testing and signed publication — 18 October 2026
 
 The existing Android 17 instances, dedicated Intel Weston desktop and owned
