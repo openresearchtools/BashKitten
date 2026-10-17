@@ -25,6 +25,7 @@ public final class UpdatesController {
     private final Set<Runnable> listeners = new HashSet<>();
     private final CompletableFuture<JSONObject> target = new CompletableFuture<>();
     private String script, version = "", availableUrl, checkError = "", matchingError = "";
+    private String channel;
     private long versionCode, statusUnavailableSince;
     private JSONObject available;
     private boolean checking, checked, matching, polling, presented, attempted;
@@ -34,6 +35,7 @@ public final class UpdatesController {
 
     UpdatesController(BrowserApp app, AgentRuntime runtime) {
         this.app = app; this.runtime = runtime;
+        channel = "nightly".equals(app.policies.getString("updates.channel", "stable")) ? "nightly" : "stable";
         io.execute(() -> {
             try {
                 android.content.pm.PackageInfo info = app.getPackageManager().getPackageInfo(app.getPackageName(), 0);
@@ -68,12 +70,13 @@ public final class UpdatesController {
     }
     private CompletableFuture<JSONObject> request(String mode, String kind, boolean retry) {
         CompletableFuture<JSONObject> result = new CompletableFuture<>();
+        String requestedChannel = channel;
         target.whenComplete((manifest, error) -> app.main.post(() -> {
             if (error != null) { result.completeExceptionally(error); return; }
             String expected = runtime.termux.installationId();
             try {
                 authorized(expected);
-                JSONObject input = object("mode", mode, "target", manifest);
+                JSONObject input = object("mode", mode, "target", manifest, "channel", requestedChannel);
                 if (kind != null) input.put("kind", kind);
                 if (retry) input.put("retry", true);
                 runtime.termux.updates(script, input, value -> {
@@ -169,7 +172,7 @@ public final class UpdatesController {
         });
     }
     private JSONObject view() {
-        return object("browser", object("version", version, "versionCode", versionCode, "available", available,
+        return object("browser", object("version", version, "versionCode", versionCode, "available", available, "channel", channel,
             "checking", checking, "checked", checked, "error", checkError),
             "termux", object("needsSetup", !runtime.localSetupReady(), "matching", packageStatus.optBoolean("matched"),
                 "updating", matching, "error", matchingError), "packages", packageStatus);
@@ -204,9 +207,23 @@ public final class UpdatesController {
     }
     CompletableFuture<JSONObject> cancel() { return request("cancel", null, false); }
     CompletableFuture<JSONObject> inventory() { return request("inventory", null, false); }
+    CompletableFuture<JSONObject> channel(String value) {
+        if (!Set.of("stable", "nightly").contains(value)) return CompletableFuture.failedFuture(new IllegalArgumentException("Unknown update channel."));
+        if (checking || matching || jobActive(packageStatus)) return CompletableFuture.failedFuture(new IllegalStateException("Wait for the current update operation before changing channel."));
+        if (!channel.equals(value)) {
+            channel = value;
+            app.policies.edit().putString("updates.channel", value).apply();
+            checked = false; available = null; availableUrl = null; checkError = "";
+            JSONObject sources = packageStatus.optJSONObject("sources");
+            if (sources != null) sources.remove("apt");
+            changed();
+        }
+        return CompletableFuture.completedFuture(view());
+    }
     CompletableFuture<JSONObject> check() {
         if (checking) return CompletableFuture.completedFuture(view());
         checking = true; checkError = ""; changed();
+        String requestedChannel = channel;
         CompletableFuture<JSONObject> result = new CompletableFuture<>();
         target.whenComplete((manifest, error) -> {
             if (error != null) { app.main.post(() -> { checking = false; checkError = message(error); changed(); result.completeExceptionally(error); }); return; }
@@ -216,7 +233,8 @@ public final class UpdatesController {
                     for (int page = 1; ; page++) {
                         JSONArray releases = new JSONArray(metadata("https://api.github.com/repos/openresearchtools/bashkitten/releases?per_page=100&page=" + page));
                         for (int i = 0; i < releases.length(); i++) {
-                            JSONObject release = releases.getJSONObject(i); if (release.optBoolean("draft")) continue;
+                            JSONObject release = releases.getJSONObject(i);
+                            if (release.optBoolean("draft") || requestedChannel.equals("stable") && release.getBoolean("prerelease")) continue;
                             Map<String, String> assets = new HashMap<>(); JSONArray list = release.getJSONArray("assets");
                             for (int j = 0; j < list.length(); j++) { JSONObject asset = list.getJSONObject(j); assets.put(asset.getString("name"), asset.getString("browser_download_url")); }
                             if (!assets.containsKey("release.json")) continue;
