@@ -5,6 +5,72 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Isolated installed follow-up — 17 October 2026, evening
+
+Desktop input now uses only the dedicated `bashkitten-acceptance` user, its own
+systemd user manager/session bus and Intel Weston screen. The ordinary host's
+BashKitten viewer is view-only; test input does not target the host keyboard,
+pointer or focus. This resolves the earlier private-session systemd limitation.
+The user's private llama VM remains outside the test environment.
+
+On installed Linux `cab1310f182`, actual sidebar container creation reached
+Running. The packaged Podman ran as host UID 1001 in its own user namespace,
+mapping container root to UID 1001 and subordinate IDs to 165536–231071. Its
+private AppArmor profile was loaded; neither the browser nor Podman ran as host
+root. Display opened the actual guest desktop. Observe blocked a typed probe,
+Interact accepted it, and closing/reopening the Display tab preserved the same
+guest browser and draft. Manage window size Off disabled Two app mode while
+retaining its saved choice; On re-enabled the control. A too-small two-app
+viewport reported its constraint and is not counted as a successful split.
+Evidence is under `Bashkitten-Acceptance/isolated-wayland-20261017`, including
+`diagnostics/cab1-container-namespace-monitor.json` and the matching screenshots.
+
+The Applications acceptance reference is the plan's **Applications list
+reference — 15 October 2026**, superseding the older top-search/grid wording:
+vertical icon/title rows, bottom search, independently scrolling lists and pins
+using natural height up to 60%. The observed vertical list is expected. Icon
+visibility and the complete launcher behavior remain under verification.
+
+Two installed failures remain explicit. Display service Off reported “A display
+endpoint is still in use”; On removed the error but the guest area remained
+black. Native Firefox-menu Quit stopped the container service and the observed
+owned Pi/AI/display/network helpers, then the browser lingered and crashed with
+exit 139. No forced termination was used. The private Weston remained running.
+These are not Display restart or successful Quit acceptance. The sanitized
+diagnostic receipts include `cab1-before-native-quit.json` and
+`cab1-after-native-quit-extended.json`; raw crash data stays private.
+
+`26ba97cd4a` repairs the Configuration gear's native input event contract. The
+normal local Linux package passed 128 payload checks, retained 2,049 full notices
+and verified all 11 corresponding-source artifacts. Native Gecko bytes retain
+their actual `05be` producer; no native relink was claimed. It was installed
+through APT and relaunched only in the private desktop with `--purgecaches`.
+Actual repaired menu interaction and startup/security traffic verification are
+pending; package/source tests do not establish either. The preceding Backup and
+RemoteSettings changes have 12 passing native regression cases, with seven
+failures reproduced on the prior source.
+
+Android 17 development installations now have matching `cab1310f182` APK,
+Termux backend and OS packages. The retained-profile upgrade preserved the
+model/router/Pi configuration hashes. On a separately cleared browser/backend
+profile, ordinary setup permissions were accepted through Cuttlefish in
+BashKitten, and first-run setup automatically downloaded Qwen3.5-2B-Q4_0 plus
+vision projector, Parakeet v3 Q4_0, Pocket TTS plus projector/reference voice,
+and their runtime/source/license records. The UI reached Ready and the generated
+router explicitly selected CPU with GPU/projector/KV offload disabled. No model
+settings were copied or manually seeded. Evidence:
+`verification/android17-fresh-cab1/automatic-defaults-ready.json` in the Build
+workspace. Actual fresh-model chat, vision, transcription and synthesis remain
+pending. This local package setup does not replace public signed update testing.
+
+Actual Android `d39` and Linux `cab` About flows exposed the central AI runtimes
+and models license entry, original upstream attribution and full saved license
+texts. Their bounded receipts do not claim every artifact/offline/traffic case.
+The full GitHub matrix at `26ba97cd4a`, run `39070407786`, includes Android ARM64
+and x86_64 plus both Linux architectures. Publication and signed device upgrade
+remain pending artifact verification and installed acceptance. All earlier
+unresolved acceptance rows remain required.
+
 ## First-run defaults and isolated desktop testing — 17 October 2026
 
 The empty desktop AI inventory came from the preserved 11 October acceptance
@@ -1285,7 +1351,7 @@ from Cuttlefish. Additional detailed cases remain mandatory in the frozen plan.
 | Application tray | Real StatusNotifier/AppIndicator and legacy XEmbed applications appear with working activation/menus; newly installed apps require no allowlist. Automatic guest BashKitten startup supplies exactly one real guest indicator, accurate status and the existing protected host activation path. Panel restart, browser closure, explicit Quit, icon hide/reorder and resizing behave correctly; no shared host bus, duplicate runtime, second protected Agent in the guest, injected system applets or UI stalls. | Pending |
 | BashKitten OS settings | Correct native package installs the application/icon and seeds its Start pin once. Manage window size defaults On; Off relinquishes layout and disables Two app mode while retaining its saved preference. Scaling/appearance/tray remain independent. Changes are responsive and persist across restart/upgrade; pin/unpin choices survive. Host/container-sharing controls are not duplicated here. | Pending |
 | Application Dark/Light preference | Change Dark/Light on Linux and Termux; the owning session's portal reads 1/2 and emits the change, and representative apps that follow system appearance observe it. Save/restart/upgrade retains the choice. BashKitten's dark/orange surfaces, Thunar customization and user wallpaper stay unchanged, as do other environments and host settings. No UI stalls, forced app restart or hidden polling. | Pending |
-| Maximized launcher | Start opens search at top, ordered pins, one divider and an alphabetical left-to-right wrapping icon/title grid of remaining apps. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow; large app/pin sets scroll. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden grid polling, second Start menu, Garcon fork or split-layout disruption. | Pending |
+| Maximized launcher | Apply the 15 October Applications-list amendment: vertical alphabetical icon/title rows, Pinned immediately above fixed bottom search, independent scrolling and natural pin height capped at 60% of available list space. Phone/tablet/desktop widths and keyboard/rotation reflow without overflow. Launch/search/pin/unpin/context actions/close stay responsive; pins survive rename/reopen/restart/update, appear once and disappear on explicit managed-entry deletion. No hidden polling, second Start menu, Garcon fork or split-layout disruption. | Pending |
 | XFCE behavior | Normal main windows maximize within the workarea; in-app modals, separate/late parent dialogs, file pickers, utilities, menus and fullscreen keep native behavior and do not dissolve a pair. Independent same-app windows remain main windows. Check pairing/drag, third main-window activation, member close, minimum sizes and viewport changes. Toggle management Off during queued resize/drag: divider disappears, pending enforcement stops, user moves/resizes normally, and no stale callback reapplies layout. On resumes without restarting apps or resurrecting a stale pair; no automatic extra workplace allocation. | Pending |
 | Linux application actions | Use real Thunar secondary-click actions on matching-architecture AppImages, `.desktop` launchers and `.deb` packages. Verify direct FUSE launch, explicit persistent extraction/reuse, explicit no-sandbox marker, icon/menu registration and rename/removal, requested desktop shortcuts and package dependencies through passwordless guest sudo. Menu/file names with spaces and percent signs work; source apps survive registration deletion. Check actual failure/cancel reporting, UI responsiveness, preservation of unrelated Thunar actions and no host/Termux installation. Record amd64/arm64 coverage separately. | Pending |
 | Scaling | Saved profiles update owned XFCE settings and new app launches; launcher reflows and the exact Gnozzard palette remains consistent; restart-needed apps are reported truthfully; no startup script resets user edits. | Pending |
