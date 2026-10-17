@@ -93,6 +93,12 @@ public final class TelephonyRuntime {
     String label(String id) { JSONObject value = backend(id); return value == null ? "Unavailable backend" : value.optString("name", "BashKitten"); }
     void failed(Throwable failure) { recordFailure(null, failure); }
     void callFailed(String callId, Throwable failure) { recordFailure(callId, failure); }
+    Runnable callRecovery(String callId) {
+        long previous = errorRevision;
+        return () -> {
+            if (Objects.equals(errorCallId, callId) && errorRevision == previous) { clearError(); changed(); }
+        };
+    }
     private void recordFailure(String callId, Throwable failure) { errorCallId = callId; errorRevision++; error = failure.getMessage() == null ? "Phone operation failed" : failure.getMessage(); changed(); }
     private void clearError() { error = ""; errorCallId = null; errorRevision++; }
     private void changed() { JSONObject snapshot = snapshot(); for (Consumer<JSONObject> observer : new ArrayList<>(observers)) main.post(() -> observer.accept(snapshot)); }
