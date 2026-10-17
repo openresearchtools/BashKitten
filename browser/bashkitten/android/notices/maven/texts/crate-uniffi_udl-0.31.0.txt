@@ -1,0 +1,6 @@
+Crate: uniffi_udl 0.31.0
+License expression: MPL-2.0
+Authors: 
+Source: https://static.crates.io/crates/uniffi_udl/uniffi_udl-0.31.0.crate
+
+Canonical full text supplied separately for the declared MPL-2.0.

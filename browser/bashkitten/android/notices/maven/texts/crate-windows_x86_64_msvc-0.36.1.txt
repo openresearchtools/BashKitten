@@ -1,0 +1,6 @@
+Crate: windows_x86_64_msvc 0.36.1
+License expression: MIT OR Apache-2.0
+Authors: Microsoft
+Source: https://static.crates.io/crates/windows_x86_64_msvc/windows_x86_64_msvc-0.36.1.crate
+
+Canonical full text supplied separately for the declared Apache-2.0 and MIT.

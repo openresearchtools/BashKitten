@@ -79,6 +79,22 @@ def notices(path: Path) -> list[tuple[str, bytes]]:
     return found
 
 
+def full_notice_present(contents: list[bytes]) -> bool:
+    # Attribution/reference files stay in the payload, but cannot by themselves
+    # satisfy full-text delivery (notably siphasher's dual-license COPYING).
+    for content in contents:
+        text = content.decode('utf-8', errors='replace').strip()
+        if not text or LICENSE_REFERENCE.fullmatch(content.strip()):
+            continue
+        if re.fullmatch(r'https?://\S+', text) or re.match(r'^(404[: ]|Not Found\b)', text, re.I):
+            continue
+        if len(text) < 1000 and re.search(r'licensed under', text, re.I) and not re.search(
+                r'permission is hereby|redistribution and use|provided [\"“]as.is', text, re.I):
+            continue
+        return True
+    return False
+
+
 def unpack_wheel(path: Path, site: Path, metadata_only: bool = False) -> None:
     with zipfile.ZipFile(path) as archive:
         for entry in archive.infolist():
@@ -148,8 +164,8 @@ def build(target: str, output: Path, termux_native: Path | None) -> None:
                 if LICENSE_REFERENCE.fullmatch(content.strip()):
                     continue
                 unique.setdefault(hashlib.sha256(content).hexdigest(), (filename, content))
-        if not unique:
-            raise RuntimeError(f"missing license texts for {name} {version}")
+        if not full_notice_present([content for _, content in unique.values()]):
+            raise RuntimeError(f"missing full license texts for {name} {version}")
         files = []
         for checksum, (filename, content) in sorted(unique.items()):
             relative = f"licenses/{name}/{checksum[:12]}-{PurePosixPath(filename).name}"

@@ -1,0 +1,6 @@
+Crate: lalrpop-util 0.19.8
+License expression: Apache-2.0/MIT
+Authors: Niko Matsakis <niko@alum.mit.edu>
+Source: https://static.crates.io/crates/lalrpop-util/lalrpop-util-0.19.8.crate
+
+Canonical full text supplied separately for the declared Apache-2.0 and MIT.

@@ -1,0 +1,6 @@
+Crate: bhttp 0.7.2
+License expression: MIT OR Apache-2.0
+Authors: Martin Thomson <mt@lowentropy.net>
+Source: https://static.crates.io/crates/bhttp/bhttp-0.7.2.crate
+
+Canonical full text supplied separately for the declared Apache-2.0 and MIT.
