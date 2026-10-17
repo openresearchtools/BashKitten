@@ -60,7 +60,7 @@ def main():
 Version: {args.version}
 Architecture: {args.architecture}
 Maintainer: openresearchtools <openresearchtools@gmail.com>
-Depends: libc6, python3, systemd, sudo, dbus-user-session, xwayland, xauth, x11-utils, xfce4-session, pipewire, pipewire-pulse, wireplumber, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-pulseaudio, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, fuse3
+Depends: libc6, python3, systemd, util-linux, sudo, dbus-user-session, xwayland, xauth, x11-utils, xfce4-session, pipewire, pipewire-pulse, wireplumber, gstreamer1.0-tools, gstreamer1.0-pipewire, gstreamer1.0-pulseaudio, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, fuse3
 Description: BashKitten private container guest session and native sudo handoff
  Rootless Podman guest services, independent desktop and private Agent endpoint.
 ''')
