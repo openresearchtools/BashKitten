@@ -363,19 +363,23 @@ fn run_gateway(
                                 }
                                 Message::Release { id } => {
                                     if let Some(sent_generation) = held.remove(&id) {
-                                        if let Some(frame) = latest.as_ref().filter(|f| f.id == id) {
-                                            // A resize can retag the retained frame while its
-                                            // previous generation is still in flight. Wait for
-                                            // that lease before sending it again: the renderer
-                                            // suppresses duplicate outstanding frame IDs.
-                                            if visible
-                                                && frame.geometry_generation != sent_generation
-                                            {
-                                                send_frame(fd.as_raw_fd(), frame)?;
-                                                held.insert(id, frame.geometry_generation);
-                                            }
-                                        } else {
+                                        if latest.as_ref().is_none_or(|f| f.id != id) {
                                             release(&mut commands, id);
+                                        }
+                                        // Drain a retained frame after backpressure, or a
+                                        // resize that retagged this frame while its previous
+                                        // generation was in flight. The renderer must never
+                                        // receive the same ID with two outstanding leases.
+                                        if let Some(frame) = latest.as_ref().filter(|f| {
+                                            visible
+                                                && held.len() < 3
+                                                && f.geometry_generation == generation
+                                                && !held.contains_key(&f.id)
+                                                && (f.id != id
+                                                    || f.geometry_generation != sent_generation)
+                                        }) {
+                                            send_frame(fd.as_raw_fd(), frame)?;
+                                            held.insert(frame.id, frame.geometry_generation);
                                         }
                                     }
                                     Ok(())
