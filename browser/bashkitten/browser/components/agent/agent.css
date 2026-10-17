@@ -102,13 +102,17 @@
 :root[bashkitten-agent-layout="full"] #bashkitten-agent-pane { position: absolute; inset: 0; z-index: 5; width: 100%; max-width: none; border: 0; }
 :root[bashkitten-agent-layout="full"] :is(#sidebar-container, #sidebar-box, #sidebar-splitter, #sidebar-launcher-splitter, #ai-window-box, #ai-window-splitter, #nav-bar, #PersonalToolbar, #status-bar) { visibility: collapse !important; }
 :root[bashkitten-display-visible] :is(#PersonalToolbar, #nav-bar > :not(#nav-bar-customization-target), #nav-bar-customization-target > :not(#bashkitten-display-controls)) { display: none !important; }
-#bashkitten-display-controls { gap: 16px; padding: 4px 10px; color: var(--toolbar-color); font: inherit; }
+#bashkitten-display-controls { gap: 8px; min-width: 0; padding: 4px 10px; color: var(--toolbar-color); font: inherit; }
 #bashkitten-display-controls[hidden] { display: none; }
 #bashkitten-display-controls .native-display-switch { display: flex; align-items: center; gap: 8px; white-space: nowrap; cursor: pointer; }
 #bashkitten-display-controls input { appearance: none; width: 30px; height: 18px; margin: 0; border: 1px solid light-dark(#c8c8cc, #48484d); border-radius: 999px; background: radial-gradient(circle, light-dark(#fff, #2b2b2b) 5px, transparent 5.5px) left center / 16px 16px no-repeat light-dark(#c8c8cc, #48484d); cursor: pointer; }
 #bashkitten-display-controls input:checked { background-position: right center; background-color: light-dark(#5f5f65, #a0a0a5); border-color: light-dark(#5f5f65, #a0a0a5); }
 #bashkitten-display-controls :disabled { opacity: .52; cursor: default; }
-#bashkitten-display-controls .native-display-command { margin-inline-start: auto; padding: 6px 12px; border: 1px solid light-dark(#c8c8cc, #48484d); border-radius: 999px; color: inherit; background: var(--toolbarbutton-hover-background); font: inherit; cursor: pointer; }
-#bashkitten-display-controls .native-display-command:hover { background: var(--toolbarbutton-active-background); }
+#bashkitten-display-controls .native-display-status { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#bashkitten-display-controls .toolbarbutton-1 { flex-shrink: 0; }
+@media (max-width: 600px) {
+  #bashkitten-display-controls { gap: 4px; padding-inline: 4px; }
+  #bashkitten-display-controls .native-display-switch { gap: 4px; }
+}
 #bashkitten-display-controls :focus-visible { outline: 2px solid var(--focus-outline-color); outline-offset: 2px; }
 @media (forced-colors: active) { #bashkitten-display-controls input { appearance: auto; } }

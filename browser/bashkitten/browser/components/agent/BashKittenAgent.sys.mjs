@@ -289,12 +289,29 @@ class AgentView {
     this.displayPower.input.addEventListener("change", () => this.run(() => lazy.BashKittenDisplay.control(this.win, "enabled", this.displayPower.input.checked)));
     this.displayInteraction = displaySwitch("Interact", "bashkitten-display-interaction");
     this.displayInteraction.input.addEventListener("change", () => this.run(() => lazy.BashKittenDisplay.control(this.win, "interactive", this.displayInteraction.input.checked)));
-    const command = html(doc, "button", { type: "button", class: "native-display-command", title: "Edit the desktop launch command" }, "Display command");
-    command.addEventListener("click", () => {
+    const command = xul(doc, "toolbarbutton", { class: "toolbarbutton-1", image: "chrome://global/skin/icons/edit.svg", tooltiptext: "Display command", "aria-label": "Edit the desktop launch command" });
+    command.addEventListener("command", () => {
       const display = lazy.BashKittenDisplay.selected(this.win);
       if (display) this.run(() => this.openSettings("machine", { backendId: display.id, displayCommand: true }));
     });
     this.displayControls.append(command);
+    this.displayClipboard = [
+      ["read", "Copy from desktop", "chrome://global/skin/icons/edit-copy.svg"],
+      ["write", "Paste to desktop", "chrome://browser/skin/edit-paste.svg"],
+    ].map(([action, label, image]) => {
+      const button = xul(doc, "toolbarbutton", { id: `bashkitten-display-clipboard-${action}`, class: "toolbarbutton-1", image, tooltiptext: label, "aria-label": label, disabled: "true" });
+      button.addEventListener("command", event => {
+        if (!event.isTrusted || DesktopLifetime.quitting) return;
+        // Clipboard work must not hold the shared service-control busy flag:
+        // Observe and Off remain available to cancel a pending transfer.
+        try { Promise.resolve(lazy.BashKittenDisplay.control(this.win, `clipboard-${action}`, event)).catch(error => this.failure(error)); }
+        catch (error) { this.failure(error); }
+      });
+      this.displayControls.append(button);
+      return button;
+    });
+    this.displayStatus = html(doc, "span", { class: "native-display-status", role: "status" });
+    this.displayControls.append(this.displayStatus);
     doc.getElementById("urlbar-container").before(this.displayControls);
     // Move the real Firefox control while its navigation toolbar is collapsed.
     // Keep its original node/listeners/anchor and exact browser-mode placement.
@@ -482,6 +499,9 @@ class AgentView {
         this.displayInteraction.input.disabled = !display.controller;
         this.displayInteraction.text.textContent = display.interactive ? "Interact" : "Observe only";
         this.displayInteraction.input.title = display.interactive ? "Send keyboard and pointer input to the desktop" : "Watch the desktop without sending input";
+        for (const button of this.displayClipboard) button.disabled = !display.controller || !display.interactive || display.state !== "running" || display.clipboardBusy;
+        this.displayStatus.textContent = [display.state === "running" ? display.renderMode : "", display.clipboardBusy ? "Transferring clipboard…" : display.clipboardStatus].filter(Boolean).join(" · ");
+        this.displayStatus.title = [this.displayStatus.textContent, display.renderReason].filter(Boolean).join(" — ");
       }
     }
     if (this.displayToggle) {
