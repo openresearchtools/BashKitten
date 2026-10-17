@@ -3637,3 +3637,31 @@ space when the viewport changes, without moving search off-screen or blocking UI
 Remove the visible frame/outline around taskbar buttons, as the user clarified
 after asking to remove highlighting. Keep this scoped to taskbar button frames;
 do not remove application styling or change the taskbar's functions.
+
+### Android stable and nightly updates — 17 October 2026
+
+Resume interrupted implementation and installed acceptance after the host reboot,
+restoring the existing BashKitten test environments without touching the user's
+separate private VM. Build and publish a complete GitHub Actions prerelease so
+the user can test the normal mobile release and update workflow alongside local
+acceptance. Preserve the required testing-release notice and matching sources.
+
+Add a persistent release/prerelease choice in Android's existing Updates page,
+using its matching controls. Stable checks released versions; enabling
+prereleases also follows nightly publications. Preserve the user's choice across
+app updates. Use the existing signed APT stable/nightly arrangement for Termux
+package selection, including its actual shared signing-key arrangement rather
+than inventing a second trust key or an alternate updater.
+
+The selected channel must never produce a browser/backend mixture: the installed
+APK's immutable package requirements remain authoritative for its BashKitten
+backend and OS packages. Switching channels must not replace those packages with
+an unrelated candidate before the corresponding APK is installed. Retain the
+ability to repair the currently installed pair, and report pending updates and
+failures clearly. All checks, downloads, package work and progress stay
+nonblocking. Desktop continues using its existing system APT update flow.
+
+Verify stable and nightly discovery, saved-choice persistence, channel switching,
+exact APK/backend/OS pairing and interrupted-update recovery through the normal
+installed mobile workflow and published signed packages. A successful workflow
+dispatch or an APK download alone does not establish this acceptance.
