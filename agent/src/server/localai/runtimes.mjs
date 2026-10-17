@@ -20,6 +20,27 @@ const executable = engine => engine === 'llama' ? 'llama-server' : 'whisper-serv
 const engineName = engine => { if (!['llama', 'whisper'].includes(engine)) throw Error('Unknown LocalAI engine'); return engine; };
 export function requireLocalRuntime() { if (!arch) throw Error('LocalAI requires an x86_64 or ARM64 native runtime'); }
 export async function runtimeInfo(engine) { return readJson(path.join(runtimeDirectory, engineName(engine) + '.json'), null); }
+export function runtimeRecordAttribution(runtime, source) {
+  const name = engineName(runtime.engine) === 'llama' ? 'llama.cpp' : 'whisper.cpp';
+  const original = `https://github.com/ggml-org/${name}`, buildRepository = `https://github.com/${repository}`;
+  if (source.repository !== original || source.commit !== runtime.sourceCommit || !/^[a-f0-9]{40}$/.test(source.commit || '') ||
+      source.build !== `${buildRepository}/tree/${runtime.builderCommit}` || !/^[a-f0-9]{40}$/.test(runtime.builderCommit || '') ||
+      source.upstreamRelease && (source.upstreamRelease.commit !== source.commit || source.upstreamRelease.tag !== runtime.upstreamVersion)) throw Error('Installed runtime source records do not match');
+  return { name, version: runtime.upstreamVersion || null, commit: source.commit, repository: original,
+    buildRepository, buildCommit: runtime.builderCommit, release: source.release || null, download: runtime.download || null };
+}
+export function formatRuntimeLicenses(content, name) {
+  const headings = [...content.matchAll(/^===== (.+) =====\r?$/gm)], upstream = [], dependencies = [], packaging = [];
+  if (headings[0]?.index) dependencies.push(content.slice(0, headings[0].index));
+  for (let i = 0; i < headings.length; i++) {
+    const heading = headings[i][1], text = content.slice(headings[i].index, headings[i + 1]?.index ?? content.length);
+    (heading === 'LICENSE' ? upstream : heading.startsWith('BashKitten build integration (') || heading === 'MIT build recipe provenance' ? packaging : dependencies).push(text);
+  }
+  if (upstream.length !== 1) throw Error('Runtime archive must identify its original upstream LICENSE');
+  return `Original upstream license — ${name}\n\n${upstream[0]}` +
+    (dependencies.length ? '\nDependency licenses and notices\n\n' + dependencies.join('') : '') +
+    (packaging.length ? '\nBuild and packaging licenses and notices\n\n' + packaging.join('') : '');
+}
 // Native UI status needs the installed selection, not CMake commands or full
 // readelf reports. Those remain in build.json/SOURCE.json beside the runtime.
 // In particular, Termux truncates PendingIntent output beyond 100 KiB.
@@ -194,7 +215,9 @@ export async function installRuntime(job, { engine, config, selection }, activat
     const verified = await validateBinary(engine, filename, executionBackend, managedRuntimeEnvironment(filename, {}, executionBackend));
     const destination = path.join(runtimeDirectory, engine + '-' + available.release + '-' + artifact.backend + '-' + path.basename(staging).slice(10));
     await fs.rename(extracted, destination); inactive = destination;
-    const next = { ...record, release: available.release, version: available.version, root: destination, binary: path.join(destination, 'bin', executable(engine)), selectedBackend: verified.backend, devices: verified.devices };
+    const next = { ...record, release: available.release, version: available.version,
+      download: { url: artifact.url, file: artifact.file, sha256: artifact.sha256 },
+      root: destination, binary: path.join(destination, 'bin', executable(engine)), selectedBackend: verified.backend, devices: verified.devices };
     // The owner confirms stopped/idle and the still-saved Managed choice.
     await activate(next, async () => { await writeJson(path.join(runtimeDirectory, engine + '.json'), next); activated = true; });
   } finally { await fs.rm(staging, { recursive: true, force: true }); if (inactive && !activated) await fs.rm(inactive, { recursive: true, force: true }); }

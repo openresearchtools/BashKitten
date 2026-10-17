@@ -46,37 +46,6 @@ export async function renderSection({ root: parent, call: control, info, signal 
   };
   const check = (parent, text, checked) => { const label = node('label', text), input = node('input'); input.type = 'checkbox'; input.checked = checked; label.prepend(input); parent.append(label); return input; };
   const copy = async text => { await call('clipboard-copy', { text }); if (active()) message.textContent = 'Copied'; };
-  const openRecord = async (engine, record) => {
-    const value = await call('localai-open-record', { engine, record });
-    if (!active() || typeof value?.content !== 'string') return;
-    const dialog = node('dialog'), content = node('pre', value.content), close = node('button', 'Close');
-    dialog.append(node('h2', value.name), content, close); parent.append(dialog);
-    const dispose = () => { signal.removeEventListener('abort', dispose); dialog.remove(); };
-    close.type = 'button'; close.onclick = dispose;
-    dialog.addEventListener('cancel', event => { event.preventDefault(); dispose(); });
-    signal.addEventListener('abort', dispose, { once: true }); dialog.showModal(); close.focus();
-  };
-  const openModelNotices = async id => {
-    const value = await call('native-models-catalogue', { notice: id });
-    if (!active()) return;
-    const dialog = node('dialog'), close = node('button', 'Close');
-    dialog.append(node('h2', value.title));
-    const files = select(dialog, 'Document', value.files.map(file => [String(file.index), file.name]), '0');
-    const content = node('pre'); dialog.append(content);
-    const show = async () => {
-      files.disabled = true; content.textContent = 'Loading…';
-      try {
-        const result = await call('native-models-catalogue', { notice: id, file: Number(files.value) });
-        if (dialog.isConnected) content.textContent = result.content;
-      } catch (error) { if (dialog.isConnected) content.textContent = error.message; }
-      finally { if (dialog.isConnected) files.disabled = false; }
-    };
-    files.onchange = () => void show();
-    close.type = 'button'; dialog.append(close); parent.append(dialog);
-    const dispose = () => { signal.removeEventListener('abort', dispose); dialog.remove(); };
-    close.onclick = dispose; dialog.addEventListener('cancel', event => { event.preventDefault(); dispose(); });
-    signal.addEventListener('abort', dispose, { once: true }); dialog.showModal(); close.focus(); await show();
-  };
   const pick = async (title, kind = 'file', initial = '') => {
     const chooser = node('section'); chooser.className = 'connection-card';
     chooser.setAttribute('role', 'dialog'); chooser.setAttribute('aria-label', title);
@@ -207,8 +176,6 @@ export async function renderSection({ root: parent, call: control, info, signal 
         if (mode.value !== config.mode || backend.value !== savedBackend) throw Error('Save the runtime choice first');
         const result = await call('localai-install', { engine }); if (active()) followJob(result);
       }));
-      const records = node('div'); section.append(records);
-      for (const [label, record] of [['Licenses', 'license'], ['Source record', 'source']]) records.append(button(label, () => openRecord(engine, record)));
       runtimeViews[engine] = next => {
         if (!version.isConnected) return;
         if (runtime?.release !== next?.release || runtime?.backend !== next?.backend) {
@@ -489,7 +456,6 @@ export async function renderSection({ root: parent, call: control, info, signal 
       curated.replaceChildren();
       const presets = catalogue.presets.filter(item => item.engine === type.value);
       const preset = select(curated, 'Downloads — smallest first', presets.map(item => [item.id, `${item.title} · ${(item.bytes / 1e9).toFixed(2)} GB`]), presets[0]?.id);
-      curated.append(button('Downloaded licenses and source', () => openModelNotices(preset.value)));
       curated.append(button('Download selected model', async () => { await call('native-models-preset', { id: preset.value }); message.textContent = 'Download started; it continues with this panel closed'; await refreshJobs(); }));
     };
     drawPresets();
@@ -519,7 +485,6 @@ export async function renderSection({ root: parent, call: control, info, signal 
       for (const job of value.jobs) {
         const card = node('section'); card.className = 'connection-card'; card.append(node('strong', job.repository), node('p', [job.status, job.error].filter(Boolean).join(' · ')));
         const presets = catalogue.presets.filter(item => item.repository === job.repository && item.revision === job.revision && item.files.every(name => job.files.some(file => file.path === name && file.status === 'complete')));
-        for (const preset of presets) card.append(button('Licenses and source · ' + preset.title, () => openModelNotices(preset.id)));
         for (const preset of presets) card.append(button('Use ' + preset.title, async () => {
           const files = preset.files.map(name => job.directory + '/' + job.files.find(file => file.path === name).outputPath);
           const result = await call('localai-model-use', { engine: preset.engine, kind: preset.kind, file: files[0], projector: files[1] || '', voice: preset.referenceVoicePath || '' }); draw(result);
