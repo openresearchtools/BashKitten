@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -19,6 +20,9 @@ ROOT = Path(__file__).resolve().parents[2]
 CERT = '2f6a2ceae1a80e98b3a12156d37e7dc5541ce0968dd48285bc71bb555713df38'
 TERMUX_UPDATE_ASSET = 'assets/termux-update.json'
 TERMUX_BOOTSTRAP_ASSET = 'assets/updates-bootstrap.mjs'
+# GitHub requires each release asset to be strictly smaller than 2 GiB.
+ASSET_SIZE_LIMIT = 2 * 1024 ** 3
+SOURCE_PART_SIZE = 1024 ** 3
 
 
 def validate_termux_update(value, version=None, abi=None):
@@ -93,6 +97,80 @@ def sha(file):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def asset_record(file, tag):
+    return {'asset': file.name, 'sha256': sha(file), 'size': file.stat().st_size,
+            'url': f'https://github.com/openresearchtools/bashkitten/releases/download/{tag}/{file.name}'}
+
+
+def copy_asset(file, output, tag):
+    if file.stat().st_size >= ASSET_SIZE_LIMIT:
+        raise ValueError('Release asset exceeds the GitHub limit; only source archives may be split: ' + file.name)
+    destination = output / file.name
+    if destination.exists():
+        if sha(destination) != sha(file):
+            raise ValueError('Conflicting release asset: ' + file.name)
+    else:
+        shutil.copy2(file, destination)
+    return asset_record(destination, tag)
+
+
+def source_archive(file, output, tag):
+    """Retain exact source bytes, splitting only archives too large for GitHub."""
+    size = file.stat().st_size
+    if size < ASSET_SIZE_LIMIT:
+        asset = copy_asset(file, output, tag)
+        return {'archive': file.name, 'sha256': asset['sha256'], 'size': size, 'parts': [asset]}
+    digest, parts = hashlib.sha256(), []
+    with file.open('rb') as source:
+        for index, offset in enumerate(range(0, size, SOURCE_PART_SIZE), 1):
+            part = output / f'{file.name}.part{index:04d}'
+            remaining = min(SOURCE_PART_SIZE, size - offset)
+            with part.open('xb') as target:
+                while remaining:
+                    block = source.read(min(8 * 1024 ** 2, remaining))
+                    if not block:
+                        raise ValueError('Source archive changed during collection: ' + file.name)
+                    target.write(block)
+                    digest.update(block)
+                    remaining -= len(block)
+            parts.append(asset_record(part, tag))
+        if source.read(1):
+            raise ValueError('Source archive changed during collection: ' + file.name)
+    original = {'archive': file.name, 'sha256': digest.hexdigest(), 'size': size, 'parts': parts}
+    (output / (file.name + '.parts.sha256')).write_text(''.join(
+        part['sha256'] + '  ' + part['asset'] + '\n' for part in parts))
+    (output / (file.name + '.sha256')).write_text(original['sha256'] + '  ' + file.name + '\n')
+    return original
+
+
+def source_instructions(archives, output, tag):
+    split = [archive for archive in archives if len(archive['parts']) > 1]
+    if not split:
+        return
+    text = ('# Corresponding source archives\n\n'
+            'Large source archives are attached as ordered binary parts to fit GitHub\'s per-asset limit. '
+            'No source, license or notice was removed, and the archive bytes were not recompressed. '
+            '`release.json` records each original archive name, byte count, SHA-256 and ordered parts '
+            'under `sourceArchives`; `sources` lists the actual downloadable assets.\n\n'
+            'Run the commands below in a new directory with GitHub CLI and coreutils installed. '
+            'Each block downloads one archive and its checksum files, verifies its parts, concatenates '
+            'them in the recorded order, and verifies the original archive before extraction. '
+            'Stop if any command fails. Allow space for both the downloaded parts and the reconstructed '
+            'archive. Individual parts are not independently extractable.\n\n'
+            'For a complete release download, `sha256sum --check SHA256SUMS` verifies all attached '
+            'files, including these instructions, the manifest and checksum files.\n')
+    for archive in split:
+        name = archive['archive']
+        parts = ' '.join(shlex.quote(part['asset']) for part in archive['parts'])
+        text += (f'\n## {name}\n\nOriginal: {archive["size"]} bytes, SHA-256 `{archive["sha256"]}`.\n\n'
+                 f'```sh\ngh release download {shlex.quote(tag)} --repo openresearchtools/BashKitten '
+                 f'--pattern {shlex.quote(name + ".*")} &&\n'
+                 f'sha256sum --check {shlex.quote(name + ".parts.sha256")} &&\n'
+                 f'cat {parts} > {shlex.quote(name)} &&\n'
+                 f'sha256sum --check {shlex.quote(name + ".sha256")}\n```\n')
+    (output / 'SOURCE-ARCHIVES.md').write_text(text)
+
+
 def package(file):
     fields = dict(line.split(': ', 1) for line in subprocess.check_output(
         ['dpkg-deb', '-f', str(file), 'Package', 'Version', 'Architecture'], text=True).splitlines())
@@ -137,14 +215,7 @@ def main():
         raise ValueError('Use an empty release directory')
 
     def copy(file):
-        destination = args.output / file.name
-        if destination.exists():
-            if sha(destination) != sha(file):
-                raise ValueError('Conflicting release source: ' + file.name)
-        else:
-            shutil.copy2(file, destination)
-        return {'asset': file.name, 'sha256': sha(file), 'size': file.stat().st_size,
-                'url': f'https://github.com/openresearchtools/bashkitten/releases/download/{tag}/{file.name}'}
+        return copy_asset(file, args.output, tag)
 
     apks = sorted(args.candidates.rglob('*.apk'))
     if len(apks) != 2:
@@ -263,14 +334,20 @@ def main():
                 raise ValueError('APK companion pairing differs from the published package: '
                                  + expected['name'] + '/' + expected['architecture']
                                  + '; reassemble APK resources from the matching inputs')
-    sources = []
+    archives = {}
     for file in sorted(args.candidates.rglob('*')):
         if file.is_file() and re.search(r'(?:source|sources|provenance)[^.]*\.(?:tar(?:\.(?:gz|xz|zst))?|zip|jar)$', file.name):
-            sources.append(copy(file))
-    names = [value['asset'] for value in sources]
+            if file.name in archives:
+                if archives[file.name]['sha256'] != sha(file):
+                    raise ValueError('Conflicting release source: ' + file.name)
+            else:
+                archives[file.name] = source_archive(file, args.output, tag)
+    names = list(archives)
     for token in ('bashkitten-source-', 'dependency-source-', 'auth', 'search', 'node-source-', 'blocker', 'android-library-source'):
         if not any(token in name for name in names):
             raise ValueError('Missing corresponding source bundle: ' + token)
+    source_instructions(archives.values(), args.output, tag)
+    sources = [part for archive in archives.values() for part in archive['parts']]
     # Share the README's warning instead of allowing release notes to imply
     # that a candidate build has passed retail-device acceptance.
     readme = (ROOT / 'README.md').read_text()
@@ -284,13 +361,19 @@ def main():
              '- **Updating Android:** update both the APK and the BashKitten package in Termux. Provider logins and chat history are retained.\n\n'
              'Local Agent opens without an account login. Publishing from Linux and connecting to remotes still require Tor authorization and account two-factor authentication.\n\n'
              'Checksums and corresponding source archives are attached.\n')
+    if (args.output / 'SOURCE-ARCHIVES.md').exists():
+        notes += ('Large source archives use lossless numbered parts. Download `SOURCE-ARCHIVES.md` '
+                  'for verification and reconstruction commands; `release.json` records original archive hashes and part order.\n')
     (args.output / 'release-notes.md').write_text(notes)
     result = {'schema': 2, 'tag': tag, 'version': version, 'firefoxVersion': engine, 'testingRelease': True, 'packageVersion': package_version,
               'sourceCommit': revision, 'buildRun': args.run or os.environ.get('GITHUB_RUN_ID'),
-              'apps': apps, 'packages': packages + auxiliary, 'sources': sources}
+              'apps': apps, 'packages': packages + auxiliary, 'sources': sources,
+              'sourceArchives': list(archives.values())}
     (args.output / 'release.json').write_text(json.dumps(result, indent=2) + '\n')
     (args.output / 'SHA256SUMS').write_text(''.join(
         sha(file) + '  ' + file.name + '\n' for file in sorted(args.output.iterdir()) if file.name != 'SHA256SUMS'))
+    if any(file.stat().st_size >= ASSET_SIZE_LIMIT for file in args.output.iterdir()):
+        raise ValueError('Release contains an asset exceeding the GitHub size limit')
     print('Assembled two Android APKs, four complete native packages and matching sources; not published.')
 
 

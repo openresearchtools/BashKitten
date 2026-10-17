@@ -67,6 +67,27 @@ native packages plus corresponding sources. A release must match the exact
 successful candidate run. Runtime/device validation happens outside the repository. Prereleases are published
 for that testing; a completed build does not certify device acceptance. Logs, probes and test profiles are not shipped.
 
+GitHub requires [each release asset to be smaller than 2 GiB](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).
+The collector preserves smaller source archives unchanged and splits larger ones
+into ordered 1 GiB binary parts without recompression or removing any sources or
+notices. `release.json` keeps `sources` as the flat downloadable asset list and
+adds `sourceArchives`, recording each original archive's name, byte count,
+SHA-256 and ordered parts with their sizes, hashes and release URLs. APK/DEB
+names, bytes and metadata remain unchanged; an oversized installable package
+fails collection instead of being split.
+
+The complete-candidate artifact contains only uploadable files, including the
+parts, `SOURCE-ARCHIVES.md`, per-archive `.parts.sha256` and original `.sha256`
+files. Its `SHA256SUMS` covers every attached file. The publish workflow verifies
+these checksums and rejects oversized assets before `gh release create` uploads
+the directory. Download `SOURCE-ARCHIVES.md` from the release and run its explicit
+`gh release download`, `sha256sum`, ordered `cat` and final checksum commands in
+a new directory. Only extract the reconstructed archive after its original hash
+passes. Direct archive downloads remain usable as before. The APT publisher
+selects whole `.deb` release assets by filename and reads their package headers;
+the APK updater uses `apps` in `release.json`. Those binaries and the manifest's
+`packages`/`apps` records are unchanged; source parts never enter those paths.
+
 The publisher's **prerelease** checkbox defaults on for now. On publishes to
 nightly APT; off publishes a regular release to stable APT. The stable catalogue
 excludes prereleases, and the nightly catalogue includes only prereleases. Install the
