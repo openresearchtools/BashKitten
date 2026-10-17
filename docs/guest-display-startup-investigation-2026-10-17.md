@@ -72,3 +72,45 @@ the installed product on real Xorg and Wayland, recording the actual guest
 component revisions separately from the outer browser. If the black frame
 returns, capture its guest window/compositor state and startup journal before
 restarting Display. These healthy attempts do not close that acceptance case.
+
+## Subsequent cold reproduction with outer 31073761ca
+
+The real Xorg VM reproduced the black guest region during ordinary cold
+autostart after installing outer candidate `31073761ca`, before updating the
+retained OS48f guest. The immutable candidate's build evidence remains unchanged.
+Outer browser PID/start ticks were 21523/94083; guest browser 22364/94345 and
+Xfwm 22446/94356. XFCE state was IDLE and compositing was On. The guest journal
+recorded a forced reset at browser time 1.06415 seconds. This is another failure,
+not a successful validation of the preceding timing hypothesis.
+
+A bounded read-only inspection retained the failed window before the planned
+OS update/Display restart. The guest's own ordinary X11 capture showed the same
+black main area and painted panel as the outer Display capture. Therefore the
+black region existed before the outer viewport transport. XRandR reported the
+expected 1270 × 652 guest screen.
+
+Inside the guest's complete user/mount/PID/IPC/network/UTS namespaces, X11
+properties identified active window `0x400016` as the guest browser's PID 87
+(host PID 22364). It was a normal, viewable, focused and maximized window at
+0,0 with size 1270 × 612; its drawing child `0x400010` had the same nonzero size.
+The opaque region matched this geometry. These observations exclude an absent,
+minimized or zero-sized browser window in this instance. The browser's main
+thread was in `do_sys_poll`; renderer/compositor threads were in futex waits.
+Those single wait-state snapshots do not establish a deadlock or identify which
+component stopped producing the visible browser content.
+
+The evidence localizes the failure to the guest browser/compositing stage, but
+does not yet distinguish those owners or establish a source fix. No browser
+preferences, source, settings or process state were changed during this
+inspection. The diagnostic hold ended after copying the receipt, allowing the
+separately planned OS update and ordinary Display controls to continue.
+
+Evidence directory:
+`/home/user/Bashkitten-Acceptance/xorg-3107-20261017/`:
+
+- `outer-installed-before-os-restart.png`
+- `inner-black-actual-x11.png`
+- `black-window-readonly.json`
+
+The original cold-start receipt is in the test VM at
+`~/.local/state/bashkitten-upgrade-3107/cold-autostart-black-area.json`.
