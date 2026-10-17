@@ -167,10 +167,12 @@ def prepare(module, request, state):
             # Run the normal updater owner directly so staging outlives its job.
             child = subprocess.Popen([node, module, '--bootstrap-runtime'], stdin=subprocess.PIPE,
                                      stdout=output, stderr=output, env=node_environment(node))
-            child.stdin.write(json.dumps(request).encode())
-            child.stdin.close()
+            # Recovery must know who owns staging before the updater can start
+            # a package job. Until then the child only waits for this request.
             state.update(pid=child.pid, started=process_start(child.pid))
             write(STATE, state)
+            child.stdin.write(json.dumps(request).encode())
+            child.stdin.close()
             while child.poll() is None:
                 owner, job = read(JOBS / 'owner.json'), read(JOBS / 'job.json')
                 if cancelled(state) and owner and owner['pid'] == child.pid and job:
