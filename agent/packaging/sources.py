@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import shutil
 from build import checked_archive
+from android_native_sources import collect as collect_android_native
 import subprocess
 import tarfile
 import zipfile
@@ -153,6 +154,7 @@ for record in android_records:
     assert hashlib.sha256(license_bytes).hexdigest() == record['sha256'], 'Android license source mismatch: ' + record['name']
 android_manifest = []
 with tarfile.open(args.output / ('bashkitten-android-dependency-source-' + revision[:12] + '.tar'), 'w') as archive:
+    collect_android_native(tracked, archive)
     for (repository, commit), file in sorted(android_archives.items()):
         archive.add(file, arcname='android-dependencies/' + file.name)
         with file.open('rb') as stream:
