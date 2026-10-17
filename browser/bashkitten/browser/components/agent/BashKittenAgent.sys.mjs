@@ -377,10 +377,23 @@ class AgentView {
     const popup = xul(this.doc, "panel", { id: "bashkitten-settings-menu", class: "cui-widget-panel panel-no-padding", type: "arrow", role: "menu" });
     const body = xul(this.doc, "vbox", { class: "panel-subview-body" });
     const gear = xul(this.doc, "toolbarbutton", { id: "bashkitten-settings-button", image: "chrome://global/skin/icons/settings.svg", class: "toolbarbutton-1", tooltiptext: "Configuration", "aria-label": "Configuration", "aria-haspopup": "menu" });
-    gear.addEventListener("command", event => {
+    const toggle = event => {
+      if (popup.state === "open") { popup.hidePopup(); return; }
+      if (popup.state !== "closed") return;
       popup.setConstraintRect(new this.win.DOMRect(this.win.mozInnerScreenX,
         this.win.mozInnerScreenY, this.win.innerWidth, this.win.innerHeight));
       popup.openPopup(gear, "after_start", 0, 0, false, false, event);
+    };
+    // Match Firefox's PanelUI trigger: open during the pointer press with its
+    // actual input event, not a later command without pointer coordinates.
+    gear.addEventListener("mousedown", event => {
+      if (event.button === 0) toggle(event);
+    });
+    gear.addEventListener("keypress", event => {
+      if (event.key === " " || event.key === "Enter") {
+        toggle(event);
+        event.stopPropagation();
+      }
     });
     this.chatsToggle.after(gear);
     for (const [section, title, image] of [
