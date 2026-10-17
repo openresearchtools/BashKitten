@@ -19,6 +19,14 @@
     "name": "BashKitten browser licences and source notices",
     "version": "",
     "license": "See original notice",
+    "source": "bashkitten/SOURCE-NOTICE",
+    "sha256": "68227c6c1c058d991d19625c21df6bf8870c0560ee66c35019386ac64cfa2b80",
+    "text": "SPDX-License-Identifier: AGPL-3.0-or-later\n\nBashKitten corresponding source and build material is published with each release:\nhttps://github.com/openresearchtools/bashkitten\n\nThe browser derives from Mozilla Firefox ESR, Waterfox and WildBuzzard. Their\noriginal licenses and attribution remain with the source. Exact retained donor\nrevisions are recorded in browser/bashkitten/upstreams.toml and ports.toml;\nWildBuzzard's original source is https://github.com/openresearchtools/WildBuzzard.\nThe release metadata identifies the exact BashKitten and Firefox revisions.\n\nThe native command entry is browser/browser/app/BashKittenCommandLine.cpp;\ncommands execute in Gecko using its in-tree JsonCpp library. Tor, blocker assets\nand other bundled components retain full licenses and corresponding build/source\nmaterial. Agent, Pi, search and authentication components carry their own notices.\nThe desktop package and paired Termux backend bundle private Node/npm and Pi\nruntimes with their own full notices. Python, the Termux host application and\nexternal operating-system libraries retain their separately installed package\nlicenses. Downloaded AI runtimes and models retain their original upstream\nlicenses; their source and download records are available under About > Licenses\n> AI runtimes and models.\n"
+  },
+  {
+    "name": "BashKitten browser licences and source notices",
+    "version": "",
+    "license": "See original notice",
     "source": "bashkitten/components/bashkitten-cli/MOZILLA-MCP-LICENSE",
     "sha256": "861f33956a7ef8566ba36159c40f126c5ad9fbfe351f673545e0cc6f53fb7dde",
     "text": "MIT License\n\nCopyright (c) 2025 Tom\u00e1\u0161 Grasl\nCopyright (c) 2025\u20132026 Mozilla and Firefox DevTools MCP Contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n"
@@ -38,14 +46,6 @@
     "source": "bashkitten/browser/branding/LICENSE",
     "sha256": "97c01d663782faf22125d54c0c1c153e58302bb846dca9394abca90b4c75a751",
     "text": "The BashKitten kitten-with-glasses logo in\nassets/bashkitten-logo-glasses-original.png is the original transparent PNG\nselected for BashKitten on 23 September 2026, distributed under AGPL-3.0-only.\nThe supplied file is preserved unchanged (SHA-256:\nadee0eba93f17f983a58e7288e3e0ae2bff86e0b11ff226e349b3e7177fd8ce5).\nThe earlier kitten logo remains in assets/bashkitten-logo-original.png under\nthe same terms (SHA-256:\n3188b511e193bb25bab93b51e8c647695f7bdb61d11b41a4c3bfd89c4b58d750).\nscripts/render-branding.py only scales the image and adds transparent padding\nfor native icon sizes and Android adaptive launcher masks. The generated SVG\nembeds the PNG; it is not separately drawn vector artwork.\n\nRetained WildBuzzard branding and wordmark material is distributed under\nAGPL-3.0-or-later. Historical WildBuzzard artwork remains credited to the\nWildBuzzard project; rebuilding replaces its old raster logo with BashKitten's\ncat icon. Inherited Mozilla document artwork retains its own MPL-2.0 headers.\n"
-  },
-  {
-    "name": "BashKitten browser licences and source notices",
-    "version": "",
-    "license": "See original notice",
-    "source": "bashkitten/SOURCE-NOTICE",
-    "sha256": "c3fec90e965fda75de086e5179910c19e70f09964c10ab1bbe258b88e4134eaf",
-    "text": "SPDX-License-Identifier: AGPL-3.0-or-later\n\nBashKitten corresponding source and build material is published with each release:\nhttps://github.com/openresearchtools/bashkitten\n\nThe browser derives from Mozilla Firefox ESR, Waterfox and WildBuzzard. Their\noriginal licenses and attribution remain with the source. Exact retained donor\nrevisions are recorded in browser/bashkitten/upstreams.toml and ports.toml;\nWildBuzzard's original source is https://github.com/openresearchtools/WildBuzzard.\nThe release metadata identifies the exact BashKitten and Firefox revisions.\n\nThe native command entry is browser/browser/app/BashKittenCommandLine.cpp;\ncommands execute in Gecko using its in-tree JsonCpp library. Tor, blocker assets\nand other bundled components retain full licenses and corresponding build/source\nmaterial. Agent, Pi, search and authentication components carry their own notices.\nNode, Python, Termux and system libraries remain separately installed packages.\n"
   },
   {
     "name": "Waterfox source and modification notices",
