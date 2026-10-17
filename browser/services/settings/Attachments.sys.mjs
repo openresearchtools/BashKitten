@@ -183,6 +183,16 @@ export class Downloader {
    * @returns {boolean} True if all attachments were processed successfully, false if failed, null if skipped.
    */
   async cacheAll(force = false) {
+    if (
+      lazy.Utils.shouldSkipRemoteActivity ||
+      !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+        this.bucketName,
+        this.collectionName
+      )
+    ) {
+      return null;
+    }
+
     // If we're offline, don't try
     if (lazy.Utils.isOffline) {
       return null;
@@ -363,10 +373,11 @@ export class Downloader {
 
     if (
       !avoidDownload &&
-      !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
-        this.bucketName,
-        this.collectionName
-      )
+      (lazy.Utils.shouldSkipRemoteActivity ||
+        !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+          this.bucketName,
+          this.collectionName
+        ))
     ) {
       // Attachments for this collection only ever come from bundled
       // dumps or the existing cache.
@@ -531,6 +542,18 @@ export class Downloader {
    * @returns {ArrayBuffer} the file content.
    */
   async downloadAsBytes(record, options = {}) {
+    if (
+      lazy.Utils.shouldSkipRemoteActivity ||
+      !lazy.BashKittenSettingsPolicy.canDownloadAttachments(
+        this.bucketName,
+        this.collectionName
+      )
+    ) {
+      throw new Error(
+        `Network attachments are disabled for ${this.bucketName}/${this.collectionName}`
+      );
+    }
+
     const {
       attachment: { location, hash, size },
     } = record;

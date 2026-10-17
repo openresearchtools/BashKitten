@@ -733,6 +733,16 @@ export class RemoteSettingsClient extends EventEmitter {
    */
   // eslint-disable-next-line complexity
   async maybeSync(expectedTimestamp, options = {}) {
+    if (
+      lazy.Utils.shouldSkipRemoteActivity ||
+      !lazy.BashKittenSettingsPolicy.canSync(
+        this.bucketName,
+        this.collectionName
+      )
+    ) {
+      return;
+    }
+
     // Should the clients try to load JSON dump? (mainly disabled in tests)
     const {
       loadDump = lazy.Utils.LOAD_DUMPS,
@@ -771,38 +781,37 @@ export class RemoteSettingsClient extends EventEmitter {
         throw new RemoteSettingsClient.NetworkOfflineError();
       }
 
-      // Read last timestamp and local data before sync.
+      // Check whether the collection needs its packaged initial data.
       let collectionLastModified = await this.db.getLastModified();
-      const hasLocalData = collectionLastModified !== null;
-      // Local data can contain local fields, strip them.
-      let localRecords = hasLocalData
-        ? (await this.db.list()).map(r => this._cleanLocalFields(r))
-        : null;
-      const localMetadata = await this.db.getMetadata();
 
       // If there is no data currently in the collection, attempt to import
       // initial data from the application defaults.
       // This allows to avoid synchronizing the whole collection content on
       // cold start.
-      if (!hasLocalData && loadDump) {
+      if (collectionLastModified === null && loadDump) {
         try {
           const imported = await this._importJSONDump();
           // The worker only returns an integer. List the imported records to build the sync event.
-          if (imported > 0) {
+          if (imported >= 0) {
             lazy.console.debug(
               `${this.identifier} ${imported} records loaded from JSON dump`
             );
             importedFromDump = await this.db.list();
-            // Local data is the data loaded from dump. We will need this later
-            // to compute the sync result.
-            localRecords = importedFromDump;
           }
-          collectionLastModified = await this.db.getLastModified();
         } catch (e) {
           // Report but go-on.
           console.error(e);
         }
+        collectionLastModified = await this.db.getLastModified();
       }
+      // Read the snapshot after the asynchronous import. An empty dump, or a
+      // parallel get() that imported data, can initialize the timestamp while
+      // the pre-import records were null. Always validate the actual DB records.
+      const localRecords =
+        collectionLastModified !== null
+          ? (await this.db.list()).map(r => this._cleanLocalFields(r))
+          : null;
+      const localMetadata = await this.db.getMetadata();
       let syncResult;
       try {
         // Is local timestamp up to date with the server?

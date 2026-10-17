@@ -418,7 +418,13 @@ pref("browser.safebrowsing.provider.google5.gethashURL", "", locked);
 pref("browser.safebrowsing.provider.mozilla.gethashURL", "", locked);
 pref("browser.safebrowsing.reportPhishURL", "about:blank", locked);
 
-// Backup pages must not advertise or download another vendor's browser.
+// BashKitten does not offer Firefox profile backup or restore. Disable the
+// service itself as well as its UI so startup does not schedule measurements.
+pref("browser.backup.enabled", false, locked);
+pref("browser.backup.scheduled.enabled", false, locked);
+pref("browser.backup.archive.enabled", false, locked);
+pref("browser.backup.restore.enabled", false, locked);
+// Retained backup resources must not advertise another vendor's browser.
 pref(
   "browser.backup.template.fallback-download.release",
   "about:blank",

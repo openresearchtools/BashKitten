@@ -3698,3 +3698,30 @@ Pi or AI services or fetching models/catalogues merely to open licenses. Preserv
 the existing protected native access path. Record unavailable source/license
 information truthfully; never invent attribution. Runtime and model downloads
 retain their source revision and available full notices for later offline access.
+
+### Browser startup service boundary — 17 October 2026
+
+The user clarified that Mozilla-hosted services required for certificate and
+website security may remain, as in Waterfox, while Sync/accounts, profile
+backup, telemetry and unrelated Mozilla product services are not requested.
+This clarification supersedes the earlier ambiguous blanket “no external
+Mozilla services” interpretation during this investigation; it does not revoke
+the existing signed security-only Remote Settings policy. Preserve the explicit
+security collection allowlist, its signature and attachment-integrity checks,
+bundled/cached security data and normal certificate validation. Do not introduce
+another endpoint, transport fallback or fabricated empty records.
+
+Disable the unwanted backup service at its startup/scheduler and UI controls,
+not by creating a Documents directory or hiding its console errors. Diagnose
+and repair failures on the retained security update path without classifying
+that path as telemetry. Enforce the same security-only policy on direct sync
+and attachment APIs as on scheduled polling.
+
+Acceptance must use the installed fresh-profile browser, including a Linux home
+without an XDG Documents directory, startup and idle processing, and scoped
+request evidence distinguishing authorized security updates from prohibited
+Sync, backup, telemetry, experiments and promotional services. Source fixes,
+console screenshots and syntax checks alone are not request-traffic evidence.
+Record actual candidate revisions, remaining errors and missing coverage in
+separate status/evidence records. This amendment records the clarified boundary,
+not a claim that these installed checks have passed.
