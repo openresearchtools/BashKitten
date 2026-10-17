@@ -118,8 +118,13 @@ the original chat opened, its stopped Pi stayed stopped and its five user messag
 remained five. A cold-process test exposed a startup race: the original six-message
 history was restored without a duplicate turn, but navigation checked its target
 before the initial chat catalogue loaded and left a false unavailable error.
-This is a failed cold-tap case, not acceptance. Evidence:
+This is a failed cold-tap case, not acceptance. `0c7b7fc022` waits for the
+coalesced initial catalogue before native navigation reports readiness, with
+the existing authentication/selection rechecks. Nine production-function
+scenarios and 33 compiled native-method assertions pass; installed warm/cold
+retesting remains required. Evidence:
 `verification/notification-open-f727-20261017/installed-result.json`.
+Component receipt: `verification/notification-cold-ready-20261017/verification.json`.
 `2f1711a1c1` separately prevents saved Callback configuration from trying to
 synchronize through a transport that has never been requested to start; requested
 connection failures remain visible. Its installed check is still required.
