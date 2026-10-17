@@ -143,7 +143,7 @@ class Launcher(Gtk.ApplicationWindow):
         button.get_style_context().add_class('application-row')
         button.set_tooltip_text(app.get_display_name())
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-        icon = Gtk.Image(); icon.set_size_request(24,24); box.pack_start(icon, False, False, 0)
+        icon = Gtk.Image(); icon.set_pixel_size(24); icon.set_size_request(24,24); box.pack_start(icon, False, False, 0)
         scale=self.get_scale_factor()
         info=Gtk.IconTheme.get_default().lookup_by_gicon_for_scale(app.get_icon() or Gio.ThemedIcon.new('application-x-executable'),24,scale,Gtk.IconLookupFlags.FORCE_SIZE)
         generation=self.generation
@@ -152,9 +152,9 @@ class Launcher(Gtk.ApplicationWindow):
                 try:
                     pixbuf=source.load_icon_finish(result)
                     if generation==self.generation and self.get_visible():
-                        # The loaded pixels already include the requested scale.
-                        # Keep their device scale so GTK does not multiply twice.
-                        icon.set_from_surface(Gdk.cairo_surface_create_from_pixbuf(pixbuf,scale,None))
+                        # Pixbuf implements GIcon: GTK sizes these already-loaded
+                        # pixels for the widget scale without a Python Cairo bridge.
+                        icon.set_from_gicon(pixbuf,Gtk.IconSize.INVALID)
                 except GLib.Error:pass
             info.load_icon_async(self.icon_jobs,loaded)
         label = Gtk.Label(label=app.get_display_name(), xalign=0, ellipsize=Pango.EllipsizeMode.END)
