@@ -5,6 +5,7 @@ This assembles files only. Prereleases enable APT testing; a successful compilat
 that real device validation has occurred.
 """
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -110,7 +111,14 @@ def copy_asset(file, output, tag):
         if sha(destination) != sha(file):
             raise ValueError('Conflicting release asset: ' + file.name)
     else:
-        shutil.copy2(file, destination)
+        # Candidate inputs are read-only during collection. Reuse their bytes
+        # within this staging filesystem instead of doubling runner disk usage.
+        try:
+            os.link(file, destination)
+        except OSError as error:
+            if error.errno != errno.EXDEV:
+                raise
+            shutil.copy2(file, destination)
     return asset_record(destination, tag)
 
 
