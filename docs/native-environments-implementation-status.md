@@ -5,6 +5,45 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Compact phone layout and installed follow-up — 17 October 2026
+
+The normal Android upgrade to local candidate `e226372894` installed its matching
+backend and OS package while preserving the existing model/router/Pi settings.
+Installed Cuttlefish acceptance through the desktop BashKitten browser confirms
+the `bba43be57d` composer correction at 411- and 360-CSS-pixel widths, both with
+the keyboard open and closed: attachment, model, reasoning, Agents, Phone,
+dictation and Send occupy one row, with roughly 2-CSS-pixel gaps, no overlap and
+no reserved spacer. The closed model truncates; the native dropdown shows its
+complete name. Original device density was restored. Evidence:
+`verification/composer-installed-single-row-20261017/installed-result.json`.
+
+Cold notification navigation also passes on this candidate. After selecting a
+different stopped chat, the test killed only the verified Android browser main
+process and tapped the actual COMPACT READY notification. It opened the original
+Messages chat without the previous false "Chat is unavailable" error; Pi stayed
+stopped, and the native history retained exactly seven user messages. Evidence:
+`verification/notification-cold-e226-20261017/installed-result.json`. The preceding
+local-model reply completed normally: 19.2 seconds loading, then 162.5 seconds CPU
+inference for the existing long conversation, not a readiness/control deadlock.
+See `verification/llama-readiness-e226-20261017/verification.json`.
+
+The independently built Linux OS package at `48f0d3c73f` passes the actual real-Xorg
+third-main-window regression without manually reactivating the window. A newly
+launched Terminal maximizes and removes the existing split; a native modal file
+chooser instead preserves that split and its divider. Normal APT installation
+and native Display Off/On loaded the new OS session; the guest browser/backend
+remain `c1826669d1`. Light appearance, 125% scale, management/two-app preferences
+and pins were preserved. Existing chooser-size and initial split-constraint
+observations remain in the receipt rather than being hidden. Evidence:
+`acceptance/xorg-vm-control/candidate-os48f-xorg-window-management.json`.
+
+These are specific installed passes, not whole-plan or final release acceptance.
+The local `e226372894` source collector failed its stale retained Search binding;
+`a07059facf` repairs that binding and its normal GitHub source collector and both
+Search builds pass. No collector bypass makes the earlier candidate releasable.
+The later license centralization and attribution changes still require their
+combined installed candidate and final public artifact verification.
+
 ## Reboot recovery, update channels and resumed acceptance — 17 October 2026
 
 The existing Wayland desktop, Android 17 Cuttlefish instances and owned real-Xorg
