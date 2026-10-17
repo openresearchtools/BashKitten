@@ -2,6 +2,7 @@
 package com.bashkitten;
 
 import android.os.Bundle;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import org.mozilla.geckoview.*;
@@ -10,8 +11,11 @@ import org.mozilla.geckoview.*;
 public final class LicensesActivity extends ProductActivity {
     private GeckoSession session;
     @Override public void onCreate(Bundle saved) {
-        super.onCreate(saved); setTitle("Bundled component licenses");
+        super.onCreate(saved); setTitle("Licenses and source");
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
+        Button downloaded = new Button(this); downloaded.setText("AI runtimes and models");
+        downloaded.setOnClickListener(ignored -> AgentSettingsActivity.open(this, "licenses"));
+        root.addView(downloaded, new LinearLayout.LayoutParams(-1, -2));
         BrowserApp app = BrowserApp.get(this);
         session = new GeckoSession(new GeckoSessionSettings.Builder().contextId("bashkitten-agent-ui-about").build());
         session.setNavigationDelegate(new GeckoSession.NavigationDelegate() {

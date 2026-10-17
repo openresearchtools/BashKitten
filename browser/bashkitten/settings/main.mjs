@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 const sections = Object.freeze({
+  licenses: { title: 'AI runtimes and models', module: './licenses.mjs' },
   autostart: { title: 'Autostart', module: './autostart.mjs' },
   updates: { title: 'Updates', module: './updates.mjs', platform: 'android' },
   localai: { title: 'Local AI', module: './localai.mjs' },

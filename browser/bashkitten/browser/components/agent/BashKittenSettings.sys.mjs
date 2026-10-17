@@ -3,7 +3,8 @@ export const SETTINGS_URI = "about:bashkitten-settings";
 const views = new WeakMap();
 let registered = false;
 const allowed = {
-  localai: new Set(["clipboard-copy", "localai-open-record", "project-root", "localai-status", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"]),
+  licenses: new Set(["localai-status", "localai-open-record", "native-models-catalogue"]),
+  localai: new Set(["clipboard-copy", "project-root", "localai-status", "localai-save", "localai-model-use", "localai-synthesize", "localai-synthesis-cancel", "localai-quantize", "localai-ini", "localai-browse", "localai-router-models", "localai-router-model-save", "localai-router-model-test", "localai-router-model-test-status", "localai-router-model-test-cancel", "localai-check", "localai-install", "localai-cancel", "localai-action", "localai-refresh", "native-models-status", "native-models-catalogue", "native-models-preset", "native-models-settings", "native-models-search", "native-models-repository", "native-models-download", "native-models-action"]),
   notifications: new Set(["phone-status", "phone-share"]),
   telephone: new Set(["phone-status", "phone-share"]),
   performance: new Set(["performance-sample", "performance-close"]),
