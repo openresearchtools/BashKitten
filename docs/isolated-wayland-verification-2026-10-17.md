@@ -56,12 +56,12 @@ visual follow-up remains separate from the correct list/search positions.
   activate a row. A temporary, coordinator-authorized event capture observed
   trusted gear events and popup dismissal, **no row input/command event**, and
   no settings view. Listeners were removed; no synthetic command is counted as
-  acceptance. The PanelMultiView correction `65f30efd8f` needs installed input
-  verification.
+  acceptance. The subsequent installed PanelMultiView results are recorded below.
 - Cab Display service Off left the container running but showed **A display
   endpoint is still in use**. Ordinary On retry showed a taskbar with black
   guest browser content during the bounded follow-up. No socket was forcibly
-  removed. Endpoint-release correction `a7a3735571` needs actual Off/On retest.
+  removed. Endpoint-release correction `a7a3735571` was subsequently exercised
+  in the 5151 Off/On test below.
 - Native Quit after the cab Display sequence stopped owned workloads and the
   machine service, then left Gecko until a watchdog SIGSEGV. The safe core
   reason was **Shutdown hanging at step AppShutdownConfirmed**; the nested
@@ -72,14 +72,61 @@ visual follow-up remains separate from the correct list/search positions.
   (coordinator launch exit 0; absence verified within 25 seconds). Its four logged
   quit-application blockers and later BashKitten blockers completed. That launch
   had Cuttlefish WebRTC tabs, an already stopped container and **no newly opened
-  container Display**. It does not resolve the earlier crash. Repeat the actual
-  Display Off/On → Quit sequence after the combined fixes, retaining diagnostics.
+  container Display**. It does not resolve the earlier crash. A second 26ba
+  native Quit removed the browser and owned workloads, but its coordinator
+  launcher returned **143**, so it is not recorded as a normal-exit pass.
 - Scoped 26ba HTTP logs contain four original Mozilla newtab-wallpapers-v2 URI
   initializations. Security/certificate services remain allowed; wallpaper
   startup requires correction. The capture used a retained profile and active
   Cuttlefish pages. Generic URL occurrences, including NEL header URLs, are not
   treated as requests. A genuinely fresh browser startup with scoped request
   evidence remains pending; quiet logs/prefs are not a pass.
+
+## Subsequent installed 5151 test
+
+Candidate `5151ba20ce574f77f69b43eb1439b93d42202b48` was installed normally by
+APT and launched with `--purgecaches`, retaining the dedicated test data and
+private asynchronous-shutdown diagnostics. PID/start-time verification preceded
+input. The existing sole-seat relay was used throughout and its exclusive input
+lease was closed when the test ended.
+
+- Configuration pointer activation still failed: gear opened the popup, but the
+  Local AI row click dismissed it without opening the protected view. One bounded
+  array capture found the expected row geometry and enabled pointer events after
+  animation, yet no row input/command event. The capture listeners were removed.
+  Source correction `49a3610a28` awaits installed Wayland pointer verification.
+- Keyboard navigation improved: gear → Down → Enter opened the actual Local AI
+  view and full llama.cpp controls; Close → gear → Down → Space also opened it.
+  Down/Up navigation, repeated reopen and Escape dismissal worked. Space after
+  dismissal did not establish keyboard opening of the gear because its focus
+  was not visible; that case remains unverified.
+- With the container running, Display Off showed the expected message that the
+  container and agent remained running. On restored the taskbar and responsive
+  Applications without the earlier endpoint-in-use error. Observe prevented a
+  typed launcher-search probe; Interact accepted `Term` and filtered the list.
+  Closing/reopening the Display tab retained that search and the running desktop.
+- Application title rows still lacked icons. The guest browser/content region
+  remained black while the launcher and taskbar rendered. After ordinary
+  Ctrl+Alt+D, the launcher disappeared and the black region remained. Read-only
+  guest state selected the existing generated 821×860 default-wallpaper image;
+  its initial-wallpaper marker was absent. No saved selection/cache was edited.
+  Without an independent window-manager desktop-state query, this does not
+  conclusively isolate a wallpaper-only failure. OS correction `3cf1855cb1`
+  requires installed guest upgrade/icon verification.
+- **Native Quit with the active container and Display passed this bounded
+  sequence.** Actual Firefox menu Quit → Close 2 tabs was confirmed at
+  22:14:41 UTC; the exact browser PID/start identity was absent by 22:14:49.211.
+  Coordinator launch session 55211 returned **0**. No signal was sent. Owned
+  browser/backend/container/display workloads and Display endpoints were gone;
+  the dedicated machine service was inactive/dead with MainPID 0. Weston and
+  the view-only viewer remained running. The private stderr completed
+  `quit-application` and all later BashKitten shutdown blockers. This does not
+  erase the cab watchdog/26ba launcher failures or cover the remote, publishing,
+  Local-Off and crash cleanup matrix.
+
+The diagnostic console also showed stock `PictureInPictureChild.sys.mjs` errors
+for a null toggle and an actor accessed after destruction. These were reported
+without suppressing them or changing the live product.
 
 Portal picker latency, larger-viewport geometry/divider behavior, appearance
 portal, scaling, tray protocols/actions, guest application integration, project
@@ -96,6 +143,8 @@ safe crash annotations and explicit partial-result JSON are retained locally:
   — 44 files; manifest SHA256 `8b27b3b09f42cf070abbd14b39ed729245c7f4c854ae9c5f3b52017ede514518`.
 - `/run/media/user/Data/BashkittenBuild/verification/desktop-26ba/isolated-wayland-evidence/manifest.json`
   — 21 files; manifest SHA256 `2d76a5e2461df494a1f982a3c2cc5a016193abf78ecb305a4830373d72cd7011`.
+- `/run/media/user/Data/BashkittenBuild/verification/desktop-5151/isolated-wayland-evidence/manifest.json`
+  — 32 files; manifest SHA256 `ea8920671e7c3768b7f623810c1aecc03ca0d5fbd07a15ce6974e24fafe7bde1`.
 
 Each manifest records per-file hashes. Raw profiles, headers, credentials and
 cores are excluded. Initial failures remain preserved alongside later results.
