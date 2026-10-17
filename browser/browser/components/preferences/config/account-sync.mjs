@@ -796,6 +796,9 @@ Preferences.addSetting({
       Services.obs.removeObserver(emitChange, "backup-service-status-updated");
   },
   visible: () => {
+    if (!Services.prefs.getBoolPref("browser.backup.enabled", false)) {
+      return false;
+    }
     let bs = lazy.BackupService.init();
     return bs.archiveEnabledStatus.enabled || bs.restoreEnabledStatus.enabled;
   },
