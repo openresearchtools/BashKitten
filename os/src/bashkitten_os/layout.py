@@ -87,7 +87,12 @@ class Layout:
     def opened(self, _, window): self.watch(window); self.changed(window)
     def changed(self, window):
         if self.pair and window in self.pair and not self.eligible(window): self.release(self.managed())
-        elif self.managed() and self.eligible(window): self.queue()
+        elif self.managed() and self.eligible(window):
+            # Activation can precede the asynchronous hints or resize actions.
+            # Recheck the current owner so a late eligible main window ends the
+            # pair, but a window that has since lost focus cannot dissolve it.
+            if window==self.screen.get_active_window(): self.activated()
+            else: self.queue()
     def closed(self, _, window):
         if self.restoring and window.get_xid() in self.restoring[0]:
             self.epoch+=1;self.cancel_restore()
