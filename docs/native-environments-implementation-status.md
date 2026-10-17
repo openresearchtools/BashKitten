@@ -60,8 +60,8 @@ and their runtime/source/license records. The UI reached Ready and the generated
 router explicitly selected CPU with GPU/projector/KV offload disabled. No model
 settings were copied or manually seeded. Evidence:
 `verification/android17-fresh-cab1/automatic-defaults-ready.json` in the Build
-workspace. Actual fresh-model chat, vision, transcription and synthesis remain
-pending. This local package setup does not replace public signed update testing.
+workspace. The subsequent installed checks below cover the starter models.
+This local package setup does not replace public signed update testing.
 
 Actual Android `d39` and Linux `cab` About flows exposed the central AI runtimes
 and models license entry, original upstream attribution and full saved license
@@ -88,7 +88,15 @@ with the default Parakeet and used the configured automatic-send behavior.
 Native Pi history contains exactly one original prompt and one transcribed
 message, using Qwen3.5-2B-Q4_0. No physical microphone was opened by the test
 fixture. Evidence: `verification/android17-fresh-cab1/model-and-dictation.json`
-and `native-session-proof.json`. Vision and Pocket TTS remain pending.
+and `native-session-proof.json`. The normal Android attachment picker then
+selected a synthetic image, and the default Qwen model with its downloaded
+projector correctly identified the red square, green circle and blue triangle.
+Local AI's Generate speech produced “Hello from BashKitten” using the untouched
+Pocket TTS CPU defaults. Independent diagnostic transcription of that generated
+WAV recovered the requested phrase. Evidence: `vision-and-synthesis.json` and
+`generated-voice-asr.json` in the same directory. These checks establish the
+fresh defaults on Android 17 x86_64 Cuttlefish, not physical-device microphones,
+GPU behavior, all Callback flows or whole-app acceptance.
 
 A separate `26ba` native Quit returned exit 0 with the container already stopped
 and no Display opened during that launch. Diagnostic logging shows all four
@@ -98,6 +106,32 @@ inside the quit-application async shutdown phase. Its exact pending blocker was
 not recoverable from that core. This narrower successful repeat does not close
 the failure after active Display Off/On; that sequence must be repeated on the
 combined candidate. Raw logs and core data remain private.
+
+The later `5151ba20ce` package was installed normally in the isolated Wayland
+session and the real-Xorg test VM. Configuration keyboard activation now works
+on Wayland, but its actual pointer row still dismisses without opening the view.
+Xorg pointer and keyboard activation work. The Wayland-specific native popup
+positioning path is under investigation; no synthetic activation counts as a
+repaired pointer flow. Display Off/On now reports stopped/running correctly
+while preserving the container. An initial black guest-browser area on restored
+Display remains a separate observed failure. Real-Xorg native Quit with Local
+Off removed all 70 captured owned process identities; this pass had no active
+remote connections or publishing and does not close those lifetime cases.
+
+Start menu rows lacked icons because the guest did not have the optional Python
+Cairo bridge used by the image conversion. `3cf1855cb1` sends the asynchronously
+loaded image directly through GTK's icon API. Real GTK component checks cover
+1×/2× scale, themed/file/default icons, drawing and cancellation. Installed OS
+package verification is pending. Default wallpaper asset/render checks passed;
+actual installed logo visibility remains under inspection without changing saved
+wallpaper choices.
+
+The full CI artifact audit at `26ba97cd4a` verified all ten DEBs and the signed
+ARM64 APK with its exact Termux/OS pair. It found the APT repository's
+case-sensitive asset filter omitted both `BashKittenOS` DEBs. APT commit
+`d00a8c8e984f2698b073e702b59dafb6021e9dee` changes only that source's pattern;
+normal selection-loop checks now include all ten packages in stable and nightly.
+No publication or signed device upgrade is claimed by this artifact check.
 
 ## First-run defaults and isolated desktop testing — 17 October 2026
 
