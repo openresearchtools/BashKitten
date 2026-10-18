@@ -49,6 +49,10 @@ public final class TelephonyRuntime {
     private JSONObject state;
     volatile Backend gateway;
     private boolean serviceReady;
+    private boolean serviceStarting;
+    private volatile PhoneCallService voiceService;
+    private volatile long serviceRevision;
+    private String receptionError = "";
     private String error = "";
     private String errorCallId;
     private long errorRevision;
@@ -107,7 +111,7 @@ public final class TelephonyRuntime {
         if (state == null) return json("error", error);
         JSONObject copy; try { copy = new JSONObject(state.toString()); } catch (JSONException invalid) { throw new IllegalStateException(invalid); }
         return json("settings", copy.optJSONObject("settings"), "backends", copy.optJSONObject("backends"), "mailbox", copy.optJSONObject("mailbox"),
-            "connected", gateway != null && gateway.connected(), "error", error, "activeCalls", calls.size());
+            "connected", gateway != null && gateway.connected(), "error", error, "activeCalls", calls.size(), "callReceptionReady", serviceReady);
     }
     public void observe(Consumer<JSONObject> listener) { serial.execute(() -> observers.add(listener)); execute(this::changed); }
     public void unobserve(Consumer<JSONObject> listener) { serial.execute(() -> observers.remove(listener)); }
@@ -140,10 +144,12 @@ public final class TelephonyRuntime {
                 if (mastersChanged && enabledListener != null) main.post(() -> enabledListener.accept(next.optBoolean("telephony") || next.optBoolean("messages")));
                 if (!enabled("telephony")) {
                     for (KittenConnection call : new ArrayList<>(calls.values())) end(call, DisconnectCause.CANCELED);
+                    stopReception();
                     telecom.unregister(); invalidateRoute("calls");
                 }
                 if (!enabled("messages")) { invalidateRoute("messages"); PhoneNotifications.clear(context); }
                 clearError(); changed();
+                if (patch.optBoolean("telephony")) ensureReception();
                 // Master changes synchronize after the enabled listener starts transport.
                 // Saved-only changes wait for explicit startup; started transports still report synchronization failures.
                 if (!mastersChanged && gateway != null && !"not-started".equals(gateway.connectionState()) && (enabled("telephony") || enabled("messages"))) gateway.request("phone.settings", json("settings", next)).whenComplete((v,e) -> { if (e != null) execute(() -> failed(e)); });
@@ -166,14 +172,16 @@ public final class TelephonyRuntime {
     static java.util.List<String> keys(JSONObject value) { java.util.List<String> result = new java.util.ArrayList<>(); value.keys().forEachRemaining(result::add); return result; }
     static void put(JSONObject object, String key, Object value) { try { object.put(key, value); } catch (JSONException error) { throw new IllegalArgumentException(error); } }
     public CompletableFuture<JSONObject> setupAccount() {
-        return job(() -> { if (!enabled("telephony")) throw new IllegalStateException("Turn on Telephony first"); telecom.register(); return json("enabled", telecom.enabled()); });
+        return job(() -> { if (!enabled("telephony")) throw new IllegalStateException("Turn on Telephony first"); ensureReception(); telecom.register(); return json("enabled", telecom.enabled()); });
     }
     public CompletableFuture<JSONObject> readiness() {
         return job(() -> {
             boolean account = false; String reason = "";
             try { if (enabled("telephony")) account = telecom.enabled(); } catch (Exception unsupported) { reason = unsupported.getMessage(); }
+            if (reason.isEmpty() && enabled("telephony") && !serviceReady) reason = receptionError.isEmpty()
+                ? "Call reception is not ready. Open Call setup to enable it while BashKitten is visible." : receptionError;
             return json("accountEnabled", account, "reason", reason, "gateway", gateway != null && gateway.connected(),
-                "microphone", context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
+                "microphone", context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED, "callReceptionReady", serviceReady);
         });
     }
     private <T> CompletableFuture<T> job(Callable<T> work) {
@@ -229,7 +237,7 @@ public final class TelephonyRuntime {
                 .putParcelableArrayListExtra(ContactsContract.Intents.Insert.DATA, rows);
         });
     }
-    public void call(String backendId) { execute(() -> { if (!enabled("telephony")) throw new IllegalStateException("Telephony is off"); telecom.call(address(backendId)); }); }
+    public void call(String backendId) { execute(() -> { if (!enabled("telephony")) throw new IllegalStateException("Telephony is off"); ensureReception(); telecom.call(address(backendId)); }); }
     Connection connection(ConnectionRequest request, boolean incoming) {
         KittenConnection call = new KittenConnection(this, incoming);
         execute(() -> {
@@ -264,6 +272,7 @@ public final class TelephonyRuntime {
         callErrorRevisions.put(call.id, errorRevision);
         if (!enabled("telephony") || gateway == null) { end(call, DisconnectCause.ERROR); callFailed(call.id, new IllegalStateException("Phone's Termux gateway is unavailable")); return; }
         if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) { end(call, DisconnectCause.ERROR); callFailed(call.id, new IllegalStateException("Allow the microphone in Phone settings before calling")); return; }
+        if (voiceService == null && !serviceStarting) { end(call, DisconnectCause.ERROR); callFailed(call.id, new IllegalStateException("Call reception is not ready. Open Call setup while BashKitten is visible before calling.")); return; }
         call.preparing = true;
         gateway.prepare().whenComplete((ready,error) -> execute(() -> {
             call.preparing = false;
@@ -271,16 +280,57 @@ public final class TelephonyRuntime {
             if(error != null || !enabled("telephony")) { if(error != null)callFailed(call.id,error); end(call,DisconnectCause.ERROR); return; }
             if(call.incoming) { try { requireEvent(event(call.eventId),"calls"); } catch(Exception expired) { JSONObject original=event(call.eventId);if(original!=null&&!original.optString("kind").equals("question")&&enabled("telephony")){mailbox(call.eventId);call.eventId=null;}callFailed(call.id,expired); end(call,DisconnectCause.CANCELED); return; } }
             call.answered = true; call.setActive();
-            try { context.startForegroundService(new Intent(context, PhoneCallService.class)); }
-            catch (RuntimeException denied) { callFailed(call.id,denied); end(call, DisconnectCause.ERROR); return; }
-            if (serviceReady) startFlow(call);
+            updateVoiceService();
         }));
     }
-    void voiceServiceReady(boolean ready, String reason) {
-        serviceReady = ready;
-        for (KittenConnection call : new ArrayList<>(calls.values())) if (call.answered && !call.ended) {
-            if (ready) startFlow(call); else { callFailed(call.id,new IllegalStateException(reason)); end(call, DisconnectCause.ERROR); }
+    /** Explicit Calls enable/setup or the saved browser-startup action; never a restart loop. */
+    public CompletableFuture<Void> prepareReception() { return job(() -> { ensureReception(); return null; }); }
+    boolean ownsVoiceService(PhoneCallService service) { return voiceService == service; }
+    private void ensureReception() {
+        if (!enabled("telephony")) return;
+        if (voiceService != null) { updateVoiceService(); return; }
+        if (serviceStarting) return;
+        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+            throw new IllegalStateException("Allow the microphone in Callback settings before enabling call reception");
+        serviceStarting = true;
+        try { context.startForegroundService(new Intent(context, PhoneCallService.class)); }
+        catch (RuntimeException denied) {
+            serviceStarting = false;
+            receptionError = "Call reception is unavailable. Open Call setup while BashKitten is visible. Android: " + denied.getMessage();
+            throw new IllegalStateException(receptionError, denied);
         }
+    }
+    private void stopReception() {
+        serviceReady = false; serviceStarting = false; voiceService = null; serviceRevision++;
+        receptionError = "";
+        context.stopService(new Intent(context, PhoneCallService.class));
+    }
+    void voiceServiceStarted(PhoneCallService service) {
+        serviceStarting = false;
+        if (!enabled("telephony")) { main.post(service::stopSelf); return; }
+        voiceService = service; updateVoiceService();
+    }
+    private void updateVoiceService() {
+        PhoneCallService service = voiceService;
+        if (service == null) return;
+        boolean active = calls.values().stream().anyMatch(call -> call.answered && !call.ended);
+        long revision = ++serviceRevision; serviceReady = false;
+        main.post(() -> { if (voiceService == service && serviceRevision == revision) service.update(active, revision); });
+    }
+    void voiceServiceReady(PhoneCallService service, long revision, String reason) {
+        if (voiceService != service || serviceRevision != revision) return;
+        serviceReady = reason.isEmpty();
+        if (serviceReady) {
+            if (!receptionError.isEmpty() && error.equals(receptionError)) clearError();
+            receptionError = "";
+        } else {
+            voiceService = null; serviceRevision++; receptionError = reason;
+            main.post(service::stopSelf); failed(new IllegalStateException(reason));
+        }
+        for (KittenConnection call : new ArrayList<>(calls.values())) if (call.answered && !call.ended) {
+            if (serviceReady) startFlow(call); else { callFailed(call.id,new IllegalStateException(reason)); end(call, DisconnectCause.ERROR); }
+        }
+        changed();
     }
     private void startFlow(KittenConnection call) {
         if (call.flow != null) return;
@@ -291,7 +341,13 @@ public final class TelephonyRuntime {
         if (errorCallId != null && (failedCall == null || failedCall.ended) && Objects.equals(previousErrorRevision, errorRevision)) { clearError(); changed(); }
         call.flow = new CallFlow(this, call); if (call.audioState != null) call.flow.audioRoute(call.audioState); call.flow.start(); for(JSONObject event : call.waitingEvents)call.flow.enqueue(event); call.waitingEvents.clear();
     }
-    void voiceServiceStopped() { serviceReady = false; for (KittenConnection call : new ArrayList<>(calls.values())) if (call.answered) end(call, DisconnectCause.ERROR); }
+    void voiceServiceStopped(PhoneCallService service) {
+        if (voiceService != service) return;
+        voiceService = null; serviceRevision++; serviceReady = false; serviceStarting = false;
+        for (KittenConnection call : new ArrayList<>(calls.values())) if (call.answered) end(call, DisconnectCause.ERROR);
+        if (enabled("telephony")) { receptionError = "Call reception stopped. Open Call setup while BashKitten is visible to enable it again."; failed(new IllegalStateException(receptionError)); }
+        changed();
+    }
     public void hangup() { execute(() -> { for (KittenConnection call : new ArrayList<>(calls.values())) end(call, DisconnectCause.LOCAL); }); }
     void end(KittenConnection call, int cause) {
         if (call.ended) return; call.ended = true;
@@ -305,7 +361,7 @@ public final class TelephonyRuntime {
         if (call.incoming && !call.answered && (cause == DisconnectCause.REJECTED || cause == DisconnectCause.MISSED)) mailbox(call.eventId);
         else if (call.eventId != null) finishEvent(call.eventId, "call-ended");
         calls.remove(call.id); call.disconnect(cause, "");
-        if (calls.isEmpty()) { serviceReady = false; context.stopService(new Intent(context, PhoneCallService.class)); }
+        if (enabled("telephony")) updateVoiceService();
         changed();
     }
     void incomingFailed(ConnectionRequest request) {

@@ -46,7 +46,7 @@ final class PhoneVoiceGateway implements TelephonyRuntime.Backend, AutoCloseable
     }
     CompletableFuture<Void> restoreStartup(){return phone.settingsSnapshot().thenCompose(settings->{
         if(!settings.optBoolean("startup")||!settings.optBoolean("telephony")&&!settings.optBoolean("messages"))return CompletableFuture.completedFuture(null);
-        return prepare(settings.optBoolean("telephony"),null);
+        return phone.prepareReception().thenCompose(ignored -> prepare(settings.optBoolean("telephony"),null));
     });}
     synchronized void ready(){localAvailable=true;if(desired&&requested)start();}
     synchronized void start(){
