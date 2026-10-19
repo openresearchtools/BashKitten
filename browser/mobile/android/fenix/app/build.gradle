@@ -825,6 +825,8 @@ tasks.register("detekt", Exec) {
 android.sourceSets.main.assets.srcDir("$buildDir/generated/bashkitten-about")
 def productAbout = tasks.register('stageBashKittenAbout', Exec) {
     dependsOn ':bashkitten:stageNotices'
+    // Read the same packaged Gecko license page that ships in the APK.
+    dependsOn rootProject.tasks.named('machStagePackage')
     commandLine 'python3', "${rootProject.projectDir}/bashkitten/android/scripts/about-assets.py",
         '--native-notices', "${project(':bashkitten').buildDir}/generated/notices",
         '--output', "$buildDir/generated/bashkitten-about", '--version', bashKittenVersion
