@@ -23,6 +23,17 @@ updates with SDK removal before the next full candidate builds. AI engine builds
 remain daughter-CI-only. The dated amendments in the native plan record scope;
 source presence and successful builds remain separate from installed acceptance.
 
+The user also requests embedding the tested full-file-reading extension in the
+existing bundled Pi extensions. Its agent-facing tool is exactly `full-read`,
+with the companion `compact_context`. Keep complete UTF-8 reads, Pi's approximate
+token/context accounting, the 70% per-file limit and 20,000-token headroom before
+the selected model's compaction reserve. Enforce one tool call and one file at a
+time. `full-read` never compacts; insufficient space requests a handoff through
+`compact_context`, then one retry. Pi and the extension own compaction and
+continuation; BashKitten remains the existing UI/RPC client. Do not add separate
+compaction, provider or UI machinery. Ship the source through existing packaging,
+without dependence on the prototype directory or its test fixtures/live logs.
+
 ## 10–11 October native environments and Display plan
 
 Latest 11 October mobile toolbar/autostart correction: keep the clickable logo
@@ -407,8 +418,8 @@ cancellation and cleanup; remove superseded job/polling/open flows. The user
 explicitly rejected adding OS sandboxing or device-capability gates around
 LibreOffice conversion. Preserve the existing protected Agent/browser boundary.
 
-This branch reuses BashKitten's browser UI with unmodified Pi 1.1.0
-(`abe508e1b89912adde45528136c3221eb69acdd7`). It contains no Rust backend or
+This branch reuses BashKitten's browser UI with unmodified Pi 1.3.0
+(`71023aec1546d6d677a65669c5665c0927ce0dd0`). It contains no Rust backend or
 agent reimplementation. `PI_UPSTREAM.md` records the runtime pin;
 `docs/pi-termux.md` describes the architecture and native boundaries.
 
