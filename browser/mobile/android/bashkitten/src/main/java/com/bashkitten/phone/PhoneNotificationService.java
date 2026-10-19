@@ -8,9 +8,38 @@ import android.service.notification.StatusBarNotification;
 
 public final class PhoneNotificationService extends NotificationListenerService {
     static volatile PhoneNotificationService current;
-    @Override public void onListenerConnected(){current=this;PhonePolicy p=PhoneControlsRuntime.get(this).policy;if(!p.master()||!p.selected(PhonePolicy.Feature.NOTIFICATIONS))requestUnbind();p.changed();}
-    @Override public void onListenerDisconnected(){if(current==this){current=null;PhoneControlsRuntime.get(this).policy.stateChanged();}}
-    @Override public void onDestroy(){if(current==this){current=null;PhoneControlsRuntime.get(this).policy.stateChanged();}super.onDestroy();}
+    private static final Object lifecycle = new Object();
+    private volatile boolean ready;
+    private long generation;
+    boolean ready(){return ready;}
+    @Override public void onListenerConnected(){
+        synchronized(lifecycle){generation++;ready=true;current=this;}
+        PhoneControlsRuntime.get(this).policy.changed();
+    }
+    void unbind(){
+        final long expected;
+        synchronized(lifecycle){if(current!=this||!ready)return;ready=false;expected=generation;}
+        PhoneControlsRuntime.get(this).policy.stateChanged();
+        // Only the background reconciler issues Binder requests, once per
+        // connection. Off stays enforced while Android completes the unbind.
+        try{requestUnbind();}
+        catch(SecurityException disconnected){
+            // Android may have revoked this listener token before its callback.
+            // Retire only that connection, never a newer onListenerConnected.
+            disconnected(expected);
+        }
+    }
+    private void disconnected(long expected){
+        synchronized(lifecycle){
+            if(expected>=0&&generation!=expected)return;
+            generation++;ready=false;
+            if(current!=this)return;
+            current=null;
+        }
+        PhoneControlsRuntime.get(this).policy.changed();
+    }
+    @Override public void onListenerDisconnected(){disconnected(-1);}
+    @Override public void onDestroy(){disconnected(-1);super.onDestroy();}
     // Deliberately do not extract or retain callback payloads. Current state is read only on an authorized request.
     @Override public void onNotificationPosted(StatusBarNotification value){}
     @Override public void onNotificationRemoved(StatusBarNotification value){}
