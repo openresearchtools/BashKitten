@@ -807,7 +807,7 @@
     let modelDefaults = { model: '', thinking: '' };
     let newModelSelectionEdited = false, visibleModelsRefresh = null;
     let current = null;
-    let source = null;
+    let source = null, sourceReady = null, sourceSession = null, sourceView = -1;
     let config = null;
     let settingsDirty = false, settingsSaving = false, settingsDraftVersion = 0, modelsGeneration = 0;
     const agentDefaults = { enabled: false, count: 3, model: '', thinking: '' };
@@ -824,7 +824,6 @@
     let editingQueueId = null;
     let editingQueueToken = null;
     let queueEditStarting = false;
-    let queueEditSaving = false;
     let editingQueueSnapshot = null;
     let renderedTurn = null;
     let displayedUsage = null;
@@ -833,10 +832,59 @@
     let historyRenderTarget = null;
     let oldestSegment = 0;
     let loadingHistory = false;
-    let sessionView = 0;
+    let sessionView = 0, chatScrollRevision = 0;
     let liveToolCalls = new Map();
     let sessionCache = [], projectCache = [];
     const chatDrafts = new Map();
+    const composerOperations = new Map();
+    const composerKey = () => current?.id || 'new:' + (pendingProjectId || '');
+    function beginComposerOperation(kind) {
+      const key = composerKey();
+      if (composerOperations.has(key)) return null;
+      const draft = window.bashkittenDraft.capture(false);
+      if (!draft) return null;
+      const operation = {key, kind, view:sessionView, draft};
+      composerOperations.set(key, operation);
+      setRunButton(queueState.busy);
+      return operation;
+    }
+    function endComposerOperation(operation) {
+      if (composerOperations.get(operation.key) === operation) composerOperations.delete(operation.key);
+      setRunButton(queueState.busy);
+      draftChanged();
+    }
+    function operationVisible(operation) {
+      return operation.view === sessionView && operation.key === composerKey();
+    }
+    function updateComposerDraft(operation, change) {
+      const visible = operation.key === composerKey();
+      const draft = (visible && window.bashkittenDraft.capture(false)) || chatDrafts.get(operation.key) ||
+        {...operation.draft, text:'', files:[], retained:[], goal:false, edit:null};
+      if (change(draft) === false) return;
+      chatDrafts.set(operation.key, draft);
+      if (visible) applyComposerContent(draft);
+      draftChanged();
+    }
+    function settleQueueDraft(operation, edit, text) {
+      updateComposerDraft(operation, draft => {
+        if (draft.edit?.id !== edit.id || draft.edit?.token !== edit.token) return false;
+        if (draft.text.trim() === text.trim()) { draft.text = ''; draft.retained = []; }
+        else draft.retained = [...new Set([...(draft.retained || []), ...(edit.snapshot?.attachmentPaths || [])])];
+        draft.edit = null; draft.notice = '';
+      });
+    }
+    function applyComposerContent(value) {
+      $('#prompt').value = value.text;
+      pendingFiles = (value.files || []).filter(file => file instanceof File);
+      pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
+      goalDraft = Boolean(value.goal);
+      const edit = current?.id === value.sessionId ? value.edit : null;
+      editingQueueId = edit?.id || null; editingQueueToken = edit?.token || null; editingQueueSnapshot = edit?.snapshot || null;
+      $('#attachBtn').disabled = Boolean(editingQueueId);
+      renderAttachments(); renderGoalChip();
+      $('#prompt').dispatchEvent(new Event('input'));
+      if (value.notice) $('#composerHint').textContent = value.notice;
+    }
     let nextSessionOffset = null;
     let loadingSessions = null;
     let sessionCatalogueReady = false;
@@ -1740,6 +1788,7 @@
       button.textContent = running && !editing && !command ? 'Ⅱ' : '▶';
       button.title = editing ? (queuedItems().find(item => item.id === editingQueueId)?.kind === 'steer' ? 'Send edited steering message' : 'Save queued message') : goalDraft ? 'Send goal' : command ? 'Run command' : (running ? 'Stop current run' : 'Send');
       button.setAttribute('aria-label', button.title);
+      button.disabled = composerOperations.has(composerKey());
     }
 
     function renderEvent(event) {
@@ -2087,7 +2136,7 @@
       const panel = $('#queuePanel');
       panel.innerHTML = '';
       const items = queuedItems();
-      if (editingQueueId && !queueEditSaving && !items.some(item => item.id === editingQueueId)) recoverQueueDraft();
+      if (editingQueueId && composerOperations.get(composerKey())?.kind !== 'edit' && !items.some(item => item.id === editingQueueId)) recoverQueueDraft();
       setRunButton(queueState.busy);
       panel.classList.toggle('hidden', !items.length);
       for (const item of items) {
@@ -2144,46 +2193,50 @@
       renderExtensionStatuses(value.data?.extensionStatuses);
     }
 
-    async function mutateQueued(id, action, content = null) {
-      if (!current) return;
-      const view = sessionView;
+    async function mutateQueued(id, action, content = null, owner = null) {
+      owner ||= {key:composerKey(), draft:window.bashkittenDraft.capture(false), sessionId:current?.id, view:sessionView, editToken:editingQueueId === id ? editingQueueToken : null};
+      if (!owner.sessionId) return false;
       try {
-        const value = await api(`/api/sessions/${current.id}/queue`, {
-          method: 'POST',
-          headers: {'content-type': 'application/json'},
-          body: JSON.stringify({id, action, content, edit_token:editingQueueId === id ? editingQueueToken : null})
+        const value = await api(`/api/sessions/${owner.sessionId}/queue`, {
+          method:'POST', headers:{'content-type':'application/json'},
+          body:JSON.stringify({id, action, content, edit_token:owner.editToken})
         });
-        if (sessionView !== view) return;
-        if (editingQueueId === id && (action === 'edit' || action === 'remove')) await cancelQueueEdit(false);
+        if (action === 'remove' && owner.draft?.edit?.id === id) settleQueueDraft(owner, owner.draft.edit, owner.draft.text);
+        if (sessionView !== owner.view || current?.id !== owner.sessionId) return true;
         renderQueueState(value.data);
         return true;
       } catch (error) {
-        await refreshQueue().catch(() => {});
-        if (editingQueueId === id && /no longer owned|no longer exists|no longer running/.test(error.message)) recoverQueueDraft();
-        $('#composerHint').textContent = error.message + ' · Draft kept';
+        if (sessionView === owner.view && current?.id === owner.sessionId) {
+          await refreshQueue().catch(() => {});
+          if (sessionView !== owner.view || current?.id !== owner.sessionId) return false;
+          if (editingQueueId === id && /no longer owned|no longer exists|no longer running/.test(error.message)) recoverQueueDraft();
+          $('#composerHint').textContent = error.message + ' · Draft kept';
+        }
         return false;
       }
     }
 
     async function saveQueueEdit(promote = false) {
-      if (!editingQueueId || queueEditSaving) return;
+      if (!editingQueueId) return;
       const text = $('#prompt').value.trim();
       if (!text && !editingQueueSnapshot?.attachments?.length) return;
-      queueEditSaving = true;
-      $('#sendBtn').disabled = true;
+      const operation = beginComposerOperation('edit');
+      if (!operation) return;
+      const edit = operation.draft.edit;
+      const owner = {sessionId:operation.draft.sessionId, view:operation.view, editToken:edit.token};
       try {
-        // Promotion keeps the edit hold, so the worker cannot consume old text.
-        if (promote && !await mutateQueued(editingQueueId, 'promote')) return;
-        await mutateQueued(editingQueueId, 'edit', text);
+        // Both actions retain the same session and edit hold across navigation.
+        if (promote && !await mutateQueued(edit.id, 'promote', null, owner)) return;
+        if (!await mutateQueued(edit.id, 'edit', text, owner)) return;
+        settleQueueDraft(operation, edit, text);
       } finally {
-        queueEditSaving = false;
-        $('#sendBtn').disabled = false;
-        renderQueueState(queueState);
+        endComposerOperation(operation);
+        if (operation.key === composerKey()) renderQueueState(queueState);
       }
     }
 
     async function beginQueueEdit(item) {
-      if (!current || queueEditStarting) return;
+      if (!current || queueEditStarting || composerOperations.has(composerKey())) return;
       queueEditStarting = true;
       try {
       const view = sessionView;
@@ -2203,7 +2256,7 @@
         }
         renderQueueState(result.data);
         item = queuedItems().find(queued => queued.id === item.id) || item;
-      } catch (error) { $('#composerHint').textContent = error.message; return; }
+      } catch (error) { if (sessionView === view) $('#composerHint').textContent = error.message; return; }
       editingQueueId = item.id;
       editingQueueToken = token;
       editingQueueSnapshot = item;
@@ -2220,18 +2273,22 @@
     }
 
     async function cancelQueueEdit(release = true) {
+      const view = sessionView, id = editingQueueId, token = editingQueueToken;
       if (release && editingQueueId && current) {
         try {
           const result = await api(`/api/sessions/${current.id}/queue`, {
             method:'POST', headers:{'content-type':'application/json'},
-            body:JSON.stringify({id:editingQueueId, action:'cancel_edit', edit_token:editingQueueToken})
+            body:JSON.stringify({id, action:'cancel_edit', edit_token:token})
           });
+          if (view !== sessionView || editingQueueId !== id || editingQueueToken !== token) return;
           renderQueueState(result.data);
         } catch (error) {
+          if (view !== sessionView || editingQueueId !== id || editingQueueToken !== token) return;
           $('#composerHint').textContent = error.message;
           if (!/no longer owned|no longer exists|no longer running/.test(error.message)) return;
         }
       }
+      if (view !== sessionView || editingQueueId !== id || editingQueueToken !== token) return;
       editingQueueId = null;
       editingQueueToken = null;
       editingQueueSnapshot = null;
@@ -2309,7 +2366,7 @@
             item.append(dot);
           }
           bindSessionContextMenu(item,session);
-          item.onclick = () => openSession(session).catch(error => { $('#composerHint').textContent = error.message; });
+          item.onclick = () => window.bashkittenNavigation.call('open', {id:session.id}).catch(error => { $('#composerHint').textContent = error.message; });
           item.addEventListener('keydown',event=>{if(event.target===item&&(event.key==='Enter'||event.key===' ')){event.preventDefault();item.click();}});
           container.append(item);
           if (descendants.length && !collapsedAgents.has(session.id)) {
@@ -2518,8 +2575,11 @@
     }
 
     function connectSession(id, consume = renderEvent, view = sessionView) {
-      source?.close();
-      return new Promise((resolve, reject) => {
+      if (view !== sessionView || current?.id !== id) return Promise.resolve();
+      if (source && sourceSession === id && sourceView === view) return sourceReady;
+      source?.close(); source = null;
+      sourceSession = id; sourceView = view;
+      sourceReady = new Promise((resolve, reject) => {
         const stream = new EventSource(`/api/sessions/${id}/events`);
         source = stream;
         let subscribed = false;
@@ -2531,7 +2591,7 @@
           }
         }, 15000);
         stream.onmessage = event => {
-          if (sessionView !== view) { stream.close(); return; }
+          if (sessionView !== view || current?.id !== id || source !== stream) { stream.close(); return; }
           try {
             const value = JSON.parse(event.data);
             if (!value.type && value.ok && value.message === 'subscribed') {
@@ -2561,7 +2621,7 @@
           stream.close();
           if (source === stream) source = null;
           if (!subscribed) reject(new Error('Agent session is offline'));
-          else if (sessionView === view) {
+          else if (sessionView === view && current?.id === id) {
             if (current) current.running = false;
             renderQueueState({busy: false});
             setCompacting(false);
@@ -2570,12 +2630,15 @@
           }
         });
       });
+      return sourceReady;
     }
 
     async function openSession(session, reconnect = false) {
       if (!session) return;
       void cancelDictation();
-      const view = ++sessionView;
+      const view = ++sessionView, scrollRevision = chatScrollRevision;
+      const savedDraft = reconnect ? null : chatDrafts.get(session.id);
+      const savedScroll = reconnect ? $('#chat').scrollTop : savedDraft?.scroll;
       try {
         if (editingQueueId && !reconnect) await cancelQueueEdit();
         if (sessionView !== view) return;
@@ -2615,6 +2678,12 @@
         $('#chatInner').innerHTML = '';
         renderQuestions([]);
         $('#composerHint').textContent = 'Opening chat…';
+        if (!reconnect) {
+          renderQueueState();
+          if (savedDraft) await window.bashkittenDraft.restore(savedDraft);
+          else applyComposerContent({sessionId:session.id, text:''});
+          if (sessionView !== view) return;
+        }
         const resumed = await api(`/api/sessions/${session.id}/resume`, {method:'POST'});
         if (sessionView !== view) return;
         if (resumed.stopped) {
@@ -2625,7 +2694,7 @@
         setSidebar(false);
         if (!$('#filePanel').classList.contains('hidden')) openFiles(current.cwd);
         document.querySelectorAll('.session').forEach(element => element.classList.toggle('active', element.dataset.id === session.id));
-        $('#chat').scrollTop = $('#chat').scrollHeight;
+        if (scrollRevision === chatScrollRevision) $('#chat').scrollTop = savedScroll === undefined ? $('#chat').scrollHeight : Number(savedScroll) || 0;
       } catch (error) {
         if (sessionView === view && !authRequired) {
           current.running = false;
@@ -2676,6 +2745,10 @@
         fillSelect($('#model'), models, modelDefaults.model);
         $('#thinking').value = modelDefaults.thinking;
       }
+      const draft = chatDrafts.get(composerKey());
+      if (draft) await window.bashkittenDraft.restore(draft);
+      else applyComposerContent({text:''});
+      if (sessionView !== view) return;
       document.querySelectorAll('.session').forEach(element => element.classList.remove('active'));
       showWelcome();
       if (!$('#filePanel').classList.contains('hidden')) openFiles(pendingCwd);
@@ -2850,6 +2923,7 @@
       const panel = $('#sessions');
       if (panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 120) loadSessions(true).catch(() => {});
     });
+    for (const type of ['wheel', 'touchmove', 'pointerdown', 'keydown']) $('#chat').addEventListener(type, () => { ++chatScrollRevision; }, {passive:true});
     $('#chat').addEventListener('scroll', () => {
       if ($('#chat').scrollTop < 80) loadOlderHistory();
     });
@@ -2861,12 +2935,18 @@
       nativeHost.call('sign-in', {}).catch(error => { $('#authError').textContent = error.message; });
     };
     $('#signOut').onclick = async () => {
-      try { await api('/api/logout', {method:'POST'}); requireLogin(); }
-      catch (error) { $('#settingsNotice').textContent = error.message; }
+      try {
+        if (nativeHost) await nativeHost.call('sign-out', {csrf});
+        else await api('/api/logout', {method:'POST'});
+        requireLogin();
+      } catch (error) {
+        if (nativeHost) { requireLogin(); $('#authError').textContent = error.message; }
+        else $('#settingsNotice').textContent = error.message;
+      }
     };
 
     window.addEventListener('focus',()=>{if(current)refreshQueue().catch(()=>{});});
-    $('#newBtn').onclick = () => beginNewSession();
+    $('#newBtn').onclick = () => window.bashkittenNavigation.call('new').catch(error => { $('#composerHint').textContent = error.message; });
     async function loadFolder(path, nearest = false) {
       const generation = ++folderGeneration;
       $('#folderUse').disabled = true;
@@ -3013,35 +3093,42 @@
     $('#defaultModel').onchange = () => setThinking($('#defaultModel'), $('#defaultThinking'));
 
     function isSessionCommand(text) { return /^\/compact(?:\s|$)/.test(text) || /^\/(fork|clone|login|providers|settings|attach)$/.test(text); }
-    async function openSessionById(id) {
+    async function openSessionById(id, view = sessionView) {
       // A list request started before Pi forked cannot contain the new session.
       if (loadingSessions) await loadingSessions;
       let sessions = await loadSessions();
+      if (view !== sessionView) return false;
       let session = sessions.find(item => item.id === id);
       while (!session && nextSessionOffset !== null) {
         sessions = await loadSessions(true);
+        if (view !== sessionView) return false;
         session = sessions.find(item => item.id === id);
       }
       if (!session) throw Error('Pi created the chat, but it could not be found in the chat list. Refresh to reconnect.');
-      await openSession(session);
+      const opening = openSession(session), openedView = sessionView;
+      await opening;
+      if (openedView !== sessionView || current?.id !== id) return false;
       document.querySelector(`.session[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({block:'nearest'});
+      return true;
     }
     async function branchSession(kind, entryId, sourceId = current?.id) {
+      const view = sessionView;
       const result = await api(`/api/sessions/${encodeURIComponent(sourceId)}/${kind}`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({entryId})});
       if (result.cancelled) throw Error(`Pi cancelled the ${kind}; the original chat is unchanged.`);
-      await openSessionById(result.id);
+      if (!await openSessionById(result.id, view)) return;
       if (kind === 'fork') { $('#prompt').value=result.text || ''; $('#prompt').dispatchEvent(new Event('input')); }
       $('#prompt').focus();
     }
     async function runSessionCommand(text, consumeDraft = false) {
-      const command = text.split(/\s/)[0];
-      const consume = () => { if (consumeDraft) { $('#prompt').value=''; $('#prompt').dispatchEvent(new Event('input')); } closeComposerActions(); };
+      const command = text.split(/\s/)[0], view = sessionView, sourceId = current?.id;
+      const consume = () => { if (view !== sessionView || current?.id !== sourceId) return; if (consumeDraft && $('#prompt').value.trim() === text.trim()) { $('#prompt').value=''; $('#prompt').dispatchEvent(new Event('input')); } closeComposerActions(); };
       if (command === '/attach') { $('#files').click(); consume(); return; }
       if (command === '/settings' || command === '/providers' || command === '/login') { consume(); showSettingsView(command === '/settings' ? 'app' : 'services'); return; }
       if (!current) { $('#composerHint').textContent = 'Open a chat first.'; return; }
       try {
         if (command === '/fork') {
-          const sourceId = current.id, result = await api(`/api/sessions/${sourceId}/fork-messages`), root=$('#forkMessages');
+          const result = await api(`/api/sessions/${sourceId}/fork-messages`), root=$('#forkMessages');
+          if (view !== sessionView || current?.id !== sourceId) return;
           root.replaceChildren(); $('#forkError').textContent = '';
           if (!result.messages.length) throw Error('This chat has no messages to fork yet.');
           for (const message of result.messages) {
@@ -3051,12 +3138,11 @@
           }
           consume(); $('#forkDialog').showModal(); return;
         }
-        if (command === '/clone') { await branchSession('clone'); consume(); return; }
-        await api(`/api/sessions/${current.id}/resume`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({start:true})});
-        if (!source) await connectSession(current.id);
-        await api(`/api/sessions/${current.id}/compact`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({instructions:text.slice(8).trim()})});
+        if (command === '/clone') { consume(); await branchSession('clone', undefined, sourceId); return; }
+        await api(`/api/sessions/${sourceId}/compact`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({instructions:text.slice(8).trim()})});
         consume();
-      } catch (error) { $('#composerHint').textContent = error.message; }
+        if (view === sessionView && current?.id === sourceId && !source) await connectSession(sourceId, renderEvent, view);
+      } catch (error) { if (view === sessionView && current?.id === sourceId) $('#composerHint').textContent = error.message; }
     }
 
     $('#composer').onsubmit = async event => {
@@ -3069,63 +3155,74 @@
         await runSessionCommand(text, true);
         return;
       }
-      if(goalDraft&&!text){$('#composerHint').textContent='Enter the goal in your message.';return;}
-      const sendingGoal=goalDraft;goalDraft=false;renderGoalChip();
-      const files = [...pendingFiles];
-      const retained = [...pendingRetainedAttachments];
-      $('#prompt').value = '';
-      $('#prompt').style.height = 'auto';
-      pendingFiles = [];
-      pendingRetainedAttachments = [];
-      renderAttachments();
+      if (goalDraft && !text) { $('#composerHint').textContent = 'Enter the goal in your message.'; return; }
+      const operation = beginComposerOperation('send');
+      if (!operation) return;
+      const draft = operation.draft;
+      let destination = draft.sessionId;
+      applyComposerContent({...draft, text:'', files:[], retained:[], goal:false, notice:''});
+      chatDrafts.delete(operation.key);
       if ($('#chatInner .welcome')) $('#chatInner').innerHTML = '';
-      $('#sendBtn').disabled = true;
+      let submitted = false;
       try {
-        if (!current) {
-          const createForm = new FormData();
-          createForm.append('prompt', text);
-          createForm.append('cwd', pendingCwd);
-          if (pendingProjectId) createForm.append('projectId', pendingProjectId);
-          createForm.append('model', $('#model').value);
-          createForm.append('thinking', $('#thinking').value);
-          createForm.append('subagents', JSON.stringify(chatAgents));
-          const result = await api('/api/sessions', {method: 'POST', body: createForm});
-          chatDrafts.delete('new:' + (pendingProjectId || ''));
-          pendingProjectId = null;
-          const sessions = await loadSessions();
-          current = sessions.find(session => session.id === result.id) || {id: result.id, title: text || 'Image session', cwd: pendingCwd, model: $('#model').value, thinking: $('#thinking').value, running: true};
-          history.replaceState(null, '', '#session=' + current.id);
-          renderSessionSidebar(sessions);
-          $('#title').textContent = current.title;
-          $('#folderLabel').textContent = displayFolder(current.cwd);
-          $('#folderBtn').disabled = true;
-          $('#folderBtn').title = `Saved working folder: ${displayFolder(current.cwd)}. Start a new chat to choose another.`;
+        if (!destination) {
+          const form = new FormData();
+          form.append('prompt', text); form.append('cwd', draft.cwd);
+          if (draft.projectId) form.append('projectId', draft.projectId);
+          form.append('model', draft.model); form.append('thinking', draft.thinking);
+          form.append('subagents', JSON.stringify(draft.subagents));
+          const result = await api('/api/sessions', {method:'POST', body:form});
+          const visible = operationVisible(operation);
+          destination = result.id;
+          const session = {id:destination, title:text || 'Image session', cwd:draft.cwd,
+            model:draft.model, thinking:draft.thinking, subagents:draft.subagents};
+          // Only the still-open originating new-chat view adopts the created chat.
+          // Other new-chat drafts and subsequent navigation keep their own state.
+          if (visible) {
+            chatDrafts.delete(operation.key);
+            current = session; pendingProjectId = null;
+            history.replaceState(null, '', '#session=' + destination);
+            $('#title').textContent = session.title;
+            $('#folderLabel').textContent = displayFolder(session.cwd);
+            $('#folderBtn').disabled = true;
+            $('#folderBtn').title = `Saved working folder: ${displayFolder(session.cwd)}. Start a new chat to choose another.`;
+          }
+          composerOperations.delete(operation.key);
+          operation.key = destination;
+          operation.draft = {...draft, sessionId:destination, projectId:null};
+          composerOperations.set(destination, operation);
+          setRunButton(queueState.busy);
+          void loadSessions().catch(() => {});
         }
-        if (!source || !queueState.busy) {
-          await api(`/api/sessions/${current.id}/resume`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({start:true})});
-          await connectSession(current.id);
+        const form = new FormData();
+        form.append('content', text); form.append('delivery', 'queue');
+        if (draft.goal) form.append('goal', 'true');
+        for (const file of draft.files) form.append('file', file);
+        for (const path of draft.retained) form.append('retained_attachment', path);
+        // The existing message endpoint owns worker startup and delivery. The
+        // selected view and its event stream never choose this operation's target.
+        const result = await api(`/api/sessions/${destination}/messages`, {method:'POST', body:form});
+        submitted = true;
+        if (operationVisible(operation)) {
+          renderQueueState(result.data);
+          if (draft.goal) renderGoal(result.data.goal);
+          current.running = true;
         }
-        const messageForm = new FormData();
-        messageForm.append('content', text);
-        if(sendingGoal)messageForm.append('goal','true');
-        messageForm.append('delivery', 'queue');
-        for (const file of files) messageForm.append('file', file);
-        for (const path of retained) messageForm.append('retained_attachment', path);
-        const result = await api(`/api/sessions/${current.id}/messages`, {method: 'POST', body: messageForm});
-        renderQueueState(result.data);
-        if(sendingGoal)renderGoal(result.data.goal);
-        setTimeout(() => refreshQueue().catch(() => {}), 100);
-        if (current) current.running = true;
-        setRunButton(true);
       } catch (error) {
-        goalDraft ||= sendingGoal;renderGoalChip();
-        $('#prompt').value = [text, $('#prompt').value].filter(value => value.trim()).join('\n\n');
-        $('#prompt').dispatchEvent(new Event('input'));
-        pendingFiles.unshift(...files);
-        pendingRetainedAttachments = [...new Set([...retained, ...pendingRetainedAttachments])];
-        renderAttachments();
-        $('#composerHint').textContent = error.message + ' · Draft kept';
-      } finally { $('#sendBtn').disabled = false; draftChanged(); }
+        updateComposerDraft(operation, value => {
+          value.text = [text, value.text].filter(text => text?.trim()).join('\n\n');
+          value.files = [...draft.files, ...(value.files || [])];
+          value.retained = [...new Set([...draft.retained, ...(value.retained || [])])];
+          value.goal ||= draft.goal;
+          value.notice = error.message + ' · Draft kept';
+        });
+      } finally { endComposerOperation(operation); }
+      // A failed observation connection must not restore an already-sent draft.
+      if (submitted && current?.id === destination) {
+        const view = sessionView;
+        try { if (!source) await connectSession(destination, renderEvent, view); }
+        catch (error) { if (view === sessionView && current?.id === destination) $('#composerHint').textContent = error.message; }
+      }
     };
 
     // Capture belongs to this protected document and the original chat only.
@@ -3195,6 +3292,7 @@
         current = destination; capture.destination = dictationDestination();
         history.replaceState(null, '', '#session=' + destination.id);
         renderSessionSidebar(await loadSessions());
+        if (dictation !== capture || dictationDestination() !== capture.destination) return;
         $('#folderLabel').textContent = displayFolder(destination.cwd); $('#folderBtn').disabled = true;
       }
       await api(`/api/sessions/${destination.id}/resume`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ start: true }), signal: capture.abort.signal });
@@ -3271,29 +3369,28 @@
 
     async function stopCurrentRun() {
       if (!current) return;
+      const operation = beginComposerOperation('stop');
+      if (!operation) return;
       const fallback = queuedItems();
-      $('#sendBtn').disabled = true;
       try {
-        const result = await api(`/api/sessions/${current.id}/stop`, {method: 'POST'});
-        const pending = result.data?.queuedMessages ? [...result.data.steeringMessages, ...result.data.queuedMessages] : fallback;
-        const restored = pending.filter(item => item.id !== editingQueueId).map(item => item.content);
-        const draft = $('#prompt').value;
-        pendingRetainedAttachments = [...new Set([...pendingRetainedAttachments, ...pending.flatMap(item => item.attachmentPaths || [])])];
-        recoverQueueDraft();
-        $('#prompt').value = [...restored, draft].filter(value => value?.trim()).join('\n\n');
-        $('#prompt').dispatchEvent(new Event('input'));
-        renderAttachments();
+        const result = await api(`/api/sessions/${operation.draft.sessionId}/stop`, {method:'POST'});
+        const pending = result.data?.queuedMessages ? [...(result.data.steeringMessages || []), ...result.data.queuedMessages] : fallback;
+        updateComposerDraft(operation, draft => {
+          const restored = pending.filter(item => item.id !== draft.edit?.id).map(item => item.content);
+          draft.text = [...restored, draft.text].filter(text => text?.trim()).join('\n\n');
+          draft.retained = [...new Set([...(draft.retained || []), ...pending.flatMap(item => item.attachmentPaths || []), ...(draft.edit?.snapshot?.attachmentPaths || [])])];
+          draft.edit = null;
+          draft.notice = draft.text || draft.retained.length ? 'Draft kept. Send when ready to continue.' : '';
+        });
         // Stop cancels work, not observation of this still-running worker.
-        current.running = false;
-        renderQueueState({busy: false});
-        $('#composerHint').textContent = restored.length || draft ? 'Draft kept. Send when ready to continue.' : '';
-        await loadSessions().catch(() => {});
+        if (operationVisible(operation)) {
+          current.running = false;
+          renderQueueState({busy:false});
+        }
+        void loadSessions().catch(() => {});
       } catch (error) {
-        $('#composerHint').textContent = error.message;
-      } finally {
-        $('#sendBtn').disabled = false;
-        setRunButton(queueState.busy);
-      }
+        updateComposerDraft(operation, draft => { draft.notice = error.message; });
+      } finally { endComposerOperation(operation); }
     }
 
     $('#sendBtn').onclick = () => {
@@ -3905,7 +4002,7 @@
     window.bashkittenDraft = {
       capture(includeStored = true) {
         if (!initialized || draftRestoring) return null;
-        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,modelSelectionEdited:newModelSelectionEdited,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
+        return {sessionId:current?.id || null,projectId:pendingProjectId,text:$('#prompt').value,files:pendingFiles,retained:pendingRetainedAttachments,goal:goalDraft,notice:chatDrafts.get(composerKey())?.notice || '',cwd:pendingCwd,model:$('#model').value,thinking:$('#thinking').value,modelSelectionEdited:newModelSelectionEdited,subagents:chatAgents,selection:[$('#prompt').selectionStart,$('#prompt').selectionEnd],scroll:$('#chat').scrollTop,edit:editingQueueId?{id:editingQueueId,token:editingQueueToken,snapshot:editingQueueSnapshot}:null,...(includeStored ? {chatDrafts:[...chatDrafts]} : {})};
       },
       async restore(value) {
         if (!initialized || !value || typeof value.text !== 'string') return;
@@ -3913,35 +4010,28 @@
         const prompt = $('#prompt').value;
         let view = sessionView;
         try {
-          for (const item of value.chatDrafts || []) if (Array.isArray(item) && typeof item[0] === 'string' && item[1] && typeof item[1].text === 'string') chatDrafts.set(item[0], item[1]);
+          const {chatDrafts:stored, ...destinationDraft} = value;
+          for (const item of stored || []) if (Array.isArray(item) && typeof item[0] === 'string' && item[1] && typeof item[1].text === 'string') chatDrafts.set(item[0], item[1]);
           if (value.sessionId && /^[a-f0-9-]{36}$/.test(value.sessionId)) {
-            history.replaceState(null, '', '#session=' + value.sessionId);
-            const session = await linkedSession(await loadSessions());
-            if (sessionView !== view || $('#prompt').value !== prompt) return;
-            if (!session) return;
-            if (current?.id !== session.id) {
+            if (current?.id !== value.sessionId) {
+              history.replaceState(null, '', '#session=' + value.sessionId);
+              const session = await linkedSession(await loadSessions());
+              if (sessionView !== view || $('#prompt').value !== prompt || !session) return;
+              chatDrafts.set(session.id, destinationDraft);
               const opening = openSession(session); view = sessionView;
               await opening;
             }
           } else if (current || value.projectId !== pendingProjectId) {
+            chatDrafts.set('new:' + (value.projectId || ''), destinationDraft);
             const opening = beginNewSession(value.projectId || null); view = sessionView;
             await opening;
           }
           if (sessionView !== view || $('#prompt').value !== prompt) return;
-          $('#prompt').value = value.text;
-          pendingFiles = (value.files || []).filter(file => file instanceof File);
-          pendingRetainedAttachments = (value.retained || []).filter(item => typeof item === 'string');
-          goalDraft = Boolean(value.goal);
           if (!current && typeof value.cwd === 'string') pendingCwd = value.cwd;
           if (!current) newModelSelectionEdited = value.modelSelectionEdited === true;
           if (!current && value.subagents) { chatAgents = { ...agentDefaults, ...value.subagents }; showAgentChoice(); }
           for (const [selector,key] of [['#model','model'],['#thinking','thinking']]) if ([...$(selector).options].some(option => option.value === value[key])) $(selector).value = value[key];
-          if (value.edit && current?.id === value.sessionId) {
-            editingQueueId = value.edit.id; editingQueueToken = value.edit.token; editingQueueSnapshot = value.edit.snapshot;
-            renderQueueState(queueState);
-          }
-          renderAttachments(); renderGoalChip();
-          $('#prompt').dispatchEvent(new Event('input'));
+          applyComposerContent(value);
           if (Array.isArray(value.selection)) $('#prompt').setSelectionRange(...value.selection.slice(0,2));
           $('#chat').scrollTop = Number(value.scroll) || 0;
           $('#folderLabel').textContent = displayFolder(current?.cwd || pendingCwd) || 'Set folder';
@@ -3967,22 +4057,27 @@
           await loadSessions(action === 'more'); return this.call('snapshot');
         }
         if (action === 'open' || action === 'new') {
-          const key = current?.id || 'new:' + (pendingProjectId || '');
-          const draft = window.bashkittenDraft.capture(false);
+          const key = composerKey(), draft = window.bashkittenDraft.capture(false);
           if (draft) chatDrafts.set(key, draft);
-          // Preserve the held queue edit and its original per-chat token while
-          // another chat is shown. Clearing local controls must not release it.
+          let view = ++sessionView;
+          // The edit hold stays with its original chat while another is shown.
           if (editingQueueId) await cancelQueueEdit(false);
+          if (view !== sessionView) return this.call('snapshot');
+          let opening;
           if (action === 'open') {
             let found = sessionCache.find(session => session.id === value.id);
-            while (!found && nextSessionOffset !== null) { await loadSessions(true); found = sessionCache.find(session => session.id === value.id); }
+            while (!found && nextSessionOffset !== null) {
+              await loadSessions(true);
+              if (view !== sessionView) return this.call('snapshot');
+              found = sessionCache.find(session => session.id === value.id);
+            }
             if (!found) throw Error('Chat is unavailable');
-            if (current?.id !== found.id) await openSession(found);
-            showChatView();
-          } else await beginNewSession(value.projectId || null);
-          const next = chatDrafts.get(current?.id || 'new:' + (pendingProjectId || ''));
-          $('#prompt').value = '';
-          if (next) await window.bashkittenDraft.restore(next);
+            opening = openSession(found);
+          } else opening = beginNewSession(value.projectId || null);
+          view = sessionView;
+          await opening;
+          if (view !== sessionView) return this.call('snapshot');
+          showChatView();
           draftChanged(); return this.call('snapshot');
         }
         if (action === 'settings' || action === 'general' || action === 'providers') {
