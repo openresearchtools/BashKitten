@@ -2,7 +2,11 @@
 
 import { Preferences } from "chrome://global/content/preferences/Preferences.mjs";
 import { SettingGroupManager } from "chrome://browser/content/preferences/config/SettingGroupManager.mjs";
-import { loginAutostart, setLoginAutostart } from "resource:///modules/DesktopAutostart.sys.mjs";
+// This pane loads in the Preferences window. Keep its runtime/remote/shutdown
+// owners in the shared system global instead of instantiating them in that window.
+const { loginAutostart, setLoginAutostart } = ChromeUtils.importESModule(
+  "resource:///modules/DesktopAutostart.sys.mjs"
+);
 
 Preferences.addSetting({
   id: "bashkittenStartOnLogin",
