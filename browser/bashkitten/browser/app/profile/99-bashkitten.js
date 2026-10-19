@@ -15,6 +15,13 @@ pref("app.update.url.override", "", locked);
 pref("extensions.systemAddon.update.enabled", false, locked);
 pref("extensions.systemAddon.update.url", "", locked);
 
+// Media plugins use on-demand/manual installation by default. Keep each native
+// Automatic Updates control available for an explicit user opt-in. The global
+// updateEnabled switch would also disable DRM setup and manual update checks.
+pref("media.gmp-gmpopenh264.autoupdate", false);
+pref("media.gmp-widevinecdm.autoupdate", false);
+pref("media.gmp-widevinecdm-l1.autoupdate", false);
+
 // No Mozilla support, marketing, release-note, feedback, or product links.
 // about:blank keeps inherited "Learn more" controls local and non-networked.
 pref("app.support.baseURL", "about:blank#", locked);

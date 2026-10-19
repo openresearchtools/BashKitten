@@ -170,6 +170,22 @@ to hide startup errors. Fresh installed-profile startup and request observation
 must distinguish authorized security traffic from prohibited service traffic;
 syntax/source checks do not establish that acceptance.
 
+GMP media provisioning is separate from those security-data updates. The shared
+policy defaults each supported plugin's `media.<plugin>.autoupdate` to false,
+while preserving the native Automatic Updates choice in `about:addons`. The idle
+installer skips its manifest and Chromium checks when no visible enabled plugin
+allows automatic updates; the provider's periodic check honors those default
+preferences too. Explicitly enabling automatic updates still works. EME,
+decoders, passkeys and existing installed plugins remain available. The native
+DRM enable/missing-CDM path requests an on-demand install independently of its
+automatic-update choice, and manual plugin updates retain the upstream download,
+certificate, signature and artifact verification path. Do not replace these
+hooks with the upstream `media.gmp-manager.updateEnabled` kill switch, which also
+disables explicit setup. On-demand media and explicitly enabled automatic updates
+can still use the upstream servers; fresh startup without browsing or media must
+not provision plugins. Installed fresh-profile traffic, explicit setup and saved
+automatic-update choices still require acceptance.
+
 The new-tab wallpaper feed also applies the attachment policy before resolving
 server metadata or broadcasting image URLs: its content CSS loads those URLs
 directly, outside the Remote Settings attachment downloader. For this offline
