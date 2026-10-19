@@ -134,7 +134,7 @@ async function savedView(meta) {
   const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
   const questions = (await readJson(path.join(sessionDir(meta.id), 'questions.json'), { records: [] })).records;
   return { questions, cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
-    entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questions) } : e), events: [],
+    entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questions, e.id) } : e), events: [],
     steeringMessages: drafts.filter(q => q.kind === 'steer').map(item => queueItem(item, questions)), queuedMessages: drafts.filter(q => q.kind !== 'steer').map(item => queueItem(item, questions)) };
 }
 const hiddenSessionsFile = path.join(dataDir, 'hidden-pi-sessions.json');

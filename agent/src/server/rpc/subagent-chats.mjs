@@ -43,7 +43,7 @@ export class SubagentChats {
       // Save the queue before its display attribution; retries are deduplicated
       // by the same delivery ID, never by prompt text.
       if (!drafts.some(item => item.agentDelivery === value.agentDelivery)) await writeJson(file, [...drafts, item]);
-      meta.messages ||= []; meta.messages.push(value); await writeMeta(meta);
+      meta.messages ||= []; meta.messages.push({ ...value, id: item.id }); await writeMeta(meta);
       return true;
     });
     if (held) return { id: target.id, delivery: 'held', message: 'Pi is stopped; the message is kept as a draft in that chat.' };

@@ -10,6 +10,7 @@ import { selectedRuntime, allowRuntimeWork, loadPi } from './runtime.mjs';
 import { managedLocalProvider, managedThinkingUnknown } from './managed-provider.mjs';
 import { notifyTurn, notifyQuestion, resolvedQuestion, notifyAssistantMessage } from './notifications.mjs';
 import { QuestionOwner } from './questions.mjs';
+import { MessageAttribution, bindMessageEntries } from './message-presentation.mjs';
 import { createPhoneWorker } from '../phone/worker.mjs';
 import { inheritChatProject } from '../projects.mjs';
 import { validatePhoneDelivery } from '../phone.mjs';
@@ -29,6 +30,8 @@ meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
 let phoneWorker, phoneSession;
 let rpc, providersVersion, localProviderRevision, projectNativeSession, busy = false, compacting = false, stopping = false, changing = false;
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false, contextUpdates = 0;
+const messageAttribution = new MessageAttribution();
+let liveUserSubmission;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
 // Recover every remaining item as a held draft; only an explicit user send releases it.
@@ -74,7 +77,7 @@ const questionOwner = new QuestionOwner({
     meta.messages ||= [];
     if (queue.some(q => q.agentDelivery === item.agentDelivery) || meta.messages.some(q => q.agentDelivery === item.agentDelivery)) return { held: true };
     item.id = randomUUID(); queue.push(item);
-    meta.messages.push({ text: item.text, wire: item.wire, attachments: [], agentDelivery: item.agentDelivery });
+    meta.messages.push({ id: item.id, text: item.text, wire: item.wire, attachments: [], agentDelivery: item.agentDelivery });
     try { await checkpoint(); await writeMeta(meta); await send(item); return { held: Boolean(item.held) }; }
     catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
   }),
@@ -100,7 +103,7 @@ async function reportCompleted(entryId, chatId = id, session = meta.piSessionId)
   return reportWork;
 }
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
-function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questionOwner.state.records) } : e); }
+function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questionOwner.state.records, e.id) } : e); }
 function status() { return { stopGeneration: questionOwner.state.generation, questions: questionOwner.list(), runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext: pendingContext || contextUpdates > 0, modelSelection: { model: meta.model, thinking: meta.thinking },
   steeringMessages: queue.filter(q => q.kind === 'steer').map(item => queueItem(item, questionOwner.state.records)), queuedMessages: queue.filter(q => q.kind !== 'steer').map(item => queueItem(item, questionOwner.state.records)) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
@@ -121,6 +124,8 @@ async function readState(follow) {
   if (phoneSession !== state.sessionId) { await phoneWorker.adopt(state.sessionId); phoneSession = state.sessionId; }
   if (server && !changing && meta.piSessionId && state.sessionId !== meta.piSessionId) await adoptSession(state, follow);
   entries = activeBranch(history.entries, history.leafId);
+  messageAttribution.seed(state.sessionId, history.entries);
+  bindMessageEntries(meta, history.entries);
   meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
   meta.thinking = state.thinkingLevel;
   if (await managedThinkingUnknown(meta.model)) {
@@ -166,25 +171,29 @@ async function adoptSession(state, follow) {
   if (follow) emit({ type: 'session_changed', id }, false);
   for (const client of clients) client.end();
   clients.clear(); events = []; dialogs.clear(); extensionStatuses.clear(); liveToolCalls.clear(); queue = [];
+  messageAttribution.clear();
   busy = state.isStreaming; compacting = state.isCompacting;
   pendingModel = null;
   await checkpoint();
 }
-function reconcileQueue(event) {
+function reconcileQueue() {
   const remaining = [];
-  const candidates = [...queue];
-  for (const [kind, values] of [['steer', event.steering], ['queue', event.followUp]]) {
-    for (const wire of values || []) {
-      const index = candidates.findIndex(q => q.wire === wire && !q.editToken);
-      const item = index < 0 ? { id: randomUUID(), wire, text: wire, attachments: [] } : candidates.splice(index, 1)[0];
+  const candidates = new Map(queue.map(item => [item.id, item]));
+  for (const [kind, values] of Object.entries(messageAttribution.queues)) {
+    for (const slot of values) {
+      const id = slot.item?.id || (slot.id ||= randomUUID());
+      const item = candidates.get(id) || slot.item || { id, wire: slot.wire, text: slot.wire, attachments: [] };
+      candidates.delete(id);
       remaining.push({ ...item, kind });
     }
   }
-  queue = [...remaining, ...candidates.filter(q => q.editToken || q.held)];
+  queue = [...remaining, ...[...candidates.values()].filter(q => q.editToken || q.held)];
   queueChanged();
 }
 async function launch() {
   extensionStatuses.clear(); liveToolCalls.clear();
+  messageAttribution.clear();
+  messageAttribution.sessionId = null;
   const newSession = !meta.piFile;
   meta.contextVersion = await syncContext();
   providersVersion = await providerRevision();
@@ -213,11 +222,15 @@ async function launch() {
     if (event.type === 'agent_start') busy = true;
     if (event.type === 'compaction_start') { compacting = true; busy = true; }
     if (event.type === 'compaction_end') compacting = false;
-    if (event.type === 'queue_update') { reconcileQueue(event); return; }
+    if (event.type === 'queue_update') { messageAttribution.update(event); reconcileQueue(); return; }
     if (event.type === 'message_start' && event.message?.role === 'user') {
-      const content = event.message.content;
-      const wire = typeof content === 'string' ? content : (content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
-      const index = queue.findIndex(q => q.wire === wire && !q.editToken);
+      const consumed = messageAttribution.start(event.message);
+      liveUserSubmission = consumed?.item.id;
+      if (consumed) {
+        const record = meta.messages.find(item => item.id === consumed.item.id);
+        if (record) record.nativeMessage = consumed.nativeMessage;
+      }
+      const index = queue.findIndex(q => q.id === consumed?.item.id);
       if (index >= 0) { queue.splice(index, 1); queueChanged(); }
     }
     if (event.type === 'extension_ui_request' && ['select', 'confirm', 'input', 'editor'].includes(event.method)) dialogs.set(event.id, event);
@@ -247,8 +260,14 @@ async function launch() {
       return;
     }
     const translated = translateEvent(event);
-    if (translated?.type === 'message') translated.message = displayMessage(meta, translated.message, questionOwner.state.records);
+    if (translated?.type === 'message') translated.message = displayMessage(meta, translated.message, questionOwner.state.records, undefined, liveUserSubmission);
     if (translated) emit(translated);
+    if (event.type === 'message_end' && event.message.role === 'user') {
+      liveUserSubmission = undefined;
+      // Pi appends after emitting message_end. Read its ID asynchronously and
+      // persist attribution while the turn runs, without delaying RPC controls.
+      void refresh().catch(error => emit({ type: 'notice', message: 'Could not save message attribution: ' + error.message }, false));
+    }
   });
   rpc.on('exit', () => {
     if (changing || stopping) return;
@@ -361,7 +380,18 @@ async function send(item) {
   item.delivery = 'submitted'; await checkpoint();
   const images = item.images || await attachmentImages(item.attachments || []);
   if (!await canSend(item)) { item.held = item.recovered = true; await checkpoint(); return; }
-  await rpc.command('prompt', { message: item.wire, images, streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
+  // Older held drafts have no submission identity in their presentation record.
+  // Give this explicit send its own record; never reuse an earlier equal text.
+  if (!meta.messages.some(record => record.id === item.id)) {
+    meta.messages.push({ id: item.id, text: item.text, wire: item.wire, attachments: item.attachments,
+      agentSource: item.agentSource, agentDelivery: item.agentDelivery });
+    await writeMeta(meta);
+  }
+  messageAttribution.submit(item);
+  try {
+    const accepted = await rpc.command('prompt', { message: item.wire, images, streamingBehavior: item.kind === 'steer' ? 'steer' : 'followUp' });
+    messageAttribution.accepted(accepted?.disposition);
+  } catch (error) { messageAttribution.accepted('failed'); throw error; }
   // Pi can expand skills/templates or transform input before message_start, so
   // its consumed text need not equal item.wire. After accepted preflight, an
   // empty native queue means this item is no longer pending even during a turn.
@@ -371,17 +401,24 @@ async function send(item) {
 }
 async function rebuildQueue(mutate) {
   const old = [...queue];
+  const submitted = messageAttribution.queues;
+  messageAttribution.clear();
   const cleared = await rpc.command('clear_queue');
   // Only restore messages Pi actually returned. A boundary may have consumed a
   // message before clear_queue; replaying the browser's stale copy duplicates it.
-  const candidates = [...old], retained = [];
+  const candidates = new Map(old.map(item => [item.id, item])), retained = [];
   for (const [kind, values] of [['steer', cleared.steering], ['queue', cleared.followUp]]) {
-    for (const wire of values || []) {
-      const index = candidates.findIndex(q => q.wire === wire && !q.editToken);
-      retained.push({ ...(index < 0 ? { id: randomUUID(), wire, text: wire, attachments: [] } : candidates.splice(index, 1)[0]), kind });
+    // Pi consumes each queue in order. A turn boundary before clear_queue can
+    // leave only its suffix, including indistinguishable equal-text entries.
+    const slots = submitted[kind].slice(submitted[kind].length - (values || []).length);
+    const known = slots.length === (values || []).length && slots.every((slot, index) => slot.wire === values[index]);
+    for (const [index, wire] of (values || []).entries()) {
+      const slot = known ? slots[index] : null, id = slot?.item?.id || slot?.id;
+      const item = candidates.get(id) || slot?.item || { id: randomUUID(), wire, text: wire, attachments: [] };
+      candidates.delete(id); retained.push({ ...item, kind });
     }
   }
-  retained.push(...candidates.filter(q => q.editToken || q.held));
+  retained.push(...[...candidates.values()].filter(q => q.editToken || q.held));
   const order = new Map(old.map((item, index) => [item.id, index]));
   retained.sort((a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity));
   let failure;
@@ -460,6 +497,7 @@ async function handle(req, res) {
     if (req.url === '/stop') {
       const pending = status(), stoppedItems = new Set(queue.map(item => item.id));
       await questionOwner.stop();
+      messageAttribution.clear();
       await rpc.command('clear_queue');
       // A peer/result arriving while Stop saves its barrier belongs to the
       // next held queue, not the earlier drafts returned to this caller.
@@ -493,8 +531,8 @@ async function handle(req, res) {
         if (!stalePhone && !stoppedAgent) { await questionOwner.resume(requestGeneration); await applyPending(); }
         meta.messages ||= [];
         if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { held: Boolean(queue.find(item => item.agentDelivery === value.agentDelivery)?.held), data: status() };
-        meta.messages.push({ text: value.text, wire: value.wire, attachments: value.attachments, agentSource: value.agentSource, agentDelivery: value.agentDelivery });
         const item = { ...value, ownerGeneration: requestGeneration, id: randomUUID(), kind: value.kind || 'queue' };
+        meta.messages.push({ id: item.id, text: value.text, wire: value.wire, attachments: value.attachments, agentSource: value.agentSource, agentDelivery: value.agentDelivery });
         queue.push(item);
         if (stalePhone || stoppedAgent) { item.held = item.recovered = true; await checkpoint(); await writeMeta(meta); queueChanged(); return { held: true, data: status() }; }
         try { await checkpoint(); await writeMeta(meta); await send(item); } catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
@@ -518,7 +556,8 @@ async function handle(req, res) {
               const prefix = item.agentSource ? item.wire.slice(0, item.wire.length - item.text.length) : '';
               const suffix = item.agentSource ? '' : item.wire.slice(item.text.length);
               item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered; delete item.questionId; delete item.phoneDelivery; delete item.phoneAuthorization; item.ownerGeneration = requestGeneration;
-              meta.messages.push({ text: item.text, wire: item.wire, attachments: item.attachments, agentSource: item.agentSource, agentDelivery: item.agentDelivery });
+              const record = meta.messages.find(record => record.id === item.id);
+              if (record) Object.assign(record, { text: item.text, wire: item.wire });
             } else throw Error('Unknown queue action');
           }
         });

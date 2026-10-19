@@ -2,6 +2,7 @@
 // Pure readers: never import the runtime/bootstrap, discover sessions or start workers.
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { displayMessage } from './rpc/message-presentation.mjs';
 
 const validId = id => /^[a-f0-9-]{36}$/.test(id || '');
 async function json(file, fallback, signal) {
@@ -49,11 +50,7 @@ export async function readNativeChat(pi, meta, { signal, leafId } = {}) {
   const branches = all.filter(entry => entry.id && !parents.has(entry.id)).map(entry => ({ id: entry.id, type: entry.type, timestamp: entry.timestamp }));
   const entries = native.getBranch(leafId).map(entry => {
     if (entry.type !== 'message' || entry.message.role !== 'user') return entry;
-    const content = entry.message.content;
-    const wire = typeof content === 'string' ? content : (content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
-    const upload = (meta.messages || []).find(message => message.wire === wire);
-    return upload ? { ...entry, message: { ...entry.message, agentSource: upload.agentSource,
-      content: [...upload.attachments, { type: 'text', text: upload.text }] } } : entry;
+    return { ...entry, message: displayMessage(meta, entry.message, [], entry.id) };
   });
   return { entries, branches, cwd: native.getCwd(), leafId: leafId || native.getLeafId() };
 }
