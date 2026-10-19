@@ -146,6 +146,40 @@ implementation; neither has been established. A framework-only design would
 require an explicit compatibility decision plus provider/credential/device
 acceptance, and cannot be represented as preserving all existing functionality.
 
+### Provider-specific trust and ordinary passwords — 19 October continuation
+
+Google Password Manager's approval is not a universal Android passkey-provider
+approval. Released Bitwarden Android `v2026.10.0-bwpm`, peeled commit
+`747801fc0867b7c9f1efedc3802249a458f19619`, checks its bundled Google and community
+browser lists, then a persisted local user trust list. Its
+[origin validation](https://github.com/bitwarden/android/blob/747801fc0867b7c9f1efedc3802249a458f19619/app/src/main/kotlin/com/x8bit/bitwarden/data/credentials/manager/OriginManagerImpl.kt#L66)
+and [trust prompt](https://github.com/bitwarden/android/blob/747801fc0867b7c9f1efedc3802249a458f19619/app/src/main/kotlin/com/x8bit/bitwarden/ui/vault/feature/itemlisting/VaultItemListingViewModel.kt#L2479)
+permit a user to approve an unrecognized browser locally; the
+[repository](https://github.com/bitwarden/android/blob/747801fc0867b7c9f1efedc3802249a458f19619/app/src/main/kotlin/com/x8bit/bitwarden/data/credentials/repository/PrivilegedAppRepositoryImpl.kt#L146)
+binds that approval to the actual package and signing certificate. Signature
+mismatches have a separate error path. `com.bashkitten` is absent from both
+bundled lists; the explicit user-trust path is relevant, not a claim that the
+browser is preapproved. No Google registration or provider submission occurred.
+
+This provides a source-supported third-party-provider path to test on Android
+14 and newer without making Google approval a prerequisite. It does not prove
+the installed BashKitten APK's registration/sign-in flows, every website/native
+app, or older Android behavior. Bitwarden must hold a credential registered with
+the relying party; trusting a browser does not expose keys held only by Google
+Password Manager. Native app asset-link validation is a distinct path from a
+browser's delegated website origin. The source-only framework adapter must still
+preserve origin validation, actual capability reporting, cancellation and errors;
+deleting the FIDO Gradle edge while leaving its callers is insufficient.
+
+Ordinary password saving and autofill are independent of WebAuthn/provider
+approval. The retained Fenix `Settings.kt` defaults `shouldPromptToSaveLogins` and
+`shouldAutofillLogins` to true, and `BaseBrowserFragment` binds both to the existing
+password-storage/prompt feature. Local saving/autofill needs no Google approval
+or Mozilla Sync account. This is source evidence, not a newly completed installed
+password-manager test. Removing the FIDO integration alone would also leave the
+separate Firebase/WebPush dependency chain above unresolved. No passkey, push or
+password feature was changed by this research record.
+
 Project source-policy approval and AGPL/GPL license compatibility are separate
 requirements. The user has not authorized retaining the proprietary SDKs. Even
 an explicit project waiver, binary checksum inventory or full notices would not
