@@ -14,6 +14,61 @@ import sys
 import tarfile
 import zipfile
 
+
+def verify_android_sdk_removal(apk):
+    """Reject actual DEX definitions from removed SDKs, including stale outputs."""
+    forbidden = (b'Lcom/google/android/gms/', b'Lcom/google/android/play/',
+                 b'Lcom/google/firebase/', b'Lcom/android/installreferrer/')
+    classes = 0
+    dex_files = [name for name in apk.namelist() if re.fullmatch(r'classes(?:\d+)?\.dex', name)]
+    if not dex_files:
+        raise ValueError('APK contains no DEX code')
+    for name in dex_files:
+        data = apk.read(name)
+        if (len(data) < 112 or data[:4] != b'dex\n' or data[4:8] not in
+                (b'035\0', b'037\0', b'038\0', b'039\0', b'040\0') or
+                struct.unpack_from('<III', data, 32) != (len(data), 112, 0x12345678)):
+            raise ValueError('Unsupported or malformed DEX header: ' + name)
+
+        def table(header_offset, entry_size):
+            count, offset = struct.unpack_from('<II', data, header_offset)
+            if offset > len(data) or count > (len(data) - offset) // entry_size:
+                raise ValueError('Malformed DEX table: ' + name)
+            return count, offset
+
+        strings_count, strings_offset = table(56, 4)
+        types_count, types_offset = table(64, 4)
+        definitions_count, definitions_offset = table(96, 32)
+        for index in range(definitions_count):
+            type_index = struct.unpack_from('<I', data, definitions_offset + index * 32)[0]
+            if type_index >= types_count:
+                raise ValueError('Invalid DEX class type: ' + name)
+            string_index = struct.unpack_from('<I', data, types_offset + type_index * 4)[0]
+            if string_index >= strings_count:
+                raise ValueError('Invalid DEX class descriptor: ' + name)
+            offset = struct.unpack_from('<I', data, strings_offset + string_index * 4)[0]
+            # Skip the UTF-16 length's bounded ULEB128 prefix. The package
+            # prefixes being checked are ASCII in the following MUTF-8 string.
+            for _ in range(5):
+                if offset >= len(data):
+                    raise ValueError('Truncated DEX class descriptor: ' + name)
+                byte = data[offset]
+                offset += 1
+                if byte < 128:
+                    break
+            else:
+                raise ValueError('Invalid DEX string length: ' + name)
+            end = data.find(b'\0', offset)
+            if end < 0:
+                raise ValueError('Unterminated DEX class descriptor: ' + name)
+            descriptor = data[offset:end]
+            if descriptor.startswith(forbidden):
+                raise ValueError('Removed Android SDK class remains in APK: ' + descriptor.decode('ascii', errors='replace'))
+            classes += 1
+    return {'dex_files': len(dex_files), 'class_definitions': classes,
+            'removed_sdk_class_definitions': 0}
+
+
 ROOT = Path(__file__).resolve().parents[3]
 OUT = Path(sys.argv[1]).resolve()
 OUT.mkdir(parents=True, exist_ok=True)
@@ -37,6 +92,16 @@ if not isinstance(missing_sources, list) or missing_sources:
 source_manifest = json.loads(source_inventories[0].read_text())
 if not isinstance(source_manifest, list) or not source_manifest:
     raise SystemExit('Resolved Android dependency source inventory is missing')
+pins = json.loads((ROOT / 'bashkitten/android/sources/sources.json').read_text())
+if json.loads((sources / 'pins.json').read_text()) != pins:
+    raise SystemExit('Staged Android dependency source pins differ from the current source tree')
+expected_sources = sorted((entry['component'], entry['kind'], Path(item['file']).name, item['sha256'])
+                          for entry in pins['entries']
+                          for item in ([entry] if entry['kind'] == 'sources' else entry['files']))
+actual_sources = sorted((entry['component'], entry['kind'], entry['file'], entry['sha256'])
+                        for entry in source_manifest)
+if actual_sources != expected_sources:
+    raise SystemExit('Staged Android dependency sources differ from their committed inventory')
 for entry in source_manifest:
     name = entry['file']
     if Path(name).name != name or not (sources / name).is_file():
@@ -62,6 +127,8 @@ for candidate in (OBJ / 'gradle/build/mobile/android/fenix').rglob('*.apk'):
             outputs.append(candidate)
 if len(outputs) != 1:
     raise SystemExit(f'Expected exactly one release {abi} Gecko APK, found ' + str(len(outputs)))
+with zipfile.ZipFile(outputs[0]) as apk:
+    sdk_removal = verify_android_sdk_removal(apk)
 destination = OUT / f'bashkitten_{version}_{abi}.apk'
 aligned = OUT / '.aligned.apk'
 subprocess.run([str(tools / 'zipalign'), '-P', '16', '-f', '4', str(outputs[0]), str(aligned)], check=True)
@@ -125,6 +192,7 @@ manifest = {'source': revision, 'product_version': version, 'firefox_version': e
             'package_id': identity[1], 'version_code': int(identity[2]), 'publisher_signed': True,
             'architecture': abi, 'native_libraries': native, 'certificate_sha256': certificate,
             'apks': {destination.name: hashlib.sha256(destination.read_bytes()).hexdigest()}}
+manifest['android_sdk_removal'] = sdk_removal
 manifest['browser_input_sha256'] = subprocess.check_output(
     ['python3', str(ROOT.parent / 'agent/packaging/browser-component.py'), 'fingerprint', target],
     text=True).strip()

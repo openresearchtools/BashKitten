@@ -126,7 +126,6 @@ class Components(private val context: Context) {
     val backgroundServices by lazyMonitored {
         BackgroundServices(
             context,
-            push,
             settings,
             analytics.crashReporter,
             core.lazyHistoryStorage,
@@ -263,7 +262,6 @@ class Components(private val context: Context) {
     val publicSuffixList by lazyMonitored { PublicSuffixList(context) }
     val clipboardHandler by lazyMonitored { ClipboardHandler(context) }
     val performance by lazyMonitored { PerformanceComponent() }
-    val push by lazyMonitored { Push(context, analytics.crashReporter) }
     val wifiConnectionMonitor by lazyMonitored { WifiConnectionMonitor(context as Application) }
 
     val strictMode by lazyMonitored {

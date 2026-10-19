@@ -48,7 +48,13 @@ export class PhoneSpeech {
     const runtime = await runtimeInfo('whisper');
     if (!runtime?.capabilities?.streamingVad) throw Error('Download the current Whisper runtime in LocalAI to enable call speech detection');
     const executable = path.join(path.dirname(runtime.binary), 'bashkitten-vad');
-    const model = path.join(path.dirname(path.dirname(runtime.binary)), 'models', 'ggml-silero-v6.2.0.bin');
+    const root = path.dirname(path.dirname(runtime.binary));
+    const source = JSON.parse(await fs.readFile(path.join(root, 'VAD-SOURCE.json'), 'utf8'));
+    const filename = source.model?.file;
+    if (typeof filename !== 'string' || !filename || path.isAbsolute(filename) || filename.split(/[\\/]/).includes('..')) {
+      throw Error('The installed Whisper runtime has an invalid VAD model record');
+    }
+    const model = path.join(root, filename);
     await fs.access(executable, fs.constants.X_OK); await fs.access(model);
     return { runtime, executable, model };
   }

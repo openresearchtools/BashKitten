@@ -182,9 +182,8 @@ pref("dom.max_script_run_time", 20);
 // Enable meta-viewport support for font inflation code (bug 1106255)
 pref("dom.meta-viewport.enabled", true);
 
-// The maximum number of recent message IDs to store for each push
-// subscription, to avoid duplicates for unacknowledged messages (bug 1207743)
-pref("dom.push.maxRecentMessageIDsPerSubscription", 0);
+// BashKitten Android has no website-push transport or subscription service.
+pref("dom.push.enabled", false, locked);
 
 // Enable WebShare support (bug 1402369)
 pref("dom.webshare.enabled", true);

@@ -498,7 +498,6 @@ dependencies {
     implementation project(':components:concept-base')
     implementation project(':components:concept-engine')
     implementation project(':components:concept-menu')
-    implementation project(':components:concept-push')
     implementation project(':components:concept-storage')
     implementation project(':components:concept-sync')
     implementation project(':components:concept-tabstray')
@@ -532,7 +531,6 @@ dependencies {
     implementation project(':components:feature-privatemode')
     implementation project(':components:feature-prompts')
     implementation project(':components:feature-protection-dashboard')
-    implementation project(':components:feature-push')
     implementation project(':components:feature-pwa')
     implementation project(':components:feature-qr')
     implementation project(':components:feature-readerview')
@@ -547,7 +545,6 @@ dependencies {
     implementation project(':components:feature-tab-collections')
     implementation project(':components:feature-tabs')
     implementation project(':components:feature-top-sites')
-    implementation project(':components:feature-webauthn')
     implementation project(':components:feature-webcompat')
     implementation project(':components:feature-webcompat-reporter')
     implementation project(':components:feature-webnotifications')
@@ -582,7 +579,6 @@ dependencies {
     implementation project(':components:lib-crash')
     implementation project(':components:lib-crash-sentry')
     implementation project(':components:lib-dataprotect')
-    implementation project(':components:lib-push-firebase')
     implementation project(':components:lib-state')
     implementation project(':components:lib-ai-controls')
 
@@ -848,11 +844,21 @@ tasks.register('stageBashKittenDependencySources') {
     doLast {
         def ids = configurations.releaseRuntimeClasspath.incoming.resolutionResult.allComponents
             .collect { it.id }.findAll { it instanceof org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+        def removedSdkGroups = ['com.google.android.gms', 'com.google.android.play',
+            'com.google.firebase', 'com.android.installreferrer']
+        def removedSdks = ids.findAll { it.group in removedSdkGroups }
+        if (removedSdks) {
+            throw new GradleException('Removed Android client SDKs were reintroduced: ' + removedSdks.join(', '))
+        }
         def sourceRoot = file("${rootProject.projectDir}/bashkitten/android/sources")
         def inventory = new groovy.json.JsonSlurper().parse(new File(sourceRoot, 'sources.json'))
         def pins = inventory.entries.collectEntries { [(it.component): it] }
         if (inventory.schema != 1 || pins.size() != inventory.entries.size()) {
             throw new GradleException('Invalid Android dependency source inventory')
+        }
+        def unusedPins = pins.keySet() - ids.collect { it.toString() }
+        if (unusedPins) {
+            throw new GradleException('Remove stale Android dependency source pins: ' + unusedPins.sort().join(', '))
         }
         def runtimeArtifacts = configurations.releaseRuntimeClasspath.incoming.artifactView {
             componentFilter { pins[it.toString()]?.runtimeArtifacts != null }
