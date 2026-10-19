@@ -64,11 +64,14 @@ Closing the Display tab does not stop the server; use launcher Stop.
 Local Agent Off stops the owned display. Switching the chat to Remote does
 not stop it; the phone's local Display remains available.
 
-After Start, read `environment.DISPLAY` from status and use that actual value
-for GUI applications, for example `DISPLAY=:2 mousepad` **only if status reports
-`:2`**. Do not restart Pi or overwrite global shell settings to use the display.
-Ask the user to open Display when a visible interaction is needed. Report independent
-X servers separately; never claim they belong to this launcher.
+After Start, use the `termux-use` skill and run GUI commands through
+`bashkitten-desktop-context --timeout SECONDS -- COMMAND`, choosing a timeout
+long enough for the intended operation. It reads the current owned display,
+authorization, desktop profile and session bus for each command, including when
+Display starts or restarts after Pi. Do not copy only `DISPLAY`, cache an old
+display number, restart Pi or overwrite global shell settings. The user's
+Display tab shows this same desktop; closing that tab leaves the desktop running.
+Report independent X servers separately; never claim they belong to this launcher.
 
 ## Device-specific GPU setup
 
