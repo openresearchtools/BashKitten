@@ -3,9 +3,9 @@
 This branch runs unmodified Pi rather than porting its behavior:
 
 - Repository: https://github.com/earendil-works/pi
-- Release: `v1.1.0`
-- Commit: `abe508e1b89912adde45528136c3221eb69acdd7`
-- Packages: `@earendil-works/pi-coding-agent@1.1.0`, `@earendil-works/pi-ai@1.1.0`
+- Release: `v1.3.0`
+- Commit: `71023aec1546d6d677a65669c5665c0927ce0dd0`
+- Packages: `@earendil-works/pi-coding-agent@1.3.0`, `@earendil-works/pi-ai@1.3.0`
 - Full transitive dependency resolution and tarball integrity: `package-lock.json`
 - License: MIT (see `reference/PI-LICENSE`)
 
@@ -38,8 +38,11 @@ authentication. `/pillama-resume off` disables it; the default is off. Settings
 live in BashKitten's private Pi profile, not the standalone Pi directory.
 
 
-The 11 October 2026 update uses the official v1.1.0 release commit and registry
-integrities. The adapter continues to use stock `get_state`, `get_entries`,
+The 19 October 2026 update uses the official v1.3.0 release commit and registry
+integrities. `vendor/pi/source.json` records the complete pristine release archive;
+`vendor/npm/sources.json` retains every locked distribution, including transitive
+dependencies. Pi's exact provider SDK versions are unchanged from its release.
+The adapter continues to use stock `get_state`, `get_entries`,
 `prompt` with steering, `clear_queue`, `fork`/`clone`, and native session parsing.
 Pi's own extension loader aliases SDK imports to the selected runtime; `chats`
 therefore reads that runtime's history parser without a second model runtime.
