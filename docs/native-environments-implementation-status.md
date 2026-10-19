@@ -135,6 +135,50 @@ APK/Termux pairing, remaining component inventories, traffic audit and installed
 acceptance are separate pending checks. This is not a release-complete claim.
 Receipt: `verification/combined-candidate-20261019/prepublication-audit-status.json`.
 
+The full run subsequently completed successfully: all 53 jobs passed, including
+both Android architectures, both Linux architectures and matching Termux packages.
+Both APK audits passed signatures, native alignment, exact backend/OS pairing
+and offline notices, but each failed the corresponding-source check for 15
+runtime SDK dependencies. License texts do not supply missing implementation
+sources. Publication remains blocked; the final assembled release inventory is
+being checked separately. Receipt:
+`verification/combined-candidate-20261019/android-runtime-source-release-blocker.json`.
+
+The complete audited Linux `153.4.6` / `bd393bd7ec59` DEB was installed normally
+on the host and owned Xorg VM. On Xorg, an actual UI-configured Local startup
+command ran once per browser lifetime with its exact working directory,
+environment and literal argument. Local Off and window Close/reopen preserved
+the same browser, command and child identities without another launch. Explicit
+native Quit while Local was Off removed those identities; the observation
+completed within 0.6 seconds. A new owner ran the command once, and Remove in
+Autostart stopped its parent and child without deleting its files or stopping
+the browser. The original empty startup configuration was restored byte-for-byte.
+This covers Local custom commands, not container/Termux commands, crash cleanup
+or the entire startup matrix. Receipt:
+`Bashkitten-Acceptance/xorg-autostart-command-20261019/acceptance.json`.
+
+Restarting the dedicated headless test browser exposed a stale private control
+socket after its owner exited. The fixture was recovered only after verifying
+the dead owner, socket identity/ownership and `ECONNREFUSED`. Source fix
+`160a106413` adds the same bounded asynchronous recovery and identity-checked
+shutdown cleanup; live peers, timeouts, symlinks, foreign owners and replacement
+paths remain protected. Baseline reproduction and 15 helper cases passed. This
+fix is later than `bd393bd7ec59`: manual fixture recovery is not installed repair
+acceptance. Evidence: `verification/control-stale-socket-20261019/` and
+`Bashkitten-Acceptance/operator-browser-20261019/stale-control-socket-bd393.json`.
+
+The retained private Wayland desktop passed scoped same-application window
+pairing, divider dragging with minimum/increment hints, parent-dialog exclusion,
+member-close recovery, Manage Off after a drag, manual placement while Off and
+On without restoring a stale pair. Applications preserved pin order and separate
+main/Pinned scrolling with fixed bottom search. Original OS/toolkit/wallpaper
+choices were restored exactly. A GTK Save Contents chooser still opens wider
+than the compact viewport even with fresh chooser defaults and management Off;
+this remains an explicit usability finding, not a demonstrated custom-layout
+regression. These are retained mixed-component results, not complete-candidate
+or all-platform acceptance. Receipt:
+`verification/xfce-window-launcher-20261019/receipt.json`.
+
 ## Installed follow-up and remaining blockers — 18 October 2026
 
 The private Intel Weston desktop repeated real native resize, Display tab close,
