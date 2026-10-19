@@ -740,13 +740,25 @@ async function action(name,value={},requestSignal) {
     }
     return {type,text:new TextDecoder('utf-8',{fatal:true}).decode(result.stdout)};
   }
-  if(name==='autostart-status'||name==='autostart-save') return catalogue(async()=>{
-    if(active.has(value.id))throw Error('Wait for the current machine operation before editing startup commands');
-    const current=await load(value.id),info=await inspect(value.id);
-    const command=name.slice('autostart-'.length)==='save'?'autostart-save':'autostart-status';
-    if(info?.State?.Running) return guestCall(value.id,command,command==='autostart-save'?{revision:value.revision,commands:value.commands}:{});
-    return stoppedAutostart(current,command==='autostart-save'?{revision:value.revision,commands:value.commands}:undefined);
-  });
+  if(name==='autostart-status'||name==='autostart-save') {
+    const cancel = new AbortController();
+    let completed;
+    const completion = new Promise(resolve => { completed = resolve; });
+    // Serialize only admission with catalogue edits. The same active slot used
+    // by Start/Delete/Display protects this rootfs while guest I/O runs without
+    // holding up lifecycle requests for any other machine.
+    await catalogue(() => {
+      if(retiring)throw updateError(updateMessage);
+      if(active.has(value.id))throw Error('Wait for the current machine operation before editing startup commands');
+      active.set(value.id, { cancel, completion, kind: name });
+    });
+    try {
+      const current=await load(value.id),info=await inspect(value.id,{signal:cancel.signal});
+      cancel.signal.throwIfAborted();
+      const valueToSave=name==='autostart-save'?{revision:value.revision,commands:value.commands}:undefined;
+      return await (info?.State?.Running ? guestCall(value.id,name,valueToSave || {}) : stoppedAutostart(current,valueToSave));
+    } finally { active.delete(value.id); completed(); }
+  }
   if(name==='guest-control') {
     if(typeof value.command!=='string'||!['phone-status','share-status','share-setup','share-reissue','share-confirm','share-cancel','share-publish','share-startup','share-files','localai-share','service-status','service-save','service-remove','service-action','local-session','status','start','stop',
       'provider-login-describe','provider-login-status','provider-login-callback','provider-login-cancel',
