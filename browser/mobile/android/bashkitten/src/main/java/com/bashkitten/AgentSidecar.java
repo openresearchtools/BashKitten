@@ -165,7 +165,8 @@ public final class AgentSidecar {
             snapshots.put(backend, snapshot); ready.run();
         }, message -> {
             if (epoch != generation || !backend.equals(runtime.selected)) return;
-            if (!runtime.state.equals("on") || android.os.SystemClock.elapsedRealtime() >= until) { error(message); return; }
+            if (!runtime.state.equals("on")) { render(); return; }
+            if (android.os.SystemClock.elapsedRealtime() >= until) { error(message); return; }
             app.main.postDelayed(() -> awaitReady(backend, ready, epoch, until), 200);
         });
     }
@@ -180,7 +181,7 @@ public final class AgentSidecar {
             @Override public void changed() {
                 if (epoch != generation || !backend.equals(runtime.selected)) { runtime.detach(this); pendingSelections.remove(this); return; }
                 if (runtime.state.equals("on")) { runtime.detach(this); pendingSelections.remove(this); awaitReady(backend, selected, epoch, android.os.SystemClock.elapsedRealtime() + 30000); }
-                else if (Arrays.asList("failed", "off", "stop-failed", "setup").contains(runtime.state)) { runtime.detach(this); pendingSelections.remove(this); error(runtime.error); }
+                else if (Arrays.asList("failed", "off", "stop-failed", "setup").contains(runtime.state)) { runtime.detach(this); pendingSelections.remove(this); render(); }
             }
         };
         pendingSelections.add(observer); runtime.observe(observer); observer.changed();
