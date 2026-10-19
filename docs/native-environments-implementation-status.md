@@ -5,6 +5,81 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Complete-candidate follow-up — 19 October 2026, evening
+
+The complete `bd393bd7ec59eebd3f540072dc9511917520de9c` / 153.4.6 CI
+assembly finished with all 53 producer jobs green. The final release audit
+passed 204 checks over 43 assets, including both Android ABIs, both Linux
+architectures, matching Termux/OS packages and reconstructable corresponding
+source archives. This is artifact/build evidence, not release approval or full
+installed acceptance. The audit is retained at
+`verification/combined-candidate-20261019/prepublication-complete-release-audit.json`.
+No new public release was published by this audit.
+
+A fresh container was created through the installed complete Linux candidate
+inside the owned real-Xorg VM. Provisioning completed in approximately 157 seconds
+with its menu still usable. The matching guest backend/OS packages, actual
+passwordless package installation and interactive `sudoedit`, window/viewport
+resize, and Display detach/reattach were exercised. Closing Display preserved
+all 46 recorded guest PID/start identities. Observe blocked the test keyboard
+input and Interact restored it. A project created through the compact modal and
+guest folder picker supplied the correct cwd to a real Pi `bash` call. Guest
+Files rendered Markdown, exposed raw content and downloaded identical bytes.
+A second Pi turn read that guest file and its clickable answer opened the same
+ordinary preview with Download retained. These are scoped software-rendered
+amd64/Xorg passes, not all layout/input/GPU cases. The stock GTK Save Contents
+dialog was usable at the observed 980-by-700 window; the earlier narrow/tall
+chooser finding remains open. Receipt with 45 checked evidence references:
+`Bashkitten-Acceptance/xorg-fresh-container-bd393-20261019/acceptance.json`.
+
+The matching publisher-signed Android x86_64 candidate and Termux backend/OS
+passed the core Callback flow in Cuttlefish 6520 through the desktop BashKitten
+viewer: native calling setup, keypad routing, Parakeet/Silero/Pocket dictation
+and speech, silence review, Add more, Change, explicit `#`, and confirmed Send.
+Native Pi history contained exactly one resulting user entry. Hangup left the
+turn working; its final produced an incoming backend-identified call, and the
+answered call spoke the saved final. Calls Off removed foreground reception.
+Models and LocalAI/Pi configuration hashes were unchanged after cleanup. This
+required an authorized clean native install after a signing-key mismatch and
+one recovery of a Cuttlefish WebRTC process crash. It does not establish an
+upgrade, the reserved signed updater path, all section-13 cases, physical/OEM
+behavior or Android Auto. Receipt:
+`Bashkitten-Acceptance/callback6520-bd393-20261019/result.json`.
+
+The fresh-profile About/Licenses/Quit flow exposed a real shutdown defect.
+Settings imported the runtime owner through its window's module global,
+instantiating another shutdown/remote owner chain. Fix `1f15c34afc` uses the
+existing shared module owner. A private copied browser with only that module
+changed exited normally in 0.52 seconds versus the matched unchanged candidate's
+71.8-second watchdog crash. The attempted dispatch-only fix failed the same
+comparison and was removed. The independently verified duplicate preference
+registration fix is `17e4eb6dff`. Shared installed binaries were not patched by
+these comparisons; both fixes require the next complete candidate. Evidence:
+`verification/quit-barrier-20261019/README.md`.
+
+User-requested sidebar fix `597cdc2962` removes redundant steady-state labels,
+retains pending progress/errors and makes power switches reflect confirmed
+backend status, including Android background Local. Source render/state tests,
+Java compilation and JavaScript syntax checks passed; installed UI acceptance
+is still pending. Receipt:
+`verification/sidecar-power-state-20261019/receipt.json`.
+
+Current source has eight unresolved Android runtime source gaps after removing
+unrequested product-service dependencies and verifying the annotations source.
+The source/packaging gates continue to reject those gaps before publication.
+The [dependency record](android-dependency-source-status.md) now explicitly
+separates repository source-policy approval from actual AGPL/GPL compatibility:
+notices or a policy waiver alone cannot resolve conflicting license terms.
+No proprietary-retention exception, provider approval, Google developer account
+registration or reduced browser authentication contract is authorized here.
+Open FIDO/framework and push integrations have been researched, not implemented
+or accepted as equivalent replacements. The user has explicitly rejected Google
+developer registration. External approval requests have not been submitted.
+
+All post-`bd393` fixes remain outside that complete candidate. Full feature and
+cross-platform acceptance remains unfinished; the immutable baseline, subsequent
+user amendments and existing coverage matrix remain mandatory.
+
 ## Recovery and integrated follow-up — 19 October 2026
 
 All three retained Android 17 Cuttlefish instances and the owned real-Xorg VM
