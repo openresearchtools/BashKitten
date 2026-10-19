@@ -2,11 +2,11 @@ use memchr::memrchr as find_char_reverse;
 
 use super::network::NetworkFilterError;
 
-use once_cell::sync::Lazy;
 use regex::Regex;
+use std::sync::LazyLock;
 
 /// For now, only support `$removeparam` with simple alphanumeric/dash/underscore patterns.
-static VALID_PARAM: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9_\-]+$").unwrap());
+static VALID_PARAM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_\-]+$").unwrap());
 
 #[derive(Clone, Copy)]
 pub(crate) enum NetworkFilterLeftAnchor {
@@ -196,8 +196,13 @@ fn parse_filter_options(raw_options: &str) -> Result<Vec<NetworkFilterOption>, N
             ("first-party", negated) | ("1p", negated) => NetworkFilterOption::FirstParty(!negated),
             ("tag", true) => return Err(NetworkFilterError::NegatedTag),
             ("tag", false) => NetworkFilterOption::Tag(String::from(value)),
-            ("redirect", true) => return Err(NetworkFilterError::NegatedRedirection),
-            ("redirect", false) => {
+            // `rewrite` is the ABP-syntax alias for `redirect`. The `abp-resource:`-prefixed
+            // values it uses are shipped by uBO as aliases of the corresponding redirect
+            // resources, so no further translation is needed here.
+            ("redirect", true) | ("rewrite", true) => {
+                return Err(NetworkFilterError::NegatedRedirection)
+            }
+            ("redirect", false) | ("rewrite", false) => {
                 // Ignore this filter if no redirection resource is specified
                 if value.is_empty() {
                     return Err(NetworkFilterError::EmptyRedirection);
