@@ -41,6 +41,8 @@ for entry in source_manifest:
     name = entry['file']
     if Path(name).name != name or not (sources / name).is_file():
         raise SystemExit('Missing Android dependency source: ' + name)
+    if hashlib.sha256((sources / name).read_bytes()).hexdigest() != entry.get('sha256'):
+        raise SystemExit('Android dependency source differs from its committed pin: ' + name)
 key = Path(os.environ['BASHKITTEN_PUBLISHER_KEYSTORE'])
 if not key.is_file():
     raise SystemExit('The Droid signing identity is required for a product candidate')
@@ -138,10 +140,6 @@ with zipfile.ZipFile(destination) as apk:
 manifest['remote_client'] = remote_manifest
 shutil.copy2(remote / 'share/source/remote-client-go.tar.gz', OUT / f'bashkitten-remote-client-source_{abi}.tar.gz')
 shutil.copy2(remote / 'bashkitten-remote-sources.jar', OUT / f'bashkitten-remote-client-java-source_{abi}.jar')
-for entry in source_manifest:
-    name = entry['file']
-    entry['sha256'] = hashlib.sha256((sources / name).read_bytes()).hexdigest()
-(sources / 'sources.json').write_text(json.dumps(source_manifest, indent=2) + '\n')
 with tarfile.open(OUT / f'bashkitten-android-library-source_{abi}.tar.gz', 'w:gz') as archive:
     archive.add(sources, arcname='android-library-sources')
     spec = importlib.util.spec_from_file_location('android_native_sources', ROOT.parent / 'agent/packaging/android_native_sources.py')
