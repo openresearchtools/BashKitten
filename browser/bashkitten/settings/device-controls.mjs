@@ -21,7 +21,7 @@ export async function renderSection({ root, call, subscribe, signal }) {
       void run(async () => { state = await call('set-master', { enabled: master.checked }); if (!signal.aborted) render(); })
         .finally(() => { if (master.isConnected) master.disabled = false; });
     };
-    if (state.enabled && !state.connected) message('Turn on Local to let your agent use phone controls.');
+    if (state.enabled && !state.connected) message('Phone controls are not connected to Local.');
     if (!state.enabled) message('Turn on Phone controls to use these actions.');
     const action = (parent, title, work) => {
       const control = button(parent, title, () => run(work));
