@@ -8,6 +8,15 @@
     "sha256": "ead918e4ca90496c08cae119d90ddd832753139c89d61d0718e8b48bc97d7802"
   },
   {
+    "name": "tor-elf-cleaner",
+    "repository": "https://github.com/termux/termux-elf-cleaner",
+    "commit": "e4f87f8d13541779756f4907c6957d2a000653da",
+    "licensePath": "COPYING",
+    "notice": "tor-elf-cleaner-COPYING",
+    "sha256": "589ed823e9a84c56feb95ac58e7cf384626b9cbf4fda2a907bc36e103de1bad2",
+    "role": "Guardian Tor Android build tool; not a shipped runtime"
+  },
+  {
     "name": "jtorctl",
     "repository": "https://github.com/guardianproject/jtorctl",
     "commit": "039dfb5a75cd857d112d068f873ebd2967882987",

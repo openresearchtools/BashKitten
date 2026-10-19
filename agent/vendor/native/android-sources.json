@@ -6,6 +6,12 @@
     "sha256": "170ed8766ae4f9380512107aaa7d06729b0cacbc4a5d32dd6d1150aec7f49560"
   },
   {
+    "repository": "https://github.com/termux/termux-elf-cleaner",
+    "commit": "e4f87f8d13541779756f4907c6957d2a000653da",
+    "file": "termux-elf-cleaner-e4f87f8d13541779756f4907c6957d2a000653da.tar.gz",
+    "sha256": "a5bde478365ca7916f16a6263b3a7abdc7d2ac39e440c4ef4717a22becfc7064"
+  },
+  {
     "repository": "https://github.com/guardianproject/jtorctl",
     "commit": "039dfb5a75cd857d112d068f873ebd2967882987",
     "file": "jtorctl-039dfb5a75cd857d112d068f873ebd2967882987.tar.gz",
