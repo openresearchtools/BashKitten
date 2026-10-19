@@ -11,8 +11,9 @@ const nodeBin = path.dirname(process.execPath);
 if (!(process.env.PATH || '').split(path.delimiter).includes(nodeBin)) process.env.PATH = nodeBin + path.delimiter + (process.env.PATH || '');
 
 export async function projectLocations() {
-  const home = await fs.realpath(os.homedir());
-  const locations = [{ path: home, label: platform === 'termux' ? 'Termux home' : 'Home', display: '~' }];
+  const homePath = os.homedir(), home = await fs.realpath(homePath);
+  const locations = [{ path: home, label: platform === 'termux' ? 'Termux home' : 'Home', display: '~',
+    ...(homePath !== home ? { aliases: [homePath] } : {}) }];
   if (platform === 'linux') {
     const configured = await readJson(path.join(dataDir, 'project-roots.json'), []);
     for (const root of configured) {

@@ -1997,8 +1997,12 @@
     let folderLocations=[];
     function displayFolder(value) {
       if(!value)return '';
-      const location=folderLocations.find(l=>l.path!=='/'&&(value===l.path||value.startsWith(l.path+'/')));
-      return location?location.display+value.slice(location.path.length):value;
+      for (const location of folderLocations) {
+        for (const root of [location.path, ...(location.aliases || [])]) {
+          if (root !== '/' && (value === root || value.startsWith(root + '/'))) return location.display + value.slice(root.length);
+        }
+      }
+      return value;
     }
     async function loadSettings() {
       const value = await api('/api/settings');
