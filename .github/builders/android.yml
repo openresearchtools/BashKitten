@@ -146,9 +146,13 @@ jobs:
       working-directory: browser
       run: python3 bashkitten/scripts/render-branding.py
       if: (success()) && steps.component.outputs.hit != 'true'
+    - name: Select the retained Go compiler
+      id: go-compiler
+      run: python3 -c 'import json; print("version=" + json.load(open("auth/dependencies/go-toolchain/sources.json"))["version"])' >> "$GITHUB_OUTPUT"
+      if: (success()) && steps.component.outputs.hit != 'true'
     - uses: actions/setup-go@v6
       with:
-        go-version: '1.27.1'
+        go-version: ${{ steps.go-compiler.outputs.version }}
         cache-dependency-path: agent/native/remote/android/go.sum
       if: (success()) && steps.component.outputs.hit != 'true'
     - uses: actions/setup-java@v4
