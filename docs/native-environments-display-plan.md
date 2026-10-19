@@ -3842,3 +3842,29 @@ and package paths, keeping synthetic files and live test logs outside shipped
 assets. RPC verification must observe compaction and its resumed run after the
 initial settled event. Prototype SDK/RPC and live-model evidence do not replace
 installed BashKitten acceptance of the integrated extension.
+
+### Flowing chat header and readable Termux paths — 19 October 2026
+
+The user requests one compact, naturally flowing header: working folder, then
+the existing token/cost/compaction, model/runtime and subscription status with
+simple separators. Use the available width before wrapping; do not reserve
+separate rows or hide metrics merely because the viewport is narrow. Preserve
+the existing typography, colors and Files action. Remove the duplicate header
+Stop/Resume button and its presentation handler; the existing composer and
+backend power controls keep their functions.
+
+Abbreviate the selected backend's home directory as `~` and descendants as
+`~/…`. On Termux, recognize both the original home spelling and its canonical
+Android path, so `/data/data/…` versus `/data/user/0/…` does not expose an unusably
+long internal prefix. This is display formatting only: preserve actual Pi cwd,
+project/session identity, file operations and access boundaries. Never apply the
+phone's home mapping to a container or remote, or abbreviate unrelated paths
+that merely start with the same text.
+
+The user also requests GitHub Actions builds to refresh caches for the updated
+component versions. Reuse valid compiler/dependency caches and save newly built
+outputs through the existing workflow. Keep source/toolchain/architecture input
+matching and fresh final packaging; do not relabel old artifacts or discard
+unrelated caches. Verify the combined candidate in the installed apps, including
+narrow/wide headers, long paths, all status combinations, Files and composer
+Stop/Resume. Source/render checks and a dispatched build are not that acceptance.
