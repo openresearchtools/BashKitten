@@ -1,5 +1,28 @@
 # BashKitten · native Pi / Linux and Termux
 
+## 19 October Android SDK removal and source updates
+
+The user explicitly authorizes removing Android website WebPush and the bundled
+Google Play Services/Firebase SDK dependencies. Preserve the browser's local
+password saving/autofill and ordinary browsing, and retain standard WebAuthn
+through the existing Android framework Credential Manager where supported.
+Keep provider-origin/caller validation, cancellation and truthful capability
+errors; no Google developer registration, proprietary SDK exception or substitute
+authentication bypass. BashKitten's native agent notifications, replies,
+questions and Callback remain required and independent of website WebPush.
+Desktop WebAuthn remains unchanged. Verify actual dependencies, source/notices,
+APK contents and installed flows; removing a preference alone is insufficient.
+
+The user also requests checking all bundled/built components for newer official
+releases and updating applicable sources/pins/dependencies, including Firefox,
+Tor, Caddy and Authelia. Compare the matching released Tor Browser lineage for
+Firefox security backports applicable to the Android base. Preserve the existing
+release-source/import/patch/license discipline and frozen adapted donor history;
+never follow moving tags or silently replace our adapted modules. Batch the
+updates with SDK removal before the next full candidate builds. AI engine builds
+remain daughter-CI-only. The dated amendments in the native plan record scope;
+source presence and successful builds remain separate from installed acceptance.
+
 ## 10–11 October native environments and Display plan
 
 Latest 11 October mobile toolbar/autostart correction: keep the clickable logo
