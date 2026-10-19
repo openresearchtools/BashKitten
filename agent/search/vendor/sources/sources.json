@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "lock": "../../runtime-lock.json",
-  "lockSha256": "5042b38881336c00d0115529c15c9e016bffb86525784a486e7edf640330a082",
+  "lockSha256": "b984c65eea2ced4fd718b93112186745035929d44af6cdbe5bbfed2f8d8bdc2d",
   "components": [
     {
       "filename": "ddgs-9.16.0.tar.gz",
@@ -6842,6 +6842,40 @@
       "file": "archives/siphasher-1.0.3-LICENSE-MIT.txt",
       "licenses": [
         "siphasher-1.0.3-LICENSE-MIT.txt"
+      ]
+    },
+    {
+      "name": "libiconv",
+      "version": "1.18",
+      "url": "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz",
+      "filename": "libiconv-1.18.tar.gz",
+      "size": 5822590,
+      "sha256": "3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8",
+      "kind": "native-source",
+      "license": "LGPL-2.1-or-later (library); GPL-3.0-or-later (utilities)",
+      "file": "archives/libiconv-1.18.tar.gz",
+      "licenses": [
+        "libiconv-1.18/COPYING.LIB",
+        "libiconv-1.18/AUTHORS",
+        "libiconv-1.18/libcharset/COPYING.LIB",
+        "libiconv-1.18/libcharset/AUTHORS",
+        "libiconv-1.18/COPYING"
+      ]
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "url": "https://zlib.net/fossils/zlib-1.3.2.tar.gz",
+      "filename": "zlib-1.3.2.tar.gz",
+      "size": 1502830,
+      "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+      "kind": "native-source",
+      "license": "Zlib",
+      "file": "archives/zlib-1.3.2.tar.gz",
+      "licenses": [
+        "zlib-1.3.2/LICENSE",
+        "zlib-1.3.2/contrib/dotzlib/LICENSE_1_0.txt",
+        "zlib-1.3.2/contrib/minizip/LICENSE.Info-Zip"
       ]
     }
   ]

@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "package": "lxml",
+  "version": "6.1.3",
+  "repository": "https://github.com/lxml/lxml",
+  "releaseTag": "lxml-6.1.3",
+  "tagObject": "9d4b2d4e5038f051c3b648e546b5bc33f2132361",
+  "releaseCommit": "3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1",
+  "sourceArchive": {
+    "filename": "lxml-6.1.3.tar.gz",
+    "url": "https://files.pythonhosted.org/packages/23/ad/28ecd7cb894d172f3c9c80a075eeeb2017ac62e3632cee05a5f9493547eb/lxml-6.1.3.tar.gz",
+    "size": 4211198,
+    "sha256": "45222d94ddd511536f3b2f7d9deae3b2339b4ce0f075f1ca25703b07cad9dd21"
+  },
+  "files": {
+    "pyproject.toml": {
+      "archiveMember": "lxml-6.1.3/pyproject.toml",
+      "sha256": "98210cb689d4fbb2d79bc80d72a60746f5488133a34a65a62d5e530b00a18c2c",
+      "upstreamUrl": "https://raw.githubusercontent.com/lxml/lxml/3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1/pyproject.toml",
+      "upstreamSha256": "fb795356bf9018a061c32a4c575423205aa21a217b6482bf1ada145336a1e5a6"
+    },
+    "buildlibxml.py": {
+      "archiveMember": "lxml-6.1.3/buildlibxml.py",
+      "sha256": "be99cde194739f2676e415e7b457d1dc6b94c00c5d86cae60ead44fcf3ea4c00",
+      "upstreamUrl": "https://raw.githubusercontent.com/lxml/lxml/3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1/buildlibxml.py",
+      "upstreamSha256": "be99cde194739f2676e415e7b457d1dc6b94c00c5d86cae60ead44fcf3ea4c00"
+    },
+    "patch_lxml_deplibs.py": {
+      "archiveMember": "lxml-6.1.3/patch_lxml_deplibs.py",
+      "sha256": "35c1ea541870a053bcceec1fb2e40670eaa5bfcc66d646160f3b9da087a1c870",
+      "upstreamUrl": "https://raw.githubusercontent.com/lxml/lxml/3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1/patch_lxml_deplibs.py",
+      "upstreamSha256": "35c1ea541870a053bcceec1fb2e40670eaa5bfcc66d646160f3b9da087a1c870"
+    },
+    "libxslt-1.1.43-backport1.patch": {
+      "archiveMember": "lxml-6.1.3/libxslt-1.1.43-backport1.patch",
+      "sha256": "b09476968c53fb378d03b2fce2057d239008f016bc28bedf38d7abe5a683a04a",
+      "upstreamUrl": "https://raw.githubusercontent.com/lxml/lxml/3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1/libxslt-1.1.43-backport1.patch",
+      "upstreamSha256": "b09476968c53fb378d03b2fce2057d239008f016bc28bedf38d7abe5a683a04a"
+    },
+    "CHANGES.txt": {
+      "archiveMember": "lxml-6.1.3/CHANGES.txt",
+      "sha256": "aac90d3b67c72f6644196847c5e4661549a446c535188b912fcfd9eb745741ed",
+      "upstreamUrl": "https://raw.githubusercontent.com/lxml/lxml/3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1/CHANGES.txt",
+      "upstreamSha256": "aac90d3b67c72f6644196847c5e4661549a446c535188b912fcfd9eb745741ed"
+    }
+  },
+  "linuxLibraries": [
+    {
+      "name": "libxml2",
+      "version": "2.14.6",
+      "patches": []
+    },
+    {
+      "name": "libxslt",
+      "version": "1.1.43",
+      "patches": [
+        {
+          "archive": "lxml-6.1.3.tar.gz",
+          "archiveMember": "lxml-6.1.3/libxslt-1.1.43-backport1.patch",
+          "sha256": "b09476968c53fb378d03b2fce2057d239008f016bc28bedf38d7abe5a683a04a",
+          "upstreamUrl": "https://raw.githubusercontent.com/lxml/lxml/3c1a4c7f2d5a3c19efe01adfd3c33ac3c8fe52c1/libxslt-1.1.43-backport1.patch",
+          "upstreamSha256": "b09476968c53fb378d03b2fce2057d239008f016bc28bedf38d7abe5a683a04a",
+          "upstreamIntroductionCommit": "2c0563b3e8c272e62667c7850612347f65d2952e",
+          "fixes": [
+            "CVE-2025-7424",
+            "CVE-2025-11731"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "libiconv",
+      "version": "1.18",
+      "patches": []
+    },
+    {
+      "name": "zlib",
+      "version": "1.3.2",
+      "patches": []
+    }
+  ],
+  "notes": [
+    "The published sdist pyproject changes only the Cython build requirement from the tag version Cython>=3.2.4 to Cython>=3.2.9,<3.3; native library settings match the tag. Both file hashes are recorded.",
+    "The retained official lxml sdist already includes the exact patch and patch applier; libxslt pristine archive alone is not its wheel source cohort.",
+    "The released pyproject explicitly selects libxslt 1.1.43 with backports for Linux and 1.1.45 for Windows. The inspected upstream sources do not state an additional rationale; this is not a BashKitten version downgrade.",
+    "LIBRARY_PATCHES declares only the libxslt patch. The selected libxml2 2.14.6, libiconv 1.18 and zlib 1.3.2 archives are unpatched by this recipe.",
+    "All six selected Linux wheels match pinned PyPI hashes and contain the backport markers; amd64 Python 3.14 exports zlibVersion=1.3.2, _libiconv_version=0x0112 and xsltCleanupSourceDoc.",
+    "Newer independent libxslt/libiconv releases are not represented as incorporated in these upstream-produced lxml wheels."
+  ]
+}
