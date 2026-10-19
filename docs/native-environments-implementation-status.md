@@ -5,6 +5,45 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Integrated release refresh — 19 October 2026, final source batch
+
+Firefox 153.5 ESR is merged in `feb8fd576c`; `e69a687bb0` records the matching
+Tor Browser 16.0a14 release and verifies all 15 applicable existing security
+backports. The compact source tag is pushed and the frozen requirements tag
+still peels to the original baseline. The merged Linux/Android Rust bridge
+checks, adblock's 217 tests and memchr's 142 tests pass. This is not a full
+browser build or an installed 153.5 result.
+
+The integrated batch also contains Tor 0.4.9.14, official Pi 1.3.0, Linux Node
+24.22.0, private Podman 6.1.4, compatible search/helper dependencies and the
+released embedded X11 dependencies. Both X11 native ABIs link with 16 KiB
+alignment; Mozilla's selected ESR toolchain still requires NDK r29. The exact
+source/import and bounded-build details are in
+[the native runtime record](component-runtime-refresh-20261019.md) and
+[the Pi record](pi-runtime-refresh-2026-10-19.md). Caddy, Authelia, Chisel and
+the other checked current releases retain their supported pins. Imported
+release dependency graphs remain their upstream-tested cohorts.
+
+Android SDK removal `46d0877c63` and framework WebAuthn `5cf8cd5475` are now
+implemented. The resolved 252-coordinate Android graph has no missing sources;
+all 519 Maven notice records resolve, and the scanned dependency classes contain
+none of the removed runtime SDKs. Production Java/JNI/Kotlin and native checks
+pass. This supersedes the historical unresolved-source discussion below; actual
+new APK class checks and installed password/provider/notification flows remain
+required. lxml's upstream Linux wheels intentionally use libxslt 1.1.43 with
+the retained security backport; `815895883b` records that exact release recipe,
+adds its previously missing libiconv/zlib sources and fixes the source lock
+binding. It does not relabel those wheels as libxslt 1.1.45.
+
+The user-requested `full-read` and `compact_context` extension is registered in
+the existing Pi package in `2c1eea5c44`. Deterministic stock Pi 1.3 SDK/RPC,
+private-profile discovery and Linux/Termux staging checks pass, including full
+reads, context refusal, compaction/resume and Stop. No paid context-fill test
+was repeated. GUI guidance also uses the existing current-desktop helper rather
+than copying only a display number. The combined candidate must still verify
+these integrations through the installed apps. No complete-product acceptance
+or new publication is claimed here.
+
 ## Release refresh and continued installed checks — 19 October 2026, later evening
 
 The user's later authorization removes the remaining Android Google Play
