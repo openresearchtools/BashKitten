@@ -7,7 +7,7 @@ license = "AGPL-3.0-or-later"
 repository = "https://github.com/openresearchtools/BashKitten"
 
 [dependencies]
-libc = "=0.2.189"
+libc = "=0.2.191"
 
 [[bin]]
 name = "bashkitten-sudo"
