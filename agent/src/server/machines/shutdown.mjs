@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, writeJson, socketRequest } from '../common.mjs';
 import { claimInstance, processStart } from '../instance.mjs';
-import { machineRoot, locations, containerName, machineLabel, podmanRuntime, helper, prepareStorage } from './config.mjs';
+import { machineRoot, locations, containerName, machineLabel, podmanRuntime, helper, prepareStorage, preparePodmanRuntime, daemonSocket } from './config.mjs';
 import { podman, quiescePodman, run } from './process.mjs';
 import { binary } from '../access/paths.mjs';
 
@@ -56,6 +56,30 @@ async function inspectOwned(id, name) {
   const value = JSON.parse(result.stdout)[0];
   if (value?.Config?.Labels?.[machineLabel] !== id) throw Error('Container ownership changed; refusing to stop it');
   return value;
+}
+async function idleOwnedMachines() {
+  const entries = await fs.readdir(machineRoot, {withFileTypes:true});
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(entry.name)) continue;
+    const id=entry.name, files=locations(id);
+    const saved = await readJson(files.operation,null);
+    if (saved?.state === 'running') return false;
+    // Only the old owner has its media ChildProcess handles. A stopped main
+    // container alone cannot establish that this whole service is idle.
+    const detail = await socketRequest(daemonSocket,'/get',{id},5000);
+    if (detail.machine?.id !== id || !Array.isArray(detail.media)) throw Error('The legacy machine status is incomplete');
+    if (['preparing','starting','stopping','deleting'].includes(detail.machine.state) || detail.media.some(channel => channel.running)) return false;
+    for (const name of [containerName(id),containerName(id)+'-materialize',containerName(id)+'-source']) {
+      const info = await inspectOwned(id,name);
+      if (info?.State?.Running || info?.State?.Paused || info?.State?.Restarting) return false;
+    }
+    const gateway = await readJson(path.join(files.runtime,'gateway.json'),null);
+    if (gateway) {
+      if (!Number.isInteger(gateway.pid) || !gateway.started) throw Error('The display gateway identity is incomplete');
+      if (await processStart(gateway.pid) === gateway.started) return false;
+    }
+  }
+  return true;
 }
 async function stopContainer(id, name) {
   const info = await inspectOwned(id, name);
@@ -121,7 +145,19 @@ async function stopPrivatePause() {
 
 // Orphan/legacy cleanup also needs a subreaper. It must not create a new pause
 // process outside the existing guard simply by inspecting the private store.
-if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'serve') {
+if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'idle' && process.argv[3] === 'serve') {
+  // The caller holds machines-update; the still-running legacy owner keeps its
+  // machines lock. This bounded read does not stop any of its existing work.
+  if (Number(process.env.BASHKITTEN_GUARD_PID) !== process.ppid) throw Error('The container cleanup guard is unavailable');
+  const deadline = setTimeout(() => process.kill(process.ppid,'SIGTERM'),10000);
+  try {
+    // Schema 1 predates the private Podman runtime directory. Create only that
+    // owned runtime path; do not rewrite the still-running owner's config files.
+    await preparePodmanRuntime();
+    console.log(JSON.stringify({idle:await idleOwnedMachines()}));
+  }
+  finally { clearTimeout(deadline); }
+} else if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] === 'serve') {
   const owner = await claimInstance('machines');
   if (!owner) throw Error('The container service is already owned');
   try {

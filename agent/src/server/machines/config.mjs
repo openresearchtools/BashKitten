@@ -43,13 +43,18 @@ export async function load(id) {
   if (config.id !== id) throw Error('Machine identity does not match its directory');
   return { files, config, state: await readJson(files.state, { state: 'new' }) };
 }
-export async function prepareStorage() {
+export async function preparePodmanRuntime() {
   const runtimeParent = process.env.XDG_RUNTIME_DIR || `/run/user/${process.getuid()}`;
   const runtimeStat = await fs.stat(runtimeParent);
   if (!runtimeStat.isDirectory() || runtimeStat.uid !== process.getuid() || runtimeStat.mode & 0o077) throw Error('A private owned XDG runtime directory is required');
   const existing = await fs.lstat(podmanRuntime).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
   if (existing && (!existing.isDirectory() || existing.uid !== process.getuid())) throw Error('Private Podman runtime directory ownership changed');
-  for (const dir of [machineRoot, runtimeRoot, podmanRuntime, storageRoot, path.join(storageRoot, 'graph'), path.join(storageRoot, 'run'), path.join(storageRoot, 'config')]) await privateDir(dir);
+  await privateDir(runtimeRoot);
+  await privateDir(podmanRuntime);
+}
+export async function prepareStorage() {
+  await preparePodmanRuntime();
+  for (const dir of [machineRoot, storageRoot, path.join(storageRoot, 'graph'), path.join(storageRoot, 'run'), path.join(storageRoot, 'config')]) await privateDir(dir);
   const q = JSON.stringify;
   const config = path.join(storageRoot, 'config');
   // Explicit paths prevent adopting host containers or silently finding distro helpers.
