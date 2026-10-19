@@ -12,7 +12,41 @@ import xml.etree.ElementTree as ET
 
 HERE = Path(__file__).resolve().parent
 SOURCE = HERE.parents[3] / 'bashkitten/vendor/termux-x11/source'
+DEPENDENCIES = SOURCE.parent.parent / 'display-dependencies'
 PIN = 'fa3a8b430e2896a19f44c99a9cb056254615ae06'
+
+
+def dependency_sources():
+    """Verify the separately imported releases replacing frozen donor gitlinks."""
+    result = {}
+    for name in ('libtirpc', 'libx11', 'xserver'):
+        directory = DEPENDENCIES / name
+        metadata = json.loads((directory / 'source.json').read_text())
+        target = 'lorie/src/main/cpp/' + name
+        if metadata['name'] != name or metadata['target'] != target:
+            raise ValueError('Unexpected embedded dependency target: ' + name)
+        inventory = directory / 'SHA256SUMS'
+        if hashlib.sha256(inventory.read_bytes()).hexdigest() != metadata['sourceInventorySha256']:
+            raise ValueError('Embedded dependency inventory changed: ' + name)
+        listed = set()
+        for line in inventory.read_text().splitlines():
+            expected, relative = line.split('  ', 1)
+            if not relative.startswith('source/') or '..' in Path(relative).parts:
+                raise ValueError('Invalid embedded dependency source path')
+            path = directory / relative
+            data = path.readlink().as_posix().encode() if path.is_symlink() else path.read_bytes()
+            if hashlib.sha256(data).hexdigest() != expected:
+                raise ValueError('Embedded dependency source changed: ' + relative)
+            listed.add(relative)
+        actual = {p.relative_to(directory).as_posix() for p in (directory / 'source').rglob('*')
+                  if p.is_file() or p.is_symlink()}
+        if listed != actual or not metadata['licensePaths']:
+            raise ValueError('Incomplete embedded dependency source: ' + name)
+        for license_path in metadata['licensePaths']:
+            if license_path not in listed or not (directory / license_path).is_file():
+                raise ValueError('Missing embedded dependency license: ' + name)
+        result[target] = (directory / 'source', metadata)
+    return result
 
 
 def prepare(output):
@@ -22,10 +56,13 @@ def prepare(output):
         metadata = json.loads((SOURCE.parent / 'source.json').read_text())
         if metadata['commit'] != PIN:
             raise ValueError('Unreviewed Termux:X11 pin')
+        dependencies = dependency_sources()
         patches = sorted((HERE / 'patches').glob('*.patch'))
         digest = hashlib.sha256(Path(__file__).read_bytes() + (SOURCE.parent / 'source.json').read_bytes())
         for patch in patches:
             digest.update(patch.read_bytes())
+        for _, dependency in dependencies.values():
+            digest.update(json.dumps(dependency, sort_keys=True).encode())
         # Gradle observes donor-tree edits, so this inner cache must observe the
         # same inputs rather than reusing output solely from unchanged metadata.
         for source in sorted(SOURCE.rglob('*')):
@@ -41,6 +78,11 @@ def prepare(output):
         staging = output.with_name(output.name + '.new')
         shutil.rmtree(staging, ignore_errors=True)
         shutil.copytree(SOURCE, staging)
+        for target, (source, _) in dependencies.items():
+            shutil.rmtree(staging / target)
+            # Preserve upstream links as links; libtirpc's INSTALL points to the
+            # maintainer's Automake manual and is not a compilation input.
+            shutil.copytree(source, staging / target, symlinks=True)
         for patch in patches:
             subprocess.run(['patch', '--batch', '--forward', '-p1', '-i', str(patch)], cwd=staging, check=True)
         java = staging / 'lorie/src/main/java/com/termux/x11'

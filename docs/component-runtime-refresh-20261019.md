@@ -76,3 +76,67 @@ combined acceptance coordinator. These checks did not run installed Android
 Node/npm, start containers, exercise rootless lifetime cleanup, inject Display
 input, or establish absence of reporting traffic. Those flows and artifact/
 traffic reconciliation remain part of the combined installed acceptance.
+
+## Additional owned Display dependency checks
+
+The complete registry dependency audit subsequently found compatible updates in
+BashKitten's own Display lock: cc 1.8.0 → 1.9.0, find-msvc-tools 0.1.14 →
+0.1.15, syn 3.0.7 → 3.0.9, and unicode-ident 1.0.26 → 1.0.27. These are now
+materialized with registry SHA256s, crate release-commit metadata and complete
+notices. The final offline Display build and seven unit tests pass again.
+
+generic-array 0.14.9 is available, but crypto-common 0.1.7 requires exactly
+`generic-array = "=0.14.7"`. Attempting 0.14.9 produced a concrete offline Cargo
+resolution error, so 0.14.7 remains pinned. The upstream requirement was not
+relaxed. Imported Podman/Firefox release vendor graphs retain their respective
+upstream-tested dependency selections; this additional refresh applies to
+BashKitten's own helper lock.
+
+## Embedded Android X11 dependency refresh
+
+The frozen Termux:X11 import still contains its original dependency gitlinks.
+Dedicated pristine replacement releases were imported separately in `098133e3f4`:
+
+| Dependency | Previous | Selected release commit | Official source archive SHA256 |
+| --- | --- | --- | --- |
+| libtirpc | 1.2.6 | 1.3.8, `b2a58e4ac15dd5f45952210ef466e9fd88dda553` | `8839959bfcc7a0f4c609d8e4f53f1c67ae33de23775ec35beb39ff15adf11920` |
+| libX11 | 1.8.13 | 1.8.14, `b8d5a7046a98a244ee8ca3c9c07fd617c800dde2` | `bbc78c46217174655c2b32b138ad119f3ac15f50808b4d0b3a2677a4b1afc950` |
+| Xorg server | 21.1.24 | 21.1.25, `edc1b378f804ef5bf286318057e0b935f91f22b7` | `6ad4e3c7b59a309b32c92e5c15ce1267110f9e13f1ac78da62361a628da1a0eb` |
+
+Primary release sources are the maintainer's
+[libtirpc 1.3.8 publication](https://sourceforge.net/projects/libtirpc/files/libtirpc/1.3.8/),
+[libX11 1.8.14 archive](https://www.x.org/releases/individual/lib/libX11-1.8.14.tar.xz)
+and [Xorg server 21.1.25 archive](https://www.x.org/releases/individual/xserver/xorg-server-21.1.25.tar.xz).
+The libtirpc release tag was resolved directly from the advertised maintainer
+repository `git://linux-nfs.org/~steved/libtirpc`; Xorg pins were peeled from the
+official Freedesktop repositories. Each new source tree has a complete inventory
+and full license paths. libtirpc's upstream `INSTALL` absolute symlink is retained
+as link text; it is not followed during preparation or used during compilation.
+
+`prepare.py` explicitly selects the new releases in build output, validates every
+source checksum and rejects missing or extra files. Negative checks confirmed
+rejection of changed source, an unrecorded source file and a missing license.
+Gradle tracks the dependency directory as an input. About uses the same verified
+selection and emits full copyright/license preambles for the actual dependencies.
+The pristine original donor metadata and source remain unchanged.
+
+The initial compile exposed duplicate `quad_t`/`u_quad_t` declarations in the old
+Android recipe and generated Xorg config. The named adaptation removes those
+obsolete declarations because libtirpc 1.3.8 now supplies them itself. It also
+replaces the donor's development `VENDOR_RELEASE` value with `12101025`.
+The existing libX11 and Xorg patches apply with zero fuzz; one Xorg hunk moves
+by 13 lines. No authentication or transport behavior is substituted.
+
+The complete `Xlorie` target successfully configures and links for x86_64 and
+arm64-v8a using the existing NDK r29, Android API 31, static C++ runtime and
+flexible-page-size setting, four build jobs on CPUs 0–7. Both resulting ELF files
+have 16 KiB load-segment alignment and use Android system shared libraries.
+Existing upstream compiler warnings remain. Component outputs:
+
+- x86_64 `libXlorie.so`: `d9effb90dfae86de1de2b56467803c7be83c52267e067802736e3376a7bc05e4`
+- arm64-v8a `libXlorie.so`: `863c34ad0cbb5d7db11b90b89371da2bdf77a92a8626211b8b849ec52a4301a4`
+
+Logs and outputs remain in the same scratch directory under `embedded-*`.
+Native builds and notice collection are not APK packaging, installed Display
+acceptance or physical-device GPU evidence. Rebuild the combined candidate and
+repeat the required installed flows, including standalone Termux:X11 coexistence.
