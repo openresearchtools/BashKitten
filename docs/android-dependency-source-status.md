@@ -28,12 +28,21 @@ The actual OSS dependency set passes the updated pinned notice inventory and ful
 notice checksum validation. These checks do not establish APK absence or device
 behavior; both need the next complete candidate after the source blocker is fixed.
 
-`stageBashKittenDependencySources` now clears stale output, records unresolved
-components as well as absent source artifacts, and fails when any remain.
-`collect-artifacts.py` rejects an incomplete receipt before signing or copying a
-candidate. These gates deliberately do not treat a license as source or add a
-closed-library exception. Artifactless metadata entries still need explicit
-review and retained provenance; the gate currently conservatively rejects them.
+`stageBashKittenDependencySources` now reconciles the actual Gradle graph with one
+committed source inventory, validates every retained input checksum, clears stale
+output and fails for coordinates without source. `collect-artifacts.py` rejects
+an incomplete receipt before signing or copying a candidate and verifies staged
+source checksums. These gates do not treat a license as source or add a
+closed-library exception.
+
+Six coordinates have no implementation needing a source JAR. Four are BOM POMs;
+`kotlin-stdlib-common:2.3.21` has a POM and Gradle module redirecting to the separately
+sourced `kotlin-stdlib:2.3.21`; the Guava `9999.0-empty-to-avoid-conflict-with-guava`
+JAR contains only `META-INF`/Maven descriptors. Their exact POM/module/marker-JAR
+bytes are retained and hashed in the same source inventory. The build verifies
+that their selected runtime artifacts are absent or match the reviewed empty
+artifact bytes. An unexpected runtime payload fails, rather than inheriting a
+metadata exemption. The remaining missing-source count is 13 runtime SDKs.
 
 ## Remaining dependency owners
 
@@ -52,11 +61,27 @@ callers; this change does not claim they were removed. Firebase's dependencies
 also serve WebPush, so removing them requires a separate functional trace, not a
 classification of every push dependency as analytics.
 
-The 263 matching JARs are downloaded by the source collector and hashed during
-packaging. They are not yet a committed, materialized source corpus/checksum lock.
-The Maven notice manifest pins legal input files, not all of those runtime source
-archives. Source-complete packaging therefore needs that independent correction
-even after the unresolved coordinates have been addressed.
+The 263 matching source JARs are now materialized under
+`browser/bashkitten/android/sources/archives` with exact coordinates and SHA-256
+pins in that directory's `sources.json`. Each JAR matches the original candidate
+source archive's recorded hash. The same inventory owns the six metadata-only
+coordinates and their eight descriptor/marker files. Source staging consumes
+these committed bytes; it no longer downloads source JARs during the build.
+Existing full source notices and the separately validated offline Maven notice
+inventory remain retained. This does not turn the 13 missing SDK sources into
+available source or claim an upstream Git revision absent from the release JAR.
+
+A failed source-JAR query establishes a missing verified input, not that every
+upstream implementation is necessarily unavailable. The six GMS libraries are
+part of the proprietary Play Services family. No matching source distribution
+was found for the retained Play Core/Integrity/review coordinates in the inspected
+Maven publication. Firebase needs a separate source correspondence check:
+its [official source repository](https://github.com/firebase/firebase-android-sdk)
+contains `firebase-annotations`, and historical version metadata records 17.0.0;
+that source has not yet been verified against the shipped 17.0.0 artifact. The
+current repository has no `firebase-iid-interop` or `firebase-measurement-connector`
+module directory. Their missing JARs are not evidence of a verified matching
+historical source revision. None of these three is marked source-complete here.
 
 ## WebAuthn compatibility boundary
 
