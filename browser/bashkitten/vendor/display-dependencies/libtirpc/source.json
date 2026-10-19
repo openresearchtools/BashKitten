@@ -1,0 +1,20 @@
+{
+  "name": "libtirpc",
+  "version": "1.3.8",
+  "tag": "libtirpc-1-3-8",
+  "url": "git://linux-nfs.org/~steved/libtirpc",
+  "commit": "b2a58e4ac15dd5f45952210ef466e9fd88dda553",
+  "target": "lorie/src/main/cpp/libtirpc",
+  "archive": {
+    "url": "https://downloads.sourceforge.net/project/libtirpc/libtirpc/1.3.8/libtirpc-1.3.8.tar.bz2",
+    "sha256": "8839959bfcc7a0f4c609d8e4f53f1c67ae33de23775ec35beb39ff15adf11920"
+  },
+  "sourceInventorySha256": "e6142727d6082219102f25bdcf3c276f87dd2d48730583b99a2c29977c9dd62e",
+  "licensePaths": [
+    "source/COPYING"
+  ],
+  "modifications": [],
+  "upstreamSymlinks": {
+    "source/INSTALL": "/usr/share/automake-1.18/INSTALL"
+  }
+}

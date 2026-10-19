@@ -1,0 +1,18 @@
+{
+  "name": "libx11",
+  "version": "1.8.14",
+  "tag": "libX11-1.8.14",
+  "url": "https://gitlab.freedesktop.org/xorg/lib/libx11.git",
+  "commit": "b8d5a7046a98a244ee8ca3c9c07fd617c800dde2",
+  "target": "lorie/src/main/cpp/libx11",
+  "archive": {
+    "url": "https://www.x.org/releases/individual/lib/libX11-1.8.14.tar.xz",
+    "sha256": "bbc78c46217174655c2b32b138ad119f3ac15f50808b4d0b3a2677a4b1afc950"
+  },
+  "sourceInventorySha256": "d77738648587b7714637d2d96953c56de915f014bc9c28a797a901829890761d",
+  "licensePaths": [
+    "source/COPYING",
+    "source/src/xlibi18n/lcUniConv/COPYRIGHT"
+  ],
+  "modifications": []
+}
