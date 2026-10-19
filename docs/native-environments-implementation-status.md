@@ -5,6 +5,60 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Inline header and combined-candidate follow-up — 19 October 2026
+
+`6f62397ee2` puts the working folder and session/runtime metrics in one flowing
+header, wrapping only when the available width is exhausted. It removes the
+redundant header Stop/Resume control and retains the composer control and Files.
+`521c0ec768` supplies the owning backend's original home-path alias alongside its
+canonical home; the shared formatter displays either as `~` or `~/…` using
+directory-boundary matching. Commands, stored paths and file permissions are
+unchanged. Source/layout checks include 320–1440-pixel widths, short landscape,
+long paths and backend alias/isolation cases. These changes are not yet an
+installed candidate pass. Their authorized requirements are recorded in the
+current plan's dated amendment, without changing the frozen original.
+
+Complete 153.5 candidate run `39325866928` uses prepared source
+`8a2c720a561ad85ef5a279db4007422e5d2aad62`, before these UI changes. Its Linux
+amd64/arm64 browser producers are still compiling at this checkpoint. The old
+Android workflow selects Go 1.27.1 while the retained source requires 1.27.2,
+so its client build cannot pass that source check. `c94c02060e` fixes the managed
+template to select the compiler from the committed source manifest; the matching
+Android builder workflows are pushed. Preserve the source/toolchain check. A
+replacement complete package run must include this fix and the UI changes,
+retain unpublished version 153.5 and wait for eligible completed Linux browser
+producers so their unchanged compiler fingerprints can reuse those archives.
+Android still requires fresh APK assembly and the matching Termux packages.
+No successful build, cache write or installation is inferred from dispatch.
+
+The four daughter Vulkan artifacts passed binary/checksum/ABI checks, but their
+Android corresponding-source audit found missing NDK libc++ sources. The
+daughter source closure repair remains in progress; the existing unpublished
+runtime run is not release approval. Keep runtime builds in daughter CI.
+
+CVD6520 now has verified KeePassDX Libre 4.5.6 installed and selected through
+ordinary Android consent, with a disposable encrypted vault and explicit trust
+for the installed BashKitten signing identity through the provider's UI. Normal
+vault lock/reopen succeeded using Cuttlefish in the isolated BashKitten browser.
+Credentials and backups remain outside repositories in private local storage.
+This is provider setup only: actual 153.5 create/sign-in/cancel and password/
+notification acceptance remain pending, including comparison of its signer.
+Evidence: `Bashkitten-Acceptance/framework-passkeys-153.5-20261019/setup-receipt.json`.
+
+The installed `bd393` real-Xorg container also exercised Pi-driven GUI launch.
+The first attempt failed: Mousepad was absent and the model substituted Thunar.
+With an explicit correction, Pi installed Mousepad through guest passwordless
+APT, but then its foreground GUI command was killed by the desktop helper's
+operation timeout. A further correction used the existing `gio launch` desktop
+entry path; Pi opened the requested README, verified the real window title and
+focus using the current owned context, and the window remained visible in the
+native Display tab after the launcher returned. The README hash stayed equal
+to its earlier Files acceptance hash. Shared desktop guidance now documents
+this persistent-application launch method, without changing the bounded helper
+or introducing a separate service. This proves the corrected installed path,
+not unguided model reliability or installed discovery of the newly edited guide.
+Evidence: `Bashkitten-Acceptance/desktop-agent-context-20261019/acceptance.json`.
+
 ## Integrated release refresh — 19 October 2026, final source batch
 
 Firefox 153.5 ESR is merged in `feb8fd576c`; `e69a687bb0` records the matching
