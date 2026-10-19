@@ -79,18 +79,14 @@ class MOZ_STACK_CLASS ServoCSSAnimationBuilder final {
     MOZ_ASSERT(aComputedStyle);
   }
 
+  const ComputedStyle* Style() const { return mComputedStyle; }
+
   bool BuildKeyframes(const Element& aElement, nsPresContext* aPresContext,
                       nsAtom* aName,
                       const StyleComputedTimingFunction& aTimingFunction,
                       nsTArray<Keyframe>& aKeyframes) {
     return aPresContext->StyleSet()->GetKeyframesForName(
         aElement, *mComputedStyle, aName, aTimingFunction, aKeyframes);
-  }
-  void SetKeyframes(KeyframeEffect& aEffect, nsTArray<Keyframe>&& aKeyframes,
-                    const dom::AnimationTimeline* aTimeline,
-                    const dom::AnimationRange& aRange) {
-    aEffect.SetKeyframes(std::move(aKeyframes), mComputedStyle, aTimeline,
-                         &aRange);
   }
 
   // Currently all the animation building code in this file is based on
@@ -174,9 +170,9 @@ static void UpdateOldAnimationPropertiesWithNew(
     CSSAnimation& aOld, TimingParams&& aNewTiming,
     nsTArray<Keyframe>&& aNewKeyframes, bool aNewIsStylePaused,
     CSSAnimationProperties aOverriddenProperties,
-    ServoCSSAnimationBuilder& aBuilder, dom::AnimationTimeline* aTimeline,
-    const nsAtom* aTimelineName, dom::CompositeOperation aNewComposite,
-    dom::AnimationRange&& aTimelineRange,
+    ServoCSSAnimationBuilder& aBuilder, const NonOwningAnimationTarget& aTarget,
+    dom::AnimationTimeline* aTimeline, const nsAtom* aTimelineName,
+    dom::CompositeOperation aNewComposite, dom::AnimationRange&& aTimelineRange,
     nsAnimationManager::TimelineNamesToAnimationMap&
         aTimelineNamesToAnimationMap) {
   const auto* oldTimelineName = aOld.GetTimelineName();
@@ -190,9 +186,7 @@ static void UpdateOldAnimationPropertiesWithNew(
 
   // Update the old from the new so we can keep the original object
   // identity (and any expando properties attached to it).
-  if (aOld.GetEffect()) {
-    dom::AnimationEffect* oldEffect = aOld.GetEffect();
-
+  if (dom::AnimationEffect* oldEffect = aOld.GetEffect()) {
     // Copy across the changes that are not overridden
     TimingParams updatedTiming = oldEffect->SpecifiedTiming();
     if (~aOverriddenProperties & CSSAnimationProperties::Duration) {
@@ -216,8 +210,13 @@ static void UpdateOldAnimationPropertiesWithNew(
 
     if (KeyframeEffect* oldKeyframeEffect = oldEffect->AsKeyframeEffect()) {
       if (~aOverriddenProperties & CSSAnimationProperties::Keyframes) {
-        aBuilder.SetKeyframes(*oldKeyframeEffect, std::move(aNewKeyframes),
-                              aTimeline, aTimelineRange);
+        // FIXME(emilio): Should we update the effect target on top if different
+        // or something?
+        auto* style = oldKeyframeEffect->GetAnimationTarget() == aTarget
+                          ? aBuilder.Style()
+                          : nullptr;
+        oldKeyframeEffect->SetKeyframes(std::move(aNewKeyframes), style,
+                                        aTimeline, &aTimelineRange);
       }
 
       if (~aOverriddenProperties & CSSAnimationProperties::Composition) {
@@ -422,8 +421,9 @@ static already_AddRefed<CSSAnimation> BuildAnimation(
     // In order to honor what the spec said, we'd copy more data over.
     UpdateOldAnimationPropertiesWithNew(
         *oldAnim, std::move(timing), std::move(keyframes), isStylePaused,
-        oldAnim->GetOverriddenProperties(), aBuilder, timeline, timelineName,
-        composition, std::move(range), aTimelineNamesToAnimationMap);
+        oldAnim->GetOverriddenProperties(), aBuilder, aTarget, timeline,
+        timelineName, composition, std::move(range),
+        aTimelineNamesToAnimationMap);
     // For now, only name-referenced timeline, or `none`, which is represented
     // as IsTimeline with the empty atom, can result in no timeline.
     MOZ_ASSERT_IF(timelineName && !timeline, styleTimeline.IsTimeline());
@@ -435,8 +435,8 @@ static already_AddRefed<CSSAnimation> BuildAnimation(
       aPresContext->Document(),
       OwningAnimationTarget(aTarget.mElement, aTarget.mPseudoRequest),
       std::move(timing), effectOptions);
-
-  aBuilder.SetKeyframes(*effect, std::move(keyframes), timeline, range);
+  effect->KeyframeEffect::SetKeyframes(std::move(keyframes), aBuilder.Style(),
+                                       timeline, &range);
 
   auto animation = MakeRefPtr<CSSAnimation>(
       aPresContext->Document()->GetScopeObject(), animationName);

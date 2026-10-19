@@ -1485,7 +1485,9 @@ already_AddRefed<RemoteBrowser> ContentParent::CreateBrowser(
   if (NS_WARN_IF(!cpm)) {
     return nullptr;
   }
-  cpm->RegisterRemoteFrame(browserParent);
+  if (NS_WARN_IF(!cpm->RegisterRemoteFrame(browserParent))) {
+    return nullptr;
+  }
 
   // Open a remote endpoint for our PBrowser actor.
   ManagedEndpoint<PBrowserChild> childEp =
@@ -4376,6 +4378,7 @@ mozilla::ipc::IPCResult ContentParent::RecvConstructPopupBrowser(
 
   // Bind the created BrowserParent to IPC to actually link the actor.
   if (NS_WARN_IF(!BindPBrowserEndpoint(std::move(aBrowserEp), parent))) {
+    cpm->UnregisterRemoteFrame(parent);
     return IPC_FAIL(this, "BindPBrowserEndpoint failed");
   }
 
@@ -6886,10 +6889,10 @@ mozilla::ipc::IPCResult ContentParent::RecvAddOrRemovePageAwakeRequest(
 
 #if defined(XP_WIN)
 mozilla::ipc::IPCResult ContentParent::RecvGetModulesTrust(
-    ModuleIdentifiers&& aModIdents, bool aRunAtNormalPriority,
+    ModulePaths&& aModPaths, bool aRunAtNormalPriority,
     GetModulesTrustResolver&& aResolver) {
   RefPtr<DllServices> dllSvc(DllServices::Get());
-  dllSvc->GetModulesTrust(std::move(aModIdents), aRunAtNormalPriority)
+  dllSvc->GetModulesTrust(std::move(aModPaths), aRunAtNormalPriority)
       ->Then(
           GetMainThreadSerialEventTarget(), __func__,
           [aResolver](ModulesMapResult&& aResult) {

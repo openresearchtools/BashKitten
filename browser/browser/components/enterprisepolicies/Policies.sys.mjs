@@ -36,6 +36,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   SearchService: "moz-src:///toolkit/components/search/SearchService.sys.mjs",
   QuickSuggest: "moz-src:///browser/components/urlbar/QuickSuggest.sys.mjs",
   WebsiteFilter: "resource:///modules/policies/WebsiteFilter.sys.mjs",
+  addPolicyPermission: "resource://gre/modules/PoliciesHelpers.sys.mjs",
   describePreferenceFailure: "resource://gre/modules/PoliciesHelpers.sys.mjs",
   reportFailure: "resource://gre/modules/PoliciesHelpers.sys.mjs",
 });
@@ -43,6 +44,16 @@ ChromeUtils.defineESModuleGetters(lazy, {
 const PREF_LOGLEVEL = "browser.policies.loglevel";
 const BROWSER_DOCUMENT_URL = AppConstants.BROWSER_CHROME_URL;
 const ABOUT_CONTRACT = "@mozilla.org/network/protocol/about;1?what=";
+
+// The only prefs read when clearing at shutdown.
+const CLEAR_ON_SHUTDOWN_PREFS = {
+  BrowsingHistoryAndDownloads:
+    "privacy.clearOnShutdown_v2.browsingHistoryAndDownloads",
+  CookiesAndStorage: "privacy.clearOnShutdown_v2.cookiesAndStorage",
+  Cache: "privacy.clearOnShutdown_v2.cache",
+  FormData: "privacy.clearOnShutdown_v2.formdata",
+  SiteSettings: "privacy.clearOnShutdown_v2.siteSettings",
+};
 
 ChromeUtils.defineLazyGetter(lazy, "log", () => {
   let { ConsoleAPI } = ChromeUtils.importESModule(
@@ -645,6 +656,26 @@ export var Policies = {
     },
   },
 
+  ClearOnShutdown: {
+    onBeforeUIStartup(manager, param) {
+      if (typeof param === "boolean") {
+        setAndLockPref("privacy.sanitize.sanitizeOnShutdown", param);
+        for (const pref of Object.values(CLEAR_ON_SHUTDOWN_PREFS)) {
+          setAndLockPref(pref, param);
+        }
+        return;
+      }
+
+      // Named categories are enforced; the rest are left to the user.
+      setAndLockPref("privacy.sanitize.sanitizeOnShutdown", true);
+      for (const [member, pref] of Object.entries(CLEAR_ON_SHUTDOWN_PREFS)) {
+        if (member in param) {
+          setAndLockPref(pref, param[member]);
+        }
+      }
+    },
+  },
+
   Containers: {
     // Queried directly by ContextualIdentityService.sys.mjs
   },
@@ -814,13 +845,10 @@ export var Policies = {
       if (param.AllowSession) {
         for (let origin of param.AllowSession) {
           try {
-            Services.perms.addFromPrincipal(
-              Services.scriptSecurityManager.createContentPrincipalFromOrigin(
-                origin
-              ),
+            lazy.addPolicyPermission(
+              origin,
               "cookie",
-              Ci.nsICookiePermission.ACCESS_SESSION,
-              Ci.nsIPermissionManager.EXPIRE_POLICY
+              Ci.nsICookiePermission.ACCESS_SESSION
             );
           } catch (ex) {
             lazy.reportFailure(
@@ -1070,6 +1098,8 @@ export var Policies = {
       if (param) {
         setAndLockPref("devtools.policy.disabled", true);
         setAndLockPref("devtools.chrome.enabled", false);
+        // Covers Marionette and the Remote Agent.
+        setAndLockPref("remote.policy.disabled", true);
 
         manager.disallowFeature("devtools");
         blockAboutPage(manager, "about:debugging");
@@ -1520,67 +1550,51 @@ export var Policies = {
 
   Extensions: {
     onBeforeUIStartup(manager, param) {
-      let uninstallingPromise = Promise.resolve();
+      let uninstallingPromise = Promise.resolve(false);
       let installingPromise = Promise.resolve();
       if ("Uninstall" in param) {
-        uninstallingPromise = runOncePerModification(
-          "extensionsUninstall",
-          JSON.stringify(param.Uninstall),
-          async () => {
-            // If we're uninstalling add-ons, re-run the extensionsInstall runOnce even if it hasn't
-            // changed, which will allow add-ons to be updated.
-            Services.prefs.clearUserPref(
-              "browser.policies.runOncePerModification.extensionsInstall"
-            );
-            let addons = await lazy.AddonManager.getAddonsByIDs(
-              param.Uninstall
-            );
-            for (let addon of addons) {
-              if (addon) {
-                try {
-                  await addon.uninstall();
-                } catch (e) {
-                  // This can fail for add-ons that can't be uninstalled.
-                  lazy.log.debug(
-                    `Add-on ID (${addon.id}) couldn't be uninstalled.`
-                  );
-                }
-              }
-            }
-          }
+        uninstallingPromise = uninstallListedAddons(
+          param.Uninstall,
+          param.Install
         );
       }
       if ("Install" in param) {
-        installingPromise = runOncePerModification(
-          "extensionsInstall",
-          JSON.stringify(param.Install),
-          async () => {
-            await uninstallingPromise;
-            for (let location of param.Install) {
-              let uri;
-              try {
-                // We need to try as a file first because
-                // Windows paths are valid URIs.
-                // This is done for legacy support (old API)
-                let xpiFile = new lazy.FileUtils.File(location);
-                uri = Services.io.newFileURI(xpiFile);
-              } catch (e) {
-                try {
-                  uri = Services.io.newURI(location);
-                } catch (ex) {
-                  // Keep going so that one bad location doesn't discard the
-                  // add-ons that come after it.
-                  lazy.reportFailure(
-                    "Extensions",
-                    `Invalid add-on location (${location})`
-                  );
-                  continue;
-                }
-              }
-              installAddonFromURL(uri.spec, null, null, "Extensions");
-            }
+        installingPromise = uninstallingPromise.then(uninstallListChanged => {
+          if (uninstallListChanged) {
+            // Re-run the install even if its list hasn't changed, which is how
+            // an add-on listed in both Uninstall and Install gets updated.
+            clearRunOnceModification("extensionsInstall");
           }
-        );
+          return runOncePerModification(
+            "extensionsInstall",
+            JSON.stringify(param.Install),
+            () => {
+              for (let location of param.Install) {
+                let uri;
+                try {
+                  // We need to try as a file first because
+                  // Windows paths are valid URIs.
+                  // This is done for legacy support (old API)
+                  let xpiFile = new lazy.FileUtils.File(location);
+                  uri = Services.io.newFileURI(xpiFile);
+                } catch (e) {
+                  try {
+                    uri = Services.io.newURI(location);
+                  } catch (ex) {
+                    // Keep going so that one bad location doesn't discard the
+                    // add-ons that come after it.
+                    lazy.reportFailure(
+                      "Extensions",
+                      `Invalid add-on location (${location})`
+                    );
+                    continue;
+                  }
+                }
+                installAddonFromURL(uri.spec, null, null, "Extensions");
+              }
+            }
+          );
+        });
       }
       if ("Locked" in param) {
         for (let ID of param.Locked) {
@@ -2849,6 +2863,12 @@ export var Policies = {
 
   SanitizeOnShutdown: {
     onBeforeUIStartup(manager, param) {
+      if (manager.getActivePolicies().ClearOnShutdown) {
+        lazy.log.error(
+          "SanitizeOnShutdown is ignored when ClearOnShutdown is also set."
+        );
+        return;
+      }
       if (typeof param === "boolean") {
         setAndLockPref("privacy.sanitize.sanitizeOnShutdown", param);
         setAndLockPref("privacy.clearOnShutdown.cache", param);
@@ -3689,11 +3709,10 @@ function addAllowDenyPermissions(permissionName, allowList, blockList) {
 
   for (let origin of allowList) {
     try {
-      Services.perms.addFromPrincipal(
-        Services.scriptSecurityManager.createContentPrincipalFromOrigin(origin),
+      lazy.addPolicyPermission(
+        origin,
         permissionName,
-        Ci.nsIPermissionManager.ALLOW_ACTION,
-        Ci.nsIPermissionManager.EXPIRE_POLICY
+        Ci.nsIPermissionManager.ALLOW_ACTION
       );
     } catch (ex) {
       // It's possible if the origin was invalid, we'll have a string instead of an origin.
@@ -3706,11 +3725,10 @@ function addAllowDenyPermissions(permissionName, allowList, blockList) {
   }
 
   for (let origin of blockList) {
-    Services.perms.addFromPrincipal(
-      Services.scriptSecurityManager.createContentPrincipalFromOrigin(origin),
+    lazy.addPolicyPermission(
+      origin,
       permissionName,
-      Ci.nsIPermissionManager.DENY_ACTION,
-      Ci.nsIPermissionManager.EXPIRE_POLICY
+      Ci.nsIPermissionManager.DENY_ACTION
     );
   }
 }
@@ -3748,6 +3766,11 @@ export function runOnce(actionName, callback) {
  * If the callback that was passed is an async function, you can await on this
  * function to await for the callback.
  *
+ * The last applied value is stored in an unlocked user pref, so this helper
+ * only suits settings the user is allowed to change afterwards. A policy that
+ * enforces something must instead check the state it controls at every
+ * startup.
+ *
  * @param {string} actionName
  *        A given name which will be used to track if this callback has run.
  *        This string will be part of a pref name.
@@ -3761,19 +3784,60 @@ export function runOnce(actionName, callback) {
  * @returns {Promise}
  *        A promise that will resolve once the callback finishes running.
  */
-async function runOncePerModification(actionName, policyValue, callback) {
+export async function runOncePerModification(
+  actionName,
+  policyValue,
+  callback
+) {
   // Stringify the value so that it matches what we'd get from getStringPref.
   policyValue = policyValue + "";
-  let prefName = `browser.policies.runOncePerModification.${actionName}`;
-  let oldPolicyValue = Services.prefs.getStringPref(prefName, undefined);
-  if (policyValue === oldPolicyValue) {
+  if (isRunOnceModificationApplied(actionName, policyValue)) {
     lazy.log.debug(
       `Not running action ${actionName} again because the policy's value is unchanged`
     );
     return Promise.resolve();
   }
-  Services.prefs.setStringPref(prefName, policyValue);
+  setRunOnceModificationApplied(actionName, policyValue);
   return callback();
+}
+
+/**
+ * setRunOnceModificationApplied
+ *
+ * Records a value as the one runOncePerModification last applied for this
+ * action, without running anything. A policy that has to act on every
+ * startup uses this to record its list while still doing the work itself.
+ *
+ * @param {string} actionName
+ *        The name given to runOncePerModification for the action.
+ * @param {string} policyValue
+ *        The value to record, in the same form that is given to
+ *        runOncePerModification.
+ */
+export function setRunOnceModificationApplied(actionName, policyValue) {
+  let prefName = `browser.policies.runOncePerModification.${actionName}`;
+  Services.prefs.setStringPref(prefName, policyValue + "");
+}
+
+/**
+ * isRunOnceModificationApplied
+ *
+ * Whether runOncePerModification has already applied this value for this
+ * action, which is when it would skip its callback. A policy can use this to
+ * find out whether one of its lists changed before it reaches the
+ * runOncePerModification step for that list.
+ *
+ * @param {string} actionName
+ *        The name given to runOncePerModification for the action.
+ * @param {string} policyValue
+ *        The value to compare with the last applied one, in the same form
+ *        that is given to runOncePerModification.
+ * @returns {boolean}
+ *        Whether the value is the last applied one.
+ */
+export function isRunOnceModificationApplied(actionName, policyValue) {
+  let prefName = `browser.policies.runOncePerModification.${actionName}`;
+  return Services.prefs.getStringPref(prefName, undefined) === policyValue + "";
 }
 
 /**
@@ -3781,7 +3845,7 @@ async function runOncePerModification(actionName, policyValue, callback) {
  *
  * Helper function that clears a runOnce policy.
  */
-function clearRunOnceModification(actionName) {
+export function clearRunOnceModification(actionName) {
   let prefName = `browser.policies.runOncePerModification.${actionName}`;
   Services.prefs.clearUserPref(prefName);
 }
@@ -4011,6 +4075,76 @@ function installAddonFromURL(url, extensionID, addon, policyName) {
         `Unable to install add-on from ${url}: ${e.message ?? e}`
       );
     });
+}
+
+/**
+ * Uninstalls the add-ons an Extensions.Uninstall list names whenever they are
+ * present, so a run-once marker pre-seeded in the profile cannot keep one
+ * installed. An ID that ExtensionSettings installs is reported as a conflict
+ * and skipped, whether or not it is installed yet.
+ *
+ * While neither the Uninstall list nor the Install list has changed since it
+ * was last applied, an add-on that a policy installed is left alone. That is
+ * what lets an administrator update an add-on by listing it in both Uninstall
+ * and Install without it being downloaded again at every startup. As soon as
+ * either list changes, everything listed is uninstalled, so an add-on the
+ * Install list no longer covers does not linger. Install records URLs rather
+ * than IDs, so which policy installed an add-on cannot be told: one that
+ * ExtensionSettings installed stays protected after its entry is removed.
+ *
+ * @param {string[]} ids
+ *        The IDs of the add-ons to uninstall.
+ * @param {string[]} [installList]
+ *        The policy's Install list, if it has one.
+ * @returns {Promise<boolean>}
+ *        Whether the Uninstall list changed since it was last applied.
+ */
+async function uninstallListedAddons(ids, installList = []) {
+  let uninstallList = JSON.stringify(ids);
+  let listChanged = !isRunOnceModificationApplied(
+    "extensionsUninstall",
+    uninstallList
+  );
+  setRunOnceModificationApplied("extensionsUninstall", uninstallList);
+  let keepPolicyInstalls =
+    !listChanged &&
+    !!installList.length &&
+    isRunOnceModificationApplied(
+      "extensionsInstall",
+      JSON.stringify(installList)
+    );
+  let candidates = [...new Set(ids)].filter(id => {
+    let mode = Services.policies.getExtensionSettings(id)?.installation_mode;
+    if (mode == "force_installed" || mode == "normal_installed") {
+      lazy.reportFailure(
+        "Extensions",
+        `Not uninstalling ${id} because ExtensionSettings installs it`
+      );
+      return false;
+    }
+    return true;
+  });
+  let addons = await lazy.AddonManager.getAddonsByIDs(candidates);
+  for (let addon of addons) {
+    if (!addon) {
+      continue;
+    }
+    if (
+      keepPolicyInstalls &&
+      addon.installTelemetryInfo?.source == "enterprise-policy"
+    ) {
+      continue;
+    }
+    try {
+      await addon.uninstall();
+    } catch (e) {
+      lazy.reportFailure(
+        "Extensions",
+        `Add-on ID (${addon.id}) couldn't be uninstalled: ${e.message ?? e}`
+      );
+    }
+  }
+  return listChanged;
 }
 
 let gBlockedAboutPages = [];

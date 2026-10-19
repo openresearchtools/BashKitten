@@ -21,8 +21,8 @@ ChromeUtils.defineESModuleGetters(lazy, {
 // ${InstallDir}/distribution folder.
 const POLICIES_FILENAME = "policies.json";
 
-// When true browser policy is loaded per-user from
-// /run/user/$UID/appname
+// Load browser policy per-user from /run/user/$UID/appname for
+// testing only.
 const PREF_PER_USER_DIR = "toolkit.policies.perUserDir";
 // For easy testing, modify the helpers/sample.json file,
 // and set PREF_ALTERNATE_PATH in firefox.js as:
@@ -67,7 +67,8 @@ function shouldIgnoreLocalPolicies() {
 // We're only testing for empty objects, not
 // empty strings or empty arrays.
 function isEmptyObject(obj) {
-  if (typeof obj != "object" || Array.isArray(obj)) {
+  // typeof null == "object", so null has to be rejected before Object.keys().
+  if (obj === null || typeof obj != "object" || Array.isArray(obj)) {
     return false;
   }
   for (let key of Object.keys(obj)) {
@@ -687,7 +688,9 @@ class JSONPoliciesProvider {
 
     try {
       let configFile;
-      let perUserPath = Services.prefs.getBoolPref(PREF_PER_USER_DIR, false);
+      let perUserPath =
+        Cu.isInAutomation &&
+        Services.prefs.getBoolPref(PREF_PER_USER_DIR, false);
       if (perUserPath) {
         configFile = Services.dirsvc.get("XREUserRunTimeDir", Ci.nsIFile);
       } else {
