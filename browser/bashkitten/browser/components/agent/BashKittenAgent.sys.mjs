@@ -1402,9 +1402,9 @@ class AgentView {
       const secret = password.value; password.value = "";
       try {
         if (!current()) throw new Error("The Remote Connections view is closed.");
-        const record = await AgentRemotes.enroll(source, secret);
-        if (!current() || !dialog.open) return;
-        await this.refreshRemotes();
+        const record = await AgentRemotes.enroll(source, secret, {
+          signal: abort.signal, current: () => current() && dialog.open && !this.win.closed && !DesktopLifetime.quitting,
+        });
         if (!current() || !dialog.open) return;
         outcome = { ok: true, id: record.id }; dialog.close();
       } catch (error) { if (dialog.open) feedback.textContent = error.message; }
@@ -1522,6 +1522,16 @@ class AgentView {
     if (entry.local) return this.reconnect();
     await lazy.BrowserControlChannel.close("sign in");
     return this.selectRemote(entry.connection, true);
+  }
+
+  async signOut(actor, entry, csrf) {
+    if (entry.local || protectedAgentView(actor) !== entry || actor.manager !== actor.browsingContext.currentWindowGlobal) {
+      throw new Error("Sign out from the selected remote Agent.");
+    }
+    const logout = AgentRemotes.logout(entry.connection, csrf);
+    void lazy.BrowserControlChannel.close("sign out").catch(console.error);
+    await logout;
+    return { ok: true };
   }
 
   aiLicenses() {

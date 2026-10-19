@@ -73,6 +73,7 @@ export class BashKittenAgentChild extends JSWindowActorChild {
     if (command === "cancel-file-view") return this.sendQuery("CancelFileView");
     if (!this.document.hasValidTransientUserGestureActivation) throw new Error("Use this action from the Agent view.");
     if (command === "sign-in") return this.sendQuery("SignIn");
+    if (command === "sign-out") return this.sendQuery("SignOut", { csrf: data.csrf });
     if (command === "provider-login-open" && entry.providerLogin === true && typeof data.attemptId === "string" && typeof data.url === "string") return this.sendQuery("ProviderLogin", { attemptId: data.attemptId, url: data.url });
     if (command === "view-file" && typeof data.url === "string") {
       const url = new URL(data.url, this.document.location.href);

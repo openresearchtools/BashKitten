@@ -765,13 +765,6 @@ public final class AgentRuntime {
         if (!hash.equalsIgnoreCase(identity.getString("caSha256").replace(":", ""))) throw new SecurityException("The service certificate identity is invalid.");
         return hash;
     }
-    private void rememberIdentity(String name, JSONObject identity) throws Exception {
-        String hash = verifiedCertificateHash(identity);
-        JSONObject stored = identities.read();
-        JSONObject previous = stored.optJSONObject(name);
-        if (previous != null && !hash.equalsIgnoreCase(previous.optString("caSha256").replace(":", ""))) throw new SecurityException("The saved Agent certificate changed. The connection was blocked.");
-        stored.put(name, identity); identities.write(stored);
-    }
     private void configure(String endpoint, JSONObject identity, boolean tor, int port) throws Exception {
         configure(endpoint, identity, tor, port, null, null);
     }
@@ -850,6 +843,10 @@ public final class AgentRuntime {
         if (selected.equals("local") && localSession != null) {
             localSession = null; reloadOnConnect = true; refresh(); return;
         }
+        if (!selected.equals("local")) {
+            RemoteAgentConnection connection = remoteConnections.get(selected);
+            if (connection == null || connection.isClosed()) { busy = false; turnOn(); return; }
+        }
         app.remoteControl.disconnect();
         GeckoSession target = session;
         captureDraft(target, () -> { if (target == session && desired) target.loadUri(url + "/login"); });
@@ -894,29 +891,59 @@ public final class AgentRuntime {
         }, ignored -> { phoneVoice.renameRemote(id, name); changed(); done.run(); }, failure);
     }
     /** Called only after native TK2 decryption; no plaintext/legacy enrollment fallback. */
-    public void importRemote(JSONObject bundle, Runnable done, Consumer<String> failure) {
+    public void importRemote(JSONObject bundle, BooleanSupplier current, Runnable done, Consumer<String> failure) {
         String id = bundle.optString("onion");
         if (removingRemotes.contains(id)) { failure.accept("This connection is being removed."); return; }
+        final int generation = operation;
+        BooleanSupplier active = () -> current.getAsBoolean() && generation == operation;
         stored(() -> {
+            if (!active.getAsBoolean()) throw new java.util.concurrent.CancellationException("Remote import was cancelled.");
             JSONObject enrollment = NativeRemote.browserIdentity(app, bundle);
-            JSONObject saved = remoteStore.read(), old = saved.optJSONObject(id);
+            JSONObject original = remoteStore.read(), saved = new JSONObject(original.toString()), old = saved.optJSONObject(id);
             if (old != null && old.has("bundle") && !old.getJSONObject("bundle").getString("id").equals(bundle.getString("id")))
                 throw new SecurityException("This server's identity changed. Remove its previous enrollment before adding the replacement.");
-            rememberIdentity(id, enrollment.getJSONObject("identity"));
+            JSONObject identity = enrollment.getJSONObject("identity");
+            String hash = verifiedCertificateHash(identity);
+            JSONObject originalIdentities = identities.read(), remembered = new JSONObject(originalIdentities.toString()), previousIdentity = remembered.optJSONObject(id);
+            if (previousIdentity != null && !hash.equalsIgnoreCase(previousIdentity.optString("caSha256").replace(":", "")))
+                throw new SecurityException("The saved Agent certificate changed. The connection was blocked.");
+            remembered.put(id, identity);
             JSONObject record = new JSONObject().put("version", 2).put("kind", "agent")
                 .put("name", bundle.getString("name")).put("bundle", bundle);
             if (old != null && old.has("mappings")) record.put("mappings", old.getJSONObject("mappings"));
             record.put("autostart", old != null && old.optBoolean("autostart"));
-            saved.put(id, record); remoteStore.write(saved);
+            saved.put(id, record);
+            boolean identityWritten = false, remoteWritten = false;
+            try {
+                identities.write(remembered, active); identityWritten = true;
+                remoteStore.write(saved, active); remoteWritten = true;
+                if (!active.getAsBoolean()) throw new java.util.concurrent.CancellationException("Remote import was cancelled.");
+                java.util.concurrent.CompletableFuture<Boolean> accepted = new java.util.concurrent.CompletableFuture<>();
+                app.main.post(() -> {
+                    if (!active.getAsBoolean()) { accepted.complete(false); return; }
+                    if (removingRemotes.contains(id)) {
+                        accepted.completeExceptionally(new IllegalStateException("This connection is being removed.")); return;
+                    }
+                    // Commit and selection share this main-thread turn. Keep the
+                    // storage task reserved until then so Back cannot leave a
+                    // saved import behind its cancelled completion callback.
+                    accepted.complete(true);
+                    RemoteAgentConnection previous = remoteConnections.get(id);
+                    app.closeServiceRoutes(id); serviceSnapshots.remove(id);
+                    if (previous != null) previous.close();
+                    if (selected.equals(id)) busy = false;
+                    select(id); done.run();
+                });
+                if (!accepted.join()) throw new java.util.concurrent.CancellationException("Remote import was cancelled.");
+            } catch (Exception error) {
+                // Still inside the same storage task: later catalogue edits have
+                // not run, so cancelling a commit cannot roll back newer actions.
+                try { if (remoteWritten) remoteStore.write(original); }
+                finally { if (identityWritten) identities.write(originalIdentities); }
+                throw error;
+            }
             return true;
-        }, ignored -> {
-            if (removingRemotes.contains(id)) { failure.accept("This connection is being removed."); return; }
-            RemoteAgentConnection previous = remoteConnections.get(id);
-            app.closeServiceRoutes(id); serviceSnapshots.remove(id);
-            if (previous != null) previous.close();
-            if (selected.equals(id)) busy = false;
-            select(id); done.run();
-        }, failure);
+        }, ignored -> {}, message -> { if (active.getAsBoolean()) failure.accept(message); });
     }
     private void closeRemoteConnections() {
         for (RemoteAgentConnection connection : remoteConnections.values()) { app.closeServiceRoutes(connection.host); connection.close(); }
@@ -1245,8 +1272,43 @@ public final class AgentRuntime {
             }
             if (command.equals("notify-turn")) { reply.accept(new JSONObject().put("result", notifyTurn(args)).toString()); return; }
             if (command.equals("sign-in")) { signIn(); reply.accept("{\"result\":true}"); return; }
+            if (command.equals("sign-out")) { signOut(source, args.getString("csrf"), reply); return; }
             throw new SecurityException("Unsupported browser action.");
         } catch (Exception exception) { try { reply.accept(new JSONObject().put("error", exception.getMessage()).toString()); } catch (JSONException ignored) {} }
+    }
+    private void signOut(GeckoSession source, String csrf, Consumer<String> reply) throws Exception {
+        final String id = selected;
+        final int generation = operation;
+        final RemoteAgentConnection connection = remoteConnections.get(id);
+        if (id.equals("local") || connection == null || !connection.ready || connection.isClosed()) throw new IllegalStateException("Sign out from the selected remote Agent.");
+        if (csrf.isEmpty() || csrf.indexOf('\r') >= 0 || csrf.indexOf('\n') >= 0) throw new IllegalArgumentException("Missing Agent CSRF token.");
+        final java.util.concurrent.CompletableFuture<Void> cookieLogout = new java.util.concurrent.CompletableFuture<>();
+        final ArrayList<String> errors = new ArrayList<>();
+        JSONObject params = new JSONObject().put("origin", URI.create(url).getScheme() + "://" + URI.create(url).getRawAuthority())
+            .put("path", "/api/logout").put("csrf", csrf).put("body", new JSONObject());
+        // Disconnect cancels its existing Gecko requests; enqueue that before
+        // the cookie logout so it cannot cancel this operation's own request.
+        app.remoteControl.disconnect();
+        // The source and native owner are captured before either asynchronous
+        // logout. Switching backends cannot retarget this operation.
+        try {
+            BashKittenController.request(source, new JSONObject().put("method", "agent.request").put("params", params).toString()).accept(text -> {
+                try { JSONObject response = new JSONObject(text); if (response.has("error")) errors.add(response.getString("error")); }
+                catch (Exception error) { errors.add("Invalid Authelia sign-out response."); }
+                finally { cookieLogout.complete(null); }
+            }, error -> { errors.add("Authelia sign-out failed: " + error.getMessage()); cookieLogout.complete(null); });
+        } catch (Exception error) { errors.add("Authelia sign-out failed: " + error.getMessage()); cookieLogout.complete(null); }
+        Consumer<String> completed = message -> {
+            if (message != null) errors.add(message);
+            if (generation == operation && source == session && selected.equals(id)) releaseWake();
+            changed();
+            try { reply.accept(errors.isEmpty() ? "{\"result\":{\"ok\":true}}" : new JSONObject().put("error", String.join("; ", errors)).toString()); }
+            catch (JSONException ignored) {}
+        };
+        suppressedStartupRemotes.add(id); startupRemotes.remove(id); remoteLoginAddresses.remove(id);
+        app.closeServiceRoutes(id); serviceSnapshots.remove(id);
+        connection.logout(cookieLogout, () -> app.main.post(() -> completed.accept(null)), completed);
+        changed();
     }
     /** Owns ordinary completed-turn notification preferences; delivery still uses the existing owner. */
     public JSONObject notificationSettings(Activity requester, JSONObject args) throws JSONException {

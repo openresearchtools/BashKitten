@@ -4,6 +4,7 @@ import { NetUtil } from "resource://gre/modules/NetUtil.sys.mjs";
 import { TorRouting } from "resource:///modules/TorRouting.sys.mjs";
 import { onionPrivateKey } from "resource:///modules/OnionAuthStore.sys.mjs";
 import { NativeRemote } from "resource:///modules/NativeRemote.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const CONTEXT_MIN = 0xB4500000;
 const CONTEXT_MAX = 0xB450FFFF;
@@ -146,11 +147,14 @@ class AgentRemoteStore {
     return this.entries;
   }
 
-  save() {
+  save(check = () => {}) {
     const pending = this.writes.then(async () => {
+      check();
       const [encrypted] = await this.crypto.encryptMany([JSON.stringify([...this.entries.values()])]);
+      check();
       await IOUtils.writeJSON(FILE, { version: 1, encrypted }, { tmpPath: FILE + ".tmp", permissions: 0o600 });
       await IOUtils.setPermissions(FILE, 0o600);
+      check();
     });
     this.writes = pending.catch(() => {}); return pending;
   }
@@ -260,26 +264,50 @@ class AgentRemoteStore {
     }, true);
   }
 
-  enroll(text, password) {
+  enroll(text, password, { signal, current }) {
     return this.serialized(async () => {
       await this.load();
+      const check = () => {
+        signal.throwIfAborted();
+        if (!current()) throw new Error("The Remote Connections view is closed.");
+      };
+      check();
       const helper = await NativeRemote.open(async () => { throw new Error("Import cannot save a login token."); });
+      const cancel = () => { void helper.close().catch(console.error); };
+      signal.addEventListener("abort", cancel, { once: true });
+      let bundle, browser;
       try {
-        const bundle = await helper.call("decrypt", { text, password });
-        const browser = await helper.call("identity", { enrollment: bundle });
-        const url = validateURL(browser.url), { identity } = certificate(browser.identity.caPem, browser.identity.caSha256);
-        const previous = [...this.entries.values()].find(item => item.url === url && item.id !== "local-hosting");
-        if (previous && (previous.caSha256 !== identity || previous.bundle && previous.bundle.id !== bundle.id)) {
-          throw new Error("This server's identity changed. Remove its previous enrollment before adding the replacement.");
+        check();
+        bundle = await helper.call("decrypt", { text, password }); check();
+        browser = await helper.call("identity", { enrollment: bundle }); check();
+      } finally {
+        password = ""; signal.removeEventListener("abort", cancel); await helper.close();
+      }
+      check();
+      const url = validateURL(browser.url), { identity } = certificate(browser.identity.caPem, browser.identity.caSha256);
+      const previous = [...this.entries.values()].find(item => item.url === url && item.id !== "local-hosting");
+      if (previous && (previous.caSha256 !== identity || previous.bundle && previous.bundle.id !== bundle.id)) {
+        throw new Error("This server's identity changed. Remove its previous enrollment before adding the replacement.");
+      }
+      if (previous) { check(); await this.disconnect(previous.id); check(); }
+      const entry = { id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1), kind: "agent",
+        name: bundle.name, url, bundle, caPem: browser.identity.caPem, caSha256: identity, instanceId: bundle.id,
+        clientAuthorization: onionPrivateKey(bundle.tor_private),
+        userContextId: previous?.userContextId ?? this.allocateContext(), mappings: previous?.mappings || {}, token: previous?.token || null,
+        autostart: previous?.autostart === true };
+      check();
+      this.entries.set(entry.id, entry);
+      try { await this.save(check); }
+      catch (error) {
+        // Remote mutations share this queue. Restore only this still-owned entry;
+        // save() reads the current catalogue, preserving concurrent Local writes.
+        if (this.entries.get(entry.id) === entry) {
+          if (previous) this.entries.set(entry.id, previous); else this.entries.delete(entry.id);
+          await this.save();
         }
-        if (previous) await this.disconnect(previous.id);
-        const entry = { id: previous?.id || Services.uuid.generateUUID().toString().slice(1, -1), kind: "agent",
-          name: bundle.name, url, bundle, caPem: browser.identity.caPem, caSha256: identity, instanceId: bundle.id,
-          clientAuthorization: onionPrivateKey(bundle.tor_private),
-          userContextId: previous?.userContextId ?? this.allocateContext(), mappings: previous?.mappings || {}, token: previous?.token || null,
-          autostart: previous?.autostart === true };
-        this.entries.set(entry.id, entry); await this.save(); this.notify(); return this.info(entry);
-      } finally { password = ""; await helper.close(); }
+        throw error;
+      }
+      this.notify(); return this.info(entry);
     });
   }
 
@@ -567,9 +595,42 @@ class AgentRemoteStore {
     TorRouting.setAgentTunnel(entry.userContextId, null);
     this.trust.clearAgentClientCertificate(new URL(entry.url).hostname, { userContextId: entry.userContextId });
   }
+  logout(connection, csrf) {
+    const { entry, owner } = this.serviceOwner(connection.id);
+    if (entry.id !== this.activeId || entry.url !== connection.url || entry.caSha256 !== connection.identity) {
+      throw new Error("The selected remote Agent changed.");
+    }
+    if (typeof csrf !== "string" || !csrf || /[\r\n]/.test(csrf)) throw new Error("Missing Agent CSRF token.");
+    owner.state = "signing-out"; owner.callback = null; owner.allowed = null;
+    owner.logoutAbort = new AbortController();
+    // Hold this owner through both independent credentials. Switching/Off may
+    // block its browser route but must not kill the helper before token saving.
+    owner.logout = (async () => {
+      const errors = [];
+      const deadline = setTimeout(() => owner.logoutAbort.abort(), 30000);
+      try {
+        const response = await this.request(connection, "/api/logout", { method: "POST", body: {}, csrf, signal: owner.logoutAbort.signal });
+        if (response.status !== 200) throw new Error(response.data?.error || "Authelia could not sign out.");
+      } catch (error) { errors.push(error.message); }
+      finally { clearTimeout(deadline); }
+      try { this.block(entry); } catch (error) { errors.push(error.message); }
+      try {
+        await owner.helper.call("logout");
+      } catch (error) { errors.push(error.message); }
+      finally {
+        owner.abort.abort();
+        try { await owner.helper.close(); } catch (error) { errors.push(error.message); }
+        if (this.clients.get(entry.id) === owner) this.clients.delete(entry.id);
+        this.notify();
+      }
+      if (errors.length) throw new Error(errors.join("; "));
+    })();
+    this.notify(); return owner.logout;
+  }
   async disconnect(id) {
     const owner = this.clients.get(id), entry = this.entries?.get(id);
     if (!owner) { if (entry) this.block(entry); return; }
+    if (owner.logout) { owner.logoutAbort.abort(); this.block(entry); await owner.logout.catch(() => {}); return; }
     owner.abort.abort(); owner.callback = null;
     try {
       try { this.block(entry); } finally { await owner.helper?.close(); }

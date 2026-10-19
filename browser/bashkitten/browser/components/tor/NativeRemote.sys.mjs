@@ -53,7 +53,9 @@ export class NativeRemote {
   }
 
   call(method, params = {}) {
-    const operation = this.queue.then(async () => {
+    // Logout interrupts a stalled native request before draining its token
+    // writes. Ordinary calls still have exactly one outstanding operation.
+    const operation = (method === "logout" ? Promise.resolve() : this.queue).then(async () => {
       if (this.closed) throw new Error("Remote connection is closed.");
       const id = ++this.next;
       return new Promise((resolve, reject) => {

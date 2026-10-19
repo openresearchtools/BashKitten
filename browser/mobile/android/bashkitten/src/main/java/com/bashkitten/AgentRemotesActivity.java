@@ -91,6 +91,10 @@ public final class AgentRemotesActivity extends ProductActivity {
         }
         super.onDestroy();
     }
+    @Override public void finish() {
+        if (state != null) state.cancel();
+        super.finish();
+    }
     /** Only transient encrypted input survives rotation; it never enters Gecko. */
     public static final class ImportState extends ViewModel {
         final MutableLiveData<Integer> changes = new MutableLiveData<>(0);
@@ -144,7 +148,7 @@ public final class AgentRemotesActivity extends ProductActivity {
                     if (closed) return;
                     if (result == null) { failed("Incorrect password or invalid connection image."); return; }
                     progress = "Saving connection…"; changed();
-                    app.agent.importRemote(result, () -> {
+                    app.agent.importRemote(result, () -> !closed, () -> {
                         if (closed) return;
                         busy = false; encrypted = ""; connected = true; changed();
                     }, message -> failed("The connection could not be saved: " + message));
