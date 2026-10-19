@@ -345,6 +345,13 @@ GMPWrapper.prototype = {
   },
 
   get applyBackgroundUpdates() {
+    // Respect a product's default branch as well as a saved user choice. Without
+    // this, the add-on timer treats a shipped autoupdate=false as Default/On.
+    if (
+      !GMPPrefs.getBool(GMPPrefs.KEY_PLUGIN_AUTOUPDATE, true, this._plugin.id)
+    ) {
+      return lazy.AddonManager.AUTOUPDATE_DISABLE;
+    }
     if (!GMPPrefs.isSet(GMPPrefs.KEY_PLUGIN_AUTOUPDATE, this._plugin.id)) {
       return lazy.AddonManager.AUTOUPDATE_DEFAULT;
     }
@@ -567,7 +574,9 @@ GMPWrapper.prototype = {
         let gmpInstallManager = new lazy.GMPInstallManager();
         // We don't really care about the results, if someone is interested
         // they can check the log.
-        gmpInstallManager.simpleCheckAndInstall().catch(() => {});
+        gmpInstallManager
+          .simpleCheckAndInstall({ requestedAddonId: this.id })
+          .catch(() => {});
       }
       this._isUpdateCheckPending = false;
     }, delay);

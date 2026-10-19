@@ -558,11 +558,32 @@ GMPInstallManager.prototype = {
    * Will only install if not already installed and will log the results.
    * This will only install/update the OpenH264 and EME plugins
    *
+   * @param {object} options
+   * @param {string|null} options.requestedAddonId
+   *        The plugin requested by an EME enable or missing-CDM event; null for
+   *        the ordinary background check. Other plugins are not provisioned as
+   *        a side effect of that request.
    * @return a promise which will be resolved if all addons could be installed
    *         successfully, rejected otherwise.
    */
-  async simpleCheckAndInstall() {
+  async simpleCheckAndInstall({ requestedAddonId = null } = {}) {
     let log = getScopedLogger("GMPInstallManager.simpleCheckAndInstall");
+    const background = requestedAddonId === null;
+
+    // Honor disabled automatic updates before fetching the manifest or querying
+    // Chromium, not only when filtering its results. A skipped background check
+    // must not record timestamps that would suppress a later explicit request.
+    if (
+      background &&
+      !GMP_PLUGIN_IDS.some(
+        id =>
+          this._isAddonUpdateEnabled(id) &&
+          !GMPUtils.isPluginHidden(new GMPAddon({ id }))
+      )
+    ) {
+      log.info("Automatic updates are disabled for all available plugins.");
+      return { status: "nothing-new-to-install" };
+    }
 
     if (this._versionchangeOccurred()) {
       log.info(
@@ -594,6 +615,10 @@ GMPInstallManager.prototype = {
       log.info("Found " + addons.length + " addons advertised.");
       let addonsToInstall = addons.filter(function (gmpAddon) {
         log.info("Found addon: " + gmpAddon.toString());
+
+        if (!background && gmpAddon.id !== requestedAddonId) {
+          return false;
+        }
 
         if (!gmpAddon.isValid) {
           log.info("Addon |" + gmpAddon.id + "| is invalid.");
@@ -628,7 +653,7 @@ GMPInstallManager.prototype = {
             log.info(
               "GMP |" + gmpAddon.id + "| has been disabled; skipping check."
             );
-          } else if (!this._isAddonUpdateEnabled(gmpAddon.id)) {
+          } else if (background && !this._isAddonUpdateEnabled(gmpAddon.id)) {
             log.info(
               "Auto-update is off for " + gmpAddon.id + ", skipping check."
             );
