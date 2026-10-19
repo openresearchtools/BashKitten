@@ -1,9 +1,9 @@
 [
   {
     "repository": "https://github.com/guardianproject/tor-android",
-    "commit": "170a3b4b7d13078142d34f5ac536d8f9c3cb89b6",
-    "file": "tor-android-170a3b4b7d13078142d34f5ac536d8f9c3cb89b6.tar.gz",
-    "sha256": "4e46a89fa45d5aa3ff104ab9e1857ead0d63d7770aa47ca020f923ef867de747"
+    "commit": "0340ba1609cb73e663e202a316d083803e399db4",
+    "file": "tor-android-0340ba1609cb73e663e202a316d083803e399db4.tar.gz",
+    "sha256": "170ed8766ae4f9380512107aaa7d06729b0cacbc4a5d32dd6d1150aec7f49560"
   },
   {
     "repository": "https://github.com/guardianproject/jtorctl",
@@ -13,9 +13,9 @@
   },
   {
     "repository": "https://github.com/bitmold/tor",
-    "commit": "8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece",
-    "file": "tor-8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece.tar.gz",
-    "sha256": "3b05fc392a78855b6b4736c9c6660b0b197b2114e339ae98eb8b1181c80f7f78"
+    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
+    "file": "tor-4a522a3ca491c6c04d4a44cb006b92101c42efc1.tar.gz",
+    "sha256": "b01c7c86053241489ced7466124ed8f912d284cf58f33f32b31b0065e70c184b"
   },
   {
     "repository": "https://github.com/libevent/libevent",

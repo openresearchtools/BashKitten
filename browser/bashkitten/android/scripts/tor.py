@@ -7,8 +7,8 @@ import sys
 import urllib.request
 import zipfile
 
-URL = "https://raw.githubusercontent.com/guardianproject/gpmaven/master/info/guardianproject/tor-android/0.4.9.13.2/tor-android-0.4.9.13.2.aar"
-SHA256 = "40be745450a8ecfaac8558950bf046f596d7ef6e88107f69334a8c4b6e7d14be"
+URL = "https://raw.githubusercontent.com/guardianproject/gpmaven/5fdb8dbcfe98d1b7e027e2f99bc086709870b005/info/guardianproject/tor-android/0.4.9.14/tor-android-0.4.9.14.aar"
+SHA256 = "28ff2bb6d4d42eabe57183dedd7a97fce77e8ce4b6f5af6fa03993b3ca054edd"
 
 def main():
     abi = sys.argv[2]

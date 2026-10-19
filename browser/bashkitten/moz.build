@@ -22,7 +22,7 @@ FINAL_TARGET_FILES.notices["blocker"] += [
 if CONFIG["BASHKITTEN_TOR"]:
     tor_name = "tor" + CONFIG["BIN_SUFFIX"]
     tor_config_name = "tor.toml"
-    tor_provenance_name = "bashkitten-tor-0.4.9.11-provenance.zip"
+    tor_provenance_name = "bashkitten-tor-0.4.9.14-provenance.zip"
     GENERATED_FILES += [tor_name, tor_config_name, tor_provenance_name]
     tor_binary = GENERATED_FILES[tor_name]
     tor_binary.script = "copy_executable.py"
