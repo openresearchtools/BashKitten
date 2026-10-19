@@ -1,0 +1,22 @@
+SPDX-License-Identifier: AGPL-3.0-only
+
+BashKitten uses the unmodified official adblock-rust 0.12.6 crate from Brave:
+https://github.com/brave/adblock-rust/tree/ca7f9f4a24a439da99e052b4e4041c45d87687f5
+Release tag: v0.12.6
+Crate SHA-256: 4844c456026028b3a22f3bc0b0e0b2485809591673e2d70930a4ada7c4d3a90d
+Source: browser/third_party/rust/adblock
+License: MPL-2.0; full upstream LICENSE retained.
+The inherited Waterfox browser integration retains its own MPL-2.0 notices.
+
+The shared memchr dependency is the unmodified official 2.8.3 crate:
+https://github.com/BurntSushi/memchr/tree/5fdb40c054e1fff359a2f7bdf7f87a13b34b465d
+Release tag: 2.8.3
+Crate SHA-256: cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98
+Source: browser/third_party/rust/memchr
+License: Unlicense OR MIT; COPYING, LICENSE-MIT and UNLICENSE retained.
+
+Both releases' source files, Cargo manifests, original VCS records and per-file
+checksums are committed with BashKitten and included in its corresponding source
+archive. browser/Cargo.lock pins the production dependency graph. These sources
+replace the earlier crate versions without replacing the adapted browser bindings.
+Bundled filter and scriptlet sources have their separate source notice.

@@ -61,6 +61,13 @@ def components(source_root):
             "bashkitten/BLOCKER-ASSET-SOURCE-NOTICE",
             "bashkitten/components/bashkitten-cli/MOZILLA-MCP-LICENSE",
             "bashkitten/browser/branding/LICENSE",
+        ]), source_component(source_root, "bashkitten-blocker-engine-notices",
+        "Adblock engine and memchr source notices", [
+            "bashkitten/BLOCKER-ENGINE-SOURCE-NOTICE",
+            "third_party/rust/adblock/LICENSE",
+            "third_party/rust/memchr/COPYING",
+            "third_party/rust/memchr/LICENSE-MIT",
+            "third_party/rust/memchr/UNLICENSE",
         ]), source_component(source_root, "bashkitten-waterfox-notices",
         "Waterfox source and modification notices", [
             "bashkitten/WATERFOX-NOTICE",
