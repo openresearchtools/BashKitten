@@ -46,13 +46,34 @@ role = "donor-only"
 
 [adblock_engine]
 package = "adblock"
-version = "0.12.1"
+version = "0.12.6"
 upstream = "https://github.com/brave/adblock-rust/"
+ref = "v0.12.6"
+commit = "ca7f9f4a24a439da99e052b4e4041c45d87687f5"
+crate_url = "https://static.crates.io/crates/adblock/adblock-0.12.6.crate"
+crate_sha256 = "4844c456026028b3a22f3bc0b0e0b2485809591673e2d70930a4ada7c4d3a90d"
 license = "MPL-2.0"
 path = "third_party/rust/adblock"
-git_tree = "631bb7e5bdd677ffb1457e1d07ae32695607be6c"
-provided_by = "1c7282e73f12cb9bc63ae9920e9c77d935804cc8"
-waterfox_tree_is_identical = true
+git_tree = "1036af4711a8ebbd90361d85d3d55a1d0c62d752"
+source_commit = "4ccc2445198d702a7656a938e76b01e018a85187"
+initial_version = "0.12.1"
+initial_git_tree = "631bb7e5bdd677ffb1457e1d07ae32695607be6c"
+initial_provided_by = "1c7282e73f12cb9bc63ae9920e9c77d935804cc8"
+initial_waterfox_tree_is_identical = true
+
+[memchr]
+package = "memchr"
+version = "2.8.3"
+upstream = "https://github.com/BurntSushi/memchr"
+ref = "2.8.3"
+commit = "5fdb40c054e1fff359a2f7bdf7f87a13b34b465d"
+crate_url = "https://static.crates.io/crates/memchr/memchr-2.8.3.crate"
+crate_sha256 = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+license = "Unlicense OR MIT"
+path = "third_party/rust/memchr"
+git_tree = "3f0ad5d5d569fe7c5b7c92b17a26f634fd3e472d"
+source_commit = "4ccc2445198d702a7656a938e76b01e018a85187"
+role = "Shared Gecko dependency; adblock 0.12.6 requires memchr 2.8 or newer"
 
 [smallbitvec_security_backport]
 package = "smallbitvec"

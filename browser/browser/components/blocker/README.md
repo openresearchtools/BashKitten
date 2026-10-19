@@ -1,7 +1,7 @@
 # BashKitten blocker component
 
 This component is derived from the Waterfox blocker commits recorded in
-`bashkitten/ports.toml`. The engine is Brave's `adblock-rs` v0.12.1
+`bashkitten/ports.toml`. The engine is Brave's `adblock-rs` v0.12.6
 (MPL-2.0), and the inherited Waterfox integration remains MPL-2.0.
 
 ## Request and response flow
@@ -68,7 +68,7 @@ source archives, licences, generators, lock, and generated data.
 
 | Item | Source | Licence or notice | Notes |
 | --- | --- | --- | --- |
-| `adblock-rs` (v0.12.1) | Brave | MPL-2.0 | Core blocking engine |
+| `adblock-rs` (v0.12.6) | Brave | MPL-2.0 | Core blocking engine |
 | Brave entries in `resources/resources.json` | Brave (`adblock-resources`) | MPL-2.0 | Redirect and script resources |
 | uBO redirect entries in `resources/resources.json` | `gorhill/uBlock` | GPL-3.0-only | Generated offline and bundled as data |
 | Generated `resources/ubo-scriptlets.json` | `gorhill/uBlock` | GPL-3.0-only | Generated offline and bundled as data |

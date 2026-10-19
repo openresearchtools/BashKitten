@@ -40,7 +40,9 @@ def bundles():
     tor = "C Tor, Guardian Project Android integration, control library and linked dependencies\n\n" + dependencies([
         record for record in records if record['name'].startswith('tor') or record['name'] in ('jtorctl', 'libevent', 'openssl', 'zlib', 'zstd')])
     blocker = "Adblocking, scriptlets and bundled filter data\n\n" + files([
-        ROOT/'bashkitten/BLOCKER-ASSET-SOURCE-NOTICE', ROOT/'third_party/rust/adblock/LICENSE',
+        ROOT/'bashkitten/BLOCKER-ASSET-SOURCE-NOTICE', ROOT/'bashkitten/BLOCKER-ENGINE-SOURCE-NOTICE',
+        ROOT/'third_party/rust/adblock/LICENSE', ROOT/'third_party/rust/memchr/COPYING',
+        ROOT/'third_party/rust/memchr/LICENSE-MIT', ROOT/'third_party/rust/memchr/UNLICENSE',
         ROOT/'browser/components/blocker/assets/SOURCES.lock.json'])
     blocker += "\n\n" + dependencies([record for record in records if record['name'] in ('ublock', 'brave-resources')])
     for file in sorted((ROOT/'browser/components/blocker/assets/filters').glob('*.txt')):

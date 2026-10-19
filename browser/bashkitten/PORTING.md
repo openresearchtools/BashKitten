@@ -31,9 +31,15 @@ platforms. Do not recreate donor branches or rebase every product change.
   add floating Git dependencies, downloaded build-time binaries, or a second
   copy of `adblock-rs`.
 
-Firefox ESR 153 already vendors the same `adblock-rs` 0.12.1 tree used by the
-Waterfox donor snapshot. WildBuzzard therefore ports bindings and product
-integration against that existing tree.
+The initial Firefox ESR 153 source provided the same `adblock-rs` 0.12.1 tree
+used by the Waterfox donor snapshot. The 19 October 2026 refresh updates that
+single vendored crate to official `adblock-rs` 0.12.6 and its required shared
+`memchr` dependency to 2.8.3. The Waterfox bindings remain unchanged. Exact release
+commits, crate checksums and pristine vendor trees are recorded in
+`upstreams.toml`; the original donor identity remains under its `initial_*` keys.
+Keep the selected 0.12 API line, locked dependency graph, upstream source tests
+and full offline notices. This does not authorize replacing the adapted blocker
+integration with a new donor snapshot.
 
 ## Product exclusions
 
