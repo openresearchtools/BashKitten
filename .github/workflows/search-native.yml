@@ -57,7 +57,7 @@ jobs:
           import ddgs, primp, lxml.etree, pymupdf, pymupdf4llm, youtube_transcript_api
           assert lxml.etree.LIBXML_COMPILED_VERSION == (2, 14, 6)
           assert lxml.etree.LIBXSLT_COMPILED_VERSION == (1, 1, 43)
-          assert pymupdf.mupdf_version_tuple == (1, 27, 2)
+          assert pymupdf.mupdf_version_tuple == (1, 28, 2)
           print('Python 3.14 native library imports and build versions verified')
           PY
       - uses: actions/upload-artifact@v4
