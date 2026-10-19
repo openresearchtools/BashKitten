@@ -3868,3 +3868,18 @@ matching and fresh final packaging; do not relabel old artifacts or discard
 unrelated caches. Verify the combined candidate in the installed apps, including
 narrow/wide headers, long paths, all status combinations, Files and composer
 Stop/Resume. Source/render checks and a dispatched build are not that acceptance.
+
+### Separate CUDA runtime licensing — 19 October 2026
+
+The user clarified that the optional AI engines belong to the separate
+MIT-licensed runtime repository. Retain its CUDA builds; do not apply the
+browser's source-only release requirement to NVIDIA's closed toolchain/runtime
+components incorporated into those downloaded engines. Preserve exact upstream
+versions, input checksums, provenance and full NVIDIA notices, identifying
+original implementation source that NVIDIA does not provide. Do not describe
+NVIDIA code as MIT or compiled bitcode as original implementation source.
+Matching source and notices remain required for source-available engines and
+dependencies. This clarification does not authorize proprietary SDKs inside
+the browser APK/DEB or change BashKitten's AGPL and Mozilla's MPL file licenses.
+Downloads retain the existing central About/license presentation and separate
+runtime process boundary; this adds no new settings or UI.
