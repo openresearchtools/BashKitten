@@ -7,7 +7,8 @@
     "auth/age/go.sum": "5480abea1030f2e6984601f8ef1c00337cf53dfa969e80a2447be8d45cebf3b6",
     "auth/mobile/go.sum": "20b6c39d75cad9e5666e6c1c2678fde787fd6db2bb233a08668bc912912b7a64",
     "auth/gozxing/go.sum": "b7e96937664ace28e4f8478777ecf688dc47b3cfbf32ca4e14cb06818dc492c0",
-    "agent/native/remote/go.sum": "845856c14cdf52626089aa3654d5f787bc4f591fca192d4c6c8ef282268ecd88"
+    "agent/native/remote/go.sum": "845856c14cdf52626089aa3654d5f787bc4f591fca192d4c6c8ef282268ecd88",
+    "agent/native/remote/android/go.sum": "2c098e0593453eb36bd11eaba588451a4f80b28c5eb53dfbdb80fa16008f30b7"
   },
   "modules": [
     {
@@ -12381,6 +12382,13 @@
     {
       "name": "github.com/yuin/goldmark",
       "version": "v1.4.13",
+      "url": "https://proxy.golang.org/github.com/yuin/goldmark/@v/v1.4.13.info",
+      "file": "proxy/github.com/yuin/goldmark/@v/v1.4.13.info",
+      "sha256": "b0302ffb76a1b14e08f0f9aeacf7f6fcc4897f5e19cd00543fe3ddd62f2ada71"
+    },
+    {
+      "name": "github.com/yuin/goldmark",
+      "version": "v1.4.13",
       "sum": "h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=",
       "file": "proxy/github.com/yuin/goldmark/@v/v1.4.13.mod",
       "sha256": "ee7fe4466203a01d3ac19adc134cdec99bc6de71992c28f3dd9a74480bff0603"
@@ -12727,6 +12735,20 @@
       "sum": "h1:TeRTkGYfJXctD9OcfyVLyj2J3IxLnKwHJR8f4D8a3YE=",
       "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20240228155512-f48c80bd79b2.mod",
       "sha256": "804303f8b1c302436bc448c6517cf3f32216611f1c7ffd72b52df2a69565a5c6"
+    },
+    {
+      "name": "golang.org/x/telemetry",
+      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
+      "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
+      "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.info",
+      "sha256": "b1dc3dbdce12f427a27c7aecff78d0cee3ce6d4cee05cff8d875f242a2439675"
+    },
+    {
+      "name": "golang.org/x/telemetry",
+      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
+      "url": "https://proxy.golang.org/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.mod",
+      "file": "proxy/golang.org/x/telemetry/@v/v0.0.0-20260908163034-4bcc4b2ee518.mod",
+      "sha256": "b3db3a6093c95190ba4c799a41b18ed8cab5f9d5329e6d327eecd8bb54d7ff76"
     },
     {
       "name": "golang.org/x/term",

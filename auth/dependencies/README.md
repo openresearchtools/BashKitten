@@ -11,10 +11,12 @@ do not update their versions or replace the existing component locks.
   they are linked into a shipped executable. Missing proxy Git-origin metadata
   is left absent, rather than inferred from a moving branch; the exact source
   is identified by its module version and verified `go.sum` content hash.
+  Include the Android binding/tooling module graph: gomobile resolves `all`
+  and runs `go mod tidy`, including metadata for modules not linked into the client.
 * `frontend/sources.json` covers every package in the existing Authelia web
   `pnpm-lock.yaml`, including build and optional platform dependencies. Original
   npm tarballs retain their locked integrity plus an independent SHA-256 hash.
-* `go-toolchain/sources.json` pins the official Go 1.27.1 source release and
+* `go-toolchain/sources.json` pins the official Go 1.27.2 source release and
   peeled release commit used by the authentication build, including the standard
   library sources linked into the runtime and their full license texts.
 * `termux/sources.json` retains the two exact Termux build-framework revisions
