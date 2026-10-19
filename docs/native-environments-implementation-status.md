@@ -50,6 +50,15 @@ Off; the explicit action starts only its Agent, without restarting the container
 or enabling host Local. Syntax/diff checks passed and the fix is pushed;
 installed acceptance belongs to the next combined candidate.
 
+Follow-up `90b0b79977` carries the existing 180-second explicit Agent-start
+deadline through both private container-control layers. Previously either
+intermediate 30-second deadline could reject a still-starting guest. Other
+operations retain their existing deadlines; errors are not retried. Ten
+controlled asynchronous IPC cases and syntax/diff checks passed. This fix is
+later than the running `bd393bd7ec59` candidate and still needs installed
+recovery acceptance. Receipt:
+`verification/guest-agent-start-timeout-20261019/results.json`.
+
 The private Intel Wayland container's XFCE preference tests resumed after the
 reboot. Light, window management Off and the selected wallpaper survived recovery.
 The actual guest portal reported Light, then Dark after restoring that choice in
@@ -74,6 +83,13 @@ candidate; they do not establish all navigation/chat or stalled-display
 responsiveness, GPU/Android behavior or the complete 153.4.6 candidate. Evidence:
 `Bashkitten-Acceptance/xorg-model-check-20261019/acceptance.json`.
 
+The same Xorg installation verified the shared Local AI startup choice in both
+directions: disabling llama.cpp startup in Autostart appeared Off in Local AI;
+enabling and saving it in Local AI appeared On in Autostart. The original
+configuration bytes were restored exactly, with no model/provider changes.
+This covers that saved-choice integration, not all startup services or platforms.
+Receipt: `Bashkitten-Acceptance/xorg-autostart-authority-20261019/acceptance.json`.
+
 GitHub preparation run `39302677649` prepared version **153.4.6** at exact
 `bd393bd7ec59eebd3f540072dc9511917520de9c`, then dispatched full package run
 `39303133963` with all Linux, Android and Termux architectures and the required
@@ -82,13 +98,15 @@ source/notices artifacts. No partial-target flags were used. The existing
 build, publication or installed acceptance result.
 The later sidebar-notice fix `8e67e0161b` is not in that immutable build head;
 it is retained for the next batched candidate, without replacing running inputs.
-An early audit of eight completed artifacts found matching GitHub archive hashes,
-checked source/version identities, architectures and full license payloads for
-the inspected loader, Display, machine runtime, OS/guest packages and runtime
-guards. No concrete mismatch was found. Final binaries, APK/Termux pairing, the
-complete corresponding-source inventory, traffic audit and installed acceptance
-remain unverified; this subset does not authorize a release-complete claim.
-Receipt: `verification/combined-candidate-20261019/prepublication-subset-audit.json`.
+The available-artifact audit subsequently verified 20 GitHub archive digests and
+the complete corresponding-source archive: 519,718 tracked paths, 153 npm source
+archives with their existing full-notice supplements, 128 native source archives,
+673 Android source/notice inputs and all four Node/search target pairs. The two
+source-byte differences exactly reproduce declared Git archive conversions
+(CRLF and export-subst); no unexplained mismatch remains. Final binaries,
+APK/Termux pairing, remaining component inventories, traffic audit and installed
+acceptance are separate pending checks. This is not a release-complete claim.
+Receipt: `verification/combined-candidate-20261019/prepublication-audit-status.json`.
 
 ## Installed follow-up and remaining blockers — 18 October 2026
 
