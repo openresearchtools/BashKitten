@@ -18,7 +18,8 @@
       "./subagents.mjs",
       "./chats.mjs",
       "./ask-user.mjs",
-      "./chatgpt-usage.mjs"
+      "./chatgpt-usage.mjs",
+      "./full-read.ts"
     ],
     "skills": [
       "./skills/browser-android",

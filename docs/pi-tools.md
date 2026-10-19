@@ -70,10 +70,34 @@ separately.
 
 The installed integration exposes `browser`, `browser_screenshot`,
 `browser_downloads`, `websearch`, `agents`, `chats` and `ask_user`. These use
-stock Pi 1.1.0's `deferred` exposure. Its built-in `tool_search` is activated without replacing
+stock Pi 1.3.0's `deferred` exposure. Its built-in `tool_search` is activated without replacing
 the existing active tool set. Pi owns discovery, schema activation and transcript
 recording; no custom tool loader or Pi patch is involved. Once a tool is loaded,
 its declaration remains subject to Pi's ordinary session/history behavior.
+
+The bundled `agent/pi/full-read.ts` extension adds `full-read({path})` and
+`compact_context({handoff})` through that same package manifest. Each must be
+the only tool call in its assistant response; nested tool calls are disabled.
+`full-read` returns one complete, unchanged UTF-8 text/code file without
+truncation. Binary, invalid UTF-8 and non-regular files are rejected. Reads are
+asynchronous and bounded by Pi's estimated context capacity.
+
+Admission uses Pi's current context usage, its token estimate and the selected
+model's effective compaction reserve. The file must fit within 70% of the model
+context and leave 20,000 tokens before that reserve. Unknown context usage is
+an error. These are estimates, not exact model token counts. `full-read` never
+compacts: insufficient space returns `compact_required`, asking the agent to
+call `compact_context` alone with a short task/findings/next-file handoff and
+retry once. If the retry still does not fit, the agent must use ordinary chunked
+reads. The one-retry instruction is model guidance, not a persisted retry counter.
+
+`compact_context` delegates to stock Pi after the tool run settles and resumes
+the handoff only after successful compaction. Failure, cancellation or changed
+session/model/input prevents that continuation. Earlier files may be summarized
+by compaction. RPC clients must observe `compaction_end` and the resumed run's
+settlement, beyond the initial `agent_settled`. BashKitten adds no compaction
+controller, provider path or UI flow. Both package targets copy the extension
+from this repository; prototype files, fixtures and live logs are not required.
 
 `agents` is hidden while delegation is Off and the chat has no family to message.
 Enabling delegation or membership in an existing family makes it discoverable.
