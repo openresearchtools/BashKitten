@@ -5,6 +5,54 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Recovery and integrated follow-up — 19 October 2026
+
+All three retained Android 17 Cuttlefish instances and the owned real-Xorg VM
+were restored after the host reboot. The separate Intel Wayland desktop accepts
+actual native input again; its container returned to Running through its normal
+sidecar switch, retiring the saved prior Podman pause-PID error. No manual
+runtime deletion or permission change was needed. The ordinary host browser
+shows only the view-only desktop and background Cuttlefish pages; desktop test
+input stays inside the dedicated test user or owned Xorg VM. Recovery evidence:
+`Bashkitten-Acceptance/environment-recovery-20261019/android-xorg-readiness.json`.
+
+Actual Android remote Send with Files Off passed on 18 October through the
+normal QR, password, Tor/mTLS, Authelia TOTP and consent flow. A new chat under
+an existing publisher project completed with the expected answer, while its
+folder/file-manager controls remained disabled. Client/backend `cab1310f182`
+and publisher `31073761ca` both include the two Files-Off source repairs.
+No alternate transport, authentication bypass or provider/model change was used.
+This closes that particular Send regression; Files On, live revocation and
+the remaining authentication/service lifecycle matrix remain open. A stale
+earlier OAuth TTL sidebar message was observed after the successful connection
+and still needs its own follow-up. Exact scope and mixed-component identities:
+`Bashkitten-Acceptance/android6522-remote-files-off-20261018/acceptance.json`.
+
+Selected-container configuration was exercised through the host UI while host
+Local was Off. General settings saved the container's working folder, and the
+container Providers and Local AI views loaded without enabling host Local.
+Only the guest settings file changed; host settings and both native Pi
+settings/authentication hashes stayed unchanged. The guest folder was restored
+through the UI, and host Local was restored On after recovery. The guest tray's
+normal Stop action restored its prior Agent Off, leaving the container and
+Display alive. This does not claim a completed provider OAuth or all Local AI
+settings test. Evidence:
+`Bashkitten-Acceptance/xorg-container-settings-20261018/acceptance-recovery-20261019.json`.
+
+The guest tray's saved Agent-Off state exposed a missing recovery action in the
+host view. `07bc82680c` adds **Turn on Agent** to that existing disconnected
+state, using the private guest controller. Selecting a stopped guest preserves
+Off; the explicit action starts only its Agent, without restarting the container
+or enabling host Local. Syntax/diff checks passed and the fix is pushed;
+installed acceptance belongs to the next combined candidate.
+
+GitHub preparation run `39302677649` prepared version **153.4.6** at exact
+`bd393bd7ec59eebd3f540072dc9511917520de9c`, then dispatched full package run
+`39303133963` with all Linux, Android and Termux architectures and the required
+source/notices artifacts. No partial-target flags were used. The existing
+`v153.4.5` testing publication remains unchanged. Dispatch is not a successful
+build, publication or installed acceptance result.
+
 ## Installed follow-up and remaining blockers — 18 October 2026
 
 The private Intel Weston desktop repeated real native resize, Display tab close,
@@ -29,8 +77,15 @@ with zero effective/permitted/inheritable/ambient capabilities. GLX reports
 `Mesa Intel(R) Graphics (ARL)`. Only selected Intel `/dev/dri/renderD128` was used;
 host device permissions, ACLs and NVIDIA were untouched. Host BashKitten and
 Podman remain rootless. Evidence is in the private desktop's
-`diagnostics/gpu-groups/summary.json`. The separate document-portal FUSE
-permission error remains under investigation; this GPU result does not close it.
+`diagnostics/gpu-groups/summary.json`. The separate document-portal FUSE error
+was subsequently repaired in `154540f00e`: the guest package uses the pristine
+pinned libfuse native helper at a private guest path, removes the replaced Python
+broker and safely diverts/restores the distro command. Actual private Wayland
+portal mounting, Thunar direct AppImage launch/unmount, persistent extraction
+reuse, package removal/reinstallation and normal container Off/On passed with
+that focused guest component. Host BashKitten/Podman remain rootless and host
+permissions were unchanged. The full matching candidate and Xorg repeat remain
+required; evidence: `verification/fuse-portal-20261018/repair-result.json`.
 
 Actual Xorg container testing passed code, rendered/raw Markdown and PDF previews,
 text Download, an existing assistant file citation with matching raw download,
@@ -55,19 +110,32 @@ Java, source and lifecycle checks passed, as did inspection of actual old APIs
 and the published runtime's ELF dependencies. It neither uses system Node nor
 manually upgrades the old fixture. A rebuilt signed APK with matching signed APT
 packages is still required for installed acceptance; CVD 6523 preserves the
-original failure. Build receipt: `verification/signed-upgrade-bootstrap-20261018/`.
+original failure. `39e3aa00e7` additionally persists the real updater child
+identity before supplying its request, preventing preparer death from retiring
+an executing staged runtime. Real-child fault checks at the three handoff
+boundaries passed; they do not replace the signed-device update. Build receipts:
+`verification/signed-upgrade-bootstrap-20261018/` and
+`verification/review-updater-pdf-20261018/handoff-parent-death.json`.
 
 An independent Android Callback test found another real blocker: an in-app call
 works, but a call from the saved Kitten contact reaches Telecom and is rejected
 when its microphone foreground service starts from the background. Recording
-permission is already granted. Supported Android call/service lifecycle repair
-and installed contact-call repetition remain required; no privileged workaround
-or claim of completed Callback acceptance is made.
+permission is already granted. `21127c4495` now retains the enabled reception
+owner as a microphone-type foreground service without recording while idle.
+An answered call adds the call type; hangup returns to reception and Calls Off
+stops it. Source compilation and focused lifecycle checks passed. An external
+Android 17 probe demonstrated unsilenced recording for ordinary Contacts calls
+and incoming Phone Answer after explicit reception enable, with no active idle
+recorder. Its zero emulator input is not intelligible-speech evidence. The
+integrated Callback/LocalAI/Pi and Off-state tests await the combined signed APK;
+no privileged workaround or completed Callback claim is made. Evidence:
+`verification/telecom-background-fgs-20261018/result.json`.
 
 The external `verification/remaining-installed-acceptance-20261018/matrix.md`
 reconciles 17 remaining groups against the frozen plan, amendments and existing
-scoped evidence. In particular, repaired remote Send with Files Off still needs
-the actual encrypted-route repeat. Full feature acceptance remains open.
+scoped evidence. Its Files-Off Send row is superseded by the successful scoped
+repeat above; its other outstanding cases remain required. Full feature
+acceptance remains open.
 
 ## Resumed installed testing and signed publication — 18 October 2026
 
