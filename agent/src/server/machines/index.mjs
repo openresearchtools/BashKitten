@@ -122,6 +122,6 @@ export async function machineControl(action, value = {}) {
   const pending = await ensure(value.browserOwner);
   if (pending && !duringUpdate.has(action)) throw updateError(pending);
   const result = await socketRequest(daemonSocket, '/' + action, value,
-    ['display-start','display-stop'].includes(action) ? 180000 : 30000);
+    ['display-start','display-stop'].includes(action) || action === 'guest-control' && value.command === 'start' ? 180000 : 30000);
   return pending ? { ...result, serviceUpdate: { pending:true, message:pending } } : result;
 }

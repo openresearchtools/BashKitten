@@ -755,7 +755,7 @@ async function action(name,value={},requestSignal) {
       'localai-synthesize','localai-synthesis-cancel','localai-ini','localai-check','localai-install','localai-quantize','localai-cancel',
       'localai-action','localai-refresh','native-models-catalogue','native-models-preset','native-models-status','native-models-settings',
       'native-models-search','native-models-repository','native-models-download','native-models-action','project-root'].includes(value.command))throw Error('Unsupported guest settings operation');
-    return guestCall(value.id,value.command,value.value||{});
+    return guestCall(value.id,value.command,value.value||{},value.command==='start'?180000:30000);
   }
   if(name==='start')return catalogue(async()=>{const cfg=await saveCapabilities(value);return begin(value.id,'start',job=>start(cfg,job));});
   if(name==='stop')return catalogue(()=>begin(value.id,'stop',job=>stop(value.id,job)));
