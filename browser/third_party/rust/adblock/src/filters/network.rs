@@ -2,9 +2,10 @@
 //! modification.
 
 use memchr::memchr as find_char;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use std::borrow::Cow;
+use std::sync::LazyLock;
 use thiserror::Error;
 
 use std::fmt;
@@ -18,7 +19,7 @@ use crate::request;
 use crate::utils::{self, Hash, TokensBuffer};
 
 /// For now, only support `$removeparam` with simple alphanumeric/dash/underscore patterns.
-static VALID_PARAM: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[a-zA-Z0-9_\-]+$").unwrap());
+static VALID_PARAM: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[a-zA-Z0-9_\-]+$").unwrap());
 
 #[non_exhaustive]
 #[derive(Debug, Error, PartialEq, Clone)]
@@ -478,11 +479,7 @@ impl NetworkFilter {
 
             options.into_iter().for_each(|option| {
                 match option {
-                    NetworkFilterOption::Domain(mut domains) => {
-                        // Some rules have duplicate domain options - avoid including duplicates
-                        // Benchmarking doesn't indicate signficant performance degradation across the entire easylist
-                        domains.sort_unstable();
-                        domains.dedup();
+                    NetworkFilterOption::Domain(domains) => {
                         let mut opt_domains_array: Vec<Hash> = vec![];
                         let mut opt_not_domains_array: Vec<Hash> = vec![];
 
@@ -497,10 +494,14 @@ impl NetworkFilter {
 
                         if !opt_domains_array.is_empty() {
                             opt_domains_array.sort_unstable();
+                            // Some rules have duplicate domain options - avoid including duplicates
+                            opt_domains_array.dedup();
                             opt_domains = Some(opt_domains_array);
                         }
                         if !opt_not_domains_array.is_empty() {
                             opt_not_domains_array.sort_unstable();
+                            // Some rules have duplicate domain options - avoid including duplicates
+                            opt_not_domains_array.dedup();
                             opt_not_domains = Some(opt_not_domains_array);
                         }
                     }
@@ -641,7 +642,7 @@ impl NetworkFilter {
                 // and then the pattern.
                 // TODO - this could be made more efficient if we could match between two
                 // indices. Once again, we have to do more work than is really needed.
-                static SEPARATOR: Lazy<Regex> = Lazy::new(|| Regex::new("[/^*]").unwrap());
+                static SEPARATOR: LazyLock<Regex> = LazyLock::new(|| Regex::new("[/^*]").unwrap());
                 if let Some(first_separator) = SEPARATOR.find(pattern) {
                     let first_separator_start = first_separator.start();
                     // NOTE: `first_separator` shall never be -1 here since `IS_REGEX` is true.
@@ -753,20 +754,13 @@ impl NetworkFilter {
 
         let hostname_decoded = hostname
             .map(|host| {
-                let hostname_normalised = if mask.contains(NetworkFilterMask::IS_HOSTNAME_ANCHOR) {
-                    host.trim_start_matches("www.")
-                } else {
-                    &host
-                };
-
-                let lowercase = hostname_normalised.to_lowercase();
-                let hostname = if lowercase.is_ascii() {
-                    lowercase
-                } else {
-                    idna::domain_to_ascii(&lowercase)
-                        .map_err(|_| NetworkFilterError::PunycodeError)?
-                };
-                Ok(hostname)
+                let hostname =
+                    idna::domain_to_ascii_cow(host.as_bytes(), idna::AsciiDenyList::EMPTY)
+                        .map_err(|_| NetworkFilterError::PunycodeError)?;
+                match hostname {
+                    Cow::Borrowed(_) => Ok(host),
+                    Cow::Owned(h) => Ok(h.to_string()),
+                }
             })
             .transpose();
 
@@ -825,8 +819,8 @@ impl NetworkFilter {
     /// emulate the behavior of hosts-style blocking.
     pub fn parse_hosts_style(hostname: &str, debug: bool) -> Result<Self, NetworkFilterError> {
         // Make sure the hostname doesn't contain any invalid characters
-        static INVALID_CHARS: Lazy<Regex> =
-            Lazy::new(|| Regex::new("[/^*!?$&(){}\\[\\]+=~`\\s|@,'\"><:;]").unwrap());
+        static INVALID_CHARS: LazyLock<Regex> =
+            LazyLock::new(|| Regex::new("[/^*!?$&(){}\\[\\]+=~`\\s|@,'\"><:;]").unwrap());
         if INVALID_CHARS.is_match(hostname) {
             return Err(NetworkFilterError::FilterParseError);
         }
@@ -839,22 +833,9 @@ impl NetworkFilter {
             return Err(NetworkFilterError::FilterParseError);
         }
 
-        // Normalize the hostname to punycode and parse it as a `||hostname^` rule.
-        let normalized_host = hostname.to_lowercase();
-        let normalized_host = normalized_host.trim_start_matches("www.");
-
-        let mut hostname = "||".to_string();
-        if normalized_host.is_ascii() {
-            hostname.push_str(normalized_host);
-        } else {
-            hostname.push_str(
-                &idna::domain_to_ascii(normalized_host)
-                    .map_err(|_| NetworkFilterError::PunycodeError)?,
-            );
-        }
-        hostname.push('^');
-
-        NetworkFilter::parse(&hostname, debug, Default::default())
+        // Parse it as a `||hostname^` rule.
+        let rule = format!("||{hostname}^");
+        NetworkFilter::parse(&rule, debug, Default::default())
     }
 
     pub fn get_id_without_badfilter(&self) -> Hash {
@@ -902,14 +883,12 @@ impl NetworkFilter {
 
         // Get tokens from filter
         match &self.filter {
-            FilterPart::Simple(f) => {
-                if !self.is_complete_regex() {
-                    let skip_last_token =
-                        (self.is_plain() || self.is_regex()) && !self.is_right_anchor();
-                    let skip_first_token = self.is_right_anchor();
+            FilterPart::Simple(f) if !self.is_complete_regex() => {
+                let skip_last_token =
+                    (self.is_plain() || self.is_regex()) && !self.is_right_anchor();
+                let skip_first_token = self.is_right_anchor();
 
-                    utils::tokenize_filter_to(f, skip_first_token, skip_last_token, tokens_buffer);
-                }
+                utils::tokenize_filter_to(f, skip_first_token, skip_last_token, tokens_buffer);
             }
             FilterPart::AnyOf(_) => (), // across AnyOf set of filters no single token is guaranteed to match to a request
             _ => (),
