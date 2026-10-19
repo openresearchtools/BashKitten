@@ -72,7 +72,7 @@ def main():
     for license in libc.glob('LICENSE*'):shutil.copy2(license,docs/('libc-'+license.name))
     for license in fuse_record['license_paths']:
         shutil.copy2(fuse_vendor/license,docs/('libfuse-'+Path(license).name))
-    (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/BashKitten','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.189','checksum':'3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2'},'fusermount3':fuse_record},indent=2)+'\n')
+    (docs/'source.json').write_text(json.dumps({'revision':args.revision,'source':'https://github.com/openresearchtools/BashKitten','donor':json.loads((ROOT/'upstream/buzzard-runtime/provenance.json').read_text()),'libc':{'version':'0.2.191','checksum':'65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a'},'fusermount3':fuse_record},indent=2)+'\n')
     copyright_dir=stage/'usr/share/doc/bashkitten-machines-guest';copyright_dir.mkdir(parents=True)
     (copyright_dir/'copyright').symlink_to('../../bashkitten-machines-guest/copyright')
     debian=stage/'DEBIAN';debian.mkdir()

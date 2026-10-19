@@ -40,6 +40,13 @@ by the tracked build recipe. Original source and full Apache-2.0 notices remain
 in vendor/podman; the modification retains those terms. Package provenance records
 the patch checksum and build recipe checksum alongside the original release pin.
 
+Release refresh, 19 October 2026: pristine Podman v6.1.4 at
+464c15fec06f0074c916f9eff87c4806869c2833 replaces v6.1.3 with its complete
+upstream vendored dependencies and full notices. The same private catatonit
+patch applies without changes. crun 1.30.1 and the other private native helper
+releases remain current. The sudo bridge's libc dependency is updated to
+0.2.191, retaining its full MIT and Apache-2.0 texts and exact crate source.
+
 Private netavark 2.1.0 and aardvark-dns 2.1.0 build metadata modifications,
 11 October 2026: require each verified upstream release commit supplied by the
 tracked recipe instead of discovering the enclosing build workspace's Git commit.
