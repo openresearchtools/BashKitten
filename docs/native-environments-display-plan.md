@@ -3810,3 +3810,35 @@ the same batched candidate cycle, then repeat the required installed Android,
 Wayland and real-Xorg acceptance. Daughter AI-runtime releases remain built in
 their GitHub Actions, never on the workstation. Updating pins, dispatching builds
 or passing source checks alone does not establish an updated working release.
+
+### Bundled Pi refresh and complete-file reading — 19 October 2026
+
+The user explicitly includes bundled Pi in the component refresh. Use the
+official unmodified Pi 1.3.0 release at
+`71023aec1546d6d677a65669c5665c0927ce0dd0`, with its exact package resolution,
+retained sources and notices. This updates the earlier runtime selection, not
+the frozen original plan or Pi's ownership of sessions, providers and compaction.
+Keep BashKitten's private profile independent of standalone Pi.
+
+The user-authorized full-file-reading handoff adds the tested extension to the
+existing bundled Pi package. Name its tool exactly `full-read` and retain
+`compact_context`; embed the source rather than referring to the scratch
+prototype. Return complete, untruncated UTF-8 text/code from one regular file,
+and enforce one tool call at a time. Use Pi's current context usage,
+`estimateTokens` and the effective selected-model compaction reserve. These
+are approximate character-based estimates, not an exact model tokenizer.
+Refuse files above 70% of the context or without 20,000 tokens of headroom
+before compaction. Keep descriptions short and concrete.
+
+`full-read` does not compact by itself. On insufficient space, direct the agent
+to call `compact_context` with a handoff, then retry once; a file that still does
+not fit must be read in chunks. Pi and the extension own asynchronous compaction
+and automatic continuation, including Stop, model/session changes, queued input
+and compaction errors. BashKitten continues as the UI/RPC client; add no second
+compaction implementation, provider/model logic, UI control or fallback.
+
+Verify the final tool name and behavior through the existing extension loading
+and package paths, keeping synthetic files and live test logs outside shipped
+assets. RPC verification must observe compaction and its resumed run after the
+initial settled event. Prototype SDK/RPC and live-model evidence do not replace
+installed BashKitten acceptance of the integrated extension.
