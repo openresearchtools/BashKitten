@@ -7,10 +7,6 @@ package org.mozilla.gecko.util;
 import android.util.Base64;
 import android.util.Log;
 import androidx.annotation.NonNull;
-import com.google.android.gms.fido.common.Transport;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -19,109 +15,6 @@ import org.mozilla.gecko.annotation.WrapForJNI;
 public class WebAuthnUtils {
   private static final String LOGTAG = "WebAuthnUtils";
   private static final boolean DEBUG = false;
-
-  // from dom/webauthn/WebAuthnTransportIdentifiers.h
-  private static final byte AUTHENTICATOR_TRANSPORT_USB = 1;
-  private static final byte AUTHENTICATOR_TRANSPORT_NFC = 2;
-  private static final byte AUTHENTICATOR_TRANSPORT_BLE = 4;
-  private static final byte AUTHENTICATOR_TRANSPORT_INTERNAL = 8;
-  private static final byte AUTHENTICATOR_TRANSPORT_HYBRID = 16;
-
-  // From WebAuthentication.webidl
-  public enum AttestationPreference {
-    NONE,
-    INDIRECT,
-    DIRECT,
-  }
-
-  public static List<Transport> getTransportsForByte(final byte transports) {
-    final ArrayList<Transport> result = new ArrayList<Transport>();
-    if ((transports & AUTHENTICATOR_TRANSPORT_USB) == AUTHENTICATOR_TRANSPORT_USB) {
-      result.add(Transport.USB);
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_NFC) == AUTHENTICATOR_TRANSPORT_NFC) {
-      result.add(Transport.NFC);
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_BLE) == AUTHENTICATOR_TRANSPORT_BLE) {
-      result.add(Transport.BLUETOOTH_LOW_ENERGY);
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_INTERNAL) == AUTHENTICATOR_TRANSPORT_INTERNAL) {
-      result.add(Transport.INTERNAL);
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_HYBRID) == AUTHENTICATOR_TRANSPORT_HYBRID) {
-      result.add(Transport.HYBRID);
-    }
-    return result;
-  }
-
-  /* package */ static JSONArray getJSONTransportsForByte(final byte transports) {
-    final JSONArray json = new JSONArray();
-    if ((transports & AUTHENTICATOR_TRANSPORT_USB) == AUTHENTICATOR_TRANSPORT_USB) {
-      json.put("usb");
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_NFC) == AUTHENTICATOR_TRANSPORT_NFC) {
-      json.put("nfc");
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_BLE) == AUTHENTICATOR_TRANSPORT_BLE) {
-      json.put("ble");
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_INTERNAL) == AUTHENTICATOR_TRANSPORT_INTERNAL) {
-      json.put("internal");
-    }
-    if ((transports & AUTHENTICATOR_TRANSPORT_HYBRID) == AUTHENTICATOR_TRANSPORT_HYBRID) {
-      json.put("hybrid");
-    }
-    return json;
-  }
-
-  public static class WebAuthnPublicCredential {
-    public final byte[] id;
-    public final byte transports;
-
-    public WebAuthnPublicCredential(final byte[] aId, final byte aTransports) {
-      this.id = aId;
-      this.transports = aTransports;
-    }
-
-    public static ArrayList<WebAuthnPublicCredential> CombineBuffers(
-        final Object[] idObjectList, final ByteBuffer transportList) {
-      if (idObjectList.length != transportList.remaining()) {
-        throw new RuntimeException("Couldn't extract allowed list!");
-      }
-
-      final ArrayList<WebAuthnPublicCredential> credList =
-          new ArrayList<WebAuthnPublicCredential>();
-
-      final byte[] transportBytes = new byte[transportList.remaining()];
-      transportList.get(transportBytes);
-
-      for (int i = 0; i < idObjectList.length; i++) {
-        final ByteBuffer id = (ByteBuffer) idObjectList[i];
-        final byte[] idBytes = new byte[id.remaining()];
-        id.get(idBytes);
-
-        credList.add(new WebAuthnPublicCredential(idBytes, transportBytes[i]));
-      }
-      return credList;
-    }
-
-    @NonNull
-    public JSONObject toJSONObject() {
-      final JSONObject item = new JSONObject();
-      try {
-        item.put("type", "public-key");
-        item.put(
-            "id",
-            Base64.encodeToString(this.id, Base64.URL_SAFE | Base64.NO_PADDING | Base64.NO_WRAP));
-
-        final JSONArray transports = getJSONTransportsForByte(this.transports);
-        item.put("transports", transports);
-      } catch (final JSONException e) {
-        Log.e(LOGTAG, "Couldn't set JSON data", e);
-      }
-      return item;
-    }
-  }
 
   @WrapForJNI
   public static class MakeCredentialResponse {

@@ -20,6 +20,7 @@
 #  include "mozilla/MozPromise.h"
 #  include "mozilla/java/GeckoResultNatives.h"
 #  include "mozilla/java/WebAuthnTokenManagerWrappers.h"
+#  include "mozilla/jni/Utils.h"
 #endif
 
 namespace mozilla::dom {
@@ -143,6 +144,12 @@ already_AddRefed<Promise> PublicKeyCredential::GetClientCapabilities(
   //    be true.
   //
   Record<nsString, bool> capabilities;
+#ifdef MOZ_WIDGET_ANDROID
+  // These declarations describe framework support, not provider enablement or
+  // browser trust. Android's public API has no exact third-party provider query;
+  // isUserVerifyingPlatformAuthenticatorAvailable performs the async check.
+  const bool hasFrameworkWebAuthn = jni::GetAPIVersion() >= 34;
+#endif
 
   auto entry = capabilities.Entries().AppendElement();
   entry->mKey = u"conditionalCreate"_ns;
@@ -217,7 +224,9 @@ already_AddRefed<Promise> PublicKeyCredential::GetClientCapabilities(
 
   entry = capabilities.Entries().AppendElement();
   entry->mKey = u"hybridTransport"_ns;
-#if defined(XP_MACOSX) || defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
+#if defined(MOZ_WIDGET_ANDROID)
+  entry->mValue = hasFrameworkWebAuthn;
+#elif defined(XP_MACOSX) || defined(XP_WIN)
   entry->mValue = true;
 #else
   entry->mValue = false;
@@ -225,7 +234,9 @@ already_AddRefed<Promise> PublicKeyCredential::GetClientCapabilities(
 
   entry = capabilities.Entries().AppendElement();
   entry->mKey = u"passkeyPlatformAuthenticator"_ns;
-#if defined(XP_MACOSX) || defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
+#if defined(MOZ_WIDGET_ANDROID)
+  entry->mValue = hasFrameworkWebAuthn;
+#elif defined(XP_MACOSX) || defined(XP_WIN)
   entry->mValue = true;
 #else
   entry->mValue = false;
@@ -249,7 +260,9 @@ already_AddRefed<Promise> PublicKeyCredential::GetClientCapabilities(
 
   entry = capabilities.Entries().AppendElement();
   entry->mKey = u"userVerifyingPlatformAuthenticator"_ns;
-#if defined(XP_MACOSX) || defined(XP_WIN) || defined(MOZ_WIDGET_ANDROID)
+#if defined(MOZ_WIDGET_ANDROID)
+  entry->mValue = hasFrameworkWebAuthn;
+#elif defined(XP_MACOSX) || defined(XP_WIN)
   entry->mValue = true;
 #else
   entry->mValue = false;
