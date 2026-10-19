@@ -24,8 +24,12 @@ and publisher `31073761ca` both include the two Files-Off source repairs.
 No alternate transport, authentication bypass or provider/model change was used.
 This closes that particular Send regression; Files On, live revocation and
 the remaining authentication/service lifecycle matrix remain open. A stale
-earlier OAuth TTL sidebar message was observed after the successful connection
-and still needs its own follow-up. Exact scope and mixed-component identities:
+earlier OAuth TTL sidebar message was observed after the successful connection.
+Subsequent fix `8e67e0161b` leaves connection errors in the authoritative backend
+state instead of copying them into the sidebar's persistent action notice;
+unrelated operation errors and actual readiness timeouts remain visible. The
+focused production-classpath Java compile passed; installed recovery and
+unrelated-notice regression checks remain pending. Exact scope and mixed-component identities:
 `Bashkitten-Acceptance/android6522-remote-files-off-20261018/acceptance.json`.
 
 Selected-container configuration was exercised through the host UI while host
@@ -52,6 +56,8 @@ GitHub preparation run `39302677649` prepared version **153.4.6** at exact
 source/notices artifacts. No partial-target flags were used. The existing
 `v153.4.5` testing publication remains unchanged. Dispatch is not a successful
 build, publication or installed acceptance result.
+The later sidebar-notice fix `8e67e0161b` is not in that immutable build head;
+it is retained for the next batched candidate, without replacing running inputs.
 
 ## Installed follow-up and remaining blockers — 18 October 2026
 
