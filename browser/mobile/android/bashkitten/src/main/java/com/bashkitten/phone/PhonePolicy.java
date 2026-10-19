@@ -31,7 +31,8 @@ public final class PhonePolicy {
     public boolean selected(Feature feature) { try { return preferences.getBoolean(feature.name(), false); } catch (ClassCastException e) { return false; } }
     public String unavailable(Feature feature) {
         if (feature.accessibility && PhoneAccessibilityService.current == null) return "Enable Accessibility access and connect the service";
-        if (feature == Feature.NOTIFICATIONS && (!notificationGranted() || PhoneNotificationService.current == null)) return "Enable notification access and connect the listener";
+        PhoneNotificationService listener = PhoneNotificationService.current;
+        if (feature == Feature.NOTIFICATIONS && (!notificationGranted() || listener == null || !listener.ready())) return "Enable notification access and connect the listener";
         if (feature == Feature.LOCATION && context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return "Precise location access is required";
         return "";
     }
@@ -54,7 +55,7 @@ public final class PhonePolicy {
     }
     void reconcileServices() {
         PhoneNotificationService listener = PhoneNotificationService.current;
-        if (!master() || !selected(Feature.NOTIFICATIONS)) { if (listener != null) listener.requestUnbind(); }
+        if (!master() || !selected(Feature.NOTIFICATIONS) || !notificationGranted()) { if (listener != null) listener.unbind(); }
         else if (listener == null && notificationGranted()) NotificationListenerService.requestRebind(new ComponentName(context, PhoneNotificationService.class));
         PhoneAccessibilityService service = PhoneAccessibilityService.current;
         if (service != null) service.reconcile();
