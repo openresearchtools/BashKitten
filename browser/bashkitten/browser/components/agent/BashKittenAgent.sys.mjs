@@ -368,7 +368,7 @@ class AgentView {
     await this.run(async () => {
       let status;
       if (localAutostart()) {
-        try { status = await control("start"); this.localOn = true; }
+        try { status = await control("start"); this.localOn = status.web?.status === "running"; }
         catch (error) { this.sidecar.notice.textContent = `Local startup: ${error.message}`; }
       }
       if (DesktopLifetime.quitting || this.win.closed) return;
@@ -806,7 +806,7 @@ class AgentView {
       return this.selectRemote(selected, false, epoch);
     }
     const status = await control("start");
-    this.localOn = true;
+    this.localOn = status.web?.status === "running";
     if (epoch !== this.selectionEpoch) return;
     await this.update(status);
     this.schedule();
@@ -908,7 +908,7 @@ class AgentView {
     const current = () => !this.off && !this.selection && !this.win.closed && !DesktopLifetime.quitting &&
       this.selectionEpoch === epoch && this.localUpdate === revision;
     const web = status.web || {};
-    this.localOn = !["failed", "stopped", "off"].includes(web.status);
+    this.localOn = web.status === "running";
     this.sidecar?.render();
     if (web.error || ["failed", "stopped", "off"].includes(web.status)) {
       this.off = true;

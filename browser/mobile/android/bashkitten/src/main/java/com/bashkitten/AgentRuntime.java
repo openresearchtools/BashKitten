@@ -111,6 +111,7 @@ public final class AgentRuntime {
             if (generation != operation || !desired) return;
             JSONObject web = value.optJSONObject("web");
             if (web == null || !web.optBoolean("running", !web.optString("url").isEmpty())) {
+                status = value;
                 fail("The Agent service stopped. Turn on to reconnect."); return;
             }
             acceptStatus(value);
@@ -118,6 +119,10 @@ public final class AgentRuntime {
     }
     public boolean isOnRequested() { return desired; }
     public boolean localIsOnRequested() { return localControlRequested; }
+    boolean localIsRunning() {
+        JSONObject web = status.optJSONObject("web");
+        return localSetupReady() && web != null && web.optString("status").equals("running");
+    }
     public boolean localAutostart() { return app.policies.getBoolean("agent.autostart.local", true); }
     public void setLocalAutostart(boolean enabled) {
         app.policies.edit().putBoolean("agent.autostart.local", enabled).apply(); changed();
@@ -153,9 +158,9 @@ public final class AgentRuntime {
                 command("status", new JSONObject(), value -> {
                     if (!currentPhoneOwner(generation, installation)) return;
                     JSONObject web = value.optJSONObject("web");
-                    if (web == null || !web.optString("status").equals("running")) return;
+                    if (web == null || !web.optString("status").equals("running")) { status = value; changed(); return; }
                     stored(() -> { verifyLocalStatus(web); return true; }, ignored -> {
-                        if (currentPhoneOwner(generation, installation)) connectPhoneControls();
+                        if (currentPhoneOwner(generation, installation)) { status = value; connectPhoneControls(); changed(); }
                     }, message -> { if (currentPhoneOwner(generation, installation)) startupFailed("local", message); });
                 }, message -> { if (currentPhoneOwner(generation, installation)) startupFailed("local", message); });
             }
@@ -207,6 +212,7 @@ public final class AgentRuntime {
                 final String installation = termux.installationId();
                 stored(() -> { verifyLocalStatus(value.getJSONObject("web")); return true; }, ignored -> {
                     if (!currentPhoneOwner(generation, installation)) return;
+                    status = value;
                     connectPhoneControls(); phoneVoice.ready(); startupErrors.remove("local"); changed();
                 }, message -> { if (currentPhoneOwner(generation, installation)) startupFailed("local", message); });
             }, message -> { if (generation == backgroundOperation) startupFailed("local", message); });
@@ -513,9 +519,10 @@ public final class AgentRuntime {
         disconnectPhoneControls();
         phoneVoice.localStopped();
         command("stop", new JSONObject(), value -> {
+            status = value;
             JSONObject web = value.optJSONObject("web");
             String current = web == null ? "" : web.optString("status");
-            if (current.equals("stopping") || current.equals("running")) { app.main.postDelayed(() -> stopBackgroundLocal(failure), 2000); return; }
+            if (current.equals("stopping") || current.equals("running")) { changed(); app.main.postDelayed(() -> stopBackgroundLocal(failure), 2000); return; }
             if (!current.equals("stopped") && !current.equals("off")) { failure.accept(web == null ? "No Local shutdown status" : web.optString("error", "Local shutdown was not confirmed")); return; }
             recordLocalControl(false); releaseWake(); changed();
         }, failure);
@@ -581,7 +588,8 @@ public final class AgentRuntime {
                 // Only the matching Local session handshake below can do that.
                 stored(() -> { verifyLocalStatus(result.getJSONObject("web")); return true; }, ignored -> {
                     if (generation != operation || !desired || !localSetupReady() || !installation.equals(termux.installationId())) { failure.accept("Agent changed while starting Share Local."); return; }
-                    connectPhoneControls(); phoneVoice.ready();
+                    status = result;
+                    connectPhoneControls(); phoneVoice.ready(); changed();
                     if (selected.equals("local")) { acceptStatus(result); poll(); }
                     done.run();
                 }, failure);
