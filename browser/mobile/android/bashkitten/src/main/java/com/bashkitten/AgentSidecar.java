@@ -244,12 +244,20 @@ public final class AgentSidecar {
         power.setSwitchMinWidth(dp(34)); power.setMinWidth(0); power.setMinimumWidth(0); power.setPadding(dp(3), 0, dp(3), 0);
         power.setThumbTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{accent, muted}));
         power.setTrackTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{(accent & 0x00ffffff) | 0x66000000, line}));
-        power.setChecked(remote ? runtime.remoteConnected(id) : runtime.localIsOnRequested());
-        power.setOnCheckedChangeListener((button, checked) -> runtime.setBackendOn(id, checked, this::error)); heading.addView(power);
+        final boolean on = remote ? runtime.remoteConnected(id) : runtime.localIsRunning();
+        JSONObject localWeb = runtime.status.optJSONObject("web");
+        String status = id.equals(runtime.selected) && !Arrays.asList("on", "off").contains(runtime.state) ? runtime.state : remote ? (on ? "Connected" : "Disconnected") : localWeb == null ? "off" : localWeb.optString("status", "off");
+        power.setChecked(on);
+        power.setEnabled(!Arrays.asList("starting", "stopping").contains(status));
+        power.setOnCheckedChangeListener((button, checked) -> {
+            if (checked == on) return;
+            button.setChecked(on); // Requests do not claim the backend has changed yet.
+            runtime.setBackendOn(id, checked, this::error);
+        }); heading.addView(power);
         if (remote) heading.addView(icon(name + " actions", R.drawable.ic_agent_more, () -> remoteActions(id, name)));
         body.addView(heading);
-        String status = id.equals(runtime.selected) ? runtime.state : remote ? (runtime.remoteConnected(id) ? "Connected" : "Disconnected") : (runtime.localIsOnRequested() ? "On requested" : "Off");
         title.setContentDescription(name + ", " + status); title.setTooltipText(status);
+        if (Arrays.asList("starting", "stopping", "login").contains(status)) body.addView(text(status));
         if (id.equals(runtime.selected) && !runtime.error.isEmpty()) body.addView(text(runtime.error));
         section("Projects", "Create project in " + name, () -> select(id, () -> projectPicker(id)));
         JSONObject snapshot = snapshots.get(id);

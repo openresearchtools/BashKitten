@@ -132,7 +132,7 @@ export class NativeSidecar {
       const heading = this.node("div", { class: "native-backend-heading" });
       const open = this.button(backend.name, backend.name, async () => { await this.select(backend.id); await this.refreshChats(); }); open.className = "native-title";
       heading.append(open);
-      const on = backend.kind === "remote" ? backend.state === "ready" : backend.kind === "machine" ? ["running", "preparing", "starting", "stopping", "deleting"].includes(backend.state) : this.host.localOn;
+      const on = backend.kind === "remote" ? backend.state === "ready" : backend.kind === "machine" ? backend.state === "running" : this.host.localOn;
       const power = this.button("", `${backend.name}: ${on ? "Turn off" : "Turn on"}`, async () => {
         if (backend.kind === "machine") {
           await this.control(on ? "machines.stop" : "machines.start", { id: backend.id, ...(!on ? { displayCapabilities: await this.displayCapabilities() } : {}) });
@@ -156,7 +156,7 @@ export class NativeSidecar {
       }
       if (backend.kind === "remote") heading.append(this.button("⋯", `${backend.name} actions`, () => this.remoteActions(backend)));
       section.append(heading);
-      if (backend.kind !== "local") section.append(this.node("small", { class: "native-backend-state", role: "status" }, backend.state || "Disconnected"));
+      if (backend.state && !["running", "stopped", "ready", "disconnected"].includes(backend.state)) section.append(this.node("small", { class: "native-backend-state", role: "status" }, backend.state));
       if (backend.error || backend.lastError) section.append(this.node("p", { class: "native-error" }, backend.error || backend.lastError));
       const snapshot = this.cache.get(backend.id);
       section.append(this.sectionHeading("Projects", `Create project in ${backend.name}`, async () => { await this.select(backend.id); await this.projectPicker(); }));
