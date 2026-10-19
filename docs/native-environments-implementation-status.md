@@ -90,6 +90,33 @@ configuration bytes were restored exactly, with no model/provider changes.
 This covers that saved-choice integration, not all startup services or platforms.
 Receipt: `Bashkitten-Acceptance/xorg-autostart-authority-20261019/acceptance.json`.
 
+The installed Xorg question flow returned pending in 11 ms and completed an
+independent Bash tool while the question remained unanswered. Actual UI actions
+sent a custom reply once and dismissed another pending question once. An
+unanswered question expired at its original 120-second deadline; dismissing its
+expired control preserved the original single expiry delivery and timestamp.
+Settled cards appeared beside their originating tool calls in the expandable
+work history, with attributed replies/notices in chronological chat history.
+The small local model made three separate question tool calls despite the
+one-question instruction and emitted a premature acknowledgement; these model
+behaviors are explicitly distinguished from backend delivery evidence. This is
+mixed-candidate coverage, not the cross-channel/Stop/crash race matrix. Receipt:
+`Bashkitten-Acceptance/xorg-question-dismiss-20261019/acceptance.json`.
+
+Android Phone acceptance exposed two lifecycle failures. Granting notification
+access while its feature was Off could race two listener-unbind requests and
+crash the process. `ef145317f2` makes unbinding connection-scoped and immediately
+revokes availability, handling the expected lost Binder token without accepting
+notifications while Off. `4342ac5e58` restores the Phone owner link after verified
+Local reconnect or late listener registration, without starting a saved-Off
+backend or invalidating live grants on repeated connected refreshes. It also
+replaces the misleading Local-Off message for a disconnected owner link.
+Production Java compilation and controlled lifecycle/authentication regressions
+passed, including reproduction against the unfixed source. Both fixes are later
+than `bd393bd7ec59`; installed repair acceptance remains required. Evidence:
+`verification/notification-listener-race-20261019/` and
+`verification/phone-owner-recovery-20261019/`.
+
 GitHub preparation run `39302677649` prepared version **153.4.6** at exact
 `bd393bd7ec59eebd3f540072dc9511917520de9c`, then dispatched full package run
 `39303133963` with all Linux, Android and Termux architectures and the required
