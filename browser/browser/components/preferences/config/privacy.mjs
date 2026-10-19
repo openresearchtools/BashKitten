@@ -453,7 +453,7 @@ Preferences.addAll([
 
   // Cookie Banner Handling
   { id: "cookiebanners.ui.desktop.enabled", type: "bool" },
-  { id: "cookiebanners.service.mode.privateBrowsing", type: "int" },
+  // The Blocker pane owns both cookie-banner mode preferences.
 
   // DoH
   { id: "network.trr.mode", type: "int" },
