@@ -397,6 +397,15 @@ Termux backend. Models remain separate downloads. No release path may depend on
 local build directories or unpublished workstation binaries. Node and Pi remain
 bundled in desktop/Termux packages. Local desktop/Android browser builds are for
 development and acceptance only.
+The user's 19 October licensing clarification retains CUDA in the separate
+MIT-licensed AI runtime repository. Do not apply the browser's source-only
+release requirement to NVIDIA's closed toolchain/runtime components in those
+optional downloaded engines. Record their exact versions, checksums, provenance
+and full NVIDIA notices, and state when original implementation source is not
+available; do not relabel NVIDIA code as MIT or bitcode as original source.
+Source-available engine/dependency code still requires matching source and
+notices. This does not permit proprietary SDKs in the browser APK/DEB or change
+BashKitten's AGPL and inherited Mozilla MPL file licenses.
 The latest runtime requirements use official upstream release tags and their
 exact peeled commits, never arbitrary branch commits. The daughter repository
 checks for newer upstream releases once daily and skips unchanged versions.

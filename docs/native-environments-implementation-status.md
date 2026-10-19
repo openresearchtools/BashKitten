@@ -7,6 +7,21 @@ the current plan also records the user's subsequent presentation, lifecycle and
 
 ## Inline header and combined-candidate follow-up — 19 October 2026
 
+Later licensing follow-up: the retained Mozilla source audit against pristine
+Firefox 153.5 found no lost MPL notice in modified non-artwork files. Completely
+replaced artwork has its replacement-artwork license; BashKitten's AGPL does
+not overwrite inherited file-level notices. The user also clarified that the
+MIT-licensed daughter runtime repository retains CUDA with NVIDIA's own
+component notices and explicit source availability. The dated plan amendment
+records that boundary without changing the frozen original.
+
+Daughter source imports and linkage diagnostics are pushed through `511454d5`;
+corrective run `39330013225` is in progress. Its Linux arm64 Vulkan engine
+compiled and passed startup/VAD checks, then packaging rejected a valid dotted
+CPU-backend library name. That classifier repair is being batched with the
+authorized CUDA notice/source-status correction. No new runtime publication or
+installed-app acceptance is claimed from these intermediate build results.
+
 `6f62397ee2` puts the working folder and session/runtime metrics in one flowing
 header, wrapping only when the available width is exhausted. It removes the
 redundant header Stop/Resume control and retains the composer control and Files.
