@@ -12,6 +12,11 @@ on:
       - 'auth/gozxing/**'
       - 'auth/mobile/**'
       - 'auth/build/**'
+      - 'auth/dependencies/go/**'
+      - 'auth/dependencies/go-toolchain/**'
+      - 'auth/authelia/go.sum'
+      - 'auth/caddy/go.sum'
+      - 'auth/upstreams.lock.json'
       - 'auth/remote-termux/**'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/NativeRemote.java'
       - 'browser/mobile/android/bashkitten/src/main/java/com/bashkitten/RemoteAgentConnection.java'
@@ -95,6 +100,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
             agent/native/remote
             auth/chisel
@@ -103,6 +109,11 @@ jobs:
             auth/gozxing
             auth/mobile
             auth/build
+            auth/dependencies/go
+            auth/dependencies/go-toolchain
+            auth/authelia/go.sum
+            auth/caddy/go.sum
+            auth/upstreams.lock.json
             browser/mobile/android/bashkitten/src/main/java/com/bashkitten
       - uses: actions/setup-go@v6
         with:

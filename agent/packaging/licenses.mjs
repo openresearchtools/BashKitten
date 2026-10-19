@@ -3,6 +3,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { isUtf8 } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { bundledLicenses } from '../src/server/licenses.mjs';
@@ -10,12 +11,9 @@ import { bundledLicenses } from '../src/server/licenses.mjs';
 const json = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 async function legalText(file) {
   const bytes = await fs.readFile(file);
-  // MuPDF 1.27.2's bundled AUTHORS uses Latin-1. Preserve its accented names;
-  // keep strict UTF-8 for every other source instead of replacing invalid bytes.
-  const latin1 = createHash('sha256').update(bytes).digest('hex') === '81747c54e07b695744e14dc41fa3cc944ffee488bf6308a8fd7073a1122f955c';
-  let text;
-  try { text = latin1 ? bytes.toString('latin1') : new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-  catch (cause) { throw Error('Invalid UTF-8 license text: ' + file, { cause }); }
+  // Upstream notices include Latin-1 attribution files. Preserve their names
+  // without tying text decoding to a particular release's file checksum.
+  const text = bytes.toString(isUtf8(bytes) ? 'utf8' : 'latin1');
   if (!text.trim() || text.includes('\0')) throw Error('Missing or invalid license text: ' + file);
   return text;
 }
