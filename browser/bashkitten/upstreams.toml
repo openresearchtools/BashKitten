@@ -86,12 +86,14 @@ scope = "buffer_len checked capacity calculation; upstream production fix only"
 
 [tor_browser_security_backports]
 remote = "https://gitlab.torproject.org/tpo/applications/tor-browser.git"
-version = "16.0a13"
-ref = "tor-browser-153.4.0esr-16.0-1-build3"
-commit = "b06b7fcaa558a84ceb38937945509fdad77ccee8"
-firefox_source_tree = "30d6c5ace5a2fc4dd3760f8ba9a6c38f744f4787"
-checked = "2026-10-06"
+version = "16.0a14"
+ref = "tor-browser-153.5.0esr-16.0-1-build2"
+commit = "aeb4c4a33fd3494569e8f2cc2821fab60d7b8acf"
+firefox_source_tree = "0bace55ff3173cceba8c96d5482dac190954d726"
+checked = "2026-10-19"
 scope = "Mozilla production backports carried by Tor on the identical ESR baseline; not the complete Tor Browser patchset"
+# Original applied patch provenance; product-specific adaptations are described in UPDATING-FIREFOX.md.
+applied_ref = "tor-browser-153.4.0esr-16.0-1-build3"
 commits = [
   "b034c49ff636cb210c17c03cbc3cedbcb68138e0", # Bug 2051440: Android resource URI lookup
   "f245c9c322406d859fd51d43c1cee13f8890dc3b", # Bug 1842361: download origin spoofing (adapted)
@@ -108,4 +110,23 @@ commits = [
   "c53f5cbbe64a9adc9a8e98d0527b857afcd377df", # Bug 2052011: about:config inline-handler removal
   "5bdc9fc9b7e1d774ae2e326962fe0e4d5b48e419", # Bug 2054384: download notification filename display
   "2b4271f74521f7119021d9b7584030bff7d6ac65", # Bug 2061470: preserve upload field keys
+]
+# Same ordered production patches in the checked release: all full and production-only
+# stable patch IDs match the original commits above. No patch is reapplied for a rebase.
+matching_release_commits = [
+  "435b0d8dfbb9b6a62912649870ed022b8ab9ec39", # Bug 2051440
+  "632bd20de32160ca3e58bd530c303558ee0cb314", # Bug 1842361
+  "4f90141bb37c9a91ec850cd1ae26b491e406328b", # Bug 1978587
+  "f07d1a9f175132f06670a351eb43972781f93869", # Bug 2049034
+  "792ebcd0a4e5b078078b0fdfa11b03f0d3619f98", # Bug 2049810
+  "05919873e10e49086c1ae91cd67371c69acffa33", # Bug 2055683
+  "a488873289ade07e6432b31a240974e1883f9796", # Bug 2059471
+  "fcd2c45a4f0822f9f648cf48fb155e27af20546a", # Bug 2045435
+  "609d917fec4d7973f305f91368cb0d358fa08f70", # Bug 2053578
+  "8396209c0133a1dec270606e273dbc2e5e9c9510", # Bug 2053578
+  "d9d4b3d24eec9daa41a81b419ed60d1eaa4d451c", # Bug 2058626
+  "525f2c47adc3cfab5087ea65d0c01d42cd7c8223", # Bug 2053320
+  "de40808aaf8a3efefa4fa577d242b906f69c7200", # Bug 2052011
+  "f301febef266818da86ce8ba4e0b4e4058e9bce3", # Bug 2054384
+  "d92082d229b2bcc4f5e636a98c39316258e27a73", # Bug 2061470
 ]

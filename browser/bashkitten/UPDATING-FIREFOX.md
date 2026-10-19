@@ -46,7 +46,7 @@ Run these commands from the outer BashKitten repository root. Start with a
 clean, committed product checkout:
 
 ```bash
-python3 browser/bashkitten/scripts/firefox_release.py update 153.4
+python3 browser/bashkitten/scripts/firefox_release.py update 153.5
 ```
 
 The tool resolves the exact official tag, then downloads only that release
@@ -77,7 +77,7 @@ original Mozilla commit, as an ancestor.
 If the merge conflicts, resolve and stage the affected files, then finish:
 
 ```bash
-python3 browser/bashkitten/scripts/firefox_release.py finish 153.4
+python3 browser/bashkitten/scripts/firefox_release.py finish 153.5
 ```
 
 Use the full Firefox version for an upstream hotfix, for example `153.3.1`.
@@ -137,6 +137,34 @@ Two patches required product-specific integration:
   BashKitten already returns `NimbusDisabled`, so do not add Mozilla's replacement
   QA broadcast receiver or enable experiments. The security-sensitive entry
   point is removed without introducing a feature we do not ship.
+
+The 19 October 2026 refresh uses Firefox **153.5.0esr**, Mozilla's official
+release of 13 October with [MFSA 2026-108](https://www.mozilla.org/en-US/security/advisories/mfsa2026-108/),
+and the matching released [Tor Browser 16.0a14 alpha](https://blog.torproject.org/new-alpha-release-tor-browser-160a14/)
+of 15 October. The exact release tag is
+`tor-browser-153.5.0esr-16.0-1-build2`, commit
+`aeb4c4a33fd3494569e8f2cc2821fab60d7b8acf`; its Mozilla base is the same
+`223014c6b9299ac9b035b4c50ea481e5c6de282c` release used by BashKitten. This selects
+its applicable security patches, not the complete Tor Browser alpha feature set.
+
+The fifteen production patches above remain necessary on this ESR source. Every
+patch in the corresponding released Tor stack has the same stable Git patch ID
+as its originally applied version, both with and without upstream test hunks.
+`commits` retains those original application sources; `matching_release_commits`
+records their rebased counterparts in the same order. No patch was reapplied
+merely because its commit ID changed. The new Windows-only counterpart
+`1cf00f166012e71602bbcaf84a9968420595b700` remains excluded.
+
+The three-way ESR merge preserves the product adapters above. Source checks
+confirmed all thirteen unadapted production patches in the merged tree, accounting
+for the layout cache fix's prerequisite order, and retained the two intentional
+Android adaptations. The only ESR overlap with these patches is the compositor
+implementation, where the hardware-buffer fix remains present alongside the new
+ESR checks. Mozilla's release also updates the vendored `encoding_rs` source and
+Cargo lock to 0.8.40; its recorded file hashes and package checksum were verified.
+These are source checks. Both native browser builds and installed Android/Linux
+security, browsing, Display, password/passkey and service-boundary acceptance
+remain required in the combined candidate cycle.
 
 Relevant Mozilla advisories include [MFSA 2026-73](https://www.mozilla.org/en-US/security/advisories/mfsa2026-73/),
 [2026-74](https://www.mozilla.org/en-US/security/advisories/mfsa2026-74/),
