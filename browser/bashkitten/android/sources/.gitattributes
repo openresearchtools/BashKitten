@@ -1,0 +1,3 @@
+# Preserve upstream archive/descriptor checksums, including source POM CRLF.
+archives/*.jar -text
+metadata/* -text whitespace=cr-at-eol
