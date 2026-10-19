@@ -6,17 +6,14 @@ package org.mozilla.fenix.browser
 
 import android.content.Context
 import android.content.Intent
-import android.hardware.SensorManager
 import android.os.StrictMode
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
-import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.Observer
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,8 +28,6 @@ import mozilla.components.feature.app.links.AppLinksUseCases
 import mozilla.components.feature.contextmenu.ContextMenuCandidate
 import mozilla.components.feature.readerview.ReaderViewFeature
 import mozilla.components.feature.tab.collections.TabCollection
-import mozilla.components.lib.accelerometer.sensormanager.LifecycleAwareSensorManagerAccelerometer
-import mozilla.components.lib.shake.detectShakes
 import mozilla.components.support.base.feature.UserInteractionHandler
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.components.support.ktx.kotlin.isContentUrl
@@ -193,8 +188,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
             )
         }
 
-        setupShakeDetection()
-
         continuousOnboardingFeature.maybeRunContinuousOnboarding(
             activity = requireActivity(),
             launcher = continuousOnboardingDefaultBrowserLauncher,
@@ -227,81 +220,6 @@ class BrowserFragment : BaseBrowserFragment(), UserInteractionHandler, SystemIns
                     navBarLayout = browserNavigationBar?.layout,
                     toolbarPosition = settings.toolbarPosition,
                     navController = findNavController(),
-                ),
-            )
-        }
-    }
-
-    private fun setupShakeDetection() {
-        val shouldSetupShake = requireComponents.core.summarizeFeatureSettings.canShowFeature &&
-                requireComponents.core.summarizationSettings.isGestureEnabled.value
-        if (!shouldSetupShake) {
-            return
-        }
-
-        val sensorManager = requireActivity().getSystemService(SensorManager::class.java) ?: return
-        val accelerometer = LifecycleAwareSensorManagerAccelerometer(sensorManager)
-        with(viewLifecycleOwner) {
-            lifecycle.addObserver(accelerometer)
-            lifecycleScope.launch {
-                viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                    accelerometer.detectShakes()
-                        .collect {
-                            summarizeToolbarCfrBinding.get()?.maybeDismissCfr()
-                            navigateToSummarizationIfEligible()
-                        }
-                }
-            }
-        }
-    }
-
-    private suspend fun navigateToSummarizationIfEligible() {
-        findNavController().apply {
-            // If the shake gesture or the parent feature was disabled in the bottom sheet hosted
-            // settings but the fragment has not been recreated yet, we need to check both are still
-            // active before proceeding.
-            val summarizationSettings = requireComponents.core.summarizationSettings
-            val shakeEnabled = summarizationSettings.isFeatureEnabled.value &&
-                summarizationSettings.isGestureEnabled.value
-
-            if (!shakeEnabled) {
-                return
-            }
-
-            // We don't want to navigate to the summarization fragment if the current
-            // tab is private.
-            val isPrivate = getSafeCurrentTab()?.content?.private == true
-
-            // We don't want to navigate to the summarization fragment if the current
-            // tab is loading.
-            val isPageLoading = getSafeCurrentTab()?.content?.loading == true
-
-            // Since the summarization fragment is in a dialog, it's possible that we
-            // can still detect shakes in the background. Don't try to navigate twice.
-            val currentDestinationIsNotTheBrowser = currentDestination?.id != R.id.browserFragment
-
-            // evaluate this lazy, to try and avoid querying the engine unless necessary
-            val isEnglishContent: suspend () -> Boolean = {
-                getSafeCurrentTab()?.engineState?.engineSession?.let { session ->
-                    requireComponents.core.summarizationEligibilityChecker
-                        .checkLanguage(session)
-                        .getOrNull()
-                } ?: false
-            }
-
-            // this can be removed when we get rid of language gating
-            @Suppress("ComplexCondition")
-            if (isPrivate ||
-                isPageLoading ||
-                currentDestinationIsNotTheBrowser ||
-                !isEnglishContent()
-            ) {
-                return
-            }
-
-            navigate(
-                BrowserFragmentDirections.actionBrowserFragmentToSummarizationFragment(
-                    true,
                 ),
             )
         }

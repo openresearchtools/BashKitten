@@ -37,7 +37,6 @@ import mozilla.components.support.locale.LocaleManager
 import mozilla.components.support.utils.Browsers
 import mozilla.components.support.utils.ext.PackageManagerCompatHelper
 import mozilla.components.support.utils.ext.packageManagerCompatHelper
-import org.mozilla.experiments.nimbus.NimbusEventStore
 import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.Config
 import org.mozilla.fenix.FeatureFlags
@@ -74,7 +73,6 @@ import org.mozilla.fenix.termsofuse.TOU_VERSION
 import org.mozilla.fenix.utils.Settings.Companion.LONGFOX_PEEK_ANIMATION_MAX_SHOWS
 import org.mozilla.fenix.wallpapers.Wallpaper
 import java.security.InvalidParameterException
-import java.util.concurrent.TimeUnit.MILLISECONDS
 
 private const val AUTOPLAY_USER_SETTING = "AUTOPLAY_USER_SETTING"
 private const val MAX_ANIMATION_FOREGROUND = 5
@@ -311,53 +309,6 @@ class Settings(
     var numberOfAppLaunches by intPreference(
         appContext.getPreferenceKey(R.string.pref_key_times_app_opened),
         default = 0,
-    )
-
-    /**
-     * In bug 1979885 we switched from manually tracking displaying review prompt
-     * to recording it as an event in Nimbus which let's us check if later
-     * with a JEXL expression.
-     *
-     * If a previously tracked value exists then this migrates it to an event.
-     */
-    fun migrateLastReviewPromptTimePrefIfNeeded(nimbusEventStore: NimbusEventStore) {
-        val oldKey = "pref_key_last_review_prompt_shown_time"
-
-        if (!preferences.contains(oldKey)) return
-
-        val lastReviewPromptTimeInMillis = try {
-            preferences.getLong(oldKey, 0L)
-        } catch (e: ClassCastException) {
-            logger.warn("Unexpected pref type when trying to migrate last review prompt time", e)
-            0
-        }
-
-        preferences.edit { remove(oldKey) }
-
-        if (lastReviewPromptTimeInMillis != 0L) {
-            val millisAgo = timeNowInMillis() - lastReviewPromptTimeInMillis
-            nimbusEventStore.recordPastEvent(
-                eventId = "review_prompt_shown",
-                timeAgo = millisAgo,
-                timeUnit = MILLISECONDS,
-            )
-        }
-    }
-
-    /**
-     * Indicates if review prompt feature should use the new trigger criteria.
-     */
-    var newReviewPromptTriggerCriteriaEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_custom_review_prompt_enabled),
-        default = { FxNimbus.features.customReviewPrompt.value().enabled },
-    )
-
-    /**
-     * Indicates if the custom review prompt UI should be enabled.
-     */
-    var customReviewPromptUiEnabled by booleanPreference(
-        appContext.getPreferenceKey(R.string.pref_key_custom_review_prompt_ui_enabled),
-        default = { FxNimbus.features.customReviewPromptUi.value().enabled },
     )
 
     var lastCfrShownTimeInMillis by longPreference(

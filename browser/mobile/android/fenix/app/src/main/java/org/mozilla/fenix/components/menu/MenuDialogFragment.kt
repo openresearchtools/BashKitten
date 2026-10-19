@@ -802,14 +802,6 @@ class MenuDialogFragment : BottomSheetDialogFragment() {
                                             onWebCompatReporterClick = {
                                                 store.dispatch(MenuAction.Navigate.WebCompatReporter)
                                             },
-                                            onSummarizePageMenuExposed = {
-                                                store.dispatch(
-                                                    MenuAction.OnSummarizationMenuExposed,
-                                                )
-                                            },
-                                            onSummarizePageClick = {
-                                                store.dispatch(MenuAction.Navigate.Summarizer)
-                                            },
                                             onShortcutsMenuClick = {
                                                 if (!isPinned) {
                                                     store.dispatch(MenuAction.AddShortcut)

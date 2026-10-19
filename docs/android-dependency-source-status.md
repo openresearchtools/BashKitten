@@ -1,6 +1,7 @@
 # Android dependency source status — 19 October 2026
 
-Release remains blocked. This record describes source/build evidence, not installed
+Release remains blocked by eight runtime source gaps after the removals and
+source verification below. This record describes source/build evidence, not installed
 browser acceptance, a traffic audit, or a change to the source requirements in the
 frozen native-environments plan (`f71686dcb76402ec43bac3e6a7db8979ef0fb119`).
 
@@ -42,46 +43,83 @@ JAR contains only `META-INF`/Maven descriptors. Their exact POM/module/marker-JA
 bytes are retained and hashed in the same source inventory. The build verifies
 that their selected runtime artifacts are absent or match the reviewed empty
 artifact bytes. An unexpected runtime payload fails, rather than inheriting a
-metadata exemption. The remaining missing-source count is 13 runtime SDKs.
+metadata exemption. At that stage the missing-source count was 13 runtime SDKs. The continuation
+below removes four and establishes corresponding source for Firebase annotations.
+
+## Further product-service removal and Firebase correspondence
+
+The disabled Mozilla page-summary service had a complete MLPA provider, an
+Integrity client, a persistent client UUID, token helpers, a summary fragment,
+shake navigation and debug token controls. Its feature flag was already false
+and its startup warmup was already disabled. The continuation removes these
+service paths, their navigation/action callers and obsolete tests, and removes
+the `lib-integrity-googleplay` / `lib-llm-mlpa` build edges. It also removes the
+unused shake/accelerometer dependencies. Shared local summary preference code
+remains disabled; no replacement service or dummy provider was introduced.
+
+Play Store rating prompts are another upstream product service. Their old
+eligibility middleware could still run without telemetry, so they were not
+assumed unreachable merely from the telemetry switch. The continuation removes
+the controller, prompt UI/binding, trigger actions/state/middleware, obsolete
+preferences/migration, navigation and their tests. It removes the direct review
+and review-ktx dependencies. These removals do not touch browsing, accounts,
+WebAuthn, Firebase push or protected browser-origin checks.
+
+The source corpus now retains 261 original source JARs with exact coordinates
+and SHA-256 pins under `browser/bashkitten/android/sources`. Two Lifecycle
+testing JARs left the runtime graph with the shake module and were removed from
+the current corpus. Their original imports remain recoverable in Git. Staging
+copies only currently resolved dependencies.
+
+`com.google.firebase:firebase-annotations:17.0.0` now has verified corresponding
+public source. Its official [version declaration](https://github.com/firebase/firebase-android-sdk/blob/bcaf4c38b9dcdafcf9ded322d689a0aa18214f7d/firebase-annotations/gradle.properties)
+selects 17.0.0. The later [released-version record](https://github.com/firebase/firebase-android-sdk/blob/8cc3e8157689ebfe55144c3a4575a936c49d0d47/firebase-annotations/gradle.properties)
+confirms 17.0.0 was released. All six annotation classes compile byte-for-byte to
+the published JAR's complete class set using Java 8 source/target and the pinned
+`javax.inject:javax.inject:1` dependency. The original module files, build/version
+metadata, upstream LICENSE and README are materialized in a deterministic source
+snapshot. The existing source inventory records the exact commit, per-file and
+archive hashes, published binary hash and six matching class hashes. Builds
+verify the selected runtime JAR still matches that binary identity. This does
+not invent a release tag or republish decompiled code.
+
+The actual post-removal Gradle graph has 276 Maven coordinates: 268 with
+verified source/metadata coverage and the eight unresolved coordinates below.
+The stage validated all 270 required files (261 source JARs, the annotations
+snapshot, and eight metadata files), including the selected annotations binary
+identity. Release Kotlin/Java compilation succeeds. Exact offline notice coverage
+and all pinned legal-text checksums pass. Both the Gradle stage and the artifact
+collector reject the eight unresolved coordinates; the latter does so before
+signing or copying a candidate. This is a bounded compile/dependency/source
+check, not a full APK build or installed feature/traffic acceptance.
 
 ## Remaining dependency owners
 
-| Owner | Remaining dependencies without collected source |
+| Owner | Dependencies still without verified corresponding source |
 | --- | --- |
-| GeckoView WebAuthn | Play Services FIDO 21.3.0; transitive base/basement 18.10.0 and tasks 18.4.1 |
-| Fenix Play Integrity / Mozilla MLPA | Play Integrity 1.6.0 and shared core-common 2.0.4; shared GMS tasks/basement |
-| Fenix Play review prompts | review and review-ktx 2.0.2; shared core-common/tasks/basement |
-| Fenix Firebase push | cloud-messaging 17.2.0, stats 17.0.2, firebase-annotations 17.0.0, firebase-iid-interop 17.1.0, firebase-measurement-connector 19.0.0; shared GMS dependencies |
+| GeckoView WebAuthn | `com.google.android.gms:play-services-fido:21.3.0` |
+| Shared WebAuthn/push dependencies | `com.google.android.gms:play-services-base:18.10.0`, `com.google.android.gms:play-services-basement:18.10.0`, `com.google.android.gms:play-services-tasks:18.4.1` |
+| Firebase push | `com.google.android.gms:play-services-cloud-messaging:17.2.0`, `com.google.android.gms:play-services-stats:17.0.2` |
+| Firebase Messaging's optional IID/analytics interfaces | `com.google.firebase:firebase-iid-interop:17.1.0`, `com.google.firebase:firebase-measurement-connector:19.0.0` |
 
-The Integrity warmup is disabled in `FenixApplication`, but its concrete client is
-still referenced by `Components`, the Mozilla MLPA provider, `ClientUUID` and
-upstream debug controls. Removing only its Gradle line leaves uncompilable paths.
-Those unrequested product paths still require a focused removal with their
-callers; this change does not claim they were removed. Firebase's dependencies
-also serve WebPush, so removing them requires a separate functional trace, not a
-classification of every push dependency as analytics.
+The six GMS libraries are in the proprietary Play Services family. The two
+remaining Firebase AARs declare the Android SDK License in their exact published
+POMs; the official Firebase repository has no corresponding module or path
+history for either. Its README excludes Analytics from its open SDK coverage.
+The IID AAR contains two interface classes, and the measurement connector AAR
+contains four interface/data classes. They are real class payloads, not code-free
+BOMs, and no verified official matching source publication was found. This is a
+bounded finding about these versions, not a claim that every Firebase SDK is
+closed.
 
-The 263 matching source JARs are now materialized under
-`browser/bashkitten/android/sources/archives` with exact coordinates and SHA-256
-pins in that directory's `sources.json`. Each JAR matches the original candidate
-source archive's recorded hash. The same inventory owns the six metadata-only
-coordinates and their eight descriptor/marker files. Source staging consumes
-these committed bytes; it no longer downloads source JARs during the build.
-Existing full source notices and the separately validated offline Maven notice
-inventory remain retained. This does not turn the 13 missing SDK sources into
-available source or claim an upstream Git revision absent from the release JAR.
-
-A failed source-JAR query establishes a missing verified input, not that every
-upstream implementation is necessarily unavailable. The six GMS libraries are
-part of the proprietary Play Services family. No matching source distribution
-was found for the retained Play Core/Integrity/review coordinates in the inspected
-Maven publication. Firebase needs a separate source correspondence check:
-its [official source repository](https://github.com/firebase/firebase-android-sdk)
-contains `firebase-annotations`, and historical version metadata records 17.0.0;
-that source has not yet been verified against the shipped 17.0.0 artifact. The
-current repository has no `firebase-iid-interop` or `firebase-measurement-connector`
-module directory. Their missing JARs are not evidence of a verified matching
-historical source revision. None of these three is marked source-complete here.
+The pinned public `firebase-messaging:25.0.2` source directly names both types:
+`FirebaseMessagingRegistrar` resolves the optional IID interface and constructor
+signatures retain it; `FirebaseMessaging` and `MessagingAnalytics` reference the
+analytics connector. Excluding the AARs alone could break class loading, so this
+change preserves the functional push graph. Building a narrowly adapted
+Firebase Messaging source module without those optional integrations would
+require a separate source/build/FCM acceptance change. It would not supply the
+six GMS sources or replace their WebAuthn and push behavior.
 
 ## WebAuthn compatibility boundary
 

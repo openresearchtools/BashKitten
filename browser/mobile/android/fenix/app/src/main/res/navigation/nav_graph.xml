@@ -209,9 +209,6 @@
         app:popUpToInclusive="true"
         app:destination="@+id/unlockPrivateTabsFragment"/>
     <action
-        android:id="@+id/action_global_customReviewPromptDialogFragment"
-        app:destination="@id/customReviewPromptDialogFragment" />
-    <action
         android:id="@+id/action_global_to_installedAddonDetailsFragment"
         app:destination="@id/installedAddonDetailsFragment" />
     <action
@@ -429,9 +426,6 @@
         <action
             android:id="@+id/action_browserFragment_to_webCompatReporterFragment"
             app:destination="@id/webCompatReporterFragment" />
-        <action
-            android:id="@+id/action_browserFragment_to_summarizationFragment"
-            app:destination="@id/summarizationFragment" />
         <action
             android:id="@+id/action_browserFragment_to_storiesFragment"
             app:destination="@id/storiesFragment"
@@ -1767,16 +1761,6 @@
             app:destination="@id/translations_settings_graph" />
     </dialog>
 
-    <dialog
-        android:id="@+id/summarizationFragment"
-        android:name="org.mozilla.fenix.summarization.SummarizationFragment">
-        <argument
-            android:name="fromShake"
-            android:defaultValue="false"
-            app:nullable="false"
-            app:argType="boolean" />
-    </dialog>
-
     <fragment
         android:id="@+id/pageSummariesSettingsFragment"
         android:name="org.mozilla.fenix.settings.pagesummaries.PageSummariesSettingsFragment" />
@@ -1904,9 +1888,6 @@
                 android:id="@+id/action_menuDialogFragment_to_translationsDialogFragment"
                 app:destination="@id/translationsDialogFragment" />
             <action
-                android:id="@+id/action_menuDialogFragment_to_summarizationFragment"
-                app:destination="@id/summarizationFragment" />
-            <action
                 android:id="@+id/action_menuDialogFragment_to_createShortcutFragment"
                 app:destination="@id/createShortcutFragment" />
             <action
@@ -2015,7 +1996,4 @@
             app:argType="string" />
     </dialog>
 
-    <dialog
-        android:id="@+id/customReviewPromptDialogFragment"
-        android:name="org.mozilla.fenix.reviewprompt.CustomReviewPromptBottomSheetFragment" />
 </navigation>
