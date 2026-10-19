@@ -82,3 +82,31 @@ Evidence and fixtures are outside release inputs at
 Installed candidate/package reconciliation, real provider/OAuth behavior,
 notifications/calls/questions/subagents and responsive full browser flows remain
 required for combined acceptance.
+
+## Bundled complete-file extension
+
+`agent/pi/full-read.ts` embeds the supplied 119-line extension, with the tool
+renamed consistently to `full-read` and the companion `compact_context` retained.
+The existing Pi package manifest and Linux/Termux staging include it unchanged;
+there is no runtime dependency on the external prototype directory. The tool
+contract and approximate admission limits are recorded in `docs/pi-tools.md`.
+
+The supplied deterministic SDK/RPC checks pass against the final bundled file
+with Node 24.22.0 and Pi 1.3.0. They cover complete text beyond 50 KiB/2,000 lines,
+same-tool and mixed batch rejection, oversized/binary/invalid UTF-8 inputs,
+insufficient context and model-specific compaction reserves, successful
+compaction/automatic continuation, provider failure and Stop. RPC verification
+waits through successful compaction and the resumed run's final settlement.
+The existing private-profile/package check discovers both exact tool names as
+model-only, with no unexpected extension errors and standalone settings intact.
+Linux and Termux curation retain the same source SHA256:
+`903cd3f1ef5af190e7dccb8d65fed47447a0c2fb427852d40a28367133db5014`.
+
+`full-read-sdk-rpc.log`, `full-read-package-rpc-result.json` and
+`full-read-staging-result.json` are in the external evidence directory above.
+The earlier prototype's real 500k-context Pi 1.3.0 RPC evidence remains unchanged
+under `/run/media/user/Data/pi-full-read/live-runs/2026-10-19T20-55-22.948Z/`;
+its historical tool name differs. This integration rerun makes no paid-provider
+requests. Installed Android/Linux discovery and a real full-file call remain
+part of combined candidate acceptance; these component checks do not establish
+that UI flow.
