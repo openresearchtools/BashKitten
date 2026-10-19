@@ -34,6 +34,14 @@ continuation; BashKitten remains the existing UI/RPC client. Do not add separate
 compaction, provider or UI machinery. Ship the source through existing packaging,
 without dependence on the prototype directory or its test fixtures/live logs.
 
+Latest 19 October chat-header correction: show the working folder followed by
+the existing usage, compaction, model/runtime and subscription status inline,
+with separators and wrapping only when the available width is exhausted. Remove
+the redundant header Stop/Resume control; retain the composer and backend power
+controls and Files. Display Termux home as `~` and its descendants as `~/…`,
+recognizing the owning backend's canonical and original home spelling without
+changing actual cwd, file access or another backend's paths. Preserve styling.
+
 ## 10–11 October native environments and Display plan
 
 Latest 11 October mobile toolbar/autostart correction: keep the clickable logo
