@@ -16,7 +16,8 @@
   Available package recipes: https://github.com/termux/termux-packages
 - For a visible desktop, read `termux-display`. Configuration → Display and
   `{{PREFIX}}/bin/bashkitten-display` share `{{DISPLAY_COMMAND}}`. Read the
-  launcher's status for the actual DISPLAY before opening GUI applications.
+  launcher's status, then use `termux-use` and `bashkitten-desktop-context` to
+  open GUI applications on its current desktop and session bus.
   Save command changes through the launcher; do not edit the installed skill.
 - For explicitly headless work, choose an unused display and start your own
   `Xvfb :N -screen 0 1280x800x24 -nolisten tcp`, then use `DISPLAY=:N`.
