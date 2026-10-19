@@ -1,9 +1,58 @@
 # Android dependency source status — 19 October 2026
 
-Release remains blocked by eight runtime source gaps after the removals and
-source verification below. This record describes source/build evidence, not installed
-browser acceptance, a traffic audit, or a change to the source requirements in the
-frozen native-environments plan (`f71686dcb76402ec43bac3e6a7db8979ef0fb119`).
+The eight previously unresolved SDK source gaps are removed from the current
+Android dependency graph following the user's explicit authorization to remove
+Google Play Services/Firebase and website WebPush. The source policy in the
+frozen plan (`f71686dcb76402ec43bac3e6a7db8979ef0fb119`) is unchanged. Full
+candidate build, installed acceptance and traffic verification remain required;
+source coverage alone is not a whole-product license or release certification.
+
+## Implemented removal and framework integration
+
+Commit `5cf8cd5475` replaces the GMS-backed Android WebAuthn path with the public
+Android Credential Manager framework. It preserves Gecko's validated website
+origin, client-data hash and original credential JSON, provider trust checks,
+transaction-specific cancellation and actual provider errors. API 31–33 remain
+supported for browsing/passwords but report framework passkeys unsupported.
+API 34+ availability describes the framework, not a guarantee that the user has
+an enabled provider or matching credential. Desktop WebAuthn is unchanged.
+No Google developer registration, provider impersonation or trust bypass is used.
+
+Commit `46d0877c63` removes Fenix Push/FCM/WebPush startup and integration code,
+the Firebase service and manifest/config entries, and their Gradle edges. The
+Android Push API is disabled. Ordinary web notification handling and BashKitten's
+native agent notifications/replies/Callback are retained, as are local password
+storage/save/autofill. The same commit contains the independent call-VAD model
+selection correction; its title alone does not describe all included paths.
+
+The resolved graph has **252 Maven coordinates: 246 source JAR entries and six
+metadata-only entries**, with all **254 staged source/metadata files** present
+and verified. The source stage reports no missing coordinates. All 519 generated
+Maven license records resolve offline. A scan of 195 actual dependency files
+and 32,214 class definitions finds no GMS, Play Services, Firebase or Install
+Referrer class definitions. Open-source Material/AndroidX and legitimate Google
+annotation packages are not treated as proprietary SDKs merely by namespace.
+
+The artifact collector now also rejects forbidden runtime class definitions in
+the actual APK DEX. Its negative check rejects the old `bd393` APK at its first
+GMS class, and its positive checks accept the retained AndroidX/Material and
+annotation classes. This guards against stale build payloads; the new APK itself
+has not yet been built and cannot be claimed to have passed its DEX check.
+
+Production Java and generated JNI checks, combined Fenix Kotlin/Java compilation,
+three native WebAuthn translation-unit compilations and 49 controlled regression
+scenarios with 481 assertions passed. Installed provider create/get/cancel,
+local password save/autofill, browsing and native notification/Callback regression
+checks remain for the complete rebuilt candidate. Framework evidence and these
+limitations are retained in
+`verification/android-framework-webauthn-20261019/README.md` under BashkittenBuild.
+
+## Historical investigation before the authorized removal
+
+The sections below preserve the earlier candidate measurements, source gaps and
+compatibility research. Their references to remaining SDKs or unimplemented
+replacement paths describe that earlier state, superseded by the implementation
+and explicit authorization recorded above; they do not describe current source.
 
 ## Candidate evidence and scoped removal
 

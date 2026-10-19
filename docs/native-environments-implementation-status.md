@@ -5,6 +5,62 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Release refresh and continued installed checks — 19 October 2026, later evening
+
+The user's later authorization removes the remaining Android Google Play
+Services/Firebase runtime SDKs and website WebPush while preserving local saved
+passwords/autofill, native agent notifications/replies and Callback. Android
+passkeys use the public framework with its real provider trust/error behavior;
+desktop WebAuthn is unchanged. The dated plan amendment supersedes the earlier
+unresolved source-policy discussion below. This batch is being integrated with
+the requested official component release refresh; it is not yet an installed
+replacement for `bd393` or a whole-product acceptance claim.
+
+Further real-Xorg `bd393` flows passed in the previously created owned container.
+Project rename, chat rename, ungrouping and moving into a different project
+preserved the existing Pi session identity and original cwd. Chat rename added
+exactly one stock Pi `session_info` entry; subsequent regrouping left its bytes
+unchanged. Canceling project creation created nothing. A new chat under the
+second project inherited `/home/user` without another folder prompt. Asked to
+find the earlier renamed/regrouped chat, Pi discovered the `chats` skill/tool,
+listed and read that history and correctly reported its original cwd and README
+contents. The earlier JSONL remained byte-identical after lookup. The receipt
+now has 11 scoped cases and 59 checked evidence references:
+`Bashkitten-Acceptance/xorg-fresh-container-bd393-20261019/acceptance.json`.
+Duplicate titles, unavailable remotes, fork/queue identity and other backends
+remain separate cases.
+
+Android `bd393` Callback follow-up passed six scoped cases through the installed
+app: local diversion without ringing, voicemail listen and reviewed reply to
+the original Pi chat, unanswered ringing saved once, clearing the mailbox
+without changing Pi history or deduplication, Messages-mode finals without
+ringing, and user call-in/reply retaining Messages mode. Unanswered delivery
+settled after 45.14 seconds and did not ring again during the subsequent
+20.99-second observation. All temporary permissions and phone settings were
+restored; models and LocalAI/Pi configuration were unchanged. Evidence:
+`Bashkitten-Acceptance/voicemail6520-bd393-20261019/result.json`.
+This found a real presentation defect: identical dictated text from different
+channels can label a later call reply as a voicemail reply. Dispatch and saved
+mode were correct; source-attribution repair and rebuilt acceptance remain
+required. No remote/OEM/Android Auto or full concurrency pass is inferred.
+
+The user's standalone Pi conflict was traced to an old BashKitten package entry
+in its global settings, written at 10:07 UTC on 8 October, before private-profile
+isolation commit `b6c435807f` at 10:55 UTC. The installed/current BashKitten
+launcher sets its private `PI_CODING_AGENT_DIR` before SDK loading. Only the
+stale BashKitten registration was removed from this host's standalone settings,
+with a private backup outside repositories; standalone Pillama/accounts/sessions
+were retained. The installed standalone resource loader then loaded its three
+own extensions with zero errors and no BashKitten extension, without changing
+settings. This is a local repair, not an automatic migration of users' profiles.
+
+Runtime updates must also preserve speech integration. `PhoneSpeech.vadFiles`
+now reads the installed runtime's `VAD-SOURCE.json` model path instead of fixing
+the filename to Silero 6.2.0. Production-method filesystem checks cover both
+6.2.0 and 6.2.3 records, malformed/missing records and missing models, with no
+version substitution. Actual newer VAD inference/call acceptance requires the
+daughter CI artifact and rebuilt candidate.
+
 ## Complete-candidate follow-up — 19 October 2026, evening
 
 The complete `bd393bd7ec59eebd3f540072dc9511917520de9c` / 153.4.6 CI
