@@ -130,10 +130,70 @@ async function fileMode(path) {
   return parseInt(output, 16);
 }
 
-async function ensureSocketPathUnused(path) {
-  if (await IOUtils.exists(path)) {
-    throw new Error("BashKitten control socket path already exists");
+// Inspect and probe in the bundled runtime, keeping filesystem/socket work off
+// the UI thread. A refused connection is the only evidence that permits reclaim.
+const SOCKET_FILE_SCRIPT = String.raw`
+const fs = require("node:fs"), net = require("node:net"), path = require("node:path");
+const [action, file, expected] = process.argv.slice(1);
+const identity = stat => [stat.dev, stat.ino, stat.uid, stat.mode, stat.ctimeNs].join(":");
+function inspect(file, directory = false) {
+  let stat;
+  try { stat = fs.lstatSync(file, {bigint: true}); }
+  catch (error) { if (!directory && error.code === "ENOENT") return null; throw error; }
+  if (stat.uid !== BigInt(process.getuid()) ||
+      (directory ? !stat.isDirectory() : !stat.isSocket()) ||
+      (stat.mode & 0o777n) !== (directory ? 0o700n : 0o600n)) {
+    throw Error("Unsafe BashKitten control path ownership, type or permissions");
   }
+  return identity(stat);
+}
+async function main() {
+  const parent = path.dirname(file), directory = inspect(parent, true);
+  const current = inspect(file);
+  if (action === "identify") {
+    if (!current) throw Error("BashKitten control socket disappeared");
+    return current;
+  }
+  if (!current) return null;
+  if (action === "prepare") {
+    await new Promise((resolve, reject) => {
+      const socket = net.createConnection(file);
+      const finish = error => { clearTimeout(timer); socket.destroy(); error ? reject(error) : resolve(); };
+      const timer = setTimeout(() => finish(Error("BashKitten control socket probe timed out")), 1000);
+      socket.once("connect", () => finish(Error("BashKitten control socket is already in use")));
+      socket.once("error", error => finish(error.code === "ECONNREFUSED" ? null : error));
+    });
+  } else if (action !== "remove" || current !== expected) {
+    throw Error("BashKitten control socket ownership changed");
+  }
+  // No asynchronous work between the final identity check and unlink. A new
+  // listener winning the subsequent bind race still fails through normal bind.
+  if (inspect(parent, true) !== directory || inspect(file) !== current) {
+    throw Error("BashKitten control socket ownership changed");
+  }
+  fs.unlinkSync(file);
+  return null;
+}
+main().then(value => console.log(JSON.stringify({value})), error => {
+  console.log(JSON.stringify({error: error.message})); process.exitCode = 1;
+});
+`;
+
+async function socketFileOperation(action, path, identity = "") {
+  const process = await Subprocess.call({
+    command: "/usr/lib/bashkitten/node/bin/node",
+    arguments: ["-e", SOCKET_FILE_SCRIPT, action, path, identity], stderr: "stdout",
+  });
+  const timeout = setTimeout(() => { void process.kill(0).catch(console.error); }, 5000);
+  try {
+    let output = "";
+    for (let chunk; (chunk = await process.stdout.readString());) output += chunk;
+    const { exitCode } = await process.wait();
+    let result;
+    try { result = JSON.parse(output); } catch {}
+    if (exitCode || !result || result.error) throw Error(result?.error || "Could not inspect the BashKitten control socket");
+    return result.value;
+  } finally { clearTimeout(timeout); }
 }
 
 /** Handles one native command connection. */
@@ -300,7 +360,7 @@ export const BashKittenControlStartup = {
 
   async listen() {
     await prepareDirectory(PathUtils.parent(this.path), !this.customPath);
-    await ensureSocketPathUnused(this.path);
+    await socketFileOperation("prepare", this.path);
     const socketFile = new LocalFile(this.path);
     this.server = new UnixServerSocket(socketFile, 0o600, 16);
     this.ownsSocket = true;
@@ -315,13 +375,7 @@ export const BashKittenControlStartup = {
       onStopListening() {},
     });
     await IOUtils.setPermissions(this.path, 0o600, false);
-    const mode = await fileMode(this.path);
-    if (
-      (mode & 0o170000) !== 0o140000 ||
-      (mode & 0o777) !== 0o600
-    ) {
-      throw new Error("Insecure BashKitten control socket");
-    }
+    this.socketIdentity = await socketFileOperation("identify", this.path);
     return { socketPath: this.path, browserPid: Services.appinfo.processID };
   },
 
@@ -329,15 +383,12 @@ export const BashKittenControlStartup = {
     try {
       this.server?.close();
     } catch {}
-    if (this.path && this.ownsSocket) {
-      try {
-        if (((await fileMode(this.path)) & 0o170000) === 0o140000) {
-          await IOUtils.remove(this.path, { ignoreAbsent: true });
-        }
-      } catch {}
+    if (this.path && this.ownsSocket && this.socketIdentity) {
+      try { await socketFileOperation("remove", this.path, this.socketIdentity); } catch {}
     }
     this.server = null;
     this.ownsSocket = false;
+    this.socketIdentity = null;
   },
 
   async uninit() {
