@@ -3749,3 +3749,64 @@ still uses its BashKitten-owned default; preserve user-selected wallpapers and
 appearance choices. Verify both Termux and Linux container desktops across
 larger, smaller, portrait and landscape viewports. These are user-authorized
 presentation corrections, not installed acceptance claims.
+
+### Android SDK removal with local passwords and framework passkeys — 19 October 2026
+
+The user explicitly chooses to remove website WebPush from Android and remove
+the bundled Google Play Services/Firebase SDK dependencies. This resolves the
+earlier dependency-policy question by changing that browser feature scope; it
+does not grant a proprietary-license/source exception. Do not register the app
+with Google or require the user to do so.
+
+Keep the existing browser password manager: offers to save/update ordinary
+logins, local storage, autofill and native password settings. These do not depend
+on Google Password Manager or Mozilla Sync. Retain standard website WebAuthn
+using the existing Android framework Credential Manager on supported versions,
+with legitimate installed credential providers. Preserve origin/caller identity
+validation, transaction ownership, cancellation and real errors/capability
+results. Provider trust remains provider-specific; Bitwarden's explicit local
+user-trust mechanism is not Google approval and is not an authentication bypass.
+Do not claim an untested provider/site is compatible or expose credentials held
+only by another provider. Keep the application's existing minimum Android
+version; platforms without the retained framework path must report unsupported
+passkey capability honestly while ordinary browsing/passwords continue to work.
+Desktop WebAuthn remains unchanged.
+
+Remove the website push SDK/service/build integration, not merely its preference
+or UI. Do not leave inert Firebase placeholders or ship replacement proprietary
+clients. Preserve BashKitten's native final/question notifications, reply actions,
+Callback and phone services; these are separate from website WebPush. Open-source
+Android platform/AndroidX dependencies are not prohibited merely because Google
+maintains them; they retain the same verified source and license requirements.
+
+Reconcile the actual resolved dependency graph, complete source corpus, notices
+and packaged APK classes. The release gates must reject missing sources and
+stale/unexpected SDK payloads. Compile the combined changes, then verify installed
+password saving/filling, retained provider passkey registration/sign-in/cancel,
+honest unsupported/denied states, absence of website background push and continued
+agent notifications/replies/Callback. This amendment is authorization and required
+coverage, not an assertion that removal or acceptance is already complete.
+
+### Component release refresh and matching security backports — 19 October 2026
+
+The user requests a complete component release check and updates to sources that
+need updating, explicitly including Firefox, Authelia, Caddy and Tor. Include all
+other built/bundled components and their relevant dependency locks/inventories;
+record actual current pins, official available releases, applied updates and any
+remaining compatibility blocker. Reuse the existing supported-line policy,
+exact peeled release commits, materialized source/checksums, full notices and
+named patches. Do not replace the historical pristine imports or frozen adapted
+Phone/Termux:X11/other donor baselines with anonymous modified dumps.
+
+For a Firefox update, compare the corresponding released Tor Browser/Firefox
+lineage and security fixes against the proposed Android base. Carry applicable
+security backports that are not already present, with exact source provenance,
+and verify their applicability rather than assuming equal version labels mean
+equal patches. Preserve BashKitten's existing security and encrypted remote
+boundaries; this does not authorize unrelated Tor Browser feature replacement.
+
+Integrate compatible source/dependency updates with the Android SDK removal in
+the same batched candidate cycle, then repeat the required installed Android,
+Wayland and real-Xorg acceptance. Daughter AI-runtime releases remain built in
+their GitHub Actions, never on the workstation. Updating pins, dispatching builds
+or passing source checks alone does not establish an updated working release.
