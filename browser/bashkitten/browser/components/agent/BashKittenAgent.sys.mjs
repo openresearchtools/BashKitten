@@ -710,6 +710,19 @@ class AgentView {
     this.selection = id; this.remote = null; this.machineId = id;
     this.off = false;
     this.message("Connecting to container", "Opening its protected Agent…");
+    const current = () => epoch === this.selectionEpoch && this.selection === id && !this.win.closed && !DesktopLifetime.quitting;
+    const status = await this.machineLocalControl(id, "status");
+    if (!current()) return;
+    if (["stopped", "off", "error", "failed"].includes(status.web?.status)) {
+      this.off = true;
+      this.message("Container Agent off", status.web.error || "Turn on this container’s Agent to reconnect to its saved chats.", () => this.run(async () => {
+        if (!current()) return;
+        this.message("Starting container Agent", "Connecting to its local service…");
+        await this.machineLocalControl(id, "start");
+        if (current()) await this.selectMachine(id, epoch);
+      }), "Turn on Agent");
+      return;
+    }
     const connection = await connectMachine(id, control, error => {
       if (epoch !== this.selectionEpoch || this.selection !== id || this.off) return;
       void this.disconnectSelected();
@@ -1080,12 +1093,12 @@ class AgentView {
     if (epoch !== this.selectionEpoch || this.off || this.selection) return;
     await this.update(status, { reload: true });
   }
-  message(title, text, action) {
+  message(title, text, action, label = "Set up account") {
     this.state.replaceChildren(html(this.doc, "h2", {}, title), html(this.doc, "p", {}, text));
     this.state.hidden = false;
     this.viewBox.hidden = true;
     if (action) {
-      const button = html(this.doc, "button", { type: "button" }, "Set up account");
+      const button = html(this.doc, "button", { type: "button" }, label);
       button.addEventListener("click", action);
       this.state.append(button);
     }
