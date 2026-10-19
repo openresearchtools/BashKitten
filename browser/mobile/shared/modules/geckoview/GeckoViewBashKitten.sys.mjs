@@ -3,6 +3,7 @@ import { GeckoViewModule } from "resource://gre/modules/GeckoViewModule.sys.mjs"
 import { BashKittenSettings } from "resource://gre/modules/BashKittenSettings.sys.mjs";
 import { BashKittenHost } from "resource://gre/modules/BashKittenHost.sys.mjs";
 import { BashKittenAndroid } from "resource://gre/modules/BashKittenAndroid.sys.mjs";
+import { setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
 const { NetUtil } = ChromeUtils.importESModule("resource://gre/modules/NetUtil.sys.mjs");
 
@@ -343,7 +344,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       throw new Error("Selected authenticated Agent origin required");
     }
     const bootstrap = path === "/api/bootstrap";
-    if (!bootstrap && !/^\/api\/browser-channel\/(open|poll|result|close|bind)$/.test(path)) throw new Error("Unsupported Agent channel endpoint");
+    if (!bootstrap && path !== "/api/logout" && !/^\/api\/browser-channel\/(open|poll|result|close|bind)$/.test(path)) throw new Error("Unsupported Agent channel endpoint");
     if (!bootstrap && (typeof csrf !== "string" || !csrf || /[\r\n]/.test(csrf))) throw new Error("Missing Agent CSRF token");
     const payload = bootstrap ? null : JSON.stringify(body ?? {});
     return this.agentFetch(origin, path, principal, current.cookieJarSettings, payload, csrf, true);
@@ -369,9 +370,14 @@ export class GeckoViewBashKitten extends GeckoViewModule {
       if (csrf) channel.setRequestHeader("X-Bashkitten-Csrf", csrf, false);
     }
     this.agentRequests.add(channel);
+    let deadline;
     try {
       return await new Promise((resolve, reject) => {
         let bytes = "", failure;
+        if (path === "/api/logout") deadline = setTimeout(() => {
+          failure = new Error("Authelia sign-out timed out");
+          channel.cancel(Cr.NS_BINDING_ABORTED);
+        }, 30000);
         const listener = {
           QueryInterface: ChromeUtils.generateQI(["nsIStreamListener", "nsIRequestObserver", "nsIInterfaceRequestor", "nsIChannelEventSink"]),
           getInterface(iid) { return this.QueryInterface(iid); },
@@ -406,7 +412,7 @@ export class GeckoViewBashKitten extends GeckoViewModule {
         try { channel.asyncOpen(listener); }
         catch (error) { reject(error); }
       });
-    } finally { this.agentRequests.delete(channel); }
+    } finally { clearTimeout(deadline); this.agentRequests.delete(channel); }
   }
 
 }

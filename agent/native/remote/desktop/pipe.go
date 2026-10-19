@@ -65,7 +65,7 @@ func Run() error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 	p := &pipe{ctx: ctx, out: json.NewEncoder(os.Stdout), ack: make(chan bool)}
-	requests := make(chan request)
+	requests := make(chan request, 1)
 	inputDone := make(chan error, 1)
 	go func() {
 		decoder := json.NewDecoder(os.Stdin)
@@ -89,6 +89,13 @@ func Run() error {
 					return
 				}
 			} else {
+				if r.Method == "logout" {
+					if c := p.connection.Load(); c != nil {
+						// Closing cancels the outstanding network operation. Keep
+						// reading so its final token-save acknowledgement can drain.
+						go c.Close()
+					}
+				}
 				select {
 				case requests <- r:
 				case <-ctx.Done():
@@ -97,8 +104,8 @@ func Run() error {
 			}
 		}
 	}()
-	// One outstanding browser command; completion is read before its successor.
-	// Token callbacks may arrive from mapped connections between commands.
+	// Ordinary browser commands are serial. Logout may queue while cancelling
+	// the current call; token acknowledgements keep their independent path.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/openresearchtools/bashkitten/remote/bundle"
 	"github.com/openresearchtools/bashkitten/remote/oauth"
@@ -309,10 +310,15 @@ func (c *Client) Logout(ctx context.Context) error {
 	defer c.authMu.Unlock()
 	token := c.token
 	c.token = oauth.Token{}
+	saveErr := c.save(oauth.Token{})
+	// Logout is bounded cleanup, unlike ordinary Tor connections. Erase local
+	// credentials even when the remote revocation endpoint never replies.
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	var revokeErr error
 	if token != (oauth.Token{}) {
 		revokeErr = c.oauth.Revoke(ctx, token)
 	}
 	defer c.http.CloseIdleConnections()
-	return errors.Join(revokeErr, c.save(oauth.Token{}))
+	return errors.Join(revokeErr, saveErr)
 }

@@ -52,6 +52,9 @@ final class SecretStore {
         finally { Arrays.fill(plain, (byte) 0); }
     }
     synchronized void write(JSONObject value) throws Exception {
+        write(value, () -> true);
+    }
+    synchronized void write(JSONObject value, java.util.function.BooleanSupplier current) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
         cipher.init(Cipher.ENCRYPT_MODE, key());
         cipher.updateAAD(alias.getBytes(StandardCharsets.UTF_8));
@@ -59,9 +62,11 @@ final class SecretStore {
         FileOutputStream output = null;
         try {
             byte[] encrypted = cipher.doFinal(plain);
+            if (!current.getAsBoolean()) throw new java.util.concurrent.CancellationException("The saved settings request was cancelled.");
             output = file.startWrite();
             output.write(cipher.getIV());
             output.write(encrypted);
+            if (!current.getAsBoolean()) throw new java.util.concurrent.CancellationException("The saved settings request was cancelled.");
             file.finishWrite(output);
         } catch (Exception error) {
             if (output != null) file.failWrite(output);

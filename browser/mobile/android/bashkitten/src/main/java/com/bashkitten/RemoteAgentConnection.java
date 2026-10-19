@@ -33,6 +33,7 @@ final class RemoteAgentConnection implements AutoCloseable {
     private final CompletableFuture<Void> nativeClosed = new CompletableFuture<>();
     private NativeRemote client;
     private boolean closed;
+    private enum CloseMode { DISCONNECT, FORGET, LOGOUT }
 
     interface Work { JSONObject run(NativeRemote client) throws Exception; }
     void request(Work work, Consumer<JSONObject> done, Consumer<String> failure) {
@@ -156,35 +157,51 @@ final class RemoteAgentConnection implements AutoCloseable {
     synchronized boolean isClosed() { return closed; }
 
     /** Completion runs on the close worker so token deletion can finish there. */
-    void forget(Runnable done, Consumer<String> failure) { close(true, done, failure); }
+    void forget(Runnable done, Consumer<String> failure) { close(CloseMode.FORGET, null, done, failure); }
 
-    @Override public void close() { close(false, null, null); }
+    void logout(CompletableFuture<Void> cookieLogout, Runnable done, Consumer<String> failure) {
+        close(CloseMode.LOGOUT, cookieLogout, done, failure);
+    }
 
-    private void close(boolean forget, Runnable done, Consumer<String> failure) {
+    @Override public void close() { close(CloseMode.DISCONNECT, null, null, null); }
+
+    private void close(CloseMode mode, CompletableFuture<Void> cookieLogout, Runnable done, Consumer<String> failure) {
         NativeRemote current;
         synchronized (this) {
             if (closed) {
-                if (forget) new Thread(() -> {
+                if (mode == CloseMode.FORGET) new Thread(() -> {
                     nativeClosed.join(); done.run();
                 }, "agent-remote-forget").start();
+                else if (mode == CloseMode.LOGOUT) failure.accept("Remote connection closed before sign-out.");
                 return;
             }
             closed = true; current = client; client = null;
         }
         // Revoke immediately; drain sockets on the close worker before releasing
         // the native port, without blocking Android's main thread.
-        route.revoke();
+        // The cookie logout uses this captured Agent route. Keep it only until
+        // that request settles; the closed owner already rejects other work.
+        if (cookieLogout == null) route.revoke();
         identity = null; ready = false; awaitingCallback = false;
         // Go's TLS close can write close_notify. It must not block Android's
         // main thread or queue behind the request that shutdown must cancel.
         new Thread(() -> {
             try {
+                if (cookieLogout != null) { cookieLogout.join(); route.revoke(); }
                 route.close();
                 if (previousClosed != null) previousClosed.join();
-                if (forget) {
+                if (mode == CloseMode.FORGET) {
                     try { if (current != null) current.forget(); }
                     catch (Exception error) {
                         main.post(() -> failure.accept("The connection could not be forgotten. Retry removal."));
+                        return;
+                    }
+                } else if (mode == CloseMode.LOGOUT) {
+                    try {
+                        if (current == null) throw new IllegalStateException("Remote connection closed before sign-out.");
+                        current.logout();
+                    } catch (Exception error) {
+                        main.post(() -> failure.accept(error.getMessage() == null ? "Remote sign-out failed." : error.getMessage()));
                         return;
                     }
                 } else if (current != null) current.close();
