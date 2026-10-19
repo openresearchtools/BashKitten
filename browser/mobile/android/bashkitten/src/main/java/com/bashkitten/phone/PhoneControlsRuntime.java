@@ -19,6 +19,7 @@ public final class PhoneControlsRuntime {
     }
     final Context context; public final PhonePolicy policy;
     private final PhoneGrantRegistry grants; private final ExecutorService io=Executors.newCachedThreadPool();
+    private final ExecutorService lifecycle=Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService deadlines=Executors.newSingleThreadScheduledExecutor();
     private final Map<Socket,ActiveRequest> active=new ConcurrentHashMap<>();
     private final Set<Socket> connections=ConcurrentHashMap.newKeySet();
@@ -27,11 +28,26 @@ public final class PhoneControlsRuntime {
     private volatile Socket ownerWatch;
     private PhoneControlsRuntime(Context context) { this.context=context;policy=new PhonePolicy(context);grants=new PhoneGrantRegistry(policy);io.execute(()->PhoneFiles.discardPrevious(context)); }
     /** Set by the native controller, delivering the link through Termux's stdin bridge. */
-    public void setOwnerLinkListener(Consumer<JSONObject> callback) { ownerChanged=callback; reconcile(); }
+    public void setOwnerLinkListener(Consumer<JSONObject> callback) {
+        ownerChanged=callback;
+        lifecycle.execute(() -> {
+            synchronized(this) {
+                if(ownerChanged!=callback)return;
+                if(!policy.master())return;
+                try {
+                    if(listener==null){start();policy.reconcileServices();}
+                    // Android services can create the listener before Local is
+                    // verified. Publish that existing link on late registration,
+                    // without revoking grants on every ordinary status refresh.
+                    else if(!connected())callback.accept(ownerLink());
+                } catch(Exception error) { stop(); }
+            }
+        });
+    }
     public boolean connected(){return listener!=null&&ownerWatch!=null&&!ownerWatch.isClosed();}
     void background(Runnable task){io.execute(task);}
-    public void disconnectOwner() { io.execute(() -> { stop(); }); }
-    public void reconcile() { io.execute(() -> {
+    public void disconnectOwner() { ownerChanged=null; lifecycle.execute(() -> { stop(); }); }
+    public void reconcile() { lifecycle.execute(() -> {
         synchronized(this) {
             grants.clear(); PhoneFiles.clearShares(); cancelRequests(null);
             for(Socket socket:connections) if(socket!=ownerWatch) try { socket.close(); } catch(IOException ignored) { }

@@ -67,6 +67,7 @@ public final class AgentRuntime {
     private final Map<String, String> remoteLoginAddresses = new HashMap<>();
     private int backgroundOperation;
     private boolean backgroundStartupPending;
+    private Object phoneControlsRequest;
     private final Set<String> firstRunAIPresented = new HashSet<>();
 
     AgentRuntime(BrowserApp app) {
@@ -142,7 +143,24 @@ public final class AgentRuntime {
             if (selected.equals("local")) turnOn();
             else if (localSetupReady()) startBackgroundLocal();
             else startupFailed("local", "Complete Local setup before starting it automatically.");
-        } else changed();
+        } else {
+            // Termux work survives an Android browser restart. Autostart Off
+            // forbids starting Local, but an already running, requested owner
+            // still needs its private Phone link restored in this process.
+            if (localControlRequested && localSetupReady()) {
+                final int generation = backgroundOperation;
+                final String installation = termux.installationId();
+                command("status", new JSONObject(), value -> {
+                    if (!currentPhoneOwner(generation, installation)) return;
+                    JSONObject web = value.optJSONObject("web");
+                    if (web == null || !web.optString("status").equals("running")) return;
+                    stored(() -> { verifyLocalStatus(web); return true; }, ignored -> {
+                        if (currentPhoneOwner(generation, installation)) connectPhoneControls();
+                    }, message -> { if (currentPhoneOwner(generation, installation)) startupFailed("local", message); });
+                }, message -> { if (currentPhoneOwner(generation, installation)) startupFailed("local", message); });
+            }
+            changed();
+        }
         if (localSetupReady()) startBackgroundServices();
         phoneVoice.restoreStartup().whenComplete((ignored, error) -> app.main.post(() -> {
             if (error != null) startupFailed("telephone", error.getMessage());
@@ -186,7 +204,11 @@ public final class AgentRuntime {
             recordLocalControl(true);
             command("start", new JSONObject(), value -> {
                 if (generation != backgroundOperation || !localSetupReady()) return;
-                connectPhoneControls(); phoneVoice.ready(); startupErrors.remove("local"); changed();
+                final String installation = termux.installationId();
+                stored(() -> { verifyLocalStatus(value.getJSONObject("web")); return true; }, ignored -> {
+                    if (!currentPhoneOwner(generation, installation)) return;
+                    connectPhoneControls(); phoneVoice.ready(); startupErrors.remove("local"); changed();
+                }, message -> { if (currentPhoneOwner(generation, installation)) startupFailed("local", message); });
             }, message -> { if (generation == backgroundOperation) startupFailed("local", message); });
         } catch (Exception error) { startupFailed("local", error.getMessage()); }
     }
@@ -337,18 +359,38 @@ public final class AgentRuntime {
             recordLocalControl(true);
             command("start", new JSONObject(), result -> {
                 if (generation != operation || !desired) return;
-                connectPhoneControls(); phoneVoice.ready();
+                phoneVoice.ready();
                 busy = false; acceptStatus(result); poll();
             }, message -> { if (generation == operation) setup(message); });
         }, message -> { if (generation == operation) setup("connection", message); });
     }
     private void connectPhoneControls() {
-        PhoneControlsRuntime.get(app).setOwnerLinkListener(link -> {
+        final int generation = backgroundOperation;
+        final String installation = termux.installationId();
+        if (!currentPhoneOwner(generation, installation)) return;
+        final PhoneControlsRuntime controls = PhoneControlsRuntime.get(app);
+        controls.setOwnerLinkListener(link -> {
             app.main.post(() -> {
-                if (!localControlRequested || !termux.permissionGranted()) { PhoneControlsRuntime.get(app).disconnectOwner(); return; }
-                command("phone-control-connect", link, ignored -> {}, ignored -> PhoneControlsRuntime.get(app).disconnectOwner());
+                if (!currentPhoneOwner(generation, installation) || !controls.policy.master()
+                        || controls.connected() || phoneControlsRequest != null) return;
+                final Object request = new Object(); phoneControlsRequest = request;
+                command("phone-control-connect", link, ignored -> {
+                    if (phoneControlsRequest == request) phoneControlsRequest = null;
+                }, message -> {
+                    if (phoneControlsRequest != request) return;
+                    phoneControlsRequest = null;
+                    if (currentPhoneOwner(generation, installation)) controls.disconnectOwner();
+                });
             });
         });
+    }
+    private boolean currentPhoneOwner(int generation, String installation) {
+        return generation == backgroundOperation && localControlRequested && localSetupReady()
+            && installation.equals(termux.installationId());
+    }
+    private void disconnectPhoneControls() {
+        phoneControlsRequest = null;
+        PhoneControlsRuntime.get(app).disconnectOwner();
     }
     private void resetLocalSetup(Runnable done) {
         resetLocalConnection(() -> {
@@ -358,7 +400,8 @@ public final class AgentRuntime {
         });
     }
     private void resetLocalConnection(Runnable done) {
-        PhoneControlsRuntime.get(app).disconnectOwner();
+        backgroundOperation++;
+        disconnectPhoneControls();
         phoneVoice.localStopped();
         final int generation = operation;
         stored(() -> {
@@ -411,7 +454,7 @@ public final class AgentRuntime {
     public void turnOff() {
         if (!selected.equals("local")) { disconnectRemote(selected); return; }
         backgroundOperation++;
-        PhoneControlsRuntime.get(app).disconnectOwner();
+        disconnectPhoneControls();
         phoneVoice.localStopped();
         if (state.equals("stopping")) return;
         boolean termuxInstalled = termux.installed();
@@ -467,7 +510,7 @@ public final class AgentRuntime {
         stopBackgroundLocal(failure);
     }
     private void stopBackgroundLocal(Consumer<String> failure) {
-        PhoneControlsRuntime.get(app).disconnectOwner();
+        disconnectPhoneControls();
         phoneVoice.localStopped();
         command("stop", new JSONObject(), value -> {
             JSONObject web = value.optJSONObject("web");
@@ -687,6 +730,7 @@ public final class AgentRuntime {
                 throw new IllegalStateException("Update BashKitten packages in Termux to use account-free Local.");
             }
             configure(endpoint, identity, false, 0);
+            connectPhoneControls();
             busy = false; changed();
             presentFirstRunAI();
         } catch (Exception exception) { fail(exception.getMessage() == null ? "The service identity could not be verified." : exception.getMessage()); }
