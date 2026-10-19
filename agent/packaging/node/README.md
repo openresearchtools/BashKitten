@@ -25,24 +25,32 @@ this input does not claim to contain LLVM's entire source repository.
 
 ## Pins and provenance
 
-Reviewed 8 October 2026. Linux uses Node 24.21.0 / npm 11.19.0 from nodejs.org
+Reviewed 19 October 2026. Linux uses Node 24.22.0 / npm 11.19.1 from nodejs.org
 with the published `SHASUMS256.txt`. Termux currently publishes Node 24.18.0-1 /
-npm 11.20.0; its native Android patches and dependency builds are retained from
+npm 11.21.1; its native Android patches and dependency builds are retained from
 `termux/termux-packages` commit
-`9f94db4fcd0a9029079b27ffd253e5d80c4caaa8`. The locked package indexes were checked
+`f3b242999b604dab33639c8211c3b461aad79dc9`. The locked package indexes were checked
 against Termux's signed InRelease, verified using the upstream automatic-build
 key fingerprint `CC72CF8BA7DBFA0182877D045A897D96E57CF20C`. Upstream package,
 source and recipe URLs, versions, index hashes and SHA256 hashes are in
 `lock.json`. A newer official Linux patch version is not represented as a
-Termux build before Termux publishes it.
+Termux build before Termux publishes it. The Linux release tag peels to
+`f14cd3aa7bf9ca8df2cc5b8bb14beb0f335b1d93`; its Node module ABI remains 137.
+The Termux dependency refresh includes SQLite 3.54.1. Its current signed indexes
+and InRelease digest are recorded in the lock. The separately published npm
+11.21.1 distribution is also retained in the source inventory, including its
+vendored dependencies, full notices and release commit
+`1e39046cfae5a28c06e048403199c35458133ff3`.
 
-On 17 October 2026 the primary Termux pool had removed the pinned npm 11.20.0
+On 17 October 2026 the primary Termux pool had removed the then-pinned npm 11.20.0
 and SQLite 3.53.4 downloads. Their fixed URLs now use the NYIST mirror listed by
 [Termux's mirror inventory](https://github.com/termux/termux-tools/blob/05c857ee9af84fb762efba3042cc9383ad1bacab/mirrors/chinese_mainland/mirror.nyist.edu.cn).
 All three downloaded files (npm `all`, SQLite `aarch64` and `x86_64`) matched
 the original signed-index SHA256 pins and package identities. Versions, hashes,
-source archives, recipes and license inputs are unchanged. The builder uses
-only each committed URL and still fails on download or hash errors.
+source archives, recipes and license inputs were unchanged in that repair.
+The 19 October release refresh replaces those pins with the verified current
+primary-pool packages. The builder uses only each committed URL and still fails
+on download or hash errors.
 
 The Android adaptation only selects Node's recursive ELF dependency closure
 and sets each object's relative RUNPATH with 16 KiB alignment. The Node ELF
