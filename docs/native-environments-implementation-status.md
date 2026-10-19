@@ -50,6 +50,27 @@ Off; the explicit action starts only its Agent, without restarting the container
 or enabling host Local. Syntax/diff checks passed and the fix is pushed;
 installed acceptance belongs to the next combined candidate.
 
+The private Intel Wayland container's XFCE preference tests resumed after the
+reboot. Light, window management Off and the selected wallpaper survived recovery.
+The actual guest portal reported Light, then Dark after restoring that choice in
+the UI. Turning window management On maximized the existing normal Terminal
+within the guest workarea without restarting it. The original OS, toolkit and
+wallpaper settings were restored through normal controls and exactly match the
+saved baseline; the centered logo again has a uniform background. This is scoped
+mixed-component evidence, not complete desktop/modal/split or Android acceptance.
+Receipt: `verification/xfce-settings-20261018/continuation-receipt-20261019.json`.
+
+The real-Xorg host Local AI UI successfully checked the saved Qwen3.5-4B model
+in CPU mode and reported **Check passed. Model unloaded.** Process observation
+confirmed that the temporary router, model child and directory disappeared while
+the original normal router stayed alive. A second check was cancelled through
+**Stop load check**; the UI reported cleanup and the final process/directory
+snapshot matched the original baseline. Both saved configuration hashes were
+unchanged. These installed checks use the existing mixed candidate; they do not
+establish responsiveness during loading, GPU/Android behavior or the complete
+153.4.6 candidate. Evidence:
+`Bashkitten-Acceptance/xorg-model-check-20261019/acceptance.json`.
+
 GitHub preparation run `39302677649` prepared version **153.4.6** at exact
 `bd393bd7ec59eebd3f540072dc9511917520de9c`, then dispatched full package run
 `39303133963` with all Linux, Android and Termux architectures and the required
