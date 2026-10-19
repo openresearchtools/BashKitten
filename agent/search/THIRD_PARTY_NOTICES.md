@@ -69,3 +69,32 @@ These are component checks, not installed BashKitten acceptance. Installed
 Linux/Android search and PDF flows, arm64 native execution and traffic checks
 remain required against the combined candidate. No helper behavior, SDK,
 telemetry integration or dependency extras are added by this refresh.
+
+19 October 2026 native-source clarification: the official lxml 6.1.3 Linux
+wheels use libxslt **1.1.43 with lxml's backport1 patch**, not pristine 1.1.43.
+The already retained lxml sdist contains `libxslt-1.1.43-backport1.patch`,
+`patch_lxml_deplibs.py` and the applying `buildlibxml.py` recipe. Upstream's
+changelog identifies the backports as fixes for CVE-2025-7424 and CVE-2025-11731.
+The patch applies to our pristine libxslt archive; all six selected Linux wheels
+match their pinned PyPI hashes and contain its new source-document cleanup and
+error-message markers. The full library license remains in the pristine archive.
+
+`third_party/lxml-build-cohort.json` records the peeled lxml release commit,
+archive/member hashes and upstream patch-introduction commit. The release recipe
+explicitly selects patched libxslt 1.1.43 on Linux and 1.1.45 on Windows; the
+inspected upstream sources give no further reason for that choice. We preserve
+the upstream-produced wheel's corresponding sources, without claiming that its
+native libraries are each the latest independent release. The recipe declares
+no patches for libxml2 2.14.6, libiconv 1.18 or zlib 1.3.2. The published sdist's
+Cython build constraint differs from the Git tag; its native-library settings,
+patch and patch applier match, and both recipe-file hashes are recorded.
+
+The same Linux wheels statically include GNU libiconv 1.18 and zlib 1.3.2.
+Their exact archives, checked against the release recipe's SHA-256 values, and
+full licenses are now retained and included in generated offline notices and
+matching source bundles. libiconv's library is LGPL-2.1-or-later; its source also
+contains GPL-3.0-or-later utilities and their full notices. zlib retains its own
+license and included third-party notices. The amd64 native symbols report
+libiconv 0x0112 and zlib 1.3.2. No wheel or runtime executable changes in this
+source-delivery correction; the generated source/notices artifacts must be
+refreshed for the combined candidate.
