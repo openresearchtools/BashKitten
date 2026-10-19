@@ -5,6 +5,64 @@ Requirements baseline: `f71686dcb76402ec43bac3e6a7db8979ef0fb119`, protected tag
 the current plan also records the user's subsequent presentation, lifecycle and
 14 October amendments. This record tracks evidence and does not reduce that combined scope.
 
+## Operation ownership corrections — 20 October 2026
+
+This checkpoint supersedes the earlier in-progress runtime/build statements below.
+It does not claim complete product acceptance or change the frozen requirements.
+
+- `a4e74b5a99` keeps per-machine Autostart exclusion while releasing the global
+  catalogue queue during guest I/O. `263f527355` replaces a verified idle legacy
+  service through the existing update/lifetime owners. Busy work and an actual
+  pre-package CLI request remain pending; current lock waiters do not block the
+  replacement. The private runtime directory is prepared without rewriting a
+  still-running old owner's configuration.
+- `b1bc35ce84` connects the protected Sign out gesture to cookie logout and the
+  existing native OAuth/mapping cleanup on Android and Linux. Cleanup is bounded
+  and reports failures without changing ordinary disconnect behavior. Import
+  cancellation reaches enrollment persistence and selection; cancelled changes
+  are restored within the existing serialized owner before later operations.
+- `62f0f9d2ff` captures each Send/Stop/queue edit's chat and draft before asynchronous
+  work. The existing message endpoint owns worker startup; the duplicate composer
+  resume/subscribe preflight is removed. Completion cannot dispatch to another
+  selected chat or restore attachments there. Draft initialization precedes chat
+  opening I/O, accepted edits/removals settle their matching held draft, and
+  current-view observation is restored when returning during a send. Native
+  logout errors expose explicit Sign in while retaining the actual error.
+
+Bundled Node syntax/whitespace checks, compilation of the four changed production
+Java files against cached Android 37/product dependencies, and native Go package
+builds pass. Independent source reviews traced the actual worker/Pi, native
+logout, enrollment and machine update callers and resolved their concrete
+follow-up findings. These checks are not installed acceptance. Required repeats
+include navigation during stopped-chat startup, failure draft recovery, queued
+edit/remove/Stop across navigation, return-to-chat observation, retained native
+drafts, remote logout with open service mappings, interrupted import, and busy
+versus idle service replacement on the complete candidate.
+
+The user explicitly rejected the additional blocking native source-audit layer
+in the separate MIT AI-runtime daughter repository. Daughter `b6da0ee0` removes
+that layer and the arbitrary library classifier while retaining release pins,
+checksums, sources, full notices and the existing executable/ABI/alignment/VAD
+checks. Its first two runs failed because the workflow still invoked a removed
+source-audit test. `91df28f1133b249dbd08002ae31d2b1aec7cd8ff` removes that stale
+invocation. Replacement all-target, publishing-enabled runs are
+[llama 39337603129](https://github.com/openresearchtools/bashkitten-localai/actions/runs/39337603129)
+and [Whisper 39337605512](https://github.com/openresearchtools/bashkitten-localai/actions/runs/39337605512).
+At the checked checkpoint, both Linux Vulkan llama jobs and all four Vulkan
+Whisper jobs passed; remaining Android llama/CUDA jobs were still building.
+No publication or installed runtime pass is inferred from this state. Browser
+source/license obligations and the CUDA notice boundary remain unchanged.
+
+Premature main run `39336986772` was cancelled; it is not the integrated candidate.
+The existing Linux 153.5 browser producers and separate SSD local native builds
+retain useful compiler work and their actual source identities. Native logout
+changes affect packaged browser and remote-helper inputs, so final candidates
+must use the integrated source and normal incremental/cache comparison rather
+than relabel earlier binaries. Local source/object/cache preparation lives under
+`/home/user/Bashkitten-Acceptance/local-candidates-e6c96a-20261019`; final packaging
+and installed Android/Wayland/real-Xorg acceptance remain pending. All other
+unclosed plan acceptance groups remain required.
+
 ## Inline header and combined-candidate follow-up — 19 October 2026
 
 Later licensing follow-up: the retained Mozilla source audit against pristine
