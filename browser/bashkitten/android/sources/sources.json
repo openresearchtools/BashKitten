@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "reviewed": "2026-10-19",
-  "provenance": "Exact releaseRuntimeClasspath coordinates and matching Gradle SourcesArtifact results from the pinned Maven repositories. Original source JARs are retained byte-for-byte; metadata-only entries are verified against actual selected runtime artifacts. Full licenses are retained by the offline Maven notice inventory. This inventory does not supply or exempt the remaining SDK source gaps.",
+  "provenance": "Exact releaseRuntimeClasspath coordinates and matching versioned source artifacts from the pinned Maven repositories. Original source JARs are retained byte-for-byte; metadata-only entries are verified against actual selected runtime artifacts. Full licenses are retained by the offline Maven notice inventory. Builds reject unknown dependencies or changed inputs.",
   "entries": [
     {
       "component": "androidx.activity:activity-compose:1.13.0",
@@ -1186,197 +1186,19 @@
       "sha256": "d6a6406beed220e9e599f6868daa84409d8f6dfbc5ef16b9fb9e58b54cf1d2fc"
     },
     {
-      "component": "com.google.android.datatransport:transport-api:3.1.0",
-      "kind": "sources",
-      "file": "archives/com.google.android.datatransport-transport-api-3.1.0-sources.jar",
-      "sha256": "824318e829fd853d9a960f9e8c0a0fbaa4025513f6d014e711233b1280fece6d"
-    },
-    {
-      "component": "com.google.android.datatransport:transport-backend-cct:3.1.9",
-      "kind": "sources",
-      "file": "archives/com.google.android.datatransport-transport-backend-cct-3.1.9-sources.jar",
-      "sha256": "b1765f83058a17aa5b235eaabc41d9f2dddcfb081b13aa01c6c949c5a32af7a3"
-    },
-    {
-      "component": "com.google.android.datatransport:transport-runtime:3.1.9",
-      "kind": "sources",
-      "file": "archives/com.google.android.datatransport-transport-runtime-3.1.9-sources.jar",
-      "sha256": "3452470e9034da185e7d4271354baa95706a4f662b660b9c477a4041dd87e4d9"
-    },
-    {
       "component": "com.google.android.material:material:1.14.0",
       "kind": "sources",
       "file": "archives/com.google.android.material-material-1.14.0-sources.jar",
       "sha256": "fde0310c43bdc6a30a12b6e288113b123769ee78de0327df559d992c26974067"
     },
     {
-      "component": "com.google.errorprone:error_prone_annotations:2.26.0",
+      "component": "com.google.errorprone:error_prone_annotations:2.15.0",
       "kind": "sources",
-      "file": "archives/com.google.errorprone-error_prone_annotations-2.26.0-sources.jar",
-      "sha256": "e715b58aff46eda2f099efee941d99e32214bfcf229ab1a0b39adcf344679848"
-    },
-    {
-      "component": "com.google.firebase:firebase-annotations:17.0.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-annotations-17.0.0-bcaf4c38-source.tar.gz",
-      "sha256": "5379bf9febb0a9fe41c8387438e6acd70eb1203df3c02c91a3dc4ae8a8382fcc",
-      "runtimeArtifacts": [
-        {
-          "file": "firebase-annotations-17.0.0.jar",
-          "sha256": "f80305e6f7b5d111278d4df9504f51f7230e06c6457a0fa7c16e236c7613cc71"
-        }
-      ],
+      "file": "archives/com.google.errorprone-error_prone_annotations-2.15.0-sources.jar",
+      "sha256": "c1b58a188fb4eca9ccefbaff21209eb07df87751384e694b908a3df0288bef97",
       "provenance": {
-        "repository": "https://github.com/firebase/firebase-android-sdk",
-        "commit": "bcaf4c38b9dcdafcf9ded322d689a0aa18214f7d",
-        "selection": "Official version=17.0.0 declaration; all six published class bytes reproduced from this module source. No release tag is advertised for this module.",
-        "module": "firebase-annotations",
-        "license": "Apache-2.0",
-        "archive": "Deterministic packaging of unmodified module files plus upstream LICENSE and README.md.",
-        "upstreamFiles": [
-          {
-            "file": "LICENSE",
-            "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
-          },
-          {
-            "file": "README.md",
-            "sha256": "e0b8ae986aafb38044ca4d04cb00513e3c0848ed7576e0ecc9d624406a961e72"
-          },
-          {
-            "file": "firebase-annotations/CHANGELOG.md",
-            "sha256": "62b0a572f5cdeca0294a7e2d37c02b446964b3c3fe41c9c71152ef5b20bf03e5"
-          },
-          {
-            "file": "firebase-annotations/api.txt",
-            "sha256": "8c4391dd4dd4e60821a3530f340216df4451cb86b7efc88014b48ec197118a85"
-          },
-          {
-            "file": "firebase-annotations/firebase-annotations.gradle.kts",
-            "sha256": "dd12f70272853185d83d30d1ea8c880b3d17334c128195ec7d5bd667bec5f124"
-          },
-          {
-            "file": "firebase-annotations/gradle.properties",
-            "sha256": "1821926b6481a28caa9f0ca793ec74db4825bcaa95748362e0dde69dc6a74e7d"
-          },
-          {
-            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/DeferredApi.java",
-            "sha256": "5a0648db97207d5015b9534cb2f46b25134b6e4aa98beac3a297a24bcef0d32e"
-          },
-          {
-            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/PreviewApi.java",
-            "sha256": "6c17ea8ad246703a83f7d834d9a3f3abf80a7e24a68bdc35091ab34aaa2bbf4a"
-          },
-          {
-            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/Background.java",
-            "sha256": "497a3d2055c8af5200a3f7ce9c25267e7df649621587602549dd3d7f71a9ad9d"
-          },
-          {
-            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/Blocking.java",
-            "sha256": "742be97d349c933024730c24c2ef19b02ac9c5f303fd7f9b886455416c36d8c6"
-          },
-          {
-            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/Lightweight.java",
-            "sha256": "dd3b2ef481d3a055832e92379cefb418d9c54d2b259a91b635a9917f125ee5e1"
-          },
-          {
-            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/UiThread.java",
-            "sha256": "9adaa79a4b203ba97b04c98867f2c52bbf018a693105a9d8735dc032cf1278d4"
-          }
-        ],
-        "classCorrespondence": [
-          {
-            "file": "com/google/firebase/annotations/DeferredApi.class",
-            "publishedSha256": "f79c92121eb30d804a7341124c2a3df26d94326928e2254789c24487a35e735c",
-            "compiledSha256": "f79c92121eb30d804a7341124c2a3df26d94326928e2254789c24487a35e735c",
-            "equal": true
-          },
-          {
-            "file": "com/google/firebase/annotations/PreviewApi.class",
-            "publishedSha256": "a837d565203691d9afe59cf1f0e836e7eff1d13877295e0c3fe0d718a884824d",
-            "compiledSha256": "a837d565203691d9afe59cf1f0e836e7eff1d13877295e0c3fe0d718a884824d",
-            "equal": true
-          },
-          {
-            "file": "com/google/firebase/annotations/concurrent/Lightweight.class",
-            "publishedSha256": "156247404bea02bd10070c2fd3c70eb51faca960e1dc3185b65c485449252bec",
-            "compiledSha256": "156247404bea02bd10070c2fd3c70eb51faca960e1dc3185b65c485449252bec",
-            "equal": true
-          },
-          {
-            "file": "com/google/firebase/annotations/concurrent/Blocking.class",
-            "publishedSha256": "abe6679f5bb02941e44feb58aa3dea5e473777101ac365ee11ed03046ca2048b",
-            "compiledSha256": "abe6679f5bb02941e44feb58aa3dea5e473777101ac365ee11ed03046ca2048b",
-            "equal": true
-          },
-          {
-            "file": "com/google/firebase/annotations/concurrent/Background.class",
-            "publishedSha256": "47ee562fda76cd8948be03dde034edc559e87e46157a67e8c7cf8608db86a6ea",
-            "compiledSha256": "47ee562fda76cd8948be03dde034edc559e87e46157a67e8c7cf8608db86a6ea",
-            "equal": true
-          },
-          {
-            "file": "com/google/firebase/annotations/concurrent/UiThread.class",
-            "publishedSha256": "86d60d59f03fb51f6e59def47281b6b3164bddb164d1a638ecf2a8ee42270ed8",
-            "compiledSha256": "86d60d59f03fb51f6e59def47281b6b3164bddb164d1a638ecf2a8ee42270ed8",
-            "equal": true
-          }
-        ],
-        "verification": "OpenJDK javac -source 8 -target 8 with the resolved javax.inject:javax.inject:1. All published .class entries equal the compiled bytes; no extra implementation classes in the runtime JAR."
+        "url": "https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.15.0/error_prone_annotations-2.15.0-sources.jar"
       }
-    },
-    {
-      "component": "com.google.firebase:firebase-common:22.0.1",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-common-22.0.1-sources.jar",
-      "sha256": "c28c9ce7bbe934bd0542a87b1db824c22675b1ce1a0bed773efdb5b643e04706"
-    },
-    {
-      "component": "com.google.firebase:firebase-components:19.0.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-components-19.0.0-sources.jar",
-      "sha256": "afc33cb236aa78b215ed7e7ca579e966482219c9d469b006fbb1f8004babb3f8"
-    },
-    {
-      "component": "com.google.firebase:firebase-datatransport:18.2.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-datatransport-18.2.0-sources.jar",
-      "sha256": "883ae1170f4bab2b7a3eff1f2f7c886404b7c9b5b5ab468885ea2deabfcf0fd4"
-    },
-    {
-      "component": "com.google.firebase:firebase-encoders-json:18.0.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-encoders-json-18.0.0-sources.jar",
-      "sha256": "83b65b5831daae4a3dc7cb3d4bdfd1617135638f2b9947b94f8e2b401e6d6a78"
-    },
-    {
-      "component": "com.google.firebase:firebase-encoders-proto:16.0.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-encoders-proto-16.0.0-sources.jar",
-      "sha256": "0260ddc338e8d993ce9b24c0a9663d4471a6f679e4f61ec1b6aad9d825b2ffab"
-    },
-    {
-      "component": "com.google.firebase:firebase-encoders:17.0.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-encoders-17.0.0-sources.jar",
-      "sha256": "bb00e5b24ad3bd6d81f65838a2470d999f083ddbbc65a9f2369e8b66bdeb73cd"
-    },
-    {
-      "component": "com.google.firebase:firebase-installations-interop:17.1.1",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-installations-interop-17.1.1-sources.jar",
-      "sha256": "7aeb756b9954b9ed730a3f70bbc1b54573a5f1dbea5f5a7b2f5c39c87ea1bb0d"
-    },
-    {
-      "component": "com.google.firebase:firebase-installations:18.0.0",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-installations-18.0.0-sources.jar",
-      "sha256": "bcbaeb00cfd17b75c4bd1e91269a43f74b89276f887b15cec8b26f64a2d9cf62"
-    },
-    {
-      "component": "com.google.firebase:firebase-messaging:25.0.2",
-      "kind": "sources",
-      "file": "archives/com.google.firebase-firebase-messaging-25.0.2-sources.jar",
-      "sha256": "a74bc06379aabcab50961d21137e59f330f845cc4d2c67781afe98029811fb17"
     },
     {
       "component": "com.google.guava:failureaccess:1.0.2",
@@ -1466,12 +1288,6 @@
       "sha256": "ba56a36c95f265d271916ba7351148d07abfa8723a7562af39c6e68832897bab"
     },
     {
-      "component": "javax.inject:javax.inject:1",
-      "kind": "sources",
-      "file": "archives/javax.inject-javax.inject-1-sources.jar",
-      "sha256": "c4b87ee2911c139c3daf498a781967f1eb2e75bc1a8529a2e7b328a15d0e433e"
-    },
-    {
       "component": "net.java.dev.jna:jna:5.18.1",
       "kind": "sources",
       "file": "archives/net.java.dev.jna-jna-5.18.1-sources.jar",
@@ -1512,12 +1328,6 @@
       "runtimeArtifacts": []
     },
     {
-      "component": "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.0",
-      "kind": "sources",
-      "file": "archives/org.jetbrains.kotlin-kotlin-stdlib-jdk7-1.9.0-sources.jar",
-      "sha256": "ea10d3e5e6e695d8a5283cbf116321acae6ba42d0bdd3eda50f7c34a26fa25cb"
-    },
-    {
       "component": "org.jetbrains.kotlin:kotlin-stdlib:2.3.21",
       "kind": "sources",
       "file": "archives/org.jetbrains.kotlin-kotlin-stdlib-2.3.21-sources.jar",
@@ -1552,12 +1362,6 @@
       "kind": "sources",
       "file": "archives/org.jetbrains.kotlinx-kotlinx-coroutines-core-1.11.0-sources.jar",
       "sha256": "42b1e26bc792fc3d8ba702ef5bd166adcd6c8350f377f639fb7d2e01b3366e3e"
-    },
-    {
-      "component": "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.11.0",
-      "kind": "sources",
-      "file": "archives/org.jetbrains.kotlinx-kotlinx-coroutines-play-services-1.11.0-sources.jar",
-      "sha256": "44f6b640fd2661c88b0155816501a4f5624ad366be74abcd0fc93515996223af"
     },
     {
       "component": "org.jetbrains.kotlinx:kotlinx-serialization-bom:1.11.0",

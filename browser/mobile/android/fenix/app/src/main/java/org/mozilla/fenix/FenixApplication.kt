@@ -49,7 +49,6 @@ import mozilla.components.concept.ai.controls.isEnabled
 import mozilla.components.concept.base.crash.Breadcrumb
 import mozilla.components.concept.engine.webextension.WebExtension
 import mozilla.components.concept.engine.webextension.isUnsupported
-import mozilla.components.concept.push.PushProcessor
 import mozilla.components.concept.storage.FrecencyThresholdOption
 import mozilla.components.feature.addons.migration.DefaultSupportedAddonsChecker
 import mozilla.components.feature.addons.update.GlobalAddonDependencyProvider
@@ -124,8 +123,6 @@ import org.mozilla.fenix.perf.ProfilerMarkerFactProcessor
 import org.mozilla.fenix.perf.StartupTimeline
 import org.mozilla.fenix.perf.StorageStatsMetrics
 import org.mozilla.fenix.perf.runBlockingIncrement
-import org.mozilla.fenix.push.PushFxaIntegration
-import org.mozilla.fenix.push.WebPushEngineIntegration
 import org.mozilla.fenix.session.VisibilityLifecycleCallback
 import org.mozilla.fenix.settings.doh.DefaultDohSettingsProvider
 import org.mozilla.fenix.settings.doh.DohSettingsProvider
@@ -366,8 +363,6 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
     private fun setupPostMegazord() {
         setupLeakCanary()
 
-        // BashKitten disables the upstream product service: setupPush()
-
         // BashKitten disables the upstream product service: maybeSetupIPProtection()
 
         GlobalFxSuggestDependencyProvider.initialize(components.fxSuggest.storage)
@@ -590,26 +585,6 @@ open class FenixApplication : Application(), Provider, ThemeProvider, com.bashki
     open fun updateLeakCanaryState(isEnabled: Boolean) {
         // The specific LeakCanarySetup implementation used will be determined based on build variant.
         (LeakCanarySetup as LeakCanarySetupInterface).updateState(isEnabled = isEnabled, components = components)
-    }
-
-    private fun setupPush() {
-        // Sets the PushFeature as the singleton instance for push messages to go to.
-        // We need the push feature setup here to deliver messages in the case where the service
-        // starts up the app first.
-        components.push.feature?.let {
-            logger.info("AutoPushFeature is configured, initializing it...")
-
-            // Install the AutoPush singleton to receive messages.
-            PushProcessor.install(it)
-
-            WebPushEngineIntegration(components.core.engine, it).start()
-
-            // Perform a one-time initialization of the account manager if a message is received.
-            PushFxaIntegration(it, lazy { components.backgroundServices.accountManager }).launch()
-
-            // Initialize the service. This could potentially be done in a coroutine in the future.
-            it.initialize()
-        }
     }
 
     private fun maybeSetupIPProtection() {

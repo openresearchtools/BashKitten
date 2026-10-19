@@ -14,11 +14,6 @@
         android:title="@string/preferences_override_sync_tokenserver"
         android:inputType="textUri"
         app:iconSpaceReserved="false" />
-    <androidx.preference.EditTextPreference
-        android:key="@string/pref_key_override_push_server"
-        android:title="@string/preferences_override_push_server"
-        android:inputType="textUri"
-        app:iconSpaceReserved="false" />
     <androidx.preference.Preference
         android:key="@string/pref_key_sync_debug_quit"
         android:title="@string/preferences_sync_debug_quit_button_title"

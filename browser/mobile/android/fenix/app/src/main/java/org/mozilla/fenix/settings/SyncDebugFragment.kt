@@ -64,10 +64,6 @@ class SyncDebugFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
             pref.setOnBindEditTextListener { it.setSingleLine() }
             pref.onPreferenceChangeListener = preferenceUpdater
         }
-        requirePreference<EditTextPreference>(R.string.pref_key_override_push_server).let { pref ->
-            pref.setOnBindEditTextListener { it.setSingleLine() }
-            pref.onPreferenceChangeListener = preferenceUpdater
-        }
         requirePreference<Preference>(R.string.pref_key_sync_debug_quit).let { pref ->
             pref.onPreferenceClickListener = OnPreferenceClickListener {
                 // Copied from StudiesView. This feels like a dramatic way to
@@ -197,9 +193,6 @@ class SyncDebugFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment
         }
         requirePreference<EditTextPreference>(R.string.pref_key_override_sync_tokenserver).let {
             it.summary = settings.overrideSyncTokenServer.ifEmpty { null }
-        }
-        requirePreference<EditTextPreference>(R.string.pref_key_override_push_server).let {
-            it.summary = settings.overridePushServer.ifEmpty { null }
         }
         requirePreference<Preference>(R.string.pref_key_sync_debug_quit).let { pref ->
             pref.isVisible = hasChanges
