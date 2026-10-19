@@ -140,10 +140,29 @@ GMS behavior. The upstream AndroidX guidance explicitly identifies Google Play
 Services as proprietary: [open-source integration guidance](https://android.googlesource.com/platform/frameworks/support/+/f26f9242406a472b524c2897c6e57f0c482ae188/docs/open_source.md).
 
 No FIDO dependency, origin check, supported Android version or browser security
-path was changed. Preserving the current contract requires corresponding source
-for the retained SDKs or a verified equivalent open implementation; neither has
-been established. A narrow source-policy exception would require explicit user
-authorization. A framework-only design would require an explicit compatibility
-decision plus provider/credential/device acceptance, and cannot be represented
-as preserving all existing functionality. No such exception or reduction is
-implemented here.
+path was changed. Keeping the current functionality and source requirement needs
+corresponding licensed source for the retained SDKs or a verified equivalent open
+implementation; neither has been established. A framework-only design would
+require an explicit compatibility decision plus provider/credential/device
+acceptance, and cannot be represented as preserving all existing functionality.
+
+Project source-policy approval and AGPL/GPL license compatibility are separate
+requirements. The user has not authorized retaining the proprietary SDKs. Even
+an explicit project waiver, binary checksum inventory or full notices would not
+cure incompatible license terms or supply missing copyright permissions.
+[AGPLv3 section 1](https://www.gnu.org/licenses/agpl-3.0.html#section1) defines
+Corresponding Source and the specific System Libraries exclusion;
+[section 10](https://www.gnu.org/licenses/agpl-3.0.html#section10) prohibits
+further restrictions on the rights it grants. Any claimed system-library or
+separate-work basis must be established for the actual components, their terms
+and their integration. This record does not assume that the Google SDKs qualify.
+
+Where a linking exception is needed, valid permission must come from the
+copyright holders of the affected covered code; project approval cannot grant
+an exception for third-party code whose holders have not granted it. The
+[GNU FAQ on incompatible libraries](https://www.gnu.org/licenses/gpl-faq.en.html#GPLIncompatibleLibs)
+explains that distinction. Applicable SDK permissions must also be satisfied.
+No licensing exception, product change or compatibility reduction is implemented
+here. This record does not certify AGPL/GPL compatibility; release remains
+blocked until both the project source requirements and the applicable license
+obligations are satisfied.
