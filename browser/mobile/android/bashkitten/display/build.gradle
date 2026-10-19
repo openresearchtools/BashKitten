@@ -34,6 +34,7 @@ tasks.register('prepareDisplay', Exec) {
     inputs.file 'prepare.py'
     inputs.dir 'patches'
     inputs.dir '../../../../bashkitten/vendor/termux-x11'
+    inputs.dir '../../../../bashkitten/vendor/display-dependencies'
     outputs.dir source
 }
 tasks.named('preBuild').configure { dependsOn 'prepareDisplay' }

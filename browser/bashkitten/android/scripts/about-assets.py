@@ -56,11 +56,22 @@ source_notice('BashKitten Telephony — adapted Phony', phony,
               [root / 'browser/mobile/android/bashkitten/telephony/NOTICE'])
 x11 = root / 'browser/bashkitten/vendor/termux-x11'
 x11_pin = json.loads((x11 / 'source.json').read_text())
+display_spec = importlib.util.spec_from_file_location('display_prepare',
+    root / 'browser/mobile/android/bashkitten/display/prepare.py')
+display_prepare = importlib.util.module_from_spec(display_spec)
+display_spec.loader.exec_module(display_prepare)
+display_dependencies = display_prepare.dependency_sources()
 records.append({'name': 'Termux:X11 — embedded native Display adaptation', 'license': 'GPL-3.0-only and individual subcomponent licenses',
-                'text': json.dumps(x11_pin, indent=2) + '\n\n' + native_source_notices(x11 / 'source/lorie') + '\n\n' + (x11 / 'source/LICENSE').read_text()})
+                'text': json.dumps({**x11_pin, 'dependencies': [display_dependencies.get(d['path'], (None, d))[1]
+                    for d in x11_pin['dependencies']]}, indent=2) + '\n\n'
+                    + native_source_notices(x11 / 'source/lorie/src/main/java') + '\n\n'
+                    + native_source_notices(x11 / 'source/lorie/src/main/cpp/lorie') + '\n\n'
+                    + (x11 / 'source/LICENSE').read_text()})
 for dependency in x11_pin['dependencies']:
+    directory, selected = display_dependencies.get(dependency['path'],
+        (x11 / 'source' / dependency['path'], dependency))
     source_notice('Embedded Display: ' + dependency['path'].rsplit('/', 1)[-1],
-                  x11 / 'source' / dependency['path'], dependency, source_headers=True)
+                  directory, selected, source_headers=True)
 remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
 remote_licenses = remote / 'share/licenses/remote-client'
 remote_modules = json.loads((remote / 'share/metadata/remote-client-go-modules.json').read_text())

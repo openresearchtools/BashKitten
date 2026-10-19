@@ -10,6 +10,24 @@ library and generates its typed preferences; no donor Application, launcher,
 accessibility interceptor or external X11 APK participates in the main manifest.
 The adapted GPL files retain attribution; new BashKitten integration is AGPL.
 
+The 19 October 2026 dependency refresh retains that original import unchanged.
+Separate pristine release sources under `browser/bashkitten/vendor/display-dependencies`
+select libtirpc 1.3.8, libX11 1.8.14 and Xorg server 21.1.25. Their metadata
+records official release URLs, peeled commits, archive hashes, complete source
+inventories and full licenses. `prepare.py` verifies those inventories and copies
+the selected dependencies into build output before applying named adaptations.
+Gradle includes those source directories in its preparation inputs. Android's
+offline About collector uses the same verified selection, including original
+source copyright preambles and full notices for the actual compiled releases.
+
+Patch `0003-release-native-dependencies.patch` removes the donor recipe's obsolete
+`quad_t`/`u_quad_t` macros and Xorg configuration typedefs: libtirpc 1.3.8 supplies
+these types itself. It also reports the selected server version as `12101025`.
+The original libX11/Xorg patches still apply to the new sources. The libtirpc
+release's `INSTALL` symlink points at its maintainer's Automake manual; it is
+retained as a symlink, hashed as link text and never used as a build input.
+The main module and paired loader retain their existing identity and private IPC.
+
 ## Browser host contract
 
 `DisplayTabs.open(Activity, "local")` opens/selects the one Android native tab
