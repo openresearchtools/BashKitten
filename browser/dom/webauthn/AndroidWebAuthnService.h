@@ -5,6 +5,7 @@
 #ifndef mozilla_dom_AndroidWebAuthnService_h_
 #define mozilla_dom_AndroidWebAuthnService_h_
 
+#include "mozilla/Maybe.h"
 #include "mozilla/java/WebAuthnTokenManagerNatives.h"
 #include "nsIWebAuthnService.h"
 
@@ -12,8 +13,7 @@ namespace mozilla {
 
 namespace dom {
 
-// Collected from
-// https://developers.google.com/android/reference/com/google/android/gms/fido/fido2/api/common/ErrorCode
+// WebAuthn DOM errors returned by the Android framework/provider bridge.
 constexpr auto kSecurityError = u"SECURITY_ERR"_ns;
 constexpr auto kConstraintError = u"CONSTRAINT_ERR"_ns;
 constexpr auto kNotSupportedError = u"NOT_SUPPORTED_ERR"_ns;
@@ -77,6 +77,7 @@ class AndroidWebAuthnService final : public nsIWebAuthnService {
 
  private:
   ~AndroidWebAuthnService() = default;
+  Maybe<uint64_t> mTransactionId;
 };
 
 }  // namespace dom

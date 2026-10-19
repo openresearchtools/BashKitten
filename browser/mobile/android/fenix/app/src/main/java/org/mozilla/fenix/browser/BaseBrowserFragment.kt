@@ -124,7 +124,6 @@ import mozilla.components.feature.session.SwipeRefreshFeature
 import mozilla.components.feature.sitepermissions.SitePermissionsFeature
 import mozilla.components.feature.sitepermissions.SitePermissionsLearnMoreUrlProvider
 import mozilla.components.feature.tabs.LastTabFeature
-import mozilla.components.feature.webauthn.WebAuthnFeature
 import mozilla.components.lib.state.ext.consumeFlow
 import mozilla.components.lib.state.ext.consumeFrom
 import mozilla.components.lib.state.ext.flowScoped
@@ -322,7 +321,6 @@ abstract class BaseBrowserFragment :
     private var fullScreenMediaSessionFeature =
         ViewBoundFeatureWrapper<MediaSessionFullscreenFeature>()
     private val searchFeature = ViewBoundFeatureWrapper<SearchFeature>()
-    private val webAuthnFeature = ViewBoundFeatureWrapper<WebAuthnFeature>()
     private val screenOrientationFeature = ViewBoundFeatureWrapper<ScreenOrientationFeature>()
     private val biometricPromptFeature = ViewBoundFeatureWrapper<BiometricPromptFeature>()
     private val crashContentIntegration = ViewBoundFeatureWrapper<CrashContentIntegration>()
@@ -410,12 +408,7 @@ abstract class BaseBrowserFragment :
         binding.engineView.setActivityContext(originalContext)
 
         startForResult = registerForActivityResult { result ->
-            listOf(
-                promptsFeature,
-                webAuthnFeature,
-            ).any {
-                it.onActivityResult(PIN_REQUEST, result.data, result.resultCode)
-            }
+            promptsFeature.onActivityResult(PIN_REQUEST, result.data, result.resultCode)
         }
 
         // DO NOT MOVE ANYTHING BELOW THIS addMarker CALL!
@@ -1290,20 +1283,6 @@ abstract class BaseBrowserFragment :
             view = view,
         )
 
-        // This component feature only works on Fenix when built on Mozilla infrastructure.
-        if (BuildConfig.MOZILLA_OFFICIAL) {
-            webAuthnFeature.set(
-                feature = WebAuthnFeature(
-                    engine = requireComponents.core.engine,
-                    activity = requireActivity(),
-                    exitFullScreen = requireComponents.useCases.sessionUseCases.exitFullscreen::invoke,
-                    currentTab = { store.state.selectedTabId },
-                ),
-                owner = this,
-                view = view,
-            )
-        }
-
         screenOrientationFeature.set(
             feature = ScreenOrientationFeature(
                 engine = requireComponents.core.engine,
@@ -2043,10 +2022,7 @@ abstract class BaseBrowserFragment :
      * Forwards activity results to the [ActivityResultHandler] features.
      */
     override fun onActivityResult(requestCode: Int, data: Intent?, resultCode: Int): Boolean {
-        return listOf(
-            promptsFeature,
-            webAuthnFeature,
-        ).any { it.onActivityResult(requestCode, data, resultCode) }
+        return promptsFeature.onActivityResult(requestCode, data, resultCode)
     }
 
     /**

@@ -15,13 +15,12 @@ import android.credentials.CredentialOption;
 import android.credentials.GetCredentialException;
 import android.credentials.GetCredentialRequest;
 import android.credentials.GetCredentialResponse;
-import android.credentials.PrepareGetCredentialResponse;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.os.OutcomeReceiver;
-import android.util.Log;
+import androidx.annotation.ChecksSdkIntAtLeast;
 import androidx.annotation.UiThread;
-import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,12 +28,9 @@ import org.mozilla.gecko.util.ThreadUtils;
 import org.mozilla.gecko.util.WebAuthnUtils;
 import org.mozilla.geckoview.GeckoResult;
 
-// Credential Manager implementation that is introduced from Android 14.
+// Android 14+ framework Credential Manager implementation.
 public class WebAuthnCredentialManager {
-  private static final String LOGTAG = "WebAuthnCredMan";
-  private static final boolean DEBUG = false;
-
-  // This defines are from androidx.credentials.
+  // Wire keys shared with AndroidX credential providers.
   // https://cs.android.com/androidx/platform/frameworks/support/+/androidx-main:credentials/credentials/src/main/java/androidx/credentials/
   private static final String CM_PREFIX = "androidx.credentials.";
   private static final String TYPE_PUBLIC_KEY_CREDENTIAL = CM_PREFIX + "TYPE_PUBLIC_KEY_CREDENTIAL";
@@ -71,10 +67,6 @@ public class WebAuthnCredentialManager {
   private static Bundle getRequestBundleForMakeCredential(
       final byte[] clientDataHash, final String requestJSON) {
     final Bundle bundle = getRequestBundle(requestJSON, clientDataHash);
-    if (bundle == null) {
-      return null;
-    }
-
     final JSONObject json;
     try {
       json = new JSONObject(requestJSON);
@@ -88,7 +80,7 @@ public class WebAuthnCredentialManager {
     }
 
     final Bundle displayInfoBundle = new Bundle();
-    displayInfoBundle.putCharSequence(BUNDLE_KEY_USER_ID, userField.optString("id"));
+    displayInfoBundle.putCharSequence(BUNDLE_KEY_USER_ID, userField.optString("name"));
     displayInfoBundle.putString(BUNDLE_KEY_USER_DISPLAY_NAME, userField.optString("displayName"));
     bundle.putBundle(BUNDLE_KEY_REQUEST_DISPLAY_INFO, displayInfoBundle);
 
@@ -99,10 +91,6 @@ public class WebAuthnCredentialManager {
   private static Bundle getRequestBundleForGetAssertion(
       final byte[] clientDataHash, final String requestJSON) {
     final Bundle bundle = getRequestBundle(requestJSON, clientDataHash);
-    if (bundle == null) {
-      return null;
-    }
-
     final JSONObject json;
     try {
       json = new JSONObject(requestJSON);
@@ -117,278 +105,246 @@ public class WebAuthnCredentialManager {
     return bundle;
   }
 
+  // Owned exclusively by the Android UI thread. A stale cancel or provider callback
+  // must never finish a successor transaction.
+  private static Request<?> activeRequest;
+
+  private static final class Request<T> {
+    final long transactionId;
+    final GeckoResult<T> result = new GeckoResult<>();
+    final CancellationSignal cancellation = new CancellationSignal();
+    boolean completed;
+
+    Request(final long transactionId) {
+      this.transactionId = transactionId;
+      if (activeRequest != null) {
+        activeRequest.cancel();
+      }
+      activeRequest = this;
+    }
+
+    boolean finish() {
+      ThreadUtils.assertOnUiThread();
+      if (completed) {
+        return false;
+      }
+      completed = true;
+      if (activeRequest == this) {
+        activeRequest = null;
+      }
+      return true;
+    }
+
+    void resolve(final T value) {
+      if (finish()) {
+        result.complete(value);
+      }
+    }
+
+    void reject(final String error) {
+      if (finish()) {
+        result.completeExceptionally(new WebAuthnUtils.Exception(error));
+      }
+    }
+
+    void cancel() {
+      // Settle before cancel(), which can synchronously deliver a callback.
+      reject("ABORT_ERR");
+      cancellation.cancel();
+    }
+  }
+
+  @UiThread
+  public static void cancel(final long transactionId) {
+    ThreadUtils.assertOnUiThread();
+    if (activeRequest != null && activeRequest.transactionId == transactionId) {
+      activeRequest.cancel();
+    }
+  }
+
+  @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+  public static boolean isAvailable() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      return false;
+    }
+    final Context context = GeckoAppShell.getApplicationContext();
+    return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CREDENTIALS)
+        && context.getSystemService(Context.CREDENTIAL_SERVICE) != null;
+  }
+
+  // AndroidX public-key providers encode WebAuthn DOM errors in the framework
+  // exception type. Preserve the recognized errors, including provider origin /
+  // signing-identity rejection, instead of retrying with another authenticator.
+  private static String providerError(final String type, final boolean create) {
+    final String prefix = CM_PREFIX + "TYPE_" + (create ? "CREATE" : "GET")
+        + "_PUBLIC_KEY_CREDENTIAL_DOM_EXCEPTION/" + CM_PREFIX + "TYPE_";
+    if (!type.startsWith(prefix)) {
+      return "UNKNOWN_ERR";
+    }
+    switch (type.substring(prefix.length())) {
+      case "ABORT_ERROR":
+        return "ABORT_ERR";
+      case "CONSTRAINT_ERROR":
+        return "CONSTRAINT_ERR";
+      case "DATA_ERROR":
+        return "DATA_ERR";
+      case "ENCODING_ERROR":
+        return "ENCODING_ERR";
+      case "INVALID_STATE_ERROR":
+        return "INVALID_STATE_ERR";
+      case "NETWORK_ERROR":
+        return "NETWORK_ERR";
+      case "NOT_ALLOWED_ERROR":
+        return "NOT_ALLOWED_ERR";
+      case "NOT_SUPPORTED_ERROR":
+        return "NOT_SUPPORTED_ERR";
+      case "SECURITY_ERROR":
+        return "SECURITY_ERR";
+      case "TIMEOUT_ERROR":
+        return "TIMEOUT_ERR";
+      default:
+        return "UNKNOWN_ERR";
+    }
+  }
+
   @UiThread
   @SuppressLint("MissingPermission")
   public static GeckoResult<WebAuthnUtils.MakeCredentialResponse> makeCredential(
-      final String origin, final byte[] clientDataHash, final String requestJSON) {
+      final long transactionId, final String origin, final byte[] clientDataHash,
+      final String requestJSON) {
     ThreadUtils.assertOnUiThread();
-
-    // We use Credential Manager first. If it doesn't work, we use GMS FIDO2.
-    // Credential manager may support non-discoverable keys,
-    // Else, following the specifications, `residentKey=discouraged` allows discoverable keys too
-    // but prefer non-discoverable keys
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("NOT_SUPPORTED_ERR"));
-    }
-    final Context context = GeckoAppShell.getApplicationContext();
-    // Some vendors disabled Credential Manager on Android 14+ devices.
-    // https://issuetracker.google.com/issues/349310440
-    if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_CREDENTIALS)) {
-      Log.w(LOGTAG, "Credential Manager is disabled on this device");
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("NOT_SUPPORTED_ERR"));
-    }
-
-    final Bundle requestBundle = getRequestBundleForMakeCredential(clientDataHash, requestJSON);
-    if (requestBundle == null) {
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
-    }
-
-    requestBundle.putBoolean(BUNDLE_KEY_PREFER_IMMEDIATELY_AVAILABLE_CREDENTIALS, false);
-    requestBundle.putBoolean(BUNDLE_KEY_IS_AUTO_SELECT_ALLOWED, false);
-
-    final CreateCredentialRequest request =
-        new CreateCredentialRequest.Builder(
-                TYPE_PUBLIC_KEY_CREDENTIAL, requestBundle, requestBundle)
-            .setAlwaysSendAppInfoToProvider(true)
-            .setOrigin(origin)
-            .build();
-
-    final CredentialManager manager =
-        (CredentialManager) context.getSystemService(Context.CREDENTIAL_SERVICE);
-    if (manager == null) {
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
-    }
-    final GeckoResult<WebAuthnUtils.MakeCredentialResponse> result = new GeckoResult<>();
-    final AtomicBoolean completed = new AtomicBoolean();
+    final Request<WebAuthnUtils.MakeCredentialResponse> operation = new Request<>(transactionId);
     try {
-      manager.createCredential(
-          context,
-          request,
-          null,
-          context.getMainExecutor(),
+      if (!isAvailable()) {
+        operation.reject("NOT_SUPPORTED_ERR");
+        return operation.result;
+      }
+      final Context context = GeckoAppShell.getApplicationContext();
+      final Bundle bundle = getRequestBundleForMakeCredential(clientDataHash, requestJSON);
+      if (bundle == null) {
+        operation.reject("DATA_ERR");
+        return operation.result;
+      }
+      bundle.putBoolean(BUNDLE_KEY_PREFER_IMMEDIATELY_AVAILABLE_CREDENTIALS, false);
+      bundle.putBoolean(BUNDLE_KEY_IS_AUTO_SELECT_ALLOWED, false);
+      final CreateCredentialRequest request =
+          new CreateCredentialRequest.Builder(TYPE_PUBLIC_KEY_CREDENTIAL, bundle, bundle)
+              .setAlwaysSendAppInfoToProvider(true)
+              .setOrigin(origin)
+              .build();
+      final CredentialManager manager = context.getSystemService(CredentialManager.class);
+      manager.createCredential(context, request, operation.cancellation, context.getMainExecutor(),
           new OutcomeReceiver<CreateCredentialResponse, CreateCredentialException>() {
             @Override
-            public void onResult(final CreateCredentialResponse createCredentialResponse) {
-              if (!completed.compareAndSet(false, true)) {
+            public void onResult(final CreateCredentialResponse response) {
+              if (operation.completed) {
                 return;
-              }
-              final Bundle data = createCredentialResponse.getData();
-              final String responseJson = data.getString(BUNDLE_KEY_REGISTRATION_RESPONSE_JSON);
-              if (responseJson == null) {
-                result.completeExceptionally(new WebAuthnUtils.Exception("DATA_ERR"));
-                return;
-              }
-              if (DEBUG) {
-                Log.d(LOGTAG, "Response JSON: " + responseJson);
               }
               try {
-                result.complete(WebAuthnUtils.getMakeCredentialResponse(responseJson));
-              } catch (final IllegalArgumentException e) {
-                Log.e(LOGTAG, "Invalid response", e);
-                result.completeExceptionally(new WebAuthnUtils.Exception("DATA_ERR"));
-              } catch (final JSONException e) {
-                Log.e(LOGTAG, "Couldn't parse response JSON", e);
-                result.completeExceptionally(new WebAuthnUtils.Exception("DATA_ERR"));
+                final String json =
+                    response.getData().getString(BUNDLE_KEY_REGISTRATION_RESPONSE_JSON);
+                if (json == null) {
+                  operation.reject("DATA_ERR");
+                  return;
+                }
+                operation.resolve(WebAuthnUtils.getMakeCredentialResponse(json));
+              } catch (final JSONException | RuntimeException e) {
+                operation.reject("DATA_ERR");
               }
             }
 
             @Override
             public void onError(final CreateCredentialException exception) {
-              if (!completed.compareAndSet(false, true)) {
-                return;
+              final String type = exception.getType();
+              if (CreateCredentialException.TYPE_USER_CANCELED.equals(type)) {
+                operation.reject("NOT_ALLOWED_ERR");
+              } else if (CreateCredentialException.TYPE_INTERRUPTED.equals(type)) {
+                operation.reject("ABORT_ERR");
+              } else if (CreateCredentialException.TYPE_NO_CREATE_OPTIONS.equals(type)) {
+                operation.reject("NOT_SUPPORTED_ERR");
+              } else {
+                operation.reject(providerError(type, true));
               }
-              final String errorType = exception.getType();
-              if (DEBUG) {
-                Log.d(LOGTAG, "Couldn't create credential. errorType=" + errorType);
-              }
-              if (errorType.equals(CreateCredentialException.TYPE_USER_CANCELED)) {
-                result.completeExceptionally(new WebAuthnUtils.Exception("ABORT_ERR"));
-                return;
-              }
-              if (errorType.equals(CreateCredentialException.TYPE_NO_CREATE_OPTIONS)) {
-                result.completeExceptionally(new WebAuthnUtils.Exception("NOT_SUPPORTED_ERR"));
-                return;
-              }
-              result.completeExceptionally(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
             }
           });
     } catch (final SecurityException e) {
-      // We might be no permission for Credential Manager
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("NOT_SUPPORTED_ERR"));
-    } catch (final java.lang.Exception e) {
-      Log.w(LOGTAG, "Couldn't make credential", e);
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
+      operation.reject("SECURITY_ERR");
+    } catch (final RuntimeException e) {
+      operation.reject("UNKNOWN_ERR");
     }
-    return result;
+    return operation.result;
   }
 
   @UiThread
   @SuppressLint("MissingPermission")
-  public static GeckoResult<PrepareGetCredentialResponse.PendingGetCredentialHandle>
-      prepareGetAssertion(
-          final String origin, final byte[] clientDataHash, final String requestJSON) {
-    ThreadUtils.assertOnUiThread();
-
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      // No credential manager. Relay to GMS FIDO2
-      return GeckoResult.fromValue(null);
-    }
-    final Bundle requestBundle = getRequestBundleForGetAssertion(clientDataHash, requestJSON);
-    if (requestBundle == null) {
-      return GeckoResult.fromValue(null);
-    }
-
-    final CredentialOption credentialOption =
-        new CredentialOption.Builder(TYPE_PUBLIC_KEY_CREDENTIAL, requestBundle, requestBundle)
-            .build();
-    final GetCredentialRequest request =
-        new GetCredentialRequest.Builder(requestBundle)
-            .addCredentialOption(credentialOption)
-            .setAlwaysSendAppInfoToProvider(true)
-            .setOrigin(origin)
-            .build();
-
-    final Context context = GeckoAppShell.getApplicationContext();
-    final CredentialManager manager =
-        (CredentialManager) context.getSystemService(Context.CREDENTIAL_SERVICE);
-    if (manager == null) {
-      // No credential manager. Relay to GMS FIDO2
-      return GeckoResult.fromValue(null);
-    }
-
-    final GeckoResult<PrepareGetCredentialResponse.PendingGetCredentialHandle> result =
-        new GeckoResult<>();
-    final AtomicBoolean completed = new AtomicBoolean();
-    try {
-      manager.prepareGetCredential(
-          request,
-          null,
-          context.getMainExecutor(),
-          new OutcomeReceiver<PrepareGetCredentialResponse, GetCredentialException>() {
-            @Override
-            public void onResult(final PrepareGetCredentialResponse prepareGetCredentialResponse) {
-              if (!completed.compareAndSet(false, true)) {
-                return;
-              }
-              final boolean hasPublicKeyCredentials =
-                  prepareGetCredentialResponse.hasCredentialResults(TYPE_PUBLIC_KEY_CREDENTIAL);
-              final boolean hasAuthenticationResults =
-                  prepareGetCredentialResponse.hasAuthenticationResults();
-
-              if (DEBUG) {
-                Log.d(
-                    LOGTAG,
-                    "prepareGetCredential: hasPublicKeyCredentials="
-                        + hasPublicKeyCredentials
-                        + ", hasAuthenticationResults="
-                        + hasAuthenticationResults);
-              }
-              if (!hasPublicKeyCredentials && !hasAuthenticationResults) {
-                // No passkey and result. Relay to GMS FIDO2.
-                result.complete(null);
-                return;
-              }
-
-              result.complete(prepareGetCredentialResponse.getPendingGetCredentialHandle());
-            }
-
-            @Override
-            public void onError(final GetCredentialException exception) {
-              if (!completed.compareAndSet(false, true)) {
-                return;
-              }
-              final String errorType = exception.getType();
-              if (DEBUG) {
-                Log.d(LOGTAG, "Couldn't get credential. errorType=" + errorType);
-              }
-              if (errorType.equals(GetCredentialException.TYPE_NO_CREDENTIAL)) {
-                result.complete(null);
-                return;
-              }
-              result.completeExceptionally(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
-            }
-          });
-    } catch (final SecurityException e) {
-      // We might be no permission for Credential Manager. Use FIDO2 API
-      return GeckoResult.fromValue(null);
-    } catch (final java.lang.Exception e) {
-      Log.e(LOGTAG, "prepareGetCredential throws an error", e);
-      return GeckoResult.fromValue(null);
-    }
-    return result;
-  }
-
-  @UiThread
   public static GeckoResult<WebAuthnUtils.GetAssertionResponse> getAssertion(
-      final PrepareGetCredentialResponse.PendingGetCredentialHandle pendingHandle) {
+      final long transactionId, final String origin, final byte[] clientDataHash,
+      final String requestJSON) {
     ThreadUtils.assertOnUiThread();
-
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("NOT_SUPPORTED_ERR"));
-    }
-    final GeckoResult<WebAuthnUtils.GetAssertionResponse> result = new GeckoResult<>();
-    final AtomicBoolean completed = new AtomicBoolean();
-    final Context context = GeckoAppShell.getApplicationContext();
-    final CredentialManager manager =
-        (CredentialManager) context.getSystemService(Context.CREDENTIAL_SERVICE);
-    if (manager == null) {
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
-    }
+    final Request<WebAuthnUtils.GetAssertionResponse> operation = new Request<>(transactionId);
     try {
-      manager.getCredential(
-          context,
-          pendingHandle,
-          null,
-          context.getMainExecutor(),
+      if (!isAvailable()) {
+        operation.reject("NOT_SUPPORTED_ERR");
+        return operation.result;
+      }
+      final Context context = GeckoAppShell.getApplicationContext();
+      final Bundle bundle = getRequestBundleForGetAssertion(clientDataHash, requestJSON);
+      if (bundle == null) {
+        operation.reject("DATA_ERR");
+        return operation.result;
+      }
+      final CredentialOption option =
+          new CredentialOption.Builder(TYPE_PUBLIC_KEY_CREDENTIAL, bundle, bundle).build();
+      final GetCredentialRequest request = new GetCredentialRequest.Builder(new Bundle())
+                                               .addCredentialOption(option)
+                                               .setAlwaysSendAppInfoToProvider(true)
+                                               .setOrigin(origin)
+                                               .build();
+      final CredentialManager manager = context.getSystemService(CredentialManager.class);
+      // Use the actual request, including locked-provider and remote options. A
+      // prepare result with no local candidates is not proof of unavailability.
+      manager.getCredential(context, request, operation.cancellation, context.getMainExecutor(),
           new OutcomeReceiver<GetCredentialResponse, GetCredentialException>() {
             @Override
-            public void onResult(final GetCredentialResponse getCredentialResponse) {
-              if (!completed.compareAndSet(false, true)) {
+            public void onResult(final GetCredentialResponse response) {
+              if (operation.completed) {
                 return;
-              }
-              final Bundle data = getCredentialResponse.getCredential().getData();
-              final String responseJson = data.getString(BUNDLE_KEY_AUTHENTICATION_RESPONSE_JSON);
-              if (responseJson == null) {
-                result.completeExceptionally(new WebAuthnUtils.Exception("DATA_ERR"));
-                return;
-              }
-              if (DEBUG) {
-                Log.d(LOGTAG, "Response JSON: " + responseJson);
               }
               try {
-                result.complete(WebAuthnUtils.getGetAssertionResponse(responseJson));
-              } catch (final IllegalArgumentException e) {
-                Log.e(LOGTAG, "Invalid response", e);
-                result.completeExceptionally(new WebAuthnUtils.Exception("DATA_ERR"));
-              } catch (final JSONException e) {
-                Log.e(LOGTAG, "Couldn't parse response JSON", e);
-                result.completeExceptionally(new WebAuthnUtils.Exception("DATA_ERR"));
+                if (!TYPE_PUBLIC_KEY_CREDENTIAL.equals(response.getCredential().getType())) {
+                  operation.reject("DATA_ERR");
+                  return;
+                }
+                final String json = response.getCredential().getData().getString(
+                    BUNDLE_KEY_AUTHENTICATION_RESPONSE_JSON);
+                if (json == null) {
+                  operation.reject("DATA_ERR");
+                  return;
+                }
+                operation.resolve(WebAuthnUtils.getGetAssertionResponse(json));
+              } catch (final JSONException | RuntimeException e) {
+                operation.reject("DATA_ERR");
               }
             }
 
             @Override
             public void onError(final GetCredentialException exception) {
-              if (!completed.compareAndSet(false, true)) {
-                return;
+              final String type = exception.getType();
+              if (GetCredentialException.TYPE_USER_CANCELED.equals(type)
+                  || GetCredentialException.TYPE_NO_CREDENTIAL.equals(type)) {
+                operation.reject("NOT_ALLOWED_ERR");
+              } else if (GetCredentialException.TYPE_INTERRUPTED.equals(type)) {
+                operation.reject("ABORT_ERR");
+              } else {
+                operation.reject(providerError(type, false));
               }
-              final String errorType = exception.getType();
-              if (DEBUG) {
-                Log.d(LOGTAG, "Couldn't get credential. errorType=" + errorType);
-              }
-              if (errorType.equals(GetCredentialException.TYPE_USER_CANCELED)) {
-                result.completeExceptionally(new WebAuthnUtils.Exception("ABORT_ERR"));
-                return;
-              }
-              result.completeExceptionally(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
             }
           });
     } catch (final SecurityException e) {
-      // We might be no permission for Credential Manager.
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("NOT_SUPPORTED_ERR"));
-    } catch (final java.lang.Exception e) {
-      Log.w(LOGTAG, "Couldn't get assertion", e);
-      return GeckoResult.fromException(new WebAuthnUtils.Exception("UNKNOWN_ERR"));
+      operation.reject("SECURITY_ERR");
+    } catch (final RuntimeException e) {
+      operation.reject("UNKNOWN_ERR");
     }
-    return result;
+    return operation.result;
   }
 }
