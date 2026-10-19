@@ -82,6 +82,13 @@ source/notices artifacts. No partial-target flags were used. The existing
 build, publication or installed acceptance result.
 The later sidebar-notice fix `8e67e0161b` is not in that immutable build head;
 it is retained for the next batched candidate, without replacing running inputs.
+An early audit of eight completed artifacts found matching GitHub archive hashes,
+checked source/version identities, architectures and full license payloads for
+the inspected loader, Display, machine runtime, OS/guest packages and runtime
+guards. No concrete mismatch was found. Final binaries, APK/Termux pairing, the
+complete corresponding-source inventory, traffic audit and installed acceptance
+remain unverified; this subset does not authorize a release-complete claim.
+Receipt: `verification/combined-candidate-20261019/prepublication-subset-audit.json`.
 
 ## Installed follow-up and remaining blockers — 18 October 2026
 
