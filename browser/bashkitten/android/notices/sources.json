@@ -2,7 +2,7 @@
   {
     "name": "tor-android",
     "repository": "https://github.com/guardianproject/tor-android",
-    "commit": "170a3b4b7d13078142d34f5ac536d8f9c3cb89b6",
+    "commit": "0340ba1609cb73e663e202a316d083803e399db4",
     "licensePath": "LICENSE",
     "notice": "tor-android-LICENSE",
     "sha256": "ead918e4ca90496c08cae119d90ddd832753139c89d61d0718e8b48bc97d7802"
@@ -18,7 +18,7 @@
   {
     "name": "tor",
     "repository": "https://github.com/bitmold/tor",
-    "commit": "8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece",
+    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
     "licensePath": "LICENSE",
     "notice": "tor-LICENSE",
     "sha256": "5dc29ea302cc75db6db4a7c88d7b5d4638b4e0f5f1d2e6d21ce71f707470b766"
@@ -82,7 +82,7 @@
   {
     "name": "tor-equix",
     "repository": "https://github.com/bitmold/tor",
-    "commit": "8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece",
+    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
     "licensePath": "src/ext/equix/LICENSE",
     "notice": "tor-equix-LICENSE",
     "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
@@ -90,7 +90,7 @@
   {
     "name": "tor-hashx",
     "repository": "https://github.com/bitmold/tor",
-    "commit": "8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece",
+    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
     "licensePath": "src/ext/equix/hashx/LICENSE",
     "notice": "tor-hashx-LICENSE",
     "sha256": "e3a994d82e644b03a792a930f574002658412f62407f5fee083f2555c5f23118"
@@ -98,7 +98,7 @@
   {
     "name": "tor-mulodi",
     "repository": "https://github.com/bitmold/tor",
-    "commit": "8aa9ce2e4e3332ef10f5b7f7e0562c60affe2ece",
+    "commit": "4a522a3ca491c6c04d4a44cb006b92101c42efc1",
     "licensePath": "src/ext/mulodi/LICENSE.TXT",
     "notice": "tor-mulodi-LICENSE",
     "sha256": "415ec2b15961f8b34859a50af386663f552bb62b9fffd69e8eb676c792ea022e"

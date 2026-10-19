@@ -18,6 +18,12 @@ its older imported Termux recipe remains pristine, with the version override
 in our separate recipe. The complete age 1.3.2 source is pinned for the remote
 connection bundle integration; it is not a separate installed CLI.
 
+Tor is pinned to the 0.4.9.14 security release. Go builds use 1.27.2 with its
+complete retained source and notices. `build/termux-go-version.patch` updates
+only the compiler version/checksum in the separately retained Termux builder;
+its Android toolchain patches and component recipes remain in place. Upstream
+module/frontend locks remain those of each selected release.
+
 `build/remote.sh` builds the small shared adapter under `agent/native/remote/`
 as private `bashkitten-remote` for Linux and Termux. It is assembled and licensed
 with this payload. The existing controller owns its private pipes and process;

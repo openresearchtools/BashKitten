@@ -1,0 +1,7 @@
+--- a/scripts/build/setup/termux_setup_golang.sh
++++ b/scripts/build/setup/termux_setup_golang.sh
+@@ -6,2 +6,2 @@
+-		local TERMUX_GO_VERSION=go1.27.1
+-		local TERMUX_GO_SHA256=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
++		local TERMUX_GO_VERSION=go1.27.2
++		local TERMUX_GO_SHA256=ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5

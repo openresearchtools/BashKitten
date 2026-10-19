@@ -42,6 +42,7 @@ cleanup() {
 }
 trap cleanup EXIT
 python3 "$root/auth/build/retained-sources.py" termux --commit "${pin[0]}" --output "$work"
+patch --directory "$work" --strip 1 < "$root/auth/build/termux-go-version.patch"
 package="bashkitten-$component-native"
 mkdir -p "$work/packages/$package" "$work/bashkitten-sources/$component"
 cp -a "$recipe/." "$work/packages/$package/"

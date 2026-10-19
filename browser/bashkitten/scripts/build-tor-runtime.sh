@@ -24,7 +24,8 @@ run_root="${build_root}/runs/$(date -u +%Y%m%dT%H%M%SZ)-${version}-$$"
 mkdir -p "${run_root}/source" "${run_root}/runtime" "${run_root}/artifacts"
 run_root="$(cd "${run_root}" && pwd -P)"
 source_archive="${run_root}/artifacts/bashkitten-tor-${version}-source.tar"
-git -C "${source_repo}" archive "${tor_commit}" > "${source_archive}"
+# The pristine tree is retained in our compact history; upstream commits are not.
+git -C "${source_repo}" archive --mtime="@${SOURCE_DATE_EPOCH}" "$(read_pin tree)" > "${source_archive}"
 python3 "${script_dir}/tor-runtime-provenance.py" verify-source \
   --pin-config "${metadata}" --source "${source_archive}" \
   --source-root "${source_repo}/third_party/tor"

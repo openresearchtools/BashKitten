@@ -56,10 +56,12 @@ security levels, or anonymity model.
 
 ## Upstream and build
 
-`third_party/tor` contains the unmodified Tor 0.4.9.11 release commit. The exact
+`third_party/tor` contains the unmodified Tor 0.4.9.14 release commit. The exact
 tag, tag object, commit, tree, archive checksum, and license checksum are pinned
 in `bashkitten/third_party/tor.toml`. Update that pin and the vendored tree from
 an official stable release together; do not substitute a distribution binary.
+The archive checksum covers `git archive` of the pristine tree with the pinned
+source date. This uses the retained tree without importing upstream Git ancestry.
 
 Build with `bashkitten/scripts/build-tor-runtime.sh --build-root DIR` in the
 configured Ubuntu 24.04 builder, using a Data-drive directory. The script verifies

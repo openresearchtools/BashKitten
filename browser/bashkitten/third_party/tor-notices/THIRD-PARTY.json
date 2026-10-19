@@ -3,7 +3,7 @@
   "packages": [
     {
       "name": "Tor",
-      "version": "0.4.9.11",
+      "version": "0.4.9.14",
       "license": "BSD-3-Clause",
       "licenseFiles": [
         {

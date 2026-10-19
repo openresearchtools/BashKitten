@@ -25,12 +25,12 @@
   "tor": {
     "repository": "https://gitlab.torproject.org/tpo/core/tor.git",
     "branch": "main",
-    "version": "0.4.9.13",
-    "tag": "tor-0.4.9.13",
-    "commit": "3c575400909efe6599d88e61e7daf0012655ca44",
-    "tagObject": "28842efe551624ea383ee56c40e63a1bdfb36556",
-    "archive": "https://gitlab.torproject.org/tpo/core/tor/-/archive/3c575400909efe6599d88e61e7daf0012655ca44/tor-3c575400909efe6599d88e61e7daf0012655ca44.tar.gz",
-    "sha256": "dd0a0a5f3a94585e3ec114c7f07fb87af0c1e5b852189122aeded823a2a8ebcb",
+    "version": "0.4.9.14",
+    "tag": "tor-0.4.9.14",
+    "commit": "8fe2745aee2c35116ff1081f19b2952418b43069",
+    "tagObject": "4d6a948ca00eac5722a866ddde65e27830921856",
+    "archive": "https://gitlab.torproject.org/tpo/core/tor/-/archive/8fe2745aee2c35116ff1081f19b2952418b43069/tor-8fe2745aee2c35116ff1081f19b2952418b43069.tar.gz",
+    "sha256": "94c8f8bad4f00af046e5bb41b9dd3ea28da3b63bf4d88ed52cbe62bda72f7374",
     "license": "tor/LICENSE"
   },
   "termux": {
@@ -40,7 +40,7 @@
     "image": "ghcr.io/termux/package-builder@sha256:a753715a74c288a4006d5f0bd8c3fcbc0f9ee4313460706a3b77c1a6417b7ae6"
   },
   "build": {
-    "go": "1.27.1",
+    "go": "1.27.2",
     "node": "24",
     "pnpm": "12"
   },
