@@ -706,18 +706,6 @@
       "sha256": "c5df5b7bfa9c6d61ef14047bd9de207db688188c0d5d7b5f5c4ad6613806b1fc"
     },
     {
-      "component": "androidx.lifecycle:lifecycle-runtime-testing-android:2.10.0",
-      "kind": "sources",
-      "file": "archives/androidx.lifecycle-lifecycle-runtime-testing-android-2.10.0-sources.jar",
-      "sha256": "8a373eedb533bc8c03e7a58ed4e8b41b5d2b5d567d7554ced1aeedd1d3298d38"
-    },
-    {
-      "component": "androidx.lifecycle:lifecycle-runtime-testing:2.10.0",
-      "kind": "sources",
-      "file": "archives/androidx.lifecycle-lifecycle-runtime-testing-2.10.0-sources.jar",
-      "sha256": "8df672462a745d8360d67d709846c006d0d1f5efff4ca4b57c5b739af7e21a26"
-    },
-    {
       "component": "androidx.lifecycle:lifecycle-runtime:2.10.0",
       "kind": "sources",
       "file": "archives/androidx.lifecycle-lifecycle-runtime-2.10.0-sources.jar",
@@ -1226,6 +1214,115 @@
       "kind": "sources",
       "file": "archives/com.google.errorprone-error_prone_annotations-2.26.0-sources.jar",
       "sha256": "e715b58aff46eda2f099efee941d99e32214bfcf229ab1a0b39adcf344679848"
+    },
+    {
+      "component": "com.google.firebase:firebase-annotations:17.0.0",
+      "kind": "sources",
+      "file": "archives/com.google.firebase-firebase-annotations-17.0.0-bcaf4c38-source.tar.gz",
+      "sha256": "5379bf9febb0a9fe41c8387438e6acd70eb1203df3c02c91a3dc4ae8a8382fcc",
+      "runtimeArtifacts": [
+        {
+          "file": "firebase-annotations-17.0.0.jar",
+          "sha256": "f80305e6f7b5d111278d4df9504f51f7230e06c6457a0fa7c16e236c7613cc71"
+        }
+      ],
+      "provenance": {
+        "repository": "https://github.com/firebase/firebase-android-sdk",
+        "commit": "bcaf4c38b9dcdafcf9ded322d689a0aa18214f7d",
+        "selection": "Official version=17.0.0 declaration; all six published class bytes reproduced from this module source. No release tag is advertised for this module.",
+        "module": "firebase-annotations",
+        "license": "Apache-2.0",
+        "archive": "Deterministic packaging of unmodified module files plus upstream LICENSE and README.md.",
+        "upstreamFiles": [
+          {
+            "file": "LICENSE",
+            "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+          },
+          {
+            "file": "README.md",
+            "sha256": "e0b8ae986aafb38044ca4d04cb00513e3c0848ed7576e0ecc9d624406a961e72"
+          },
+          {
+            "file": "firebase-annotations/CHANGELOG.md",
+            "sha256": "62b0a572f5cdeca0294a7e2d37c02b446964b3c3fe41c9c71152ef5b20bf03e5"
+          },
+          {
+            "file": "firebase-annotations/api.txt",
+            "sha256": "8c4391dd4dd4e60821a3530f340216df4451cb86b7efc88014b48ec197118a85"
+          },
+          {
+            "file": "firebase-annotations/firebase-annotations.gradle.kts",
+            "sha256": "dd12f70272853185d83d30d1ea8c880b3d17334c128195ec7d5bd667bec5f124"
+          },
+          {
+            "file": "firebase-annotations/gradle.properties",
+            "sha256": "1821926b6481a28caa9f0ca793ec74db4825bcaa95748362e0dde69dc6a74e7d"
+          },
+          {
+            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/DeferredApi.java",
+            "sha256": "5a0648db97207d5015b9534cb2f46b25134b6e4aa98beac3a297a24bcef0d32e"
+          },
+          {
+            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/PreviewApi.java",
+            "sha256": "6c17ea8ad246703a83f7d834d9a3f3abf80a7e24a68bdc35091ab34aaa2bbf4a"
+          },
+          {
+            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/Background.java",
+            "sha256": "497a3d2055c8af5200a3f7ce9c25267e7df649621587602549dd3d7f71a9ad9d"
+          },
+          {
+            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/Blocking.java",
+            "sha256": "742be97d349c933024730c24c2ef19b02ac9c5f303fd7f9b886455416c36d8c6"
+          },
+          {
+            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/Lightweight.java",
+            "sha256": "dd3b2ef481d3a055832e92379cefb418d9c54d2b259a91b635a9917f125ee5e1"
+          },
+          {
+            "file": "firebase-annotations/src/main/java/com/google/firebase/annotations/concurrent/UiThread.java",
+            "sha256": "9adaa79a4b203ba97b04c98867f2c52bbf018a693105a9d8735dc032cf1278d4"
+          }
+        ],
+        "classCorrespondence": [
+          {
+            "file": "com/google/firebase/annotations/DeferredApi.class",
+            "publishedSha256": "f79c92121eb30d804a7341124c2a3df26d94326928e2254789c24487a35e735c",
+            "compiledSha256": "f79c92121eb30d804a7341124c2a3df26d94326928e2254789c24487a35e735c",
+            "equal": true
+          },
+          {
+            "file": "com/google/firebase/annotations/PreviewApi.class",
+            "publishedSha256": "a837d565203691d9afe59cf1f0e836e7eff1d13877295e0c3fe0d718a884824d",
+            "compiledSha256": "a837d565203691d9afe59cf1f0e836e7eff1d13877295e0c3fe0d718a884824d",
+            "equal": true
+          },
+          {
+            "file": "com/google/firebase/annotations/concurrent/Lightweight.class",
+            "publishedSha256": "156247404bea02bd10070c2fd3c70eb51faca960e1dc3185b65c485449252bec",
+            "compiledSha256": "156247404bea02bd10070c2fd3c70eb51faca960e1dc3185b65c485449252bec",
+            "equal": true
+          },
+          {
+            "file": "com/google/firebase/annotations/concurrent/Blocking.class",
+            "publishedSha256": "abe6679f5bb02941e44feb58aa3dea5e473777101ac365ee11ed03046ca2048b",
+            "compiledSha256": "abe6679f5bb02941e44feb58aa3dea5e473777101ac365ee11ed03046ca2048b",
+            "equal": true
+          },
+          {
+            "file": "com/google/firebase/annotations/concurrent/Background.class",
+            "publishedSha256": "47ee562fda76cd8948be03dde034edc559e87e46157a67e8c7cf8608db86a6ea",
+            "compiledSha256": "47ee562fda76cd8948be03dde034edc559e87e46157a67e8c7cf8608db86a6ea",
+            "equal": true
+          },
+          {
+            "file": "com/google/firebase/annotations/concurrent/UiThread.class",
+            "publishedSha256": "86d60d59f03fb51f6e59def47281b6b3164bddb164d1a638ecf2a8ee42270ed8",
+            "compiledSha256": "86d60d59f03fb51f6e59def47281b6b3164bddb164d1a638ecf2a8ee42270ed8",
+            "equal": true
+          }
+        ],
+        "verification": "OpenJDK javac -source 8 -target 8 with the resolved javax.inject:javax.inject:1. All published .class entries equal the compiled bytes; no extra implementation classes in the runtime JAR."
+      }
     },
     {
       "component": "com.google.firebase:firebase-common:22.0.1",

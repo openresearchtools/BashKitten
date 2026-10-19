@@ -12,7 +12,6 @@ import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
-import com.google.android.play.core.review.ReviewManagerFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
@@ -31,8 +30,6 @@ import mozilla.components.lib.ai.controls.dataStore
 import mozilla.components.lib.ai.controls.default
 import mozilla.components.lib.crash.store.CrashAction
 import mozilla.components.lib.crash.store.CrashMiddleware
-import mozilla.components.lib.integrity.googleplay.GooglePlayIntegrityClient
-import mozilla.components.lib.llm.mlpa.MlpaTokenStorage
 import mozilla.components.lib.publicsuffixlist.PublicSuffixList
 import mozilla.components.service.fxrelay.eligibility.RelayEligibilityStore
 import mozilla.components.service.fxrelay.eligibility.middlewares.ClearLastUsedMiddleware
@@ -65,8 +62,6 @@ import org.mozilla.fenix.components.appstate.sports.SportsWidgetState
 import org.mozilla.fenix.components.bookmarks.lastSavedFolderCache
 import org.mozilla.fenix.components.ipprotection.IPProtection
 import org.mozilla.fenix.components.lens.GoogleLensAIControlFeature
-import org.mozilla.fenix.components.llm.Llm
-import org.mozilla.fenix.components.llm.ext.accessTokenProvider
 import org.mozilla.fenix.components.metrics.MetricsMiddleware
 import org.mozilla.fenix.crashes.CrashReportingAppMiddleware
 import org.mozilla.fenix.crashes.SettingsCrashReportCache
@@ -102,7 +97,6 @@ import org.mozilla.fenix.perf.StartupActivityLog
 import org.mozilla.fenix.perf.StartupStateProvider
 import org.mozilla.fenix.perf.StrictModeManager
 import org.mozilla.fenix.perf.lazyMonitored
-import org.mozilla.fenix.reviewprompt.ReviewPromptMiddleware
 import org.mozilla.fenix.search.VoiceSearchAIControlFeature
 import org.mozilla.fenix.settings.ai.AIControlsSearchProvider
 import org.mozilla.fenix.settings.datachoices.DataChoicesSearchProvider
@@ -283,13 +277,6 @@ class Components(private val context: Context) {
     val settings by lazyMonitored { Settings(context) }
     val fenixOnboarding by lazyMonitored { FenixOnboarding(context) }
 
-    val playStoreReviewPromptController by lazyMonitored {
-        PlayStoreReviewPromptController(
-            manager = ReviewManagerFactory.create(context),
-            numberOfAppLaunches = { settings.numberOfAppLaunches },
-        )
-    }
-
     val autofillConfiguration by lazyMonitored {
         AutofillConfiguration(
             storage = core.passwordsStorage,
@@ -357,19 +344,6 @@ class Components(private val context: Context) {
                 HomeTelemetryMiddleware(),
                 SetupChecklistPreferencesMiddleware(DefaultSetupChecklistRepository(context, settings)),
                 SetupChecklistTelemetryMiddleware(),
-                ReviewPromptMiddleware(
-                    continuousOnboardingInProgress = {
-                        val continuousOnboardingCompleted = settings.seventhDayOnboardingCompletedTimestamp != -1L
-                        settings.continuousOnboardingFeatureEnabled && !continuousOnboardingCompleted
-                    },
-                    shouldUseNewTriggerCriteria = { settings.newReviewPromptTriggerCriteriaEnabled },
-                    shouldShowCustomPrompt = { settings.customReviewPromptUiEnabled && settings.isTelemetryEnabled },
-                    disableCustomPrompt = { settings.customReviewPromptUiEnabled = false },
-                    createJexlHelper = nimbus::createJexlHelper,
-                    nimbusEventStore = nimbus.events,
-                ).also {
-                    settings.migrateLastReviewPromptTimePrefIfNeeded(nimbus.events)
-                },
                 AppVisualCompletenessMiddleware(performance.visualCompletenessQueue),
                 SportsWidgetMiddleware(
                     sportsRepository = WorldCupMatchesRepository(
@@ -427,14 +401,6 @@ class Components(private val context: Context) {
             distributionProviderChecker = DefaultDistributionProviderChecker(context),
             distributionSettings = DefaultDistributionSettings(settings),
             metricController = analytics.metrics,
-        )
-    }
-
-    val integrityClient by lazyMonitored {
-        GooglePlayIntegrityClient.create(
-            context = context,
-            projectNumberToken = BuildConfig.GPS_INTEGRITY_TOKEN,
-            requestHashProvider = clientUUID,
         )
     }
 
@@ -541,18 +507,6 @@ class Components(private val context: Context) {
             registry = aiFeatureRegistry,
         )
     }
-
-    val llm: Llm by lazyMonitored {
-        Llm(
-            client = core.client,
-            storage = MlpaTokenStorage.sharedPrefs(context),
-            fxaTokenProvider = backgroundServices.accountManager.accessTokenProvider,
-            integrityClient = integrityClient,
-            userIdProvider = clientUUID,
-        )
-    }
-
-    val clientUUID by lazyMonitored { ClientUUID.build(context) }
 
     val ipProtection by lazyMonitored {
         IPProtection(

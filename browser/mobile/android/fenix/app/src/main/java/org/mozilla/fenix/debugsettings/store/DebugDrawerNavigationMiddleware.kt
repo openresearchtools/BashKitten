@@ -67,8 +67,6 @@ class DebugDrawerNavigationMiddleware(
                 navController.navigate(route = DebugDrawerRoute.AddonsDebugTools.route)
             is DebugDrawerAction.NavigateTo.CrashDebugTools ->
                 navController.navigate(route = DebugDrawerRoute.CrashDebugTools.route)
-            is DebugDrawerAction.NavigateTo.IntegrityDebugTools ->
-                navController.navigate(route = DebugDrawerRoute.IntegrityTools.route)
             is DebugDrawerAction.NavigateTo.TabGroupDebugTools ->
                 navController.navigate(route = DebugDrawerRoute.TabGroupTools.route)
             is DebugDrawerAction.NavigateTo.TabProcessTools ->

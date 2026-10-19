@@ -96,11 +96,6 @@ sealed class DebugDrawerAction : Action {
         object CrashDebugTools : NavigateTo()
 
         /**
-         * [NavigateTo] action fired when the debug drawer needs to navigate to [IntegrityTools].
-         */
-        object IntegrityDebugTools : NavigateTo()
-
-        /**
          * [NavigateTo] action fired when the debug drawer needs to navigate to [TabGroupTools].
          */
         object TabGroupDebugTools : NavigateTo()

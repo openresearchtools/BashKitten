@@ -29,8 +29,6 @@ import org.mozilla.fenix.home.recenttabs.RecentTab
 import org.mozilla.fenix.home.recentvisits.RecentlyVisitedItem
 import org.mozilla.fenix.library.history.PendingDeletionHistory
 import org.mozilla.fenix.messaging.MessagingState
-import org.mozilla.fenix.reviewprompt.ReviewPromptState
-import org.mozilla.fenix.reviewprompt.ReviewPromptState.Unknown
 import org.mozilla.fenix.wallpapers.WallpaperState
 
 /**
@@ -80,7 +78,6 @@ import org.mozilla.fenix.wallpapers.WallpaperState
  * @property qrScannerState The [QrScannerState] when the feature was last used.
  * @property isPrivateScreenLocked Whether the private browsing mode is currently locked behind
  * authentication.
- * @property reviewPrompt Whether we should show a review prompt and whether we ran the eligibility check at all
  * @property voiceSearchState The [VoiceSearchState] representing the current state of voice search functionality.
  * @property isDefaultBrowser Whether Firefox is the default browser or not.
  * @property blockedTrackersState The [BlockedTrackersState] with data about blocked trackers.
@@ -120,7 +117,6 @@ data class AppState(
     val lensState: LensState = LensState.DEFAULT,
     val qrScannerState: QrScannerState = QrScannerState.DEFAULT,
     val isPrivateScreenLocked: Boolean = false,
-    val reviewPrompt: ReviewPromptState = Unknown,
     val voiceSearchState: VoiceSearchState = VoiceSearchState(),
     val isDefaultBrowser: Boolean = false,
     val blockedTrackersState: BlockedTrackersState = BlockedTrackersState(),

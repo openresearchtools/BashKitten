@@ -27,7 +27,6 @@ import org.junit.runner.RunWith
 import org.mozilla.fenix.browser.browsingmode.BrowsingMode
 import org.mozilla.fenix.components.toolbar.ToolbarPosition
 import org.mozilla.fenix.nimbus.DefaultBrowserPrompt
-import org.mozilla.fenix.nimbus.FakeNimbusEventStore
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.nimbus.HomescreenEdgeToEdgeBackground
 import org.mozilla.fenix.settings.PhoneFeature
@@ -1167,57 +1166,6 @@ class SettingsTest {
                 ),
             ),
         )
-    }
-
-    @Test
-    fun `GIVEN previously stored pref_key_last_review_prompt_shown_time value WHEN calling migrateLastReviewPromptTimePrefIfNeeded THEN migrate the value`() {
-        val oldKey = "pref_key_last_review_prompt_shown_time"
-        val lastReviewPromptTimeInMillis = 300_000L
-        val timeNowInMillis = 500_000L
-        val eventStore = FakeNimbusEventStore()
-
-        val settings = spyk(settings)
-        every { settings.timeNowInMillis() } returns timeNowInMillis
-
-        settings.preferences.edit { putLong(oldKey, lastReviewPromptTimeInMillis) }
-
-        assertEquals(lastReviewPromptTimeInMillis, settings.preferences.getLong(oldKey, 0))
-        eventStore.assertNoPastEvents()
-
-        settings.migrateLastReviewPromptTimePrefIfNeeded(eventStore)
-
-        assertFalse(settings.preferences.contains(oldKey))
-        eventStore.assertSinglePastEventEquals(
-            eventId = "review_prompt_shown",
-            secondsAgo = (timeNowInMillis - lastReviewPromptTimeInMillis) / 1000,
-        )
-    }
-
-    @Test
-    fun `GIVEN none previously stored pref_key_last_review_prompt_shown_time value WHEN calling migrateLastReviewPromptTimePrefIfNeeded THEN migration should not happen`() {
-        val oldKey = "pref_key_last_review_prompt_shown_time"
-        val eventStore = FakeNimbusEventStore()
-
-        assertFalse(settings.preferences.contains(oldKey))
-        eventStore.assertNoPastEvents()
-
-        settings.migrateLastReviewPromptTimePrefIfNeeded(eventStore)
-
-        eventStore.assertNoPastEvents()
-    }
-
-    @Test
-    fun `GIVEN previously stored pref_key_last_review_prompt_shown_time value is a String WHEN calling migrateLastReviewPromptTimePrefIfNeeded THEN crash should not happen`() {
-        val oldKey = "pref_key_last_review_prompt_shown_time"
-        val eventStore = FakeNimbusEventStore()
-
-        settings.preferences.edit { putString(oldKey, "something unexpected") }
-        eventStore.assertNoPastEvents()
-
-        settings.migrateLastReviewPromptTimePrefIfNeeded(eventStore)
-
-        assertFalse(settings.preferences.contains(oldKey))
-        eventStore.assertNoPastEvents()
     }
 
     @Test

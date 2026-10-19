@@ -26,13 +26,11 @@ import kotlinx.coroutines.flow.map
 import mozilla.components.browser.state.state.BrowserState
 import mozilla.components.browser.state.state.createTab
 import mozilla.components.browser.state.store.BrowserStore
-import mozilla.components.concept.integrity.IntegrityClient
 import mozilla.components.concept.storage.CreditCardsAddressesStorage
 import mozilla.components.concept.storage.LoginsStorage
 import mozilla.telemetry.glean.Glean
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.AppStore
-import org.mozilla.fenix.components.ClientUUID
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.components
 import org.mozilla.fenix.debugsettings.addresses.AddressesDebugRegionRepository
@@ -48,7 +46,6 @@ import org.mozilla.fenix.debugsettings.gleandebugtools.DefaultGleanDebugToolsSto
 import org.mozilla.fenix.debugsettings.gleandebugtools.GleanDebugToolsMiddleware
 import org.mozilla.fenix.debugsettings.gleandebugtools.GleanDebugToolsState
 import org.mozilla.fenix.debugsettings.gleandebugtools.GleanDebugToolsStore
-import org.mozilla.fenix.debugsettings.integrity.FakeClientUUID
 import org.mozilla.fenix.debugsettings.logins.FakeLoginsStorage
 import org.mozilla.fenix.debugsettings.logins.LoginsTools
 import org.mozilla.fenix.debugsettings.navigation.DebugDrawerRoute
@@ -128,8 +125,6 @@ fun FenixOverlay(
             },
         creditCardsAddressesStorage = context.components.core.autofillStorage,
         inactiveTabsEnabled = inactiveTabsEnabled,
-        clientUUID = context.components.clientUUID,
-        integrityClient = context.components.integrityClient,
         tabGroupRepository = tabGroupRepository,
     )
 }
@@ -144,8 +139,6 @@ fun FenixOverlay(
  * @param loginsStorage [LoginsStorage] used to access logins for [LoginsTools].
  * @param addressesDebugRegionRepository used to control storage for [AddressesTools].
  * @param creditCardsAddressesStorage used to access addresses for [AddressesTools].
- * @param clientUUID used to test an [IntegrityClient].
- * @param integrityClient used to test an [IntegrityClient].
  * @param tabGroupRepository [TabGroupRepository] used to access and modify tab groups for [TabGroupTools].
  * @param inactiveTabsEnabled Whether the inactive tabs feature is enabled.
  */
@@ -159,8 +152,6 @@ private fun FenixOverlay(
     loginsStorage: LoginsStorage,
     addressesDebugRegionRepository: AddressesDebugRegionRepository,
     creditCardsAddressesStorage: CreditCardsAddressesStorage,
-    clientUUID: ClientUUID,
-    integrityClient: IntegrityClient,
     tabGroupRepository: TabGroupRepository,
     inactiveTabsEnabled: Boolean,
 ) {
@@ -194,8 +185,6 @@ private fun FenixOverlay(
             loginsStorage = loginsStorage,
             addressesDebugRegionRepository = addressesDebugRegionRepository,
             creditCardsAddressesStorage = creditCardsAddressesStorage,
-            clientUUID = clientUUID,
-            integrityClient = integrityClient,
             tabGroupRepository = tabGroupRepository,
         )
     }
@@ -270,8 +259,6 @@ private fun FenixOverlayPreview() {
         loginsStorage = FakeLoginsStorage(),
         addressesDebugRegionRepository = FakeAddressesDebugRegionRepository(),
         creditCardsAddressesStorage = FakeCreditCardsAddressesStorage(),
-        clientUUID = FakeClientUUID(),
-        integrityClient = IntegrityClient.testSuccess,
         tabGroupRepository = mockTabGroupRepository,
     )
 }

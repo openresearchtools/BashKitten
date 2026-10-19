@@ -33,7 +33,6 @@ class DebugDrawerTelemetryMiddleware : Middleware<DebugDrawerState, DebugDrawerA
             DebugDrawerAction.NavigateTo.CreditCards,
             DebugDrawerAction.NavigateTo.GleanDebugTools,
             DebugDrawerAction.NavigateTo.Home,
-            DebugDrawerAction.NavigateTo.IntegrityDebugTools,
             DebugDrawerAction.NavigateTo.TabGroupDebugTools,
             DebugDrawerAction.NavigateTo.TabProcessTools,
             DebugDrawerAction.NavigateTo.Logins,

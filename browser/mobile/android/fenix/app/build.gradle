@@ -414,13 +414,6 @@ android.defaultConfig.with {
         buildConfigField 'String', 'MLS_TOKEN', '""'
     }
 
-    try {
-        def token = new File("${rootDir}/.gps_integrity_token").text.trim()
-        buildConfigField 'String', 'GPS_INTEGRITY_TOKEN', '"' + token + '"'
-    } catch (FileNotFoundException ignored) {
-        buildConfigField 'String', 'GPS_INTEGRITY_TOKEN', '""'
-    }
-
     if (gradle.hasProperty("localProperties.glean.custom.server.url")) {
         def url = gradle.getProperty("localProperties.glean.custom.server.url")
         buildConfigField 'String', 'GLEAN_CUSTOM_URL', url
@@ -591,10 +584,6 @@ dependencies {
     implementation project(':components:lib-dataprotect')
     implementation project(':components:lib-push-firebase')
     implementation project(':components:lib-state')
-    implementation project(':components:lib-accelerometer-sensormanager')
-    implementation project(':components:lib-integrity-googleplay')
-    implementation project(':components:lib-llm-mlpa')
-    implementation project(':components:lib-shake')
     implementation project(':components:lib-ai-controls')
 
     implementation ComponentsDependencies.mozilla_appservices_syncmanager
@@ -651,8 +640,6 @@ dependencies {
     implementation libs.kotlinx.coroutines
     implementation libs.kotlinx.serialization.json
     implementation libs.mozilla.glean
-    implementation libs.play.review
-    implementation libs.play.review.ktx
     implementation libs.protobuf.javalite
     implementation libs.sentry
     implementation libs.androidx.documentfile
@@ -868,7 +855,7 @@ tasks.register('stageBashKittenDependencySources') {
             throw new GradleException('Invalid Android dependency source inventory')
         }
         def runtimeArtifacts = configurations.releaseRuntimeClasspath.incoming.artifactView {
-            componentFilter { pins[it.toString()]?.kind == 'metadata-only' }
+            componentFilter { pins[it.toString()]?.runtimeArtifacts != null }
         }.artifacts.artifacts.groupBy { it.id.componentIdentifier.toString() }
         def sha256 = { input ->
             java.security.MessageDigest.getInstance('SHA-256').digest(input.bytes).encodeHex().toString()
@@ -886,18 +873,20 @@ tasks.register('stageBashKittenDependencySources') {
                 missing << coordinate
                 return
             }
-            def inputs
-            if (pin.kind == 'sources') {
-                inputs = [pin]
-            } else if (pin.kind == 'metadata-only') {
-                // A reviewed BOM/redirect may have no implementation artifact. The
-                // Guava marker JAR must still match the exact reviewed empty bytes.
+            if (pin.runtimeArtifacts != null) {
+                // Check the binary identity used to establish source correspondence,
+                // or the absent/empty artifact set of reviewed metadata coordinates.
                 def actual = (runtimeArtifacts[coordinate] ?: []).collect {
                     [file: it.file.name, sha256: sha256(it.file)]
                 }.sort { it.file }
                 if (actual != pin.runtimeArtifacts.sort { it.file }) {
-                    throw new GradleException('Android metadata-only artifact changed: ' + coordinate)
+                    throw new GradleException('Android pinned runtime artifact changed: ' + coordinate)
                 }
+            }
+            def inputs
+            if (pin.kind == 'sources') {
+                inputs = [pin]
+            } else if (pin.kind == 'metadata-only' && pin.runtimeArtifacts != null) {
                 inputs = pin.files
             } else {
                 throw new GradleException('Invalid Android source kind: ' + coordinate)
