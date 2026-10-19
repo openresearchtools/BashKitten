@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "reviewed": "2026-10-17",
+  "reviewed": "2026-10-19",
   "dependencies": [
     "androidx.activity:activity-compose:1.13.0",
     "androidx.activity:activity-ktx:1.13.0",
@@ -198,13 +198,11 @@
     "androidx.work:work-runtime-ktx:2.11.2",
     "androidx.work:work-runtime:2.11.2",
     "com.abovevacant:epitaph:0.1.1",
-    "com.android.installreferrer:installreferrer:2.2",
     "com.caverock:androidsvg-aar:1.4",
     "com.google.accompanist:accompanist-drawablepainter:0.37.3",
     "com.google.android.datatransport:transport-api:3.1.0",
     "com.google.android.datatransport:transport-backend-cct:3.1.9",
     "com.google.android.datatransport:transport-runtime:3.1.9",
-    "com.google.android.gms:play-services-ads-identifier:18.3.0",
     "com.google.android.gms:play-services-base:18.10.0",
     "com.google.android.gms:play-services-basement:18.10.0",
     "com.google.android.gms:play-services-cloud-messaging:17.2.0",

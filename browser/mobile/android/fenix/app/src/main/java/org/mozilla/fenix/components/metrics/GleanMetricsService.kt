@@ -56,7 +56,7 @@ private val Event.wrapper: EventWrapper<*>?
     get() = null
 
 /**
- * Service responsible for sending the activation and installation pings.
+ * Upstream metrics service; BashKitten keeps collection disabled.
  */
 class GleanMetricsService(
     private val context: Context,
@@ -66,8 +66,6 @@ class GleanMetricsService(
 
     private val logger = Logger("GleanMetricsService")
     private var initialized = false
-
-    private val activationPing = ActivationPing(context)
 
     override fun start() {
         logger.debug("Enabling Glean.")
@@ -80,14 +78,7 @@ class GleanMetricsService(
         // The code below doesn't need to execute immediately, so we'll add them to the visual
         // completeness task queue to be run later.
         runWhenReadyQueue.runIfReadyOrQueue {
-            // We have to initialize Glean *on* the main thread, because it registers lifecycle
-            // observers. However, the activation ping must be sent *off* of the main thread,
-            // because it calls Google ad APIs that must be called *off* of the main thread.
-            // These two things actually happen in parallel, but that should be ok because Glean
-            // can handle events being recorded before it's initialized.
             Glean.registerPings(Pings)
-
-            activationPing.checkAndSend()
         }
     }
 
