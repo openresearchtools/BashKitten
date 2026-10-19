@@ -66,9 +66,12 @@ confirmed that the temporary router, model child and directory disappeared while
 the original normal router stayed alive. A second check was cancelled through
 **Stop load check**; the UI reported cleanup and the final process/directory
 snapshot matched the original baseline. Both saved configuration hashes were
-unchanged. These installed checks use the existing mixed candidate; they do not
-establish responsiveness during loading, GPU/Android behavior or the complete
-153.4.6 candidate. Evidence:
+unchanged. During a third check, the native Configuration menu opened while the
+UI still showed model loading and process snapshots confirmed both temporary
+children were active. That check also completed and cleaned up without changing
+the configuration or normal router identity. These checks use the existing mixed
+candidate; they do not establish all navigation/chat or stalled-display
+responsiveness, GPU/Android behavior or the complete 153.4.6 candidate. Evidence:
 `Bashkitten-Acceptance/xorg-model-check-20261019/acceptance.json`.
 
 GitHub preparation run `39302677649` prepared version **153.4.6** at exact
