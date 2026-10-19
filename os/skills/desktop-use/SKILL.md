@@ -16,6 +16,14 @@ It resolves the owner's current desktop generation, X authorization and session 
 owner to start Display; do not guess `:0`, scrape another process, use `xhost +`,
 start a second D-Bus session or borrow another backend's context.
 
+To leave an application open, launch its installed desktop entry with
+`bashkitten-desktop-context --timeout 30 -- gio launch /path/to/application.desktop [file]`.
+Use the actual installed entry and redirect its output to a private log so the
+application does not keep the shell's output pipe open. Check launch errors,
+then verify the window separately. Running a persistent GUI executable directly
+under the timeout closes it at the deadline; increasing that timeout or
+backgrounding the timeout wrapper does not fix the launch.
+
 1. Identify the intended window using `xdotool search --name 'TITLE'`,
    `getwindowname ID` and `getwindowgeometry --shell ID`; `xprop -id ID WM_CLASS`
    reads its application class.
