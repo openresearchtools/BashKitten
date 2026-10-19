@@ -5,8 +5,8 @@ processes. The old Rust implementation, build files, packages, differential
 fixtures and porting scripts are removed from the current tree. Git history and
 the separate [bashkitten-rust repository](https://github.com/openresearchtools/bashkitten-rust)
 retain the original Rust implementation and its complete main-branch history.
-Pi is pinned to npm `@earendil-works/pi-coding-agent@1.1.0`, upstream commit
-`abe508e1b89912adde45528136c3221eb69acdd7` (tag v1.1.0). The lockfile pins its
+Pi is pinned to npm `@earendil-works/pi-coding-agent@1.3.0`, upstream commit
+`71023aec1546d6d677a65669c5665c0927ce0dd0` (tag v1.3.0). The lockfile pins its
 runtime dependencies. Pi owns inference, tools, compaction, session JSONL, and
 credentials. The existing HTML/CSS transcript remains the presentation layer.
 
