@@ -25,6 +25,22 @@ machine, machine_name, target = {
     'x86_64': (62, 'x86-64', 'android-x86_64'),
 }[abi]
 engine = (ROOT / 'browser/config/version_display.txt').read_text().strip()
+# Check before signing/copying a candidate. Licenses do not replace source, and
+# a collector receipt with unresolved coordinates is not a complete archive.
+source_inventories = list((OBJ / 'gradle/build/mobile/android/fenix').rglob('generated/bashkitten-sources/sources.json'))
+if len(source_inventories) != 1:
+    raise SystemExit('Expected exactly one resolved Android dependency source inventory, found ' + str(len(source_inventories)))
+sources = source_inventories[0].parent
+missing_sources = json.loads((sources / 'missing.json').read_text())
+if not isinstance(missing_sources, list) or missing_sources:
+    raise SystemExit('Android dependency source is incomplete: ' + json.dumps(missing_sources))
+source_manifest = json.loads(source_inventories[0].read_text())
+if not isinstance(source_manifest, list) or not source_manifest:
+    raise SystemExit('Resolved Android dependency source inventory is missing')
+for entry in source_manifest:
+    name = entry['file']
+    if Path(name).name != name or not (sources / name).is_file():
+        raise SystemExit('Missing Android dependency source: ' + name)
 key = Path(os.environ['BASHKITTEN_PUBLISHER_KEYSTORE'])
 if not key.is_file():
     raise SystemExit('The Droid signing identity is required for a product candidate')
@@ -122,17 +138,8 @@ with zipfile.ZipFile(destination) as apk:
 manifest['remote_client'] = remote_manifest
 shutil.copy2(remote / 'share/source/remote-client-go.tar.gz', OUT / f'bashkitten-remote-client-source_{abi}.tar.gz')
 shutil.copy2(remote / 'bashkitten-remote-sources.jar', OUT / f'bashkitten-remote-client-java-source_{abi}.jar')
-source_inventories = list((OBJ / 'gradle/build/mobile/android/fenix').rglob('generated/bashkitten-sources/sources.json'))
-if len(source_inventories) != 1:
-    raise SystemExit('Expected exactly one resolved Android dependency source inventory, found ' + str(len(source_inventories)))
-sources = source_inventories[0].parent
-source_manifest = json.loads(source_inventories[0].read_text())
-if not isinstance(source_manifest, list) or not source_manifest:
-    raise SystemExit('Resolved Android dependency source inventory is missing')
 for entry in source_manifest:
     name = entry['file']
-    if Path(name).name != name or not (sources / name).is_file():
-        raise SystemExit('Missing Android dependency source: ' + name)
     entry['sha256'] = hashlib.sha256((sources / name).read_bytes()).hexdigest()
 (sources / 'sources.json').write_text(json.dumps(source_manifest, indent=2) + '\n')
 with tarfile.open(OUT / f'bashkitten-android-library-source_{abi}.tar.gz', 'w:gz') as archive:

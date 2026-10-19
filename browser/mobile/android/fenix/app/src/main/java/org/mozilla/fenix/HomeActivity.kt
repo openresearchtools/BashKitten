@@ -113,7 +113,6 @@ import org.mozilla.fenix.components.menu.MenuAccessPoint
 import org.mozilla.fenix.components.menu.share.QRCodeDialogFragment
 import org.mozilla.fenix.components.metrics.BreadcrumbsRecorder
 import org.mozilla.fenix.components.metrics.GrowthDataWorker
-import org.mozilla.fenix.components.metrics.InstallReferrerHandlingService
 import org.mozilla.fenix.components.metrics.fonts.FontEnumerationWorker
 import org.mozilla.fenix.components.share.QR_CODE_URI_KEY
 import org.mozilla.fenix.components.share.SEND_TO_DEVICES_ACTION
@@ -487,7 +486,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
             }
 
         SplashScreenManager(
-            splashScreenOperation = createSplashScreenOperation(shouldShowOnboarding),
+            splashScreenOperation = createSplashScreenOperation(),
             scope = lifecycleScope,
             splashScreenTimeout = FxNimbus.features.splashScreen.value().maximumDurationMs.toLong(),
             storage = DefaultSplashScreenStorage(components.settings),
@@ -1331,7 +1330,7 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         return false
     }
 
-    private fun createSplashScreenOperation(shouldShowOnboarding: Boolean): SplashScreenOperation {
+    private fun createSplashScreenOperation(): SplashScreenOperation {
         val nimbusOperation = if (FxNimbus.features.splashScreen.value().offTrainOnboarding) {
             ApplyExperimentsOperation(
                 storage = DefaultExperimentsOperationStorage(components.settings),
@@ -1342,10 +1341,6 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
                 storage = DefaultExperimentsOperationStorage(components.settings),
                 nimbus = components.nimbus.sdk,
             )
-        }
-
-        if (shouldShowOnboarding) {
-            InstallReferrerHandlingService(applicationContext).start()
         }
 
         return nimbusOperation

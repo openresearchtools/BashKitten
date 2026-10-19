@@ -648,13 +648,11 @@ dependencies {
     implementation libs.androidx.viewpager2
     implementation libs.androidx.work.runtime
     implementation libs.google.material
-    implementation libs.installreferrer
     implementation libs.kotlinx.coroutines
     implementation libs.kotlinx.serialization.json
     implementation libs.mozilla.glean
     implementation libs.play.review
     implementation libs.play.review.ktx
-    implementation libs.play.services.ads.id
     implementation libs.protobuf.javalite
     implementation libs.sentry
     implementation libs.androidx.documentfile
@@ -866,9 +864,12 @@ tasks.register('stageBashKittenDependencySources') {
         def result = dependencies.createArtifactResolutionQuery().forComponents(ids)
             .withArtifacts(org.gradle.jvm.JvmLibrary, org.gradle.language.base.artifact.SourcesArtifact).execute()
         def destination = file("$buildDir/generated/bashkitten-sources")
+        // Never carry a removed dependency's source into a later candidate.
+        delete destination
         destination.mkdirs()
         def manifest = []
-        def missing = []
+        def resolvedIds = result.resolvedComponents.collect { it.id }.toSet()
+        def missing = ids.findAll { !resolvedIds.contains(it) }.collect { it.toString() }
         result.resolvedComponents.each { component ->
             def artifacts = component.getArtifacts(org.gradle.language.base.artifact.SourcesArtifact)
             if (!artifacts.any { it instanceof org.gradle.api.artifacts.result.ResolvedArtifactResult }) missing << component.id.toString()
@@ -880,8 +881,14 @@ tasks.register('stageBashKittenDependencySources') {
                 }
             }
         }
+        missing = missing.unique().sort()
+        manifest.sort { it.component }
         new File(destination, 'missing.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(missing))
         new File(destination, 'sources.json').text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(manifest))
+        if (missing) {
+            throw new GradleException('Android dependency source is incomplete; see ' +
+                new File(destination, 'missing.json') + ': ' + missing.join(', '))
+        }
     }
 }
 tasks.matching { it.name == 'assembleRelease' }.configureEach {

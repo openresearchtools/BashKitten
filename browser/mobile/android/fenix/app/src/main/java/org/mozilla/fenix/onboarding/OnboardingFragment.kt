@@ -40,8 +40,6 @@ import org.mozilla.fenix.components.accounts.FenixFxAEntryPoint
 import org.mozilla.fenix.components.appstate.AppAction
 import org.mozilla.fenix.components.appstate.SupportedMenuNotifications
 import org.mozilla.fenix.components.initializeGlean
-import org.mozilla.fenix.components.metrics.InstallReferrerHandlingService
-import org.mozilla.fenix.components.metrics.RtamoAttributionHandler
 import org.mozilla.fenix.components.metrics.installSourcePackage
 import org.mozilla.fenix.components.startMetricsIfEnabled
 import org.mozilla.fenix.ext.application
@@ -74,10 +72,6 @@ class OnboardingFragment : Fragment() {
     private val logger = Logger("OnboardingFragment")
 
     private val removeMarketingFeature = ViewBoundFeatureWrapper<MarketingPageRemovalSupport>()
-
-    private val rtamoAttributionHandler by lazy {
-        RtamoAttributionHandler(requireContext(), requireComponents.settings, requireComponents.addonsProvider)
-    }
 
     private val termsOfServiceEventHandler by lazy {
         DefaultOnboardingTermsOfServiceEventHandler(
@@ -344,8 +338,6 @@ class OnboardingFragment : Fragment() {
             Pings.onboardingOptOut.setEnabled(true)
             Pings.onboardingOptOut.submit()
         }
-
-        rtamoAttributionHandler.handleReferrer(InstallReferrerHandlingService.response)
 
         // The marketing telemetry may be enabled after finishing onboarding.
         startMetricsIfEnabled(
