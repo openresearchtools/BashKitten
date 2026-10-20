@@ -30,6 +30,7 @@ meta.browserOwner = process.env.BASHKITTEN_BROWSER_OWNER || id;
 let phoneWorker, phoneSession;
 let rpc, providersVersion, localProviderRevision, projectNativeSession, busy = false, compacting = false, stopping = false, changing = false;
 let entries = [], events = [], usage = null, queue = [], pendingModel = null, pendingContext = false, contextUpdates = 0;
+let snapshotEntries = [];
 const messageAttribution = new MessageAttribution();
 let liveUserSubmission;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
@@ -103,10 +104,11 @@ async function reportCompleted(entryId, chatId = id, session = meta.piSessionId)
   return reportWork;
 }
 function serial(fn) { const work = operations.then(fn); operations = work.catch(() => {}); return work; }
-function displayEntries() { return entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questionOwner.state.records, e.id) } : e); }
+function displayEntries() { return snapshotEntries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questionOwner.state.records, e.id) } : e); }
 function status() { return { stopGeneration: questionOwner.state.generation, questions: questionOwner.list(), runtimeVersion: rpc?.runtime.version, cwd: meta.cwd, busy, compacting, usage, extensionStatuses: [...extensionStatuses.values()], contextVersion: meta.contextVersion, pendingContext: pendingContext || contextUpdates > 0, modelSelection: { model: meta.model, thinking: meta.thinking },
   steeringMessages: queue.filter(q => q.kind === 'steer').map(item => queueItem(item, questionOwner.state.records)), queuedMessages: queue.filter(q => q.kind !== 'steer').map(item => queueItem(item, questionOwner.state.records)) }; }
 function snapshot() { return { ...status(), entries: displayEntries(), events, dialogs: [...dialogs.values()] }; }
+function settleSnapshot() { snapshotEntries = entries; events = []; }
 function emit(event, remember = true) {
   if (remember) events.push(event);
   const line = `data: ${JSON.stringify(event)}\n\n`;
@@ -124,6 +126,10 @@ async function readState(follow) {
   if (phoneSession !== state.sessionId) { await phoneWorker.adopt(state.sessionId); phoneSession = state.sessionId; }
   if (server && !changing && meta.piSessionId && state.sessionId !== meta.piSessionId) await adoptSession(state, follow);
   entries = activeBranch(history.entries, history.leafId);
+  // Live events replay after this boundary. Attribution/status refreshes may
+  // read newer persisted messages, but must not also add them to that prefix.
+  // Advance the prefix and discard its replay together when the turn settles.
+  if (!events.length) snapshotEntries = entries;
   messageAttribution.seed(state.sessionId, history.entries);
   bindMessageEntries(meta, history.entries);
   meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
@@ -170,7 +176,7 @@ async function adoptSession(state, follow) {
   oldOwnership.close();
   if (follow) emit({ type: 'session_changed', id }, false);
   for (const client of clients) client.end();
-  clients.clear(); events = []; dialogs.clear(); extensionStatuses.clear(); liveToolCalls.clear(); queue = [];
+  clients.clear(); entries = []; snapshotEntries = []; events = []; dialogs.clear(); extensionStatuses.clear(); liveToolCalls.clear(); queue = [];
   messageAttribution.clear();
   busy = state.isStreaming; compacting = state.isCompacting;
   pendingModel = null;
@@ -251,7 +257,7 @@ async function launch() {
         await refresh();
         // A new prompt may have arrived while RPC history was being read.
         if (busy) return;
-        events = [];
+        settleSnapshot();
         emit({ type: 'snapshot', data: snapshot() }, false);
         emit({ type: 'agent_settled' }, false);
         notifyTurn(meta, entries).catch(() => {});
@@ -503,7 +509,7 @@ async function handle(req, res) {
       // next held queue, not the earlier drafts returned to this caller.
       queue = queue.filter(item => !stoppedItems.has(item.id)); await checkpoint();
       await rpc.command('abort'); busy = compacting = false;
-      await refresh(); events = []; emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
+      await refresh(); settleSnapshot(); emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
       return json(res, { data: pending });
     }
     if (req.url === '/shutdown') {
@@ -578,7 +584,7 @@ async function handle(req, res) {
         // Do not occupy the control queue while a potentially long compaction runs.
         busy = compacting = true;
         rpc.command('compact', { customInstructions: value.instructions || undefined }, 30 * 60 * 1000).then(async () => {
-          await refresh(); busy = compacting = false; events = []; emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
+          await refresh(); busy = compacting = false; settleSnapshot(); emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
         }).catch(error => { busy = compacting = false; emit({ type: 'compaction_end', errorMessage: error.message }); emit({ type: 'agent_settled' }, false); });
         return { ok: true };
       }
