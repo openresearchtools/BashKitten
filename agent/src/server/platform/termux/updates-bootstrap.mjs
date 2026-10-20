@@ -290,8 +290,14 @@ async function bootstrap(request) {
   }
   const ownership = await instance.claimInstance('package-update');
   if (!ownership) { acknowledge({ error: 'Another package operation is starting; wait for its status' }); return null; }
+  const temporary = path.join(directory, 'tmp');
   let controlOwner, started;
   try {
+    // Termux removes its shared tmp on service shutdown, including after our
+    // short status calls. Only the locked transaction owns this private tmp.
+    await fs.rm(temporary, { recursive: true, force: true });
+    await fs.mkdir(temporary, { mode: 0o700 });
+    process.env.TMPDIR = temporary;
     started = await instance.processStart(process.pid);
     if (!started) throw Error('The update process has no live ownership identity');
     await writeJson(ownerFile, { pid: process.pid, started });
@@ -372,6 +378,7 @@ async function bootstrap(request) {
     try {
       const owner = await readJson(ownerFile, null);
       if (owner?.pid === process.pid && owner.started === started) await fs.rm(ownerFile, { force: true });
+      await fs.rm(temporary, { recursive: true, force: true });
     } finally { controlOwner?.close(); ownership.close(); }
   }
   return null;

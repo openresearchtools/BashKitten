@@ -109,6 +109,11 @@ def prepare(module, request, state):
     try:
         stage = Path(tempfile.mkdtemp(prefix='runtime-', dir=DIRECTORY))
         state['stage'] = str(stage)
+        # Termux clears its shared TMPDIR when short RUN_COMMAND services stop.
+        # APT's signature files must survive the independent status requests.
+        temporary = stage / 'tmp'
+        temporary.mkdir(mode=0o700)
+        os.environ['TMPDIR'] = str(temporary)
         target = request['target']
         backend = next(item for item in target['packages'] if item['name'] == 'bashkitten')
 
