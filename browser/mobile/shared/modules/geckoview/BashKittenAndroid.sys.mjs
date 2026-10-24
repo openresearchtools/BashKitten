@@ -36,6 +36,12 @@ export const BashKittenAndroid = {
   register(context, browserId) {
     if (!contexts.has(context)) contexts.set(context, new Set());
     contexts.get(context).add(browserId);
+    // History restoration bypasses Android's navigation interceptor. The
+    // native ordinary-user context is always direct; Tor switches contexts.
+    // Initialize it before restoration without opening any unknown route.
+    if (context === contextPrefix("bashkitten-user") && !routes.has(context)) {
+      this.configure(context, browserId, {});
+    }
   },
   configure(context, browserId, { tor = false, port = 0, identities = [], adblock = true, proxySecret = "", serviceRoute = null, agentHost = "" }) {
     if (!context) throw new Error("Missing isolated session context");
