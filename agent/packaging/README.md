@@ -134,12 +134,19 @@ Both channels use the exact committed product version for `.deb` versions and
 regular release `153.4.3`. There is no nightly version suffix or separate stable
 sequence: with both sources enabled, APT takes the higher version from either.
 The channel is GitHub's prerelease flag; candidate binaries are not relabeled
-or promoted by changing their compiled version at publication. The Android
-version code is `2020000000 + floor((commitEpoch - 1767225600) / 60) * 8 + abiBits`,
-where ARM64 uses 2 and x86_64 uses 6. This advances beyond the previous Fennec
-version codes while preserving deterministic rebuilds. Publish distinct APK
-updates from different source minutes; reusing an identical cached APK keeps its
-original code and does not require a browser update.
+or promoted by changing their compiled version at publication.
+
+From the 24 October 2026 rollback baseline onward, direct Android APK releases
+keep version code `2024000000 + abiBits`, where ARM64 uses 2 and x86_64 uses 6.
+Do not increment this code: Android's normal installer permits replacing an APK
+with the same code and signing identity, so a user can return to this baseline
+without uninstalling or clearing saved app data. Update discovery compares the
+numeric two- or three-part product `versionName`; it never offers the installed
+version again merely because a build code differs. Build/source identities stay
+in the existing manifests and matching Termux package pins. Retain published
+baseline packages in signed APT catalogues. This defines package rollback from
+this baseline forward; installed acceptance must also check that the tested
+versions preserve user configurations, models, chats and explicit runtime choices.
 
 
 Private Node components are built by `node-native.yml` for Linux amd64/arm64 and

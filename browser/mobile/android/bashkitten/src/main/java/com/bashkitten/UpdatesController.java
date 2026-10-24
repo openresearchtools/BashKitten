@@ -3,6 +3,7 @@ package com.bashkitten;
 
 import android.app.Activity;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
@@ -224,6 +225,16 @@ public final class UpdatesController {
         }
         return CompletableFuture.completedFuture(view());
     }
+    private static int compareVersions(String left, String right) {
+        String pattern = "[0-9]+\\.[0-9]+(?:\\.[0-9]+)?";
+        if (!left.matches(pattern) || !right.matches(pattern)) throw new IllegalArgumentException("Invalid published product version.");
+        String[] a = left.split("\\."), b = right.split("\\.");
+        for (int i = 0; i < 3; i++) {
+            int difference = new BigInteger(i < a.length ? a[i] : "0").compareTo(new BigInteger(i < b.length ? b[i] : "0"));
+            if (difference != 0) return difference;
+        }
+        return 0;
+    }
     CompletableFuture<JSONObject> check() {
         if (checking) return CompletableFuture.completedFuture(view());
         checking = true; checkError = ""; changed();
@@ -233,7 +244,7 @@ public final class UpdatesController {
             if (error != null) { app.main.post(() -> { checking = false; checkError = message(error); changed(); result.completeExceptionally(error); }); return; }
             io.execute(() -> {
                 try {
-                    long newest = versionCode; JSONObject found = null; String link = null;
+                    String newest = version; JSONObject found = null; String link = null;
                     for (int page = 1; ; page++) {
                         JSONArray releases = new JSONArray(metadata("https://api.github.com/repos/openresearchtools/bashkitten/releases?per_page=100&page=" + page));
                         for (int i = 0; i < releases.length(); i++) {
@@ -245,11 +256,13 @@ public final class UpdatesController {
                             JSONArray apps = new JSONObject(metadata(assets.get("release.json"))).getJSONArray("apps");
                             for (int j = 0; j < apps.length(); j++) {
                                 JSONObject candidate = apps.getJSONObject(j);
-                                if (!candidate.getString("packageId").equals(app.getPackageName()) || !candidate.getString("abi").equals(manifest.getString("apkAbi")) || candidate.getLong("versionCode") <= newest) continue;
+                                if (!candidate.getString("packageId").equals(app.getPackageName()) || !candidate.getString("abi").equals(manifest.getString("apkAbi"))) continue;
+                                String candidateVersion = candidate.getString("versionName");
+                                if (compareVersions(candidateVersion, newest) <= 0) continue;
                                 String asset = candidate.getString("asset");
                                 if (!asset.endsWith(".apk") || !assets.containsKey(asset)) throw new IllegalStateException("The published release is missing its matching APK.");
-                                newest = candidate.getLong("versionCode"); link = assets.get(asset);
-                                found = object("version", candidate.getString("versionName"), "versionCode", newest);
+                                newest = candidateVersion; link = assets.get(asset);
+                                found = object("version", candidateVersion, "versionCode", candidate.getLong("versionCode"));
                             }
                         }
                         if (releases.length() < 100) break;
