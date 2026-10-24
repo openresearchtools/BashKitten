@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Reuse verified browser artifacts without consuming the compiler-cache quota."""
 import argparse
+import base64
+from functools import cache
 import hashlib
 import importlib.util
 import json
@@ -149,16 +151,80 @@ def verify_package(directory, target, source, digest):
             raise ValueError('Package checksum mismatch')
 
 
+@cache
+def android_workflow_steps(repository, revision):
+    if not re.fullmatch('[0-9a-f]{40}', revision):
+        raise ValueError('Invalid builder workflow revision')
+    path = '.github/workflows/build.yml'
+    entry = api(f'repos/{repository}/contents/{path}?ref={revision}')
+    source = base64.b64decode(entry['content']).decode()
+    jobs = source.partition('\njobs:\n')[2]
+    # The Android recipe has one job and ordinary top-level steps. Numbered
+    # Actions results start with setup-job (1), then these steps (2 onwards).
+    # Resolve commands from the immutable recipe: API display names can be
+    # secret-redacted, including the word Android, and are not identities.
+    if re.findall(r'^  ([\w-]+):$', jobs, re.M) != ['apk']:
+        return None
+    steps = re.split(r'^    - ', jobs.partition('    steps:\n')[2], flags=re.M)[1:]
+    if not steps:
+        return None
+    return steps, {'revision': revision, 'path': path, 'blob': entry['sha']}
+
+
+def completed_android_producer(repository, run, jobs):
+    recipe = android_workflow_steps(repository, run['head_sha'])
+    if recipe is None or len(jobs) != 1:
+        return None
+    steps, workflow = recipe
+
+    def command_number(command):
+        matches = [index + 2 for index, step in enumerate(steps)
+                   if re.search(r'^      run: ' + re.escape(command) + r'$', step, re.M)]
+        return matches[0] if len(matches) == 1 else None
+
+    build_numbers = [command_number(command) for command in (
+        'set -o pipefail; ./mach build 2>&1 | tee ../artifacts/gecko-build.log',
+        'set -o pipefail; ./mach gradle :fenix:assembleRelease --profile 2>&1 | tee ../artifacts/apk-build.log',
+        'python3 browser/bashkitten/android/scripts/collect-artifacts.py candidate')]
+    verify_number = command_number('python3 agent/packaging/browser-component.py verify "$BROWSER_TARGET" --directory candidate')
+    restore_number = command_number('python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate')
+    if not verify_number or not all(build_numbers) or max(build_numbers) >= verify_number:
+        return None
+    upload_index = verify_number - 1  # zero-based recipe step immediately after verification
+    if upload_index >= len(steps):
+        return None
+    upload_recipe = steps[upload_index]
+    if (not re.match(r'uses: actions/upload-artifact@[0-9a-f]{40}\n', upload_recipe) or
+            not re.search(r'^        path: candidate/$', upload_recipe, re.M) or
+            not re.search(r'^        name: \$\{\{ steps\.component\.outputs\.artifact \}\}$', upload_recipe, re.M)):
+        return None
+    job = jobs[0]
+    results = {step['number']: step for step in job.get('steps', [])}
+    builds = [results.get(number, {}) for number in build_numbers]
+    verification = results.get(verify_number, {})
+    upload = results.get(verify_number + 1, {})
+    if verification.get('conclusion') != 'success' or upload.get('conclusion') != 'success':
+        return None
+    evidence = {'job': job['id'], 'workflow': workflow, 'verify': verification, 'upload': upload}
+    if all(step.get('conclusion') == 'success' for step in builds):
+        return {**evidence, 'build': builds}
+    restored = results.get(restore_number, {})
+    if (run['conclusion'] == 'success' and restored.get('conclusion') == 'success' and
+            all(step.get('conclusion') == 'skipped' for step in builds)):
+        return {**evidence, 'restored': restored}
+    return None
+
+
 def completed_producer(repository, run, target):
     if (run['status'] != 'completed' or run['conclusion'] not in ('success', 'failure') or
             run['event'] != 'workflow_dispatch' or run['head_branch'] != 'main' or
             run['path'] != '.github/workflows/build.yml'):
         return None
-    android = target.startswith('android')
-    verify_name = 'Verify the Android artifact and source inputs' if android else 'Verify the browser archive and source inputs'
-    build_names = (['Build Gecko for the selected architecture', 'Assemble the release browser',
-                    'Sign, verify and collect the production APK'] if android else ['Build the complete browser archive'])
     jobs = api(f'repos/{repository}/actions/runs/{run["id"]}/jobs?per_page=100')['jobs']
+    if target.startswith('android'):
+        return completed_android_producer(repository, run, jobs)
+    verify_name = 'Verify the browser archive and source inputs'
+    build_names = ['Build the complete browser archive']
     for job in jobs:
         steps = job.get('steps', [])
         verification = next((s for s in steps if s['name'] == verify_name and s['conclusion'] == 'success'), None)
@@ -203,9 +269,6 @@ def restore(directory, target, digest):
             if artifact['expired'] or not artifact['name'].startswith(f'bashkitten-browser-{target}-'):
                 continue
             run = api(f'repos/{repository}/actions/runs/{artifact["workflow_run"]["id"]}')
-            evidence = completed_producer(repository, run, target)
-            if not evidence:
-                continue
             if target.startswith('android'):
                 # The APK carries exact companion package expectations. A
                 # different assembly revision needs new APK resources, even
@@ -214,6 +277,9 @@ def restore(directory, target, digest):
                 current = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
                 if not source or source[1] != current:
                     continue
+            evidence = completed_producer(repository, run, target)
+            if not evidence:
+                continue
             legacy = None
             expected = digest
             if artifact['name'] != name:
