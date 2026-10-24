@@ -71,10 +71,10 @@ def initialize():
     initialized=config/'bashkitten-os/initialized'
     pending=config/'bashkitten-os/initial-scale'
     if not initialized.exists() and not pending.exists() and not any((channel_dir/source.name).exists() for source in sources):
-        # Touchscreen Termux starts at 3x; mouse-driven container desktops retain
-        # 1x. Never infer scaling from viewport resize or replace a saved choice.
+        # Touchscreen Termux starts at 3x; new container desktops start at 2.25x.
+        # Never infer scaling from viewport resize or replace a saved choice.
         chosen=settings().get_user_value('scale')
-        new_default(pending,(chosen.get_string() if chosen is not None else '3' if os.environ.get('BASHKITTEN_EXECUTION_ROLE')=='termux' else '1')+'\n')
+        new_default(pending,(chosen.get_string() if chosen is not None else '3' if os.environ.get('BASHKITTEN_EXECUTION_ROLE')=='termux' else '2.25')+'\n')
     label=pending.read_text().strip() if pending.exists() else None
     for source in sources:
         target=channel_dir/source.name
