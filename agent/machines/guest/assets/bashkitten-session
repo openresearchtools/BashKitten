@@ -41,6 +41,10 @@ async def run():
            'BASHKITTEN_MACHINE_ID': str(uuid.UUID(display['machineId'])),
            'BASHKITTEN_DATA_DIR': str(DATA), 'BASHKITTEN_DESKTOP_CONTEXT': str(CONTEXT),
            'BASHKITTEN_GUEST_STATUS_FILE': str(STATUS)}
+    notify_env = env.copy()
+    # Only this owner reports the unit's state. Caddy's STOPPING notification
+    # during Share Local setup must not stop the entire guest Agent service.
+    env.pop('NOTIFY_SOCKET', None)
     stopped = asyncio.Event()
     for sig in [signal.SIGTERM, signal.SIGINT]:
         asyncio.get_running_loop().add_signal_handler(sig, stopped.set)
@@ -54,7 +58,7 @@ async def run():
         if await start.wait():
             raise RuntimeError('Guest services did not start')
         write_json(STATUS, {'running': True, 'error': None})
-        ready = await asyncio.create_subprocess_exec('/usr/bin/systemd-notify', '--ready', env=env)
+        ready = await asyncio.create_subprocess_exec('/usr/bin/systemd-notify', '--ready', env=notify_env)
         if await ready.wait():
             raise RuntimeError('Guest Agent readiness could not be published')
         stop_task = asyncio.create_task(stopped.wait())
