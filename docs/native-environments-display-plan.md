@@ -3930,6 +3930,13 @@ Use the existing signed package channel and matching published artifacts;
 preserve user configurations and intentional custom runtime choices. Do not
 downgrade unrelated Termux packages merely to align the BashKitten payload.
 
+The user's later clarification establishes 153.5.2 as the supported rollback
+baseline. From this release onward, verify upgrading to a newer testing APK and
+reinstalling this baseline through the normal installer, with automatic selection
+of each APK's exact owned Termux packages. Keep those versioned packages available
+and preserve settings, models, chats and deliberate custom runtimes in both
+directions. Retrofitting historical releases is outside this request.
+
 Inter-agent messages are attributed agent communication, never user-authored
 drafts. Deliver them as stock Pi steering while the recipient is working. The
 receiver must know the source agent/subagent identity, source chat title and
