@@ -18,7 +18,7 @@ const acknowledge = value => { if (process.connected) process.send(value, () => 
 const terminal = state => ['complete', 'failed', 'interrupted', 'cancelled'].includes(state);
 const aptOptions = ['-o', 'DPkg::Lock::Timeout=300', '-o', 'Dpkg::Use-Pty=0', '-o', 'APT::Status-Fd=3',
   '-o', 'Dpkg::Options::=--force-confdef', '-o', 'Dpkg::Options::=--force-confold',
-  '-o', 'APT::Get::AllowUnauthenticated=false', '-o', 'Acquire::AllowInsecureRepositories=false'];
+  '-o', 'APT::Get::AllowUnauthenticated=false', '-o', 'Acquire::AllowInsecureRepositories=false', '-o', 'APT::Update::Error-Mode=any'];
 const importInstalled = name => import(pathToFileURL(path.join(app, 'src/server', name)).href);
 function termux() { if (process.platform !== 'android' || process.env.PREFIX !== prefix) throw Error('These package updates require the installed Termux backend'); }
 export function validateTarget(value) {
@@ -124,11 +124,17 @@ function checkRemoval(output) {
   if (/^Remv (?:bashkitten(?:-os)?|python|termux-tools|openresearchtools-termux-keyring)(?: |:)/m.test(output))
     throw Error('APT would remove a required BashKitten package; the transaction was not applied');
 }
-function checkPlan(output, target) {
+async function checkPlan(output, target) {
   checkRemoval(output);
-  for (const [, name, version] of output.matchAll(/^Inst (\S+)(?: \[[^\]]+\])? \((\S+)/gm)) {
+  for (const [, name, current, version] of output.matchAll(/^Inst (\S+)(?: \[([^\]]+)\])? \((\S+)/gm)) {
     const expected = target.packages.find(item => item.name === name.split(':')[0]);
     if (expected && version !== expected.version) throw Error('APT preferences would replace ' + expected.name + ' with a version that does not match this APK');
+    if (!expected && current && current !== version) {
+      let downgrade;
+      try { await exec('dpkg', ['--compare-versions', version, 'lt', current]); downgrade = true; }
+      catch (error) { if (error.code !== 1) throw error; downgrade = false; }
+      if (downgrade) throw Error(`APT would downgrade unrelated package ${name} from ${current} to ${version}; only this APK's owned packages may be downgraded`);
+    }
   }
 }
 async function archiveBuild(file) {
@@ -197,21 +203,21 @@ export async function applyPackages(job, { target, channel }, { beforeApply = as
     ...(files || target.packages.map(item => item.name + '=' + item.version))];
   let options = await packageOptions(job, target, channel);
   await job.phase('Checking the complete package transaction');
-  checkPlan(await apt(job, [...options, '-s', ...args], { captureAll: true }), target);
+  await checkPlan(await apt(job, [...options, '-s', ...args], { captureAll: true }), target);
   await job.phase('Downloading package dependencies'); await apt(job, [...options, '--download-only', ...args]);
   if (job.job.kind === 'update-packages') {
-    checkPlan(await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true }), target);
+    await checkPlan(await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true }), target);
     await apt(job, [...options, '--download-only', '-y', 'full-upgrade']);
   }
   await beforeApply(async () => {
     await job.phase('Installing the matching app packages and dependencies');
     // Recheck immediately before applying: external APT changes are not assumed away.
     options = await packageOptions(job, target, channel);
-    checkPlan(await apt(job, [...options, '-s', ...args], { captureAll: true }), target);
+    await checkPlan(await apt(job, [...options, '-s', ...args], { captureAll: true }), target);
     await apt(job, [...options, ...args]);
     if (job.job.kind === 'update-packages') {
       options = await packageOptions(job, target, channel);
-      checkPlan(await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true }), target);
+      await checkPlan(await apt(job, [...options, '-s', 'full-upgrade'], { captureAll: true }), target);
       await apt(job, [...options, '-y', 'full-upgrade']);
     }
     const final = await installed();

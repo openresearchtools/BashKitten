@@ -51,7 +51,13 @@ export async function atIdle(job, fn) {
       if (!waiting) break;
       await job.phase('Waiting for Pi turns and provider login to finish', 'waiting'); await delay(2000);
     }
-    await job.phase('Applying at idle boundary'); return await fn();
+    await job.phase('Applying at idle boundary');
+    const result = await fn();
+    // Keep this pre-transaction module alive through package replacement. An
+    // older APK's updater can therefore adopt its restored bundled Pi before
+    // the older backend starts, without resetting an explicit runtime choice.
+    selectedRuntime();
+    return result;
   } finally { await fs.rm(maintenanceFile, { force: true }); }
 }
 export async function activateRuntime(job, next) {
@@ -63,7 +69,7 @@ export async function activateRuntime(job, next) {
     }
     try {
       const packaged = await readJson(path.join(bundledRoot, 'runtime-default.json'), null);
-      await writeJson(runtimeFile, { root: next.root, version: next.version, packagedRoot: packaged?.root, previous: { root: current.root, version: current.version } });
+      await writeJson(runtimeFile, { root: next.root, version: next.version, selection: 'explicit', packagedRoot: packaged?.root, previous: { root: current.root, version: current.version } });
       selectedRuntime(); await ensureIntegration(); await reload();
     } catch (error) {
       if (previousSelection) await writeJson(runtimeFile, previousSelection); else await fs.rm(runtimeFile, { force: true });

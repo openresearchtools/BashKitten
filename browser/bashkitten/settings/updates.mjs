@@ -18,7 +18,7 @@ export async function renderSection({ root, call, signal, subscribe }) {
   const actions = node(browser, 'div'); actions.className = 'actions'; browser.append(actions);
   const check = button(actions, 'Check for updates', () => run(() => call('updates.check')));
   const download = button(actions, 'Download app update', () => run(() => call('updates.download')));
-  browser.append(node(browser, 'p', 'Android asks you to install the downloaded app. Its matching Termux packages update automatically after you open the new version. Package repair restores the exact versions required by the installed app.'));
+  browser.append(node(browser, 'p', 'Android asks you to install the downloaded app. Opening an installed app upgrades or downgrades its BashKitten Termux packages to the exact required versions. Package repair restores that same pair. Your settings, models and chats are retained.'));
   packages.append(node(packages, 'h2', 'Termux packages'));
   const matching = node(packages, 'p'); packages.append(matching);
   const packageSummary = node(packages, 'p'); packages.append(packageSummary);

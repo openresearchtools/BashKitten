@@ -30,12 +30,15 @@ export function selectedRuntime() {
         try { managed = JSON.parse(fs.readFileSync(path.join(selection.root, 'managed.json'), 'utf8')); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
       }
-      // Adopt a new package at the existing idle/restart boundary. Never replace
-      // an independently selected external runtime or downgrade a newer Pi.
+      // Android's automatically selected package runtime follows its APK in
+      // either direction. The prior packagedRoot identifies that selection;
+      // independent npm/custom choices remain selected across a rollback.
+      const followsPackage = selection && selection.selection !== 'explicit' &&
+        selection.root === selection.packagedRoot;
       const upgrade = !selection || (managed?.owner === 'bashkitten' &&
-        semver.gte(bundled.version, selection.version));
+        (process.platform === 'android' ? followsPackage : semver.gte(bundled.version, selection.version)));
       const previous = selection && { root: selection.root, version: selection.version };
-      selection = upgrade ? { ...bundled, ...(previous && previous.root !== bundled.root ? { previous } : {}) } : selection;
+      selection = upgrade ? { ...bundled, selection: 'packaged', ...(previous && previous.root !== bundled.root ? { previous } : {}) } : selection;
       selection.packagedRoot = bundled.root;
       saveSelection(selection);
     }

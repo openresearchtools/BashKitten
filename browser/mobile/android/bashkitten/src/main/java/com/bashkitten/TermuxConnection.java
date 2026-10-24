@@ -16,6 +16,7 @@ import android.provider.Settings;
 import org.json.JSONObject;
 
 import java.util.UUID;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
@@ -81,22 +82,41 @@ public final class TermuxConnection {
     }
 
     /** The only setup command shown to the user. It carries no executable intent extras. */
-    public String setupCommand() {
+    String setupCommand(JSONObject target) throws org.json.JSONException {
         PackageManager packages = context.getPackageManager();
         Intent launch = packages.getLaunchIntentForPackage(context.getPackageName());
         if (launch == null || launch.getComponent() == null) {
             throw new IllegalStateException("BashKitten's launch activity is unavailable.");
         }
         ComponentName destination = launch.getComponent();
+        String revision = target.getString("sourceCommit");
+        String version = target.getString("productVersion");
+        String architecture = target.getString("architecture");
+        String backend = null, desktop = null;
+        org.json.JSONArray requirements = target.getJSONArray("packages");
+        for (int i = 0; i < requirements.length(); i++) {
+            JSONObject item = requirements.getJSONObject(i);
+            if (!architecture.equals(item.getString("architecture"))) throw new IllegalStateException("The setup package architecture is invalid.");
+            if (item.getString("name").equals("bashkitten") && backend == null) backend = item.getString("version");
+            else if (item.getString("name").equals("bashkitten-os") && desktop == null) desktop = item.getString("version");
+            else throw new IllegalStateException("The setup package list is invalid.");
+        }
+        if (!revision.matches("[a-f0-9]{40}") || !version.matches("[0-9]+\\.[0-9]+(?:\\.[0-9]+)?") ||
+            !version.equals(backend) || !(version + "-1").equals(desktop) ||
+            !Set.of("aarch64", "x86_64").contains(architecture)) throw new IllegalStateException("The setup package requirements are invalid.");
         // Repair old bootstrap libraries before invoking curl. Download completely
-        // before running the repository script, retaining its real failure status.
+        // before running this APK's immutable setup script. An existing backend
+        // must wait for the normal updater's idle boundary, even during setup.
         return "(set -eu; export DEBIAN_FRONTEND=noninteractive; "
                 + "apt-get -o APT::Update::Error-Mode=any update; "
-                + "apt-get full-upgrade -y -o Dpkg::Options::=--force-confold; "
+                + "if [ \"$(dpkg-query -W -f='${Status}' bashkitten 2>/dev/null || true)\" = 'install ok installed' ]; then "
+                + "apt-get --no-remove --only-upgrade install -y -o Dpkg::Options::=--force-confold curl; "
+                + "else apt-get --no-remove full-upgrade -y -o Dpkg::Options::=--force-confold; fi; "
                 + "curl -fL --proto '=https' --proto-redir '=https' "
-                + "https://termux.bashkitten.com "
+                + "https://raw.githubusercontent.com/openresearchtools/BashKitten/" + revision + "/agent/packaging/termux/install.sh "
                 + "-o \"$TMPDIR/bashkitten-install.sh\"; "
-                + "bash \"$TMPDIR/bashkitten-install.sh\" " + shellQuote(destination.flattenToShortString()) + ")";
+                + "bash \"$TMPDIR/bashkitten-install.sh\" " + shellQuote(destination.flattenToShortString()) + " "
+                + shellQuote(backend) + " " + shellQuote(desktop) + " " + shellQuote(architecture) + ")";
     }
 
     public void probe(Consumer<JSONObject> done, Consumer<String> fail) {

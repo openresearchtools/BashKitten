@@ -78,20 +78,35 @@ not interchangeable. Download Termux selects the official GitHub APK for the
 device's preferred supported 64-bit ABI. Existing F-Droid or other compatible
 `com.termux` installations stay in place.
 
-Copy command first updates/upgrades Termux through APT, repairing old bootstrap
-libraries before invoking curl. It then follows the HTTPS redirect at
-`https://termux.bashkitten.com`, downloads the whole `install.sh`, and runs it
-with this APK's actual return activity. The script verifies architecture-specific
-keyring/setup package hashes, enables the stable and nightly APT sources, and
-installs BashKitten's dependencies through `pkg`. These are testing releases.
-The successful callback resumes the normal Android permission/start flow.
+Copy command reads the installed APK's immutable package manifest asynchronously.
+It repairs Termux's bootstrap libraries before downloading `install.sh` from
+that APK's exact source revision, and passes its backend/OS versions, architecture
+and actual return activity. The script verifies architecture-specific keyring
+package hashes, enables the signed stable and nightly APT sources, and installs
+the exact `bashkitten` and `bashkitten-os` versions on a fresh backend. An existing
+backend returns to the app for its normal coordinated replacement at idle.
+These are testing releases. The callback resumes Android permission/start setup;
+the APK verifies the backend's source revision and OS package identity before
+starting work. Missing matching published packages produce an error.
+Already-shipped APKs use a one-argument command through
+`https://termux.bashkitten.com`; that entry remains supported. On a fresh Termux
+installation it initially installs the signed repository candidate, then the
+installed APK's existing reconciler restores its exact pair before activation.
+Only new commands carry the APK's versions into the first install transaction.
 
-Update packages uses both signed sources with normal APT version ordering.
-Removing `openresearchtools-termux-nightly` removes only nightly access;
-stable upgrades continue when their version exceeds the installed package.
-The native browser update check includes published stable and prerelease APKs,
-selects the device ABI from `release.json`, and offers only a higher Android
-`versionCode`. APK installation still uses Android's normal package installer.
+Configuration → Updates checks stable APKs, or stable and nightly APKs when
+Include pre-releases is enabled. It selects the device ABI from `release.json`
+and offers only a higher Android `versionCode`; Android's normal package installer
+owns installation. Switching channel does not replace the installed app's pair.
+Opening an APK also reconciles an older installed release: its two owned Termux
+packages may downgrade, while unrelated Termux packages may not. Both signed
+catalogues retain older published versions and remain needed for exact repair.
+Update packages can separately upgrade general Termux dependencies. Downloads,
+simulation, idle coordination and progress use the same updater; no runtime
+source builds or substitute versions are used. Configurations, models and native
+Pi history remain in place. Automatically selected bundled Pi follows the
+Android package in either direction; explicit npm/custom selections remain
+independent, including the existing Update Pi and Roll back Pi controls.
 
 Display embeds the pinned Termux:X11 engine and input handling in the BashKitten
 APK, with a matching architecture-specific Termux launcher. It does not require
