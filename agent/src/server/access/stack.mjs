@@ -306,6 +306,10 @@ ${backend('remote')}
       for (const server of Object.values(adapted.apps.http.servers)) {
         if (!server.listen.includes('127.0.0.1:' + this.remotePort)) continue;
         found = true; server.protocols = ['h1'];
+        // Tor backpressure can keep a legitimate file write pending beyond
+        // Caddy's default one-minute idle deadline. Negative disables that
+        // optional write wrapper; zero would restore its default at provisioning.
+        server.write_idle_timeout = -1;
         // Caddy omits default TLS policies until provisioning. Declare this
         // listener's required client authentication before loading the config.
         server.tls_connection_policies = [{ client_authentication: {
