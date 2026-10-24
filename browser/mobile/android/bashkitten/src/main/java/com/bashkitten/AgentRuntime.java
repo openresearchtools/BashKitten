@@ -101,6 +101,18 @@ public final class AgentRuntime {
     }
     public void observe(Listener listener) { listeners.add(listener); }
     public void detach(Listener listener) { listeners.remove(listener); }
+    BooleanSupplier downloadAccess(GeckoSession source) {
+        String id = sessions.entrySet().stream().filter(entry -> entry.getValue() == source).map(Map.Entry::getKey).findFirst().orElse(null);
+        if (id == null) return () -> false;
+        String context = localSessionContext;
+        RemoteAgentConnection remote = remoteConnections.get(id);
+        // Selection/visibility do not revoke a transfer. Bind it to the existing
+        // backend owner so a replacement login/session cannot inherit its access.
+        return () -> sessions.get(id) == source && source.isOpen() && (id.equals("local")
+            ? localControlRequested && context != null && context.equals(localSessionContext) &&
+                (!selected.equals(id) || desired && state.equals("on"))
+            : remote != null && remoteConnections.get(id) == remote && remote.ready && !remote.isClosed());
+    }
     void changed() { for (Listener listener : new ArrayList<>(listeners)) listener.changed(); }
     public void refresh() {
         if (!desired || busy || !selected.equals("local")) return;

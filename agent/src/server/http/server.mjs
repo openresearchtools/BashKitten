@@ -18,7 +18,7 @@ import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
 import { gitChanges, gitDiff } from '../files/git.mjs';
 import { folderLocations, pickerDirectory, listFolders } from '../files/folders.mjs';
-import { fileDirectory, filePath, referencedFile, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments, editFile } from '../files/files.mjs';
+import { fileDirectory, filePath, referencedFile, sessionImage, listFiles, sendFile, uploadFiles, saveAttachments } from '../files/files.mjs';
 import { startFileJob, fileJob, cancelFileJob, downloadFileJob, sendZip, closeFileJobs, revokeRemoteFileJobs } from '../files/jobs.mjs';
 import { prepareAndSendFile, closeFilePreviews, revokeRemotePreviews } from '../files/previews.mjs';
 import { managerAllowed, managerContext, authorizeManagerPath, runManagerRequest, refreshManagerPolicy, watchManagerPolicy } from '../files/access.mjs';
@@ -234,11 +234,6 @@ async function fileRequest(req, res, url, record) {
       throw Object.assign(Error('Choose a file to view'), { status: 400 });
     }
     return await prepareAndSendFile(req, res, await selectedFile(url), close => auth.watch(record, close));
-  }
-  if (route === '/api/files/edit') {
-    requireMethod(req, ['GET', 'POST']);
-    const value = mutation ? await jsonBody(req) : undefined;
-    return json(res, await editFile(url.searchParams.get('root'), url.searchParams.get('path'), value));
   }
   if (route === '/api/folders') {
     requireMethod(req, ['GET', 'POST']);
