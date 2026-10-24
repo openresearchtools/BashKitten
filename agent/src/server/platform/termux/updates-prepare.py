@@ -202,7 +202,7 @@ def main():
     module = Path(sys.argv[1])
     node = APP / 'node/bin/node'
     installed = os.access(node, os.X_OK)
-    if installed and not STATE.exists():
+    if installed and not STATE.exists() and not (JOBS / 'owner.json').exists():
         execute(node, module, request)
     if os.environ.get('PREFIX') != str(PREFIX):
         raise ValueError('Run package preparation inside Termux.')
@@ -223,37 +223,37 @@ def main():
             acquired = True
         except BlockingIOError:
             acquired = False
-        if not installed:
-            # dpkg can briefly remove the installed Node while its independent
-            # updater remains alive. Report that existing transaction instead
-            # of mistaking the replacement window for a missing installation.
-            owner, job = read(JOBS / 'owner.json'), read(JOBS / 'job.json')
-            if (owner and owner.get('started') and process_start(owner.get('pid')) == owner['started']
-                    and job and job.get('status') in ('running', 'waiting')):
-                if request['mode'] == 'cancel':
-                    write(JOBS / 'cancel.json', {'id': job['id']})
-                elif request['mode'] == 'start':
-                    # Match validateTarget's persisted release fields and
-                    # ordered package records, including the APK ABI.
-                    job_target = {key: target[key] for key in
-                                  ('schema', 'productVersion', 'sourceCommit', 'bootstrapSha256', 'architecture', 'apkAbi')}
-                    job_target['packages'] = []
-                    for name in ('bashkitten', 'bashkitten-os'):
-                        item = next(item for item in target['packages'] if item['name'] == name)
-                        package = {key: item[key] for key in ('name', 'version', 'architecture', 'sourceCommit')}
-                        package.update({key: item[key] for key in ('sha256', 'installedManifestSha256') if item.get(key)})
-                        job_target['packages'].append(package)
-                    if job['kind'] != request['kind'] or job['input'] != {'target': job_target, 'channel': request['channel']}:
-                        raise ValueError('Another package operation is running.')
-                elif request['mode'] != 'status':
-                    raise ValueError('Wait for the package update to finish.')
-                if (read(JOBS / 'cancel.json') or {}).get('id') == job['id']:
-                    job['cancelRequested'] = True
-                try:
-                    job['log'] = (JOBS / 'output.log').read_text(errors='replace')[-32000:]
-                except FileNotFoundError:
-                    pass
-                return {'matched': False, 'job': job}
+        # Node can be executable before dpkg has restored its libraries and
+        # imported modules. The independent updater publishes ownership before
+        # installation and keeps it until the final job is saved, so read its
+        # durable progress without executing the tree being replaced.
+        owner, job = read(JOBS / 'owner.json'), read(JOBS / 'job.json')
+        if (owner and owner.get('started') and process_start(owner.get('pid')) == owner['started']
+                and job and job.get('status') in ('running', 'waiting')):
+            if request['mode'] == 'cancel':
+                write(JOBS / 'cancel.json', {'id': job['id']})
+            elif request['mode'] == 'start':
+                # Match validateTarget's persisted release fields and
+                # ordered package records, including the APK ABI.
+                job_target = {key: target[key] for key in
+                              ('schema', 'productVersion', 'sourceCommit', 'bootstrapSha256', 'architecture', 'apkAbi')}
+                job_target['packages'] = []
+                for name in ('bashkitten', 'bashkitten-os'):
+                    item = next(item for item in target['packages'] if item['name'] == name)
+                    package = {key: item[key] for key in ('name', 'version', 'architecture', 'sourceCommit')}
+                    package.update({key: item[key] for key in ('sha256', 'installedManifestSha256') if item.get(key)})
+                    job_target['packages'].append(package)
+                if job['kind'] != request['kind'] or job['input'] != {'target': job_target, 'channel': request['channel']}:
+                    raise ValueError('Another package operation is running.')
+            elif request['mode'] != 'status':
+                raise ValueError('Wait for the package update to finish.')
+            if (read(JOBS / 'cancel.json') or {}).get('id') == job['id']:
+                job['cancelRequested'] = True
+            try:
+                job['log'] = (JOBS / 'output.log').read_text(errors='replace')[-32000:]
+            except FileNotFoundError:
+                pass
+            return {'matched': False, 'job': job}
         state = read(STATE)
         alive = state and state.get('started') and process_start(state.get('pid')) == state['started']
         if not acquired or alive:
