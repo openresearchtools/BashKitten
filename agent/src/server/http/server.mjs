@@ -13,6 +13,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { loadPi, allowRuntimeWork } from '../rpc/runtime.mjs';
 import { dataDir, sessionsDir, sessionDir, socketPath, readMeta, writeMeta, readJson, writeJson, privateDir, createJson, json, jsonBody, formBody, workerRequest, safeName, withinRoot, allMeta } from '../common.mjs';
 import { displayMessage, queueItem, savedSession } from '../rpc/rpc.mjs';
+import { bindMessageEntries, unconsumedMessages } from '../rpc/message-presentation.mjs';
 import { ensureManager, controlRequest } from '../control.mjs';
 import * as auth from './web-auth.mjs';
 import { Services } from '../rpc/services.mjs';
@@ -131,7 +132,9 @@ async function savedView(meta) {
   const native = await savedSession(meta);
   if (native && native.getCwd() !== meta.cwd) { meta.cwd = native.getCwd(); await writeMeta(meta); }
   const entries = native?.getBranch() || [];
-  const drafts = (await readJson(path.join(sessionDir(meta.id), 'drafts.json'), [])).map(item => ({ ...item, recovered: true, editToken: undefined }));
+  bindMessageEntries(meta, native?.getEntries() || []);
+  const drafts = unconsumedMessages(meta, await readJson(path.join(sessionDir(meta.id), 'drafts.json'), []), native?.getEntries() || [])
+    .map(item => ({ ...item, held: true, recovered: true, editToken: undefined }));
   const questions = (await readJson(path.join(sessionDir(meta.id), 'questions.json'), { records: [] })).records;
   return { questions, cwd: native?.getCwd() || meta.cwd, busy: false, stopped: Boolean((await readJson(path.join(sessionDir(meta.id), 'lifecycle.json'), {})).stopped),
     entries: entries.map(e => e.type === 'message' ? { ...e, message: displayMessage(meta, e.message, questions, e.id) } : e), events: [],
@@ -551,7 +554,9 @@ async function handler(req, res) {
     if (action === 'resume') {
       const value = await jsonBody(req);
       if ((await readJson(path.join(sessionDir(id), 'lifecycle.json'), {})).stopped && !value.start) return json(res, { stopped: true, snapshot: await savedView(meta) });
-      await ensureWorker(id, Boolean(value.start)); return json(res, { ok: true });
+      await ensureWorker(id, Boolean(value.start));
+      if (value.start) await workerRequest(id, '/resume');
+      return json(res, { ok: true });
     }
     if (action === 'stop') {
       const input = await jsonBody(req);

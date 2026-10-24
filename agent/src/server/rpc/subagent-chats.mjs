@@ -26,11 +26,14 @@ export class SubagentChats {
     });
   }
   async deliver(source, target, text, deliveryId, report = false, resume = false) {
-    const agentSource = { id: source.id, name: source.title, report };
-    const label = `${report ? 'Completed turn' : 'Message'} from agent ${JSON.stringify(source.title)} (${source.id})`;
-    const value = { text, wire: `${label}\n\n${text}`, attachments: [], kind: 'queue', agentSource,
+    if (source.id === target.id) throw Error('Choose another agent ID returned by list');
+    const relationship = target.subagentParent === source.id ? 'parent' : source.subagentParent === target.id ? 'child' : 'peer';
+    const agentSource = { kind: 'agent', id: source.id, name: source.title, sessionId: source.piSessionId,
+      parentId: source.subagentParent || null, relationship, report, recipient: { id: target.id, name: target.title } };
+    const label = `${report ? 'Completed turn' : 'Message'} from ${relationship} ${source.subagentParent ? 'subagent' : 'agent'} ${JSON.stringify(source.title)} (source chat ${source.id}, Pi session ${source.piSessionId}) to agent ${JSON.stringify(target.title)} (recipient chat ${target.id}).\nAgent coordination; this is not a user message.`;
+    const value = { text, wire: `${label}\n\n${text}`, attachments: [], kind: 'steer', agentSource,
       agentDelivery: `${source.id}:${deliveryId}`, ...(resume ? { agentResume: true } : {}) };
-    // Use the ordinary worker queue, including held drafts for an explicitly
+    // Use the ordinary worker queue, including held messages for an explicitly
     // stopped chat. Taking its startup lock prevents two owners of drafts.json.
     const held = await this.serial('worker:' + target.id, async () => {
       if (await this.running(target.id)) return false;
@@ -39,17 +42,17 @@ export class SubagentChats {
       const drafts = await readJson(file, []);
       const meta = await readMeta(target.id);
       if ((meta.messages || []).some(item => item.agentDelivery === value.agentDelivery)) return true;
-      const item = { ...value, id: randomUUID(), held: true, recovered: true };
+      const item = { ...value, id: randomUUID(), delivery: 'pending', held: true, recovered: true };
       // Save the queue before its display attribution; retries are deduplicated
       // by the same delivery ID, never by prompt text.
       if (!drafts.some(item => item.agentDelivery === value.agentDelivery)) await writeJson(file, [...drafts, item]);
       meta.messages ||= []; meta.messages.push({ ...value, id: item.id }); await writeMeta(meta);
       return true;
     });
-    if (held) return { id: target.id, delivery: 'held', message: 'Pi is stopped; the message is kept as a draft in that chat.' };
+    if (held) return { id: target.id, delivery: 'held', message: 'Pi is stopped; this agent message is held until the recipient is explicitly resumed.' };
     await this.ensureWorker(target.id);
     const result = await workerRequest(target.id, '/message', value);
-    if (result.held) return { id: target.id, delivery: 'held', message: 'Pi is stopped; the message is kept as a draft in that chat.' };
+    if (result.held) return { id: target.id, delivery: 'held', message: 'This agent message is held in the recipient chat; review its delivery status there.' };
     return { id: target.id, delivery: 'accepted' };
   }
   async handle(piSessionId, value) {
@@ -88,7 +91,7 @@ export class SubagentChats {
       if (existing) {
         // Chat creation precedes worker startup. Retry the original delivery
         // after a startup failure; the durable delivery ID prevents replay of
-        // an already accepted task and preserves an explicit Stop as a draft.
+        // an already accepted task and holds delivery after an explicit Stop.
         const delivery = await this.deliver(source, existing, value.message, value.deliveryId);
         return { ...delivery, name: existing.title, parent: source.id };
       }
@@ -116,7 +119,7 @@ export class SubagentChats {
       return this.serial('worker:' + target.id, async () => {
         if (await this.running(target.id)) await workerRequest(target.id, '/shutdown', {});
         // A crashed/idle-exited worker still needs a durable Stop intent. A
-        // later peer message must become a held draft instead of restarting it.
+        // later peer message must remain held instead of restarting it.
         else {
           await writeJson(path.join(sessionDir(target.id), 'lifecycle.json'), { stopped: true });
           await stopSavedQuestions(target.id, 'User stopped this chat');

@@ -7,6 +7,7 @@ import { selectedRuntime, loadPi } from './runtime.mjs';
 import { browserSocketPath } from '../access/browser-channel.mjs';
 import { nativeSession } from '../chats.mjs';
 import { questionPresentation } from './question-presentation.mjs';
+import { userAuthored } from './message-presentation.mjs';
 export { displayMessage } from './message-presentation.mjs';
 
 // Read native history without opening a second writable session manager.
@@ -17,7 +18,11 @@ export async function savedSession(meta) {
 
 export function queueItem(item, questions = []) {
   const question = questionPresentation(item, questions);
-  return { id: item.id, content: item.text, ...(question ? { displayContent: question.text, agentSource: question.agentSource } : {}), attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path), editing: Boolean(item.editToken), recovered: Boolean(item.recovered) };
+  return { id: item.id, content: item.text, agentSource: question?.agentSource || item.agentSource,
+    userAuthored: userAuthored(item, questions), ...(question ? { displayContent: question.text } : {}),
+    attachments: item.attachments.map(a => a.name), attachmentPaths: item.attachments.map(a => a.path),
+    editing: Boolean(item.editToken), recovered: Boolean(item.recovered), held: Boolean(item.held),
+    uncertain: Boolean(item.recovered && item.delivery !== 'pending') };
 }
 
 /** Strict LF framing: a JSON string may contain U+2028/U+2029. */

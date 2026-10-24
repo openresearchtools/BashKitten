@@ -105,7 +105,15 @@ The backend independently checks delegation settings, group membership, direct
 parent authority, live child limits and durable Stop intent for each operation.
 Completed child turns reach the direct parent using native session entries.
 Messages and retried spawn tasks use stable delivery IDs to avoid duplicate
-queue entries; a stopped recipient receives a held draft.
+queue entries; a stopped recipient receives a held agent message. The sender and
+recipient remain attached to pending deliveries and consumed native entries.
+Only user-authored input gets queue editing/steering or returns to the composer
+on Stop/fork. Explicit resume releases agent messages known to be unconsumed;
+uncertain crash deliveries remain held. `agents` addresses other agent sessions;
+normal assistant replies address the user. Inter-agent messages/results use
+stock Pi steering at the next safe boundary while busy and start a turn while
+idle; `follow_up` also explicitly resumes a stopped recipient. Installed
+verification of this correction remains pending the next candidate.
 
 Search uses one thin deferred tool adapter to the existing packaged Python
 query-or-URL helper. Input validation, extraction, saved full Markdown and errors

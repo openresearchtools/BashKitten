@@ -4,6 +4,16 @@ import { questionPresentation } from './question-presentation.mjs';
 const textOf = message => typeof message.content === 'string' ? message.content
   : (message.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
 
+// Pi transports every prompt with role=user. Authorship is separate: only
+// actual user input may be edited, steered or returned to the user composer.
+export function userAuthored(item, questions = []) {
+  const source = questionPresentation(item, questions)?.agentSource || item.agentSource;
+  if (source?.kind === 'phone') return true;
+  if (source?.kind === 'question') return ['answer', 'late'].includes(source.action);
+  if (source || (item.agentDelivery && item.userAuthored !== true)) return false;
+  return item.userAuthored !== false;
+}
+
 // Attribution belongs to a consumed native message, never every occurrence of
 // its text. Forks retain entry IDs; imported/unbound history stays native.
 export function displayMessage(meta, message, questions = [], entryId, submissionId) {
@@ -13,7 +23,7 @@ export function displayMessage(meta, message, questions = [], entryId, submissio
     item.nativeMessage.timestamp === message.timestamp && (entryId ? item.nativeMessage.entryId === entryId : submissionId && item.id === submissionId));
   if (matches.length !== 1) return message;
   const item = matches[0], question = questionPresentation(item, questions);
-  return { ...message, agentSource: question?.agentSource || item.agentSource,
+  return { ...message, agentSource: question?.agentSource || item.agentSource, userAuthored: userAuthored(item, questions),
     content: [...item.attachments, { type: 'text', text: question?.text ?? item.text }] };
 }
 
@@ -35,9 +45,16 @@ export function bindMessageEntries(meta, entries) {
   }
 }
 
+export function unconsumedMessages(meta, items, entries) {
+  const nativeIds = new Set(entries.filter(entry => entry.type === 'message' && entry.message.role === 'user').map(entry => entry.id));
+  const consumed = new Set((meta.messages || []).filter(item => nativeIds.has(item.nativeMessage?.entryId)).map(item => item.id));
+  return items.filter(item => !consumed.has(item.id));
+}
+
 // Stock RPC reports queue removal before message_start, without a request ID.
 // Track its ordered queue occurrences while they are live, including unknown
-// extension inputs. A clear/rebuild drops this correlation before resubmission.
+// extension inputs. A clear/rebuild drops pending slots before resubmission,
+// retaining messages already removed by Pi whose message_start is still pending.
 export class MessageAttribution {
   queues = { steer: [], queue: [] };
   consumed = [];
@@ -45,6 +62,8 @@ export class MessageAttribution {
   immediate = null;
   sessionId = null;
   occurrences = new Map();
+  clearing = false;
+  beforeClearUpdate = null;
   seed(sessionId, entries) {
     if (this.sessionId === sessionId) return;
     this.sessionId = sessionId; this.occurrences.clear();
@@ -60,8 +79,17 @@ export class MessageAttribution {
     if (disposition === 'started' && this.submitting && !this.submitting.consumed) this.immediate = this.submitting;
     this.submitting = null;
   }
-  clear() { this.queues = { steer: [], queue: [] }; this.consumed = []; this.submitting = this.immediate = null; }
+  clear() { this.queues = { steer: [], queue: [] }; this.consumed = []; this.submitting = this.immediate = null; this.clearing = false; this.beforeClearUpdate = null; }
+  beginClear() { this.clearing = true; this.beforeClearUpdate = null; }
+  endClear(success) {
+    // Stock clear_queue synchronously emits its final queue_update immediately
+    // before its response. Its removed slots were cleared, not consumed. Keep
+    // earlier consumption whose asynchronous message_start has yet to arrive.
+    if (success) { this.queues = { steer: [], queue: [] }; this.consumed = this.beforeClearUpdate || this.consumed; }
+    this.clearing = false; this.beforeClearUpdate = null;
+  }
   update(event) {
+    if (this.clearing) this.beforeClearUpdate = [...this.consumed];
     for (const [kind, values] of [['steer', event.steering || []], ['queue', event.followUp || []]]) {
       const previous = this.queues[kind];
       if (values.length === previous.length && values.every((wire, index) => wire === previous[index].wire)) continue;

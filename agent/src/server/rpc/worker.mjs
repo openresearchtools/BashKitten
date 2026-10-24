@@ -10,7 +10,7 @@ import { selectedRuntime, allowRuntimeWork, loadPi } from './runtime.mjs';
 import { managedLocalProvider, managedThinkingUnknown } from './managed-provider.mjs';
 import { notifyTurn, notifyQuestion, resolvedQuestion, notifyAssistantMessage } from './notifications.mjs';
 import { QuestionOwner } from './questions.mjs';
-import { MessageAttribution, bindMessageEntries } from './message-presentation.mjs';
+import { MessageAttribution, bindMessageEntries, unconsumedMessages, userAuthored } from './message-presentation.mjs';
 import { createPhoneWorker } from '../phone/worker.mjs';
 import { inheritChatProject } from '../projects.mjs';
 import { validatePhoneDelivery } from '../phone.mjs';
@@ -35,7 +35,8 @@ const messageAttribution = new MessageAttribution();
 let liveUserSubmission;
 const draftsFile = () => path.join(sessionDir(id), 'drafts.json');
 // A crashed process cannot prove whether Pi consumed its last submitted prompt.
-// Recover every remaining item as a held draft; only an explicit user send releases it.
+// Hold remaining inputs. User drafts need explicit Send; agent deliveries may
+// resume only when clear_queue proved them pending, never after an uncertain send.
 queue = (await readJson(draftsFile(), [])).map(item => ({ ...item, held: true, recovered: true, editToken: undefined }));
 let draftWrites = Promise.resolve();
 function checkpoint() {
@@ -132,6 +133,8 @@ async function readState(follow) {
   if (!events.length) snapshotEntries = entries;
   messageAttribution.seed(state.sessionId, history.entries);
   bindMessageEntries(meta, history.entries);
+  const pending = unconsumedMessages(meta, queue, history.entries);
+  if (pending.length !== queue.length) { queue = pending; queueChanged(); }
   meta.model = state.model && !(state.model.provider === 'unknown' && state.model.id === 'unknown') ? `${state.model.provider}/${state.model.id}` : '';
   meta.thinking = state.thinkingLevel;
   if (await managedThinkingUnknown(meta.model)) {
@@ -188,7 +191,12 @@ function reconcileQueue() {
   for (const [kind, values] of Object.entries(messageAttribution.queues)) {
     for (const slot of values) {
       const id = slot.item?.id || (slot.id ||= randomUUID());
-      const item = candidates.get(id) || slot.item || { id, wire: slot.wire, text: slot.wire, attachments: [] };
+      const item = candidates.get(id) || slot.item || { id, wire: slot.wire, text: slot.wire, attachments: [], userAuthored: false };
+      if (!slot.item) {
+        slot.item = item;
+        meta.messages ||= [];
+        meta.messages.push({ id, text: item.text, wire: item.wire, attachments: [], userAuthored: false });
+      }
       candidates.delete(id);
       remaining.push({ ...item, kind });
     }
@@ -390,7 +398,7 @@ async function send(item) {
   // Give this explicit send its own record; never reuse an earlier equal text.
   if (!meta.messages.some(record => record.id === item.id)) {
     meta.messages.push({ id: item.id, text: item.text, wire: item.wire, attachments: item.attachments,
-      agentSource: item.agentSource, agentDelivery: item.agentDelivery });
+      agentSource: item.agentSource, agentDelivery: item.agentDelivery, userAuthored: item.userAuthored });
     await writeMeta(meta);
   }
   messageAttribution.submit(item);
@@ -408,8 +416,10 @@ async function send(item) {
 async function rebuildQueue(mutate) {
   const old = [...queue];
   const submitted = messageAttribution.queues;
-  messageAttribution.clear();
-  const cleared = await rpc.command('clear_queue');
+  messageAttribution.beginClear();
+  let cleared;
+  try { cleared = await rpc.command('clear_queue'); }
+  finally { messageAttribution.endClear(Boolean(cleared)); }
   // Only restore messages Pi actually returned. A boundary may have consumed a
   // message before clear_queue; replaying the browser's stale copy duplicates it.
   const candidates = new Map(old.map(item => [item.id, item])), retained = [];
@@ -420,8 +430,8 @@ async function rebuildQueue(mutate) {
     const known = slots.length === (values || []).length && slots.every((slot, index) => slot.wire === values[index]);
     for (const [index, wire] of (values || []).entries()) {
       const slot = known ? slots[index] : null, id = slot?.item?.id || slot?.id;
-      const item = candidates.get(id) || slot?.item || { id: randomUUID(), wire, text: wire, attachments: [] };
-      candidates.delete(id); retained.push({ ...item, kind });
+      const item = candidates.get(id) || slot?.item || { id: randomUUID(), wire, text: wire, attachments: [], userAuthored: false };
+      candidates.delete(id); retained.push({ ...item, kind, delivery: 'pending' });
     }
   }
   retained.push(...[...candidates.values()].filter(q => q.editToken || q.held));
@@ -453,6 +463,25 @@ async function rebuildQueue(mutate) {
   queueChanged();
   if (failure) throw failure;
 }
+async function resumeAgentMessages(generation) {
+  for (const item of [...queue]) {
+    if (!item.agentSource?.id || !item.held || item.delivery !== 'pending') continue;
+    item.ownerGeneration = generation; item.kind = 'steer';
+    delete item.recovered; delete item.held; delete item.editToken;
+    try { await send(item); }
+    catch (error) { item.held = item.recovered = true; if (!queue.includes(item)) queue.push(item); await checkpoint(); throw error; }
+  }
+  queueChanged();
+}
+async function userForkMessages() {
+  const [result, history] = await Promise.all([rpc.command('get_fork_messages'), rpc.command('get_entries')]);
+  bindMessageEntries(meta, history.entries);
+  const byId = new Map(history.entries.filter(entry => entry.type === 'message').map(entry => [entry.id, entry.message]));
+  return { ...result, messages: result.messages.filter(item => {
+    const message = byId.get(item.entryId);
+    return message?.role === 'user' && displayMessage(meta, message, questionOwner.state.records, item.entryId).userAuthored !== false;
+  }) };
+}
 async function handle(req, res) {
   // A native session switch rebinds this worker; do not reuse its old control connection.
   res.setHeader('Connection', 'close');
@@ -468,7 +497,7 @@ async function handle(req, res) {
     if (req.url === '/questions') return json(res, { questions: questionOwner.list() });
     if (req.url === '/status') return json(res, { data: status() });
     if (req.url === '/view') return json(res, snapshot());
-    if (req.url === '/fork-messages') return json(res, await rpc.command('get_fork_messages'));
+    if (req.url === '/fork-messages') return json(res, await userForkMessages());
     if (req.url === '/models') return json(res, await serial(async () => { await applyPending(); return rpc.command('get_available_models'); }));
     const value = await jsonBody(req), requestGeneration = questionOwner.state.generation;
     if (req.url === '/context') {
@@ -501,13 +530,17 @@ async function handle(req, res) {
     }
     if (req.url === '/reply') { if (!dialogs.has(value.id)) throw Error('This prompt is no longer pending'); dialogs.delete(value.id); rpc.reply(value); return json(res, { ok: true }); }
     if (req.url === '/stop') {
-      const pending = status(), stoppedItems = new Set(queue.map(item => item.id));
+      const stoppedItems = new Set(queue.map(item => item.id));
       await questionOwner.stop();
-      messageAttribution.clear();
-      await rpc.command('clear_queue');
-      // A peer/result arriving while Stop saves its barrier belongs to the
-      // next held queue, not the earlier drafts returned to this caller.
-      queue = queue.filter(item => !stoppedItems.has(item.id)); await checkpoint();
+      const pending = await serial(async () => {
+        // Preserve only the queue Pi actually cleared; a boundary may have
+        // consumed an earlier item. Agent inputs stay held with their identity.
+        await rebuildQueue(items => { for (const item of items) { item.recovered = true; item.held = true; delete item.editToken; } });
+        const pending = status();
+        for (const key of ['steeringMessages', 'queuedMessages']) pending[key] = pending[key].filter(item => stoppedItems.has(item.id) && item.userAuthored);
+        queue = queue.filter(item => !stoppedItems.has(item.id) || !userAuthored(item, questionOwner.state.records));
+        await checkpoint(); return pending;
+      });
       await rpc.command('abort'); busy = compacting = false;
       await refresh(); settleSnapshot(); emit({ type: 'snapshot', data: snapshot() }, false); emit({ type: 'agent_settled' }, false);
       return json(res, { data: pending });
@@ -530,14 +563,22 @@ async function handle(req, res) {
       if (stopping) throw Error('Pi instance is stopping');
       if (req.url === '/barrier') { const state = await rpc.command('get_state'); return { idle: !state.isStreaming && !state.isCompacting && !dialogs.size && !queue.some(q => !q.held && !q.editToken) }; }
       allowRuntimeWork();
+      if (req.url === '/resume') {
+        await questionOwner.resume(requestGeneration);
+        await resumeAgentMessages(requestGeneration);
+        return { data: status() };
+      }
       if (req.url === '/message') {
         const authorizedPhone = !value.phoneDelivery || await validatePhoneDelivery(id, value.phoneAuthorization);
         const stalePhone = !authorizedPhone || requestGeneration !== questionOwner.state.generation || (value.phoneDelivery && value.stopGeneration !== questionOwner.state.generation);
         const stoppedAgent = value.agentSource?.id && questionOwner.state.stopped && !value.agentResume;
-        if (!stalePhone && !stoppedAgent) { await questionOwner.resume(requestGeneration); await applyPending(); }
+        if (!stalePhone && !stoppedAgent) {
+          await questionOwner.resume(requestGeneration); await applyPending();
+          if (!value.agentSource || value.agentResume) await resumeAgentMessages(requestGeneration);
+        }
         meta.messages ||= [];
         if (value.agentDelivery && (queue.some(item => item.agentDelivery === value.agentDelivery) || meta.messages.some(item => item.agentDelivery === value.agentDelivery))) return { held: Boolean(queue.find(item => item.agentDelivery === value.agentDelivery)?.held), data: status() };
-        const item = { ...value, ownerGeneration: requestGeneration, id: randomUUID(), kind: value.kind || 'queue' };
+        const item = { ...value, ownerGeneration: requestGeneration, id: randomUUID(), kind: value.kind || 'queue', delivery: 'pending' };
         meta.messages.push({ id: item.id, text: value.text, wire: value.wire, attachments: value.attachments, agentSource: value.agentSource, agentDelivery: value.agentDelivery });
         queue.push(item);
         if (stalePhone || stoppedAgent) { item.held = item.recovered = true; await checkpoint(); await writeMeta(meta); queueChanged(); return { held: true, data: status() }; }
@@ -545,12 +586,16 @@ async function handle(req, res) {
         return { held: Boolean(item.held), data: status() };
       }
       if (req.url === '/queue') {
-        const changedDelivery = queue.find(q => q.id === value.id)?.agentDelivery;
+        const selected = queue.find(q => q.id === value.id);
+        if (!selected) throw Error('Queued message no longer exists');
+        if (!userAuthored(selected, questionOwner.state.records)) throw Error('Only user-authored messages can be edited or sent from the user queue');
+        const changedDelivery = selected.agentDelivery;
         if (['send', 'promote', 'edit'].includes(value.action)) await questionOwner.resume(requestGeneration);
         await applyPending();
         await rebuildQueue(items => {
           const index = items.findIndex(q => q.id === value.id), item = items[index];
           if (!item) throw Error('Queued message no longer exists');
+          if (!userAuthored(item, questionOwner.state.records)) throw Error('Only user-authored messages can be edited or sent from the user queue');
           if (value.action === 'begin_edit' || value.action === 'take_edit') { if (item.editToken && value.action !== 'take_edit') throw Error('Message is being edited'); item.editToken = value.edit_token; }
           else {
             if (item.editToken && item.editToken !== value.edit_token) throw Error('Edit is no longer owned by this tab');
@@ -559,11 +604,15 @@ async function handle(req, res) {
             else if (value.action === 'promote') { item.kind = 'steer'; delete item.recovered; delete item.questionId; delete item.phoneDelivery; delete item.phoneAuthorization; item.ownerGeneration = requestGeneration; }
             else if (value.action === 'cancel_edit') delete item.editToken;
             else if (value.action === 'edit') {
+              // Editing an actual question answer remains user input even
+              // after its text no longer matches the original question wire.
+              item.userAuthored = true;
+              item.agentSource ||= queueItem(item, questionOwner.state.records).agentSource;
               const prefix = item.agentSource ? item.wire.slice(0, item.wire.length - item.text.length) : '';
               const suffix = item.agentSource ? '' : item.wire.slice(item.text.length);
               item.text = value.content; item.wire = prefix + value.content + suffix; delete item.editToken; delete item.recovered; delete item.questionId; delete item.phoneDelivery; delete item.phoneAuthorization; item.ownerGeneration = requestGeneration;
               const record = meta.messages.find(record => record.id === item.id);
-              if (record) Object.assign(record, { text: item.text, wire: item.wire });
+              if (record) Object.assign(record, { text: item.text, wire: item.wire, agentSource: item.agentSource, userAuthored: true });
             } else throw Error('Unknown queue action');
           }
         });
@@ -571,6 +620,7 @@ async function handle(req, res) {
         await writeMeta(meta); return { data: status() };
       }
       if (req.url === '/fork' || req.url === '/clone') {
+        if (req.url === '/fork' && !(await userForkMessages()).messages.some(item => item.entryId === value.entryId)) throw Error('Choose a user-authored message to return to the editor');
         const result = await rpc.command(req.url.slice(1), req.url === '/fork' ? { entryId: value.entryId } : {});
         if (result.cancelled) return result;
         await refresh(false);
