@@ -52,7 +52,9 @@ public class GeckoWebExecutor {
 
   /** The cancellation signal settles on success/error too, releasing its native listener. */
   private static final class FetchResult extends GeckoResult<WebResponse> {
-    final GeckoResult<Boolean> cancellation = new GeckoResult<>();
+    // Fetch callers may poll from worker threads without a Looper. Unlike the
+    // response, this signal always has a native listener and needs a dispatcher.
+    final GeckoResult<Boolean> cancellation = new GeckoResult<>(ThreadUtils.getUiHandler());
     boolean cancelled;
 
     FetchResult() {
