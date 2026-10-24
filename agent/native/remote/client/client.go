@@ -354,7 +354,8 @@ func (c *Client) Mappings() []MappingState {
 	return states
 }
 
-// Caller holds mu. Closing a mapping cancels its active carriers immediately.
+// Caller holds mu. Mapping closure stops application traffic immediately; only
+// a leased credential exchange can outlive it until the client owner cancels.
 func (c *Client) closeMappings() {
 	for id, m := range c.mappings {
 		m.tunnel.Close()

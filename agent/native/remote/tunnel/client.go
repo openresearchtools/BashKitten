@@ -86,7 +86,8 @@ func Map(ctx context.Context, cfg ClientConfig, serviceID string, port int) (*Ma
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	owner := ctx
+	ctx, cancel := context.WithCancel(owner)
 	m := &Mapping{listener: listener, cancel: cancel, active: make(map[net.Conn]struct{})}
 	context.AfterFunc(ctx, func() { m.Close() })
 	go func() {
@@ -106,7 +107,7 @@ func Map(ctx context.Context, cfg ClientConfig, serviceID string, port int) (*Ma
 			go func() {
 				defer local.Close()
 				defer func() { m.mu.Lock(); delete(m.active, local); m.mu.Unlock() }()
-				if err := m.carry(ctx, cfg, dialer, endpoint, serviceID, local); err != nil && ctx.Err() == nil {
+				if err := m.carry(owner, ctx, cfg, dialer, endpoint, serviceID, local); err != nil && ctx.Err() == nil {
 					m.setStatus(err)
 				}
 			}()
@@ -184,10 +185,14 @@ func (t *onionTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return t.Transport.RoundTrip(r)
 }
 
-func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websocket.Dialer, endpoint, id string, local *net.TCPConn) error {
-	ctx, cancel := context.WithCancel(parent)
+func (m *Mapping) carry(owner, mapping context.Context, cfg ClientConfig, dialer *websocket.Dialer, endpoint, id string, local *net.TCPConn) error {
+	ctx, cancel := context.WithCancel(owner)
 	defer cancel()
-	token, err := cfg.AccessToken(ctx)
+	// Setup still belongs to the mapping. After admission, a leased credential
+	// exchange belongs to the whole client and must survive this mapping's Off.
+	stopSetup := context.AfterFunc(mapping, cancel)
+	defer stopSetup()
+	token, err := cfg.AccessToken(mapping)
 	if err != nil {
 		return fmt.Errorf("OAuth access token unavailable: %w", err)
 	}
@@ -235,8 +240,19 @@ func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websoc
 	if err != nil || !ok {
 		return errors.New("service configuration denied")
 	}
-	active := &Carrier{conn: sc, renewal: string(capability) == renewalRequest}
+	active := &Carrier{conn: sc, renewal: string(capability) == renewalRequest, mapping: mapping}
 	defer active.finish()
+	// Do not admit a carrier while a setup-cancellation callback can still close
+	// its SSH socket. A completed cancellation is not handed to the lease owner.
+	if !stopSetup() || mapping.Err() != nil {
+		return context.Canceled
+	}
+	stopMapping := context.AfterFunc(mapping, func() {
+		local.Close()
+		active.finish()
+		cancel()
+	})
+	defer stopMapping()
 	if err := cfg.CarrierOpened(token, active); err != nil {
 		return err
 	}
@@ -245,6 +261,10 @@ func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websoc
 	if err != nil {
 		return errors.New("service channel unavailable")
 	}
+	// Off closes application traffic immediately; only an already leased native
+	// credential exchange may retain the carrier until its response arrives.
+	stopApplication := context.AfterFunc(mapping, func() { local.Close(); stream.Close() })
+	defer stopApplication()
 	m.setStatus(nil)
 	go ssh.DiscardRequests(reqs)
 	go func() {

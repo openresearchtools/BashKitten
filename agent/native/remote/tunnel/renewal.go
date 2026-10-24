@@ -28,6 +28,7 @@ type renewal struct {
 type Carrier struct {
 	conn    ssh.Conn
 	renewal bool
+	mapping context.Context
 	mu      sync.Mutex
 	closed  bool
 }
@@ -45,7 +46,7 @@ func (c *Carrier) Renew(ctx context.Context, access, refresh string) (oauth.Toke
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	var response oauth.TokenResponse
-	if c.closed {
+	if c.closed || c.mapping.Err() != nil {
 		return response, ErrCarrierClosed
 	}
 	if !c.renewal {
