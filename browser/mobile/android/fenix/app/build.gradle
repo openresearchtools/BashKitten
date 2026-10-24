@@ -44,10 +44,6 @@ def isAppBundle = gradle.startParameter.taskNames.any { it.toLowerCase().contain
 def publisherKeystore = System.getenv('BASHKITTEN_PUBLISHER_KEYSTORE')
 def publisherSigning = publisherKeystore && file(publisherKeystore).exists()
 def bashKittenVersion = file("${rootProject.projectDir}/bashkitten/config/version.txt").text.trim()
-def bashKittenCommitSeconds = providers.exec {
-    workingDir rootProject.projectDir
-    commandLine 'git', 'show', '-s', '--format=%ct', 'HEAD'
-}.standardOutput.asText.map { it.trim().toLong() }
 
 android {
     def ciDebugKeystore = System.getenv('BASHKITTEN_DEBUG_KEYSTORE')
@@ -340,25 +336,18 @@ androidComponents {
         // object so we could read the flag directly; onVariants only gives us the build type name, so
         // we gate on the names instead.
         if (buildType in ['nightly', 'beta', 'release', 'benchmark']) {
-            // The Google Play Store does not allow multiple APKs for the same app that all have the
-            // same version code. Therefore we need to have different version codes for our ARM and x86
-            // builds.
             def versionName = bashKittenVersion
             project.logger.debug("versionName override: $versionName")
 
             variant.outputs.each { output ->
                 def abi = output.filters.find { it.filterType == FilterConfiguration.FilterType.ABI }?.identifier ?: "universal"
-                // Deterministic source minutes allow same-hour nightly upgrades. The
-                // new range is above legacy Fennec codes; retain its ABI ordering.
-                def sourceSeconds = bashKittenCommitSeconds.get()
+                // Direct APK releases from the 24 October 2026 baseline keep
+                // this code so Android permits same-signer replacement in both
+                // directions without removing app data. Product versionName
+                // orders update discovery; source identity stays in manifests.
                 def abiBits = ['arm64-v8a': 2, 'x86_64': 6, universal: 7][abi]
-                if (sourceSeconds < 1767225600L || abiBits == null) {
-                    throw new GradleException("Invalid BashKitten source date or ABI: $abi")
-                }
-                def versionCodeOverride = 2020000000L + Math.floorDiv(sourceSeconds - 1767225600L, 60L) * 8L + abiBits
-                if (versionCodeOverride > 2100000000L) {
-                    throw new GradleException('BashKitten versionCode exceeds the Android publishing limit')
-                }
+                if (abiBits == null) throw new GradleException("Invalid BashKitten ABI: $abi")
+                def versionCodeOverride = 2024000000 + abiBits
                 project.logger.debug("versionCode for $abi = $versionCodeOverride")
                 output.versionName.set(versionName)
                 output.versionCode.set(versionCodeOverride.intValue())
