@@ -9,10 +9,12 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +22,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/openresearchtools/bashkitten/remote/oauth"
 	"github.com/openresearchtools/bashkitten/remote/tunnel"
 	"golang.org/x/crypto/ssh"
 )
@@ -72,15 +75,15 @@ func Start(c Config) (*Host, error) {
 	}}
 	client := &http.Client{Transport: transport, Timeout: 5 * time.Second,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	authorize := func(ctx context.Context, token string) error {
+	authorizeIdentity := func(ctx context.Context, token string) (string, error) {
 		if !strings.HasPrefix(token, "authelia_at_") || strings.ContainsAny(token, "\r\n") {
-			return errors.New("OAuth authorization required")
+			return "", errors.New("OAuth authorization required")
 		}
 		// This separately configured Authelia endpoint accepts Bearer only. A
 		// CookieSession or forged Caddy identity header cannot authorize a carrier.
 		r, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+c.Onion+"/login/api/authz/tunnel", nil)
 		if err != nil {
-			return errors.New("invalid authorization request")
+			return "", errors.New("invalid authorization request")
 		}
 		r.Header.Set("Authorization", "Bearer "+token)
 		r.Header.Set("X-Forwarded-Proto", "https")
@@ -90,16 +93,47 @@ func Start(c Config) (*Host, error) {
 		r.Header.Set("X-Forwarded-Uri", "/tunnel")
 		response, err := client.Do(r)
 		if err != nil {
-			return errors.New("Authelia authorization unavailable")
+			return "", errors.New("Authelia authorization unavailable")
 		}
 		defer response.Body.Close()
 		io.Copy(io.Discard, response.Body)
 		if response.StatusCode != http.StatusOK || response.Header.Get("Remote-User") == "" {
-			return errors.New("OAuth authorization denied")
+			return "", errors.New("OAuth authorization denied")
 		}
-		return nil
+		return response.Header.Get("Remote-User"), nil
 	}
-	relay, err := tunnel.NewServer(signer, authorize)
+	authorize := func(ctx context.Context, token string) error {
+		_, err := authorizeIdentity(ctx, token)
+		return err
+	}
+	refresh := func(ctx context.Context, refreshToken string) (oauth.TokenResponse, error) {
+		var result oauth.TokenResponse
+		// Exactly this generation's registered public client and standard grant.
+		// The authenticated SSH request cannot select a URL, issuer, client ID,
+		// scope or redirect. Authelia checks refresh-token ownership/revocation.
+		values := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {refreshToken},
+			"client_id": {"bashkitten-" + c.Generation}}
+		r, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+c.Onion+"/login/api/oidc/token", strings.NewReader(values.Encode()))
+		if err != nil {
+			return result, errors.New("invalid OAuth refresh request")
+		}
+		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		r.Header.Set("Accept", "application/json")
+		r.Header.Set("X-Forwarded-Proto", "https")
+		r.Header.Set("X-Forwarded-Host", c.Onion)
+		response, err := client.Do(r)
+		if err != nil {
+			return result, errors.New("Authelia refresh unavailable")
+		}
+		defer response.Body.Close()
+		body, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+		defer clear(body)
+		if err != nil || response.StatusCode != http.StatusOK || len(body) > 64<<10 || json.Unmarshal(body, &result) != nil {
+			return oauth.TokenResponse{}, errors.New("Authelia refresh denied")
+		}
+		return result, nil
+	}
+	relay, err := tunnel.NewServer(signer, authorizeIdentity, refresh)
 	if err != nil {
 		return nil, err
 	}

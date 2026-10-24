@@ -27,12 +27,14 @@ import (
 )
 
 type ClientConfig struct {
-	OnionURL     string
-	SOCKSNetwork string // Explicitly tcp or unix; never a direct-network fallback.
-	SOCKSAddress string
-	TLS          *tls.Config
-	Fingerprint  string
-	AccessToken  func(context.Context) (string, error)
+	OnionURL      string
+	SOCKSNetwork  string // Explicitly tcp or unix; never a direct-network fallback.
+	SOCKSAddress  string
+	TLS           *tls.Config
+	Fingerprint   string
+	AccessToken   func(context.Context) (string, error)
+	CarrierOpened func(string, *Carrier) error
+	CarrierClosed func(*Carrier)
 }
 
 type Mapping struct {
@@ -67,8 +69,8 @@ func (m *Mapping) Close() error {
 // Map atomically reserves the loopback port. Every accepted native connection
 // gets one independent carrier; a failed connection is never retried or replayed.
 func Map(ctx context.Context, cfg ClientConfig, serviceID string, port int) (*Mapping, error) {
-	if cfg.AccessToken == nil {
-		return nil, errors.New("OAuth access token callback required")
+	if cfg.AccessToken == nil || cfg.CarrierOpened == nil || cfg.CarrierClosed == nil {
+		return nil, errors.New("native OAuth and carrier ownership callbacks required")
 	}
 	dialer, endpoint, err := cfg.prepare(serviceID)
 	if err != nil {
@@ -229,10 +231,16 @@ func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websoc
 	}
 	defer sc.Close()
 	remote := &settings.Remote{LocalHost: "127.0.0.1", LocalPort: strconv.Itoa(local.LocalAddr().(*net.TCPAddr).Port), LocalProto: "tcp", RemoteHost: id, RemotePort: "1", RemoteProto: "tcp"}
-	ok, _, err := sc.SendRequest("config", true, settings.EncodeConfig(settings.Config{Version: share.BuildVersion, Remotes: settings.Remotes{remote}}))
+	ok, capability, err := sc.SendRequest("config", true, settings.EncodeConfig(settings.Config{Version: share.BuildVersion, Remotes: settings.Remotes{remote}}))
 	if err != nil || !ok {
 		return errors.New("service configuration denied")
 	}
+	active := &Carrier{conn: sc, renewal: string(capability) == renewalRequest}
+	defer active.finish()
+	if err := cfg.CarrierOpened(token, active); err != nil {
+		return err
+	}
+	defer cfg.CarrierClosed(active)
 	stream, reqs, err := sc.OpenChannel("chisel", []byte(id+":1"))
 	if err != nil {
 		return errors.New("service channel unavailable")
@@ -249,6 +257,9 @@ func (m *Mapping) carry(parent context.Context, cfg ClientConfig, dialer *websoc
 		local.CloseRead()
 	}()
 	cio.Pipe(local, stream)
+	// Normal application EOF must not interrupt a credential exchange renewing
+	// other active streams. Owner cancellation still closes the socket directly.
+	active.finish()
 	cancel()
 	return nil
 }

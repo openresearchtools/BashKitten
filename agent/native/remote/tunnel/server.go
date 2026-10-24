@@ -24,7 +24,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// AuthorizeBearer delegates new and active carriers' authorization to Authelia.
+// AuthorizeBearer delegates catalogue and service actions to Authelia.
 type AuthorizeBearer func(context.Context, string) error
 
 type service struct {
@@ -33,19 +33,22 @@ type service struct {
 }
 
 type Server struct {
-	signer    ssh.Signer
-	authorize AuthorizeBearer
-	mu        sync.Mutex
-	services  map[string]*service
-	epoch     uint64
-	closed    bool
+	signer         ssh.Signer
+	authorize      AuthorizeIdentity
+	refresh        RefreshBearer
+	mu             sync.Mutex
+	services       map[string]*service
+	authorizations map[string]*authorization
+	epoch          uint64
+	closed         bool
 }
 
-func NewServer(signer ssh.Signer, authorize AuthorizeBearer) (*Server, error) {
-	if signer == nil || authorize == nil {
-		return nil, errors.New("SSH signer and authorization are required")
+func NewServer(signer ssh.Signer, authorize AuthorizeIdentity, refresh RefreshBearer) (*Server, error) {
+	if signer == nil || authorize == nil || refresh == nil {
+		return nil, errors.New("SSH signer, authorization and credential renewal are required")
 	}
-	return &Server{signer: signer, authorize: authorize, services: make(map[string]*service)}, nil
+	return &Server{signer: signer, authorize: authorize, refresh: refresh, services: make(map[string]*service),
+		authorizations: make(map[string]*authorization)}, nil
 }
 
 func (s *Server) Fingerprint() string { return ccrypto.FingerprintKey(s.signer.PublicKey()) }
@@ -134,11 +137,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
-	err := s.authorize(r.Context(), token)
+	authorization, err := s.acquireAuthorization(r.Context(), token)
 	if err != nil {
 		http.Error(w, "unauthorized", 401)
 		return
 	}
+	defer s.releaseAuthorization(authorization)
 	if r.Header.Get("Sec-WebSocket-Protocol") != share.ProtocolVersion {
 		http.Error(w, "invalid protocol", 400)
 		return
@@ -174,9 +178,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				check, done := context.WithTimeout(ctx, 5*time.Second)
-				err := s.authorize(check, token)
-				done()
+				err := s.checkAuthorization(ctx, authorization)
 				if err != nil {
 					cancel()
 					return
@@ -209,11 +211,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		request.Reply(false, []byte("service configuration denied"))
 		return
 	}
-	if err := request.Reply(true, nil); err != nil {
+	if err := request.Reply(true, []byte(renewalRequest)); err != nil {
 		return
 	}
 	noChannels := make(chan ssh.NewChannel)
 	close(noChannels)
+	requests = s.credentialRequests(ctx, cancel, authorization, epoch, requests)
 	go func() { bind(ctx, sc, requests, noChannels); cancel() }()
 	used := false
 	for ch := range channels {

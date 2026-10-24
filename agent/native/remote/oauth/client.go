@@ -27,6 +27,10 @@ const CallbackURI = "http://127.0.0.1/oauth/callback"
 const scope = "authelia.bearer.authz offline_access"
 const maxBody = 64 << 10
 
+// Renew early enough to carry the exchange over a slow Tor circuit. This does
+// not change the issuer's expiry or allow an expired/revoked credential.
+const RefreshBefore = 5 * time.Minute
+
 var ErrLoginRequired = errors.New("OAuth login required")
 var onionHost = regexp.MustCompile(`^[a-z2-7]{56}\.onion$`)
 
@@ -38,6 +42,16 @@ type Token struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token"`
 	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+// TokenResponse is the standard Authelia token response. It stays inside the
+// native owners, including when refreshed through an existing SSH carrier.
+type TokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int64  `json:"expires_in"`
+	Scope        string `json:"scope,omitempty"`
 }
 
 type Config struct {
@@ -110,16 +124,24 @@ func (c *Client) post(ctx context.Context, endpoint string, values url.Values, o
 }
 
 func (c *Client) exchange(ctx context.Context, values url.Values) (Token, error) {
-	var response struct {
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		TokenType    string `json:"token_type"`
-		ExpiresIn    int64  `json:"expires_in"`
-		Scope        string `json:"scope"`
-	}
+	var response TokenResponse
+	requestedAt := time.Now()
 	if err := c.post(ctx, "token", values, &response); err != nil {
 		return Token{}, err
 	}
+	return c.accept(ctx, response, requestedAt)
+}
+
+// AcceptRefresh applies the same validation and encrypted persistence as the
+// ordinary token endpoint. Only the enrolled native carrier supplies response.
+func (c *Client) AcceptRefresh(ctx context.Context, previous Token, response TokenResponse, requestedAt time.Time) (Token, error) {
+	if !c.Owns(previous) {
+		return Token{}, ErrLoginRequired
+	}
+	return c.accept(ctx, response, requestedAt)
+}
+
+func (c *Client) accept(ctx context.Context, response TokenResponse, requestedAt time.Time) (Token, error) {
 	if !strings.EqualFold(response.TokenType, "Bearer") || !safeValue(response.AccessToken) || !safeValue(response.RefreshToken) ||
 		!strings.HasPrefix(response.AccessToken, "authelia_at_") || !strings.HasPrefix(response.RefreshToken, "authelia_rt_") ||
 		response.ExpiresIn <= 0 || response.ExpiresIn > int64((365*24*time.Hour)/time.Second) {
@@ -131,8 +153,10 @@ func (c *Client) exchange(ctx context.Context, values url.Values) (Token, error)
 			return Token{}, errors.New("required OAuth scopes were not granted")
 		}
 	}
+	// Start the local estimate before the exchange: Tor response latency must
+	// never make us believe the token outlives its actual issuer expiry.
 	token := Token{Issuer: c.config.Issuer, ClientID: c.config.ClientID, AccessToken: response.AccessToken,
-		RefreshToken: response.RefreshToken, ExpiresAt: time.Now().Add(time.Duration(response.ExpiresIn) * time.Second)}
+		RefreshToken: response.RefreshToken, ExpiresAt: requestedAt.Add(time.Duration(response.ExpiresIn) * time.Second)}
 	if err := ctx.Err(); err != nil {
 		return Token{}, err
 	}
@@ -161,7 +185,7 @@ func (c *Client) Access(ctx context.Context, token Token) (Token, error) {
 	if !c.Owns(token) {
 		return Token{}, ErrLoginRequired
 	}
-	if time.Until(token.ExpiresAt) > 30*time.Second {
+	if time.Until(token.ExpiresAt) > RefreshBefore {
 		return token, nil
 	}
 	return c.Refresh(ctx, token)

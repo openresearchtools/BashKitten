@@ -46,13 +46,16 @@ type Client struct {
 	oauth  *oauth.Client
 	save   func(oauth.Token) error
 
-	authMu      sync.Mutex // Serializes refreshes and token persistence.
-	token       oauth.Token
-	mu          sync.Mutex
-	closed      bool
-	login       *oauth.Authorization
-	loginCancel context.CancelFunc
-	mappings    map[string]mapping
+	authMu           sync.Mutex // Serializes refreshes and token persistence.
+	token            oauth.Token
+	renewalUncertain bool       // A missing reply cannot prove successor-grant revocation.
+	carrierMu        sync.Mutex // Carrier closure never waits for a credential exchange.
+	carriers         map[*tunnel.Carrier]struct{}
+	mu               sync.Mutex
+	closed           bool
+	login            *oauth.Authorization
+	loginCancel      context.CancelFunc
+	mappings         map[string]mapping
 }
 
 // OAuthClientID is derived from the bundle ID so no additional shared secret or
@@ -68,10 +71,11 @@ func New(config Config) (*Client, error) {
 		return nil, err
 	}
 	origin := "https://" + config.Enrollment.Onion
-	c := &Client{save: config.Save, token: config.Token, mappings: make(map[string]mapping)}
+	c := &Client{save: config.Save, token: config.Token, mappings: make(map[string]mapping),
+		carriers: make(map[*tunnel.Carrier]struct{})}
 	c.config = tunnel.ClientConfig{OnionURL: origin, SOCKSNetwork: config.SOCKSNetwork,
 		SOCKSAddress: config.SOCKSAddress, TLS: tlsConfig, Fingerprint: config.Enrollment.Fingerprint,
-		AccessToken: c.accessToken}
+		AccessToken: c.accessToken, CarrierOpened: c.carrierOpened, CarrierClosed: c.carrierClosed}
 	c.http, err = c.config.HTTPClient()
 	if err != nil {
 		return nil, err
@@ -87,7 +91,54 @@ func New(config Config) (*Client, error) {
 		return nil, errors.New("saved OAuth credentials belong to another enrollment")
 	}
 	c.ctx, c.cancel = context.WithCancel(context.Background())
+	go c.renewActive()
 	return c, nil
+}
+
+func (c *Client) carrierOpened(token string, carrier *tunnel.Carrier) error {
+	c.authMu.Lock()
+	defer c.authMu.Unlock()
+	// A handshake begun before a rotation may finish afterward. Do not send
+	// application bytes using its stale admission credential.
+	if c.ctx.Err() != nil || token != c.token.AccessToken {
+		return errors.New("remote credentials changed during connection setup")
+	}
+	c.carrierMu.Lock()
+	c.carriers[carrier] = struct{}{}
+	c.carrierMu.Unlock()
+	return nil
+}
+
+func (c *Client) carrierClosed(carrier *tunnel.Carrier) {
+	c.carrierMu.Lock()
+	delete(c.carriers, carrier)
+	c.carrierMu.Unlock()
+}
+
+func (c *Client) activeCarrier() *tunnel.Carrier {
+	c.carrierMu.Lock()
+	defer c.carrierMu.Unlock()
+	for carrier := range c.carriers {
+		return carrier
+	}
+	return nil
+}
+
+// Downloads and event streams need no new HTTP request to remain authorized.
+// The same owner/authMu handles this and every on-demand token acquisition.
+func (c *Client) renewActive() {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.ctx.Done():
+			return
+		case <-ticker.C:
+			if c.activeCarrier() != nil {
+				_, _ = c.accessToken(c.ctx)
+			}
+		}
+	}
 }
 
 func (c *Client) operation(parent context.Context) (context.Context, context.CancelFunc) {
@@ -193,7 +244,42 @@ func (c *Client) accessTokenLocked(parent context.Context) (string, error) {
 		return "", err
 	}
 	previous := c.token
-	token, err := c.oauth.Access(ctx, previous)
+	var token oauth.Token
+	var err error
+	carrier := c.activeCarrier()
+	if carrier != nil && c.oauth.Owns(previous) && time.Until(previous.ExpiresAt) <= oauth.RefreshBefore {
+		// The host atomically renews all carriers sharing this bearer. Refreshing
+		// through the ordinary HTTP endpoint would revoke them before a new
+		// credential could arrive over Tor. Only the native connection owner can
+		// cancel this exchange; a catalogue caller's deadline cannot kill a file.
+		for carrier != nil {
+			requestedAt := time.Now()
+			response, renewalErr := carrier.Renew(c.ctx, previous.AccessToken, previous.RefreshToken)
+			if errors.Is(renewalErr, tunnel.ErrCarrierClosed) {
+				// No request was sent. A short HTTP connection can finish between
+				// selection and acquiring its renewal lease.
+				c.carrierClosed(carrier)
+				carrier = c.activeCarrier()
+				continue
+			}
+			err = renewalErr
+			if err == nil {
+				token, err = c.oauth.AcceptRefresh(c.ctx, previous, response, requestedAt)
+			}
+			if err != nil {
+				// A dropped response or failed save may follow a committed rotation.
+				// Never retry the old refresh token or continue with stale credentials.
+				err = errors.Join(oauth.ErrLoginRequired, err)
+				c.renewalUncertain = true
+			}
+			break
+		}
+		if carrier == nil {
+			token, err = c.oauth.Access(ctx, previous)
+		}
+	} else {
+		token, err = c.oauth.Access(ctx, previous)
+	}
 	if err != nil {
 		if errors.Is(err, oauth.ErrLoginRequired) {
 			c.token = oauth.Token{}
@@ -320,5 +406,8 @@ func (c *Client) Logout(ctx context.Context) error {
 		revokeErr = c.oauth.Revoke(ctx, token)
 	}
 	defer c.http.CloseIdleConnections()
+	if c.renewalUncertain {
+		revokeErr = errors.Join(revokeErr, errors.New("credential renewal was interrupted; remote revocation could not be confirmed"))
+	}
 	return errors.Join(revokeErr, saveErr)
 }
