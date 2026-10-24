@@ -67,7 +67,7 @@ def native_recipe(workflow):
 
 
 @cache
-def native_inputs(revision, target):
+def native_inputs(revision, target, legacy_android_module=False):
     if not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('Invalid native source revision')
     if subprocess.run(['git', 'cat-file', '-e', revision + '^{commit}'], cwd=ROOT,
@@ -80,6 +80,10 @@ def native_inputs(revision, target):
         if not entry:
             continue
         path = entry.split(b'\t', 1)[1].decode()
+        # This exact EXTRA_JS_MODULES input is repackaged into omni.ja. Keep its
+        # moz.build and all other shared files in the native input comparison.
+        if path == component.ANDROID_ONLY_MODULE and not legacy_android_module:
+            continue
         if path == COLLECTOR or path.startswith(APPLICATION_PATHS) or '/__pycache__/' in path:
             continue
         entries.append(entry)
@@ -112,9 +116,14 @@ def gecko_libraries(apk, abi):
 def verify_native(apk, record, target):
     abi = 'x86_64' if target == 'android-x86_64' else 'arm64-v8a'
     current = git('rev-parse', 'HEAD').decode().strip()
+    producer_inputs = native_inputs(record.get('source', ''), target)
+    # Preserve old receipts, including their original digest. Validate that
+    # digest under its actual producer's old/new calculation before comparing
+    # current native inputs with the producer under the narrow resource rule.
+    recorded_inputs = {producer_inputs, native_inputs(record.get('source', ''), target, True)}
     if (record.get('schema') != 1 or record.get('architecture') != abi or
-            record.get('input_sha256') != native_inputs(current, target) or
-            record.get('input_sha256') != native_inputs(record.get('source', ''), target) or
+            record.get('input_sha256') not in recorded_inputs or
+            producer_inputs != native_inputs(current, target) or
             record.get('libraries') != gecko_libraries(apk, abi)):
         raise ValueError('Gecko native producer, inputs or library bytes do not match')
     producer = record.get('producer')
@@ -132,6 +141,7 @@ def verify_native(apk, record, target):
 def record_build(apk, target):
     abi = 'x86_64' if target == 'android-x86_64' else 'arm64-v8a'
     current = git('rev-parse', 'HEAD').decode().strip()
+    component.verify_android_resources(apk)
     receipt = os.environ.get('BASHKITTEN_ANDROID_NATIVE_RECEIPT')
     if receipt:
         record = json.loads(Path(receipt).read_text())
