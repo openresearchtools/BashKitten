@@ -8,7 +8,6 @@ import android.content.pm.PackageManager;
 import android.content.res.TypedArray;
 import android.net.Uri;
 import android.os.*;
-import android.provider.MediaStore;
 import android.provider.Settings;
 import android.view.*;
 import android.widget.*;
@@ -26,6 +25,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final BrowserApp app;
     private final AgentRuntime runtime;
     private final View browser;
+    private final java.util.function.Consumer<Boolean> visibilityChanged;
     private final LinearLayout agent, bar, body;
     private final AgentSidecar sidecar;
     private final GeckoView view;
@@ -33,20 +33,25 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     private final ScrollView logScroll;
     private final TextView message, log, connectionStatus;
     private final LinearLayout actions;
+    private final LinearLayout downloadRows;
+    private final Runnable downloadsChanged = this::renderDownloads;
+    private final Map<FileTransfers.Download, DownloadRow> downloadViews = new LinkedHashMap<>();
     private final ImageButton displayButton;
     private GeckoSession attached;
     private AgentMicrophone microphone;
     private String renderedState = "";
     private String connectionError = "";
     private boolean shown = true;
-    private boolean split;
+    private boolean split = true;
     private boolean browserUi;
     private boolean destroyed;
     private GeckoSession.PromptDelegate.FilePrompt filePrompt;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> fileResult;
     public static final int FILE_REQUEST = 7310, TERMUX_PERMISSION = 7311, NOTIFICATION_PERMISSION = 7312, BATTERY_PERMISSION = 7313;
-    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, Runnable openBrowserMenu, Runnable openSettingsMenu) {
+    public AgentPanel(Activity activity, View browser, GeckoRuntime engine, int agentIcon, View tabSwitcher,
+            Runnable openBrowserMenu, Runnable openSettingsMenu, java.util.function.Consumer<Boolean> visibilityChanged) {
         super(activity); this.activity = activity; this.browser = browser;
+        this.visibilityChanged = visibilityChanged;
         app = BrowserApp.get(activity); runtime = app.agent;
         sidecar = new AgentSidecar(activity, runtime);
         runtime.activity = new java.lang.ref.WeakReference<>(activity);
@@ -64,12 +69,14 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         TypedArray buttonTheme = activity.obtainStyledAttributes(new int[]{android.R.attr.selectableItemBackgroundBorderless});
         try { toggle.setBackground(buttonTheme.getDrawable(0)); } finally { buttonTheme.recycle(); }
         toggle.setOnClickListener(v -> sidecar.toggle()); bar.addView(toggle, new LayoutParams(dp(48), -1));
+        bar.addView(barIcon("Hide Agent", R.drawable.ic_agent_sidebar, this::hideAgent), new LayoutParams(dp(48), -1));
         bar.addView(new View(activity), new LayoutParams(0, 1, 1));
         displayButton = barIcon("Display", R.drawable.ic_agent_display, () -> com.bashkitten.display.DisplayTabs.toggle(activity, "local"));
         displayButton.setBackgroundResource(R.drawable.bashkitten_display_toggle);
         bar.addView(displayButton, new LayoutParams(dp(48), -1));
         displayChanged();
         bar.addView(barIcon("Configuration", R.drawable.ic_agent_gear, openSettingsMenu), new LayoutParams(dp(48), -1));
+        bar.addView(tabSwitcher, new LayoutParams(dp(48), -1));
         ImageButton menu = barIcon("Browser menu", R.drawable.ic_agent_browser_menu, openBrowserMenu); bar.addView(menu, new LayoutParams(dp(48), -1));
         FrameLayout chatContent = new FrameLayout(activity); agent.addView(chatContent, new LayoutParams(-1, 0, 1));
         body = new LinearLayout(activity); body.setOrientation(VERTICAL); chatContent.addView(body, new FrameLayout.LayoutParams(-1, -1));
@@ -77,6 +84,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         connectionStatus.setPadding(dp(16), dp(8), dp(16), dp(8));
         connectionStatus.setText("Connecting to Agent…"); connectionStatus.setVisibility(GONE);
         body.addView(connectionStatus, new LayoutParams(-1, -2));
+        downloadRows = new LinearLayout(activity); downloadRows.setOrientation(VERTICAL);
+        body.addView(downloadRows, new LayoutParams(-1, -2));
+        app.transfers.observeDownloads(downloadsChanged);
         view = new GeckoView(activity); body.addView(view, new LayoutParams(-1, 0, 1));
         setup = new ScrollView(activity); setup.setFillViewport(true);
         LinearLayout setupBody = new LinearLayout(activity); setupBody.setPadding(dp(24), dp(28), dp(24), dp(24)); setupBody.setOrientation(VERTICAL); setup.addView(setupBody);
@@ -140,7 +150,9 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
     }
     private Button button(Button b, String label, Runnable action) { b.setAllCaps(false); b.setText(label); b.setMinWidth(0); b.setMinimumWidth(0); b.setPadding(dp(8),0,dp(8),0); b.setOnClickListener(v -> action.run()); return b; }
     private void action(String label, Runnable action) { actions.addView(button(label, action), new LayoutParams(-1, dp(52))); }
-    public void showAgent() { shown = true; split = false; browserUi = false; layoutPanels(); }
+    public void showAgent() { shown = true; split = true; browserUi = false; layoutPanels(); }
+    public void showAgentBesideBrowser() { shown = !wideLayout(); split = true; browserUi = false; layoutPanels(); }
+    public void hideAgent() { shown = false; split = false; browserUi = false; layoutPanels(); }
     public boolean openMessage(Intent intent) {
         String eventId = intent.getStringExtra(PhoneVoiceGateway.MESSAGE_EVENT);
         if (eventId == null) return false;
@@ -153,26 +165,32 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         if (Build.VERSION.SDK_INT >= 30) displayButton.setStateDescription(open ? "Open" : "Closed");
         displayButton.setTooltipText(open ? "Close Display" : "Open Display");
     }
-    public void showBrowser() { shown = false; split = true; browserUi = false; layoutPanels(); }
+    // Opening a tab respects an explicit Hide Agent choice, including Display.
+    public void showBrowser() { shown = false; browserUi = false; layoutPanels(); }
     public Bundle saveLayoutState() {
         Bundle state = new Bundle(); state.putBoolean("shown", shown); state.putBoolean("split", split); return state;
     }
     public void restoreLayoutState(Bundle state) {
         if (state == null) return;
-        shown = state.getBoolean("shown", true); split = state.getBoolean("split", false); layoutPanels();
+        shown = state.getBoolean("shown", true); split = state.getBoolean("split", true); layoutPanels();
     }
     public void setBrowserUiVisible(boolean visible) { browserUi = visible; layoutPanels(); }
     public boolean isShownAgent() { return shown && !browserUi; }
-    public void toggle() { if (shown) showBrowser(); else showAgent(); }
+    private boolean wideLayout() {
+        return (getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp)) >= dp(600);
+    }
     private void layoutPanels() {
         int availableWidth = getWidth() > 0 ? getWidth() : dp(getResources().getConfiguration().screenWidthDp);
-        boolean sideBySide = !browserUi && split && !shown && availableWidth >= dp(600);
+        boolean sideBySide = !browserUi && split && !shown && wideLayout();
         boolean agentVisible = !browserUi && (shown || sideBySide);
         agent.setVisibility(agentVisible ? VISIBLE : GONE);
+        visibilityChanged.accept(agentVisible);
         if (!agentVisible) sidecar.close();
-        agent.setLayoutParams(new LayoutParams(sideBySide ? 0 : -1, -1, sideBySide ? .46f : 0));
+        // Keep all six 48dp header controls reachable at the smallest split width.
+        int agentWidth = Math.max(dp(288) + agent.getPaddingLeft() + agent.getPaddingRight(), Math.round(availableWidth * .46f));
+        agent.setLayoutParams(new LayoutParams(sideBySide ? agentWidth : -1, -1));
         browser.setVisibility(browserUi || sideBySide || !shown ? VISIBLE : GONE);
-        browser.setLayoutParams(new LayoutParams(0, -1, sideBySide ? .54f : 1));
+        browser.setLayoutParams(new LayoutParams(0, -1, 1));
         runtime.visible = agentVisible;
         if (microphone != null) microphone.changed();
         if (runtime.session != null) runtime.session.setActive(agentVisible);
@@ -192,7 +210,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         }
         layoutPanels();
     }
-    public void destroy() { destroyed = true; sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
+    public void destroy() { destroyed = true; app.transfers.detachDownloads(downloadsChanged); sidecar.close(); if (microphone != null) microphone.close(); runtime.detach(this); if (attached != null) { view.releaseSession(); attached = null; } runtime.visible = false; }
     @Override protected void onConfigurationChanged(android.content.res.Configuration c) { super.onConfigurationChanged(c); layoutPanels(); }
     @Override protected void onSizeChanged(int w, int h, int oldw, int oldh) { super.onSizeChanged(w, h, oldw, oldh); if (w != oldw) layoutPanels(); }
     @Override public void changed() {
@@ -322,7 +340,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             @Override public void onCloseRequest(GeckoSession s) { /* Protected Agent is never a closeable tab. */ }
             @Override public void onCrash(GeckoSession s) { runtime.recoverSession(); }
             @Override public void onKill(GeckoSession s) { runtime.recoverSession(); }
-            @Override public void onExternalResponse(GeckoSession s, WebResponse response) { download(response); }
+            @Override public void onExternalResponse(GeckoSession s, WebResponse response) { app.transfers.download(s, response); }
         });
         session.setPromptDelegate(new GeckoSession.PromptDelegate() {
             @Override public GeckoResult<PromptResponse> onChoicePrompt(GeckoSession s, ChoicePrompt prompt) {
@@ -451,7 +469,7 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
             } else message.setText("Approve Android’s Termux permission prompt to continue. If you dismissed it, turn Agent off and on to try again.");
         } else if (runtime.setupStep.equals("connection")) {
             TextView guide = text();
-            guide.setText("Copy this command, open Termux, paste it and press Enter. It enables Open Research Tools stable and nightly packages and installs BashKitten with its dependencies through pkg. These are testing releases. Progress appears in Termux. After installation, it returns here and starts Agent automatically.");
+            guide.setText("Copy this command, open Termux, paste it and press Enter. It enables the signed package sources and installs the packages required by this app. These are testing releases. Progress appears in Termux. It then returns here to finish matching packages and start Agent.");
             actions.addView(guide);
             if (Build.VERSION.SDK_INT >= 34) {
                 TextView processGuide = text();
@@ -463,12 +481,19 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
                     catch (ActivityNotFoundException error) { activity.startActivity(new Intent(Settings.ACTION_SETTINGS)); }
                 });
             }
+            String setupCommand;
+            try { setupCommand = runtime.updates.setupCommand(); }
+            catch (RuntimeException error) {
+                guide.setText("The app’s package requirements could not be read. Reinstall this APK to retry setup.");
+                return;
+            }
+            if (setupCommand == null) { guide.setText("Preparing this app’s setup command…"); return; }
             TextView command = text();
             command.setTypeface(android.graphics.Typeface.MONOSPACE); command.setTextSize(12);
-            command.setText(runtime.termux.setupCommand()); command.setTextIsSelectable(true);
+            command.setText(setupCommand); command.setTextIsSelectable(true);
             command.setPadding(dp(12), dp(12), dp(12), dp(12));
             action("Copy command", () -> {
-                ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Set up BashKitten", runtime.termux.setupCommand()));
+                ((android.content.ClipboardManager)activity.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Set up BashKitten", setupCommand));
                 Toast.makeText(activity, "Command copied", Toast.LENGTH_SHORT).show();
             });
             ScrollView commandScroll = new ScrollView(activity);
@@ -537,7 +562,49 @@ public final class AgentPanel extends LinearLayout implements AgentRuntime.Liste
         finally { connection.disconnect(); }
     }
     private void error(String text){message.setText(text);Toast.makeText(activity,text,Toast.LENGTH_LONG).show();}
-    private void download(WebResponse response){
-        new Thread(()->{Uri target=null;try{String name=mozilla.components.support.utils.DownloadUtils.INSTANCE.extractFileNameFromUrl(response.headers.get("Content-Disposition"),response.uri);ContentValues values=new ContentValues();values.put(MediaStore.Downloads.DISPLAY_NAME,name);values.put(MediaStore.Downloads.MIME_TYPE,response.headers.get("Content-Type"));values.put(MediaStore.Downloads.IS_PENDING,1);target=activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);if(target==null)throw new IOException();try(InputStream input=response.body;OutputStream output=activity.getContentResolver().openOutputStream(target)){if(input==null||output==null)throw new IOException();input.transferTo(output);}values.clear();values.put(MediaStore.Downloads.IS_PENDING,0);activity.getContentResolver().update(target,values,null,null);Uri saved=target;app.main.post(()->new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme).setMessage("Saved "+name).setPositiveButton("Open",(d,w)->{try{activity.startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(saved,response.headers.get("Content-Type")).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));}catch(Exception e){app.message("Saved in Downloads.");}}).setNegativeButton("Close",null).show());}catch(Exception e){if(target!=null)activity.getContentResolver().delete(target,null,null);app.main.post(()->error("Download failed."));}},"agent-download").start();
+    private void renderDownloads() {
+        List<FileTransfers.Download> transfers = app.transfers.downloads();
+        for (FileTransfers.Download transfer : new ArrayList<>(downloadViews.keySet())) if (!transfers.contains(transfer)) {
+            downloadRows.removeView(downloadViews.remove(transfer));
+        }
+        for (FileTransfers.Download transfer : transfers) {
+            DownloadRow row = downloadViews.get(transfer);
+            if (row == null) { row = new DownloadRow(transfer); downloadViews.put(transfer, row); downloadRows.addView(row, new LayoutParams(-1, -2)); }
+            row.update();
+        }
+        downloadRows.setVisibility(transfers.isEmpty() ? GONE : VISIBLE);
+    }
+    private final class DownloadRow extends LinearLayout {
+        final FileTransfers.Download transfer;
+        final TextView label;
+        final ProgressBar meter;
+        final Button open, cancel;
+        DownloadRow(FileTransfers.Download transfer) {
+            super(activity); this.transfer = transfer; setGravity(Gravity.CENTER_VERTICAL);
+            setPadding(dp(12), dp(4), dp(8), dp(4));
+            LinearLayout detail = new LinearLayout(activity); detail.setOrientation(VERTICAL);
+            label = text(); label.setTextSize(12); label.setMaxLines(2);
+            detail.addView(label, new LayoutParams(-1, -2));
+            meter = new ProgressBar(activity, null, android.R.attr.progressBarStyleHorizontal); meter.setMax(1000);
+            detail.addView(meter, new LayoutParams(-1, dp(4)));
+            addView(detail, new LayoutParams(0, -2, 1));
+            open = button("Open", () -> {
+                try { activity.startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(transfer.saved, transfer.mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)); }
+                catch (Exception error) { app.message("Saved in Downloads. No app can open this file."); }
+            }); addView(open, new LayoutParams(-2, dp(40)));
+            cancel = button("Cancel", () -> {
+                if (transfer.finished) app.transfers.dismissDownload(transfer);
+                else app.transfers.cancelDownload(transfer, "Download cancelled");
+            }); addView(cancel, new LayoutParams(-2, dp(40)));
+        }
+        void update() {
+            String progress = android.text.format.Formatter.formatShortFileSize(activity, transfer.received);
+            if (transfer.expected >= 0) progress += " of " + android.text.format.Formatter.formatShortFileSize(activity, transfer.expected);
+            label.setText(transfer.name + " · " + (transfer.finished || transfer.cancelled != null ? transfer.status : progress));
+            meter.setVisibility(transfer.finished ? GONE : VISIBLE); meter.setIndeterminate(transfer.expected <= 0);
+            if (transfer.expected > 0) meter.setProgress((int)Math.min(1000, transfer.received * 1000.0 / transfer.expected));
+            open.setVisibility(transfer.saved == null ? GONE : VISIBLE);
+            cancel.setText(transfer.finished ? "Dismiss" : "Cancel"); cancel.setEnabled(transfer.finished || transfer.cancelled == null);
+        }
     }
 }

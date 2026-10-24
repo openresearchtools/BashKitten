@@ -33,7 +33,6 @@ import mozilla.components.compose.browser.toolbar.store.BrowserToolbarStore
 import mozilla.components.lib.state.ext.observeAsComposableState
 import org.mozilla.fenix.HomeActivity
 import org.mozilla.fenix.components.toolbar.DisplayActions
-import org.mozilla.fenix.components.toolbar.TabCounterInteractions
 import com.bashkitten.R as agentR
 import mozilla.components.ui.icons.R as iconsR
 
@@ -54,20 +53,13 @@ fun DisplayToolbar(activity: HomeActivity, store: BrowserToolbarStore) {
     val state by store.observeAsComposableState { it.displayState }
     val actions = (state.browserActionsStart + state.browserActionsEnd + state.navigationActions)
         .filter { action ->
-            action is Action.TabCounterAction || action is Action.ActionButtonRes &&
-                (action.onClick is DisplayActions.MenuClicked ||
-                    action.onClick is TabCounterInteractions.AddNewTab ||
-                    action.onClick is TabCounterInteractions.AddNewPrivateTab)
-        }.distinctBy { action ->
-            if (action is Action.ActionButtonRes) action.onClick::class else action::class
-        }.sortedBy { action ->
-            if (action is Action.ActionButtonRes && action.onClick is DisplayActions.MenuClicked) 1 else 0
-        }
+            action is Action.ActionButtonRes && action.onClick is DisplayActions.MenuClicked
+        }.take(1)
     Row(
         modifier = Modifier.fillMaxWidth().height(56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        AgentButton { activity.showBashKittenAgent() }
+        AgentEntryButton(activity)
         Spacer(Modifier.weight(1f))
         IconToggleButton(
             checked = running,
@@ -117,6 +109,7 @@ fun DisplayToolbar(activity: HomeActivity, store: BrowserToolbarStore) {
         ) {
             Icon(painterResource(agentR.drawable.ic_agent_gear), contentDescription = "Configuration")
         }
+        AgentTabsButton(activity)
         ActionContainer(actions = actions, onInteraction = { store.dispatch(it) })
     }
 }

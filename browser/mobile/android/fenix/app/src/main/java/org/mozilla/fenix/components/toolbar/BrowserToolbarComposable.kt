@@ -105,6 +105,9 @@ class BrowserToolbarComposable(
     val layout: View = ScrollableToolbarComposeView(activity, this) {
         val isSearching = toolbarStore.observeAsComposableState { it.isEditMode() }.value
         val shouldShowTabStrip: Boolean = remember { shouldShowTabStrip() }
+        val displaySelected by browserStore.observeAsComposableState {
+            customTabSession == null && it.selectedTab?.contextId == com.bashkitten.display.DisplayTabs.CONTEXT
+        }
         val customColors = browserScreenStore.observeAsComposableState { it.customTabColors }
         val shouldUseBottomToolbar = remember(settings) { settings.shouldUseBottomToolbar }
 
@@ -155,7 +158,7 @@ class BrowserToolbarComposable(
                             .fillMaxWidth()
                             .wrapContentHeight(),
                     ) {
-                        tabStripContent()
+                        if (!displaySelected) tabStripContent()
                         if (customTabSession == null) TorTabPrivacyNotice(browserStore)
                         AgentBrowserToolbar(
                             store = toolbarStore,
@@ -345,7 +348,7 @@ class BrowserToolbarComposable(
         }
         androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
             if (activity is org.mozilla.fenix.HomeActivity) {
-                org.mozilla.fenix.bashkitten.AgentButton { activity.showBashKittenAgent() }
+                org.mozilla.fenix.bashkitten.AgentEntryButton(activity)
             }
             androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) {
                 NativeBrowserToolbar(store, cfr, useMinimalBottomToolbarWhenEnteringText)

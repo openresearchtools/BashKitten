@@ -197,6 +197,7 @@ import mozilla.components.ui.icons.R as iconsR
 open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, CrashActionDispatcher {
     var bashKittenAgentPanel: com.bashkitten.AgentPanel? = null
         private set
+    val bashKittenAgentVisible = mutableStateOf(false)
     private var bashKittenMenuFromAgent = false
     private var bashKittenBrowserUiBack = false
     fun showBashKittenAgent() { bashKittenAgentPanel?.showAgent() }
@@ -205,6 +206,19 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         bashKittenMenuFromAgent = true
         // The protected Agent has no ordinary page actions or extension menu context.
         navHost.navController.navigate(NavGraphDirections.actionGlobalMenuDialogFragment(MenuAccessPoint.Home))
+    }
+
+    fun openBashKittenTabs() {
+        bashKittenMenuFromAgent = bashKittenAgentVisible.value
+        navHost.navController.navigate(
+            NavGraphDirections.actionGlobalTabManagementFragment(
+                page = if (browsingModeManager.mode.isPrivate) {
+                    org.mozilla.fenix.tabstray.redux.state.Page.PrivateTabs
+                } else {
+                    org.mozilla.fenix.tabstray.redux.state.Page.NormalTabs
+                },
+            ),
+        )
     }
 
     @VisibleForTesting
@@ -538,7 +552,19 @@ open class HomeActivity : LocaleAwareAppCompatActivity(), NavHostActivity, Crash
         }
 
         if (this !is ExternalAppBrowserActivity) {
-            bashKittenAgentPanel = com.bashkitten.AgentPanel(this, binding.root, components.core.geckoRuntime, R.drawable.bashkitten_logo, ::openBashKittenBrowserMenu, { org.mozilla.fenix.bashkitten.BashKittenMenuDialog().show(supportFragmentManager, "bashkitten-settings-menu") })
+            val agentTabs = androidx.compose.ui.platform.ComposeView(this).apply {
+                setContent {
+                    org.mozilla.fenix.theme.FirefoxTheme {
+                        org.mozilla.fenix.bashkitten.AgentTabsButton(this@HomeActivity)
+                    }
+                }
+            }
+            bashKittenAgentPanel = com.bashkitten.AgentPanel(
+                this, binding.root, components.core.geckoRuntime, R.drawable.bashkitten_logo, agentTabs,
+                ::openBashKittenBrowserMenu,
+                { org.mozilla.fenix.bashkitten.BashKittenMenuDialog().show(supportFragmentManager, "bashkitten-settings-menu") },
+                { visible -> bashKittenAgentVisible.value = visible },
+            )
             // Theme and tablet-layout recreation retain the selected pane. New
             // launches keep AgentPanel's full-Agent default; ACTION_MAIN also
             // explicitly selects Agent when delivered through onNewIntent.
