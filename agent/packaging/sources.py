@@ -176,5 +176,10 @@ for target in ['linux-amd64', 'linux-arm64', 'termux-aarch64', 'termux-x86_64']:
     file = matches[0]
     digest = checked_archive(file)
     shutil.copy2(file, args.output / name)
-    node_sources.append({'target': target, 'file': name, 'sha256': digest})
+    receipt = file.with_name('node-provenance-' + target + '.json')
+    checked_archive(receipt)
+    provenance = json.loads(receipt.read_text())
+    if provenance['target'] != target or provenance['archives'].get(name) != digest:
+        raise ValueError('Node source producer receipt mismatch: ' + target)
+    node_sources.append({'target': target, 'file': name, 'sha256': digest, 'provenance': provenance})
 (args.output / 'node-source-components.json').write_text(json.dumps(node_sources, indent=2) + '\n')

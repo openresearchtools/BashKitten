@@ -55,6 +55,18 @@ application inputs can still require R8 to run. Pass caching/worker options usin
 immediately after Gecko compilation; those and the Gradle timing report remain
 downloadable from each run.
 
+Private Node jobs likewise restore a complete runtime and corresponding-source
+artifact before consulting download caches or upstream package pools. Reuse
+requires a successful Node assembly/upload job (or a verified prior restore) in
+a completed main-branch candidate or Node workflow, identical committed recipe
+and retained-source trees, and the same runner/install/assembly commands.
+The verifier checks both archives and sidecars, lock identities, complete source
+archives, npm source and full notices. A checksummed receipt preserves the
+original producing revision/run and archive hashes through later restores;
+the release source inventory retains it. Changing cache policy does not change
+the component recipe, pins, binaries or original producer. Changed assembly
+inputs still require the ordinary pinned build, including its download errors.
+
 `build.py` accepts `linux|termux`, `--architecture`, `--auth-archive`,
 `--search-archive`, `--node-archive` and `--output`; Linux also requires `--browser-dir`.
 Each component requires its `SHA256SUMS` and target metadata. The Firefox-aligned
