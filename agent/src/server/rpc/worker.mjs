@@ -415,7 +415,9 @@ async function send(item) {
 }
 async function rebuildQueue(mutate) {
   const old = [...queue];
-  const submitted = messageAttribution.queues;
+  // clear_queue emits queue_update before its response, replacing the live
+  // arrays. Preserve each ordered slot and its delivery identity for the rebuild.
+  const submitted = { steer: [...messageAttribution.queues.steer], queue: [...messageAttribution.queues.queue] };
   messageAttribution.beginClear();
   let cleared;
   try { cleared = await rpc.command('clear_queue'); }
