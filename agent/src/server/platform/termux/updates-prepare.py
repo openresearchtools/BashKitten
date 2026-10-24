@@ -223,6 +223,31 @@ def main():
             acquired = True
         except BlockingIOError:
             acquired = False
+        if not installed:
+            # dpkg can briefly remove the installed Node while its independent
+            # updater remains alive. Report that existing transaction instead
+            # of mistaking the replacement window for a missing installation.
+            owner, job = read(JOBS / 'owner.json'), read(JOBS / 'job.json')
+            if (owner and owner.get('started') and process_start(owner.get('pid')) == owner['started']
+                    and job and job.get('status') in ('running', 'waiting')):
+                if request['mode'] == 'cancel':
+                    write(JOBS / 'cancel.json', {'id': job['id']})
+                elif request['mode'] == 'start':
+                    # The Node validator omits the APK-only ABI field from its
+                    # persisted target while retaining the package identity.
+                    job_target = {key: target[key] for key in
+                                  ('schema', 'productVersion', 'sourceCommit', 'bootstrapSha256', 'architecture', 'packages')}
+                    if job['kind'] != request['kind'] or job['input'] != {'target': job_target, 'channel': request['channel']}:
+                        raise ValueError('Another package operation is running.')
+                elif request['mode'] != 'status':
+                    raise ValueError('Wait for the package update to finish.')
+                if (read(JOBS / 'cancel.json') or {}).get('id') == job['id']:
+                    job['cancelRequested'] = True
+                try:
+                    job['log'] = (JOBS / 'output.log').read_text(errors='replace')[-32000:]
+                except FileNotFoundError:
+                    pass
+                return {'matched': False, 'job': job}
         state = read(STATE)
         alive = state and state.get('started') and process_start(state.get('pid')) == state['started']
         if not acquired or alive:
