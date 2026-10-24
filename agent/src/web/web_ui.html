@@ -511,6 +511,7 @@
     .file-row .file-name { flex:1; min-width:80px; overflow-wrap:anywhere; }
     .file-row .file-item-actions { display:flex; flex-wrap:wrap; gap:5px; margin-left:auto; }
     .file-item-actions button, .file-item-actions a { padding:5px 7px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface); color:var(--text); font-size:11px; white-space:nowrap; }
+    .file-item-actions .file-reference-button { display:inline-flex; align-items:center; justify-content:center; min-width:28px; padding:5px; }
     .file-row a { color:var(--text); text-decoration:none; }
     .file-row a:hover { text-decoration:underline; }
     .file-empty { padding:16px 4px; color:var(--muted); font-size:12px; }
@@ -3570,7 +3571,7 @@
       $('#downloadFiles').title=selectingFiles?'Download selected items as ZIP':'Download this folder as ZIP';
     }
     function fileIcon(kind) {
-      const paths={"folder":"M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z","file":"M14 3H5v18h14V8l-5-5Zm0 0v5h5","chevron":"m9 5 7 7-7 7"};
+      const paths={"folder":"M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z","file":"M14 3H5v18h14V8l-5-5Zm0 0v5h5","chevron":"m9 5 7 7-7 7","reference":"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10ZM9 10h6m-3-3v6"};
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),line=document.createElementNS(svg.namespaceURI,'path');
       svg.setAttribute('class','file-icon'+(kind==='chevron'?' file-disclosure':''));svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linejoin','round');svg.setAttribute('aria-hidden','true');line.setAttribute('d',paths[kind]);svg.append(line);return svg;
     }
@@ -3618,7 +3619,7 @@
             view.onclick=()=>openFilePreview(root,entry);actions.append(view);
           }
           const download=document.createElement('a');download.href=fileUrl('/content',entry.path,root)+'&download=true';download.download=entry.name;download.textContent='Download';download.title='Download '+entry.name;actions.append(download);
-          const reference=document.createElement('button');reference.type='button';reference.textContent='Reference in chat';reference.title='Add '+entry.name+' to the message';
+          const reference=document.createElement('button');reference.type='button';reference.className='file-reference-button';reference.title='Reference in chat';reference.setAttribute('aria-label','Reference '+entry.name+' in chat');reference.append(fileIcon('reference'));
           reference.onclick=()=>{
             if(!fileManagerAllowed)return;
             const prompt=$('#prompt'),path=absoluteFilePath(entry.path,root);
