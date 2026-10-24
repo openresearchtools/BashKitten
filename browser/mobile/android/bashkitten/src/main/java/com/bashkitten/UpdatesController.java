@@ -24,7 +24,7 @@ public final class UpdatesController {
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Set<Runnable> listeners = new HashSet<>();
     private final CompletableFuture<JSONObject> target = new CompletableFuture<>();
-    private String script, preparer, version = "", availableUrl, checkError = "", matchingError = "";
+    private String script, preparer, setup, version = "", availableUrl, checkError = "", matchingError = "";
     private String channel;
     private long versionCode, statusUnavailableSince;
     private JSONObject available;
@@ -54,12 +54,14 @@ public final class UpdatesController {
                 if (manifest.getInt("schema") != 1 || !manifest.getString("productVersion").equals(info.versionName) ||
                     !manifest.getString("apkAbi").equals(TermuxConnection.downloadAbi()) || !manifest.getString("sourceCommit").matches("[a-f0-9]{40}"))
                     throw new IllegalStateException("This app's Termux update manifest is invalid.");
-                app.main.post(() -> { version = info.versionName; versionCode = info.getLongVersionCode(); script = source; preparer = preparation; target.complete(manifest); changed(); });
+                String command = runtime.termux.setupCommand(manifest);
+                app.main.post(() -> { version = info.versionName; versionCode = info.getLongVersionCode(); script = source; preparer = preparation; setup = command; target.complete(manifest); changed(); });
             } catch (Exception error) { app.main.post(() -> { target.completeExceptionally(error); changed(); }); }
         });
     }
     void observe(Runnable listener) { listeners.add(listener); }
     void removeObserver(Runnable listener) { listeners.remove(listener); }
+    String setupCommand() { target.getNow(null); return setup; }
     private void changed() { for (Runnable listener : new HashSet<>(listeners)) listener.run(); runtime.changed(); }
     private static JSONObject object(Object... values) { return AgentSettingsActivity.object(values); }
     private static String message(Throwable error) {

@@ -24,11 +24,11 @@ BashKitten verifies the connection and starts Agent automatically. There is no
 separate Connect or Install packages step. Existing compatible Termux can be
 used; no Termux:API, Termux:X11 APK, root or ADB is required.
 
-For an existing Android installation, update the APK and the BashKitten Termux
-package together. Install the APK update, then use **Settings → App → Update
-packages**, or upgrade the installed Termux packages through APT. The native
-local connection needs the matching browser and server; provider logins and
-chat history are preserved.
+For an existing Android installation, install the APK and open it. BashKitten
+automatically upgrades or downgrades its owned Termux packages to that APK's
+exact versions before starting Local. **Configuration → Updates** shows progress,
+offers package repair and checks general Termux package updates. Provider logins,
+model settings and chat history are preserved.
 
 If an older install command stops with `CANNOT LINK EXECUTABLE` and a missing
 SSL/library symbol, run `apt update && apt full-upgrade` in Termux, then retry

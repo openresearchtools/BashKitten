@@ -41,6 +41,7 @@ def fingerprint(target, legacy_verifier=None):
                   'agent/src/server/models/third_party', 'agent/src/server/updates/platform-packages.mjs',
                   'agent/src/server/platform/termux/updates-bootstrap.mjs',
                   'agent/src/server/platform/termux/updates-prepare.py',
+                  'agent/packaging/termux/install.sh',
                   '.github/workflows/auth-native.yml', '.github/workflows/search-native.yml']
     else:
         paths += ['.github/builders/linux.yml', 'agent/packaging/linux/prepare-runner.sh',
