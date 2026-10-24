@@ -17,19 +17,20 @@ final class DocumentPreviews {
     private final File root;
     private final Set<Transfer> pending = new HashSet<>();
     private final Map<String, Transfer> opened = new HashMap<>();
-    private static final class Transfer {
+    private final class Transfer {
         final BooleanSupplier current;
         final String context = "bashkitten-preview-" + UUID.randomUUID();
         volatile boolean cancelled;
         volatile InputStream input;
         volatile File directory;
-        GeckoResult<WebResponse> request;
         BrowserApp.Tab tab;
         Transfer(BooleanSupplier current) { this.current = current; }
         void cancel() {
             cancelled = true;
-            if (request != null) request.cancel();
-            try { if (input != null) input.close(); } catch (IOException ignored) {}
+            // Keep cancellation in the app owner, without changing Gecko's
+            // shared fetch result. A late response is closed before tab creation.
+            InputStream body = input;
+            if (body != null) app.transfers.execute(() -> { try { body.close(); } catch (IOException ignored) {} });
         }
     }
     DocumentPreviews(BrowserApp app) {
@@ -63,11 +64,12 @@ final class DocumentPreviews {
         WebRequest request = new WebRequest.Builder(target.toASCIIString())
             .contextId(source.getSettings().getContextId()).cacheMode(WebRequest.CACHE_MODE_NO_STORE)
             .header("Origin", own.getScheme() + "://" + own.getRawAuthority()).header("Accept-Encoding", "identity").build();
+        GeckoResult<WebResponse> result;
         try {
-            transfer.request = new GeckoWebExecutor(app.host.runtime()).fetch(request,
+            result = new GeckoWebExecutor(app.host.runtime()).fetch(request,
                 GeckoWebExecutor.FETCH_FLAGS_NO_REDIRECTS | GeckoWebExecutor.FETCH_FLAGS_SAVE_AS_DOWNLOAD);
         } catch (Exception error) { pending.remove(transfer); throw error; }
-        transfer.request.accept(response -> {
+        result.accept(response -> {
             transfer.input = response.body;
             if (transfer.cancelled || !current.getAsBoolean()) transfer.cancel();
             app.transfers.execute(() -> {

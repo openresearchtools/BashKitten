@@ -428,8 +428,6 @@
     .dialog-actions button { padding: 8px 13px; border: 1px solid var(--line); }
     .dialog-actions button:not(.primary) { background: transparent; }
     .dialog-actions .primary { border: 0; }
-    #fileEditor { width:min(900px,calc(100vw - 28px)); }
-    #fileEditorText { width:100%; min-height:160px; height:50dvh; resize:vertical; white-space:pre; overflow:auto; font:13px/1.5 ui-monospace,monospace; }
     #folderDialog { width: min(620px, calc(100vw - 28px)); }
     .folder-toolbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; }
     .folder-toolbar button, .folder-create button, #folderLocations button { padding: 7px 9px; border: 1px solid var(--line); background: var(--surface-2); }
@@ -509,7 +507,10 @@
     #fileTree input[type="checkbox"] { margin:0; vertical-align:middle; accent-color:var(--ok); }
     #fileTree:not(.selecting) input[type="checkbox"] { display:none; }
     .file-row { display:flex; gap:7px; padding:8px 4px 8px 22px; align-items:center; font-size:12px; }
-    .file-row .file-name { flex:1; min-width:0; overflow-wrap:anywhere; }
+    .file-row { flex-wrap:wrap; }
+    .file-row .file-name { flex:1; min-width:80px; overflow-wrap:anywhere; }
+    .file-row .file-item-actions { display:flex; flex-wrap:wrap; gap:5px; margin-left:auto; }
+    .file-item-actions button, .file-item-actions a { padding:5px 7px; border:1px solid var(--line); border-radius:var(--radius-pill); background:var(--surface); color:var(--text); font-size:11px; white-space:nowrap; }
     .file-row a { color:var(--text); text-decoration:none; }
     .file-row a:hover { text-decoration:underline; }
     .file-empty { padding:16px 4px; color:var(--muted); font-size:12px; }
@@ -731,7 +732,6 @@
   </section>
   <dialog id="fileActionDialog" aria-labelledby="fileActionTitle"><form id="fileActionForm" class="dialog-body"><h2 id="fileActionTitle"></h2><p id="fileActionDescription"></p><ul id="fileActionPaths"></ul><label id="copyDestinationLabel">Destination folder<input id="copyDestination" autocomplete="off" spellcheck="false" placeholder="Absolute folder path"></label><p id="fileActionError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close autofocus>Cancel</button><button id="confirmFileAction" class="primary">Continue</button></div></form></dialog>
   <dialog id="filePreview" aria-labelledby="filePreviewTitle"><div class="dialog-body"><h2 id="filePreviewTitle"></h2><p id="filePreviewStatus" role="status">Preparing preview…</p><progress id="filePreviewProgress" aria-label="Preparing preview"></progress><p id="filePreviewError" class="meta" role="alert"></p><div class="dialog-actions"><a id="filePreviewDownload" download>Download original</a><button id="filePreviewClose" type="button" data-close>Cancel</button></div></div></dialog>
-  <dialog id="fileEditor" aria-labelledby="fileEditorTitle"><form id="fileEditorForm" class="dialog-body"><h2 id="fileEditorTitle"></h2><textarea id="fileEditorText" aria-label="File contents" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea><p id="fileEditorError" class="meta" role="alert"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button><button id="fileEditorSave" class="primary">Save</button></div></form></dialog>
   <dialog id="forkDialog" aria-labelledby="forkHeading"><div class="dialog-body"><h2 id="forkHeading">Fork chat</h2><p>Choose a message to return to. Pi opens the fork before that message.</p><div id="forkMessages"></div><p id="forkError" class="meta" role="status"></p><div class="dialog-actions"><button type="button" data-close>Cancel</button></div></div></dialog>
   <dialog id="subagentDialog" aria-labelledby="subagentHeading"><form id="subagentForm" class="dialog-body">
     <h2 id="subagentHeading">Subagents for this chat</h2>
@@ -1008,6 +1008,17 @@
       return { content: '/api/files/content' + query, preview: '/api/files/previews/content' + query };
     }
 
+    function fileReferenceName(reference) {
+      let name = reference;
+      try { name = decodeURIComponent(reference.startsWith('file:') ? new URL(reference).pathname : reference); } catch {}
+      return name.split('/').pop() || 'File';
+    }
+    function fileReferenceKind(reference) {
+      const name = fileReferenceName(reference);
+      return /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(name) ? 'image' :
+          /\.(pdf|xlsx?|xls[bm]|xlt[xm]?|ods|ots|fods|csv|tsv|doc[xm]?|dot[xm]?|odt|ott|odm|otm|oth|fodt|rtf|ppt[xm]?|pot[xm]?|pps[xm]?|odp|otp|fodp|odg|otg|fodg|md|markdown|mdown|mkd|txt|log|json|jsonl|html?|xml|ya?ml|toml|ini|cfg|conf|css|[cm]?js|jsx|tsx?|py|sh|bash|zsh|fish|c|h|cc|cpp|hpp|cs|java|kt|kts|rs|go|rb|php|sql|tex|rst|diff|patch)$/i.test(name) ? 'document' : null;
+    }
+
     function inlineMarkdown(value) {
       // Tokenize before escaping so code stays literal and labels/URLs cannot inject HTML.
       // Destinations support angle brackets for spaces and parentheses in filenames.
@@ -1033,7 +1044,7 @@
         if (/^https?:\/\//i.test(target)) html += `<a href="${escapeHtml(target)}" target="_blank" rel="noreferrer">${escapeHtml(label || target)}</a>`;
         else {
           const urls = !image && fileReferenceUrls(current?.id, target);
-          if (urls) html += `<a class="file-reference" href="${escapeHtml(urls.content + '&download=true')}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="Open file · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
+          if (urls) html += `<a class="file-reference" ${fileReferenceKind(target) ? '' : 'download="' + escapeHtml(fileReferenceName(target)) + '"'} href="${escapeHtml(urls.content + '&download=true')}" data-file-session="${escapeHtml(current.id)}" data-file-reference="${escapeHtml(target)}" aria-disabled="${!fileManagerAllowed}" title="${fileReferenceKind(target) ? 'View' : 'Download'} file · ${escapeHtml(target)}">${escapeHtml(label || target)}</a>`;
           else html += escapeHtml(match[0]);
         }
       }
@@ -1178,17 +1189,14 @@
     $('#chatInner').addEventListener('click', event => {
       const reference = event.target.closest('a.file-reference');
       if (reference) {
-        event.preventDefault();
-        if (!fileManagerAllowed) { $('#composerHint').textContent = 'The host has not enabled Files for this connection.'; return; }
-        if (reference.dataset.fileSession !== current?.id) return;
+        if (!fileManagerAllowed) { event.preventDefault(); $('#composerHint').textContent = 'The host has not enabled Files for this connection.'; return; }
+        if (reference.dataset.fileSession !== current?.id) { event.preventDefault(); return; }
         const target = reference.dataset.fileReference, urls = fileReferenceUrls(current.id, target);
         if (!urls) return;
-        let name = target;
-        try { name = decodeURIComponent(target.startsWith('file:') ? new URL(target).pathname : target); } catch {}
-        name = name.split('/').pop() || 'File';
-        // This extension hint only selects the existing image overlay. Every
-        // file is resolved and authorized by its own backend before any bytes.
-        const previewKind = /\.(png|jpe?g|gif|webp|svg|bmp|avif|ico)$/i.test(name) ? 'image' : null;
+        const name = fileReferenceName(target), previewKind = fileReferenceKind(target);
+        // Unsupported links retain the original download gesture and route.
+        if (!previewKind) return;
+        event.preventDefault();
         openFilePreview(null, { name, previewKind }, urls);
         return;
       }
@@ -3484,7 +3492,7 @@
       ++fileGeneration; ++changesGeneration; ++folderGeneration;
       diffAbort?.abort();
       for (const id of ['fileTree', 'changesList', 'changesCounts', 'fileNotice']) $('#'+id).replaceChildren();
-      for (const id of ['folderDialog', 'fileActionDialog', 'fileEditor', 'filePreview']) if ($('#'+id)?.open) $('#'+id).close();
+      for (const id of ['folderDialog', 'fileActionDialog', 'filePreview']) if ($('#'+id)?.open) $('#'+id).close();
       fileRoot = fileFolder = projectRoot = changesRoot = ''; selectedFiles.clear();
       pendingFileAction = null; fileJob = null;
       $('#fileJob').classList.add('hidden'); $('#fileJobText').textContent = '';
@@ -3575,13 +3583,22 @@
           const row=document.createElement('div');row.className='file-row';
           const root=fileRoot, label=document.createElement('span');label.className='file-name';label.textContent=entry.name;
           row.append(fileCheckbox(entry),fileIcon('file'),label);
+          const actions=document.createElement('span');actions.className='file-item-actions';
           if(entry.previewKind) {
             const view=document.createElement('button');view.type='button';view.textContent='View';view.title='View '+entry.name;
-            view.onclick=()=>openFilePreview(root,entry);row.append(view);
+            view.onclick=()=>openFilePreview(root,entry);actions.append(view);
           }
-          const download=document.createElement('a');download.href=fileUrl('/content',entry.path,root)+'&download=true';download.download=entry.name;download.className='icon-button';download.textContent='↓';download.title='Download '+entry.name;download.setAttribute('aria-label',download.title);row.append(download);
-          const edit=document.createElement('button'); edit.type='button'; edit.textContent='Edit'; edit.title='Edit '+entry.name;
-          edit.onclick=()=>openFileEditor(root,entry.path); row.append(edit); target.append(row);
+          const download=document.createElement('a');download.href=fileUrl('/content',entry.path,root)+'&download=true';download.download=entry.name;download.textContent='Download';download.title='Download '+entry.name;actions.append(download);
+          const reference=document.createElement('button');reference.type='button';reference.textContent='Reference in chat';reference.title='Add '+entry.name+' to the message';
+          reference.onclick=()=>{
+            if(!fileManagerAllowed)return;
+            const prompt=$('#prompt'),path=absoluteFilePath(entry.path,root);
+            const link='['+entry.name.replace(/[\\\[\]]/g,'\\$&')+'](<'+path.replaceAll('%','%25').replaceAll('<','%3C').replaceAll('>','%3E').replaceAll('\n','%0A').replaceAll('\r','%0D')+'>)';
+            prompt.setRangeText(link+' ',prompt.selectionStart,prompt.selectionEnd,'end');
+            prompt.dispatchEvent(new Event('input',{bubbles:true}));prompt.focus();
+            if(matchMedia('(max-width:700px)').matches)closeFiles();
+          };
+          actions.append(reference);row.append(actions);target.append(row);
         }
       }
       if(!result.entries.length){const empty=document.createElement('p');empty.className='file-empty';empty.textContent='Empty folder';target.append(empty);}
@@ -3645,43 +3662,6 @@
       ++filePreviewGeneration;cancelPreparedPreview();$('#filePreviewDownload').removeAttribute('href');$('#filePreviewError').textContent='';
     });
     window.addEventListener('pagehide',()=>{++filePreviewGeneration;cancelPreparedPreview();});
-    let fileEdit = null, fileEditGeneration = 0;
-    async function openFileEditor(root, path) {
-      if (!fileManagerAllowed) return;
-      const generation = ++fileEditGeneration;
-      fileEdit = null; $('#fileEditorTitle').textContent = path;
-      $('#fileEditorText').value = ''; $('#fileEditorText').disabled = true;
-      $('#fileEditorSave').disabled = true; $('#fileEditorError').textContent = 'Opening file…';
-      $('#fileEditor').showModal();
-      try {
-        const value = await api(fileUrl('/edit', path, root));
-        if (generation !== fileEditGeneration || !fileManagerAllowed || !$('#fileEditor').open) return;
-        fileEdit = {root, path, revision:value.revision};
-        $('#fileEditorText').value = value.text; $('#fileEditorText').disabled = false;
-        $('#fileEditorSave').disabled = false; $('#fileEditorError').textContent = '';
-        $('#fileEditorText').focus();
-      } catch (error) { if (generation === fileEditGeneration) $('#fileEditorError').textContent = error.message; }
-    }
-    $('#fileEditor').addEventListener('close', () => {
-      ++fileEditGeneration; fileEdit = null; $('#fileEditorText').value = ''; $('#fileEditorError').textContent = '';
-    });
-    $('#fileEditorForm').onsubmit = async event => {
-      event.preventDefault();
-      if (!fileManagerAllowed || !fileEdit || $('#fileEditorSave').disabled) return;
-      const edit = fileEdit, generation = fileEditGeneration;
-      $('#fileEditorSave').disabled = true; $('#fileEditorText').disabled = true;
-      $('#fileEditorError').textContent = 'Saving…';
-      try {
-        await filePost(fileUrl('/edit',edit.path,edit.root), {revision:edit.revision, text:$('#fileEditorText').value});
-        if (generation !== fileEditGeneration) return;
-        $('#fileEditor').close(); refreshProjectPanel();
-      } catch (error) {
-        if (generation === fileEditGeneration) {
-          $('#fileEditorError').textContent = error.message;
-          $('#fileEditorSave').disabled = false; $('#fileEditorText').disabled = false;
-        }
-      }
-    };
     function refreshProjectPanel() {
       changesDirty=true;
       if(projectPanelVisible()&&fileTab==='changes') refreshChanges();
