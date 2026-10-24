@@ -55,6 +55,18 @@ application inputs can still require R8 to run. Pass caching/worker options usin
 immediately after Gecko compilation; those and the Gradle timing report remain
 downloadable from each run.
 
+For application Java/resource changes, Android also reuses unchanged Gecko
+libraries from a verified completed APK through Mozilla's artifact-build mode.
+The native comparison keeps GeckoView JNI sources, native sources, build
+definitions, version pins, mozconfig and compiler commands. Only application
+Java/assets/resources and the final collector are excluded. The original native
+producer, successful build evidence, APK/manifest checksums and individual Gecko
+library checksums remain in `build-manifest.json`; repeated reuse preserves that
+producer. Current Java, resources, native app modules, companion licenses and
+exact Termux package pairing are assembled and signed again. Complete APK
+fingerprints and revision checks still apply. A native input change uses the
+normal compiler cache and build.
+
 Private Node jobs likewise restore a complete runtime and corresponding-source
 artifact before consulting download caches or upstream package pools. Reuse
 requires a successful Node assembly/upload job (or a verified prior restore) in

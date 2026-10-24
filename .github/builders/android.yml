@@ -80,6 +80,12 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: python3 agent/packaging/browser-component.py restore "$BROWSER_TARGET" --directory candidate
+    - id: native-component
+      name: Restore unchanged Android Gecko libraries
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 agent/packaging/android-native-component.py "$BROWSER_TARGET" --directory "$RUNNER_TEMP/android-native"
+      if: (success()) && steps.component.outputs.hit != 'true'
     - name: Prepare hosted runner
       run: |
         printf '%s\n' "BASHKITTEN_PUBLISHER_KEYSTORE=$RUNNER_TEMP/droid.p12" "BASHKITTEN_COMPANION_LICENSES=$RUNNER_TEMP/companion-licenses.json" >> "$GITHUB_ENV"

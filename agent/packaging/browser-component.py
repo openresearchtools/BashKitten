@@ -2,6 +2,7 @@
 """Reuse verified browser artifacts without consuming the compiler-cache quota."""
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -81,7 +82,7 @@ def matching_input(directory, target, recorded, digest, producer):
         raise ValueError('Browser source equivalence does not match this source')
 
 
-def verify(directory, target, digest):
+def verify_checksums(directory):
     directory = Path(directory)
     checked = set()
     for line in (directory / 'SHA256SUMS').read_text().splitlines():
@@ -95,6 +96,11 @@ def verify(directory, target, digest):
     payload = {item.name for item in directory.iterdir() if item.is_file() and item.name != 'SHA256SUMS'}
     if not checked or checked != payload:
         raise ValueError('Component checksums must cover the complete artifact')
+
+
+def verify(directory, target, digest):
+    directory = Path(directory)
+    verify_checksums(directory)
     if target.startswith('android'):
         manifest = json.loads((directory / 'build-manifest.json').read_text())
         if manifest.get('architecture') != ('x86_64' if target == 'android-x86_64' else 'arm64-v8a'):
@@ -115,6 +121,11 @@ def verify(directory, target, digest):
         if pairing['sourceCommit'] != expected_source or pairing['sourceCommit'] != manifest['source']:
             raise ValueError('APK resources must be reassembled for this revision’s Termux packages')
         matching_input(directory, target, manifest.get('browser_input_sha256'), digest, manifest['source'])
+        if manifest.get('native_gecko'):
+            spec = importlib.util.spec_from_file_location('android_native_component', ROOT / 'agent/packaging/android-native-component.py')
+            native_component = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(native_component)
+            native_component.verify_native(apks[0], manifest['native_gecko'], target)
     else:
         manifest = dict(line.split('=', 1) for line in (directory / 'browser-artifact-manifest.txt').read_text().splitlines())
         if manifest.get('architecture') != target.removeprefix('linux-') or not re.fullmatch('[0-9a-f]{40}', manifest.get('bashkitten_commit', '')):
