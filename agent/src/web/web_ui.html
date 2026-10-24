@@ -251,7 +251,7 @@
     .message-content { min-width: 0; max-width: 100%; font-size: 15px; line-height: 1.62; overflow-wrap: anywhere; }
     .message.user .message-content { max-width: 82%; padding: 9px 13px; border-radius: var(--radius-card); background: var(--surface-2); font-size: 14px; }
     .message.assistant .message-content { width: 100%; }
-    .message.agent .message-content { width: 100%; padding-left: 10px; border-left: 2px solid var(--line); }
+    .message.agent .message-content { width: 100%; padding: 9px 13px; border-left: 2px solid var(--line); border-radius: var(--radius-card); background: var(--activity); }
     .message.error .message-content { padding-left: 10px; border-left: 2px solid var(--danger); color: var(--danger); }
     .markdown p { margin: 0 0 8px; }
     .markdown p:last-child { margin-bottom: 0; }
@@ -634,7 +634,7 @@
         <button id="filesToggle" class="icon-button" type="button" aria-label="Browse working folder files" title="Files" aria-expanded="false"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H10l2 2h6.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/></svg></button>
       </header>
       </div>
-      <div id="chat"><div class="chat-inner"><div id="chatInner"></div><div id="questionCards" aria-live="polite"></div></div></div>
+      <div id="chat"><div class="chat-inner"><div id="chatInner"></div><div id="questionCards" aria-live="polite"></div><div id="pendingAgentMessages" aria-live="polite"></div></div></div>
       <section id="diffView" class="hidden" aria-labelledby="diffTitle"><header class="diff-heading"><div><strong id="diffTitle"></strong><p id="diffNotice" class="meta" role="status"></p></div><button id="closeDiff" type="button" title="Close diff"><svg class="file-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg><span>Close diff</span></button></header><div id="fileDiff" tabindex="0" aria-label="File changes"></div></section>
       <section id="settingsView" class="hidden" aria-labelledby="settingsHeading">
         <form id="settingsForm" class="settings-page">
@@ -1225,7 +1225,7 @@
       copy.title = 'Copy message';
       copy.onclick = () => copyText(messageCopyText(message), copy);
       actions.append(copy);
-      if (entryId && current?.id && message.role === 'user') {
+      if (entryId && current?.id && message.role === 'user' && message.userAuthored !== false) {
         const fork = document.createElement('button');
         fork.type = 'button';
         fork.textContent = 'Fork';
@@ -1425,6 +1425,23 @@
       const action = { expiry: 'Question expired', dismissal: 'Question dismissed', answer: 'Question reply', late: 'Question follow-up' }[source.action];
       const channel = { call: 'Phone call', notification: 'Notification reply', voicemail: 'Voicemail reply' }[source.source];
       return channel ? `${action} · ${channel}` : action;
+    }
+
+    function messageAttribution(body, source) {
+      if (source?.kind === 'question') {
+        const attribution = agentSourceLink(null, questionSourceLabel(source));
+        attribution.title = source.question; body.append(attribution);
+      } else if (source?.kind === 'phone') {
+        const attribution = document.createElement('span'); attribution.className = 'agent-source';
+        attribution.textContent = { notification: 'Notification reply', call: 'Phone call', voicemail: 'Voicemail reply' }[source.source];
+        body.append(attribution);
+      } else if (source?.id) {
+        const kind = source.report ? 'Subagent result' : 'Agent message';
+        const recipient = source.recipient || { id: current?.id, name: current?.title };
+        const attribution = agentSourceLink(source.id, `${kind}${source.relationship ? ` · ${source.relationship}` : ''} · ${agentTitle(source.id, source.name)} → ${agentTitle(recipient.id, recipient.name)}`);
+        attribution.title = `Source chat: ${source.name || source.id} · ${source.id}${source.sessionId ? ` · Pi session: ${source.sessionId}` : ''}\nRecipient chat: ${recipient.name || recipient.id} · ${recipient.id}`;
+        body.append(attribution);
+      }
     }
 
     function toolPresentation(block) {
@@ -1725,20 +1742,9 @@
       if (message.role === 'user') {
         beginRenderedTurn(message.timestamp);
         const source = message.agentSource;
-        const fromAgent = source && source.kind !== 'phone' && (source.kind !== 'question' || ['expiry', 'dismissal'].includes(source.action));
+        const fromAgent = message.userAuthored === false || source && source.kind !== 'phone' && (source.kind !== 'question' || ['expiry', 'dismissal'].includes(source.action));
         const body = messageRow(fromAgent ? 'agent' : 'user');
-        if (source?.kind === 'question') {
-          const attribution = agentSourceLink(null, questionSourceLabel(source));
-          attribution.title = source.question; body.append(attribution);
-        } else if (message.agentSource?.kind === 'phone') {
-          const attribution = document.createElement('span'); attribution.className = 'agent-source';
-          attribution.textContent = { notification: 'Notification reply', call: 'Phone call', voicemail: 'Voicemail reply' }[message.agentSource.source];
-          body.append(attribution);
-        } else if (message.agentSource) {
-          const sender = message.agentSource;
-          const kind = sender.report ? 'Subagent result' : 'Agent message';
-          body.append(agentSourceLink(sender.id, `${kind} · ${agentTitle(sender.id, sender.name)} → ${agentTitle(current?.id, current?.title)}`));
-        }
+        messageAttribution(body, source);
         const hasStoredAttachments = renderStoredAttachments(message.content, body);
         if (!hasStoredAttachments) renderImages(message.content, body, 'Attached image');
         const text = textBlocks(message.content);
@@ -2136,6 +2142,7 @@
     }
 
     function renderQueueState(value = {}) {
+      const chat = $('#chat'), follow = chat.scrollTop + chat.clientHeight >= chat.scrollHeight - 48;
       queueState = {
         busy: Boolean(value.busy),
         steeringMessages: value.steeringMessages || [],
@@ -2144,10 +2151,31 @@
       const panel = $('#queuePanel');
       panel.innerHTML = '';
       const items = queuedItems();
+      const agentMessages = $('#pendingAgentMessages'); agentMessages.replaceChildren();
+      for (const item of items.filter(item => item.userAuthored !== true)) {
+        const row = document.createElement('div'); row.className = 'message agent';
+        const body = document.createElement('div'); body.className = 'message-content';
+        messageAttribution(body, item.agentSource);
+        const state = document.createElement('div'); state.className = 'meta';
+        state.textContent = item.uncertain ? 'Held after interruption; delivery is uncertain. Review history before requesting another follow-up.'
+          : item.held ? 'Held until this chat is explicitly resumed.'
+          : item.kind === 'steer' ? 'Waiting for the next safe agent boundary.' : 'Waiting for the next turn.';
+        const text = document.createElement('div'); text.className = 'markdown'; text.innerHTML = markdown(item.displayContent ?? item.content);
+        body.append(state, text); row.append(body); agentMessages.append(row);
+      }
+      if (editingQueueId && items.some(item => item.id === editingQueueId && item.userAuthored === false)) {
+        // An older client may have saved an agent delivery as a user edit.
+        // Drop only its unchanged copied text, retaining anything the user typed.
+        if ($('#prompt').value === editingQueueSnapshot?.content) $('#prompt').value = '';
+        editingQueueId = editingQueueToken = editingQueueSnapshot = null;
+        $('#attachBtn').disabled = false;
+        $('#prompt').dispatchEvent(new Event('input'));
+      }
       if (editingQueueId && composerOperations.get(composerKey())?.kind !== 'edit' && !items.some(item => item.id === editingQueueId)) recoverQueueDraft();
       setRunButton(queueState.busy);
-      panel.classList.toggle('hidden', !items.length);
-      for (const item of items) {
+      const userItems = items.filter(item => item.userAuthored === true);
+      panel.classList.toggle('hidden', !userItems.length);
+      for (const item of userItems) {
         const row = document.createElement('div');
         row.className = `queue-item ${item.kind === 'steer' ? 'steer' : ''} ${editingQueueId === item.id ? 'editing' : ''}`.trim();
         const kind = document.createElement('span');
@@ -2183,6 +2211,7 @@
         row.append(edit, remove);
         panel.append(row);
       }
+      if (follow) chat.scrollTop = chat.scrollHeight;
     }
 
     async function refreshQueue() {
@@ -2244,7 +2273,7 @@
     }
 
     async function beginQueueEdit(item) {
-      if (!current || queueEditStarting || composerOperations.has(composerKey())) return;
+      if (!current || item.userAuthored !== true || queueEditStarting || composerOperations.has(composerKey())) return;
       queueEditStarting = true;
       try {
       const view = sessionView;
@@ -3382,7 +3411,7 @@
       const fallback = queuedItems();
       try {
         const result = await api(`/api/sessions/${operation.draft.sessionId}/stop`, {method:'POST'});
-        const pending = result.data?.queuedMessages ? [...(result.data.steeringMessages || []), ...result.data.queuedMessages] : fallback;
+        const pending = (result.data?.queuedMessages ? [...(result.data.steeringMessages || []), ...result.data.queuedMessages] : fallback).filter(item => item.userAuthored === true);
         updateComposerDraft(operation, draft => {
           const restored = pending.filter(item => item.id !== draft.edit?.id).map(item => item.content);
           draft.text = [...restored, draft.text].filter(text => text?.trim()).join('\n\n');
@@ -3393,7 +3422,7 @@
         // Stop cancels work, not observation of this still-running worker.
         if (operationVisible(operation)) {
           current.running = false;
-          renderQueueState({busy:false});
+          await refreshQueue();
         }
         void loadSessions().catch(() => {});
       } catch (error) {

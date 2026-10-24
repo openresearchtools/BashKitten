@@ -14,9 +14,10 @@ export default function subagents(pi) {
   };
   const tool = {
     name: 'agents', label: 'Agents', exposure: 'hidden',
-    description: 'Delegate tasks to saved child chats and message parent, child or peer agents. Read the subagents skill. list returns real IDs; spawn, send, follow_up and stop coordinate their work. Completed child turns automatically reach the parent.',
+    description: 'Coordinate other agent sessions, never talk to the user: use a normal assistant reply for the user. Read the subagents skill. list returns real IDs; spawn delegates, send steers a busy recipient at the next safe boundary or starts an idle turn, follow_up explicitly resumes a stopped recipient, and stop stops a direct child. Never target your own ID. Completed child turns automatically reach the parent.',
     parameters: Type.Object({ action: Type.String({ enum: ['list', 'spawn', 'send', 'follow_up', 'stop'] }),
-      id: Type.Optional(Type.String()), name: Type.Optional(Type.String()), message: Type.Optional(Type.String()) }),
+      id: Type.Optional(Type.String({ description: 'Another agent session ID from list; never self or the user.' })), name: Type.Optional(Type.String()),
+      message: Type.Optional(Type.String({ description: 'Task or coordination message for the recipient agent, not a user-facing reply.' })) }),
     async execute(toolCallId, value, signal, _update, ctx) {
       const result = await request(ctx, { ...value, deliveryId: toolCallId }, signal);
       return { content: [{ type: 'text', text: JSON.stringify(result) }], details: result };
