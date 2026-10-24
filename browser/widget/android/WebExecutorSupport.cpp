@@ -23,8 +23,6 @@
 #include "nsINSSErrorsService.h"
 #include "nsContentUtils.h"
 #include "nsNetUtil.h"  // for NS_NewURI, NS_NewChannel, NS_NewStreamLoader
-#include "nsProxyRelease.h"
-#include "nsThreadUtils.h"
 #include "nsIPrivateBrowsingChannel.h"
 #include "nsIUploadChannel2.h"
 #include "nsIX509Cert.h"
@@ -36,7 +34,6 @@
 #include "mozilla/java/WebMessageWrappers.h"
 #include "mozilla/java/WebRequestErrorWrappers.h"
 #include "mozilla/java/WebResponseWrappers.h"
-#include "mozilla/jni/GeckoResultUtils.h"
 
 namespace mozilla {
 using namespace net;
@@ -136,40 +133,12 @@ class ByteBufferStream final : public nsIInputStream {
 
 NS_IMPL_ISUPPORTS(ByteBufferStream, nsIInputStream)
 
-// Main-thread channel ownership, shared only with the result's existing JNI
-// callback and its loader. The reference is cleared when headers or an error
-// complete the fetch; the response body then owns ordinary stream cancellation.
-class FetchCancellation final {
- public:
-  NS_INLINE_DECL_REFCOUNTING(FetchCancellation)
-
-  void SetChannel(nsIChannel* aChannel) {
-    mChannel = aChannel;
-    if (mCancelled && mChannel) mChannel->Cancel(NS_BINDING_ABORTED);
-  }
-
-  void Cancel() {
-    mCancelled = true;
-    if (mChannel) mChannel->Cancel(NS_BINDING_ABORTED);
-  }
-
-  void Complete() { mChannel = nullptr; }
-  bool IsCancelled() const { return mCancelled; }
-
- private:
-  ~FetchCancellation() = default;
-  nsCOMPtr<nsIChannel> mChannel;
-  bool mCancelled = false;
-};
-
 class LoaderListener final : public GeckoViewStreamListener {
  public:
   explicit LoaderListener(java::GeckoResult::Param aResult,
-                          bool aAllowRedirects, bool testStreamFailure,
-                          FetchCancellation* aCancellation)
+                          bool aAllowRedirects, bool testStreamFailure)
       : GeckoViewStreamListener(),
         mResult(aResult),
-        mCancellation(aCancellation),
         mTestStreamFailure(testStreamFailure),
         mAllowRedirects(aAllowRedirects) {
     MOZ_ASSERT(mResult);
@@ -196,34 +165,25 @@ class LoaderListener final : public GeckoViewStreamListener {
   AsyncOnChannelRedirect(nsIChannel* aOldChannel, nsIChannel* aNewChannel,
                          uint32_t flags,
                          nsIAsyncVerifyRedirectCallback* callback) override {
-    if (!mAllowRedirects || mCancellation->IsCancelled()) {
+    if (!mAllowRedirects) {
       return NS_ERROR_ABORT;
     }
 
-    mCancellation->SetChannel(aNewChannel);
     callback->OnRedirectVerifyCallback(NS_OK);
     return NS_OK;
   }
 
   void SendWebResponse(java::WebResponse::Param aResponse) override {
-    mCancellation->Complete();
     mResult->Complete(aResponse);
   }
 
   void CompleteWithError(nsresult aStatus, nsIChannel* aChannel) override {
-    mCancellation->Complete();
     WebExecutorSupport::CompleteWithError(mResult, aStatus, aChannel);
-  }
-
-  NS_IMETHOD OnStopRequest(nsIRequest* aRequest, nsresult aStatus) override {
-    mCancellation->Complete();
-    return GeckoViewStreamListener::OnStopRequest(aRequest, aStatus);
   }
 
   virtual ~LoaderListener() {}
 
   const java::GeckoResult::GlobalRef mResult;
-  const RefPtr<FetchCancellation> mCancellation;
   const bool mTestStreamFailure;
   bool mAllowRedirects;
 };
@@ -486,9 +446,6 @@ static nsresult SetupHttpChannel(nsIHttpChannel* aHttpChannel,
 nsresult WebExecutorSupport::CreateStreamLoader(
     java::WebRequest::Param aRequest, int32_t aFlags,
     java::GeckoResult::Param aResult) {
-  if (java::GeckoWebExecutor::IsFetchCancelled(aResult)) {
-    return NS_BINDING_ABORTED;
-  }
   const auto req = java::WebRequest::LocalRef(aRequest);
   const auto reqBase = java::WebMessage::LocalRef(req.Cast<java::WebMessage>());
 
@@ -559,56 +516,20 @@ nsresult WebExecutorSupport::CreateStreamLoader(
   const bool testStreamFailure =
       (aFlags & java::GeckoWebExecutor::FETCH_FLAGS_STREAM_FAILURE_TEST);
 
-  auto cancellation = MakeRefPtr<FetchCancellation>();
-  cancellation->SetChannel(channel);
-  auto listener = MakeRefPtr<LoaderListener>(aResult, allowRedirects,
-                                             testStreamFailure, cancellation);
+  auto listener =
+      MakeRefPtr<LoaderListener>(aResult, allowRedirects, testStreamFailure);
 
   rv = channel->SetNotificationCallbacks(listener);
-  if (NS_FAILED(rv)) {
-    cancellation->Complete();
-    return rv;
-  }
-
-  if (auto signal = java::GeckoWebExecutor::FetchCancellation(aResult)) {
-    jni::GeckoResultCallback::Init();
-    nsMainThreadPtrHandle<FetchCancellation> handle{
-        new nsMainThreadPtrHolder<FetchCancellation>("WebExecutor cancellation",
-                                                     cancellation)};
-    auto cancel = jni::GeckoResultCallback::CreateAndAttach<bool>(
-        [handle](bool aCancelled) {
-          if (!aCancelled) return;
-          if (NS_IsMainThread()) {
-            handle->Cancel();
-          } else {
-            NS_DispatchToMainThread(NS_NewRunnableFunction(
-                "WebExecutorSupport::Cancel", [handle] { handle->Cancel(); }));
-          }
-        });
-    auto reject =
-        jni::GeckoResultCallback::CreateAndAttach([](jni::Object::Param) {});
-    auto cancellationSignal =
-        java::GeckoResult::LocalRef(signal.Cast<java::GeckoResult>());
-    cancellationSignal->NativeThen(cancel, reject);
-  }
-
-  if (cancellation->IsCancelled()) {
-    cancellation->Complete();
-    return NS_BINDING_ABORTED;
-  }
+  NS_ENSURE_SUCCESS(rv, rv);
 
   // Finally, open the channel
-  rv = channel->AsyncOpen(listener);
-  if (NS_FAILED(rv)) cancellation->Complete();
-  return rv;
+  return channel->AsyncOpen(listener);
 }
 
 void WebExecutorSupport::Fetch(jni::Object::Param aRequest, int32_t aFlags,
                                jni::Object::Param aResult) {
   const auto request = java::WebRequest::LocalRef(aRequest);
   auto result = java::GeckoResult::LocalRef(aResult);
-
-  if (java::GeckoWebExecutor::IsFetchCancelled(result)) return;
 
   if (aFlags & java::GeckoWebExecutor::FETCH_FLAGS_OHTTP) {
     nsresult rv = PerformOrQueueOhttpRequest(request, aFlags, result);
