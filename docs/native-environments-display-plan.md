@@ -3883,3 +3883,67 @@ dependencies. This clarification does not authorize proprietary SDKs inside
 the browser APK/DEB or change BashKitten's AGPL and Mozilla's MPL file licenses.
 Downloads retain the existing central About/license presentation and separate
 runtime process boundary; this adds no new settings or UI.
+
+### Android browsing, file actions and agent communication — 24 October 2026
+
+The user reports failures from manual Android testing and requests these fixes
+together with complete GitHub Actions candidates. Restore ordinary browsing:
+app-owned request cancellation must not change the shared Gecko fetch lifetime.
+Keep agent/service logic in the existing BashKitten backend/modules, with only
+the necessary browser control, protected-view and display integration hooks.
+
+Files provides Download and Reference in chat, plus View for supported files.
+Remove the file editor, Edit actions and their exclusive backend implementation;
+the user did not request editing in the file browser. Unsupported files download
+directly rather than first attempting a preview. Keep Downloads usable over the
+existing Tor/Chisel/Caddy/Authelia route, including transfers of hundreds of MB
+taking twenty minutes or longer. Do not impose an overall download deadline or
+minimum transfer speed. Preserve streaming, explicit cancellation, actual access
+revocation and the existing authenticated route; do not introduce a direct
+transport fallback. Progress must reflect bytes received, and incomplete files
+must not be reported as successfully downloaded.
+
+Android's Agent header needs an explicit Hide Agent control that also works
+while Display is selected on tablets/foldables. Do not force the sidecar open
+on wide screens. Avoid duplicate BashKitten logo controls in the combined
+Agent/Display layout. Expose the native numbered tab-switcher control while
+Agent occupies a normal phone screen. Hide the wide-screen top tab strip only
+when the selected tab is internal Display; other tabs retain the user's normal
+tab-strip preference. Keep native tab access, display input and the desktop
+service running when the user hides Agent.
+
+When a Local/container backend has remote sharing configured, put its sharing
+toggle beside its main power control. It reflects actual running publication,
+including stopped/failed/autostart states, and uses the existing private sharing
+controller. Saved enabled intent alone is not evidence that sharing is running.
+Keep container socket controls and remote connection/sharing routes distinct.
+Desktop chat/project action, rename and delete controls use compact anchored
+menus/popovers matching the existing design, contained within the application
+viewport, rather than oversized separate modals.
+
+The user's explicit scaling correction applies **225% to the Termux desktop**
+on first setup, not Linux/container desktops or browser zoom. Preserve every
+existing user choice on updates; Linux/container defaults remain unchanged.
+The installed Android APK determines the exact matching versions of BashKitten's
+Termux buildable packages, including when an older APK requires a downgrade.
+Use the existing signed package channel and matching published artifacts;
+preserve user configurations and intentional custom runtime choices. Do not
+downgrade unrelated Termux packages merely to align the BashKitten payload.
+
+Inter-agent messages are attributed agent communication, never user-authored
+drafts. Deliver them as stock Pi steering while the recipient is working. The
+receiver must know the source agent/subagent identity, source chat title and
+stable session/chat identity; preserve this information through queues, history
+and reconnects. Render concise, visibly attributed agent-message bubbles in the
+existing chat style. Only real user input gets user queue/Edit/Send controls or
+restoration to the user's composer. The shipped subagents skill must explain
+that agent messaging targets other agent sessions; ordinary assistant replies
+are how the agent addresses the user. Preserve routing identity and avoid
+duplicate delivery or presentation during queue-to-transcript transitions.
+
+These are requirements, not acceptance claims. Record the corrected candidate
+revision and installed results separately. Recheck ordinary address entry,
+history and browsing, supported/unsupported file actions and a long encrypted
+download, Android narrow/wide Display/tab behavior, truthful sharing controls,
+desktop action menus, first-use versus saved scaling, APK/package rollback, and
+live inter-agent steering/provenance before marking the respective flows passed.
