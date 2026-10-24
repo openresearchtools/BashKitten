@@ -70,6 +70,10 @@ final class DocumentPreviews {
                 GeckoWebExecutor.FETCH_FLAGS_NO_REDIRECTS | GeckoWebExecutor.FETCH_FLAGS_SAVE_AS_DOWNLOAD);
         } catch (Exception error) { pending.remove(transfer); throw error; }
         result.accept(response -> {
+            // Prepared documents use the same potentially slow encrypted route.
+            // Override WebResponse's default 30-second read timeout, not Gecko's
+            // shared networking policy; the app still owns explicit cancellation.
+            response.setReadTimeoutMillis(0);
             transfer.input = response.body;
             if (transfer.cancelled || !current.getAsBoolean()) transfer.cancel();
             app.transfers.execute(() -> {

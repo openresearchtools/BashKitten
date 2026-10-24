@@ -58,6 +58,10 @@ final class FileTransfers {
     // never issue a second request through Android's public DownloadManager or
     // another transport. A slow encrypted stream has no lifetime/speed deadline.
     void download(GeckoSession source, WebResponse response) {
+        // WebResponse otherwise installs a 30-second per-read timeout, including
+        // external downloads. Tor can legitimately pause longer between bytes;
+        // explicit cancellation, access revocation and stream errors own expiry.
+        response.setReadTimeoutMillis(0);
         if (!watchingDownloads) {
             watchingDownloads = true;
             app.agent.observe(() -> {
