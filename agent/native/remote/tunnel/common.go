@@ -13,7 +13,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jpillora/chisel/share/cio"
 	chtunnel "github.com/jpillora/chisel/share/tunnel"
@@ -55,9 +54,11 @@ func validToken(token string) bool {
 	return true
 }
 
-// Upstream Chisel owns SSH ping/pong, backpressure and half-close semantics.
-// There is no stream lifetime deadline and no reconnection or replay loop.
+// Upstream Chisel owns backpressure and half-close semantics. Disable its optional
+// ping watchdog: a slow Tor circuit can delay a pong without losing the stream.
+// Owner cancellation, authorization revocation and transport errors still close
+// the carrier; there is no stream lifetime deadline, reconnection or replay loop.
 func bind(ctx context.Context, c ssh.Conn, requests <-chan *ssh.Request, channels <-chan ssh.NewChannel) error {
-	t := chtunnel.New(chtunnel.Config{Logger: cio.NewLogger("tunnel"), KeepAlive: 25 * time.Second})
+	t := chtunnel.New(chtunnel.Config{Logger: cio.NewLogger("tunnel"), KeepAlive: 0})
 	return t.BindSSH(ctx, c, requests, channels)
 }
