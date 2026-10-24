@@ -141,6 +141,21 @@ def record_build(apk, target):
             'input_sha256': native_inputs(current, target), 'libraries': gecko_libraries(apk, abi)}
 
 
+def artifact_mozconfig():
+    # Artifact mode disables toolchain.configure, so its compiler-only options
+    # are unavailable. Keep every assembly option and the native input file
+    # unchanged; shell no-ops preserve conditional branches such as SCCACHE_PATH.
+    source = (ROOT / 'browser/bashkitten/android/mozconfig').read_text()
+    source = re.sub(r'^([ \t]*)ac_add_options --(?:(?:enable|disable)-(?:optimize|debug-symbols)|'
+                    r'(?:with|without)-ccache)(?:=.*)?$',
+                    r'\1: # Native compilation option; retained in the producer configuration.',
+                    source, flags=re.M)
+    # Full native builds produce these host generators. Artifact builds obtain
+    # them from the same source-hashed Mozilla toolchain definitions instead.
+    return (source + '\nac_add_options --enable-artifact-builds\n'
+            'ac_add_options --enable-bootstrap=embedded-uniffi-bindgen,nimbus-fml\n')
+
+
 def restore(directory, target):
     repository = os.environ['GITHUB_REPOSITORY']
     if repository != 'openresearchtools/bashkitten-build-' + target:
@@ -198,8 +213,7 @@ def restore(directory, target):
             # Mozilla's normal mach build installs this local archive and rebuilds
             # resources/Java. The normal mozconfig remains an immutable input.
             mozconfig = directory / 'mozconfig'
-            mozconfig.write_text('. "' + str(ROOT / 'browser/bashkitten/android/mozconfig') + '"\n'
-                                 'ac_add_options --enable-artifact-builds\n')
+            mozconfig.write_text(artifact_mozconfig())
             with Path(os.environ['GITHUB_ENV']).open('a') as environment:
                 environment.write(f'MOZCONFIG={mozconfig.resolve()}\nMOZ_ARTIFACT_FILE={payload.resolve()}\n'
                                   f'BASHKITTEN_ANDROID_NATIVE_RECEIPT={receipt.resolve()}\n')
