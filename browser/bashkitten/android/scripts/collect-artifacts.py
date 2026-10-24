@@ -198,6 +198,11 @@ manifest['browser_input_sha256'] = subprocess.check_output(
     text=True).strip()
 manifest['build_repository'] = os.environ.get('GITHUB_REPOSITORY', '')
 manifest['build_run'] = os.environ.get('GITHUB_RUN_ID', '')
+sys.path.insert(0, str(ROOT.parent / 'agent/packaging'))
+spec = importlib.util.spec_from_file_location('android_native_component', ROOT.parent / 'agent/packaging/android-native-component.py')
+native_component = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(native_component)
+manifest['native_gecko'] = native_component.record_build(destination, target)
 remote = Path(os.environ['BASHKITTEN_REMOTE_CLIENT_DIR'])
 remote_manifest = json.loads((remote / 'build-manifest.json').read_text())
 if remote_manifest['source'] != revision or remote_manifest['architecture'] != abi:
