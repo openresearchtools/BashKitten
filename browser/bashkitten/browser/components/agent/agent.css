@@ -41,6 +41,8 @@
 #bashkitten-native-sidecar .native-power-track::after { content: ""; position: absolute; inset-block-start: 2px; inset-inline-start: 2px; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
 #bashkitten-native-sidecar .native-power-toggle[aria-checked="true"] .native-power-track { background: var(--button-background-color-primary, AccentColor); color: var(--button-text-color-primary, AccentColorText); }
 #bashkitten-native-sidecar .native-power-toggle[aria-checked="true"] .native-power-track::after { inset-inline-start: 14px; }
+#bashkitten-native-sidecar .native-backend-heading .native-sharing-toggle { display: flex; flex: none; align-items: center; gap: 4px; border-radius: 8px; padding-inline: 3px; font-size: 10px; }
+#bashkitten-native-sidecar .native-sharing-toggle[aria-busy="true"] { opacity: .52; }
 #bashkitten-native-sidecar svg { width: 17px; height: 17px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; vertical-align: middle; }
 #bashkitten-native-sidecar .native-chat { margin-block: 1px; border-radius: 12px; font-size: 13px; }
 #bashkitten-native-sidecar .native-chat:hover { background: var(--sidecar-surface); }
@@ -82,6 +84,21 @@
 .bashkitten-agent-dialog img { width: 210px; height: 210px; background: white; }
 .bashkitten-agent-dialog pre, .bashkitten-agent-dialog textarea { white-space: pre-wrap; overflow-wrap: anywhere; width: 100%; box-sizing: border-box; }
 .bashkitten-agent-dialog a { color: LinkText; }
+.native-action-popover { box-sizing: border-box; position: fixed; inset: auto; margin: 0; width: 280px; min-width: 0; height: fit-content; min-height: 0; overflow: auto; padding: 8px; border: 1px solid light-dark(#c8c8cc, #48484d); border-radius: 12px; background: light-dark(#fff, #2b2b2b); color: light-dark(#242426, #e8e8e8); box-shadow: 0 6px 22px #0004; font: 13px/1.4 Inter, ui-sans-serif, system-ui, sans-serif; }
+.native-action-popover::backdrop { background: transparent; }
+.native-action-popover .native-action-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.native-action-popover h2 { flex: 1; min-width: 0; margin: 0; padding: 4px 8px; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.native-action-popover :is(button, input, select) { box-sizing: border-box; min-width: 0; min-height: 32px; border: 1px solid transparent; border-radius: 8px; padding: 6px 8px; color: inherit; background: transparent; font: inherit; }
+.native-action-popover button { text-align: start; cursor: pointer; }
+.native-action-popover button:hover { background: light-dark(#e5e5e7, #333337); }
+.native-action-popover :is(input, select) { width: 100%; background: light-dark(#f3f3f3, #1e1e1e); border-color: light-dark(#c8c8cc, #48484d); }
+.native-action-popover :is(button, input, select):focus-visible { outline: 1px solid currentColor; outline-offset: -1px; }
+.native-action-popover :disabled { opacity: .52; cursor: default; }
+.native-action-popover :is(.native-action-content, form) { display: grid; gap: 4px; }
+.native-action-popover .native-action-buttons { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
+.native-action-popover .native-action-buttons button { background: light-dark(#e5e5e7, #333337); }
+.native-action-popover p { margin: 6px 8px; overflow-wrap: anywhere; }
+.native-action-popover [role="alert"]:empty { display: none; }
 .bashkitten-agent-dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
 .bashkitten-agent-dialog.native-project-dialog { box-sizing: border-box; width: min(420px, calc(100vw - 32px)); height: fit-content; min-height: 0; max-height: calc(100dvh - 32px); padding: 20px; }
 .native-project-dialog .native-project-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }

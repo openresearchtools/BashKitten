@@ -208,7 +208,11 @@ export class RemoteAccess {
       const state = await this.state();
       if (state.phase !== 'ready') throw Error('Complete Share Local account and authenticator setup first');
       if (enabled && (!this.stack.ready || this.stack.stopping)) throw Error('Turn on Local before publishing');
-      if (state.enabled === enabled && this.publicationRequested === enabled) return this.status();
+      const stopped = !this.stack?.authStarted && !this.stack?.tunnelStarted && !this.stack?.remoteOrigins?.length &&
+        !this.stack?.children.some(child => ['tor', 'remote', 'authelia', 'valkey'].includes(child.name));
+      // A failed child closes ingress without changing the user's saved intent.
+      // On must retry that route; Off must finish cleaning up any remaining pieces.
+      if (state.enabled === enabled && this.publicationRequested === enabled && (enabled ? this.isRunning(state) : stopped)) return this.status();
       this.publicationRequested = enabled;
       await this.stack.refreshFileManager(true);
       await writeJson(paths.share, { ...state, enabled });
@@ -240,11 +244,18 @@ export class RemoteAccess {
     });
   }
   // Native private IPC only. The encrypted image is never a remote HTTP result.
+  isRunning(state) {
+    const stack = this.stack;
+    return Boolean(state.enabled && stack?.ready && !stack.stopping && !stack.reconfiguring && stack.authStarted &&
+      stack.tunnelStarted && stack.tunnel && !stack.tunnel.closed && stack.remoteOrigins?.length &&
+      ['backend', 'caddy', 'tor', 'remote', 'authelia', 'valkey'].every(name =>
+        stack.children.some(child => child.name === name && child.exit === undefined && !child.stopping)));
+  }
   async status() {
     try {
       const state = await this.state();
       const migrationRequired = state.phase === 'new' && Boolean(await readJson(path.join(accessDir, 'remote.json'), null));
-      const running = Boolean(state.enabled && this.stack?.ready && this.stack.tunnelStarted && this.stack.children.some(child => child.name === 'tor' && child.exit === undefined));
+      const running = this.isRunning(state);
       return { phase: state.phase, enabled: state.enabled, startup: state.startup, running, allowFileManager: state.allowFileManager, migrationRequired, error: this.error,
         address: state.phase === 'ready' ? 'https://' + await this.hostname() : null,
         qrDataUrl: state.phase === 'ready' ? 'data:image/png;base64,' + (await fs.readFile(paths.connectionQr)).toString('base64') : null };

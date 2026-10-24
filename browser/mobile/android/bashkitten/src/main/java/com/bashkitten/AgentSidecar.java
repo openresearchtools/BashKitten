@@ -42,6 +42,10 @@ public final class AgentSidecar {
     private boolean loading;
     private int generation;
     private final Runnable poll = () -> refresh();
+    private ShareSettingsAdapter sharingAdapter;
+    private JSONObject sharing = new JSONObject();
+    private boolean sharingLoading, sharingChanging;
+    private long sharingChecked;
 
     AgentSidecar(Activity activity, AgentRuntime runtime) {
         this.activity = activity; this.runtime = runtime; app = BrowserApp.get(activity);
@@ -101,6 +105,13 @@ public final class AgentSidecar {
         result.setImageTintList(ColorStateList.valueOf(muted)); result.setPadding(dp(7), dp(7), dp(7), dp(7));
         result.setLayoutParams(new LinearLayout.LayoutParams(dp(34), dp(34))); rowBackground(result, false, 17); return result;
     }
+    private SwitchCompat powerSwitch(String label) {
+        SwitchCompat power = new SwitchCompat(activity); power.setShowText(false); power.setContentDescription(label);
+        power.setSwitchMinWidth(dp(34)); power.setMinWidth(0); power.setMinimumWidth(0); power.setPadding(dp(3), 0, dp(3), 0);
+        power.setThumbTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{accent, muted}));
+        power.setTrackTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{(accent & 0x00ffffff) | 0x66000000, line}));
+        return power;
+    }
     private void divider() { View view = new View(activity); view.setBackgroundColor(line); LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(1)); params.setMargins(0, dp(7), 0, dp(7)); body.addView(view, params); }
     private MaterialAlertDialogBuilder dialog() { return new MaterialAlertDialogBuilder(activity, R.style.BashKittenSidecarDialogTheme); }
     private EditText input() {
@@ -135,6 +146,9 @@ public final class AgentSidecar {
     public void toggle() {
         if (isOpen()) { close(); return; }
         readPalette();
+        sharingAdapter = new ShareSettingsAdapter(activity, ignored -> {});
+        sharingChecked = 0; sharingLoading = false; sharingChanging = false;
+        sharing = value("configured", sharing.optBoolean("configured"), "available", false, "running", false);
         drawer.setVisibility(View.VISIBLE); layout();
         if (activity instanceof androidx.activity.ComponentActivity) {
             back.setEnabled(true); ((androidx.activity.ComponentActivity) activity).getOnBackPressedDispatcher().addCallback(back);
@@ -146,17 +160,56 @@ public final class AgentSidecar {
         for (AgentRuntime.Listener listener : pendingSelections) runtime.detach(listener);
         pendingSelections.clear();
     }
-    public void close() { cancelSelection(); back.setEnabled(false); back.remove(); drawer.setVisibility(View.GONE); layout(); }
+    public void close() {
+        cancelSelection(); back.setEnabled(false); back.remove(); drawer.setVisibility(View.GONE); layout();
+        ShareSettingsAdapter previous = sharingAdapter; sharingAdapter = null;
+        if (previous != null) previous.close();
+    }
     public void changed() { if (isOpen()) { render(); refresh(); } }
     private void refresh() {
         if (loading || !isOpen()) return;
         loading = true; final int epoch = generation;
+        refreshSharing();
         runtime.remotes(value -> { if (epoch == generation) { remotes = value; render(); } }, message -> { if (epoch == generation) error(message); });
         final String backend = runtime.selected;
         runtime.navigation("snapshot", value(), snapshot -> {
             if (epoch != generation) return; loading = false;
             snapshots.put(backend, snapshot); render(); app.main.removeCallbacks(poll); app.main.postDelayed(poll, 2000);
         }, message -> { if (epoch != generation) return; loading = false; app.main.removeCallbacks(poll); app.main.postDelayed(poll, 2000); });
+    }
+    private void acceptSharing(JSONObject state) {
+        // Keep only display state here, not the encrypted connection QR or identity.
+        sharing = value("configured", state.optString("phase").equals("ready") || state.optBoolean("needsSetup") && sharing.optBoolean("configured"),
+            "running", state.optBoolean("running"), "available", !state.optBoolean("needsSetup"), "error", state.optString("error"));
+        sharingChecked = android.os.SystemClock.elapsedRealtime();
+    }
+    private void refreshSharing() {
+        final ShareSettingsAdapter owner = sharingAdapter;
+        if (owner == null || sharingLoading || sharingChanging || android.os.SystemClock.elapsedRealtime() - sharingChecked < 5000) return;
+        sharingLoading = true;
+        owner.dispatch("share-status", value()).whenComplete((state, failure) -> app.main.post(() -> {
+            if (owner != sharingAdapter || !isOpen()) return;
+            sharingLoading = false;
+            if (failure == null) acceptSharing(state);
+            else {
+                sharingChecked = android.os.SystemClock.elapsedRealtime();
+                sharing = value("configured", sharing.optBoolean("configured"), "running", false, "available", false, "error", failure.getMessage());
+            }
+            render();
+        }));
+    }
+    private void toggleSharing() {
+        final ShareSettingsAdapter owner = sharingAdapter;
+        if (owner == null || sharingLoading || sharingChanging || !sharing.optBoolean("available") || !runtime.localIsRunning()) return;
+        final boolean enable = !sharing.optBoolean("running");
+        sharingChanging = true; render();
+        owner.dispatch("share-publish", value("enabled", enable)).whenComplete((state, failure) -> app.main.post(() -> {
+            if (owner != sharingAdapter || !isOpen()) return;
+            sharingChanging = false;
+            if (failure == null) acceptSharing(state);
+            else { error(failure.getMessage()); sharingChecked = 0; refreshSharing(); }
+            render();
+        }));
     }
     private void awaitReady(String backend, Runnable ready, int epoch, long until) {
         if (epoch != generation || !backend.equals(runtime.selected)) return;
@@ -240,10 +293,7 @@ public final class AgentSidecar {
     private void backend(String id, String name, boolean remote) {
         LinearLayout heading = row(); Button title = button(name, () -> select(id, this::refresh)); title.setTypeface(null, Typeface.BOLD);
         heading.addView(title, new LinearLayout.LayoutParams(0, dp(41), 1));
-        SwitchCompat power = new SwitchCompat(activity); power.setShowText(false); power.setContentDescription(name + " power");
-        power.setSwitchMinWidth(dp(34)); power.setMinWidth(0); power.setMinimumWidth(0); power.setPadding(dp(3), 0, dp(3), 0);
-        power.setThumbTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{accent, muted}));
-        power.setTrackTintList(new ColorStateList(new int[][]{new int[]{android.R.attr.state_checked}, new int[]{}}, new int[]{(accent & 0x00ffffff) | 0x66000000, line}));
+        SwitchCompat power = powerSwitch(name + " power");
         final boolean on = remote ? runtime.remoteConnected(id) : runtime.localIsRunning();
         JSONObject localWeb = runtime.status.optJSONObject("web");
         String status = id.equals(runtime.selected) && !Arrays.asList("on", "off").contains(runtime.state) ? runtime.state : remote ? (on ? "Connected" : "Disconnected") : localWeb == null ? "off" : localWeb.optString("status", "off");
@@ -254,6 +304,17 @@ public final class AgentSidecar {
             button.setChecked(on); // Requests do not claim the backend has changed yet.
             runtime.setBackendOn(id, checked, this::error);
         }); heading.addView(power);
+        if (!remote && sharing.optBoolean("configured")) {
+            if (!on) sharing = value("configured", true, "running", false, "available", sharing.optBoolean("available"), "error", sharing.optString("error"));
+            final boolean shared = on && sharing.optBoolean("running");
+            String label = "Local sharing: " + (!on || sharing.optBoolean("available") ? shared ? "On" : "Off" : "unavailable");
+            SwitchCompat share = powerSwitch(label); share.setText("Share"); share.setTextSize(10); share.setTextColor(muted);
+            share.setChecked(shared); share.setEnabled(on && sharing.optBoolean("available") && !sharingLoading && !sharingChanging);
+            share.setTooltipText(sharing.optString("error").isEmpty() ? label : label + ". " + sharing.optString("error"));
+            androidx.core.view.ViewCompat.setStateDescription(share, sharingChanging ? "Changing sharing" : shared ? "On" : "Off");
+            share.setOnCheckedChangeListener((button, checked) -> { if (checked != shared) { button.setChecked(shared); toggleSharing(); } });
+            heading.addView(share);
+        }
         if (remote) heading.addView(icon(name + " actions", R.drawable.ic_agent_more, () -> remoteActions(id, name)));
         body.addView(heading);
         title.setContentDescription(name + ", " + status); title.setTooltipText(status);

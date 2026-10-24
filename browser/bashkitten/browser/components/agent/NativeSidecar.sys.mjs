@@ -8,6 +8,7 @@ export class NativeSidecar {
   constructor(host, control) {
     this.host = host; this.control = control; this.doc = host.doc;
     this.cache = new Map(); this.rows = new Map(); this.expanded = new Map(); this.renderEpoch = 0;
+    this.sharing = new Map(); this.sharingPending = new Set(); this.sharingEpoch = new Map();
     host.win.addEventListener("unload", () => { this.closed = true; this.renderEpoch++; clearTimeout(this.catalogueTimer); this.resize.disconnect(); }, { once: true });
     this.root = this.node("aside", { id: "bashkitten-native-sidecar", "aria-label": "Environments, projects and chats" });
     this.notice = this.node("p", { role: "status" }); this.root.append(this.notice);
@@ -16,7 +17,7 @@ export class NativeSidecar {
       const group = this.node("div", { class: "native-environment-group" }); this.groups.set(kind, group); this.root.append(group);
       if (kind !== "local") group.append(this.sectionHeading(kind === "machine" ? "Containers" : "Remotes",
         kind === "machine" ? "Create container VM" : "Connect to remote",
-        () => kind === "machine" ? this.createMachine() : this.host.remotes()));
+        anchor => kind === "machine" ? this.createMachine(anchor) : this.host.remotes()));
     }
     this.resize = new host.win.ResizeObserver(entries => {
       const width = entries[0]?.contentRect.width;
@@ -33,7 +34,7 @@ export class NativeSidecar {
   }
   button(text, label, action) {
     const button = this.node("button", { type: "button", title: label, "aria-label": label }, text);
-    button.addEventListener("click", async () => { button.disabled = true; try { this.notice.textContent = ""; await action(); } catch (error) { this.notice.textContent = error.message; } finally { button.disabled = false; } }); return button;
+    button.addEventListener("click", async () => { button.disabled = true; try { this.notice.textContent = ""; await action(button); } catch (error) { this.notice.textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }); return button;
   }
   iconButton(image, label, action) {
     const button = this.button("", label, action);
@@ -46,9 +47,9 @@ export class NativeSidecar {
   }
   isOpen() { return this.host.pane.getAttribute("data-sidecar-open") !== "false"; }
   setOpen(open) { this.host.pane.setAttribute("data-sidecar-open", String(open)); this.host.chatsToggle?.setAttribute("aria-expanded", String(open)); }
-  open() { this.setOpen(true); }
-  close() { this.setOpen(false); }
-  toggle() { this.setOpen(!this.isOpen()); }
+  open() { this.setOpen(true); if (this.backends) void this.refresh().catch(error => { this.notice.textContent = error.message; }); }
+  close() { this.actionPanel?.close(); this.setOpen(false); }
+  toggle() { if (this.isOpen()) this.close(); else this.open(); }
   chatSelected() { if (this.narrow) this.close(); }
   updateDisplays(buttons = this.root.querySelectorAll("[data-display-id]")) {
     for (const button of buttons) {
@@ -104,15 +105,63 @@ export class NativeSidecar {
         ...(machines.status === "fulfilled" ? (machines.value.machines || machines.value || []).map(machine => ({ ...machine, kind: "machine" })) : previous.filter(backend => backend.kind === "machine")),
         ...(remotes.status === "fulfilled" ? remotes.value.map(remote => ({ ...remote, kind: "remote" })) : previous.filter(backend => backend.kind === "remote"))];
       for (const result of [machines, remotes]) if (result.status === "rejected") this.notice.textContent = result.reason.message;
-      await this.render(); await this.refreshChats();
+      await this.render(); await Promise.all([this.refreshChats(), this.refreshSharing()]);
     })().finally(() => {
       this.refreshTask = null;
-      if (!this.closed && this.backends?.some(backend => backend.kind === "machine")) {
+      if (!this.closed && (this.isOpen() || this.backends?.some(backend => backend.kind === "machine"))) {
         const pending = this.backends.some(backend => ["preparing", "starting", "stopping", "deleting"].includes(backend.state));
         this.catalogueTimer = setTimeout(() => this.refresh().catch(error => { this.notice.textContent = error.message; }), pending ? 1000 : 5000);
       }
     });
     return this.refreshTask;
+  }
+  sharingRequest(backend, command, value = {}) {
+    if (backend.kind === "machine") return this.host.machineLocalControl(backend.id, command, value);
+    if (backend.kind === "local") return this.control(command, value);
+    throw new Error("Remote connections cannot change sharing on their host.");
+  }
+  async refreshSharing() {
+    if (!this.isOpen()) return;
+    await Promise.all((this.backends || []).filter(backend => backend.kind !== "remote").map(async backend => {
+      if (this.sharingPending.has(backend.id)) return;
+      if (backend.kind === "machine" && backend.state !== "running") {
+        const previous = this.sharing.get(backend.id);
+        if (previous) this.sharing.set(backend.id, { ...previous, running: false, available: false });
+        return;
+      }
+      const epoch = (this.sharingEpoch.get(backend.id) || 0) + 1;
+      this.sharingEpoch.set(backend.id, epoch);
+      try {
+        const [state, local] = await Promise.all([this.sharingRequest(backend, "share-status"),
+          backend.kind === "local" ? this.control("status") : null]);
+        if (!this.closed && epoch === this.sharingEpoch.get(backend.id)) {
+          if (local) this.host.localOn = local.web?.status === "running";
+          this.sharing.set(backend.id, {
+            configured: state.phase === "ready", running: state.running === true, available: true, error: state.error,
+          });
+        }
+      } catch (error) {
+        if (!this.closed && epoch === this.sharingEpoch.get(backend.id)) this.sharing.set(backend.id, {
+          configured: this.sharing.get(backend.id)?.configured, running: false, available: false, error: error.message,
+        });
+      }
+    }));
+    if (!this.closed) await this.render();
+  }
+  async toggleSharing(backend) {
+    if (this.sharingPending.has(backend.id)) return;
+    const state = this.sharing.get(backend.id);
+    if (!state?.configured || !state.available) throw new Error(state?.error || "Sharing status is unavailable.");
+    this.sharingPending.add(backend.id);
+    this.sharingEpoch.set(backend.id, (this.sharingEpoch.get(backend.id) || 0) + 1);
+    await this.render();
+    try {
+      if (!state.running) await this.sharingRequest(backend, "start");
+      await this.sharingRequest(backend, "share-publish", { enabled: !state.running });
+    } finally {
+      this.sharingPending.delete(backend.id);
+      await this.refreshSharing();
+    }
   }
   async refreshChats() {
     if (this.refreshing) { this.refreshAgain = true; return; }
@@ -147,6 +196,20 @@ export class NativeSidecar {
       power.append(this.node("span", { class: "native-power-track", "aria-hidden": "true" }));
       power.disabled = ["preparing", "starting", "stopping", "deleting"].includes(backend.state);
       power.setAttribute("role", "switch"); power.setAttribute("aria-checked", String(Boolean(on))); heading.append(power);
+      const sharing = this.sharing.get(backend.id);
+      if (backend.kind !== "remote" && sharing?.configured) {
+        if (!on) sharing.running = false;
+        const running = on && sharing.running === true;
+        const label = `${backend.name} sharing: ${sharing.available || !on ? running ? "On" : "Off" : "unavailable"}`;
+        const share = this.button("", label, () => this.toggleSharing(backend));
+        share.className = "native-power-toggle native-sharing-toggle";
+        share.append(this.node("span", {}, "Share"), this.node("span", { class: "native-power-track", "aria-hidden": "true" }));
+        share.setAttribute("role", "switch"); share.setAttribute("aria-checked", String(Boolean(running)));
+        share.disabled = !on || !sharing.available || this.sharingPending.has(backend.id);
+        share.setAttribute("aria-busy", String(this.sharingPending.has(backend.id)));
+        if (sharing.error) share.title = `${label}. ${sharing.error}`;
+        heading.append(share);
+      }
       if (backend.kind === "machine") heading.append(this.iconButton("chrome://global/skin/icons/settings.svg", `${backend.name} settings`, () => this.machineSettings(backend.id)));
       if (backend.kind === "machine") {
         const display = this.iconButton("chrome://browser/skin/device-desktop.svg", `Open ${backend.name} Display`, () => this.host.toggleMachineDisplay(backend.id));
@@ -154,7 +217,7 @@ export class NativeSidecar {
         this.updateDisplays([display]);
         heading.append(display);
       }
-      if (backend.kind === "remote") heading.append(this.button("⋯", `${backend.name} actions`, () => this.remoteActions(backend)));
+      if (backend.kind === "remote") heading.append(this.button("⋯", `${backend.name} actions`, anchor => this.remoteActions(backend, anchor)));
       section.append(heading);
       if (backend.state && !["running", "stopped", "ready", "disconnected"].includes(backend.state)) section.append(this.node("small", { class: "native-backend-state", role: "status" }, backend.state));
       if (backend.error || backend.lastError) section.append(this.node("p", { class: "native-error" }, backend.error || backend.lastError));
@@ -173,7 +236,7 @@ export class NativeSidecar {
         const children = sessions.filter(child => child.subagentParent === chat.id);
         if (children.length) row.append(this.button(this.expanded.get(backend.id + ":" + chat.id) === false ? "▸" : "▾", "Show subagent chats", () => { this.expanded.set(backend.id + ":" + chat.id, this.expanded.get(backend.id + ":" + chat.id) === false); this.render(); }));
         const link = this.button((chat.running ? "● " : "") + chat.title, chat.title, async () => { await this.select(backend.id); await this.navigation("open", { id: chat.id }); await this.refreshChats(); this.chatSelected(); }); link.className = "native-title";
-        row.append(link, this.button("⋯", "Chat actions", async () => { await this.select(backend.id); this.chatActions(chat, snapshot.projects || []); })); target.append(row);
+        row.append(link, this.button("⋯", "Chat actions", async anchor => { const rect = anchor.getBoundingClientRect(); await this.select(backend.id); this.chatActions(chat, snapshot.projects || [], rect); })); target.append(row);
         if (this.expanded.get(backend.id + ":" + chat.id) !== false) for (const child of children) appendChat(child, target, depth + 1, visited);
       };
       for (const project of snapshot.projects || []) {
@@ -181,7 +244,7 @@ export class NativeSidecar {
         group.addEventListener("toggle", () => this.expanded.set(backend.id + ":" + project.id, group.open));
         const summary = this.node("summary"); summary.append(this.icon("folder"), this.node("span", {}, project.name)); group.append(summary);
         const newProjectChat = this.button("+", "New chat in " + project.name, async () => { await this.select(backend.id); await this.navigation("new", { projectId: project.id }); await this.refreshChats(); this.chatSelected(); });
-        const projectActions = this.button("⋯", "Project actions", async () => { await this.select(backend.id); this.projectActions(project); });
+        const projectActions = this.button("⋯", "Project actions", async anchor => { const rect = anchor.getBoundingClientRect(); await this.select(backend.id); this.projectActions(project, rect); });
         for (const button of [newProjectChat, projectActions]) button.addEventListener("click", event => event.stopPropagation());
         summary.append(newProjectChat, projectActions);
         for (const chat of roots.filter(chat => chat.projectId === project.id)) appendChat(chat, group, 1);
@@ -192,27 +255,88 @@ export class NativeSidecar {
       if (snapshot.nextOffset !== null) section.append(this.button("Load more", "Load more chats", async () => { await this.select(backend.id); await this.navigation("more"); await this.refreshChats(); }));
     }
     const ids = new Set((this.backends || []).map(backend => backend.id));
-    for (const [id, row] of this.rows) if (!ids.has(id)) { row.remove(); this.rows.delete(id); this.cache.delete(id); }
+    for (const [id, row] of this.rows) if (!ids.has(id)) { row.remove(); this.rows.delete(id); this.cache.delete(id); this.sharing.delete(id); }
     this.root.scrollTop = scroll;
   }
-  textDialog(title, initial, save) {
-    const { dialog, content } = this.host.dialog(title), input = this.node("input", { value: initial || "", "aria-label": title }), error = this.node("p", { role: "alert" });
-    content.append(input, error, this.button("Save", "Save", async () => { try { await save(input.value); dialog.close(); await this.refreshChats(); } catch (e) { error.textContent = e.message; } })); input.focus();
+  actionPopover(title, anchor) {
+    this.actionPanel?.close();
+    const rect = anchor?.getBoundingClientRect?.() || anchor || this.root.getBoundingClientRect();
+    const panel = this.node("div", { class: "native-action-popover", popover: "auto", role: "dialog", "aria-label": title });
+    const heading = this.node("h2", {}, title), content = this.node("div", { class: "native-action-content" }), error = this.node("p", { role: "alert" });
+    const header = this.node("div", { class: "native-action-header" });
+    const close = () => { if (panel.matches(":popover-open")) panel.hidePopover(); };
+    header.append(heading, this.button("×", "Close", close)); panel.append(header, content, error);
+    const position = () => {
+      if (!panel.isConnected) return;
+      const margin = 8, width = this.host.win.innerWidth, height = this.host.win.innerHeight;
+      panel.style.maxWidth = `${Math.max(1, width - 2 * margin)}px`;
+      panel.style.maxHeight = `${Math.max(1, height - 2 * margin)}px`;
+      const size = panel.getBoundingClientRect();
+      panel.style.left = `${Math.max(margin, Math.min(rect.left, width - size.width - margin))}px`;
+      const top = rect.bottom + 4 + size.height <= height - margin ? rect.bottom + 4 : rect.top - size.height - 4;
+      panel.style.top = `${Math.max(margin, Math.min(top, height - size.height - margin))}px`;
+    };
+    const observer = new this.host.win.ResizeObserver(position);
+    const state = { panel, content, close, show: (label, nodes, focus) => {
+      heading.textContent = label; panel.setAttribute("aria-label", label); error.textContent = "";
+      content.replaceChildren(...nodes); position(); (focus || content.querySelector("button, input, select"))?.focus();
+    }, run: async operation => {
+      if (panel.hasAttribute("aria-busy")) return;
+      panel.setAttribute("aria-busy", "true"); error.textContent = "";
+      const controls = [...content.querySelectorAll("button, input, select")]; controls.forEach(node => { node.disabled = true; });
+      try { await operation(); close(); }
+      catch (failure) { error.textContent = failure.message; }
+      finally { panel.removeAttribute("aria-busy"); controls.forEach(node => { node.disabled = false; }); position(); }
+    } };
+    panel.addEventListener("toggle", event => {
+      if (event.newState !== "closed") return;
+      observer.disconnect(); this.host.win.removeEventListener("resize", position); this.root.removeEventListener("scroll", close);
+      panel.remove(); if (this.actionPanel === state) this.actionPanel = null;
+    });
+    panel.addEventListener("keydown", event => {
+      if (!event.target.matches("button") || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const choices = [...content.querySelectorAll("button:not(:disabled)")]; if (!choices.length) return;
+      const index = choices.indexOf(event.target), next = event.key === "Home" ? 0 : event.key === "End" ? choices.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length;
+      event.preventDefault(); choices[next].focus();
+    });
+    this.doc.documentElement.append(panel); this.actionPanel = state; panel.showPopover();
+    observer.observe(panel); this.host.win.addEventListener("resize", position); this.root.addEventListener("scroll", close, { passive: true });
+    position(); return state;
   }
-  chatActions(chat, projects) {
-    const backend = this.selected(), request = (action, value) => { if (backend !== this.selected()) throw new Error("The selected backend changed."); return this.navigation(action, value); };
-    const { dialog, content } = this.host.dialog(chat.title);
-    content.append(this.button("Rename", "Rename chat", () => { dialog.close(); this.textDialog("Rename chat", chat.title, name => request("rename", { id: chat.id, name })); }));
-    const select = this.node("select", { "aria-label": "Project" }); select.append(this.node("option", { value: "" }, "No project"));
-    for (const project of projects) select.append(this.node("option", { value: project.id }, project.name)); select.value = chat.projectId || "";
-    content.append(select, this.button("Move", "Move chat to project", async () => { await request("move", { id: chat.id, projectId: select.value }); dialog.close(); await this.refreshChats(); }),
-      this.button("Remove chat", "Remove chat", async () => { if (!Services.prompt.confirm(this.host.win, "Remove chat?", "Stop this chat and remove it from the list? Native Pi history and working files are kept.")) return; await request("remove", { id: chat.id }); dialog.close(); await this.refreshChats(); }));
+  textDialog(title, initial, save, anchor, existing) {
+    const popup = existing || this.actionPopover(title, anchor);
+    const input = this.node("input", { value: initial || "", "aria-label": title });
+    const form = this.node("form"), actions = this.node("div", { class: "native-action-buttons" });
+    const submit = () => popup.run(async () => { await save(input.value); await this.refreshChats(); });
+    actions.append(this.button("Cancel", "Cancel", popup.close), this.button("Save", "Save", submit)); form.append(input, actions);
+    form.addEventListener("submit", event => { event.preventDefault(); void submit(); });
+    popup.show(title, [form], input); input.select();
   }
-  projectActions(project) {
+  confirmAction(popup, title, message, label, action) {
+    const actions = this.node("div", { class: "native-action-buttons" });
+    const cancel = this.button("Cancel", "Cancel", popup.close);
+    actions.append(cancel, this.button(label, label, () => popup.run(action)));
+    popup.show(title, [this.node("p", {}, message), actions], cancel);
+  }
+  chatActions(chat, projects, anchor) {
     const backend = this.selected(), request = (action, value) => { if (backend !== this.selected()) throw new Error("The selected backend changed."); return this.navigation(action, value); };
-    const { dialog, content } = this.host.dialog(project.name);
-    content.append(this.node("p", {}, project.cwd), this.button("Rename", "Rename project", () => { dialog.close(); this.textDialog("Rename project", project.name, name => request("project-rename", { id: project.id, name })); }),
-      this.button("Remove grouping", "Remove project; keep chats", async () => { if (!Services.prompt.confirm(this.host.win, "Remove project?", "Keep its chats directly under this backend?")) return; await request("project-remove", { id: project.id }); dialog.close(); await this.refreshChats(); }));
+    const popup = this.actionPopover(chat.title, anchor);
+    const rename = this.button("Rename chat", "Rename chat", () => this.textDialog("Rename chat", chat.title, name => request("rename", { id: chat.id, name }), null, popup));
+    const move = this.button("Move to project", "Move to project", () => {
+      const select = this.node("select", { "aria-label": "Project" }); select.append(this.node("option", { value: "" }, "No project"));
+      for (const project of projects) select.append(this.node("option", { value: project.id }, project.name)); select.value = chat.projectId || "";
+      const actions = this.node("div", { class: "native-action-buttons" });
+      actions.append(this.button("Cancel", "Cancel", popup.close), this.button("Move", "Move chat", () => popup.run(async () => { await request("move", { id: chat.id, projectId: select.value }); await this.refreshChats(); })));
+      popup.show("Move chat", [select, actions], select);
+    });
+    const remove = this.button("Remove chat", "Remove chat", () => this.confirmAction(popup, "Remove chat?", "Stop this chat and remove it from the list? Native Pi history and working files are kept.", "Remove", async () => { await request("remove", { id: chat.id }); await this.refreshChats(); }));
+    popup.show(chat.title, [rename, move, remove]);
+  }
+  projectActions(project, anchor) {
+    const backend = this.selected(), request = (action, value) => { if (backend !== this.selected()) throw new Error("The selected backend changed."); return this.navigation(action, value); };
+    const popup = this.actionPopover(project.name, anchor);
+    popup.show(project.name, [this.button("Rename project", "Rename project", () => this.textDialog("Rename project", project.name, name => request("project-rename", { id: project.id, name }), null, popup)),
+      this.button("Remove grouping", "Remove project; keep chats", () => this.confirmAction(popup, "Remove project grouping?", "Chats stay directly under this backend. Their working folders do not change.", "Remove", async () => { await request("project-remove", { id: project.id }); await this.refreshChats(); }))]);
   }
   async projectPicker() {
     const backend = this.selected(), { dialog, content, actions } = this.host.dialog("Create project"), name = this.node("input", { placeholder: "Project name", "aria-label": "Project name" }), location = this.node("span", {}, "Loading folder…"), folders = this.node("div", { class: "native-project-folders", hidden: "", "aria-label": "Folders" }), error = this.node("p", { role: "alert" });
@@ -238,20 +362,20 @@ export class NativeSidecar {
     name.focus();
     try { await load("~"); } catch (e) { error.textContent = e.message; }
   }
-  remoteActions(remote) {
-    const { dialog, content } = this.host.dialog(remote.name);
-    content.append(this.button("Rename", "Rename remote", () => { dialog.close(); this.textDialog("Rename remote", remote.name, async name => { await AgentRemotes.rename(remote.id, name); await this.refresh(); }); }),
-      this.button("Connect to phone", "Connect to phone", async () => { dialog.close(); await this.host.connectToPhone(remote.id); }),
-      this.button("Delete remote", "Delete saved remote", async () => { if (!Services.prompt.confirm(this.host.win, "Delete remote?", `Forget “${remote.name}” and its login? Its machine and chats are kept.`)) return; await AgentRemotes.remove(remote.id); if (this.selected() === remote.id) await this.host.disconnectSelected(); dialog.close(); await this.refresh(); }));
+  remoteActions(remote, anchor) {
+    const popup = this.actionPopover(remote.name, anchor);
+    popup.show(remote.name, [this.button("Rename remote", "Rename remote", () => this.textDialog("Rename remote", remote.name, async name => { await AgentRemotes.rename(remote.id, name); await this.refresh(); }, null, popup)),
+      this.button("Connect to phone", "Connect to phone", async () => { popup.close(); await this.host.connectToPhone(remote.id); }),
+      this.button("Delete remote", "Delete saved remote", () => this.confirmAction(popup, "Delete remote?", `Forget “${remote.name}” and its login? Its machine and chats are kept.`, "Delete", async () => { await AgentRemotes.remove(remote.id); if (this.selected() === remote.id) await this.host.disconnectSelected(); await this.refresh(); }))]);
   }
-  createMachine() {
+  createMachine(anchor) {
     this.textDialog("Container name", "", async name => {
       const result = await this.control("machines.create", { name, displayCapabilities: await this.displayCapabilities() });
       // A coalesced catalogue request may have started before this machine existed.
       await this.refreshTask;
       await this.refresh();
       if (!this.closed) await this.operation(result.machine?.id || result.id);
-    });
+    }, anchor);
   }
   machineSettings(id) { return this.host.openSettings("machine", { backendId: id }); }
   operation(id) { return this.host.openSettings("machine", { backendId: id, operation: true }); }
