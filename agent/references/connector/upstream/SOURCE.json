@@ -1,0 +1,90 @@
+{
+  "repository": "zotero/zotero-connectors",
+  "commit": "ce29dfa360d1ce17a3a1f15a9d338d638a073106",
+  "version": "5.0.217",
+  "archive": "https://codeload.github.com/zotero/zotero-connectors/tar.gz/ce29dfa360d1ce17a3a1f15a9d338d638a073106",
+  "sha256": "0c3b37f05db22fe6023b7735f5334935eb7e05d25887a973c146e398a55953e0",
+  "gitlinks": [
+    {
+      "path": "src/translate",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "485ac36edbd66459e2aa3bad4d4b36921be2c7c2"
+    },
+    {
+      "path": "src/utilities",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "cccf1235a318c259345fc623d5e9d6770ba19df7"
+    },
+    {
+      "path": "src/zotero",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "01ebeb183439bbd79797bbcd4a41e99aad099ab8"
+    },
+    {
+      "path": "src/zotero-google-docs-integration",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "a46413151134ad699c351ac42ecbbe9c76c8e6cc"
+    },
+    {
+      "path": "src/zotero-schema",
+      "mode": "160000",
+      "type": "commit",
+      "sha": "b5b3f51217a99b3c41585d468ee1dc0837233d13"
+    }
+  ],
+  "materializedDependencies": [
+    {
+      "name": "translate",
+      "repository": "zotero/translate",
+      "commit": "485ac36edbd66459e2aa3bad4d4b36921be2c7c2",
+      "archive": "https://codeload.github.com/zotero/translate/tar.gz/485ac36edbd66459e2aa3bad4d4b36921be2c7c2",
+      "sha256": "3c736a199ab9c6f3e88487299901cf4d87e333ba343edd2dd149a35bd1c3f1d7",
+      "selectedPaths": [
+        "."
+      ]
+    },
+    {
+      "name": "utilities",
+      "repository": "zotero/utilities",
+      "commit": "cccf1235a318c259345fc623d5e9d6770ba19df7",
+      "archive": "https://codeload.github.com/zotero/utilities/tar.gz/cccf1235a318c259345fc623d5e9d6770ba19df7",
+      "sha256": "7b2d41f08ecbcd978cb82a10df0f9859f4eeb8812d61e29e7636dfab9d235967",
+      "selectedPaths": [
+        "."
+      ]
+    },
+    {
+      "name": "zotero-schema",
+      "repository": "zotero/zotero-schema",
+      "commit": "b5b3f51217a99b3c41585d468ee1dc0837233d13",
+      "archive": "https://codeload.github.com/zotero/zotero-schema/tar.gz/b5b3f51217a99b3c41585d468ee1dc0837233d13",
+      "sha256": "7b9b58e8f19dba7143d9ee28b62c60343efc42af2c545cb47f3262200e0974df",
+      "selectedPaths": [
+        "."
+      ]
+    },
+    {
+      "name": "zotero",
+      "repository": "zotero/zotero",
+      "commit": "01ebeb183439bbd79797bbcd4a41e99aad099ab8",
+      "archive": "https://codeload.github.com/zotero/zotero/tar.gz/01ebeb183439bbd79797bbcd4a41e99aad099ab8",
+      "sha256": "d5efa161d6f3a5cd269f8ee827aaea524e05f98ba855b6904b369b90cdb6346e",
+      "selectedPaths": [
+        "chrome/skin/default/zotero",
+        "chrome/locale",
+        "COPYING",
+        "README.md"
+      ]
+    }
+  ],
+  "omittedGitlinks": [
+    {
+      "path": "src/zotero-google-docs-integration",
+      "reason": "Not used by References; Google Docs integration excluded."
+    }
+  ]
+}
