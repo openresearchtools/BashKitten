@@ -20,7 +20,7 @@ export async function packageExtension(destination) {
   }
   const shared = path.join(destination, 'shared'); await fs.mkdir(shared, { recursive: true });
   for (const name of ['shared-citation-dialog.js', 'common.js', 'virtual-list.js', 'collections.js', 'references.css']) await fs.copyFile(path.join(root, '..', 'references', 'web', name), path.join(shared, name));
-  await fs.writeFile(path.join(destination, 'bashkitten-extension.json'), JSON.stringify({ version: '1.0.0', nativeApi: 1, sourceRevision: '42745e44dd8530fac7acd5f46cb7571ceea63c6a', sharedChooser: 'References web', capabilities: ['Writer', 'Calc', 'Impress'], requiredPatches: ['native-extensions-small-screen-dialog'] }, null, 2) + '\n');
+  await fs.writeFile(path.join(destination, 'bashkitten-extension.json'), JSON.stringify({ version: '1.0.0', nativeApi: 1, sourceRevision: '42745e44dd8530fac7acd5f46cb7571ceea63c6a', sharedChooser: 'References web', capabilities: ['Writer', 'Calc', 'Impress'], requiredPatches: ['native-extensions-small-screen-dialog', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state'] }, null, 2) + '\n');
   return destination;
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(await packageExtension(path.resolve(process.argv[2] || '')));

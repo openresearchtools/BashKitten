@@ -1,0 +1,35 @@
+--- a/engine/include/svx/unoshprp.hxx
++++ b/engine/include/svx/unoshprp.hxx
+@@ -194,6 +194,7 @@
+ #define OWN_ATTR_IS_DIAGRAM                     (OWN_ATTR_VALUE_START+111)
+ #define OWN_ATTR_DIAGRAM_DATA                   (OWN_ATTR_VALUE_START+112)
+ #define OWN_ATTR_MISC_OBJ_HORIZONTAL_RULE       (OWN_ATTR_VALUE_START+113)
++#define OWN_ATTR_TEXT_EDIT_ACTIVE               (OWN_ATTR_VALUE_START+114)
+ // ATTENTION: current maximum is OWN_ATTR_VALUE_START+120 svx; when adding values, update
+ // OWN_ATTR_VALUE_END in include/svl/solar.hrc accordingly
+ 
+@@ -315,6 +316,7 @@
+     { UNO_NAME_EDGERADIUS,        SDRATTR_CORNER_RADIUS   , ::cppu::UnoType<sal_Int32>::get()  ,            0,     0, PropertyMoreFlags::METRIC_ITEM},
+ 
+ #define TEXT_PROPERTIES_DEFAULTS\
++    { u"TextEditActive"_ustr, OWN_ATTR_TEXT_EDIT_ACTIVE, cppu::UnoType<bool>::get(), css::beans::PropertyAttribute::READONLY | css::beans::PropertyAttribute::TRANSIENT, 0 }, \
+     { UNO_NAME_TEXT_WRITINGMODE,      SDRATTR_TEXTDIRECTION,          ::cppu::UnoType<css::text::WritingMode>::get(),      0,      0},\
+     { UNO_NAME_TEXT_ANIAMOUNT,        SDRATTR_TEXT_ANIAMOUNT,         ::cppu::UnoType<sal_Int16>::get(),        0,      0}, \
+     { UNO_NAME_TEXT_ANICOUNT,         SDRATTR_TEXT_ANICOUNT,          ::cppu::UnoType<sal_Int16>::get(),        0,      0}, \
+--- a/engine/svx/source/unodraw/unoshape.cxx
++++ b/engine/svx/source/unodraw/unoshape.cxx
+@@ -4024,6 +4024,14 @@
+ 
+ bool SvxShapeText::getPropertyValueImpl( const OUString& rName, const SfxItemPropertyMapEntry* pProperty, cpo::uno::Any& rValue )
+ {
++    if (pProperty->nWID == OWN_ATTR_TEXT_EDIT_ACTIVE)
++    {
++        // Expose the existing native editor state without changing ownership.
++        const SdrTextObj* text = DynCastSdrTextObj(GetSdrObject());
++        rValue <<= text && text->IsTextEditActive();
++        return true;
++    }
++
+     if( pProperty->nWID == SDRATTR_TEXTDIRECTION )
+     {
+         SdrTextObj* pTextObj = DynCastSdrTextObj( GetSdrObject() );

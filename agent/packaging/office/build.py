@@ -32,6 +32,7 @@ PATCHES = [
     'office/patches/0009-native-uno-undo-view.patch',
     'office/patches/0010-native-uno-shape-undo.patch',
     'office/patches/0011-native-online-openssl-headers.patch',
+    'office/patches/0016-native-text-edit-state.patch',
 ]
 ENGINE_OPTIONS = ['--with-distro=CPLinux-LOKit', '--disable-epm',
                   '--without-package-format', '--disable-symbols',

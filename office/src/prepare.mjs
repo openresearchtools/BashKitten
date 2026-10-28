@@ -8,7 +8,7 @@ const keyPair = promisify(generateKeyPair);
 const defaultRoot = fileURLToPath(new URL('../runtime/', import.meta.url));
 const unavailable = message => Object.assign(new Error('Office unavailable: ' + message), { status: 503, code: 'office_runtime_unavailable' });
 const exact = '42745e44dd8530fac7acd5f46cb7571ceea63c6a';
-const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes'];
+const requiredPatches = ['native-locked-light-theme', 'native-extensions-small-screen-dialog', 'native-proof-key-path', 'native-document-property-undo', 'native-field-command-undo', 'native-ooxml-user-attributes', 'source-archive-build-id', 'native-bounded-config-cache-keys', 'native-uno-undo-view', 'native-uno-shape-undo', 'native-text-edit-state'];
 function relative(root, value) {
   if (typeof value !== 'string' || !value || path.isAbsolute(value) || value.split(/[\\/]/).some(part => part === '..') || value.includes('\0')) throw unavailable('invalid native artifact path');
   return path.join(root, value);
@@ -77,12 +77,13 @@ export async function prepareOffice({ dataRoot, componentRoot = defaultRoot, por
   // Drop the parent's unrelated Linux capability inheritance before native
   // startup; preserve ForKit's checks, namespace selection and seccomp policy.
   if (!termux) { try { await fs.access('/usr/bin/setpriv', fs.constants.X_OK); } catch { throw unavailable('the packaged Linux util-linux dependency is missing'); } }
+  const nativeEnvironment = termux ? { COOL_FORCE_LANDLOCK: '1', PREFIX: '/data/data/com.termux/files/usr', LD_LIBRARY_PATH: path.join(paths.engine, 'program'), SSL_CERT_FILE: process.env.SSL_CERT_FILE || '/data/data/com.termux/files/usr/etc/tls/cert.pem', OPENSSL_CONF: '/data/data/com.termux/files/usr/etc/tls/openssl.cnf' } : {};
   const argv = termux ? nativeArgv : ['/usr/bin/setpriv', '--inh-caps=-all', '--ambient-caps=-all', '--', ...nativeArgv];
   const launch = path.join(directory, 'launch.json');
   const artifactRevision = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
-  await fs.writeFile(launch + '.new', JSON.stringify({ schema: 1, revision: artifactRevision, argv, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }), { mode: 0o600 });
+  await fs.writeFile(launch + '.new', JSON.stringify({ schema: 1, revision: artifactRevision, argv, nativeEnvironment, cwd: directory, systemplateSetup: paths.systemplateSetup, systemplate, engine: paths.engine }), { mode: 0o600 });
   await fs.rename(launch + '.new', launch);
-  const configRevision = createHash('sha256').update(JSON.stringify({ manifest, configuration, argv })).digest('hex');
-  const service = { id: 'office', name: 'Office', enabled: false, startup: false, configRevision, kind: 'web', scheme: 'http', openPath: serviceRoot + '/', target: { network: 'tcp', address: '127.0.0.1:' + port }, command: { argv: [process.execPath, fileURLToPath(new URL('./launch.mjs', import.meta.url)), launch], cwd: directory, env: { BASHKITTEN_OFFICE_CONFIG_REVISION: configRevision, ...((manifest.target || manifest.platform) === 'termux' ? { COOL_FORCE_LANDLOCK: '1', PREFIX: '/data/data/com.termux/files/usr', LD_LIBRARY_PATH: path.join(paths.engine, 'program') } : {}) } } };
+  const configRevision = createHash('sha256').update(JSON.stringify({ manifest, configuration, argv, nativeEnvironment })).digest('hex');
+  const service = { id: 'office', name: 'Office', enabled: false, startup: false, configRevision, kind: 'web', scheme: 'http', openPath: serviceRoot + '/', target: { network: 'tcp', address: '127.0.0.1:' + port }, command: { argv: [process.execPath, fileURLToPath(new URL('./launch.mjs', import.meta.url)), launch], cwd: directory, env: { BASHKITTEN_OFFICE_CONFIG_REVISION: configRevision } } };
   return { service, collaboraInternalURL: 'http://127.0.0.1:' + port + serviceRoot, editorBasePath: serviceRoot, wopiURL, extension };
 }

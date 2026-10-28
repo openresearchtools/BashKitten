@@ -15,6 +15,7 @@ async function run(work) {
 }
 const renderDocument = (state, { signal } = {}) => api.project(context.projectId).request('citations/render', { method: 'POST', body: state, signal });
 async function command(request, preview = false, signal) {
+  if (!preview) await invoke({ operation: 'view.finish-edit' });
   return runCitationCommand({ invoke, renderDocument, importSnapshots: (body, options) => api.project(context.projectId).request('citations/import-snapshots', { method: 'POST', body, ...options }), documentType, projectId: context.projectId, request, preview, signal });
 }
 async function update() {
@@ -29,11 +30,11 @@ async function update() {
   message(current.citations.length + ' managed citation' + (current.citations.length === 1 ? '' : 's') + (current.metadataSource === 'snapshot' ? '. Using embedded reference snapshots.' : '') + (current.unlinkedItems?.length ? ' ' + current.unlinkedItems.length + ' reference(s) are not linked to this project.' : ''));
 }
 async function cite() {
-  const selection = await invoke({ operation: 'selection' });
   const id = document.querySelector('#occurrence').value;
+  const selection = id ? null : await invoke({ operation: 'selection' });
   const initial = current.citations.find(citation => citation.id === id) || { items: [] };
   const operation = id ? 'citations.edit' : 'citations.insert';
-  const target = selection.target;
+  const target = selection?.target;
   const metadataSource = document.querySelector('#metadata-source').value;
   const expectedRevision = current.revision;
   let cluster;

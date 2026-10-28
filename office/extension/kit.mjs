@@ -256,6 +256,22 @@ export function nativeOperation(request) {
     }
     return null;
   }
+  function assertTextShapeAvailable(shape) {
+    if (!shape || typeof shape.getShapeType !== 'function' || typeof shape.getString !== 'function') return;
+    if (!shape.getPropertySetInfo().hasPropertyByName('TextEditActive')) fail('Office native active-text inspection is unavailable for this shape');
+    if (shape.getPropertyValue('TextEditActive')) fail('Shape text is being edited in a native view');
+  }
+  function preflightCitationShapes(state, desired) {
+    // The entire operation is synchronous under the native SolarMutex. Check
+    // every existing target before any write, including copies/removals and
+    // untagged text shapes being promoted from citation codes.
+    for (const citation of [...state.citations, ...bibliographies(state)]) {
+      if (citation.anchor?.kind === 'shape') assertTextShapeAvailable(anchorFor(citation));
+    }
+    for (const citation of [...(desired?.citations || []), ...(desired?.bibliography ? [desired.bibliography, ...(desired.bibliography.copies || [])] : [])]) {
+      if (citation.target?.existingShape) assertTextShapeAvailable(findShape(citation.target));
+    }
+  }
   function rendered(citation) { const anchor = anchorFor(citation); return anchor ? anchor.getString() : null; }
   function writerLocation(range) {
     let location = range;
@@ -642,6 +658,14 @@ export function nativeOperation(request) {
     }
     return result;
   }
+  if (operation === 'view.finish-edit') {
+    // Explicit confirmation only: use this participant's existing controller
+    // to commit its native text edit before starting the citation undo group.
+    // Other participants' active editors are never selected or ended here.
+    if (documentType === 'spreadsheet') view.select(view.getSelection());
+    else if (documentType === 'presentation') css.frame.DispatchHelper.create(uno.componentContext).executeDispatch(view.getFrame(), '.uno:SelectObject', '', 0, []);
+    return { finishedOwnEdit: true };
+  }
   if (operation === 'native.uno') {
     if (typeof request.command !== 'string' || !/^\.uno:[A-Za-z0-9_]+$/.test(request.command)) fail('A native .uno command is required');
     const types = { string: uno.type.string, boolean: uno.type.boolean, short: uno.type.short, long: uno.type.long, float: uno.type.float, double: uno.type.double };
@@ -713,6 +737,7 @@ export function nativeOperation(request) {
     }
     if (operation === 'shape.edit') {
       const shape = findShape(request.target); if (intersectsManaged(shape)) fail('Shape contains a managed citation');
+      assertTextShapeAvailable(shape);
       if (request.expectedText !== undefined && shape.getString() !== request.expectedText) fail('Shape text changed');
       if (request.text !== undefined) shape.setString(text(request.text));
       if (request.position) shape.setPosition(new css.awt.Point({ X: request.position.x, Y: request.position.y }));
@@ -722,6 +747,7 @@ export function nativeOperation(request) {
     if (operation === 'format') {
       const allowed = ['CharColor', 'CharHeight', 'CharFontName', 'CharWeight', 'CharPosture', 'CellBackColor', 'NumberFormat', 'ParaAdjust', 'ParaStyleName', 'FillColor', 'FillTransparence'];
       const target = documentType === 'text' ? writerRange(request.target) : documentType === 'spreadsheet' ? sheet(request.target.sheet).getCellRangeByName(request.target.range) : findShape(request.target);
+      assertTextShapeAvailable(target);
       for (const [name, value] of Object.entries(request.properties || {})) { if (!allowed.includes(name)) fail('Unsupported property ' + name); target.setPropertyValue(name, value); }
       return { formatted: true };
     }
@@ -729,6 +755,7 @@ export function nativeOperation(request) {
       const state = metadata(); checkRevision(state);
       if (!request.state || request.state.version !== 1 || !Array.isArray(request.state.citations) || request.state.citations.length > 10000) fail('Invalid citation state');
       const desired = request.state;
+      preflightCitationShapes(state, desired);
       applyingState = desired;
       if (desired.nativeSnapshot !== undefined && desired.nativeSnapshot !== snapshot(state)) fail('Native citation positions or text changed during rendering; refresh before applying');
       for (const c of desired.citations) { text(c.text); if (c.anchor && !anchorFor(c)) fail('Citation anchor missing'); }
@@ -759,6 +786,7 @@ export function nativeOperation(request) {
     }
     if (operation === 'citations.unlink') {
       const state = metadata(); checkRevision(state);
+      preflightCitationShapes(state);
       for (const citation of [...state.citations, ...bibliographies(state)]) removeAnchor(citation, true);
       persist(null); return { unlinked: true };
     }

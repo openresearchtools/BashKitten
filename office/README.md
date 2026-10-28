@@ -99,8 +99,9 @@ released native client API even in a preset extension.
 The named native patches cover only observed missing facilities: small-screen
 extension access, a runtime proof-key path, generic document-property undo,
 Writer field-command undo/redo, generic OOXML user-defined attributes, and native
-view ownership for UNO undo contexts/actions. The latter retains the existing
-collaborative ownership checks; it does not allow one participant to undo another.
+view ownership for UNO undo contexts/actions, background shape undo, and a
+read-only native text-edit state property. These retain the existing
+collaborative ownership checks; they do not allow one participant to undo another.
 The light-canvas and Termux changes belong to their respective native owners.
 No citation algorithm is added to Office core. Recheck and retire seams when
 upstream provides the equivalent facility. `prepareOffice()` fails with 503 for
@@ -149,12 +150,18 @@ identity. The rebuilt 0009 artifact (manifest SHA256
 packaged plugin `04a026bff54d0236530ad9952cf6f607442f1a16c915c56fbf9a73a5cce65fea`)
 and the adapter's actual active-frame controller passed Writer `.uno:Undo`/Redo
 with separate authenticated views. The other view's Undo was rejected in all
-three editors. Calc/Impress shape text did not yet roll back with the group;
-patch 0010 addresses that native UNO gap and needs its own runtime proof.
-An active same-shape human typing probe also exposed a native background UNO
-write being overwritten when the human finished. The same patch uses the native
-text-edit ownership state to reject that conflict before changing model text;
-its active-editor and multi-step rollback checks remain pending.
+three editors. Calc/Impress shape text initially failed to roll back with the group.
+The subsequent 0010 artifact (manifest SHA256
+`0a7feb8700501540dc186878452958c9772df01ff73dbae7abd188e2ecd3a128`,
+plugin `a07c72a7f01480fa9ddb749943c6222723314df81ccee96a5a4ac76d74288d86`)
+passed native `.uno:Undo`/Redo and other-view rejection in all three editors,
+including copied bibliography layout and unlink/Undo/Redo. Empty auto-grow
+frames regain their original size and empty text. Native active same-shape
+writes now reject; edits elsewhere and human typing continue, and retry works
+after the human finishes. Calc's rollback after an earlier cell write moved an
+anchored shape by 0.05 mm, so the adapter also preflights all shape targets via
+the generic 0016 native read-only property before any citation write. That final
+preflight needs its own rebuilt-runtime check.
 Full backend shutdown/reopen preserved managed
 citations in DOCX/XLSX/PPTX. The generic attribute seam independently preserved
 exact 43,709-byte native attribute payloads through native clipboard and all six
@@ -176,6 +183,20 @@ passed native text/character-property inspection in all three editors. These
 latest adapter diagnostics used source scripts against the 0009 runtime; they
 are not receipts for the older packaged ZIP. These are native component diagnostics;
 rendered desktop/phone UI and visual layout acceptance remain separate.
+
+Explicit UI citation confirmation finishes only its own native shape editor
+before the citation undo group. Actual Calc/Impress checks retain the typed text
+on citation Undo, with a separate next Undo for the typing. Preview/read/cancel
+leave the editor untouched. The preflight and mutation execute in one synchronous
+native script under the native SolarMutex; another view cannot start editing
+between those two steps. CSL rendering occurs before that script and still uses
+revision/anchor checks.
+
+Native Calc cell input follows its existing last-commit behavior: both raw UNO
+cell writes and ordinary native `EnterString` can be superseded by a human's
+later Enter from an already active cell input buffer. This adapter does not add
+a separate cell-lock policy. Agents should inspect and verify the final cell
+value when another participant is editing that same cell.
 
 These component proofs are not installed product acceptance. Current work still
 includes comprehensive cross-document copy/move identity behavior, full
