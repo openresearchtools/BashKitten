@@ -238,7 +238,23 @@ def restore(directory, target):
             if run['id'] == int(os.environ.get('GITHUB_RUN_ID', '0')):
                 continue
             evidence = completed_producer(run, target)
-            if not evidence or inputs(run['head_sha']) != current:
+            if not evidence:
+                continue
+            try:
+                producer_inputs = inputs(run['head_sha'])
+            except subprocess.CalledProcessError as error:
+                # Historical artifacts can outlive the GitHub source objects
+                # needed to prove their inputs. Leave their identity untouched
+                # and use the ordinary pinned build when proof is unavailable.
+                try:
+                    response = json.loads(error.output)
+                except (TypeError, ValueError):
+                    raise error
+                if not isinstance(response, dict) or response.get('status') != '404':
+                    raise
+                print(f'Skipping Node cache producer whose source is unavailable: {run["head_sha"]}', flush=True)
+                continue
+            if producer_inputs != current:
                 continue
             subprocess.run(['gh', 'run', 'download', str(run['id']), '--repo', REPOSITORY,
                             '--name', artifact['name'], '--dir', str(directory)], check=True)

@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends build-essential autoconf automake libtool pkg-config libcap-dev libseccomp-dev libsystemd-dev libjson-c-dev libglib2.0-dev meson ninja-build libprotobuf-dev protobuf-compiler libgpgme-dev libapparmor-dev libbpf-dev libxkbcommon-dev libdrm-dev libgbm-dev libegl-dev libgles-dev python3 dpkg-dev
-          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rust-docs
       - uses: actions/cache@v4
         with:
           path: |
@@ -79,13 +79,13 @@ jobs:
           ARCH: ${{ matrix.architecture }}
           SOURCE_COMMIT: ${{ github.sha }}
         run: |
-          rustup toolchain install 1.96.0 --profile minimal
+          rustup toolchain install 1.96.0 --profile minimal --component rust-docs
           image=$(python3 -c 'import json; print(json.load(open("agent/machines/image-base.json"))["image"])')
           mkdir -p "$RUNNER_TEMP/guest-cache" "$RUNNER_TEMP/guest-packages"
           docker run --rm --network=bridge -v "$GITHUB_WORKSPACE:/source:ro" -v "$RUNNER_TEMP/guest-cache:/cache" -v "$RUNNER_TEMP/guest-packages:/output" -v "$HOME/.rustup:/rustup:ro" -v "$HOME/.cargo/bin:/rust-bin:ro" -e ARCH -e SOURCE_COMMIT -e RUSTUP_HOME=/rustup -e RUSTUP_TOOLCHAIN=1.96.0 "$image" sh -ec '
             export DEBIAN_FRONTEND=noninteractive PATH=/rust-bin:$PATH
             apt-get update
-            apt-get install -y --no-install-recommends build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev gobject-introspection libgirepository1.0-dev libdisplay-info-dev
+            apt-get install -y --no-install-recommends ca-certificates build-essential git python3 meson ninja-build gettext pkg-config libgtk-3-dev libwnck-3-dev libxfce4ui-2-dev libxfce4util-dev libxfconf-0-dev libx11-dev libxrandr-dev libdbusmenu-gtk3-dev libnotify-dev libexo-2-dev libgarcon-1-dev libgarcon-gtk3-1-dev xfce4-dev-tools wayland-protocols libwayland-dev libxkbcommon-dev libegl-dev libepoxy-dev gobject-introspection libgirepository1.0-dev libdisplay-info-dev
             version=$(cat /source/browser/bashkitten/config/version.txt)
             python3 /source/os/packaging/build.py --target linux --architecture "$ARCH" --version "$version" --source-commit "$SOURCE_COMMIT" --output /output --build-dir /cache/os --jobs 2
             python3 /source/agent/machines/build-guest.py --architecture "$ARCH" --version "$version" --revision "$SOURCE_COMMIT" --output /output --work /cache/guest
