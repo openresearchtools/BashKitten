@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 """Reuse unchanged Gecko libraries through Mozilla's Android artifact build."""
 import argparse
+import base64
 from functools import cache
 import hashlib
 import importlib.util
@@ -64,6 +65,14 @@ def native_recipe(workflow):
         recipe[action] = block[1] + '\n'.join(line for line in block[2].splitlines()
                                              if not re.match(r'      if:', line))
     return recipe
+
+
+@cache
+def historical_native_recipe(revision):
+    # Read the small immutable recipe before considering a product-tree fetch.
+    # Older trees can contain source archives removed from current history.
+    record = component.api(f'repos/openresearchtools/bashkitten/contents/{WORKFLOW}?ref={revision}')
+    return native_recipe(base64.b64decode(record['content']).decode())
 
 
 @cache
@@ -172,6 +181,7 @@ def restore(directory, target):
         raise ValueError('Native restoration must use its matching Android builder')
     current = git('rev-parse', 'HEAD').decode().strip()
     digest = native_inputs(current, target)
+    current_recipe = native_recipe(git('show', current + ':' + WORKFLOW).decode())
     abi = 'x86_64' if target == 'android-x86_64' else 'arm64-v8a'
     page = 1
     while True:
@@ -185,6 +195,21 @@ def restore(directory, target):
                 continue
             evidence = component.completed_producer(repository, run, target)
             if not evidence:
+                continue
+            try:
+                if historical_native_recipe(source[1]) != current_recipe:
+                    continue
+            except subprocess.CalledProcessError as error:
+                try:
+                    response = json.loads(error.output)
+                except (TypeError, ValueError):
+                    raise error
+                if not isinstance(response, dict) or response.get('status') != '404':
+                    raise
+                print(f'Skipping native Gecko cache producer whose source is unavailable: {source[1]}', flush=True)
+                continue
+            except ValueError:
+                # An older unsupported native recipe cannot prove a match.
                 continue
             try:
                 producer_inputs = native_inputs(source[1], target)
