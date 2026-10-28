@@ -1,0 +1,1398 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index c071f00..b1a0e3e 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -10,7 +10,10 @@ AGPL-3.0-or-later licensing.
+ ## Architecture boundaries
+ 
+ - Pi owns models, sessions, context, permissions and optional delegation. Do not
+-  introduce an agent loop, mandatory MCP server, web UI, database or daemon.
++  introduce an agent loop, mandatory MCP server, research web UI, database or
++  daemon. An explicitly requested, temporary loopback page for user-entered
++  service credentials is permitted; it must remain optional and share the CLI's
++  configuration rather than become a separate application.
+ - Skills describe capabilities and research quality criteria, not a fixed
+   sequence of stages or a compulsory schema. A spreadsheet, Markdown, CSV,
+   JSON, analysis script or a database chosen by the researcher is equally valid.
+@@ -18,6 +21,9 @@ AGPL-3.0-or-later licensing.
+   needed. Do not inject every stage into the prompt.
+ - Small, independently usable libraries and scripts implement deterministic
+   operations. The extension is a thin adapter. Never override built-in tools.
++- Zotero integration uses the running application's local HTTP API, including
++  the project's native apt-installable Termux port. Do not add Zotero cloud API
++  access or Zotero API-key setup; offline reference snapshots remain supported.
+ - Use Pi's existing full-read capability where available for files that fit;
+   otherwise read ordinary chunks through EOF. Never silently omit a source.
+ - Do not require subagents. When available, delegate bounded work with separate
+diff --git a/README.md b/README.md
+index 2fd1091..b11c174 100644
+--- a/README.md
++++ b/README.md
+@@ -7,24 +7,26 @@ agent harness. The original application remains on `main`.
+ ## Design
+ 
+ - **One umbrella skill**, with attached capabilities loaded only when needed:
+-  protocol, harvesting, PDF/vision reading, screening, extraction, appraisal,
++  protocol, harvesting, semantic search, PDF/vision reading, screening, extraction, appraisal,
+   analysis, writing and verification. These are capabilities, not a fixed workflow.
+ - **Your artifacts, your tools.** Excel, CSV, Markdown, JSON, scripts or an
+   optional database; no compulsory columns, store, model, OCR provider or subagent.
+ - **Pi owns the harness:** models, sessions, context, tool use and optional
+   delegation. Existing full-read/chunked-read capabilities are reused.
+-- **Existing Zotero APIs**, no new Zotero plugin. A read-only adapter retrieves
++- **Existing local Zotero APIs**, no new Zotero plugin. A read-only adapter retrieves
+   verified identities and CSL metadata; an offline snapshot works too.
+ - **Readable Markdown, live office citations.** Render author/date or numeric
+   labels alongside durable Zotero identities, then export Zotero-linked DOCX.
+   Use Zotero's standard LibreOffice/Word integration for Refresh and style changes.
+-- **Small separable tools.** The Crossref harvest script works independently of
+-  Pi; citation libraries run without an office process or network.
++- **Small separable tools.** Crossref and OpenAlex collectors work independently of
++  Pi; the Zotero CLI resolves identifiers and explicitly imports metadata through
++  Zotero's HTTP interfaces. Citation libraries run without an office process or
++  network. Helpers serve the user's chosen methods, fields and artifacts.
+ 
+ ## Install into Pi
+ 
+ Requires Node **22.19+** and Pi with the current `@earendil-works` extension API
+-(tested with Pi 1.3.0). Install the package, not a second harness:
++(tested with Pi 1.3.0 and 1.4.0). Install the package, not a second harness:
+ 
+ ```sh
+ pi install git:github.com/openresearchtools/systematic-reviewer@V3
+@@ -49,15 +51,30 @@ are pure JavaScript; there are no lifecycle downloads, native addons, daemons,
+ or global settings changes by the extension. Pi supplies its SDK and TypeBox
+ as peer dependencies.
+ 
++For OpenAlex, run `/review-setup` in Pi. It shows account links and lets you save
++or remove its API key locally. `node scripts/setup.mjs set openalex` provides hidden terminal entry;
++add `--web` for an optional local browser form, or use
++`node scripts/setup.mjs serve` for the same setup page. Open the URL printed by the
++helper and enter the key yourself. The browser must reach the helper on the same host.
++Helpers reuse the same private file outside the repository; `OPENALEX_API_KEY`
++overrides the saved key. Zotero uses only its running local application's
++HTTP interfaces and needs no key. See [service setup](docs/setup.md).
++
+ ## Tools
+ 
+ | Tool | Purpose |
+ | --- | --- |
+-| `review_zotero` | Search one bounded page or retrieve selected references through Zotero's existing local/Web API into a JSON snapshot |
++| `review_zotero` | Search one bounded page or retrieve selected references through Zotero's existing local API into a JSON snapshot |
+ | `review_citation` | Build a citation marker from verified IDs and optional locators/affixes |
+ | `review_render_citations` | Render the complete Markdown manuscript with CSL, preserving identities and optional bibliography |
+ | `review_export_docx` | Export a manuscript with embedded Zotero metadata; cross-office bookmarks by default, optional Word fields |
+ 
++These are the four model-callable Pi tools. The
++[complete tools and skills inventory](docs/capabilities.md) also lists the
++`/review-setup` user command, six standalone helper CLIs, eleven capability guides,
++and development checks. Skills guide the agent's work; they do not impose a
++sequence, scientific method, extraction schema, or artifact format.
++
+ Example source and rendered form:
+ 
+ ```markdown
+@@ -71,12 +88,20 @@ unless overwrite is explicit. See [citation format, API setup and usage](docs/ci
+ 
+ ## Platforms and optional applications
+ 
+-The same portable core targets **native Linux amd64, Linux arm64 and Android
+-Termux**. Tests have been run here on aarch64 Termux. A [Linux CI template](docs/ci/README.md)
+-for both architectures is included but inactive: the current GitHub login lacks
+-`workflow` scope. Do not substitute glibc Linux binaries for Termux's Bionic packages.
++The same portable core targets **Linux x86-64/amd64 and arm64, and Android Termux
++x86-64 and arm64**. Tests have run on Linux x86-64 and native Termux x86-64;
++the initial alpha was also tested on native aarch64 Termux. Linux arm64 has not
++yet been executed. See the dated [validation log](docs/implementation-plan.md)
++for exact coverage. A [Linux CI template](docs/ci/README.md) is included but
++inactive. Do not substitute glibc Linux binaries for Termux's Bionic packages.
++
++Live Zotero access uses the running local application; existing reference
++snapshots support offline rendering and export without it. On Termux, the project
++targets its owner's native Zotero port, installable with apt from the
++user's configured repository. Use that port's documented repository/package
++instructions; its installation and local API on each device remain separate
++validation checks.
+ 
+-Zotero desktop is optional when using the Web API or existing reference files.
+ LibreOffice/Word and Zotero's standard office integration are needed only for
+ interactive live-citation refresh/editing, not initial rendering/export. PDF
+ reading uses whatever appropriate tools are available: text extraction first,
+@@ -119,14 +144,63 @@ node scripts/harvest.mjs --query "evidence synthesis" --limit 100 --output harve
+ Read [harvesting](docs/harvesting.md) for search limitations, provenance and retry
+ behavior. A single Crossref search is not a comprehensive systematic search.
+ 
++The [OpenAlex collector](docs/openalex.md) takes native search/filter arguments,
++reconstructs indexed abstracts, and can read matching Zotero records to enrich
++abstracts using the original plugin's metadata-preference rule:
++
++```sh
++node scripts/openalex.mjs --query "your search" --limit 100 --output works.json
++```
++
++Independent Zotero access:
++
++```sh
++node scripts/zotero.mjs --help
++node scripts/zotero.mjs search --query "search terms" --output references.json
++node scripts/zotero.mjs target
++```
++
++The [Zotero CLI guide](docs/zotero-cli.md) covers identifier normalization,
++PMCID-to-PMID conversion, explicit imports into the selected Zotero destination,
++verified citation identities, pagination and write receipts.
++It also lists local attachments and reads Zotero's cached text with indexing
++coverage; it does not assume an imported reference has a PDF.
++
++Optional [semantic search](docs/semantic-search.md) combines titles and abstracts,
++uses an explicitly configured OpenAI-compatible embedding endpoint (including
++llama.cpp), and preserves reusable vectors and provenance:
++
++```sh
++node scripts/embeddings.mjs rank --input works.json --query "your research question" \
++  --base-url http://127.0.0.1:8080/v1 --model YOUR_EMBEDDING_MODEL \
++  --output ranked.json
++```
++
++Use the model's required query/document prefixes and verify its input limits.
++The helper does not install models or choose an exclusion threshold. The attached
++guidance explains how to investigate multiple lower-ranked titles and abstracts,
++including exceptions and missing text, before discussing a possible cutoff.
++
++Refresh inline citations in one Markdown file using live Zotero metadata:
++
++```sh
++node scripts/citations.mjs render --input draft.md --zotero local --in-place
++```
++
++The [citation guide](docs/citations.md) also covers offline snapshots and separate
++output files. Citation identity stays inline; empty or stale labels are updated,
++while ordinary brackets, links and code examples remain unchanged.
++
+ ## Status and limits
+ 
+ **Alpha implementation, not a validated research product.** Offline tests and
+-Pi's real package loader pass on Termux. LibreOffice 26.8.1.1 opened the example,
+-rendered a visually inspected PDF, and preserved all citation bookmarks and
+-custom properties through DOCX re-save and ODT conversion. An actual Zotero
+-Refresh has **not** been verified here: Zotero and its office integration were
+-not found in this backend. See the [office validation procedure](docs/office-interop.md).
++Pi's real package loader pass on Linux x86-64, with additional native Termux
++test coverage recorded in the validation log. Real DOI imports and paginated
++metadata retrieval passed against Zotero 10.0.6. Its standard LibreOffice
++integration rebuilt stale citations and bibliography in an exported DOCX,
++resolved the papers to real library items, then passed save/close/reopen/Refresh
++with LibreOffice 26.2.6.3. Word, interactive citation editing and style changes
++remain separate checks. See the [office validation procedure](docs/office-interop.md).
+ 
+ The bundled author–date style is deliberately minimal, **not APA**. Supply an
+ independent in-text CSL style for real work and install it in Zotero before
+@@ -138,13 +212,17 @@ migration or automatic unreviewed screening/extraction.
+ 
+ ## Documentation
+ 
++- [All tools, commands, helpers and skills](docs/capabilities.md)
++- [Optional service setup: Pi, terminal or local browser](docs/setup.md)
+ - [Implementation plan and validation log](docs/implementation-plan.md)
+ - [Contributor instructions](AGENTS.md)
+ - [Umbrella review skill](skills/systematic-review/SKILL.md)
+ - [Research artifacts and handoffs](docs/research-artifacts.md)
+ - [Citations and Zotero API](docs/citations.md)
++- [Standalone Zotero CLI and DOI import](docs/zotero-cli.md)
+ - [Office interoperability](docs/office-interop.md)
+ - [Harvesting](docs/harvesting.md)
++- [OpenAlex abstracts and Zotero enrichment](docs/openalex.md)
+ - [Citation asset licensing](assets/NOTICE.md)
+ 
+ ## License
+diff --git a/docs/ci/README.md b/docs/ci/README.md
+index d62430b..6af5396 100644
+--- a/docs/ci/README.md
++++ b/docs/ci/README.md
+@@ -14,7 +14,9 @@ to `.github/workflows/test.yml` and commit it on `V3`. Review it before enabling
+ it; the workflow only needs read access to repository contents. It installs the
+ Pi host peers into the CI checkout, not into a system/global Pi installation.
+ 
+-Until a Linux CI run completes, the amd64/arm64 targets are portable-code design
+-targets; the recorded execution evidence is aarch64 Android Termux. Office tests
+-are optional and separate, and neither these checks nor the CI template can
+-validate a real Zotero toolbar Refresh without the installed integration.
++Linux x86-64 checks have now been run locally with Node 22.22.1, alongside native
++Android Termux x86-64 checks with Node 24.18.0. The original alpha also has native
++Termux arm64 evidence. Linux arm64 still needs an actual run; CI remains inactive.
++See the dated [validation log](../implementation-plan.md) for what each run
++covered. Office checks are separate: offline tests and CI cannot establish a
++successful Zotero Refresh without the installed standard integration.
+diff --git a/docs/citations.md b/docs/citations.md
+index 8c7e875..6e63b12 100644
+--- a/docs/citations.md
++++ b/docs/citations.md
+@@ -7,7 +7,9 @@ running office application is needed to render or export.
+ 
+ ## Get verified identities
+ 
+-Use `review_zotero` against Zotero's existing local API (default) or Web API.
++Use `review_zotero` against the running Zotero application's existing local API.
++The independent [Zotero CLI](zotero-cli.md) provides the same search/snapshot
++operations without loading the extension, plus an explicit DOI-import command.
+ Local access must be enabled in Zotero Settings → Advanced → “Allow other
+ applications on this computer to communicate with Zotero”. A local query:
+ 
+@@ -28,24 +30,22 @@ Fetch selected verified identities into a snapshot:
+ ```
+ 
+ IDs in these examples are **synthetic**. Replace them with identities retrieved
+-from your actual library, never with guessed keys. For the Web API, add
+-`"mode":"web"` and an explicit library for search. Set `ZOTERO_API_KEY` in the
+-process environment for private libraries; never pass it in prompts, URLs,
+-reference files or tool arguments. Public libraries need no key. No network
+-request is made merely by loading the package.
++from your actual library, never with guessed keys. Local Zotero needs no API key
++or mode selection. No network request is made merely by loading the package.
+ 
+ Local API URL defaults to `http://127.0.0.1:23119/api/`. `ZOTERO_LOCAL_URL` can
+ select a different loopback host/port, but must retain `/api/`; forwarding an
+ unauthenticated local library endpoint to the network is not supported. API
+ reads time out, honor bounded rate-limit waits, reject redirects, and cap
+ responses at 10 MiB. A long backoff is reported for retry later, not bypassed.
+-Local Zotero 10 instance IDs and item versions are recorded as provenance;
+-local versions must not be compared with Web API versions.
++Local Zotero 10 instance IDs and item versions are recorded as provenance.
+ 
+-The tool currently reads bibliographic metadata only. Other Zotero work can use
+-its documented API with an appropriate small adapter; it need not be added to
+-this extension. Zotero imports/writes require separate user authorization and
+-are not silently performed by harvesting or rendering. Never edit SQLite.
++The extension tool reads bibliographic metadata only. The standalone CLI can
++import Crossref DOI metadata through Zotero's existing Connector HTTP importer
++when requested. Other Zotero work can use its documented local interfaces with
++an appropriate small adapter; it need not be added to this extension. Follow the user's existing
++authorization for imports/writes; harvesting and rendering never silently import
++items. Never edit SQLite.
+ 
+ ## Reference snapshot
+ 
+@@ -68,15 +68,15 @@ An ordinary JSON file is sufficient; it is **not an extraction schema**:
+ 
+ `itemData` is CSL-JSON, not Zotero's native `data` object. Snapshot entries may
+ also carry `provenance`; `review_zotero` records source URL, retrieval time,
+-source mode, item version and local server ID. Extra snapshot-level data such
+-as pagination is allowed. Combine pages with ordinary code, rejecting conflicts
++item version and local server ID. Extra snapshot-level data such as pagination
++is allowed. Combine pages with ordinary code, rejecting conflicts
+ rather than keeping two entries with the same ID. Rendering rejects duplicates.
+ 
+ Identities are `users/<actualUserID>/items/<KEY>`,
+ `groups/<actualGroupID>/items/<KEY>`, or the real unsynced
+-`users/local/<localUserKey>/items/<KEY>`. Web API retrieval cannot fetch unsynced
+-local IDs. `users/0`, bare item keys and a local numeric SQLite library ID are
+-not valid citation identities. Standard Zotero HTTP(S) item URIs are accepted
++`users/local/<localUserKey>/items/<KEY>`. `users/0`, bare item keys and a local
++numeric SQLite library ID are not valid citation identities. Standard Zotero
++HTTP(S) item URIs are accepted
+ and normalized; office metadata uses Zotero's canonical historical
+ `http://zotero.org/...` URI. The HTTP URI is an identifier, not an HTTP request.
+ 
+@@ -92,6 +92,13 @@ For a single item with no locator, write:
+ A finding [cite](sr-cite:users/123/items/ABCD2345).
+ ```
+ 
++An empty label, `[](sr-cite:users/123/items/ABCD2345)`, is equally valid when only
++the verified identity is known. The `sr-cite:` target identifies the citation;
++the label is never used to infer its source. Both empty and stale labels are
++replaced on complete-document rendering. Ordinary brackets and unrelated links
++are left alone; literal examples in code are not processed. The IDs shown here
++are synthetic placeholders, not real references.
++
+ After `review_render_citations`:
+ 
+ ```markdown
+@@ -147,6 +154,33 @@ range. Do not put citations inside it or nest it in a list/quote.
+ 
+ ## Render and export
+ 
++For a single manuscript that carries its own inline citation identities, use
++the standalone refresh helper:
++
++```sh
++node scripts/citations.mjs render --input draft.md --zotero local --in-place
++```
++
++It fetches only the cited identities from the running Zotero API into memory,
++reconciles every citation in document order, and updates the same Markdown file.
++No reference snapshot or second manuscript is written. Empty labels receive
++citation text; existing labels are replaced regardless of their content. CSL
++controls first/subsequent-citation rules, numbering and disambiguation. The
++`sr-cite:` identity and optional locators remain authoritative throughout.
++
++Use `--style /path/to/style.csl` for a chosen independent in-text CSL style.
++For offline work, replace `--zotero local` with `--references references.json`.
++Local access accepts `ZOTERO_LOCAL_URL` or `--local-url`. To keep the source
++unchanged, replace `--in-place` with `--output new-draft.md`; an existing
++destination is refused.
++
++Lookup, parsing or rendering failures leave the manuscript unchanged. In-place
++refresh checks for edits made while metadata was being fetched and refuses to
++overwrite them. This is not a lock against another editor: save edits before
++refreshing. Literal code and ordinary brackets/links are never citation matches.
++
++The extension's file-based tools remain available too:
++
+ ```json
+ {"input":"draft.md","references":"references.json","output":"report.md"}
+ ```
+@@ -195,6 +229,5 @@ Zotero's office integration. DOCX export rejects unsupported Markdown rather
+ than silently discarding it. Keep the Markdown and reference snapshot as the
+ editable/reproducible source; after office-side edits, agree on one master copy.
+ 
+-Sources: [Zotero API basics](https://www.zotero.org/support/dev/web_api/v3/basics),
+-[local API](https://www.zotero.org/support/dev/web_api/v3/local_api), and
++Sources: [Zotero local API](https://www.zotero.org/support/dev/web_api/v3/local_api) and
+ [CSL data schema](https://github.com/citation-style-language/schema/blob/master/schemas/input/csl-data.json).
+diff --git a/docs/implementation-plan.md b/docs/implementation-plan.md
+index 59ce4f2..75538db 100644
+--- a/docs/implementation-plan.md
++++ b/docs/implementation-plan.md
+@@ -23,8 +23,8 @@ old assumptions about where data must live or how an agent must perform work.
+    identities and optional locators. A deterministic renderer replaces only
+    visible labels with CSL output. Ordinary Markdown viewers show citations.
+    Exports retain identities and metadata as live Zotero fields, not flat text.
+-5. **Optional adapters.** Local Zotero's read-only API, Zotero's authenticated
+-   Web API and offline CSL snapshots are independent sources. Harvest helpers
++5. **Local reference integration.** Local Zotero's read-only API and offline
++   CSL snapshots are independent sources. Harvest helpers
+    remain standalone; neither network access nor a database is needed to write
+    and export a report from an existing snapshot.
+ 6. **Context-aware reading.** Prefer the host's existing full-read operation
+@@ -128,7 +128,10 @@ Actions workflow. The original workflow-containing commit was never published.
+   exclusive-copy fallback retains no-clobber behavior; full publication atomicity
+   is not claimed for that fallback.
+ 
+-### Remaining integration gates / deliberate limits
++### Gates and limits at initial publication (22 October 2026)
++
++This records the initial alpha's evidence. The dated follow-up below supersedes
++the local-API and LibreOffice Refresh gaps; unlisted gates remain open.
+ 
+ - **Actual Zotero-toolbar Refresh remains unverified.** This backend has
+   LibreOffice but no discoverable Zotero installation/standard integration.
+@@ -145,3 +148,311 @@ Actions workflow. The original workflow-containing commit was never published.
+   generator, footnote/endnote style support, embedded images, universal Markdown
+   rendering, or legacy project migration. These are separate future capabilities,
+   not hidden fallbacks or requirements for review/extraction work.
++
++### Main-profile live integration (24 October 2026)
++
++- Reaffirmed the skills-first design: scientific methods, fields, sequence,
++  artifacts and reference-manager choice remain with the researcher/agent.
++  Helpers perform bounded operations. The extension still has exactly four
++  tools; no new orchestration or background service was added.
++- Added a standalone Zotero CLI for target inspection, search, selected-ID
++  snapshots and explicit imports through the existing Connector HTTP importer.
++  Metadata retrieval, identity verification and output publication stay separate
++  from scientific decisions. Existing files are protected; imports are never
++  automatically retried after an uncertain write response.
++- Used the user's **main native Zotero 10.0.6 profile** and selected collection
++  for two public test records: DOI `10.1136/bmj.n71` and
++  `10.1371/journal.pmed.1000097`. The app's own importer saved Crossref RIS
++  metadata; no database access or custom Zotero plugin was used. Retrieved both
++  records through the local HTTP API with one-record pagination, then fetched
++  their verified library-qualified identities into a citation snapshot. A
++  mismatching selected-target guard rejected an import before writing.
++- Rendered an APA manuscript from those actual records: three citation clusters,
++  two bibliography entries, repeated references and a test page locator. Rendering
++  was idempotent. Exported bookmark and Word-field DOCX variants.
++- **Actual standard Zotero Refresh passed in main LibreOffice.** With LibreOffice
++  26.2.6.3 and bundled integration 9.0.2, activated the Writer document and invoked
++  the same standard UNO `refresh` entry point as the toolbar. Zotero rebuilt all
++  deliberately stale citation/bibliography caches, resolved the canonical URIs
++  to library items, and preserved Unicode and four live bookmark ranges. Saved,
++  closed, reopened, refreshed again and saved successfully. Debug logging was
++  disabled afterward. An earlier dispatch without an active Writer frame failed
++  in the standard plugin; activating the frame fixed the test, with no exporter
++  change needed.
++- Separately ran LibreOffice DOCX re-save, ODT conversion and PDF export on the
++  synthetic example: all 12 custom properties and four bookmark ranges survived.
++  These structural checks remain distinct from the actual Refresh test above.
++- Temporary app profiles created during initial setup were removed at the user's
++  request. The real test papers remain in the user's selected Zotero collection.
++  Generated documents, snapshots, receipts and validation evidence stay under
++  ignored `output/live-zotero/`, outside the committed package.
++
++Still unverified: Word integration, standard Add/Edit Citation and style-change
++dialogs, embedded-only reference fallback, live Web API access, and Linux arm64.
++The original native arm64 Termux evidence does not validate later code changes.
++The GitHub Actions template remains inactive. No legacy database migration,
++DOCX-to-Markdown importer, native ODT generator, images or footnote-style support
++was added.
++
++### Identifier, abstract and inline-citation follow-up (24 October 2026)
++
++- Compared the original plugin at `main` commit `859824b`. Its native identifier
++  payloads were DOI, PMID, arXiv and ISBN; the custom conversion was PMCID to PMID.
++  The independent resolver now retains that distinction, normalization and
++  provenance. HTTP imports use Zotero's existing RIS/PubMed XML/BibTeX translators.
++  ISBN, explicitly versioned arXiv and PubMed books are directed to native Zotero
++  lookup before any write, instead of building another translator service.
++- Live checks converted `PMC2707599` to verified PMID `19621072` and its DOI.
++  Imported PMID `100` and arXiv `1706.03762`, both without a DOI, plus PMID
++  `26978244` (FAIR Principles), into the same main-profile collection. Five test
++  records in total remain there. This tests metadata transport, not scientific
++  recommendations or inclusion decisions.
++- Added a standalone OpenAlex collector with source-preserving JSON, bounded
++  pagination and reconstruction of `abstract_inverted_index`. Optional read-only
++  Zotero enrichment requires exact DOI/PMID matches and rejects conflicting or
++  ambiguous identities. Preserved the original metadata rule: retain Zotero text
++  unless shorter than 100 trimmed characters and OpenAlex is longer. Raw OpenAlex
++  metadata, Zotero source text and provenance remain available independently of
++  the researcher's eventual extraction format.
++- Live OpenAlex checks retrieved the PRISMA 2020 and FAIR records. Reconstructed
++  the PRISMA abstract (877 characters) where the Zotero entry lacked one; for FAIR,
++  matched the main-profile Zotero item by both DOI and PMID and selected its
++  851-character abstract according to the inherited rule. Empty-source cases,
++  malformed indices and conflicting matches also have offline regression tests.
++- Added a render-only citation CLI using the existing `sr-cite:` link grammar.
++  With live metadata in memory it updates one manuscript in place; offline
++  snapshots and a separate output are optional alternatives. Real main-profile
++  testing refreshed empty and stale labels, preserved ordinary brackets, an
++  author/year-looking ordinary bracket and a literal code example, retained
++  citation identities, and produced identical Markdown on a second refresh.
++  Regression tests cover first/subsequent CSL rules and complete-document order.
++
++### User-controlled service setup (24 October 2026)
++
++- Added one user-invoked `/review-setup` Pi command, with service status,
++  official account/key links, local key entry/replacement/removal, and guidance
++  for hidden terminal entry. The four model tools remain unchanged in count.
++  Pi's standard dialog echoes input while typing but passes it to the command
++  handler without adding a model message. Noninteractive use reports CLI guidance.
++- Added a shared per-user private credential file outside the project, using
++  XDG configuration or the user's home directory. Environment variables take
++  precedence. This is filesystem-protected plaintext, not an encrypted keychain.
++  Status and errors omit values, suffixes and lengths. Local Zotero never needs
++  these credentials or reads the Web configuration.
++- OpenAlex harvesting, optional Zotero Web enrichment, the Zotero CLI,
++  standalone citation refresh, and the Pi Zotero tool reuse configured keys.
++  Pure library operations still accept explicit keys without a config dependency.
++  Existing public/unauthenticated access remains available where supported.
++- Tested private file permissions, malformed config, bounded hidden/stdin entry,
++  cancellation, environment precedence, no secret output, and saved-key reuse
++  across helpers. Exclusive mutation locks reject overlapping updates instead
++  of silently discarding another service's key. Real registered-command testing uses the installed Pi loader;
++  a real terminal prompt also saved/removed a synthetic key with no input echo.
++  All setup tests use isolated synthetic credentials. No real account key was
++  read, saved, or remotely validated; setup itself makes no network requests.
++
++### Executable-source verification before service setup (24 October 2026)
++
++| Target | Execution evidence |
++| --- | --- |
++| Linux x86-64, Node 22.22.1 | `npm test`: 116 passed, no failures/skips; `npm run check`: 28 JS modules and 11 skills; real Pi 1.3.0 package-loader smoke; synthetic Markdown and both DOCX modes; package dry run |
++| Native Android Termux x86-64, Node 24.18.0 | Same 116 tests passed, no failures/skips; same checks and synthetic exports; executable-source hashes match final sources |
++| Native Android Termux arm64 | Initial alpha's 64-test evidence above; this follow-up has not been rerun there |
++| Linux arm64 | No execution evidence yet; inactive CI template includes this target |
++
++The Android x86-64 run used the existing Android 17 Cuttlefish device, native
++Termux Node under the Termux UID via `run-as` (SELinux `runas_app` context).
++Its isolated code-test directory was removed; app profiles/settings were not
++changed. No Pi peer was installed there, so that run does not claim Android
++package-loader validation. The package dry run includes all helpers and supporting
++skills and excludes generated outputs, reference libraries and credentials.
++
++Additional regressions cover exact-identifier conflicts during enrichment,
++malformed indexed abstracts, source edits during citation refresh, and import
++preflight matching Zotero's accepted RIS/BibTeX/XML grammar. Metadata-only imports
++reject attachment fields and unexpected extra records before Connector writes.
++
++### Final verification including service setup (24 October 2026)
++
++- Linux x86-64, Node 22.22.1: **142 tests passed**, no failures or skips;
++  resource/syntax checks passed for **34 JS modules and 11 skills**. Pi 1.3.0's
++  installed loader discovered one umbrella skill, four tools and the setup
++  command. Synthetic setup exercised the actual command, saved-key Web fallback,
++  local mode independence, and secret-free outputs without a network or model call.
++- Native Android Termux x86-64, Node 24.18.0: the same **142 tests**, resource
++  checks and synthetic Markdown/bookmark-DOCX/Word-field-DOCX example passed.
++  Executable/package hashes matched the tested snapshot. The isolated code-test
++  directory was removed; no application profile or setting was changed. The
++  setup run used a temporary config override, never the user's credential file.
++- The Linux synthetic example passed in both DOCX modes; the 65-file package
++  dry run includes setup libraries, helpers and guidance and excludes generated
++  review outputs and credentials. `git diff --check` passed.
++- Latest ARM64 execution and Android Pi-loader checks remain unverified. The
++  real main-profile Zotero/LibreOffice checks above are separate evidence; this
++  setup follow-up does not claim live account authentication with a real API key.
++
++### Optional browser setup and inventory (24 October 2026)
++
++- At the user's explicit request, added a narrow exception to the architecture
++  boundary for a temporary credential setup page. `setup.mjs set SERVICE --web`
++  focuses one service; `setup.mjs serve` opens both. The CLI prints a capability
++  URL for the user or their agent's browser. It does not launch a browser or
++  become a daemon, and it adds no dependencies or model tools.
++- The page uses the same credential library, showing account links and safe
++  status, password entry, save/replace/remove and Done. Existing credentials are
++  never returned or prefilled. It binds only `127.0.0.1`, expires within ten
++  minutes, and stops on Done or interruption. Requests have size/time bounds;
++  capability routes, exact Host/Origin checks and restrictive response headers
++  protect the local credential endpoint. A remote browser needs an explicitly
++  configured route to the host's loopback address.
++- Actual in-app browser testing used a temporary synthetic config: saved a fake
++  key, reloaded to verify status persistence and empty password input, removed
++  the key, and selected Done. The CLI exited successfully. Screenshot evidence
++  is under ignored `output/setup-web/`; the temporary config directory was
++  removed and real credentials/profiles were untouched.
++- **157 tests passed** on Linux x86-64 (Node 22.22.1) and native Android Termux
++  x86-64 (Node 24.18.0), with no failures/skips. Checks passed for **37 modules
++  and 11 skills**. HTTP tests exercise actual loopback requests, origin/host
++  rejection, malformed/oversized/slow bodies, expiry and cancellation. Android
++  executable hashes matched the tested sources and its temporary directory was
++  removed. Current ARM64 code and Android Pi-loader validation remain untested.
++- Installed Pi discovery still passed with one umbrella skill, four model tools
++  and the setup user command. Synthetic Markdown and both DOCX modes passed.
++  The 69-file package dry run includes the server and inventory docs, excluding
++  generated outputs and credentials. Added [the complete capability inventory](capabilities.md)
++  to distinguish model tools, helper CLIs and optional research guidance.
++
++### Local-only Zotero (24 October 2026)
++
++- The project owner confirmed their native Zotero port is apt-installable in
++  Termux and requested local-only integration. Removed Zotero cloud endpoints,
++  API-key use, model-tool mode selection, CLI `--mode`, and Zotero credential
++  controls from terminal, Pi and browser setup. All live Zotero operations use
++  the running application's loopback HTTP API; offline snapshots remain valid.
++  Earlier dated Web-API setup/validation entries above describe retired work.
++- OpenAlex retains its optional key and browser setup. Zotero now has only local
++  connection guidance. Legacy stored Zotero fields are ignored, hidden and left
++  intact during OpenAlex updates; no real credential file was read or changed.
++  Old cloud requests fail before fetching rather than silently reading a local
++  library. Local library scopes, groups, canonical identities, server checks,
++  identifier imports and citation refresh are preserved.
++- Updated active documentation, capability guidance and contributor boundaries
++  for the owner's native Termux port without guessing package repositories or
++  claiming a new Zotero installation test. A real read-only Connector check
++  still reached the user's running main Linux Zotero profile and its C1 target.
++- **162 tests passed** with no failures/skips on Linux x86-64 and native Android
++  Termux x86-64; checks passed for **37 modules and 11 skills**. Installed Pi
++  discovery, local-only tool execution, synthetic Markdown and both DOCX modes
++  passed. Android executable/package hashes matched and its temporary code-test
++  directory was removed without changing app profiles/settings. Package dry-run
++  and `git diff --check` passed. Current ARM64 and Android Pi-loader coverage
++  remain unchanged from the limitations recorded above.
++
++### Ten-paper use trial and semantic ranking (24 October 2026)
++
++Acceptance for this follow-up includes an actual model-driven Pi run, ten real
++local Zotero references, source-grounded extraction and a complete cited report,
++an audited office refresh, and real local embeddings over a mixed corpus. The
++report is a bounded methods demonstration, not a validated systematic review.
++All real references, source text, model logs, embeddings and report outputs stay
++under ignored `output/trial-10-papers/`; they are not package fixtures.
++
++- Real OpenAlex retrieval exposed malformed abstract positions that caused a
++  whole harvest to fail. Decoding remains strict, but an affected record now
++  retains its original metadata and an explicit `abstractIssue`, empty decoded
++  abstract, and warning count. Other records remain usable. Invalid identities,
++  pages and request failures still abort publication; no words are invented.
++- Added a read-only Zotero attachment manifest and cached-text helper. It
++  verifies the library and parent relationship, exposes pagination and indexing
++  coverage, and distinguishes missing, empty and partial text. It does not
++  download, copy or index PDFs. Live trial items had no attachments, so actual
++  cached-text success is a separate unfulfilled gate; synthetic tests cover it.
++- Added an optional standalone embedding/cosine helper and capability guide.
++  Combined titles and abstracts retain stable IDs, original metadata, missing
++  text flags, explicit model/prefix recipe and reusable vectors. No threshold
++  chooses eligibility. The guide calls for inspecting multiple texts around and
++  below any proposed boundary, including lower/random bands, missing abstracts
++  and relevant exceptions; a negative sample does not prove the unseen tail empty.
++- At the owner's explicit request, configured the existing native llama.cpp
++  router and downloaded a pinned Apache-2.0 Nomic embedding GGUF into the user's
++  model cache. This is a local test runtime outside the package, not a bundled
++  model, automatic installer, mandatory daemon or Pi replacement. The extension
++  still exposes four tools and one umbrella skill; eleven capability guides
++  and six standalone research/setup CLIs are now available.
++
++- Imported ten selected methods reports into the main local Zotero collection,
++  verified canonical identities, and retrieved six full XML article texts plus
++  four abstracts. A linked erratum was retrieved and added as an eleventh
++  supporting reference; the sample remains ten main reports. Original metadata
++  and article texts remain unchanged. Source checks found a publication-year
++  mismatch and an internally inconsistent table aggregate, recorded separately
++  from software defects. Figures/PDFs and linked supplements were not inspected.
++- Pi 1.4.0 with the user's existing `openai-codex/gpt-6.1-sol` configuration ran
++  actual model/tool calls through its installed RPC client. The initial run read
++  all sixteen designated evidence text files through EOF in bounded chunks, then
++  used all four native review tools to produce extraction, Markdown and DOCX.
++  Revisions incorporate separate agent audits and the supporting correction;
++  this is not independent human validation.
++- The native CUDA router ranked 153 distinct OpenAlex records with Nomic Embed
++  Text v1.5: 154 paper/query inputs, 768 dimensions, explicit task prefixes and
++  pinned weights. The exact-input tokenizer audit found a maximum of 1,189
++  tokens, within the configured 2,048-token limit. Twenty records initially
++  lacked usable abstracts; no score-based exclusions were made.
++- An identical live cache rerun made zero requests and reproduced every score.
++  Adding the verified missing abstract to one record recomputed one vector,
++  reused 153 and left all other vectors/scores unchanged. Its score decreased
++  from 0.7789 to 0.7653 (rank 33 to 38), reinforcing that completeness and
++  scientific eligibility cannot be inferred from a universal numeric boundary.
++- **191 offline tests passed** with no failures/skips on Linux x86-64 and native
++  Android Termux x86-64. Checks passed for **42 modules and 12 skill files**;
++  installed Pi discovery, synthetic Markdown and both DOCX modes passed. The
++  Termux source snapshot matched the tested executable files and its temporary
++  code directory was removed. The 76-file package dry run excluded credentials,
++  model weights, source corpora and generated outputs; `git diff --check` passed.
++  Current ARM64 execution and Android Pi-loader coverage remain unverified.
++
++- Separate source/claim reconciliation passed after revision. The final Markdown
++  has 31 citation occurrences, exactly 11 verified scoped Zotero identities and
++  11 bibliography entries; a second render is identical. A second audit verified
++  that root's final status-only prose edits preserve every substantive finding,
++  limitation and identity. Actual Pi artifacts, final hashes, source checks and
++  read-coverage logs are retained separately in the ignored trial directory.
++- Semantic assessment scanned all 153 titles and recorded 53 judgments: 33
++  complete available abstract/description fields and 20 missing-abstract cases.
++  It found 15 relevant, 10 off-topic and 28 uncertain records, leaving 100
++  available abstract fields unread. Six relevant records fell below the explored
++  0.80 line, including one at 0.7456. Band/tail/random sampling, exact text and
++  judgments were independently checked. No records were excluded and no recall
++  estimate or human adjudication is claimed. Supporting files and overlapping
++  versions are distinguished from independent studies.
++- Independent code review of the embeddings library/CLI, all sixteen tests and
++  shared request/file helpers found no material functional defects; the sixteen
++  embedding tests passed again. Server-side token truncation and changed weights
++  behind an unchanged model alias remain explicit external limitations.
++- The first actual main-profile Office/Zotero pass rebuilt all 31 citation labels
++  and 11 bibliography entries, retained the scoped identities, and passed a
++  save/reopen/refresh challenge. Six-page visual inspection found two pagination
++  defects: a single-line paragraph start and a reference DOI stranded on the next
++  page. Added normal-paragraph widow/orphan control and kept bibliography entries
++  together in the exporter. All 191 Linux tests, checks, installed Pi discovery,
++  synthetic examples and package dry-run passed again. The regenerated DOCX is
++  the only report artifact whose content/hash changed.
++
++- Native Termux x86-64 reverification of the final pagination code also passed
++  all 191 tests, checks and both synthetic DOCX modes. Executable/package hashes
++  matched; the temporary test directory was removed. Durable results and hashes
++  are retained in the trial's ignored verification directory.
++
++- The corrected report passed genuine Zotero Refresh and save/close/reopen/Refresh
++  in the user's main LibreOffice/Zotero profiles. Each challenge deliberately
++  invalidated visible caches and observed all 42 text runs restored. All 31
++  citation occurrences, one bibliography bookmark, eleven canonical references,
++  ordered citation metadata and document preferences survive the round trip.
++  The exported source is unchanged. Saved DOCX/PDF and detailed evidence remain
++  in the ignored `office-validation` directory; the initial pass is preserved.
++- All six final PDF pages were visually inspected with separate agent review.
++  The body orphan and lone DOI were resolved, with no clipping, overlap or
++  missing glyphs. Zotero Refresh applies its own bibliography style, so one
++  reference still splits normally with two lines on each page; the exporter
++  does not dictate the refreshed application's paragraph layout. This report has
++  no tables, so this visual check does not extend table coverage.
+diff --git a/docs/office-interop.md b/docs/office-interop.md
+index c6ceaf6..cae16d8 100644
+--- a/docs/office-interop.md
++++ b/docs/office-interop.md
+@@ -133,6 +133,15 @@ Record the office and Zotero versions and the storage mode tested. Until these
+ checks are performed, describe exports as structurally validated, with live
+ plugin interoperability pending. Never test against a researcher's only copy.
+ 
++On 24 October 2026, bookmark-mode exports passed genuine Refresh and
++save/close/reopen/Refresh in the user's main Zotero 10.0.6 and LibreOffice
++26.2.6.3 profiles with the standard integration 9.0.2. The test replaced cached
++citations and bibliography with stale text first, then verified regeneration and
++resolution to the actual library records. Repetition, a multi-item cluster, a
++locator and Unicode survived. This validates that path, not every procedure
++above: Word, Add/Edit Citation, style-change dialogs and embedded-only fallback
++remain untested. See the [dated validation log](implementation-plan.md).
++
+ ## Protocol references
+ 
+ The implementation is a fresh serializer, not a port of Zotero or the old V1
+diff --git a/extensions/index.js b/extensions/index.js
+index 2df9798..9f215e4 100644
+--- a/extensions/index.js
++++ b/extensions/index.js
+@@ -5,6 +5,7 @@ import { citationMarker } from '../lib/markdown.mjs';
+ import { renderDocument } from '../lib/citations.mjs';
+ import { ZoteroClient } from '../lib/zotero.mjs';
+ import { readText, writeOutput } from '../lib/io.mjs';
++import { reviewSetup } from '../lib/review-setup.mjs';
+ 
+ const namespace = { name: 'systematic_review', description: 'Zotero citation interchange for flexible research artifacts. Review methodology is in the systematic-review skill.' };
+ const citationItem = Type.Object({
+@@ -44,6 +45,11 @@ async function renderedInput(params, ctx, signal) {
+ 
+ /** Native Pi package entry point. No model loop, background process or global settings. */
+ export default function systematicReviewer(pi) {
++  pi.registerCommand('review-setup', {
++    description: 'Configure an OpenAlex key locally, or show account links and configuration status',
++    handler: reviewSetup,
++  });
++
+   pi.registerTool({
+     name: 'review_citation', label: 'Build citation marker', namespace,
+     description: 'Build a durable Markdown citation marker from verified Zotero identities and optional locators. Insert the marker with ordinary edit/write, then render the WHOLE document with review_render_citations. Never invent an item ID.',
+@@ -89,11 +95,10 @@ export default function systematicReviewer(pi) {
+ 
+   pi.registerTool({
+     name: 'review_zotero', label: 'Read Zotero references', namespace,
+-    description: 'Search Zotero or fetch verified item identities into a portable CSL snapshot; no custom Zotero plugin or SQLite access. Uses existing local API by default, or Web API with optional ZOTERO_API_KEY from environment. Explicit output file required. Search returns one bounded page; use nextStart to continue. Does NOT modify Zotero.',
++    description: 'Search the running Zotero app or fetch verified item identities into a portable CSL snapshot through its local HTTP API; no API key, custom Zotero plugin or SQLite access. Explicit output file required. Search returns one bounded page; use nextStart to continue. Does NOT modify Zotero.',
+     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+     parameters: Type.Object({
+       operation: Type.Union([Type.Literal('search'), Type.Literal('snapshot')]),
+-      mode: Type.Optional(Type.Union([Type.Literal('local'), Type.Literal('web')])),
+       ids: Type.Optional(Type.Array(Type.String(), { minItems: 1, maxItems: 100 })),
+       library: Type.Optional(Type.String({ description: 'users/<actualID> or groups/<actualID>; users/0 is permitted only for local search' })),
+       query: Type.Optional(Type.String()), limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 100 })),
+@@ -104,7 +109,8 @@ export default function systematicReviewer(pi) {
+     async execute(_id, params, signal, _update, ctx) {
+       const output = local(ctx, params.output);
+       return withFileMutationQueue(output, async () => {
+-        const client = new ZoteroClient({ mode: params.mode ?? 'local', apiKey: process.env.ZOTERO_API_KEY, localUrl: process.env.ZOTERO_LOCAL_URL });
++        if (params.mode !== undefined && params.mode !== 'local') throw new Error('Zotero uses only the local HTTP API; omit mode.');
++        const client = new ZoteroClient({ localUrl: process.env.ZOTERO_LOCAL_URL });
+         const data = params.operation === 'snapshot' ? await client.snapshot(params.ids, { signal }) : await client.search({ library: params.library, query: params.query, limit: params.limit, start: params.start, signal });
+         await writeOutput(output, `${JSON.stringify(data, null, 2)}\n`, { overwrite: params.overwrite, signal });
+         return result({ path: output, count: data.items.length, preview: data.items.slice(0, 20).map(item => ({ id: item.id, title: String(item.itemData.title ?? '').slice(0, 250) })), page: data.page ?? null });
+diff --git a/lib/docx.mjs b/lib/docx.mjs
+index 7961aae..4be1f04 100644
+--- a/lib/docx.mjs
++++ b/lib/docx.mjs
+@@ -340,7 +340,7 @@ class Document {
+ 
+ function styles() {
+   const headings = Array.from({ length: 6 }, (_, i) => `<w:style w:type="paragraph" w:styleId="Heading${i + 1}"><w:name w:val="heading ${i + 1}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="${i}"/></w:pPr><w:rPr><w:b/><w:sz w:val="${[36, 32, 28, 26, 24, 24][i]}"/></w:rPr></w:style>`).join('');
+-  return `${DECL}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="120"/></w:pPr></w:style>${headings}<w:style w:type="character" w:styleId="InlineCode"><w:name w:val="Inline Code"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="120"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Bibliography"><w:name w:val="Bibliography"/><w:basedOn w:val="Normal"/><w:pPr><w:ind w:left="360" w:hanging="360"/></w:pPr></w:style></w:styles>`;
++  return `${DECL}<w:styles xmlns:w="${W}"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:widowControl/><w:spacing w:after="120"/></w:pPr></w:style>${headings}<w:style w:type="character" w:styleId="InlineCode"><w:name w:val="Inline Code"/><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="CodeBlock"><w:name w:val="Code Block"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="120"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Bibliography"><w:name w:val="Bibliography"/><w:basedOn w:val="Normal"/><w:pPr><w:keepLines/><w:ind w:left="360" w:hanging="360"/></w:pPr></w:style></w:styles>`;
+ }
+ 
+ /**
+diff --git a/lib/zotero.mjs b/lib/zotero.mjs
+index b53f032..206af52 100644
+--- a/lib/zotero.mjs
++++ b/lib/zotero.mjs
+@@ -1,13 +1,13 @@
+ import { setTimeout as delay } from 'node:timers/promises';
+ import { normalizeId, zoteroUri, validateSnapshot } from './references.mjs';
+ 
+-function baseUrl(mode, localUrl) {
+-  if (mode === 'web') return new URL('https://api.zotero.org/');
+-  if (mode !== 'local') throw new Error('Zotero mode must be local or web');
++export class ZoteroError extends Error {}
++
++function baseUrl(localUrl) {
+   const url = new URL(localUrl ?? 'http://127.0.0.1:23119/api/');
+   if (url.protocol !== 'http:' || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+       || url.username || url.password || url.search || url.hash || url.pathname !== '/api/') {
+-    throw new Error('The Zotero local API URL must be loopback HTTP with path /api/');
++    throw new ZoteroError('The Zotero local API URL must be loopback HTTP with path /api/');
+   }
+   return url;
+ }
+@@ -15,31 +15,31 @@ function baseUrl(mode, localUrl) {
+ async function jsonResponse(response, maxBytes = 10 * 1024 * 1024) {
+   if (Number(response.headers.get('content-length')) > maxBytes) {
+     await response.body?.cancel();
+-    throw new Error('Zotero response exceeds 10 MiB; use a smaller page');
++    throw new ZoteroError('Zotero response exceeds 10 MiB; use a smaller page');
+   }
+   const parts = [];
+   let bytes = 0;
+-  if (!response.body) throw new Error('Empty Zotero response');
++  if (!response.body) throw new ZoteroError('Empty Zotero response');
+   for await (const chunk of response.body) {
+     bytes += chunk.byteLength;
+-    if (bytes > maxBytes) throw new Error('Zotero response exceeds 10 MiB; use a smaller page');
++    if (bytes > maxBytes) throw new ZoteroError('Zotero response exceeds 10 MiB; use a smaller page');
+     parts.push(chunk);
+   }
+   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(parts))); }
+-  catch { throw new Error('Zotero returned invalid UTF-8 JSON'); }
++  catch { throw new ZoteroError('Zotero returned invalid UTF-8 JSON'); }
+ }
+ 
+ function canonicalItem(raw, expected) {
+-  if (!raw || !/^[A-Z0-9]{8}$/.test(raw.key)) throw new Error('Zotero returned an invalid item key');
++  if (!raw || !/^[A-Z0-9]{8}$/.test(raw.key)) throw new ZoteroError('Zotero returned an invalid item key');
+   let csl = raw.csljson;
+   if (typeof csl === 'string') {
+-    try { csl = JSON.parse(csl); } catch { throw new Error(`Invalid CSL-JSON for ${raw.key}`); }
++    try { csl = JSON.parse(csl); } catch { throw new ZoteroError(`Invalid CSL-JSON for ${raw.key}`); }
+   }
+   if (Array.isArray(csl)) {
+-    if (csl.length !== 1) throw new Error(`Item ${raw.key} is not a citable bibliographic item`);
++    if (csl.length !== 1) throw new ZoteroError(`Item ${raw.key} is not a citable bibliographic item`);
+     csl = csl[0];
+   }
+-  if (!csl?.type) throw new Error(`Missing CSL-JSON for ${raw.key}; use a recent Zotero version and a bibliographic item, not an attachment/note`);
++  if (!csl?.type) throw new ZoteroError(`Missing CSL-JSON for ${raw.key}; use a recent Zotero version and a bibliographic item, not an attachment/note`);
+   let id;
+   try { id = normalizeId(csl.id); } catch { /* Export translators can emit a citation key instead of a URI. */ }
+   if (!id && raw.library && /^[1-9]\d*$/.test(String(raw.library.id))) {
+@@ -47,19 +47,18 @@ function canonicalItem(raw, expected) {
+     if (scope) id = `${scope}/${raw.library.id}/items/${raw.key}`;
+   }
+   if (!id && expected) id = normalizeId(expected);
+-  if (!id) throw new Error(`Cannot establish the canonical Zotero URI for ${raw.key}. Supply its verified library-qualified ID; users/0 is only an API routing alias.`);
++  if (!id) throw new ZoteroError(`Cannot establish the canonical Zotero URI for ${raw.key}. Supply its verified library-qualified ID; users/0 is only an API routing alias.`);
+   if (!id.endsWith(`/items/${raw.key}`) || (expected && id !== normalizeId(expected))) {
+-    throw new Error(`Zotero identity mismatch for ${raw.key}; do not substitute a different library's item`);
++    throw new ZoteroError(`Zotero identity mismatch for ${raw.key}; do not substitute a different library's item`);
+   }
+   return { id, itemData: { ...csl, id: zoteroUri(id) }, provenance: { itemVersion: raw.version ?? null } };
+ }
+ 
+-/** Read-only, explicit API client. Never starts Zotero, modifies its database or sends writes. */
++/** Read-only local API client. Never starts Zotero, modifies its database or sends writes. */
+ export class ZoteroClient {
+-  constructor({ mode = 'local', apiKey, localUrl, fetch: fetcher = globalThis.fetch, timeoutMs = 30000, sleep = delay } = {}) {
+-    this.mode = mode;
+-    this.base = baseUrl(mode, localUrl);
+-    this.apiKey = mode === 'web' ? apiKey : undefined;
++  constructor({ mode = 'local', localUrl, fetch: fetcher = globalThis.fetch, timeoutMs = 30000, sleep = delay } = {}) {
++    if (mode !== 'local') throw new ZoteroError('Only the running local Zotero application is supported; use local mode.');
++    this.base = baseUrl(localUrl);
+     this.fetch = fetcher;
+     this.timeoutMs = timeoutMs;
+     this.sleep = sleep;
+@@ -68,7 +67,7 @@ export class ZoteroClient {
+ 
+   async get(path, params, signal) {
+     const url = new URL(path, this.base);
+-    if (url.origin !== this.base.origin || !url.pathname.startsWith(this.base.pathname)) throw new Error('Zotero requests must stay on the configured API origin');
++    if (url.origin !== this.base.origin || !url.pathname.startsWith(this.base.pathname) || url.username || url.password) throw new ZoteroError('Zotero requests must stay on the configured local API origin without credentials');
+     for (const [key, value] of Object.entries(params)) {
+       for (const part of Array.isArray(value) ? value : [value]) url.searchParams.append(key, String(part));
+     }
+@@ -77,13 +76,12 @@ export class ZoteroClient {
+     for (let attempt = 0; attempt < 3; attempt++) {
+       combined.throwIfAborted();
+       const headers = { 'Zotero-API-Version': '3', Accept: 'application/json' };
+-      if (this.apiKey) headers['Zotero-API-Key'] = this.apiKey;
+-      if (this.serverId && this.mode === 'local') headers['Zotero-Server-ID'] = this.serverId;
++      if (this.serverId) headers['Zotero-Server-ID'] = this.serverId;
+       let response;
+       try { response = await this.fetch(url, { headers, signal: combined, redirect: 'error' }); }
+       catch {
+         combined.throwIfAborted();
+-        throw new Error(`Cannot reach Zotero ${this.mode} API. ${this.mode === 'local' ? 'Start Zotero and enable local API access in Settings → Advanced.' : 'Check network access.'}`);
++        throw new ZoteroError('Cannot reach the local Zotero API. Start Zotero and enable local API access in Settings → Advanced.');
+       }
+       const waitHeader = response.headers.get('Retry-After') ?? response.headers.get('Backoff');
+       const seconds = waitHeader === null ? 1 : /^\d+$/.test(waitHeader) ? Number(waitHeader) : Math.max(0, (Date.parse(waitHeader) - Date.now()) / 1000);
+@@ -94,34 +92,33 @@ export class ZoteroClient {
+       }
+       if (!response.ok) {
+         await response.body?.cancel();
+-        throw new Error(`Zotero HTTP ${response.status}${response.status === 403 ? ': enable local API access or verify Web API key permissions' : ''}${response.status === 412 ? ': Zotero instance changed; retry with a fresh client/snapshot' : ''}${[429, 503].includes(response.status) ? ': rate limited/unavailable; retry later' : ''}`);
++        throw new ZoteroError(`Zotero HTTP ${response.status}${response.status === 403 ? ': enable local API access in Settings → Advanced' : ''}${response.status === 412 ? ': Zotero instance changed; retry with a fresh client/snapshot' : ''}${[429, 503].includes(response.status) ? ': rate limited/unavailable; retry later' : ''}`);
+       }
+       const serverId = response.headers.get('Zotero-Server-ID');
+       if (this.serverId && serverId && this.serverId !== serverId) {
+         await response.body?.cancel();
+-        throw new Error('Zotero instance changed during retrieval; snapshot was not saved');
++        throw new ZoteroError('Zotero instance changed during retrieval; snapshot was not saved');
+       }
+       if (serverId) this.serverId = serverId;
+       const data = await jsonResponse(response);
+       // Respect a successful response's Backoff before the next request too.
+       const backoff = Number(response.headers.get('Backoff') ?? 0);
+-      if (!Number.isFinite(backoff) || backoff > 10) throw new Error('Zotero requested a long Backoff; retry retrieval later');
++      if (!Number.isFinite(backoff) || backoff > 10) throw new ZoteroError('Zotero requested a long Backoff; retry retrieval later');
+       if (backoff > 0) await this.sleep(backoff * 1000, undefined, { signal: combined });
+       return { data, total: response.headers.get('Total-Results'), url: url.href, serverId: this.serverId };
+     }
+-    throw new Error('Zotero retry limit reached');
++    throw new ZoteroError('Zotero retry limit reached');
+   }
+ 
+   async snapshot(ids, { signal } = {}) {
+-    if (!Array.isArray(ids) || !ids.length || ids.length > 100) throw new Error('Fetch 1–100 Zotero identities at a time');
++    if (!Array.isArray(ids) || !ids.length || ids.length > 100) throw new ZoteroError('Fetch 1–100 Zotero identities at a time');
+     const normalized = [...new Set(ids.map(normalizeId))];
+     const items = [];
+     for (const id of normalized) {
+-      if (this.mode === 'web' && id.startsWith('users/local/')) throw new Error('Unsynced local identities cannot be fetched from the Web API');
+       const path = id.startsWith('users/local/') ? id.replace(/^users\/local\/[^/]+/, 'users/0') : id;
+       const result = await this.get(path, { format: 'json', include: 'csljson' }, signal);
+       const item = canonicalItem(result.data, id);
+-      item.provenance = { ...item.provenance, source: result.url, retrievedAt: new Date().toISOString(), serverId: result.serverId ?? null, mode: this.mode };
++      item.provenance = { ...item.provenance, source: result.url, retrievedAt: new Date().toISOString(), serverId: result.serverId ?? null, mode: 'local' };
+       items.push(item);
+     }
+     const snapshot = { version: 1, items };
+@@ -129,18 +126,27 @@ export class ZoteroClient {
+     return snapshot;
+   }
+ 
+-  async search({ library = 'users/0', query = '', limit = 25, start = 0, signal } = {}) {
+-    if (!/^(users\/(0|[1-9]\d*)|groups\/[1-9]\d*)$/.test(library) || (this.mode === 'web' && library === 'users/0')) throw new Error('Use users/<numericID> or groups/<numericID>; users/0 is local-only');
+-    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(start) || start < 0) throw new Error('Search limit must be 1–100 and start a nonnegative integer');
+-    if (typeof query !== 'string' || query.length > 2000) throw new Error('Search query must be a string of at most 2000 characters');
+-    const result = await this.get(`${library}/items/top`, { format: 'json', include: 'csljson', itemType: ['-attachment', '-note', '-annotation'], q: query, limit, start }, signal);
+-    if (!Array.isArray(result.data) || result.data.length > limit) throw new Error('Zotero search returned an invalid or oversized page');
+-    const items = result.data.map(raw => canonicalItem(raw));
++  async search({ library = 'users/0', query = '', limit = 25, start = 0, qmode, includeData = false, signal } = {}) {
++    if (!/^(users\/(0|[1-9]\d*)|groups\/[1-9]\d*)$/.test(library)) throw new ZoteroError('Use users/<numericID> or groups/<numericID>; users/0 addresses the local user library');
++    if (!Number.isInteger(limit) || limit < 1 || limit > 100 || !Number.isInteger(start) || start < 0) throw new ZoteroError('Search limit must be 1–100 and start a nonnegative integer');
++    if (typeof query !== 'string' || query.length > 2000) throw new ZoteroError('Search query must be a string of at most 2000 characters');
++    if (typeof includeData !== 'boolean') throw new ZoteroError('includeData must be a boolean');
++    if (qmode !== undefined && !['titleCreatorYear', 'everything'].includes(qmode)) throw new ZoteroError('qmode must be titleCreatorYear or everything');
++    const result = await this.get(`${library}/items/top`, { format: 'json', include: includeData ? 'data,csljson' : 'csljson', itemType: ['-attachment', '-note', '-annotation'], q: query, limit, start, ...(qmode ? { qmode } : {}) }, signal);
++    if (!Array.isArray(result.data) || result.data.length > limit) throw new ZoteroError('Zotero search returned an invalid or oversized page');
++    const items = result.data.map(raw => {
++      const item = canonicalItem(raw);
++      if (includeData) {
++        if (!raw.data || typeof raw.data !== 'object' || Array.isArray(raw.data)) throw new ZoteroError('Zotero did not return requested item data');
++        item.zoteroData = raw.data;
++      }
++      return item;
++    });
+     const total = result.total !== null && /^\d+$/.test(result.total) ? Number(result.total) : null;
+-    if (items.length === 0 && total !== null && start < total) throw new Error('Zotero returned an empty page before its reported end; retry rather than treating it as complete');
++    if (items.length === 0 && total !== null && start < total) throw new ZoteroError('Zotero returned an empty page before its reported end; retry rather than treating it as complete');
+     validateSnapshot({ version: 1, items });
+     return {
+-      version: 1, items: items.map(item => ({ ...item, provenance: { ...item.provenance, source: result.url, retrievedAt: new Date().toISOString(), serverId: result.serverId ?? null, mode: this.mode } })),
++      version: 1, items: items.map(item => ({ ...item, provenance: { ...item.provenance, source: result.url, retrievedAt: new Date().toISOString(), serverId: result.serverId ?? null, mode: 'local' } })),
+       page: { library, query, start, limit, total, nextStart: (total !== null ? start + items.length < total : items.length === limit) && items.length ? start + items.length : null },
+     };
+   }
+diff --git a/scripts/smoke-pi.mjs b/scripts/smoke-pi.mjs
+index 80958e1..47bafa2 100644
+--- a/scripts/smoke-pi.mjs
++++ b/scripts/smoke-pi.mjs
+@@ -9,7 +9,14 @@ const sdk = await import(process.env.PI_SDK_ENTRY ? pathToFileURL(resolve(proces
+   throw new Error('Pi SDK not found. Run with an installed SDK peer or set PI_SDK_ENTRY to the installed pi-coding-agent/dist/index.js. No global installs are needed.', { cause: error });
+ });
+ const temporary = await mkdtemp(join(tmpdir(), 'sr-pi-smoke-'));
++const originalEnvironment = Object.fromEntries(['SYSTEMATIC_REVIEW_CONFIG', 'OPENALEX_API_KEY', 'ZOTERO_API_KEY', 'ZOTERO_LOCAL_URL'].map(key => [key, process.env[key]]));
++const originalFetch = globalThis.fetch;
+ try {
++  process.env.SYSTEMATIC_REVIEW_CONFIG = join(temporary, 'credentials.json');
++  delete process.env.OPENALEX_API_KEY;
++  delete process.env.ZOTERO_API_KEY;
++  delete process.env.ZOTERO_LOCAL_URL;
++  globalThis.fetch = async () => assert.fail('Unexpected network request');
+   const loader = new sdk.DefaultResourceLoader({
+     cwd: temporary,
+     agentDir: join(temporary, 'agent'),
+@@ -26,7 +33,19 @@ try {
+   assert.deepEqual(skills.skills.map(skill => skill.name), ['systematic-review']);
+   const tools = loaded.extensions[0].tools;
+   assert.deepEqual([...tools.keys()].sort(), ['review_citation', 'review_export_docx', 'review_render_citations', 'review_zotero']);
++  const commands = loaded.extensions[0].commands;
++  assert.deepEqual([...commands.keys()], ['review-setup']);
++  const setupMessages = [];
++  const setupContext = { cwd: root, hasUI: true, mode: 'tui', ui: {
++    select: async () => 'Enter or replace saved key',
++    input: async () => 'SYNTHETIC-SMOKE-KEY',
++    notify: message => setupMessages.push(message),
++  } };
++  await commands.get('review-setup').handler('openalex', setupContext);
++  assert.ok(setupMessages.some(message => message.includes('key saved locally')));
++  assert.ok(setupMessages.every(message => !message.includes('SYNTHETIC-SMOKE-KEY')));
+   const context = { cwd: root };
++  assert.equal(tools.get('review_zotero').definition.parameters.properties.mode, undefined);
+   const signal = new AbortController().signal;
+   const execute = (name, input) => tools.get(name).definition.execute('smoke-test', input, signal, undefined, context);
+   const marker = await execute('review_citation', { items: [{ id: 'users/123/items/ABCD2345', locator: '12' }] });
+@@ -41,7 +60,23 @@ try {
+   await assert.rejects(() => execute('review_export_docx', { ...params, output: params.input }), /must not replace/);
+   const cancelled = AbortSignal.abort(new Error('cancelled'));
+   await assert.rejects(() => tools.get('review_render_citations').definition.execute('cancel', { ...params, output: join(temporary, 'cancelled.md') }, cancelled, undefined, context), /cancelled/);
+-  console.log('Pi smoke passed: package manifest, one umbrella skill, four native tools, Markdown render, live DOCX export, overwrite protection and cancellation. No model/network calls.');
++  // Reject stale cloud requests before fetching; do not silently read another source.
++  await assert.rejects(() => execute('review_zotero', { operation: 'search', mode: 'web', library: 'users/123', output: join(temporary, 'rejected.json') }), /only the local HTTP API/);
++  // Local Zotero must remain usable even if unrelated OpenAlex setup is invalid.
++  process.env.SYSTEMATIC_REVIEW_CONFIG = 'invalid-relative-config-path';
++  process.env.ZOTERO_API_KEY = 'SYNTHETIC-IGNORED-KEY';
++  globalThis.fetch = async (url, options) => {
++    assert.equal(url.origin, 'http://127.0.0.1:23119');
++    assert.equal(options.headers['Zotero-API-Key'], undefined);
++    return new Response('[]', { headers: { 'Total-Results': '0' } });
++  };
++  assert.equal((await execute('review_zotero', { operation: 'search', output: join(temporary, 'local-references.json') })).details.count, 0);
++  console.log('Pi smoke passed: one umbrella skill, four native tools, OpenAlex setup with isolated credentials, local-only Zotero without keys, Markdown render, live DOCX export, overwrite protection and cancellation. No model/network calls.');
+ } finally {
++  globalThis.fetch = originalFetch;
++  for (const [key, value] of Object.entries(originalEnvironment)) {
++    if (value === undefined) delete process.env[key];
++    else process.env[key] = value;
++  }
+   await rm(temporary, { recursive: true, force: true });
+ }
+diff --git a/skills/systematic-review/SKILL.md b/skills/systematic-review/SKILL.md
+index e5bcf54..27c9a17 100644
+--- a/skills/systematic-review/SKILL.md
++++ b/skills/systematic-review/SKILL.md
+@@ -12,6 +12,11 @@ requested work and existing artifacts; revisit or combine capabilities when
+ useful. Do not impose a review type, database, directory layout, column schema,
+ registration, meta-analysis, or subagent workflow.
+ 
++The researcher and agent choose the scientific methods, fields, sequence, and
++deliverables for the question. The capability notes offer relevant considerations,
++not mandatory checklists or prerequisites for unrelated work. Explain consequential
++choices and uncertainties; preserve evidence and agreed methods as work evolves.
++
+ ## Choose what to load
+ 
+ Resolve every relative path below against **this skill's directory**, not the
+@@ -23,6 +28,7 @@ skills.
+ | --- | --- |
+ | Frame a question, eligibility criteria, or methods amendment | [Protocol](capabilities/protocol/SKILL.md) |
+ | Design searches, retrieve records, deduplicate, or update a corpus | [Harvesting](capabilities/harvesting/SKILL.md) |
++| Rank papers against a topic or investigate a similarity-score boundary | [Semantic search](capabilities/semantic-search/SKILL.md) |
+ | Extract PDF text, render page images, or transcribe with agent vision | [Full text and PDF](capabilities/full-text/SKILL.md) |
+ | Interpret and verify source passages, tables, or supplements | [Evidence reading](capabilities/evidence-reading/SKILL.md) |
+ | Apply inclusion criteria or reconcile eligibility decisions | [Screening](capabilities/screening/SKILL.md) |
+@@ -33,8 +39,14 @@ skills.
+ | Audit provenance, counts, claims, reproducibility, or handoffs | [Verification](capabilities/verification/SKILL.md) |
+ 
+ For choosing or handing off files, read [research artifacts](../../docs/research-artifacts.md).
+-For citation markers, reference snapshots, rendering, and export, read
+-[citations](../../docs/citations.md); do not invent a competing citation format.
++For the bundled Zotero citation markers, reference snapshots, rendering, and
++DOCX export, read [citations](../../docs/citations.md). This bridge uses local
++Zotero or offline reference snapshots. Use another researcher-selected reference
++manager through its available documented APIs, tools, or exports; do not require a migration or
++claim this package implements an adapter it does not provide.
++For optional Zotero retrieval, identifier resolution, and imports, see the
++[Zotero helper](../../docs/zotero-cli.md) and its current command help.
++When a selected service needs configuration, read [service setup](../../docs/setup.md).
+ 
+ ## Working agreement
+ 
+@@ -52,6 +64,10 @@ For citation markers, reference snapshots, rendering, and export, read
+   assign bounded sources, explicit criteria, and separate output files. Share
+   only permitted data. Reconcile conflicts and verify evidence before merging;
+   several model runs do not constitute independent human review.
++- Use small helper CLIs or libraries for bounded retrieval, conversion, or other
++  deterministic operations when useful. Inspect their help and current interface.
++  A helper's input/output schema serves that operation; it does not prescribe the
++  researcher's extraction fields, methods, artifact format, or next task.
+ 
+ ## Evidence safeguards
+ 
+@@ -62,17 +78,19 @@ For citation markers, reference snapshots, rendering, and export, read
+   and source locators; never silently skip truncation, supplements, or unreadable
+   text. State whether a conclusion uses a title, abstract, excerpt, or full text.
+   Leave context management to Pi; do not add a custom compaction loop.
+-- Use configured APIs and lawful access. For Zotero, use its main API or local
+-  reference snapshots; no custom Zotero plugin is required. Keep credentials,
+-  participant data, private reference libraries, and full-text corpora out of Git.
++- Use configured APIs and lawful access for the selected sources and reference
++  manager. For Zotero, use its supported local interfaces or reference snapshots;
++  no custom Zotero plugin is required. Keep credentials, participant data, private reference
++  libraries, and full-text corpora out of Git.
+   Do not upload local evidence to additional services without permission. Never
+   write Zotero SQLite or modify a Zotero profile as an integration shortcut.
+ - Never fabricate sources, quotations, values, page numbers, searches, or
+   reviewer decisions. Separate reported observations, calculations, and
+   interpretation; distinguish missing evidence from evidence of absence.
+-- For citations, verified library-qualified Zotero item identities and locators
+-  are authoritative. Rendered labels are replaceable caches. Do not guess keys,
+-  resolve bare keys across libraries, or flatten live citations to bypass errors.
++- Preserve verified source/manager identities and locators. For the bundled
++  Zotero bridge, library-qualified item identities are authoritative and rendered
++  labels are replaceable caches. Do not guess keys, resolve bare keys across
++  libraries, or flatten live citations to bypass errors.
+ 
+ Deliver usable artifacts plus a short account of what was done, checked,
+ unresolved, and limited. Claim only checks actually performed; recommendations
+diff --git a/skills/systematic-review/capabilities/analysis/SKILL.md b/skills/systematic-review/capabilities/analysis/SKILL.md
+index 055e720..c98e34f 100644
+--- a/skills/systematic-review/capabilities/analysis/SKILL.md
++++ b/skills/systematic-review/capabilities/analysis/SKILL.md
+@@ -13,8 +13,10 @@ evidence; no meta-analysis, language, package, or database is compulsory.
+ 
+ ## Establish the analysis basis
+ 
+-Identify the question/estimand, population/context, comparison, outcome, time
+-window, and intended interpretation. Check input definitions and provenance.
++Identify the question and intended interpretation, with the estimand,
++population/context, comparison, outcome, and time window where relevant to the
++chosen analysis. These are methodological considerations, not required fields.
++Check input definitions and provenance.
+ Link multiple reports of a study and identify overlapping cohorts before treating
+ observations as independent. Preserve the planned selection rules and label
+ post hoc analyses; do not choose an analysis because it gives a preferred result.
+diff --git a/skills/systematic-review/capabilities/full-text/SKILL.md b/skills/systematic-review/capabilities/full-text/SKILL.md
+index 6c72817..93ef468 100644
+--- a/skills/systematic-review/capabilities/full-text/SKILL.md
++++ b/skills/systematic-review/capabilities/full-text/SKILL.md
+@@ -14,11 +14,12 @@ storage format is required.
+ 
+ ## Establish the source and available tools
+ 
+-Use a researcher-supplied file, a permitted attachment obtained through Zotero's
+-main API, or another configured lawful source. A local reference snapshot may
+-identify the item but does not guarantee that its PDF is available. Keep the
+-library-qualified item/attachment identity when known, file/version, page count,
+-and retrieval provenance linked. Do not infer missing keys or reach into Zotero
++Use a researcher-supplied file, a permitted attachment obtained through the
++selected reference manager's supported API/tool, or another configured lawful
++source. For Zotero, use its supported local interfaces. A reference snapshot may
++identify the item but does not guarantee that its PDF is available. Keep the manager/source
++scope and item/attachment identity when known, file/version, page count, and
++retrieval provenance linked. Do not infer missing keys or reach into Zotero
+ SQLite/profile files. No custom Zotero plugin is needed for source access.
+ 
+ Preserve the original. Check which local tools and model capabilities are actually
+diff --git a/skills/systematic-review/capabilities/harvesting/SKILL.md b/skills/systematic-review/capabilities/harvesting/SKILL.md
+index e484adf..ba65200 100644
+--- a/skills/systematic-review/capabilities/harvesting/SKILL.md
++++ b/skills/systematic-review/capabilities/harvesting/SKILL.md
+@@ -28,16 +28,47 @@ export can be sufficient; live access and a Zotero library are not prerequisites
+ 
+ ## Retrieve with explicit limits
+ 
+-Use configured APIs, authorized source tools, or researcher-supplied files.
+-For Zotero, prefer its official Web API for live library access, or use a local
+-reference snapshot for offline work; a supported built-in local API is an option
+-only when explicitly configured. Do not require a custom Zotero plugin or a new
+-review store. A metadata snapshot is not the full-text attachment itself.
++Use configured APIs, authorized source tools, or researcher-supplied files for
++the sources and reference manager the researcher chooses. Prefer an available
++small helper for the requested operation; inspect its help and documented
++limits. Another manager's supported API or export is valid input, without
++requiring a Zotero library or claiming an unimplemented package adapter.
++For Zotero, use its configured built-in local API when the application is running,
++or a reference snapshot for offline work. Zotero access is local only and needs no key.
++Choose according to the user's setup. Do not require a custom Zotero plugin or a
++new review store. A metadata snapshot is not the full-text attachment itself.
+ Inspect tool help before use rather than inventing API arguments. Respect access
+ rights, rate limits, pagination, timeouts, response bounds, and cancellation.
+ Never expose credentials in URLs, logs, reports, or shell history. Do not bypass
+ paywalls or modify Zotero SQLite/profile files.
+ 
++For an OpenAlex key, use `node scripts/setup.mjs status` from the
++package directory to inspect its safe configuration summary. Direct the user to
++`/review-setup` or the [setup guide](../../../../docs/setup.md) for official
++account links, hidden terminal entry or the optional local browser form. The
++agent may start browser setup and open its printed URL; the user enters the key.
++Never ask for keys in chat or read the credential file. `OPENALEX_API_KEY`
++overrides the saved key; configured status does not validate it. Local Zotero
++needs no credential setup, including the project's native apt-packaged Termux port.
++
++For the bundled Zotero helper, read the
++[CLI guide](../../../../docs/zotero-cli.md) and run
++`node scripts/zotero.mjs --help` from the package directory. Use its current
++interface for the requested retrieval, resolution, or import operation.
++
++For OpenAlex, read the [collector guide](../../../../docs/openalex.md) and inspect
++`node scripts/openalex.mjs --help`. It reconstructs indexed abstracts and can
++enrich them from exactly matched existing Zotero records, recording both sources.
++Its inherited abstract-length preference is a metadata heuristic, not a judgement
++of evidence quality. Do not treat a missing abstract as grounds for exclusion or
++silently import a harvest merely to enrich it.
++
++Distinguish metadata retrieval from importing items into a reference library.
++For a requested import, use the selected manager's supported write API/tool and
++the intended destination; retain returned identities and report duplicates,
++partial failures, and unresolved records. A successful metadata lookup alone
++does not mean that an item was added to the library or its full text retrieved.
++
+ Keep retrieval provenance and original exports where permitted. Record exhausted
+ budgets, failed pages, missing attachments, access restrictions, and partial
+ results; a truncated response is not the complete search. Retry only within
+@@ -46,6 +77,13 @@ Do not upload a local corpus to an unapproved retrieval/OCR service.
+ 
+ ## Resolve identities without losing evidence
+ 
++- Prefer the selected manager's native identifier lookup for formats it
++  supports, such as DOI, PMID, arXiv, or ISBN. Use a resolver only for unsupported
++  inputs or a specific conversion the task needs, such as PMCID to PMID; do not
++  require every reference to have or become a DOI. Preserve the original input,
++  returned identifier/metadata, lookup source, and unresolved or ambiguous
++  mappings. An identifier match does not establish that two reports are the same
++  study or that their findings are interchangeable.
+ - Preserve source-specific record IDs and verified identifier aliases. For
+   Zotero citations, keep the library scope with each item identity; ask rather
+   than resolving a bare key across libraries. Follow the
+diff --git a/skills/systematic-review/capabilities/verification/SKILL.md b/skills/systematic-review/capabilities/verification/SKILL.md
+index 40f012e..fade119 100644
+--- a/skills/systematic-review/capabilities/verification/SKILL.md
++++ b/skills/systematic-review/capabilities/verification/SKILL.md
+@@ -38,8 +38,10 @@ agent summaries. Use [evidence reading](../evidence-reading/SKILL.md) when neede
+ - **Claims:** Does the evidence support each tested statement and qualifier?
+   Check tables/figures against narrative, contradictory evidence, and whether
+   conclusions overstate design, certainty, scope, or completeness.
+-- **Citations and exports:** Follow the
+-  [citation specification](../../../../docs/citations.md). Check scoped identities,
++- **Citations and exports:** Check the selected manager/document workflow's
++  identities, locators, and supported export properties. For the bundled Zotero
++  bridge, follow the [citation specification](../../../../docs/citations.md).
++  Check scoped identities,
+   source locators, snapshot consistency, document-order rendering, missing items,
+   malformed markers, and code examples. Distinguish structural DOCX checks,
+   office round trips, and actual Zotero UI validation; never infer one from another.
+diff --git a/skills/systematic-review/capabilities/writing/SKILL.md b/skills/systematic-review/capabilities/writing/SKILL.md
+index 5404665..286341d 100644
+--- a/skills/systematic-review/capabilities/writing/SKILL.md
++++ b/skills/systematic-review/capabilities/writing/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: writing
+-description: Draft or revise evidence-grounded review reports, preserve live Zotero citation identities, refresh citation labels, and export DOCX with honest validation claims.
++description: Draft or revise evidence-grounded review reports with the researcher's citation tools and artifacts; use the bundled Zotero bridge when live-citation DOCX export is requested.
+ license: AGPL-3.0-or-later
+ disable-model-invocation: true
+ ---
+@@ -31,14 +31,36 @@ voice, audience, and file format; do not require a new report template.
+   plagiarism. Never fabricate a quotation, page number, reference, or result to
+   make an unfinished draft read smoothly. Label unresolved claims for review.
+ 
+-## Preserve citation identity
++## Use the selected citation workflow
+ 
+-Before adding markers, refreshing labels, or exporting, read the
+-[citation specification](../../../../docs/citations.md). It defines the accepted
++Keep the researcher's reference manager and existing document conventions. Use
++available documented APIs, tools, or exports for that manager and preserve its
++identities and citation metadata. An existing bibliography or reference export
++can be sufficient for the requested writing task. State when a chosen export is
++static or does not preserve live editing; do not claim universal manager support.
++The package's implemented live-citation bridge is Zotero-specific.
++
++## Preserve identity in the Zotero bridge
++
++When a single Markdown manuscript is preferred, the standalone citation helper
++can refresh it in place using live local Zotero metadata, without a saved reference
++snapshot. Read the citation guide and `node scripts/citations.mjs --help` from
++the package directory. Empty labels and stale labels use the same `sr-cite:`
++identity-bearing link; ordinary bracketed text is not a citation marker. Use
++offline snapshots when useful rather than requiring either storage approach.
++
++Before adding markers, refreshing labels, or exporting through this bridge, read
++the [citation specification](../../../../docs/citations.md). It defines the accepted
+ marker format, reference snapshot, tool arguments, and supported modes. If the
+ documentation or required metadata is unavailable, stop that integration task
+ and report the gap rather than inventing syntax or a key.
+ 
++To obtain missing Zotero reference metadata or perform a requested library
++import, use the [Zotero helper guide](../../../../docs/zotero-cli.md) and current
++help (`node scripts/zotero.mjs --help` from the package directory). Follow
++[harvesting](../harvesting/SKILL.md) for identifier resolution and provenance;
++do not turn a DOI, PMID, arXiv, ISBN, or PMCID directly into a Zotero item key.
++
+ Use only verified library-qualified Zotero item identities. Author/year labels,
+ bibliography positions, and temporary keys are not stable identities. Preserve
+ cluster membership, locator metadata, and supported citation modes. Do not
+@@ -54,13 +76,19 @@ or flattening a live citation to plain author-date text.
+ 
+ ## Export and verify only what was tested
+ 
+-Use `review_export_docx` according to its current schema, saving a new output
+-unless overwrite is explicit. Retain the source document, reference snapshot,
+-and style/locale needed to reproduce it. If the tool is unavailable, provide the
+-source and explain that live-field export has not been performed.
++For the bundled Zotero bridge, use `review_export_docx` according to its current
++schema, saving a new output unless overwrite is explicit. Retain the source
++document, reference snapshot, and style/locale needed to reproduce it. If the
++tool is unavailable, provide the source and explain that live-field export has
++not been performed.
++
++For other workflows, use the selected manager's available export/integration
++and check the properties that matter for that deliverable. Do not translate
++foreign keys into Zotero item identities or promise live-field interoperability
++without a supported, verified conversion.
+ 
+-Check that the export contains live Zotero citation fields, embedded item
+-metadata, document preferences, and a bibliography field as documented. Keep
++For a Zotero-linked DOCX, check that it contains live citation fields, embedded
++item metadata, document preferences, and a bibliography field as documented. Keep
+ these validation claims distinct:
+ 
+ - ZIP/XML structural checks on the produced archive.
+diff --git a/test/zotero.test.mjs b/test/zotero.test.mjs
+index 4a1524b..97568c7 100644
+--- a/test/zotero.test.mjs
++++ b/test/zotero.test.mjs
+@@ -17,17 +17,33 @@ test('local API uses existing Zotero endpoint, CSL include and no API key', asyn
+   assert.equal(calls[0].options.redirect, 'error');
+   assert.equal(snapshot.items[0].id, id);
+   assert.equal(snapshot.items[0].provenance.serverId, 'instance1');
++  assert.equal(snapshot.items[0].provenance.mode, 'local');
++  await client.snapshot([id]);
++  assert.equal(calls[1].options.headers['Zotero-Server-ID'], 'instance1');
++  assert.equal(calls[1].options.headers['Zotero-API-Key'], undefined);
++});
++
++test('legacy remote mode and nonlocal URLs fail before any request', async () => {
++  const fetch = () => assert.fail('Must not contact a remote API or silently fall back');
++  for (const mode of ['web', 'remote', null]) assert.throws(() => new ZoteroClient({ mode, fetch }), /local Zotero/);
++  for (const localUrl of ['https://api.zotero.org/', 'http://example.org/api/']) assert.throws(() => new ZoteroClient({ localUrl, fetch }), /loopback/);
++  const client = new ZoteroClient({ mode: 'local', fetch });
++  await assert.rejects(() => client.get(`https://api.zotero.org/${id}`, {}), /origin/);
++  await assert.rejects(() => client.get(`http://user:password@127.0.0.1:23119/api/${id}`, {}), /credentials/);
+ });
+ 
+-test('Web API key is a header, never a source URL or response field', async () => {
+-  let seen;
+-  const client = new ZoteroClient({ mode: 'web', apiKey: 'secret', fetch: async (url, options) => { seen = { url, options }; return response(item); } });
+-  const snapshot = await client.snapshot([id]);
+-  assert.equal(seen.url.origin, 'https://api.zotero.org');
+-  assert.equal(seen.options.headers['Zotero-API-Key'], 'secret');
+-  assert.ok(!JSON.stringify(snapshot).includes('secret'));
+-  await assert.rejects(() => client.get('https://example.org/', {}), /origin/);
+-  await assert.rejects(() => client.snapshot(['users/local/abc/items/ABCD2345']), /Unsynced/);
++test('local group library identities and a custom loopback port are preserved', async () => {
++  const groupId = 'groups/456/items/ABCD2345';
++  const client = new ZoteroClient({ localUrl: 'http://127.0.0.1:23120/api/', fetch: async (url, options) => {
++    assert.equal(url.origin, 'http://127.0.0.1:23120');
++    assert.equal(url.pathname, '/api/groups/456/items/top');
++    assert.equal(options.headers['Zotero-API-Key'], undefined);
++    return response([{ ...item, library: { type: 'group', id: 456 }, csljson: { ...item.csljson, id: 'replaceable-label' } }]);
++  } });
++  const result = await client.search({ library: 'groups/456' });
++  assert.equal(result.items[0].id, groupId);
++  assert.equal(result.items[0].itemData.id, `http://zotero.org/${groupId}`);
++  assert.equal(result.items[0].provenance.mode, 'local');
+ });
+ 
+ test('local translator string arrays and citation-key exports use verified scoped identities', async () => {
+@@ -64,6 +80,31 @@ test('search is bounded and returns explicit pagination; excludes nonbibliograph
+   await assert.rejects(() => client.search({ limit: 101 }), /limit/);
+ });
+ 
++test('optional source data supports abstract/identifier enrichment without changing citation-only searches', async () => {
++  const data = { itemType: 'journalArticle', abstractNote: 'Verified abstract', extra: 'PMID: 12345678' };
++  const client = new ZoteroClient({ fetch: async url => {
++    const withData = url.searchParams.get('include') === 'data,csljson';
++    return response([{ ...item, ...(withData ? { data } : {}) }]);
++  } });
++  const enriched = await client.search({ includeData: true });
++  assert.equal(enriched.items[0].id, id);
++  assert.deepEqual(enriched.items[0].zoteroData, data);
++  assert.equal((await client.search()).items[0].zoteroData, undefined);
++  const missing = new ZoteroClient({ fetch: async () => response([item]) });
++  await assert.rejects(() => missing.search({ includeData: true }), /requested item data/);
++  await assert.rejects(() => client.search({ includeData: 'yes' }), /boolean/);
++});
++
++test('identifier searches can explicitly include all metadata fields', async () => {
++  const client = new ZoteroClient({ fetch: async url => {
++    assert.equal(url.searchParams.get('qmode'), 'everything');
++    assert.equal(url.searchParams.get('q'), '10.1234/example');
++    return response([item]);
++  } });
++  assert.equal((await client.search({ query: '10.1234/example', qmode: 'everything' })).items[0].id, id);
++  await assert.rejects(() => client.search({ qmode: 'unknown' }), /qmode/);
++});
++
+ test('rate limits retry with a bound and long Retry-After fails immediately', async () => {
+   let calls = 0;
+   const sleeps = [];
+@@ -74,8 +115,8 @@ test('rate limits retry with a bound and long Retry-After fails immediately', as
+   await assert.rejects(() => long.snapshot([id]), /503/);
+ });
+ 
+-test('credentials and response body are not leaked in network errors', async () => {
+-  const client = new ZoteroClient({ mode: 'web', apiKey: 'SECRET', fetch: async () => { throw new Error('SECRET'); } });
++test('transport details and response body are not leaked in local API errors', async () => {
++  const client = new ZoteroClient({ fetch: async () => { throw new Error('SECRET'); } });
+   await assert.rejects(() => client.snapshot([id]), error => !error.message.includes('SECRET'));
+   const denied = new ZoteroClient({ fetch: async () => response({ secret: 'DO_NOT_PRINT' }, {}, 403) });
+   await assert.rejects(() => denied.snapshot([id]), error => /403/.test(error.message) && !error.message.includes('DO_NOT_PRINT'));

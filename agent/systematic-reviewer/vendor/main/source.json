@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/openresearchtools/systematic-reviewer",
+  "commit": "859824b115731cb9932cdd45b130b8f4d222daac",
+  "license": "AGPL-3.0-or-later",
+  "purpose": "UI search/filter presentation reference only; V3 identifier and abstract rules take precedence.",
+  "files": [
+    {
+      "path": "src/ui/harvest.js",
+      "size": 46989,
+      "sha256": "0d65de1c5c80b7b1a523544a4dd32105f6d8f5b2ca1fd5f66fda3daa21211f32"
+    },
+    {
+      "path": "src/ui/searchable-autocomplete.js",
+      "size": 10166,
+      "sha256": "ccabfb327594596026031e1ba9172e55fd37473a752e3b2639626dcd911db2e7"
+    },
+    {
+      "path": "src/core/search-options.js",
+      "size": 11099,
+      "sha256": "fb538fa2f811b26e9364555853f80632b626d0bfc4d67c709242c9e7813f3e92"
+    },
+    {
+      "path": "src/core/openalex.js",
+      "size": 15933,
+      "sha256": "06ed4e4a247d8792f7c61ed6ba3bbc309105500ec455fe9a8fa9ba33f120a91a"
+    },
+    {
+      "path": "LICENSE",
+      "size": 34500,
+      "sha256": "60c66d170d6d9ef655c1f072f5cd681c9d8f5cecbca1257bd145f95c97409565"
+    }
+  ]
+}

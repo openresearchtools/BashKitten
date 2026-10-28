@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/openresearchtools/systematic-reviewer",
+  "branch": "V3",
+  "commit": "3224958eac9f58a92173b177f4adde78f5bbc018",
+  "license": "AGPL-3.0-or-later",
+  "snapshotDate": "2026-10-28",
+  "files": 78,
+  "modifiedTracked": 17,
+  "untracked": 31,
+  "manifestSha256": "425705a5cdc3bf7e30ca4b58006ff81cc331d29bba333f892b5199621782deb3",
+  "trackedDiffSha256": "98863cf33f642549599155a24ff31e1a0ce28ac145a2b5365b897a158c9ae595",
+  "source": "source/ is the exact reviewed working source. pristine/ is the committed base. local-delta/ contains changed and untracked source; local.diff records the tracked binary patch. This import did not change the donor checkout."
+}

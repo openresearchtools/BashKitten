@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "users/123/items/ABCD2345",
+      "itemData": {
+        "type": "article-journal",
+        "title": "Synthetic study of transparent evidence workflows",
+        "author": [{ "family": "Smith", "given": "Alex" }],
+        "issued": { "date-parts": [[2024]] },
+        "container-title": "Fictional Methods Journal"
+      },
+      "provenance": { "source": "Synthetic software-test fixture. NOT a real Zotero reference or research finding." }
+    },
+    {
+      "id": "groups/456/items/EFGH6789",
+      "itemData": {
+        "type": "book",
+        "title": "Synthetic handbook of auditable extraction",
+        "author": [{ "family": "Jones", "given": "Sam" }],
+        "issued": { "date-parts": [[2023]] },
+        "publisher": "Fictional Press"
+      },
+      "provenance": { "source": "Synthetic software-test fixture. NOT a real Zotero reference or research finding." }
+    }
+  ]
+}

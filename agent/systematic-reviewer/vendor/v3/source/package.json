@@ -1,0 +1,35 @@
+{
+  "name": "@openresearchtools/pi-systematic-reviewer",
+  "version": "3.0.0-alpha.1",
+  "description": "Capability-based systematic review skills and Zotero citation tools for Pi",
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openresearchtools/systematic-reviewer.git"
+  },
+  "keywords": ["pi-package", "systematic-review", "zotero", "research"],
+  "engines": { "node": ">=22.19.0" },
+  "files": ["extensions", "lib", "skills", "scripts", "assets", "docs", "examples", "test", "README.md", "AGENTS.md", "LICENSE"],
+  "pi": {
+    "extensions": ["./extensions/index.js"],
+    "skills": ["./skills/systematic-review/SKILL.md"]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  },
+  "dependencies": {
+    "citeproc": "2.4.63",
+    "fflate": "0.8.3",
+    "mdast-util-from-markdown": "2.1.0",
+    "mdast-util-gfm-table": "2.0.0",
+    "micromark-extension-gfm-table": "2.1.2"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node scripts/check.mjs",
+    "example": "node scripts/example.mjs",
+    "smoke:pi": "node scripts/smoke-pi.mjs"
+  }
+}

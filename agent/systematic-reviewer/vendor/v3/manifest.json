@@ -1,0 +1,548 @@
+[
+  {
+    "path": ".gitignore",
+    "size": 74,
+    "sha256": "333d99e51e47cca2706b6e08bf3b309c6d517886caa7b42bb33cf1265c48a1ab",
+    "origin": "committed",
+    "baseSha256": "333d99e51e47cca2706b6e08bf3b309c6d517886caa7b42bb33cf1265c48a1ab"
+  },
+  {
+    "path": "AGENTS.md",
+    "size": 3688,
+    "sha256": "3f9632e6059f1480ff93eba72c80febd533b55c6a99abaac32022c0df722d6c4",
+    "origin": "modified",
+    "baseSha256": "c0641812966086e5a848021270082b8e3e0c3dcb0730bda1cc6763edcd06e986"
+  },
+  {
+    "path": "LICENSE",
+    "size": 34500,
+    "sha256": "60c66d170d6d9ef655c1f072f5cd681c9d8f5cecbca1257bd145f95c97409565",
+    "origin": "committed",
+    "baseSha256": "60c66d170d6d9ef655c1f072f5cd681c9d8f5cecbca1257bd145f95c97409565"
+  },
+  {
+    "path": "README.md",
+    "size": 10733,
+    "sha256": "947425350ff2ec89113c4de50177575d110d820f67550bff342fa5c306dd4a6c",
+    "origin": "modified",
+    "baseSha256": "7566f9c1435d9337fda9740ccacb629c1c22c695046ed209b59f50555834a4fb"
+  },
+  {
+    "path": "assets/NOTICE.md",
+    "size": 1336,
+    "sha256": "9c4ad10180b8283f68a3eb8949c186522b81a967e8f096c0f4e44fcfb5164e36",
+    "origin": "committed",
+    "baseSha256": "9c4ad10180b8283f68a3eb8949c186522b81a967e8f096c0f4e44fcfb5164e36"
+  },
+  {
+    "path": "assets/author-date.csl",
+    "size": 2119,
+    "sha256": "c829c85e5b87300de00bf608e57e19f3d09f9ea31704f436990366a72e8eff6b",
+    "origin": "committed",
+    "baseSha256": "c829c85e5b87300de00bf608e57e19f3d09f9ea31704f436990366a72e8eff6b"
+  },
+  {
+    "path": "assets/locales-en-US.xml",
+    "size": 32649,
+    "sha256": "ac864c7c21166b4390d82c31792cdc509400727fa0060b43d8aa17e07f9cb079",
+    "origin": "committed",
+    "baseSha256": "ac864c7c21166b4390d82c31792cdc509400727fa0060b43d8aa17e07f9cb079"
+  },
+  {
+    "path": "docs/capabilities.md",
+    "size": 8862,
+    "sha256": "a24888df1b5d8fa8bde5a7ea58016fc1a5223b64d5d87d1a7fcfe575a226baae",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "docs/ci/README.md",
+    "size": 1335,
+    "sha256": "3456ae763b8cde05e09f254f5f7ba575b3b469aa6ed4d67669f85114fcddb13e",
+    "origin": "modified",
+    "baseSha256": "f083b2e6bcbd823487c3b975e68715eec5b70d48bc6c8b2b37d3e315f625a1e4"
+  },
+  {
+    "path": "docs/ci/github-actions.yml",
+    "size": 877,
+    "sha256": "6c74ff27d470c340b2a17ee60de608856b8de3877229705cccd2cbdd1175062d",
+    "origin": "committed",
+    "baseSha256": "6c74ff27d470c340b2a17ee60de608856b8de3877229705cccd2cbdd1175062d"
+  },
+  {
+    "path": "docs/citations.md",
+    "size": 11111,
+    "sha256": "7068c2d7df2789b14aca602bbb1da01465a067fa6f71b5e3b9316fd584ed366c",
+    "origin": "modified",
+    "baseSha256": "2203e087f491bca68b41ac9cf49dbacc896d4e13cd8b1b788db783a4545bf5c0"
+  },
+  {
+    "path": "docs/harvesting.md",
+    "size": 9825,
+    "sha256": "e173dc2e67ba42ac44a17eb18bc7d489383c1f8f138215e9af980a644254ec0d",
+    "origin": "committed",
+    "baseSha256": "e173dc2e67ba42ac44a17eb18bc7d489383c1f8f138215e9af980a644254ec0d"
+  },
+  {
+    "path": "docs/implementation-plan.md",
+    "size": 31067,
+    "sha256": "77ad5b13e2b67e9ff65e12625c4f3187102f9fa13137d3a75726d77500e5d80d",
+    "origin": "modified",
+    "baseSha256": "3adebcda4b4ee3f10906a448451cb331c92b39b77257794977a4887f66c00e65"
+  },
+  {
+    "path": "docs/office-interop.md",
+    "size": 9374,
+    "sha256": "121654758adad5c77276c84fed844c39d2ce999aa469c261cf47abe865792ca0",
+    "origin": "modified",
+    "baseSha256": "5bb069ca0023e13595a8a106b16a5eac81c0ba986985c563fd3a20252854b1d1"
+  },
+  {
+    "path": "docs/openalex.md",
+    "size": 5379,
+    "sha256": "665bbc184199fb787a175509dc727af833b0a747d739cfb33e17ed583196c023",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "docs/research-artifacts.md",
+    "size": 9991,
+    "sha256": "0000c620ffc4fe84483af81614262ad091279a1d1912871fc61856839617006c",
+    "origin": "committed",
+    "baseSha256": "0000c620ffc4fe84483af81614262ad091279a1d1912871fc61856839617006c"
+  },
+  {
+    "path": "docs/semantic-search.md",
+    "size": 10124,
+    "sha256": "74c95e8cb4335d8ade58b17f9fcbe745236334210be3b1dfe3ab7be8773fa27f",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "docs/setup.md",
+    "size": 7080,
+    "sha256": "3e5f3a50d7f04cc1e07db1fac1458e92d74709bb1947104ef73758a047439f3e",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "docs/zotero-cli.md",
+    "size": 8631,
+    "sha256": "a412c7b420f64067c800bacf0f2a0059688cedd94d96aaf14a5e56669e7c3a8e",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "examples/manuscript.md",
+    "size": 881,
+    "sha256": "1383ac2ca33037bbcc137d85b416050cf86633fa136cee32d963e39ae35d671b",
+    "origin": "committed",
+    "baseSha256": "1383ac2ca33037bbcc137d85b416050cf86633fa136cee32d963e39ae35d671b"
+  },
+  {
+    "path": "examples/references.json",
+    "size": 934,
+    "sha256": "312a5a165ab526151d8c01b425661b93404a479c20e5e965d3fbfb152acca6ce",
+    "origin": "committed",
+    "baseSha256": "312a5a165ab526151d8c01b425661b93404a479c20e5e965d3fbfb152acca6ce"
+  },
+  {
+    "path": "extensions/index.js",
+    "size": 9252,
+    "sha256": "7ff2b33adb2d474ec1fbf1c0d7a2e5d3846822917fcacf155f1a5a64ad756ee2",
+    "origin": "modified",
+    "baseSha256": "b6264f24ac19e0f454499156a794b6fc4556b8dd119af4ce656999f2de4fd47a"
+  },
+  {
+    "path": "lib/citations.mjs",
+    "size": 4975,
+    "sha256": "8ddae7fcc69619b76771ae418a57afc74668cbfe48760787c822dacc665fc961",
+    "origin": "committed",
+    "baseSha256": "8ddae7fcc69619b76771ae418a57afc74668cbfe48760787c822dacc665fc961"
+  },
+  {
+    "path": "lib/docx.mjs",
+    "size": 23205,
+    "sha256": "7cf2e85715ad3217e6bf7606d4b62712be5824210d8b78d562fe185c6152398d",
+    "origin": "modified",
+    "baseSha256": "137d88b49fa7eba2d8ae1e112714f7178dfd08e2ec1d89cd57811a3fa9afff9f"
+  },
+  {
+    "path": "lib/embeddings.mjs",
+    "size": 11967,
+    "sha256": "afa66594077e52a4b600a5bd0e0fd827bfae0d3fa2f14b034af138c384e2f739",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/harvest.mjs",
+    "size": 10862,
+    "sha256": "be89b7062eb588b2c4e03e7b3e7598106b19169025addd41a930ea6e45ea6a07",
+    "origin": "committed",
+    "baseSha256": "be89b7062eb588b2c4e03e7b3e7598106b19169025addd41a930ea6e45ea6a07"
+  },
+  {
+    "path": "lib/identifiers.mjs",
+    "size": 6681,
+    "sha256": "27519e9c984f576e91a7676ffadade54f0bb8492b626df7cfdab4bce815ea178",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/io.mjs",
+    "size": 2233,
+    "sha256": "25bcef2b5aeb61775bdb6057b719d421d1d8025b3f5a85584e638e50b3c16d85",
+    "origin": "committed",
+    "baseSha256": "25bcef2b5aeb61775bdb6057b719d421d1d8025b3f5a85584e638e50b3c16d85"
+  },
+  {
+    "path": "lib/markdown.mjs",
+    "size": 6644,
+    "sha256": "5df77d74742b45b4acbdedae8b5e1c7d6c96a08d09f9eeaf2822a221fdb37f52",
+    "origin": "committed",
+    "baseSha256": "5df77d74742b45b4acbdedae8b5e1c7d6c96a08d09f9eeaf2822a221fdb37f52"
+  },
+  {
+    "path": "lib/metadata-http.mjs",
+    "size": 2499,
+    "sha256": "9d78f5381208f3f5c679b30086cedf8e5f84c2c0893986f893dce13c41e21064",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/openalex.mjs",
+    "size": 11455,
+    "sha256": "a92d3c2fc471c50b4ca916d016901b687a7387306b5110f94ee2127bf7909e05",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/references.mjs",
+    "size": 1717,
+    "sha256": "c62328ce4369d0ba631140ae6e7f68376e73cda6699a9bf8b36f335b230c6cd1",
+    "origin": "committed",
+    "baseSha256": "c62328ce4369d0ba631140ae6e7f68376e73cda6699a9bf8b36f335b230c6cd1"
+  },
+  {
+    "path": "lib/review-setup.mjs",
+    "size": 3672,
+    "sha256": "d793c8beafd2a3fcd9c3ec2f1a2e1972ca2164c97ea249db5edc9b409a43fa3b",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/services.mjs",
+    "size": 7122,
+    "sha256": "a5489ff18fbee5bea56ba8931ae4bf66420ded9ec07cadf4609a7bceb8f5b2d0",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/setup-web.mjs",
+    "size": 13122,
+    "sha256": "8a3fb5d250716ddf7c1a1d1afc2563ae9869b31224894cb2002345595a10585a",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/zotero-attachments.mjs",
+    "size": 7450,
+    "sha256": "f4315f320c2358e6303f6731676a306bffc82575c34ef463560b901395f2b5e1",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/zotero-import.mjs",
+    "size": 11717,
+    "sha256": "10b44e8ff4e5be01edcdba19b7826c051dfe868694450574be12623f8fb27902",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "lib/zotero.mjs",
+    "size": 9556,
+    "sha256": "13f9cd7259588f2bdc2ae5c7f282b9fd6bad5c1950afbdca6cd795346d36bc60",
+    "origin": "modified",
+    "baseSha256": "4d6a188c574848726ca8be963ef365a54fc5786adff607240352f914ef6ffbfa"
+  },
+  {
+    "path": "package-lock.json",
+    "size": 29577,
+    "sha256": "93fbe7f8528101236fb84c80874be5eb3c197573722e7f1bfada65630a5a1abd",
+    "origin": "committed",
+    "baseSha256": "93fbe7f8528101236fb84c80874be5eb3c197573722e7f1bfada65630a5a1abd"
+  },
+  {
+    "path": "package.json",
+    "size": 1186,
+    "sha256": "35ec05d40888b419aeeb66732a03f1d6d1a0139b7a744ac0fa8d28b82a342dc3",
+    "origin": "committed",
+    "baseSha256": "35ec05d40888b419aeeb66732a03f1d6d1a0139b7a744ac0fa8d28b82a342dc3"
+  },
+  {
+    "path": "scripts/check.mjs",
+    "size": 2736,
+    "sha256": "bddb23dba35376e6502b2dda50b7c9e0eeb4a418ac515945b33adae9d2fabfd2",
+    "origin": "committed",
+    "baseSha256": "bddb23dba35376e6502b2dda50b7c9e0eeb4a418ac515945b33adae9d2fabfd2"
+  },
+  {
+    "path": "scripts/citations.mjs",
+    "size": 7265,
+    "sha256": "f4375fa0d4ac01ebb05ce00bd8167b3558e62403ed5c93596afe5f8f6d5f9e53",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "scripts/embeddings.mjs",
+    "size": 6845,
+    "sha256": "0949fad8d2d5c7f1608510f64385f81a587557cb511151829dfd8fd1330a7d99",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "scripts/example.mjs",
+    "size": 941,
+    "sha256": "c182f48b0f8990c64da3ca4858af5155c5f2a16da40e574435dd576e849af6a7",
+    "origin": "committed",
+    "baseSha256": "c182f48b0f8990c64da3ca4858af5155c5f2a16da40e574435dd576e849af6a7"
+  },
+  {
+    "path": "scripts/harvest.mjs",
+    "size": 5942,
+    "sha256": "98c8f1793bc8f6b36332977e2632abb9e3446365f5882d09eae9c7e1063abf40",
+    "origin": "committed",
+    "baseSha256": "98c8f1793bc8f6b36332977e2632abb9e3446365f5882d09eae9c7e1063abf40"
+  },
+  {
+    "path": "scripts/openalex.mjs",
+    "size": 5997,
+    "sha256": "0cf3674be12787dd7e8f6cc2103b843da200d845ad7f8982a69c6d628a38d023",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "scripts/setup.mjs",
+    "size": 7823,
+    "sha256": "290f7d4dbe06bb93a929c6e9a255b3d8a234bed0cf463970f0a652b8c756d93d",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "scripts/smoke-pi.mjs",
+    "size": 5606,
+    "sha256": "d889478cce8339f1c932c781165d770eaf1fc3638b688424ee76ef7e5d08f295",
+    "origin": "modified",
+    "baseSha256": "d5763d729e841a65377321007f42cc8338e74d6e729cfed3d23d0bdaae6904bd"
+  },
+  {
+    "path": "scripts/verify-office.py",
+    "size": 3746,
+    "sha256": "1dc3250de1bea09d7d46f0000ac15d9959a9f8062755292fd3661130888eb101",
+    "origin": "committed",
+    "baseSha256": "1dc3250de1bea09d7d46f0000ac15d9959a9f8062755292fd3661130888eb101"
+  },
+  {
+    "path": "scripts/zotero.mjs",
+    "size": 8556,
+    "sha256": "400d2ec1f319dee1b6310e736426df01fd3578d32a3cb44857941fd8e273a98c",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "skills/systematic-review/SKILL.md",
+    "size": 6482,
+    "sha256": "f6b57688cbcea47e3e38416abcf6b4e6b584dbc14ee327a7e0a7ce06848f9b4b",
+    "origin": "modified",
+    "baseSha256": "cfb76ffd801e26e216c0814534a8a6fe3a717ed06e2a83d0f6e6a8b2c128d5cc"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/analysis/SKILL.md",
+    "size": 4029,
+    "sha256": "8025c53de3f36f2372cbbbf9f7c8a748a38b92167ac001570f6aeb2e9dc7358b",
+    "origin": "modified",
+    "baseSha256": "9913f38ca9a1e91ca4694ab5dec90fa6089b14653c1038fc54906fc2283082c6"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/appraisal/SKILL.md",
+    "size": 3342,
+    "sha256": "208f2d886c0a80184842215afcea5e6bbe62ccbc119aacb3da772e57dbe1980a",
+    "origin": "committed",
+    "baseSha256": "208f2d886c0a80184842215afcea5e6bbe62ccbc119aacb3da772e57dbe1980a"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/evidence-reading/SKILL.md",
+    "size": 3326,
+    "sha256": "f96b3d1f61a388b76a97b21ce6231c4bacb5e900223d25289bcd0ae7438a8e2c",
+    "origin": "committed",
+    "baseSha256": "f96b3d1f61a388b76a97b21ce6231c4bacb5e900223d25289bcd0ae7438a8e2c"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/extraction/SKILL.md",
+    "size": 3560,
+    "sha256": "ed272a68d31d7871ef6430c72f6785669b47047bc2b3fe1455478d0a54c67df9",
+    "origin": "committed",
+    "baseSha256": "ed272a68d31d7871ef6430c72f6785669b47047bc2b3fe1455478d0a54c67df9"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/full-text/SKILL.md",
+    "size": 7477,
+    "sha256": "8e0c6078fe4d417071a7364461c5b083c78917d0e83a44748649df2fa55a0951",
+    "origin": "modified",
+    "baseSha256": "2839ac3927d9bf8e3dd8e1e75902b626f82d4d85039aa4149df544e2a439d135"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/harvesting/SKILL.md",
+    "size": 6588,
+    "sha256": "2b6f6aece50af72b7ec7ae1520cff47fc9e3abf7e7dacbd01b625a3a01976e94",
+    "origin": "modified",
+    "baseSha256": "89e28a095fb8730076dc9254d9b049af6576246af175469af841aae2059aa7b3"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/protocol/SKILL.md",
+    "size": 3351,
+    "sha256": "c7e73291c02129d8ba0b9d3180229003c13ce47a0ed3fcb7a7a1dc63fafd8f43",
+    "origin": "committed",
+    "baseSha256": "c7e73291c02129d8ba0b9d3180229003c13ce47a0ed3fcb7a7a1dc63fafd8f43"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/screening/SKILL.md",
+    "size": 3316,
+    "sha256": "321d3c4acc24f54d42ee9fee01127ca803778d922ae7cc8ad0a94681664dd65f",
+    "origin": "committed",
+    "baseSha256": "321d3c4acc24f54d42ee9fee01127ca803778d922ae7cc8ad0a94681664dd65f"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/semantic-search/SKILL.md",
+    "size": 4277,
+    "sha256": "a168717707258da3bb4e9e084107418fc311bd565093e7598e6e2b515f4c5b46",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "skills/systematic-review/capabilities/verification/SKILL.md",
+    "size": 3979,
+    "sha256": "74d821bf611d2ac92fb80691fc1ec1c9031b5a611c9b5d6640b0d0d0c12859b1",
+    "origin": "modified",
+    "baseSha256": "ec191cd66b918c6e8162555e038b7fd886882ebe1a1d19264350ed56e74a366d"
+  },
+  {
+    "path": "skills/systematic-review/capabilities/writing/SKILL.md",
+    "size": 5793,
+    "sha256": "de17fdd08d268371183c2a3c93bfdcd5da3ae7c91470c0ed91c5c98dbe3d0bb9",
+    "origin": "modified",
+    "baseSha256": "faf3df34bf40bfbe4d54b30d8aa247b105fe24430f19f6a7d77da57ee03effef"
+  },
+  {
+    "path": "test/citation-cli.test.mjs",
+    "size": 12557,
+    "sha256": "5f6f896c744f2d5a29ed83007e1e0001cd5c2d2e8928f8efdc97ab50e927dfd9",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/citations.test.mjs",
+    "size": 8566,
+    "sha256": "5e061ad881425bd0f678952dee5c223a90cdddb2686f0c8a017ee4af5127371e",
+    "origin": "committed",
+    "baseSha256": "5e061ad881425bd0f678952dee5c223a90cdddb2686f0c8a017ee4af5127371e"
+  },
+  {
+    "path": "test/docx.test.mjs",
+    "size": 17933,
+    "sha256": "88c963cecccccc5e6f7c58113a7f1fa7e30c10aabdeee29a5a775bd0714188d8",
+    "origin": "committed",
+    "baseSha256": "88c963cecccccc5e6f7c58113a7f1fa7e30c10aabdeee29a5a775bd0714188d8"
+  },
+  {
+    "path": "test/embeddings.test.mjs",
+    "size": 14890,
+    "sha256": "19f2828aa37b2d61038cb714f820da235adcb30d0bad5b29629bceb7d5ab72ba",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/harvest.test.mjs",
+    "size": 25458,
+    "sha256": "edc5b646ac3ac0a28fd5c318612901de3bddc70cd0f16dfd8d3e89c0dceed7fd",
+    "origin": "committed",
+    "baseSha256": "edc5b646ac3ac0a28fd5c318612901de3bddc70cd0f16dfd8d3e89c0dceed7fd"
+  },
+  {
+    "path": "test/identifiers.test.mjs",
+    "size": 8748,
+    "sha256": "f4c49c79b7e1da416541009f2aaf0b478c1f3bd24469dce041f381c31ffa2317",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/io.test.mjs",
+    "size": 2068,
+    "sha256": "35d247a57348f8e302210d17e04bd44f349ae6505ff19a1918cf981a6e620f61",
+    "origin": "committed",
+    "baseSha256": "35d247a57348f8e302210d17e04bd44f349ae6505ff19a1918cf981a6e620f61"
+  },
+  {
+    "path": "test/openalex.test.mjs",
+    "size": 16910,
+    "sha256": "84c48fa1d46aa12a34233a282431a57b00eb6b92747e38592b2e8c43eead2c86",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/service-integration.test.mjs",
+    "size": 3682,
+    "sha256": "130d79e795c25f55780ef5d41a207090e7b73979a3440b0c5486383c304cc457",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/services.test.mjs",
+    "size": 15222,
+    "sha256": "bd4c944f1d5b0e5aed1cf6b648bf8a43edfa0b0002d9f2f538b8fd59048e6560",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/setup-cli-web.test.mjs",
+    "size": 3290,
+    "sha256": "37923a43fe87fb25e364646c0764612294914ce39cd2890fe2db2be100ba65f5",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/setup-command.test.mjs",
+    "size": 6894,
+    "sha256": "aba8023b162fbac8f1f5b00ed85159049bfe49a008a7d726346cb797e50799e4",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/setup-web.test.mjs",
+    "size": 12619,
+    "sha256": "4b0705f862f1685b13adce0445d1a7c194dd53bc52e200ffa0f45a6a62cdc36d",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/zotero-attachments.test.mjs",
+    "size": 10036,
+    "sha256": "d93509c48364f4404f50ae34297d9596b520ed37902223dbdf634fdbd22e4a12",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/zotero-cli.test.mjs",
+    "size": 11619,
+    "sha256": "1b5cfa9312594294f7be998193181c9b58c6a2235669a588cc1f01067278a4e1",
+    "origin": "untracked",
+    "baseSha256": null
+  },
+  {
+    "path": "test/zotero.test.mjs",
+    "size": 9139,
+    "sha256": "dd36cafbe0da16a63061127b655392ce754b6ffe0434e18ceb64e6e5867bc197",
+    "origin": "modified",
+    "baseSha256": "731c275d588e04c2df2ec845b9608311e1de3ff2fc86aab3c39a754d9049105e"
+  }
+]
