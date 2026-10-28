@@ -177,6 +177,38 @@ rules, including bounded cleanup; remote disconnect never shuts down the remote
 host. Termux retains its established background lifetime. A save that could not
 finish before termination remains an unresolved/recoverable save, not a success.
 
+The initial default is **lazy startup**, not keeping the entire stack idle from
+browser/backend launch:
+
+| First authorized use | Start/reuse |
+| --- | --- |
+| Sidecar Files button / its ordinary web-service URL | The owning environment's Quantum instance |
+| Open an Office document from Quantum, or Pi open/edit/convert/export | The owning environment's Office stack and required file-storage/callback service |
+| Open References, capture a reference or request library/citation data | The shared References service |
+| Compare existing Office snapshots through Pi/CLI | The read-only tool; no Office renderer/server required |
+
+The existing lightweight backend/gateway remains reachable while its owning
+backend is enabled. It authenticates the request and uses the existing supervisor
+to start dependencies and wait for readiness, with normal web loading/status
+and a useful error if startup fails. No Office-specific browser integration or
+additional permanent host daemon is needed. A remote uses the same mechanism
+through its established Chisel mapping; an unavailable/off remote backend cannot
+be woken merely by opening a loopback URL.
+
+Pi's direct Office path must also ensure the download/save-callback service is
+running; with Quantum as the connector, this can start Quantum even if the user
+has not opened Files. Keep those dependencies alive while documents, conversions,
+exports or pending saves need them. Browsing code/images/PDFs must not start the
+Office stack unnecessarily, and startup probes/indexing must not eagerly wake it.
+Explicit saved autostart choices may prewarm components; they are not required.
+
+For the initial implementation, once started, services follow the existing
+backend lifetime. Do not add a custom automatic-idle shutdown subsystem merely
+to implement lazy startup. Any later idle-stop option must use native session/job
+and save-completion signals, not the last Files-tab close or absence of HTTP
+requests. First use can take longer because the services are cold; do not promise
+instant startup before measuring it on the selected platform.
+
 Acceptance must inspect process ownership, sockets and database/service data
 paths while many projects/chats/tabs open concurrently. Verify one Quantum
 instance and one Office dependency stack in each owner, including races,
@@ -1481,6 +1513,11 @@ Required acceptance groups:
   one Office stack plus one References service per owner, with separate project
   databases; no per-chat PostgreSQL/Redis/RabbitMQ startup.
   Concurrent launch, restart, duplicate windows and CLI entry reuse that stack.
+  With autostart disabled, browser/backend launch starts neither Quantum nor the
+  Office stack. First Files use starts Quantum; first Office use starts Office
+  and its dependencies, including direct Pi use. Plain PDF/code browsing and
+  snapshot comparison do not start Office. Active edits/pending saves keep the
+  required storage/callback service alive after the Files tab closes.
 - [ ] **Scope/launch:** correct owning folder, no manual server/admin setup,
   multiple scoped project tabs, rename/move/revocation behavior, inaccessible
   backend errors, and no project identity drift from cookies/global selection.

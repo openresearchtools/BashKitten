@@ -49,6 +49,11 @@ cache services, shared by all its chats, projects, folders and documents. Never
 launch the stack per chat/project/tab. Libraries have separate project databases
 outside repositories, served by one References module; attachments belong in
 the project's Bibliography folder. Office snapshots stay outside projects.
+Default to on-demand component startup through the existing backend owner:
+Files on first Files use, Office on first user/Pi Office operation, References on
+first use. Keep needed file/callback services alive during Office work and saves.
+No heavy-stack startup just for browser launch, no per-tab shutdown and no new
+automatic-idle subsystem; honor explicit saved autostart and backend lifetime.
 Keep actual Office resource defaults initially and measure the whole shared
 stack. All remote access retains the existing authorized Tor/Chisel/Caddy/
 Authelia route. Complex implementation work uses Astra with xhigh reasoning.
