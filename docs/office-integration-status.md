@@ -259,6 +259,42 @@ The obsolete unlicensed module archives are removed from current build/source
 inputs while the original import remains recoverable in Git history. Final
 package assembly still waits for the selected graph and artifact checks.
 
+### Licensed Files and native Office follow-up
+
+The Files dependency correction is committed in `8b4fa02c88`. Native Linux
+amd64 and Termux aarch64/x86_64 builds passed with the selected licensed cache,
+logger and media dependencies; their complete notices and linked module graph
+were verified. Obsolete unlicensed archives are absent from current build and
+source inputs. The normal final collector still requires a single coherent
+source checkpoint before new accepted artifacts are sealed. Historical rejected
+artifacts remain unchanged.
+
+Shared native Office changes and both Termux server build inputs are committed
+in `bbd5388fea`. The corrected native shape Undo implementation passed actual
+`.uno:Undo`/Redo in Writer, Calc and Impress, restoring citation identities,
+styles and metadata revisions. Another authenticated view was rejected by the
+native collaboration ownership check. Copied bibliographies and unlink Undo/Redo
+also passed. These are native module diagnostics, not installed toolbar checks.
+
+The native active-shape guard rejects background text changes while a human is
+editing the same shape; editing another shape and retrying after the human
+finishes passed. Impress compound rollback was exact. Calc restored text and
+metadata but moved a cell-anchored bibliography by 0.05 mm after an earlier cell
+change and rollback, so all-target conflict preflight remains under investigation.
+Native Calc cell input separately showed last-commit behavior with both UNO
+setters and the ordinary EnterString command: a human's uncommitted input can
+replace an agent's same-cell edit when the human commits. No separate cell-lock
+system or stronger native guarantee is claimed.
+
+Both complete Bionic engine/server builds and their upstream SBOM checks passed.
+The new runtime diagnostic uses Android instance 6522, Termux UID 10122. ADB's
+copy did not preserve executable modes and app-labelled symlinks; extracting the
+verified artifact through the actual app UID repaired that setup problem without
+changing SELinux policy. First Office startup then exposed a real launcher
+boundary issue: native Office library paths were applied to the Node launcher
+itself. Restricting those paths to its native children is being fixed and tested.
+Successful native document execution on Termux remains unverified.
+
 ## Decision and planning work
 
 The user selected Collabora Online after the temporary stock-server comparison. The active plan, AGENTS instructions and current native
